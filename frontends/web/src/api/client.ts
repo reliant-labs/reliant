@@ -5,7 +5,6 @@ import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
 import { settingsGrpc, type Preferences } from "./settings-grpc";
 import { addProviderApiKey, disconnectProvider } from "../hooks/provider-account-queries";
-import { mcpGrpc } from "./mcp-grpc";
 import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
 import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
@@ -620,33 +619,4 @@ export const api = {
       };
     },
   },
-
-  mcp: {
-    listServers: (projectId: string) => mcpGrpc.listServers(projectId),
-    getServer: (projectId: string, name: string) =>
-      mcpGrpc.getServer(projectId, name),
-    installServer: (
-      projectId: string,
-      name: string,
-      config: {
-        command: string;
-        args?: string[];
-        env?: string[];
-        type: string;
-        url?: string;
-      }
-    ) => mcpGrpc.installServer(projectId, name, config),
-    uninstallServer: (projectId: string, name: string) =>
-      mcpGrpc.uninstallServer(projectId, name),
-    restartServer: (projectId: string, name: string) =>
-      mcpGrpc.restartServer(projectId, name),
-    listRecommended: (projectId: string) => mcpGrpc.listRecommended(projectId),
-    updateServerConfig: (
-      projectId: string,
-      name: string,
-      env: Record<string, string>
-    ) => mcpGrpc.updateServerConfig(projectId, name, env),
-  },
-
-  // Background processes - use backgroundGrpc directly from background-grpc.ts
 };

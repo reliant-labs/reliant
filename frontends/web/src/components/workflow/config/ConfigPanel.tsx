@@ -37,7 +37,7 @@ import { RunStepConfig } from "./RunStepConfig";
 import { ActionStepConfig } from "./ActionStepConfig";
 import { IntegrationActionConfig } from "./IntegrationActionConfig";
 import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
-import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { useCatalogEntry } from "../../../hooks/catalog-queries";
 import { CELCurrentNodeProvider } from "../CELCompletionContext";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";

@@ -8,8 +8,8 @@ import Label from "../forge-ui/label";
 import Button from "@/components/forge-ui/button";
 import Card from "../forge-ui/card";
 import { ConfigScopeSelector, getScopeLabel } from "./ConfigScopeSelector";
-import type { MCPServerConfig, RecommendedServer } from "../../api/mcp-grpc";
-import { ConfigScope } from "../../api/mcp-grpc";
+import type { MCPServerConfig, RecommendedServer } from "../../hooks/mcp-queries";
+import { ConfigScope } from "../../hooks/mcp-queries";
 
 /** Text with its URLs as links: config help text names where to get a key. */
 function withLinks(text: string) {

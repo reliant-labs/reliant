@@ -36,7 +36,7 @@ import {
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
-import { InputOptionSchema, InputOptionsConnectionState, ListInputOptionsResponseSchema, type ListInputOptionsRequest } from "@/gen/reliant/v1/catalog_pb";
+import { InputOptionSchema, InputOptionsConnectionState, ListInputOptionsResponseSchema, SearchCatalogResponseSchema, type ListInputOptionsRequest } from "@/gen/reliant/v1/catalog_pb";
 import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
 import { InputBaseSchema, InputSchema, IntegrationInputConfigSchema, StringInputConfigSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
@@ -60,8 +60,6 @@ const listRepos = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    connection: () => ({ listConnections }),
-    catalog: () => ({ searchCatalog, getCatalogEntry, listInputOptions }),
     trigger: () => ({ enableWorkflow, listTriggers }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     worktree: () => ({ listWorktrees }),
@@ -71,11 +69,16 @@ vi.mock("@/api/grpc-client", () => ({
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
 
-// RepoService is on its generated hooks, so it is answered at the transport.
-// PresetService is reached through connectClient (hooks/preset-queries).
+// RepoService, CatalogService and ConnectionService are on their generated
+// hooks, so they are answered at the transport. PresetService is reached
+// through connectClient (hooks/preset-queries).
 setTransport(
   mockTransport({
     "RepoService.ListRepos": (req) => listRepos(req),
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "CatalogService.ListInputOptions": (req) => listInputOptions(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
     ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
   }),
 );
@@ -201,7 +204,7 @@ beforeEach(() => {
     projectDaemons: [create(ProjectDaemonSchema, { projectId: "proj-1", daemonId: "daemon-1", installState: ProjectInstallState.INSTALLED })],
   });
   listConnections.mockResolvedValue(create(ListConnectionsResponseSchema, { connections: [] }));
-  searchCatalog.mockResolvedValue({ entries: [], nextPageToken: "", totalSize: 0, categoryFacets: [] });
+  searchCatalog.mockResolvedValue(create(SearchCatalogResponseSchema));
   getCatalogEntry.mockRejectedValue(new Error("not in this test's catalog"));
   listInputOptions.mockImplementation(async (req: ListInputOptionsRequest) => {
     if (req.resolve.length > 0) return create(ListInputOptionsResponseSchema, {});

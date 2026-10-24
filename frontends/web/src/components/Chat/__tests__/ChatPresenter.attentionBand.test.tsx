@@ -105,7 +105,13 @@ vi.mock("../../workflow/WorkflowViewerPanel", () => ({
 }));
 
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
+
+// The background-work pill lists the daemon's processes (BackgroundService,
+// on its generated hooks); none are running here.
+setTransport(mockTransport({ "BackgroundService.ListProcesses": { response: {} } }));
 
 const baseProps = {
   messages: [],

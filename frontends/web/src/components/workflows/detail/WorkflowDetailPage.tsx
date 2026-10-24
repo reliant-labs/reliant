@@ -49,7 +49,7 @@ import { DRAFT_NOT_RUNNABLE } from "../../workflow/workflowDraftStatus";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
 import { declaredTriggers, describeDeclaredSource } from "@/lib/declaredTriggers";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { workflowAutomationsFor } from "@/lib/automationUnits";
 import { describeSchedule } from "@/lib/cronText";
 import { TurnedOnCard } from "./TurnedOnCard";

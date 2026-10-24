@@ -12,14 +12,22 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { CatalogService } from "../../../gen/reliant/v1/catalog_pb";
+import { connectClient } from "../../../lib/connect";
 import {
-  catalogSearchGrpc,
+  catalogFacetFromProto,
+  catalogKindToProto,
+  catalogListingFromProto,
+  catalogSummaryFromProto,
   type CatalogEntrySummary,
   type CatalogFacet,
   type CatalogIntegrationListing,
   type CatalogKind,
-} from "../../../api/catalog-search-grpc";
+} from "../../../hooks/catalog-queries";
+import { catalogServiceKeys } from "../../../hooks/catalog-service-hooks_gen";
 import { useDebounce } from "../../../hooks/useDebounce";
+
+const client = connectClient(CatalogService);
 
 export const CATALOG_SEARCH_DEBOUNCE_MS = 150;
 export const CATALOG_PAGE_SIZE = 20;
@@ -54,13 +62,27 @@ export interface CatalogSearchState {
   refetch: () => void;
 }
 
-export const catalogSearchKeys = {
-  all: ["catalogSearch"] as const,
+/**
+ * The paged reads' keys: the generated key of the first page's request (no
+ * page token), plus a suffix. An infinite query caches `{ pages }`, not one
+ * response, so it must never share an entry with a plain useSearchCatalog of
+ * the same request; it stays under catalogServiceKeys.all, so a connection
+ * change still refetches it.
+ */
+export const catalogPageKeys = {
   search: (query: string, kind: CatalogKind, category: string, integration = "") =>
-    [...catalogSearchKeys.all, kind, category, integration, query] as const,
-  integrations: (kind: CatalogKind, category: string) => ["catalogIntegrations", kind, category] as const,
-  entry: (ref: string) => ["catalogEntry", ref] as const,
+    [...catalogServiceKeys.searchCatalog(searchRequest(query, kind, category, integration)), "pages"] as const,
+  integrations: (kind: CatalogKind, category: string, pageSize: number) =>
+    [...catalogServiceKeys.listCatalogIntegrations(integrationsRequest(kind, category, pageSize)), "pages"] as const,
 };
+
+function searchRequest(query: string, kind: CatalogKind, category: string, integration: string) {
+  return { query: query.slice(0, 256), kinds: [catalogKindToProto(kind)], category, integration, pageSize: CATALOG_PAGE_SIZE };
+}
+
+function integrationsRequest(kind: CatalogKind, category: string, pageSize: number) {
+  return { kinds: [catalogKindToProto(kind)], category, pageSize };
+}
 
 export function useCatalogSearch({
   query,
@@ -74,12 +96,9 @@ export function useCatalogSearch({
   const active = enabled && (!requireQuery || settledQuery !== "");
 
   const result = useInfiniteQuery({
-    queryKey: catalogSearchKeys.search(settledQuery, kind, category, integration),
+    queryKey: catalogPageKeys.search(settledQuery, kind, category, integration),
     queryFn: ({ pageParam, signal }) =>
-      catalogSearchGrpc.search(
-        { query: settledQuery, kinds: [kind], category, integration, pageSize: CATALOG_PAGE_SIZE, pageToken: pageParam },
-        signal,
-      ),
+      client.searchCatalog({ ...searchRequest(settledQuery, kind, category, integration), pageToken: pageParam }, { signal }),
     initialPageParam: "",
     getNextPageParam: (last) => last.nextPageToken || undefined,
     // Typing keeps the last results on screen until the next land. Switching
@@ -97,17 +116,18 @@ export function useCatalogSearch({
       for (const entry of page.entries) {
         if (seen.has(entry.ref)) continue;
         seen.add(entry.ref);
-        out.push(entry);
+        out.push(catalogSummaryFromProto(entry));
       }
     }
     return out;
   }, [result.data]);
 
   const first = result.data?.pages[0];
+  const facets = useMemo(() => first?.categoryFacets.map(catalogFacetFromProto) ?? [], [first]);
 
   return {
     entries,
-    facets: first?.categoryFacets ?? [],
+    facets,
     totalSize: first?.totalSize ?? 0,
     settledQuery,
     isLoading: result.isLoading,
@@ -148,9 +168,9 @@ export interface CatalogIntegrationsState {
  */
 export function useCatalogIntegrations({ kind, category = "", pageSize = CATALOG_PAGE_SIZE, enabled = true }: CatalogIntegrationsArgs): CatalogIntegrationsState {
   const result = useInfiniteQuery({
-    queryKey: [...catalogSearchKeys.integrations(kind, category), pageSize],
+    queryKey: catalogPageKeys.integrations(kind, category, pageSize),
     queryFn: ({ pageParam, signal }) =>
-      catalogSearchGrpc.listIntegrations({ kinds: [kind], category, pageSize, pageToken: pageParam }, signal),
+      client.listCatalogIntegrations({ ...integrationsRequest(kind, category, pageSize), pageToken: pageParam }, { signal }),
     initialPageParam: "",
     getNextPageParam: (last) => last.nextPageToken || undefined,
     placeholderData: keepPreviousData,
@@ -163,18 +183,20 @@ export function useCatalogIntegrations({ kind, category = "", pageSize = CATALOG
     const out: CatalogIntegrationListing[] = [];
     for (const page of result.data?.pages ?? []) {
       for (const listing of page.integrations) {
-        if (seen.has(listing.integration.id)) continue;
-        seen.add(listing.integration.id);
-        out.push(listing);
+        const id = listing.integration?.id ?? "";
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(catalogListingFromProto(listing));
       }
     }
     return out;
   }, [result.data]);
 
   const first = result.data?.pages[0];
+  const facets = useMemo(() => first?.categoryFacets.map(catalogFacetFromProto) ?? [], [first]);
   return {
     integrations,
-    facets: first?.categoryFacets ?? [],
+    facets,
     totalSize: first?.totalSize ?? 0,
     isLoading: result.isLoading,
     isError: result.isError,

@@ -41,6 +41,8 @@ import {
   worktreesResponse,
 } from "@/components/workflow/run/__tests__/runFormFixtures";
 import { renderAtRoute } from "./automationTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const createTrigger = vi.fn();
 const updateTrigger = vi.fn();
@@ -56,7 +58,6 @@ const listConnections = vi.fn(async () => ({ connections: [] }));
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    connection: () => ({ listConnections }),
     trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows, getWorkflow }),
     worktree: () => ({ listWorktrees }),
@@ -66,9 +67,13 @@ vi.mock("@/api/grpc-client", () => ({
 }));
 
 // PresetService is reached through connectClient (hooks/preset-queries), so
-// it is answered at the transport by the same fakes.
+// it is answered at the transport by the same fakes. So is ConnectionService
+// (generated hooks).
 beforeEach(() => {
-  setTransport(mockTransport(serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch })));
+  setTransport(mockTransport({
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      "ConnectionService.ListConnections": (req) => listConnections(req),
+    }));
 });
 afterEach(() => {
   setTransport(null);

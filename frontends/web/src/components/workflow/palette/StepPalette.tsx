@@ -30,7 +30,7 @@ import { createPortal } from "react-dom";
 
 import Badge from "../../forge-ui/badge";
 import { IntegrationLogoTile } from "../../icons/IntegrationLogo";
-import { catalogSearchGrpc, type CatalogEntrySummary, type CatalogKind } from "../../../api/catalog-search-grpc";
+import { prefetchCatalogEntry, type CatalogEntrySummary, type CatalogKind } from "../../../hooks/catalog-queries";
 import { ensureNodesCached, getNodeBgColor, getNodeIcon } from "../../../lib/node-metadata";
 import { cn } from "../../../lib/utils";
 import {
@@ -44,7 +44,7 @@ import {
   type BuiltinTriggerPaletteItem,
   type PaletteItem,
 } from "./paletteItems";
-import { catalogSearchKeys, useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
+import { useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
 import { useUnavailableIntegrations } from "../../../hooks/connection-queries";
 
 export interface StepPaletteProps {
@@ -208,11 +208,7 @@ function StepPaletteBody({
   // choosing it inserts defaults and opens its form without a wait.
   useEffect(() => {
     if (!activeEntry) return;
-    void queryClient.prefetchQuery({
-      queryKey: catalogSearchKeys.entry(activeEntry.ref),
-      queryFn: () => catalogSearchGrpc.get(activeEntry.ref),
-      staleTime: 5 * 60_000,
-    });
+    void prefetchCatalogEntry(queryClient, activeEntry.ref);
   }, [activeEntry, queryClient]);
 
   useEffect(() => {

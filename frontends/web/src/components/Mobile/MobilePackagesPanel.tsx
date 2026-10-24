@@ -17,7 +17,7 @@ import {
   type PackageCommand,
   type PackageType,
 } from "../../hooks/package-queries";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../hooks/background-queries";
 import { cn } from "../../lib/utils";
 
 const PACKAGE_TYPE_ICON: Record<PackageType, React.ReactNode> = {

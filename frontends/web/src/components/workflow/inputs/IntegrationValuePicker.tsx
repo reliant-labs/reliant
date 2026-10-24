@@ -30,7 +30,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Check, ChevronDown, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
-import type { InputOption } from "@/api/input-options-grpc";
+import type { InputOption } from "@/hooks/input-options-queries";
 import { inputOptionsErrorReason, useInputOptions, useResolvedInputOptions } from "@/hooks/input-options-queries";
 import { cn } from "@/lib/utils";
 import { inputTypeNouns } from "./inputTypeNouns";

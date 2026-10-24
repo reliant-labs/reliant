@@ -127,11 +127,13 @@ import { findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTrig
 import { useAddTrigger } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
 import {
-  catalogSearchGrpc,
-  type CatalogEntry,
+  cachedCatalogEntry,
+  fetchCatalogEntry,
+  useActionOutputSchemas,
+  useCatalogEntry,
+  useDeclaredTriggerRef,
   type CatalogEntrySummary,
-} from "../../api/catalog-search-grpc";
-import { connectionKeys, useActionOutputSchemas, useCatalogEntry, useDeclaredTriggerRef } from "../../hooks/connection-queries";
+} from "../../hooks/catalog-queries";
 import {
   actionNodeIdBase,
   getActionParams,
@@ -1616,15 +1618,10 @@ function WorkflowBuilderInner({
   const addActionStep = useCallback(
     (entry: CatalogEntrySummary) => {
       const id = uniqueNodeId(actionNodeIdBase(entry.ref), nodes.map((n) => n.id));
-      const cached = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      const cached = cachedCatalogEntry(queryClient, entry.ref);
       insertStep(newActionStep(id, entry.ref, actionParamDefaults(cached?.paramsSchema)));
       if (cached) return;
-      void queryClient
-        .fetchQuery({
-          queryKey: connectionKeys.catalogEntry(entry.ref),
-          queryFn: () => catalogSearchGrpc.get(entry.ref),
-          staleTime: 5 * 60_000,
-        })
+      void fetchCatalogEntry(queryClient, entry.ref)
         .then((full) => {
           const defaults = actionParamDefaults(full.paramsSchema);
           if (Object.keys(defaults).length === 0) return;

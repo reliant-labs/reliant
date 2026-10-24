@@ -29,7 +29,7 @@ import { RunStatusBadge } from "./RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { RunDuration } from "./RunRow";
 
 export interface RunHeaderActions {

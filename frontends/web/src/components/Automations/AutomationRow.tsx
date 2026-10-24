@@ -27,7 +27,7 @@ import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource 
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import { describeTriggerSource } from "@/lib/cronText";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";

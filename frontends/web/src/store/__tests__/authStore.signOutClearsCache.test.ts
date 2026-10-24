@@ -32,7 +32,6 @@ vi.mock("../projectStore", () => ({ useProjectStore: zustandStore }));
 vi.mock("../worktreeStore", () => ({ useWorktreeStore: zustandStore }));
 vi.mock("../chatNavigationStore", () => ({ useChatNavigationStore: zustandStore }));
 vi.mock("../attachmentStore", () => ({ useAttachmentStore: zustandStore }));
-vi.mock("../processStore", () => ({ useProcessStore: zustandStore }));
 
 vi.mock("@/lib/supabase", () => ({
   supabase: { auth: { signOut: vi.fn().mockResolvedValue({ error: null }) } },

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Download } from "lucide-react";
-import { type RecommendedServer } from "../../api/mcp-grpc";
+import { type RecommendedServer } from "../../hooks/mcp-queries";
 import Button from "@/components/forge-ui/button";
 import { getMcpIconUrl, MCPAvatar } from "./mcpAvatar";
 

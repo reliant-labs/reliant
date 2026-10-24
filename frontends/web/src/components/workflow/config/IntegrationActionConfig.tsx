@@ -22,7 +22,7 @@ import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { ConnectionPicker } from "../connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../connections/ConnectIntegrationDialog";
 import { IntegrationLogoTile } from "../../icons/IntegrationLogo";
-import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { useCatalogEntry } from "../../../hooks/catalog-queries";
 import {
   getActionConnection,
   getActionParams,
@@ -36,7 +36,7 @@ import {
   missingRequiredParams,
   paramToFieldValue,
 } from "../../../lib/jsonSchemaFields";
-import { refIntegration } from "../../../api/catalog-search-grpc";
+import { refIntegration } from "../../../hooks/catalog-queries";
 import { Section, SectionFields, SectionLabel } from "./primitives";
 
 export interface IntegrationActionConfigProps {

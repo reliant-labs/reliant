@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface TriggerCardProps {

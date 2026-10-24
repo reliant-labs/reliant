@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PackageCommand, PackageType } from "../../../api/package-commands-grpc";
+import type { PackageCommand, PackageType } from "../../../hooks/package-queries";
 import { findCommandForProcess, processMatchesCommand } from "../commandMatching";
 
 function makeCommand(overrides: Partial<PackageCommand> = {}): PackageCommand {

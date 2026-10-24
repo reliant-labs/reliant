@@ -19,7 +19,6 @@ import { ChatState } from "../../../gen/reliant/v1/chat_pb";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../../store/chatStore";
 import { useWorktreeStore } from "../../../store/worktreeStore";
-import { useProcessStore } from "../../../store/processStore";
 import { useProjectStore } from "../../../store/projectStore";
 
 vi.mock("../../ui/Tooltip", () => ({
@@ -104,7 +103,6 @@ describe("Sidebar and child runs", () => {
       currentWorktree: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-    useProcessStore.setState({ fetchProcesses: vi.fn() } as Partial<ReturnType<typeof useProcessStore.getState>>);
     useProjectStore.setState({
       currentProject: {
         id: "project-1",

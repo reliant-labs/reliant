@@ -7,7 +7,7 @@ import Label from "../forge-ui/label";
 import Textarea from "../forge-ui/textarea";
 import Button from "@/components/forge-ui/button";
 import { ConfigScopeSelector } from "./ConfigScopeSelector";
-import { ConfigScope } from "../../api/mcp-grpc";
+import { ConfigScope } from "../../hooks/mcp-queries";
 import { toast } from "sonner";
 
 interface MCPCustomServerModalProps {

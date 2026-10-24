@@ -12,6 +12,10 @@ import userEvent from "@testing-library/user-event";
 
 import type { Trigger, TriggerHealth } from "@/api/trigger-grpc";
 import { renderAtRoute } from "./automationTestUtils";
+import { create } from "@bufbuild/protobuf";
+import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const setTriggerEnabled = vi.fn();
 const deleteTrigger = vi.fn();
@@ -25,10 +29,16 @@ vi.mock("@/api/grpc-client", () => ({
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
     worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),
-    catalog: () => ({ searchCatalog: vi.fn(async () => ({ entries: [] })), getCatalogEntry: vi.fn() }),
-    connection: () => ({ listConnections: vi.fn(async () => ({ connections: [] })) }),
   },
 }));
+
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
+    "ConnectionService.ListConnections": { response: {} },
+  }),
+);
 
 vi.mock("@/store/projectStore", () => {
   const state = { projects: [{ id: "p1", name: "Reliant" }], currentProject: { id: "p1", name: "Reliant" }, loadProjects: vi.fn() };

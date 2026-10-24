@@ -50,7 +50,7 @@ import {
 } from "@/api/trigger-grpc";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { triggerKeys, useProjectDaemonInstalls, useTriggers } from "@/hooks/trigger-queries";
-import { useCatalogEntry, useDeclaredTriggerRef, useDeclaredTriggerRefState, useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef, useDeclaredTriggerRefState, useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, isAlertingWebhook, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";

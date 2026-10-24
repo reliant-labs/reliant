@@ -44,7 +44,7 @@ import { useState } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { ChevronRight, Database, Layers, Plus, Settings as SettingsIcon, X } from "lucide-react";
 
-import { ConfigScope } from "../../api/mcp-grpc";
+import { ConfigScope } from "../../hooks/mcp-queries";
 import { CheckRow } from "../Forge/Status/CheckRow";
 import { DispositionLegend } from "../Forge/Status/DispositionLegend";
 import { MCPServerListItem } from "../Settings/MCPServerListItem";

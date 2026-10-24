@@ -8,19 +8,18 @@
  * an older run with no launch event still says what it can.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { LaunchEvent } from "@/api/run-grpc";
 import { TriggerCard } from "../TriggerCard";
-import { githubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { answerGithubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { setTransport } from "@/lib/connect";
 
 // The catalog's trigger types name an integration event.
-vi.mock("@/api/catalog-search-grpc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/catalog-search-grpc")>()),
-  catalogSearchGrpc: { search: async () => githubTriggerTypes() },
-}));
+beforeEach(() => answerGithubTriggerTypes());
+afterEach(() => setTransport(null));
 
 function scheduleEvent(overrides: Partial<LaunchEvent> = {}): LaunchEvent {
   return {

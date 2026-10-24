@@ -31,7 +31,6 @@ import { ChatActivity } from "../../gen/reliant/v1/chat_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 
@@ -142,10 +141,6 @@ describe("Sidebar forge nav entry", () => {
       currentWorktree: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses: vi.fn(),
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useChatListPreferencesStore.setState({
       sortOrder: "recent_activity",

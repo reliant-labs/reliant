@@ -45,7 +45,7 @@ import {
   useTriggerEvents,
 } from "@/hooks/trigger-queries";
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";

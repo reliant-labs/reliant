@@ -19,12 +19,11 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
-import { usePackageCommandsStore } from "./packageCommandsStore";
-import { useProcessStore } from "./processStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
-import type { BackgroundProcess } from "../api/background-grpc";
+import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
+import { upsertPackageProcess } from "../hooks/package-queries";
 import { logger } from "../lib/logger";
 import { heartbeatOomKills, type ProcessOomKills } from "../lib/machineMemory";
 import { getEventBus } from "../lib/events";
@@ -35,6 +34,7 @@ import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, r
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
+import { invalidateMcpQueries } from "../hooks/mcp-queries";
 import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
@@ -1148,20 +1148,18 @@ function handleProcessStarted(update: UserUpdate) {
     ports: data.ports,
   };
 
-  const processStore = useProcessStore.getState();
-  useProcessStore.setState({
-    processes: [...processStore.processes.filter(p => p.id !== data.process_id), newProcess],
-  });
+  upsertBackgroundProcess(newProcess);
 
-  // Also update package commands store if it's a worktree-associated process
+  // A worktree-associated process is also a package process.
   const worktreeId = data.worktree_id || update.worktree_id;
   if (worktreeId) {
-    usePackageCommandsStore.getState().handleProcessStarted({
+    upsertPackageProcess({
       id: data.process_id,
       command: data.command,
+      status: BackgroundProcessStatus.RUNNING,
       worktree_id: worktreeId,
       working_dir: data.working_dir,
-      start_time: data.start_time,
+      start_time: data.start_time || new Date().toISOString(),
     });
   }
 
@@ -1237,14 +1235,7 @@ function handleProcessPortChanged(update: UserUpdate) {
     portCount: data.ports?.length || 0,
   });
 
-  const procStore = useProcessStore.getState();
-  useProcessStore.setState({
-    processes: procStore.processes.map((p) =>
-      p.id === data.process_id
-        ? { ...p, ports: data.ports }
-        : p
-    ),
-  });
+  patchBackgroundProcessPorts(data.process_id, data.ports);
 
   try { getEventBus().emit("process:updated", { processId: data.process_id, status: "port_changed" }); } catch {}
 }
@@ -1281,60 +1272,17 @@ function updateProcessStatus(
     ports: data.ports,
   };
 
-  // Update processStore - upsert pattern
-  const procStore = useProcessStore.getState();
-  const procExists = procStore.processes.some((p) => p.id === data.process_id);
-  logger.info(`${LOG_PREFIX} Updating processStore`, {
-    processId: data.process_id.slice(0, 8),
+  upsertBackgroundProcess(fullProcess);
+  upsertPackageProcess({
+    id: data.process_id,
+    command: data.command,
     status,
-    exists: procExists,
-    storeCount: procStore.processes.length,
+    worktree_id: data.worktree_id || update.worktree_id,
+    working_dir: data.working_dir,
+    start_time: data.start_time,
+    end_time: data.end_time,
+    exit_code: data.exit_code,
   });
-  if (procExists) {
-    useProcessStore.setState({
-      processes: procStore.processes.map((p) =>
-        p.id === data.process_id
-          ? {
-              ...p,
-              status,
-              exit_code: data.exit_code,
-              end_time: data.end_time,
-              ports: data.ports || p.ports,
-            }
-          : p
-      ),
-    });
-  } else {
-    // Process doesn't exist - add it
-    useProcessStore.setState({
-      processes: [fullProcess, ...procStore.processes],
-    });
-  }
-
-  // Update package commands store - it has its own upsert logic
-  const pkgStore = usePackageCommandsStore.getState();
-  const pkgExists = pkgStore.processes.some((p) => p.id === data.process_id);
-  logger.info(`${LOG_PREFIX} Updating packageCommandsStore`, {
-    processId: data.process_id.slice(0, 8),
-    status,
-    exists: pkgExists,
-    storeCount: pkgStore.processes.length,
-  });
-  if (status === BackgroundProcessStatus.COMPLETED) {
-    pkgStore.handleProcessCompleted(data.process_id, data.exit_code, data.end_time, {
-      command: data.command,
-      working_dir: data.working_dir,
-      start_time: data.start_time,
-      worktree_id: data.worktree_id || update.worktree_id,
-    });
-  } else {
-    pkgStore.handleProcessFailed(data.process_id, data.exit_code, data.end_time, {
-      command: data.command,
-      working_dir: data.working_dir,
-      start_time: data.start_time,
-      worktree_id: data.worktree_id || update.worktree_id,
-    });
-  }
 }
 
 /**
@@ -1383,8 +1331,10 @@ function handleRefetch(update: UserUpdate) {
     return;
   }
   if (refetchType === "config_health") {
-    // ConfigHealthIndicator reads GetConfigHealth through the generated hook.
+    // ConfigHealthIndicator reads GetConfigHealth through the generated hook,
+    // and MCP server health is part of config health.
     void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.all });
+    invalidateMcpQueries(queryClient);
   }
   // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);

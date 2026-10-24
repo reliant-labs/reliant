@@ -50,8 +50,8 @@ beforeEach(() => {
   );
 });
 afterEach(() => setTransport(null));
-vi.mock("../../api/mcp-grpc", () => ({
-  mcpGrpc: { listServers: vi.fn(async () => ({ servers: [] })) },
+vi.mock("../../hooks/mcp-queries", () => ({
+  fetchMcpServers: vi.fn(async () => []),
 }));
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

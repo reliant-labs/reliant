@@ -2,14 +2,13 @@
  * Unified Process Hook
  * 
  * Provides accurate process counts by merging and deduplicating processes
- * from processStore and packageCommandsStore. This ensures the UI shows
+ * from BackgroundService and PackageCommandsService. This ensures the UI shows
  * consistent counts across all components.
  */
 
 import { useMemo } from "react";
-import { useProcessStore } from "../store/processStore";
+import { BackgroundProcessStatus, useBackgroundProcesses } from "./background-queries";
 import { usePackageProcesses } from "./package-queries";
-import { BackgroundProcessStatus } from "../api/background-grpc";
 
 // Unified process type that works with both stores
 interface UnifiedProcess {
@@ -43,8 +42,8 @@ interface UnifiedProcessCounts {
  */
 export function useUnifiedProcessCounts(currentWorktreeId?: string): UnifiedProcessCounts {
   // Get processes from both stores
-  const backgroundProcesses = useProcessStore((state) => state.processes);
-  const { data: packageProcesses = [] } = usePackageProcesses();
+  const { data: backgroundProcesses } = useBackgroundProcesses();
+  const { data: packageProcesses } = usePackageProcesses();
 
   return useMemo(() => {
     // Merge and deduplicate processes

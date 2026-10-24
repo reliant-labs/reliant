@@ -1,28 +1,182 @@
 // Copyright (c) 2025 Reliant Labs
 
+/**
+ * The caller's saved logins to integrations — `reliant.v1.ConnectionService`
+ * (research/CONNECTIONS_VAULT.md) — on the generated hooks and keys. Metadata
+ * only: no RPC here ever returns a secret.
+ *
+ * The cache holds what the generated hooks fetch (the proto responses) under
+ * `connectionServiceKeys`; components read the plain frontend types mapped
+ * from it, so they never touch `$typeName` or proto enums. A connection made,
+ * changed or removed also flips `connected` across the integration catalog,
+ * so every write here invalidates `catalogServiceKeys.all` as well — another
+ * service's keys, which the generated mutation cannot know about.
+ *
+ * OAuth is two authenticated RPCs with the provider in between; the whole
+ * client flow is lib/connection-oauth.ts.
+ */
+
 import { useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { ConnectError } from "@connectrpc/connect";
 
-import { connectionGrpc, type Connection } from "../api/connection-grpc";
-import { catalogSearchGrpc } from "../api/catalog-search-grpc";
-import type { JsonSchema } from "../lib/jsonSchema";
+import {
+  ApiKeyConnectionKind,
+  ConnectionAuthKind,
+  ConnectionStatus,
+  type Connection as ProtoConnection,
+  type CreateApiKeyConnectionResponse,
+  type Integration as ProtoIntegration,
+  type IntegrationAuthMethod as ProtoAuthMethod,
+  type IntegrationConnectionParam as ProtoConnectionParam,
+} from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
-import { integrationEventNaming, RAW_EVENT_NAMING, type IntegrationEventNaming } from "../lib/integrationEventNames";
+import { catalogServiceKeys } from "./catalog-service-hooks_gen";
+import {
+  connectionServiceKeys,
+  useCreateApiKeyConnection as useCreateApiKeyConnectionRpc,
+  useListConnections,
+  useListIntegrations,
+} from "./connection-service-hooks_gen";
 
-export const connectionKeys = {
-  all: ["connections"] as const,
-  list: (integrationId: string) => [...connectionKeys.all, "list", integrationId] as const,
-  catalogEntry: (ref: string) => ["catalogEntry", ref] as const,
-};
+// ── Frontend types ──────────────────────────────────────────────────────────
+
+export type AuthKind = "oauth2" | "api_key" | "basic" | "none" | "delegated" | "unknown";
+
+export type ConnectionHealth = "active" | "needs_reauth" | "revoked" | "unknown";
+
+export interface Connection {
+  id: string;
+  integrationId: string;
+  authKind: AuthKind;
+  name: string;
+  /** The provider identity it acts as ("octocat"). */
+  accountLabel: string;
+  /**
+   * The provider's id for the person who made it, as that provider's events
+   * name them in `trigger.sender.id` (a Slack user id, a GitHub user id — the
+   * number, never the renameable login — a Gmail address); "" when the
+   * integration does not say. What "Only from: Me" allowlists.
+   */
+  senderId: string;
+  status: ConnectionHealth;
+  isDefault: boolean;
+}
+
+export interface AuthMethod {
+  kind: AuthKind;
+  /** False when this deployment has not configured it. */
+  available: boolean;
+  unavailableReason: string;
+  /** Form fields a pasted credential needs, keyed by the CreateApiKeyConnection field key. */
+  fieldLabels: Record<string, string>;
+}
+
+export interface ConnectionParam {
+  name: string;
+  displayName: string;
+  description: string;
+  pattern: string;
+  defaultValue: string;
+  required: boolean;
+}
+
+export interface Integration {
+  id: string;
+  displayName: string;
+  methods: AuthMethod[];
+  params: ConnectionParam[];
+}
+
+// ── Proto mapping ───────────────────────────────────────────────────────────
+
+export function authKindFromProto(kind: ConnectionAuthKind): AuthKind {
+  switch (kind) {
+    case ConnectionAuthKind.OAUTH2:
+      return "oauth2";
+    case ConnectionAuthKind.API_KEY:
+      return "api_key";
+    case ConnectionAuthKind.BASIC:
+      return "basic";
+    case ConnectionAuthKind.NONE:
+      return "none";
+    case ConnectionAuthKind.DELEGATED:
+      return "delegated";
+    default:
+      return "unknown";
+  }
+}
+
+function statusFromProto(status: ConnectionStatus): ConnectionHealth {
+  switch (status) {
+    case ConnectionStatus.ACTIVE:
+      return "active";
+    case ConnectionStatus.NEEDS_REAUTH:
+      return "needs_reauth";
+    case ConnectionStatus.REVOKED:
+      return "revoked";
+    default:
+      return "unknown";
+  }
+}
+
+export function authMethodFromProto(proto: ProtoAuthMethod): AuthMethod {
+  return {
+    kind: authKindFromProto(proto.kind),
+    available: proto.available,
+    unavailableReason: proto.unavailableReason,
+    fieldLabels: { ...proto.fieldLabels },
+  };
+}
+
+export function connectionParamFromProto(proto: ProtoConnectionParam): ConnectionParam {
+  return {
+    name: proto.name,
+    displayName: proto.displayName || proto.name,
+    description: proto.description,
+    pattern: proto.pattern,
+    defaultValue: proto.defaultValue,
+    required: proto.required,
+  };
+}
+
+export function connectionFromProto(proto: ProtoConnection): Connection {
+  return {
+    id: proto.id,
+    integrationId: proto.integrationId,
+    authKind: authKindFromProto(proto.authKind),
+    name: proto.name,
+    accountLabel: proto.accountLabel,
+    senderId: proto.senderId,
+    status: statusFromProto(proto.status),
+    isDefault: proto.isDefault,
+  };
+}
+
+function integrationFromProto(proto: ProtoIntegration): Integration {
+  return {
+    id: proto.id,
+    displayName: proto.displayName || proto.id,
+    methods: proto.methods.map(authMethodFromProto),
+    params: proto.connectionParams.map(connectionParamFromProto),
+  };
+}
+
+/** The message to show for a failed connection RPC, without connect's code prefix. */
+export function connectionErrorMessage(error: unknown): string {
+  if (error instanceof ConnectError) return error.rawMessage || error.message;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+// ── Reads ───────────────────────────────────────────────────────────────────
 
 /** The caller's connections to one integration. */
 export function useConnections(integrationId: string | undefined) {
-  return useQuery({
-    queryKey: connectionKeys.list(integrationId ?? ""),
-    queryFn: () => connectionGrpc.list(integrationId),
-    enabled: !!integrationId,
-    staleTime: 30_000,
-  });
+  const query = useListConnections({ integrationId }, { enabled: !!integrationId, staleTime: 30_000 });
+  const connections = query.data?.connections;
+  const data = useMemo(() => connections?.map(connectionFromProto), [connections]);
+  return { ...query, data };
 }
 
 /**
@@ -33,129 +187,56 @@ export function useConnections(integrationId: string | undefined) {
  * and the connect dialog still explains.
  */
 export function useUnavailableIntegrations(): ReadonlySet<string> {
-  const query = useQuery({
-    queryKey: [...connectionKeys.all, "integrations"],
-    queryFn: () => connectionGrpc.listIntegrations(),
-    staleTime: 5 * 60_000,
-  });
-  return useMemo(() => unavailableIntegrationIds(query.data ?? []), [query.data]);
+  const query = useListIntegrations({}, { staleTime: 5 * 60_000 });
+  const integrations = query.data?.integrations;
+  return useMemo(() => unavailableIntegrationIds((integrations ?? []).map(integrationFromProto)), [integrations]);
 }
 
-/** One catalog entry in full (schemas, connection methods). Shared with the palette's prefetch. */
-export function useCatalogEntry(ref: string | undefined) {
-  return useQuery({
-    queryKey: connectionKeys.catalogEntry(ref ?? ""),
-    queryFn: () => catalogSearchGrpc.get(ref!),
-    enabled: !!ref,
-    staleTime: 5 * 60_000,
-  });
-}
+// ── Writes ──────────────────────────────────────────────────────────────────
 
-/** Refetch everything a new or changed connection shows up in. */
+/**
+ * Refetch everything a new or changed connection shows up in: every
+ * ConnectionService read, and every catalog read (search results, listings,
+ * entries and the input-option lists all say whether the caller is connected).
+ */
 export function invalidateConnectionQueries(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: connectionKeys.all });
-  // A new connection changes `connected` on every search result for it.
-  void queryClient.invalidateQueries({ queryKey: ["catalogSearch"] });
-  void queryClient.invalidateQueries({ queryKey: ["catalogEntry"] });
+  void queryClient.invalidateQueries({ queryKey: connectionServiceKeys.all });
+  void queryClient.invalidateQueries({ queryKey: catalogServiceKeys.all });
 }
 
+export interface ApiKeyConnectionInput {
+  integrationId: string;
+  name: string;
+  kind: "api_key" | "basic";
+  fields: Record<string, string>;
+  params: Record<string, string>;
+}
+
+/** The CreateApiKeyConnection request for a pasted credential. */
+export function apiKeyConnectionRequest(input: ApiKeyConnectionInput) {
+  return {
+    integrationId: input.integrationId,
+    name: input.name,
+    kind: input.kind === "basic" ? ApiKeyConnectionKind.BASIC : ApiKeyConnectionKind.API_KEY,
+    fields: input.fields,
+    params: input.params,
+  };
+}
+
+/** The connection a CreateApiKeyConnection answer carries. */
+export function createdConnection(response: CreateApiKeyConnectionResponse): Connection {
+  if (!response.connection) throw new Error("No connection in response");
+  return connectionFromProto(response.connection);
+}
+
+/**
+ * Save a pasted credential (`mutateAsync(apiKeyConnectionRequest(...))`). The
+ * generated mutation invalidates `connectionServiceKeys.all`; the catalog's
+ * `connected` flags are another service's keys, invalidated here.
+ */
 export function useCreateApiKeyConnection() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: connectionGrpc.createApiKey,
-    onSuccess: (connection: Connection) => {
-      invalidateConnectionQueries(queryClient);
-      return connection;
-    },
+  return useCreateApiKeyConnectionRpc({
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: catalogServiceKeys.all }),
   });
-}
-
-/**
- * The output schema of each integration action, keyed by node id, from the
- * cached catalog entries (one request per distinct ref). Feeds CEL
- * completion of `nodes.<id>.data.*`.
- */
-export function useActionOutputSchemas(refsByNode: ReadonlyArray<readonly [string, string]>): Record<string, JsonSchema> {
-  const refs = [...new Set(refsByNode.map(([, ref]) => ref))];
-  const results = useQueries({
-    queries: refs.map((ref) => ({
-      queryKey: connectionKeys.catalogEntry(ref),
-      queryFn: () => catalogSearchGrpc.get(ref),
-      staleTime: 5 * 60_000,
-    })),
-  });
-  const byRef = new Map<string, JsonSchema | undefined>();
-  refs.forEach((ref, i) => byRef.set(ref, results[i]?.data?.outputSchema));
-  const signature = refsByNode.map(([id, ref]) => `${id}=${ref}:${byRef.get(ref) ? 1 : 0}`).join("|");
-  return useMemo(() => {
-    const out: Record<string, JsonSchema> = {};
-    for (const [id, ref] of refsByNode) {
-      const schema = byRef.get(ref);
-      if (schema) out[id] = schema;
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed when a schema arrives or a ref moves
-  }, [signature]);
-}
-
-/**
- * Integration events by their catalog names — "GitHub: Issue opened", not
- * "github: issues.opened" — for every run and trigger that names one
- * (lib/integrationEventNames). One search of the trigger types, shared with
- * useDeclaredTriggerRef's cache; the recorded names until it loads.
- */
-export function useIntegrationEventNaming(): IntegrationEventNaming {
-  const search = useQuery({
-    queryKey: ["catalogSearch", "trigger-types", ""],
-    queryFn: () => catalogSearchGrpc.search({ query: "", kinds: ["trigger"], pageSize: 100 }),
-    staleTime: 5 * 60_000,
-  });
-  return useMemo(() => (search.data ? integrationEventNaming(search.data.entries) : RAW_EVENT_NAMING), [search.data]);
-}
-
-/**
- * The catalog trigger type a declared integration trigger was made from, for
- * its payload schema and event list. Declarations name an integration and
- * events, not a ref, so this searches that integration's trigger types (a
- * handful) and picks the one whose events cover the declaration's.
- */
-export function useDeclaredTriggerRef(integration: string | undefined, events: readonly string[], knownRef?: string): string | undefined {
-  return useDeclaredTriggerRefState(integration, events, knownRef).ref;
-}
-
-/**
- * useDeclaredTriggerRef, plus whether the answer is still on its way: `ref` is
- * undefined both while the catalog is being searched and when nothing in it
- * matches, and a caller that shows a message has to tell those apart.
- */
-export function useDeclaredTriggerRefState(
-  integration: string | undefined,
-  events: readonly string[],
-  knownRef?: string,
-): { ref: string | undefined; loading: boolean } {
-  const search = useQuery({
-    queryKey: ["catalogSearch", "trigger-types", integration ?? ""],
-    queryFn: () => catalogSearchGrpc.search({ query: "", kinds: ["trigger"], integration, pageSize: 100 }),
-    enabled: !!integration && !knownRef,
-    staleTime: 5 * 60_000,
-  });
-  const candidates = search.data?.entries ?? [];
-  const entries = useQueries({
-    queries: candidates.map((candidate) => ({
-      queryKey: connectionKeys.catalogEntry(candidate.ref),
-      queryFn: () => catalogSearchGrpc.get(candidate.ref),
-      staleTime: 5 * 60_000,
-      enabled: !knownRef && events.length > 0,
-    })),
-  });
-  if (knownRef) return { ref: knownRef, loading: false };
-  const loading = search.isLoading || (search.data !== undefined && entries.some((entry) => entry.isLoading));
-  if (candidates.length === 1) return { ref: candidates[0]!.ref, loading: false };
-  for (let i = 0; i < candidates.length; i += 1) {
-    const offered = (entries[i]?.data?.payloadSchema?.properties?.event?.enum ?? []) as unknown[];
-    if (events.length > 0 && events.every((event) => offered.includes(event) || offered.some((o) => event.endsWith(".*") && String(o).startsWith(event.slice(0, -1))))) {
-      return { ref: candidates[i]!.ref, loading: false };
-    }
-  }
-  return { ref: undefined, loading };
 }

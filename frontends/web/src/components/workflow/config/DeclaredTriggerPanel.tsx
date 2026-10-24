@@ -62,7 +62,7 @@ import {
 } from "../../../lib/declaredTriggers";
 import type { Trigger } from "../../../api/trigger-grpc";
 import type { JsonSchema } from "../../../lib/jsonSchema";
-import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/catalog-queries";
 import type { Workflow } from "../../../types/workflow";
 import { getInputDefault, getInputDescription, isInternalInput, type InputDef } from "../../../lib/inputHelpers";
 import { formatInputDefault } from "../../../lib/inputDefaultDisplay";

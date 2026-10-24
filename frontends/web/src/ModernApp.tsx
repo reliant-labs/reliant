@@ -59,9 +59,7 @@ import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
 import { resolveTerminalWorkingDir } from "./lib/terminalWorkingDir";
 import { useUpdateStreamConnection } from "./hooks/useUpdateStreamConnection";
-import { useProcessStore } from "./store/processStore";
 
-import { isGrpcReady } from "./api/grpc-client";
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
 import { useWorkspaceStateStore, type RightSidebarTab } from "./store/workspaceStateStore";
 import {
@@ -1099,27 +1097,6 @@ function App() {
     // Start permission refresh interval to detect system permission changes
     startPermissionRefresh();
   }, [isBackendReady, projectId]);
-
-  // Fetch background processes on app mount to ensure we have current state
-  // This is critical because processes survive server restarts and we need
-  // to load them from the database into our stores on initial load.
-  // Streaming events only capture NEW events, not existing state.
-  useEffect(() => {
-    if (!isBackendReady) return;
-
-    // Guard: gRPC must be ready, otherwise these calls
-    // hit a non-existent server and produce ERR_CONNECTION_REFUSED.
-    if (!isGrpcReady()) {
-      logger.info("⏭️ Skipping background process fetch — gRPC not ready");
-      return;
-    }
-
-    // Fetch all processes (no worktree filter) to populate stores.
-    // Both stores are kept in sync by globalUpdatesStore streaming events;
-    // we only need one initial fetch and let the event handler propagate.
-    logger.info("🔄 Fetching background processes on app mount");
-    useProcessStore.getState().fetchProcesses();
-  }, [isBackendReady]);
 
   // Listen for toggle file browser requests
   useEffect(() => {

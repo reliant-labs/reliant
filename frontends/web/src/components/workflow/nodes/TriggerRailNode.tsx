@@ -35,7 +35,7 @@ import { AlertOctagon, AlertTriangle, CalendarClock, Clock, MessageCircle, Plug,
 import type { NodeExecutionStatus } from "../../../lib/workflow-flow";
 import { declaredRailLines, triggerRailLines, type DeclaredRailLine, type TriggerRailLine } from "../../../lib/triggerRail";
 import { describeDeclaredSource, findingFieldLabel, integrationOf, sourceCase, type TriggerFinding } from "../../../lib/declaredTriggers";
-import { useIntegrationEventNaming } from "../../../hooks/connection-queries";
+import { useIntegrationEventNaming } from "../../../hooks/catalog-queries";
 import { describeSchedule } from "../../../lib/cronText";
 import { useTriggers } from "../../../hooks/trigger-queries";
 import type { Trigger } from "../../../api/trigger-grpc";

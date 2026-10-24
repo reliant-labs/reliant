@@ -1,107 +1,302 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * Package commands (Makefile / npm / Taskfile targets) and the processes they
+ * start — PackageCommandsService — on the generated hooks and keys, kept live
+ * by the user stream.
+ *
+ * The cache holds what the generated hooks fetch (ListPackageCommandsResponse,
+ * ListPackageProcessesResponse, GetCommandFavoritesResponse) under
+ * `packageCommandsServiceKeys`. RunCommand / KillProcess / SetCommandFavorite
+ * are generated mutations, which invalidate `packageCommandsServiceKeys.all`;
+ * the stream's process events patch the cached process lists
+ * (upsertPackageProcess). Components read the frontend types mapped from
+ * those entries.
+ *
+ * BackgroundService also has a ListProcesses and a KillProcess: the two
+ * generated files export the same hook names, so this module imports this
+ * service's under aliases and background-queries.ts the other's.
+ */
+
+import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { create } from "@bufbuild/protobuf";
+
+import { BackgroundProcessStatus, OutputStreamType } from "../gen/reliant/v1/common_pb";
 import {
-  packageCommandsGrpc,
-  type PackageCommand,
-  type PackageProcess,
-  type PackageType,
-  type ProcessLogsResponse,
-  type ListCommandsResponse,
-} from "../api/package-commands-grpc";
-import { usePackageCommandsStore } from "../store/packageCommandsStore";
+  GetCommandFavoritesResponseSchema,
+  PackageProcessSchema,
+  PackageType as ProtoPackageType,
+  type CommandsByType as ProtoCommandsByType,
+  type GetCommandFavoritesResponse,
+  type ListPackageProcessesResponse,
+  type PackageCommand as ProtoPackageCommand,
+  type PackageProcess as ProtoPackageProcess,
+} from "../gen/reliant/v1/package_commands_pb";
+import { queryClient } from "../lib/query-client";
+import {
+  packageCommandsServiceKeys,
+  useGetCommandFavorites,
+  useGetProcessLogs as useGetPackageProcessLogs,
+  useKillProcess as useKillPackageProcessRpc,
+  useListCommands,
+  useListProcesses as useListPackageProcesses,
+  useRunCommand as useRunCommandRpc,
+  useSetCommandFavorite,
+} from "./package-commands-service-hooks_gen";
 
-// Re-export types for consumer convenience
-export type { PackageCommand, PackageProcess, PackageType, ProcessLogsResponse, ListCommandsResponse };
+// ── Frontend types ──────────────────────────────────────────────────────────
 
-// ── Query key factory ───────────────────────────────────────────────────────
+export type PackageType = "makefile" | "npm" | "taskfile";
 
-export const packageKeys = {
-  all: ["packages"] as const,
-  commands: (worktreeId?: string) => [...packageKeys.all, "commands", worktreeId] as const,
-  processes: (worktreeId?: string) => [...packageKeys.all, "processes", worktreeId] as const,
-  processLogs: (processId: string) => [...packageKeys.all, "logs", processId] as const,
+const PACKAGE_TYPE_TO_STRING: Record<number, PackageType> = {
+  [ProtoPackageType.MAKEFILE]: "makefile",
+  [ProtoPackageType.NPM]: "npm",
+  [ProtoPackageType.TASKFILE]: "taskfile",
 };
 
-// ── Query hooks ─────────────────────────────────────────────────────────────
+const STRING_TO_PACKAGE_TYPE: Record<PackageType, ProtoPackageType> = {
+  makefile: ProtoPackageType.MAKEFILE,
+  npm: ProtoPackageType.NPM,
+  taskfile: ProtoPackageType.TASKFILE,
+};
 
-export function usePackageCommands(worktreeId?: string, path?: string) {
-  return useQuery({
-    queryKey: packageKeys.commands(worktreeId),
-    queryFn: () => packageCommandsGrpc.listCommands({ worktreeId, path }),
-    enabled: !!(worktreeId || path),
-  });
+export interface PackageCommand {
+  name: string;
+  description?: string;
+  command: string;
+  package_type: PackageType;
+  source: string;
+  category?: string;
+  dependencies?: string[];
+  working_dir: string;
+  relative_path?: string;
 }
 
-export function usePackageProcesses(worktreeId?: string) {
-  // Merge: React Query fetched data + real-time store updates from WebSocket
-  const storeProcesses = usePackageCommandsStore((state) => state.processes);
+export interface ListCommandsResponse {
+  commands: Record<PackageType, PackageCommand[]>;
+  detected_types: PackageType[];
+}
 
-  const query = useQuery({
-    queryKey: packageKeys.processes(worktreeId),
-    queryFn: () => packageCommandsGrpc.listProcesses(worktreeId),
-  });
+export interface PackageProcess {
+  id: string;
+  command: string;
+  status: BackgroundProcessStatus;
+  worktree_id?: string;
+  working_dir: string;
+  start_time: string;
+  end_time?: string;
+  exit_code?: number;
+}
 
-  // The store receives real-time updates via globalUpdatesStore (handleProcessStarted/Completed/Failed).
-  // Merge store processes on top of query data so the UI reflects WebSocket events immediately.
-  const mergedProcesses = (() => {
-    const fetched = query.data ?? [];
-    if (storeProcesses.length === 0) return fetched;
+export interface OutputLine {
+  type: "stdout" | "stderr";
+  text: string;
+}
 
-    // Build a map keyed by process ID; store wins on conflicts (fresher data).
-    const byId = new Map<string, PackageProcess>();
-    for (const p of fetched) byId.set(p.id, p);
-    for (const p of storeProcesses) byId.set(p.id, p);
-    return Array.from(byId.values());
-  })();
+export interface ProcessLogsResponse {
+  stdout: string;
+  stderr: string;
+  combined: OutputLine[];
+}
 
+// ── Proto mapping ───────────────────────────────────────────────────────────
+
+function commandFromProto(proto: ProtoPackageCommand): PackageCommand {
   return {
-    ...query,
-    data: mergedProcesses,
+    name: proto.name,
+    description: proto.description || undefined,
+    command: proto.command,
+    package_type: PACKAGE_TYPE_TO_STRING[proto.packageType] || "makefile",
+    source: proto.source,
+    category: proto.category || undefined,
+    dependencies: proto.dependencies?.length > 0 ? proto.dependencies : undefined,
+    working_dir: proto.workingDir,
+    relative_path: proto.relativePath || undefined,
   };
 }
 
-export function useProcessLogs(processId: string) {
-  return useQuery({
-    queryKey: packageKeys.processLogs(processId),
-    queryFn: () => packageCommandsGrpc.getProcessLogs(processId),
-    enabled: !!processId,
+function commandsByTypeFromProto(protoCommands: { [key: string]: ProtoCommandsByType }): Record<PackageType, PackageCommand[]> {
+  const result: Record<string, PackageCommand[]> = {};
+  for (const [pkgType, cmdsByType] of Object.entries(protoCommands)) {
+    result[pkgType] = cmdsByType.commands.map(commandFromProto);
+  }
+  return result as Record<PackageType, PackageCommand[]>;
+}
+
+export function packageProcessFromProto(proto: ProtoPackageProcess): PackageProcess {
+  return {
+    id: proto.id,
+    command: proto.command,
+    status: proto.status,
+    worktree_id: proto.worktreeId,
+    working_dir: proto.workingDir,
+    start_time: proto.startTime,
+    end_time: proto.endTime,
+    exit_code: proto.exitCode,
+  };
+}
+
+function packageProcessToProto(process: PackageProcess): ProtoPackageProcess {
+  return create(PackageProcessSchema, {
+    id: process.id,
+    command: process.command,
+    status: process.status,
+    worktreeId: process.worktree_id,
+    workingDir: process.working_dir,
+    startTime: process.start_time,
+    endTime: process.end_time,
+    exitCode: process.exit_code,
   });
 }
 
-// ── Mutation hooks ──────────────────────────────────────────────────────────
+// ── Reads ───────────────────────────────────────────────────────────────────
 
-export function useRunCommand() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (params: {
-      worktreeId?: string;
-      path?: string;
-      commandName: string;
-      packageType: PackageType;
-      workingDir?: string;
-      env?: Record<string, string>;
-    }) =>
-      packageCommandsGrpc.runCommand({
-        worktree_id: params.worktreeId,
-        path: params.path,
-        command_name: params.commandName,
-        package_type: params.packageType,
-        working_dir: params.workingDir,
-        env: params.env,
-      }),
-    onSuccess: (_data, variables) => {
-      // Invalidate processes so the list refreshes
-      queryClient.invalidateQueries({ queryKey: packageKeys.processes(variables.worktreeId) });
+/** The commands a worktree (or, with none, a project directory) offers. */
+export function usePackageCommands(worktreeId?: string, path?: string) {
+  const query = useListCommands({ worktreeId, path }, { enabled: !!(worktreeId || path) });
+  const response = query.data;
+  const data = useMemo<ListCommandsResponse | undefined>(
+    () =>
+      response && {
+        commands: commandsByTypeFromProto(response.commands),
+        detected_types: response.detectedTypes as PackageType[],
+      },
+    [response],
+  );
+  return { ...query, data };
+}
+
+const NO_PROCESSES: PackageProcess[] = [];
+
+/**
+ * Processes package commands started: one worktree's, or every worktree's
+ * without one. The fetch is the cold-start seed; the stream keeps it live.
+ */
+export function usePackageProcesses(worktreeId?: string) {
+  const query = useListPackageProcesses({ worktreeId: worktreeId || undefined });
+  const processes = query.data?.processes;
+  const data = useMemo(() => processes?.map(packageProcessFromProto) ?? NO_PROCESSES, [processes]);
+  return { ...query, data };
+}
+
+/** A process's captured logs, fetched while `processId` is set. */
+export function useProcessLogs(processId: string | null) {
+  const query = useGetPackageProcessLogs({ processId: processId ?? "" }, { enabled: !!processId });
+  const response = query.data;
+  const data = useMemo<ProcessLogsResponse | undefined>(
+    () =>
+      response && {
+        stdout: response.stdout,
+        stderr: response.stderr,
+        combined: response.combined.map((line) => ({
+          type: line.type === OutputStreamType.STDERR ? "stderr" : "stdout",
+          text: line.text,
+        })),
+      },
+    [response],
+  );
+  return { ...query, data };
+}
+
+const NO_FAVORITES: ReadonlySet<string> = new Set();
+
+/** A project's favorite command keys (getCommandKey). */
+export function useCommandFavorites(projectId: string | undefined) {
+  const query = useGetCommandFavorites({ projectId: projectId ?? "" }, { enabled: !!projectId });
+  const keys = query.data?.commandKeys;
+  const data = useMemo<ReadonlySet<string>>(() => (keys ? new Set(keys) : NO_FAVORITES), [keys]);
+  return { ...query, data };
+}
+
+// ── Writes ──────────────────────────────────────────────────────────────────
+
+export interface RunCommandInput {
+  worktreeId?: string;
+  path?: string;
+  commandName: string;
+  packageType: PackageType;
+  /** The directory to run from (the command's working_dir). */
+  workingDir?: string;
+  env?: Record<string, string>;
+}
+
+/** The RunCommand request for a package command. */
+export function runCommandRequest(input: RunCommandInput) {
+  return {
+    worktreeId: input.worktreeId,
+    path: input.path,
+    commandName: input.commandName,
+    packageType: STRING_TO_PACKAGE_TYPE[input.packageType] ?? ProtoPackageType.MAKEFILE,
+    env: input.env ?? {},
+    workingDir: input.workingDir,
+  };
+}
+
+/** Run a command (`mutateAsync(runCommandRequest(...))`); refetches the process lists. */
+export const useRunCommand = useRunCommandRpc;
+
+/** Stop a process a command started (`mutateAsync({ processId })`); refetches the process lists. */
+export const useKillPackageProcess = useKillPackageProcessRpc;
+
+/**
+ * Mark or unmark a favorite, shown at once: the cached favorites are patched
+ * before the call and restored if it fails; the generated mutation then
+ * refetches them on success.
+ */
+export function useToggleCommandFavorite() {
+  const client = useQueryClient();
+  return useSetCommandFavorite({
+    onMutate: async ({ projectId = "", commandKey = "", isFavorite = false }) => {
+      const key = packageCommandsServiceKeys.getCommandFavorites({ projectId });
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<GetCommandFavoritesResponse>(key);
+      const keys = new Set(previous?.commandKeys ?? []);
+      if (isFavorite) keys.add(commandKey);
+      else keys.delete(commandKey);
+      client.setQueryData(key, create(GetCommandFavoritesResponseSchema, { commandKeys: [...keys] }));
+      return { key, previous };
+    },
+    // The generated hook infers onMutate's return (TanStack's TContext), so
+    // the rollback arrives typed.
+    onError: (_error, _vars, rollback) => {
+      if (rollback) client.setQueryData(rollback.key, rollback.previous);
     },
   });
 }
 
-export function useKillProcess() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (processId: string) => packageCommandsGrpc.killProcess(processId),
-    onSuccess: () => {
-      // Invalidate all process queries
-      queryClient.invalidateQueries({ queryKey: [...packageKeys.all, "processes"] });
-    },
+// ── Stream ──────────────────────────────────────────────────────────────────
+
+/** A message's fields without its type tag, so create() builds a new message from them. */
+function fieldsOf({ $typeName: _typeName, ...fields }: ProtoPackageProcess) {
+  return fields;
+}
+
+function patchList(worktreeId: string | undefined, update: (processes: ProtoPackageProcess[]) => ProtoPackageProcess[]): void {
+  const patch = (prev: ListPackageProcessesResponse | undefined) => (prev ? { ...prev, processes: update(prev.processes) } : prev);
+  queryClient.setQueryData<ListPackageProcessesResponse>(packageCommandsServiceKeys.listProcesses({}), patch);
+  if (worktreeId) {
+    queryClient.setQueryData<ListPackageProcessesResponse>(packageCommandsServiceKeys.listProcesses({ worktreeId }), patch);
+  }
+}
+
+/**
+ * A process started, finished or failed. One a list already holds takes the
+ * event's status, exit code and end time; an unknown one is added. Lists that
+ * were never fetched are left alone: their first fetch is current.
+ */
+export function upsertPackageProcess(process: PackageProcess): void {
+  patchList(process.worktree_id, (processes) => {
+    const index = processes.findIndex((p) => p.id === process.id);
+    if (index < 0) return [packageProcessToProto(process), ...processes];
+    const existing = processes[index]!;
+    const next = [...processes];
+    next[index] = create(PackageProcessSchema, {
+      ...fieldsOf(existing),
+      status: process.status,
+      exitCode: process.exit_code,
+      endTime: process.end_time,
+    });
+    return next;
   });
 }

@@ -47,8 +47,6 @@ const getCatalogEntry = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    connection: () => ({ listConnections }),
-    catalog: () => ({ searchCatalog, getCatalogEntry }),
     trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     worktree: () => ({ listWorktrees }),
@@ -90,7 +88,16 @@ const webhookDeclared = {
 } as unknown as DeclaredTrigger;
 
 beforeEach(() => {
-  setTransport(mockTransport(serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch })));
+  // PresetService (connectClient), CatalogService and ConnectionService
+  // (generated hooks) are answered at the transport.
+  setTransport(
+    mockTransport({
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+      "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+      "ConnectionService.ListConnections": (req) => listConnections(req),
+    }),
+  );
   createTrigger.mockReset();
   rotateWebhookToken.mockReset();
   getWorkflow.mockReset();

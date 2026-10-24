@@ -56,6 +56,8 @@ import {
   worktreesResponse,
 } from "../../workflow/run/__tests__/runFormFixtures";
 import { renderRunsAt } from "./runTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const rpc = vi.hoisted(() => ({
   getChat: vi.fn(),
@@ -92,12 +94,16 @@ vi.mock("@/api/grpc-client", () => ({
 }));
 
 // PresetService is reached through connectClient (hooks/preset-queries), so
-// it is answered at the transport by the same fakes.
+// it is answered at the transport by the same fakes. Integration events are
+// named from the catalog's trigger types; none here.
 beforeEach(() => {
-  setTransport(mockTransport(serviceHandlers("PresetService", {
+  setTransport(mockTransport({
+      ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: rpc.listPresetsForWorkflow,
       getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
-    })));
+    }),
+      "CatalogService.SearchCatalog": { response: {} },
+    }));
 });
 afterEach(() => {
   setTransport(null);

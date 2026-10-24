@@ -1,4 +1,4 @@
-import type { PackageCommand } from "../../api/package-commands-grpc";
+import type { PackageCommand } from "../../hooks/package-queries";
 
 interface ProcessLike {
   command: string;

@@ -4,18 +4,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+import { ConnectionAuthKind, ConnectionStatus } from '@/gen/reliant/v1/connection_pb'
+import { setTransport } from '@/lib/connect'
+import { mockTransport } from '@/lib/test-utils'
+
 const { startOAuth, completeOAuth, invalidate } = vi.hoisted(() => ({
   startOAuth: vi.fn(),
   completeOAuth: vi.fn(),
   invalidate: vi.fn(),
 }))
 
-vi.mock('@/api/connection-grpc', () => ({
-  connectionGrpc: { startOAuth, completeOAuth },
-  connectionErrorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
-}))
+// The two OAuth RPCs, answered at the transport: startOAuth resolves the
+// provider URL, completeOAuth the server's CompleteOAuthResponse.
+setTransport(
+  mockTransport({
+    'ConnectionService.StartOAuth': async (req) => ({ authorizeUrl: await startOAuth(req) }),
+    'ConnectionService.CompleteOAuth': (req) => completeOAuth(req),
+  }),
+)
 
-vi.mock('@/hooks/connection-queries', () => ({
+vi.mock('@/hooks/catalog-queries', () => ({
   useCatalogEntry: () => ({
     isLoading: false,
     isError: false,
@@ -26,15 +34,23 @@ vi.mock('@/hooks/connection-queries', () => ({
       },
     },
   }),
+}))
+
+vi.mock('@/hooks/connection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/connection-queries')>()),
   useCreateApiKeyConnection: () => ({ mutateAsync: vi.fn(), isPending: false }),
   invalidateConnectionQueries: invalidate,
 }))
 
 import { ConnectIntegrationDialog } from '../ConnectIntegrationDialog'
 
+const protoConnection = {
+  id: 'conn_1', integrationId: 'slack', authKind: ConnectionAuthKind.OAUTH2, name: 'Acme',
+  accountLabel: 'Acme', status: ConnectionStatus.ACTIVE, isDefault: true,
+}
 const connection = {
   id: 'conn_1', integrationId: 'slack', authKind: 'oauth2', name: 'Acme',
-  accountLabel: 'Acme', status: 'active', isDefault: true,
+  accountLabel: 'Acme', senderId: '', status: 'active', isDefault: true,
 }
 
 const renderDialog = (props: { onConnected?: (c: unknown) => void; onClose?: () => void } = {}) => {
@@ -58,7 +74,7 @@ describe('ConnectIntegrationDialog OAuth', () => {
 
   beforeEach(() => {
     startOAuth.mockReset().mockResolvedValue('https://slack.com/oauth/v2/authorize?state=s')
-    completeOAuth.mockReset().mockResolvedValue({ connection, redirectAfter: '/workflow/x' })
+    completeOAuth.mockReset().mockResolvedValue({ connection: protoConnection, redirectAfter: '/workflow/x' })
     invalidate.mockReset()
     assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, assign })
@@ -98,7 +114,7 @@ describe('ConnectIntegrationDialog OAuth', () => {
     finishBrowser({ code: 'the-code', state: 'the-state' })
 
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith(connection))
-    expect(completeOAuth).toHaveBeenCalledWith({ code: 'the-code', state: 'the-state' })
+    expect(completeOAuth).toHaveBeenCalledWith(expect.objectContaining({ code: 'the-code', state: 'the-state' }))
     expect(invalidate).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
     expect(assign).not.toHaveBeenCalled()
