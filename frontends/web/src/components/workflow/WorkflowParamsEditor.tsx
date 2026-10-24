@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useId } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { ToolsSelector } from './ToolsSelector'
-import { presetGrpc, type Preset } from '../../api/preset-grpc'
+import { useProjectPresets } from '../../hooks/preset-queries'
 import { useProjectStore } from '../../store/projectStore'
 import { useModels } from '../../store/globalDataStore'
 import { formatValueForDisplay } from '../../lib/paramUtils'
@@ -598,8 +598,7 @@ function ToolsDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 
 function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
   const { currentProject } = useProjectStore()
-  const [availablePresets, setAvailablePresets] = useState<Preset[]>([])
-  const [loading, setLoading] = useState(true)
+  const { presets: availablePresets, loading } = useProjectPresets(currentProject?.id)
 
   // Parse the default value from proto Value
   const parseDefault = (): string[] => {
@@ -618,22 +617,6 @@ function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
   }
   
   const [selectedPresets, setSelectedPresets] = useState<string[]>(parseDefault)
-
-  useEffect(() => {
-    if (!currentProject?.id) {
-      setLoading(false)
-      return
-    }
-    presetGrpc.listPresets(currentProject.id)
-      .then(presets => {
-        setAvailablePresets(presets)
-        setLoading(false)
-      })
-      .catch(err => {
-        console.error('Failed to load presets:', err)
-        setLoading(false)
-      })
-  }, [currentProject?.id])
 
   const handleToggle = (presetName: string) => {
     const newSelection = selectedPresets.includes(presetName)

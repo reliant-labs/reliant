@@ -13,7 +13,7 @@
  * hook's return value because a query can be `isLoading` for benign reasons —
  * only "the network call was made" distinguishes the bug from the fix.
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -29,6 +29,20 @@ vi.mock("../../api/client", () => ({
     },
   },
 }));
+
+// SettingsService is answered at the transport: the code under test reads
+// provider statuses / preferences through the generated hooks' cache entries.
+import { setTransport } from "../../lib/connect";
+import { mockTransport } from "../../lib/test-utils";
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "SettingsService.GetProviderStatuses": async () => ({ providers: await getProviders() }),
+      "SettingsService.GetPreferences": () => getPreferences(),
+    }),
+  );
+});
+afterEach(() => setTransport(null));
 
 // The auth store, driven by this test. `session` is the signal the gate reads:
 // a user object without a committed session still cannot authenticate an RPC.

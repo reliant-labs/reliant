@@ -103,14 +103,11 @@ vi.mock('@/api/grpc-unauth', () => ({
 }))
 
 // Keep attachment-store tests deterministic by stubbing network deletion.
-vi.mock('@/api/attachment-grpc', async () => {
-  const actual = await vi.importActual<typeof import('@/api/attachment-grpc')>('@/api/attachment-grpc')
+vi.mock('@/hooks/attachment-queries', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/attachment-queries')>('@/hooks/attachment-queries')
   return {
     ...actual,
-    attachmentGrpc: {
-      ...actual.attachmentGrpc,
-      deleteAttachment: vi.fn(async () => undefined),
-    },
+    deleteAttachment: vi.fn(async () => undefined),
   }
 })
 

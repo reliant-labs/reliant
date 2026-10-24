@@ -97,7 +97,6 @@ const MODELS = {
   tiers: {},
 };
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => PRESETS,
   useModels: () => MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
@@ -109,8 +108,10 @@ vi.mock("../../../hooks/workflow-config-queries", async () => {
 });
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => [] }));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: { getDefaultPresets: vi.fn().mockResolvedValue({}), listPresets: vi.fn().mockResolvedValue([]) },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 

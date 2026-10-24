@@ -32,11 +32,8 @@ vi.mock('../../../api/workflow-grpc', () => ({
   },
 }))
 
-vi.mock('../../../api/preset-grpc', () => ({
-  presetGrpc: { getDefaultPresets: vi.fn(async () => ({})) },
-}))
-
-vi.mock('../../../store/globalDataStore', () => ({
+vi.mock('../../../hooks/preset-queries', () => ({
+  fetchDefaultPresets: vi.fn(async () => ({})),
   useWorkflowPresets: () => ({ presets: [], loading: false }),
 }))
 

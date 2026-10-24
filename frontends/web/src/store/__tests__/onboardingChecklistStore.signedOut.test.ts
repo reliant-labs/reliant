@@ -16,7 +16,7 @@
  * nothing stopped. These tests assert the negative: with no session, the
  * provider fetch is never issued.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 const readSetting = vi.fn();
 const upsertStringSetting = vi.fn(async () => undefined);
@@ -33,6 +33,19 @@ const getProviders = vi.fn(async () => [] as unknown[]);
 vi.mock("../../api/client", () => ({
   api: { settings: { getProviders: () => getProviders() } },
 }));
+
+// SettingsService is answered at the transport: the code under test reads
+// provider statuses / preferences through the generated hooks' cache entries.
+import { setTransport } from "../../lib/connect";
+import { mockTransport } from "../../lib/test-utils";
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "SettingsService.GetProviderStatuses": async () => ({ providers: await getProviders() }),
+    }),
+  );
+});
+afterEach(() => setTransport(null));
 vi.mock("../../api/mcp-grpc", () => ({
   mcpGrpc: { listServers: vi.fn(async () => ({ servers: [] })) },
 }));

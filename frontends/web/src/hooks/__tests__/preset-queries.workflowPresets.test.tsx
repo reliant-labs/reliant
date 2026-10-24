@@ -14,21 +14,15 @@
  *     `projectId` argument for presets as it already did for the definition.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook as renderHookBare, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createTestQueryClient } from "../../test/renderWithQuery";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const listPresetsForWorkflow = vi.fn();
-
-vi.mock("@/api/preset-grpc", () => ({
-  presetGrpc: {
-    listPresetsForWorkflow: (projectId: string, workflowName: string) =>
-      listPresetsForWorkflow(projectId, workflowName),
-    getDefaultPresets: vi.fn(async () => ({})),
-  },
-}));
 
 vi.mock("@/api/workflow-grpc", () => ({
   workflowGrpc: {
@@ -48,7 +42,7 @@ vi.mock("@/store/projectStore", () => {
   return { useProjectStore };
 });
 
-import { usePresetsForWorkflow, useWorkflowPresets } from "../globalDataStore";
+import { usePresetsForWorkflow, useWorkflowPresets } from "../preset-queries";
 
 // The preset list is a React Query read (cached across composer mounts); the
 // app always provides a client, so the hooks are rendered under one here.
@@ -68,7 +62,17 @@ describe("workflow presets follow the right project", () => {
     listPresetsForWorkflow.mockImplementation(async (projectId: string) => [
       { name: `preset-of-${projectId}`, description: "", params: {}, source: "project", tag: "agent" },
     ]);
+    setTransport(
+      mockTransport({
+        "PresetService.ListPresetsForWorkflow": async (req) => {
+          const r = req as { projectId: string; workflowName: string };
+          return { presets: await listPresetsForWorkflow(r.projectId, r.workflowName), invalidPresets: [] };
+        },
+        "PresetService.GetDefaultPresetsBatch": () => ({ presetsByWorkflow: {} }),
+      }),
+    );
   });
+  afterEach(() => setTransport(null));
 
   it("useWorkflowPresets reads the project it is given, not the current one", async () => {
     const { result } = renderHook(() => useWorkflowPresets("proj-other", "builtin://triage"));

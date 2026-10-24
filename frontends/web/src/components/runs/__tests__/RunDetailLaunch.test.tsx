@@ -16,7 +16,11 @@
  * transcript are stubbed; everything between them and the wire is real.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -80,16 +84,27 @@ vi.mock("@/api/grpc-client", () => ({
     }),
     run: () => ({ listRuns: rpc.listRuns }),
     workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
-    preset: () => ({
-      listPresetsForWorkflow: rpc.listPresetsForWorkflow,
-      getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
-    }),
     worktree: () => ({ listWorktrees: rpc.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
     project: () => ({ listProjectDaemons: rpc.listProjectDaemons }),
   },
   setDaemonLastSeen: vi.fn(),
 }));
+
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(mockTransport(serviceHandlers("PresetService", {
+      listPresetsForWorkflow: rpc.listPresetsForWorkflow,
+      getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
+    })));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 // The run's chat is "loaded" straight from GetChat; the stores the real
 // loader drives are not under test here.

@@ -63,7 +63,7 @@ vi.mock("../../../store/projectStore", () => {
 });
 
 vi.mock("../../../store/globalDataStore", () => {
-  const state = { presets: [{ name: "general" }], refetchPresets: vi.fn(), refetchWorkflows: vi.fn(async () => undefined) };
+  const state = { refetchWorkflows: vi.fn(async () => undefined) };
   const useGlobalDataStore = Object.assign(
     (selector?: (s: typeof state) => unknown) => (selector ? selector(state) : state),
     { getState: () => state },

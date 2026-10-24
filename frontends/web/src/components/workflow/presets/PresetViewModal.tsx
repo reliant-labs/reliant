@@ -13,8 +13,7 @@ import { toast } from 'sonner'
 import { cn } from '../../../lib/utils'
 import { Modal } from '../../ui/Modal'
 import Button from '@/components/forge-ui/button';
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
+import { createPreset, type Preset } from '../../../hooks/preset-queries'
 import { formatValueForDisplay, unwrapProtoValue } from '../../../lib/paramUtils'
 
 interface PresetViewModalProps {
@@ -33,7 +32,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
 
     setIsCopying(true)
     try {
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: copyName.trim(),
         description: preset.description || `Copy of ${preset.name}`,
         params: preset.params,

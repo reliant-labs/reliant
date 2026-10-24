@@ -1,9 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+// PresetPicker reads a workflow's defaults through the query cache; these
+// renders have no QueryClient and no defaults to show.
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  useDefaultPresets: () => ({ defaults: {}, loading: false }),
+}));
+
 import { MobileWorkflowParamsView } from "../MobileWorkflowParamsView";
 import { createInput } from "../../../lib/inputHelpers";
 import type { Workflow } from "../../../types/workflow";
-import type { Preset } from "../../../store/globalDataStore";
+import type { Preset } from "../../../hooks/preset-queries";
 
 function workflow(): Workflow {
   return {

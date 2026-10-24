@@ -55,7 +55,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
       useModel ? api.chatsV2.retryUsageLimitWait(chatId, useModel) : api.chatsV2.retryUsageLimitWait(chatId),
   });
   const fallback = useChatModelFallback(chatId);
-  const accounts = useProviderAccounts().data;
+  const accounts = useProviderAccounts();
   const earliest = earliestResettingAccount(
     accounts?.kind === "ready" ? accounts.accounts : [],
     fallback.limitedDriver,

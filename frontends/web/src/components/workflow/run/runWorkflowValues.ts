@@ -20,7 +20,7 @@
  * module also converts between the two.
  */
 
-import type { Preset } from "@/api/preset-grpc";
+import type { Preset } from "@/hooks/preset-queries";
 import type { InputDef } from "@/lib/inputHelpers";
 import { getInputDefault, getInputMinItems, getInputMulti, isInputMarkedRequired, isIntegrationInput } from "@/lib/inputHelpers";
 import type { InputGroupDef } from "../WorkflowInputGroup";

@@ -1,14 +1,10 @@
 import { useMemo, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../types/providerAccount";
 import { OnLimitDefault } from "./OnLimitDefault";
-import {
-  useProviderAccountActions,
-  useProviderAccountsView,
-  useRoutingMode,
-  type RoutingMode,
-} from "../../../hooks/provider-account-queries";
+import { useProviderAccountActions, useProviderAccountsView } from "../../../hooks/provider-account-queries";
+import { useRoutingMode, type RoutingMode } from "../../../hooks/provider-routing-queries";
 import { AccountRow } from "./AccountRow";
 import { AddAccountButton, ConnectPanel } from "./AddAccountButton";
 import { sortByPriority } from "./accountFormat";

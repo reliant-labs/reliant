@@ -8,7 +8,7 @@ import { MultiSelectDropdown } from "../../ui/MultiSelectDropdown";
 import { celString, normalizeCelString } from "../../../lib/celAdapter";
 import { api } from "../../../api/client";
 import { useProjectStore } from "../../../store/projectStore";
-import { usePresetsForWorkflow } from "../../../store/globalDataStore";
+import { usePresetsForWorkflow } from "../../../hooks/preset-queries";
 import { canonicalizeBuiltinWorkflowRef } from "../workflowRef";
 import type {
   RouterArgs,

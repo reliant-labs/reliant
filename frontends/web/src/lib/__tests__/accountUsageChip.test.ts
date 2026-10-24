@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ProviderAccount, UsageWindow } from "../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../types/providerAccount";
 import { accountChipState, accountChipText, shortAccountLabel } from "../accountUsageChip";
 
 const NOW = new Date("2026-10-18T12:00:00Z");

@@ -1,6 +1,6 @@
 /**
  * "Add an API key" completion is derived from the provider-status query
- * cache (settingsKeys.providers()), not from the "api-key:saved" event.
+ * cache (providerStatusesKey()), not from the "api-key:saved" event.
  *
  * THE BUG THIS PINS: a real prod incident where a user redeemed an AI
  * coupon, control-plane credited their wallet, but the checklist item
@@ -16,7 +16,7 @@
  * write to the query cache, exactly as a `useProviderStatuses()` refetch
  * from any other part of the app would produce.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 // ─── Persistence layer (the unit under test talks to this) ───────────────────
 
@@ -37,6 +37,19 @@ const getProviders = vi.fn(async () => [] as unknown[]);
 vi.mock("../../api/client", () => ({
   api: { settings: { getProviders: () => getProviders() } },
 }));
+
+// SettingsService is answered at the transport: the code under test reads
+// provider statuses / preferences through the generated hooks' cache entries.
+import { setTransport } from "../../lib/connect";
+import { mockTransport } from "../../lib/test-utils";
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "SettingsService.GetProviderStatuses": async () => ({ providers: await getProviders() }),
+    }),
+  );
+});
+afterEach(() => setTransport(null));
 vi.mock("../../api/mcp-grpc", () => ({
   mcpGrpc: { listServers: vi.fn(async () => ({ servers: [] })) },
 }));
@@ -90,7 +103,7 @@ vi.mock("../authStore", () => {
 import { queryClient as realQueryClient } from "../../lib/query-client";
 
 import { useOnboardingChecklistStore } from "../onboardingChecklistStore";
-import { settingsKeys } from "../../hooks/settings-queries";
+import { providerStatusesKey } from "../../hooks/settings-queries";
 
 function resetStore() {
   useOnboardingChecklistStore.setState({
@@ -121,9 +134,11 @@ describe("onboarding checklist — add-api-key derives from provider-status cach
     // Simulate what RedeemCouponForm (or any other flow) produces WITHOUT
     // emitting "api-key:saved": a write to the shared providers query cache,
     // exactly as a background refetch of useProviderStatuses() would do.
-    realQueryClient.setQueryData(settingsKeys.providers(), [
-      { provider: "reliant", configured: true, hasApiKey: false, displayName: "Reliant" },
-    ]);
+    realQueryClient.setQueryData(providerStatusesKey(), {
+      providers: [
+        { provider: "reliant", configured: true, hasApiKey: false, displayName: "Reliant" },
+      ],
+    });
 
     await vi.waitFor(() => {
       expect(
@@ -137,9 +152,11 @@ describe("onboarding checklist — add-api-key derives from provider-status cach
   it("does not complete while the cached provider list has no configured provider", async () => {
     const unsub = useOnboardingChecklistStore.getState().subscribeToStoreChanges();
 
-    realQueryClient.setQueryData(settingsKeys.providers(), [
-      { provider: "anthropic", configured: false, hasApiKey: false, displayName: "Anthropic" },
-    ]);
+    realQueryClient.setQueryData(providerStatusesKey(), {
+      providers: [
+        { provider: "anthropic", configured: false, hasApiKey: false, displayName: "Anthropic" },
+      ],
+    });
 
     // Give any stray async work a tick to (not) run.
     await new Promise((r) => setTimeout(r, 0));
@@ -161,7 +178,7 @@ describe("onboarding checklist — add-api-key derives from provider-status cach
       true,
     );
     // The fetch landed in the shared cache other consumers (useProviderStatuses) read.
-    expect(realQueryClient.getQueryData(settingsKeys.providers())).toBeDefined();
+    expect(realQueryClient.getQueryData(providerStatusesKey())).toBeDefined();
   });
 
   it("THE OLD BUG, characterized: with the event-only latch this would have stayed unchecked forever", async () => {
@@ -171,9 +188,11 @@ describe("onboarding checklist — add-api-key derives from provider-status cach
     // so if `add-api-key` completes here, it did NOT come from the event.
     const unsub = useOnboardingChecklistStore.getState().subscribeToStoreChanges();
 
-    realQueryClient.setQueryData(settingsKeys.providers(), [
-      { provider: "reliant", configured: true, hasApiKey: false, displayName: "Reliant" },
-    ]);
+    realQueryClient.setQueryData(providerStatusesKey(), {
+      providers: [
+        { provider: "reliant", configured: true, hasApiKey: false, displayName: "Reliant" },
+      ],
+    });
 
     await vi.waitFor(() => {
       expect(

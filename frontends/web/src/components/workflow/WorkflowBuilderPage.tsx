@@ -156,17 +156,6 @@ export function WorkflowBuilderPage({
   // Use cached workflows from global store for immediate display
   const { workflows: cachedWorkflows } = useWorkflows();
 
-  // Get presets from global store
-  const presets = useGlobalDataStore((state) => state.presets);
-  const refetchPresets = useGlobalDataStore((state) => state.refetchPresets);
-
-  // Ensure presets are loaded when component mounts with a projectId
-  useEffect(() => {
-    if (projectId && presets.length === 0) {
-      refetchPresets(projectId);
-    }
-  }, [projectId, presets.length, refetchPresets]);
-
   // Merge cached workflows with any detailed data we've fetched
   const existingWorkflows = useMemo(() => {
     const workflowMap = new Map<string, WorkflowResponse>();

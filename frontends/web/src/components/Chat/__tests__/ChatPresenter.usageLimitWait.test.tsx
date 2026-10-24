@@ -36,7 +36,7 @@ vi.mock("../../../store/globalDataStore", () => ({
   useModels: () => ({ models: state.models, tiers: state.tiers, loading: false, error: null }),
 }));
 vi.mock("../../../hooks/provider-account-queries", () => ({
-  useProviderAccounts: () => ({ data: { kind: "ready", accounts: state.accounts } }),
+  useProviderAccounts: () => ({ kind: "ready", accounts: state.accounts }),
 }));
 vi.mock("../../../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../api/client")>();

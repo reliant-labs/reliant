@@ -30,10 +30,8 @@ vi.mock("../../../api/grpc-client", () => ({
   getGRPCBaseURLPublic: () => "http://api.test",
 }));
 
-vi.mock("../../../api/attachment-grpc", () => ({
-  attachmentGrpc: {
-    getAttachmentAsBlob: (id: string) => getAttachmentAsBlob(id),
-  },
+vi.mock("../../../hooks/attachment-queries", () => ({
+  fetchAttachmentBlob: (id: string) => getAttachmentAsBlob(id),
 }));
 
 // The tool card is rendered for real so the test can prove the image is NOT
