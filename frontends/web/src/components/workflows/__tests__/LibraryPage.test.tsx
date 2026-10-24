@@ -8,7 +8,11 @@
  * builder), and Run… opening RunWorkflowDialog.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -37,15 +41,26 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow, deleteWorkflow: mocks.deleteWorkflow }),
     run: () => ({ lastRunPerWorkflow: mocks.lastRunPerWorkflow }),
     trigger: () => ({ listTriggers: mocks.listTriggers }),
-    preset: () => ({
-      listPresetsForWorkflow: mocks.listPresetsForWorkflow,
-      getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
-    }),
     worktree: () => ({ listWorktrees: mocks.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
     project: () => ({ listProjectDaemons: mocks.listProjectDaemons }),
   },
 }));
+
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(mockTransport(serviceHandlers("PresetService", {
+      listPresetsForWorkflow: mocks.listPresetsForWorkflow,
+      getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
+    })));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const state = { currentProject: { id: "proj-1", name: "Reliant" }, projects: [], isLoading: false };

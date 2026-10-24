@@ -9,7 +9,7 @@
  * lives in Settings → Providers.
  */
 
-import type { ProviderAccount, UsageWindow } from "@/api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "@/types/providerAccount";
 import {
   USAGE_WARN_FRACTION,
   effectiveWindow,

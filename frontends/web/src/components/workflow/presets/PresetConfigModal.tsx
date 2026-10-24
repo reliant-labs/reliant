@@ -10,8 +10,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Modal } from '../../ui/Modal'
 import Button from '@/components/forge-ui/button';
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
+import { fetchDefaultPresets, setDefaultPreset, type Preset } from '../../../hooks/preset-queries'
 import { workflowGrpc } from '../../../api/workflow-grpc'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
 import { usePreferencesStore } from '../../../store/preferencesStore'
@@ -21,7 +20,8 @@ interface PresetConfigModalProps {
   workflowName: string
   projectId: string
   availablePresets: Preset[]
-  onSave: () => void
+  /** Called after saving. The defaults refetch on their own (hooks/preset-queries). */
+  onSave?: () => void
   onClose: () => void
 }
 
@@ -89,7 +89,7 @@ export function PresetConfigModal({
         setGroups(groupInfos)
 
         // Fetch current defaults
-        const defaults = await presetGrpc.getDefaultPresets(projectId, workflowName)
+        const defaults = await fetchDefaultPresets(projectId, workflowName)
         setSelectedPresets(defaults)
       } catch (error) {
         console.error('Failed to load workflow config:', error)
@@ -107,9 +107,9 @@ export function PresetConfigModal({
       // Save each group's default
       for (const group of groups) {
         const presetName = selectedPresets[group.name] || null
-        await presetGrpc.setDefaultPreset(projectId, workflowName, group.name, presetName)
+        await setDefaultPreset(projectId, workflowName, group.name, presetName)
       }
-      onSave()
+      onSave?.()
       onClose()
       toast.success('Default presets saved')
     } catch {

@@ -1,6 +1,6 @@
 import { Loader2, RefreshCw } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../types/providerAccount";
 import {
   effectiveWindow,
   formatAgo,

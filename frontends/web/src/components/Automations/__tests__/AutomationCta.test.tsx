@@ -22,7 +22,6 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
     workflow: () => ({ getWorkflow, listWorkflows }),
-    preset: () => ({ listPresetsForWorkflow: vi.fn(async () => ({ presets: [] })), getDefaultPresetsBatch: vi.fn(async () => ({})) }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
     worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),

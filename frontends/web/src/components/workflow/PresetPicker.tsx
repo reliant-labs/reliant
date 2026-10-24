@@ -6,9 +6,13 @@ import { createPortal } from "react-dom";
 import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import type { Preset } from "../../store/globalDataStore";
-import { presetGrpc } from "../../api/preset-grpc";
-import { useGlobalDataStore } from "../../store/globalDataStore";
+import {
+  deletePreset,
+  setDefaultPreset,
+  updatePreset,
+  useDefaultPresets,
+  type Preset,
+} from "../../hooks/preset-queries";
 import { isCelTemplate } from "../../lib/celTemplate";
 
 interface PresetPickerProps {
@@ -62,12 +66,14 @@ export function PresetPicker({
   const [isOpen, setIsOpen] = useState(false);
   // Escape closes the list, and only the list (useEscapeLayer).
   const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
-  const [defaultPresetName, setDefaultPresetName] = useState<string | null>(null);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-  const { refetchPresets } = useGlobalDataStore();
+  // This group's default (empty string for top-level). Derived from the
+  // cached defaults, which setDefaultPreset refetches.
+  const { defaults } = useDefaultPresets(projectId, workflowName);
+  const defaultPresetName = defaults[groupName || ""] || null;
 
   const valueIsTemplate = isCelTemplate(value);
 
@@ -111,19 +117,6 @@ export function PresetPicker({
     }
   }, [isOpen]);
 
-  // Fetch default preset for this group when workflow/group changes
-  useEffect(() => {
-    if (projectId && workflowName) {
-      presetGrpc.getDefaultPresets(projectId, workflowName)
-        .then((defaults) => {
-          // Get default for this specific group (empty string for top-level)
-          const defaultName = defaults[groupName || ""] || null;
-          setDefaultPresetName(defaultName);
-        })
-        .catch(() => setDefaultPresetName(null));
-    }
-  }, [projectId, workflowName, groupName]);
-
   // Find the selected preset
   const selectedPreset = presets.find(p => p.name === value);
 
@@ -148,8 +141,7 @@ export function PresetPicker({
 
     try {
       // Set default for this specific group (empty string for top-level)
-      await presetGrpc.setDefaultPreset(projectId, workflowName, groupName || "", preset.name);
-      setDefaultPresetName(preset.name);
+      await setDefaultPreset(projectId, workflowName, groupName || "", preset.name);
     } catch (error) {
       console.error("Failed to set default preset:", error);
       alert("Failed to set default preset");
@@ -160,13 +152,12 @@ export function PresetPicker({
     if (!projectId) return;
 
     try {
-      const result = await presetGrpc.updatePreset(projectId, preset.name, {
+      const result = await updatePreset(projectId, preset.name, {
         newName,
         newDescription,
       });
 
       if (result.success) {
-        await refetchPresets(projectId);
         // If the edited preset is currently selected, update the selection
         if (value === preset.name && result.preset) {
           onChange?.(result.preset);
@@ -188,10 +179,9 @@ export function PresetPicker({
     }
 
     try {
-      const result = await presetGrpc.deletePreset(projectId, preset.name);
+      const result = await deletePreset(projectId, preset.name);
 
       if (result.success) {
-        await refetchPresets(projectId);
         // If the deleted preset is currently selected, clear selection
         if (value === preset.name) {
           onChange?.(null);

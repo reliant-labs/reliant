@@ -10,12 +10,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+// PresetPicker reads a workflow's defaults through the query cache; these
+// renders have no QueryClient and no defaults to show.
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  useDefaultPresets: () => ({ defaults: {}, loading: false }),
+}));
+
 vi.mock("../../../store/globalDataStore", () => ({
   useModels: () => ({ models: [{ id: "claude-opus-5-5", name: "Claude Opus 5.5", provider: "Anthropic" }], loading: false }),
   useGlobalDataStore: (selector: (state: unknown) => unknown) =>
     selector({ isInitialized: true, isPrefetching: false, refetchWorkflowPresets: async () => undefined }),
 }));
-vi.mock("../../../api/preset-grpc", () => ({ presetGrpc: {} }));
 vi.mock("../../../api/client", () => ({
   api: { tools: { list: async () => ({ tools: [{ name: "view", description: "Read a file", category: "File" }] }) } },
 }));

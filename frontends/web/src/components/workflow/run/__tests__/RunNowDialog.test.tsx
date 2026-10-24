@@ -9,7 +9,11 @@
  * built and the PreviewReplay/ListReplayEvents calls it made.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -56,7 +60,6 @@ const listProjectDaemons = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
     worktree: () => ({ listWorktrees }),
     chat: () => ({ runNow, startChat }),
     trigger: () => ({ listReplayEvents, previewReplay }),
@@ -64,6 +67,18 @@ vi.mock("@/api/grpc-client", () => ({
     project: () => ({ listProjectDaemons }),
   },
 }));
+
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(mockTransport(serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch })));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({ currentProject: { id: "proj-1", name: "Forge" }, projects: [] });

@@ -3,8 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { ChevronDown, ChevronRight, Save, Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useGlobalDataStore, type Preset } from "../../store/globalDataStore";
-import { presetGrpc } from "../../api/preset-grpc";
+import { createPreset, updatePreset, type Preset } from "../../hooks/preset-queries";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDefault, isIntegrationInput } from "../../lib/inputHelpers";
 import { inputDefToSchema } from "../../lib/nodeFieldAdapter";
@@ -133,9 +132,6 @@ export function WorkflowInputGroup({
   const [saveMode, setSaveMode] = useState<"new" | "update" | null>(null);
   const [newPresetName, setNewPresetName] = useState("");
   
-  // Get refetch function from global store
-  const refetchPresets = useGlobalDataStore((state) => state.refetchPresets);
-  
   // Find the selected preset object
   const selectedPresetObj = presets.find(p => p.name === selectedPreset) || null;
   
@@ -197,7 +193,7 @@ export function WorkflowInputGroup({
     try {
       const params = getGroupParams();
 
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: newPresetName.trim(),
         description: "",
         params,
@@ -209,10 +205,7 @@ export function WorkflowInputGroup({
         return;
       }
 
-      // Refresh presets
-      await refetchPresets(projectId);
-
-      // Select the new preset
+      // Select the new preset (createPreset has already refetched the lists)
       const newPreset: Preset = {
         name: newPresetName.trim(),
         description: "",
@@ -231,7 +224,7 @@ export function WorkflowInputGroup({
     } finally {
       setSavingGroup(false);
     }
-  }, [projectId, newPresetName, group.presets?.tag, getGroupParams, refetchPresets, onPresetSelect]);
+  }, [projectId, newPresetName, group.presets?.tag, getGroupParams, onPresetSelect]);
 
   // Handle update existing preset
   const handleUpdatePreset = useCallback(async () => {
@@ -244,7 +237,7 @@ export function WorkflowInputGroup({
     try {
       const params = getGroupParams();
 
-      const result = await presetGrpc.updatePreset(projectId, selectedPresetObj.name, {
+      const result = await updatePreset(projectId, selectedPresetObj.name, {
         newParams: params,
       });
 
@@ -252,9 +245,6 @@ export function WorkflowInputGroup({
         setSaveError(result.error || "Failed to update preset");
         return;
       }
-
-      // Refresh presets
-      await refetchPresets(projectId);
 
       // Reset save mode
       setSaveMode(null);
@@ -264,7 +254,7 @@ export function WorkflowInputGroup({
     } finally {
       setSavingGroup(false);
     }
-  }, [projectId, group.presets?.tag, selectedPresetObj, getGroupParams, refetchPresets]);
+  }, [projectId, group.presets?.tag, selectedPresetObj, getGroupParams]);
 
   const groupIsDirty = isDirty();
   const canUpdate = selectedPresetObj?.source === "user";

@@ -2,7 +2,7 @@
 
 import { ChevronLeft, X, Check, Layers } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { Preset } from "../../../store/globalDataStore";
+import type { Preset } from "../../../hooks/preset-queries";
 
 interface PresetSettingsPageProps {
   presets: Preset[];

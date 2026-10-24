@@ -32,10 +32,13 @@ const rpc = vi.hoisted(() => ({ saveWorkflow: vi.fn() }));
 vi.mock("../../../api/grpc-client", () => ({
   grpcClient: { workflow: () => ({ saveWorkflow: rpc.saveWorkflow }) },
 }));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: {
-    listPresets: vi.fn(async () => [{ name: "careful", description: "", params: {}, source: "project" }]),
-  },
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({
+    presets: [{ name: "careful", description: "", params: {}, source: "project" }],
+    invalidPresets: [],
+    loading: false,
+    error: null,
+  }),
 }));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {

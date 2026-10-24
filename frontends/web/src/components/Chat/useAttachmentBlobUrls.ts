@@ -5,12 +5,12 @@
  * the small uploaded-file chips and the large inline generated images — share
  * ONE loading path. There is no HTTP route that serves attachment bytes
  * (`attachment.url` is vestigial), so the only way to get pixels is
- * `attachmentGrpc.getAttachmentAsBlob`, and a second copy of this effect would
+ * `fetchAttachmentBlob` (GetAttachment), and a second copy of this effect would
  * be a second place for the revoke/cancel bookkeeping to drift.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { attachmentGrpc } from "../../api/attachment-grpc";
+import { fetchAttachmentBlob } from "../../hooks/attachment-queries";
 
 /** Attachment fields this hook needs — narrower than the full Attachment. */
 interface LoadableAttachment {
@@ -64,7 +64,7 @@ export function useAttachmentBlobUrls(
         if (blobUrlsRef.current.has(attachment.id)) continue;
 
         try {
-          const blob = await attachmentGrpc.getAttachmentAsBlob(attachment.id);
+          const blob = await fetchAttachmentBlob(attachment.id);
           // Check before creating the URL: one we create after unmount has no
           // owner left to revoke it.
           if (cancelled) break;

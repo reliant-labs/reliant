@@ -35,6 +35,7 @@ import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, r
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
+import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
@@ -1380,6 +1381,10 @@ function handleRefetch(update: UserUpdate) {
   if (!refetchType) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });
     return;
+  }
+  if (refetchType === "config_health") {
+    // ConfigHealthIndicator reads GetConfigHealth through the generated hook.
+    void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.all });
   }
   // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);

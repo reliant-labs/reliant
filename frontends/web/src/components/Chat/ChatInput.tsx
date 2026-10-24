@@ -13,11 +13,7 @@ import { Settings2, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
-import {
-  usePresetsForWorkflow,
-  useModels,
-  type Preset,
-} from "../../store/globalDataStore";
+import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
@@ -78,10 +74,8 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
-import {
-  fetchDefaultPresets,
-  useWorkflowDefinitionQuery,
-} from "../../hooks/workflow-config-queries";
+import { useWorkflowDefinitionQuery } from "../../hooks/workflow-config-queries";
+import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
 interface WorkflowTagInfo {

@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, AlertCircle, X, ChevronDown, ChevronRight } from "lucide-react";
-import { settingsGrpc, type ConfigHealth } from "../../api/settings-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import { logger } from "../../lib/logger";
-import { subscribeToRefetch } from "../../store/refetchStore";
 import { ConfigSeverity } from "../../gen/reliant/v1/settings_pb";
+import { useGetConfigHealth } from "../../hooks/settings-service-hooks_gen";
 
 interface ConfigHealthIndicatorProps {
   className?: string;
@@ -19,40 +17,14 @@ interface ConfigHealthIndicatorProps {
  * Clicking shows a dropdown with the error details.
  */
 export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps) {
-  const [health, setHealth] = useState<ConfigHealth | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const projectId = useProjectStore((state) => state.currentProject?.id);
 
-  // Fetch config health on mount and when project changes
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchHealth = async () => {
-      try {
-        const result = await settingsGrpc.getConfigHealth(projectId);
-        if (!cancelled) {
-          setHealth(result);
-        }
-      } catch (error) {
-        logger.error("[ConfigHealthIndicator] Failed to fetch config health", { error });
-        if (!cancelled) {
-          setHealth(null);
-        }
-      }
-    };
-
-    fetchHealth();
-
-    // Subscribe to refetch events instead of polling
-    const unsubscribe = subscribeToRefetch("config_health", fetchHealth);
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [projectId]);
+  // Per project. Kept fresh by the stream: a config_health refetch event
+  // invalidates settingsServiceKeys.all (store/globalUpdatesStore.ts).
+  const { data: health } = useGetConfigHealth({ projectId });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -69,12 +41,12 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
   }, [isOpen]);
 
   // Don't render if no errors
-  if (!health || (health.error_count === 0 && health.warning_count === 0)) {
+  if (!health || (health.errorCount === 0 && health.warningCount === 0)) {
     return null;
   }
 
-  const hasErrors = health.error_count > 0;
-  const totalCount = health.error_count + health.warning_count;
+  const hasErrors = health.errorCount > 0;
+  const totalCount = health.errorCount + health.warningCount;
 
   const toggleExpanded = (index: number) => {
     setExpandedErrors((prev) => {
@@ -119,7 +91,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>
       <Tooltip
-        content={`${health.error_count} error${health.error_count !== 1 ? "s" : ""}, ${health.warning_count} warning${health.warning_count !== 1 ? "s" : ""}`}
+        content={`${health.errorCount} error${health.errorCount !== 1 ? "s" : ""}, ${health.warningCount} warning${health.warningCount !== 1 ? "s" : ""}`}
         placement="bottom"
         delay={300}
       >
@@ -183,15 +155,15 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
 
           {/* Summary */}
           <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border/50">
-            {health.error_count > 0 && (
+            {health.errorCount > 0 && (
               <span className="text-destructive-ink font-medium">
-                {health.error_count} error{health.error_count !== 1 ? "s" : ""}
+                {health.errorCount} error{health.errorCount !== 1 ? "s" : ""}
               </span>
             )}
-            {health.error_count > 0 && health.warning_count > 0 && ", "}
-            {health.warning_count > 0 && (
+            {health.errorCount > 0 && health.warningCount > 0 && ", "}
+            {health.warningCount > 0 && (
               <span className="text-yellow-600 dark:text-yellow-500 font-medium">
-                {health.warning_count} warning{health.warning_count !== 1 ? "s" : ""}
+                {health.warningCount} warning{health.warningCount !== 1 ? "s" : ""}
               </span>
             )}
           </div>

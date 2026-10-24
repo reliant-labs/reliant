@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
-import { presetGrpc, type Preset } from "@/api/preset-grpc";
+import { fetchDefaultPresets, useWorkflowPresets, type Preset } from "@/hooks/preset-queries";
 import { worktreeGrpc } from "@/api/worktree-grpc";
 import { buildDaemonChoices, daemonLabel, NO_MACHINE } from "@/components/Automations/daemonChoices";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
@@ -31,7 +31,6 @@ import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import type { InputDef } from "@/lib/inputHelpers";
-import { useWorkflowPresets } from "@/store/globalDataStore";
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
 import { TypedInputsProvider } from "../inputs/TypedInputField";
@@ -214,7 +213,7 @@ export function RunWorkflowForm({
     if (countRunInputs(valueRef.current) > 0) return;
 
     let cancelled = false;
-    void presetGrpc.getDefaultPresets(projectId, workflowRef).then((defaults) => {
+    void fetchDefaultPresets(projectId, workflowRef).then((defaults) => {
       if (cancelled || Object.keys(defaults).length === 0) return;
       // The user may have started filling the form while this was in flight.
       if (countRunInputs(valueRef.current) > 0) return;

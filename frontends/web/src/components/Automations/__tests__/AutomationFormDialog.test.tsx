@@ -9,7 +9,11 @@
  * InvalidArgument is shown beside the field it is about.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -55,12 +59,23 @@ vi.mock("@/api/grpc-client", () => ({
     connection: () => ({ listConnections }),
     trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
     project: () => ({ listProjectDaemons }),
   },
 }));
+
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(mockTransport(serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch })));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 function daemon(daemonId: string, hostname: string, status = DaemonStatus.ACTIVE) {
   return create(DaemonInfoSchema, { daemonId, hostname, status });

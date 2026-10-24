@@ -59,10 +59,6 @@ vi.mock("../../api/chat-grpc", async () => {
     },
   };
 });
-vi.mock("../../api/preset-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/preset-grpc")>("../../api/preset-grpc");
-  return { ...actual, presetGrpc: { ...actual.presetGrpc, listPresets: vi.fn(async () => []) } };
-});
 vi.mock("../../api/workflow-grpc", async () => {
   const actual = await vi.importActual<typeof import("../../api/workflow-grpc")>("../../api/workflow-grpc");
   return { ...actual, workflowGrpc: { ...actual.workflowGrpc, listWorkflows: vi.fn(async () => []) } };

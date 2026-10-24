@@ -16,7 +16,7 @@ import {
   getInputDefault,
   getInputUI,
 } from "../../../lib/inputHelpers";
-import type { Preset } from "../../../store/globalDataStore";
+import type { Preset } from "../../../hooks/preset-queries";
 
 // ---------------------------------------------------------------------------
 // Types
