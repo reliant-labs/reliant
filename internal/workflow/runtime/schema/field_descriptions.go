@@ -8,6 +8,7 @@ package schema
 // The map and GetFieldDescription function are defined in field_descriptions_base.go.
 func init() {
 	FieldDescriptions["action.connection"] = "Id of the saved connection to authenticate with. Leave it empty to use your default connection"
+	FieldDescriptions["action.hosted_use"] = "Hosted HTTP use-grant reference for this fixed action"
 	FieldDescriptions["action.uses"] = "Which integration action to run, as integration/action@major"
 	FieldDescriptions["action.with"] = "Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates"
 	FieldDescriptions["ask_question.metadata"] = "The questions to ask, as JSON: a questions list, each with question text and its options"
