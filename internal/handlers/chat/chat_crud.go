@@ -847,19 +847,6 @@ func (s *Service) UpdateChatState(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
 	}
 
-	// If unarchiving a chat, also unarchive the associated workspace
-	if newState == db.ChatStateIdle && previousState == db.ChatStateArchived && chat.WorktreeID != nil {
-		worktree, err := s.deps.Repo.GetWorktree(ctx, *chat.WorktreeID)
-		if err == nil && worktree.DeletedAt != nil {
-			if err := s.deps.Repo.UnarchiveWorktree(ctx, *chat.WorktreeID); err != nil {
-				logging.ErrorContext(ctx, "Failed to unarchive workspace when unarchiving chat",
-					"error", err,
-					"chatID", req.Msg.ChatId,
-					"worktreeID", *chat.WorktreeID)
-			}
-		}
-	}
-
 	// If archiving, also cancel any running workflow
 	if newState == db.ChatStateArchived {
 		s.cancelArchivedChatWorkflow(ctx, chat)
