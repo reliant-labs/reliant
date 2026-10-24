@@ -674,10 +674,19 @@ tasks:
     # `forge lint --migration-safety` fails it until it says one, with a
     # reason.
     desc: "Create a new forge migration (NAME=my_changes), then: write the SQL and its compat declaration, task generate:check, queries in internal/store (internal/db/SCHEMA.md)"
+    #
+    # The version must clear origin/main's NEWEST migration, not the wall
+    # clock: a long-lived branch, a skewed clock or a future-dated main head
+    # otherwise mints a version under one that already merged, which is never
+    # applied and crash-loops the migrator (reliant#1399). So origin/main is
+    # refreshed first (forge allocates above its tip), and the result is checked
+    # against it after, whatever forge pin is installed.
     requires:
       vars: [NAME]
     cmds:
+      - git fetch -q origin main || echo "WARNING - could not refresh origin/main; the version is checked against the ref as it is" >&2
       - '{{.GEN_ENV}} {{.FORGE}} db migration new {{.NAME}}'
+      - MIGRATION_ORDER_OFFLINE=1 go run ./tools/test-affected migration-order
 
   migrate:
     desc: Apply pending database migrations (wraps `reliant db migrate up`)

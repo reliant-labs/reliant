@@ -19,9 +19,13 @@ const (
 	// laneDocGen is not a test runner either: it runs every docs generator
 	// and fails if that changes anything (task generate:docs:check).
 	laneDocGen lane = "docs-generate"
+	// laneMigOrder is not a test runner either: it fails a migration added on
+	// this branch whose version is at or below origin/main's newest
+	// (migrationorder.go).
+	laneMigOrder lane = "migration-order"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder}
 
 // forgeInputs are the paths `forge generate` reads (protos, migrations,
 // contract.go interfaces, package directives in doc.go, handler packages, the
@@ -335,3 +339,7 @@ func matchSegments(pat, segs []string) bool {
 	}
 	return len(segs) == 0
 }
+
+// isMigrationPath reports whether p is under db/migrations/, the directory the
+// migration-order lane judges.
+func isMigrationPath(p string) bool { return matchGlob("db/migrations/**", p) }

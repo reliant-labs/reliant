@@ -44,6 +44,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # A migration versioned at or below origin/main's newest is never
+      # applied on a database that has run it, and the migrator refuses to
+      # start on it (reliant#1399 crash-looped prod). Fetches main itself;
+      # a push to main passes (every file is main's own).
+      - name: Migrations are versioned above origin/main's newest
+        run: go run ./tools/test-affected migration-order
+
       # The one migration path (internal/db/migrate.go) against a real
       # Postgres: it builds a fresh database, leaves a current (and an
       # adopted) one alone, refuses what it must, and takes turns under

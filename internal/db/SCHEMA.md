@@ -30,7 +30,8 @@ query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
    `make migration` runs `forge db migration new` from the forge go.mod pins,
    which opens the file with the two compatibility declarations (below) as a
    comment to replace. Always let forge pick the version: it allocates a UTC
-   timestamp that sorts after every existing one. There is no down migration —
+   timestamp that sorts after every existing one, including the newest on
+   `origin/main` (it fetches main first and checks the result). There is no down migration —
    a bad migration is repaired by a new one written against the state the
    database is actually in.
 
@@ -86,6 +87,17 @@ older than one that merged first, re-version it before merging:
 ```bash
 forge db migration rebase db/migrations/<version>_my_changes.up.sql
 ```
+
+This is enforced, not advisory: `go run ./tools/test-affected migration-order`
+fetches `origin/main` and fails any migration on your branch that main does not
+carry and whose version is at or below main's newest, naming both versions and
+the remedy. It runs in `make test-affected` and `task ci:merge`
+(`scripts/merge-gate.sh`) whenever the diff touches `db/migrations/`, in the
+`check-migrations` workflow, and after `make migration`. It fails closed: if
+`origin/main` cannot be refreshed it reports that instead of passing
+(`MIGRATION_ORDER_OFFLINE=1` judges the local ref, for an offline desk only).
+`forge lint --migration-safety` has the same rule but reads the local
+`origin/main` as it was last fetched, which is how reliant#1399 passed it.
 
 ## Applying and inspecting
 

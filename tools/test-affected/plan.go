@@ -86,6 +86,12 @@ type DocGenPlan struct {
 	LaneFull
 }
 
+// MigOrderPlan is the migration-order lane (all or nothing): a migration added
+// under db/migrations must be versioned above origin/main's newest.
+type MigOrderPlan struct {
+	LaneFull
+}
+
 // Plan is the whole decision.
 type Plan struct {
 	Base     string       `json:"base"`
@@ -96,6 +102,7 @@ type Plan struct {
 	Electron ElectronPlan `json:"electron"`
 	ForgeGen ForgeGenPlan `json:"forge_generate"`
 	DocGen   DocGenPlan   `json:"docs_generate"`
+	MigOrder MigOrderPlan `json:"migration_order"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs with `npm ci` before any test runs.
 	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`
@@ -240,6 +247,7 @@ func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 		}
 	}
 	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
+	c.pl.MigOrder.LaneFull = laneFull(c.full[laneMigOrder])
 	return c.pl
 }
 
@@ -282,9 +290,16 @@ func (c *classifier) attribute(ch Change) {
 		rep.Rules = append(rep.Rules, "docgen-input")
 		c.full[laneDocGen] = append(c.full[laneDocGen], ch.Path+": "+why)
 	}
+	if !ch.Deleted && isMigrationPath(ch.Path) {
+		rep.Rules = append(rep.Rules, "migration-order")
+		c.full[laneMigOrder] = append(c.full[laneMigOrder], ch.Path+": a migration must be versioned above origin/main's newest")
+	}
 	if len(matched) == 0 && !owned {
 		why := fmt.Sprintf("%s: claimed by no rule and no Go package (fail-safe)", ch.Path)
 		for _, l := range allLanes {
+			if l == laneMigOrder {
+				continue // judged by path alone: an unclaimed file is no migration
+			}
 			c.full[l] = append(c.full[l], why)
 		}
 		rep.Note = "UNCLAIMED"

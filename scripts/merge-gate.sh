@@ -25,6 +25,8 @@
 #              deeper dependents run in the release gate (MG_REACH=all for all)
 #   lint       forge lint --scope <changed dirs> (unscoped when a pin moved)
 #   migsafety  forge lint --migration-safety, only when a migration changed
+#   migorder   every migration is versioned above origin/main's newest (fetched
+#              first, fail closed), only when a migration changed
 # generate and docs run first, because they can change the tree the others
 # judge; build, test, lint and migsafety then run at the same time.
 #
@@ -241,6 +243,12 @@ if [ "$fail" = 0 ]; then
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
+  # A migration below main's newest is never applied and reliant's migrator
+  # refuses to start on it (reliant#1399). The check fetches origin/main
+  # itself, so it judges main as it is now, not as this clone last saw it.
+  if echo "$files" | grep -qE '^db/migrations/'; then
+    phase migorder go run ./tools/test-affected migration-order & pids+=($!)
+  fi
   for p in "${pids[@]}"; do wait "$p" || fail=1; done
 fi
 # --amend: fold what the generators rewrote (generated paths only) into HEAD.
@@ -285,7 +293,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test lint migsafety build-2 test-2 docs-2; do
+  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test lint migsafety migorder build-2 test-2 docs-2; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

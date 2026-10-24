@@ -75,6 +75,12 @@ The phases:
      package).
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
+   - **migorder** is `go run ./tools/test-affected migration-order`, and runs
+     only when a migration changed. It fetches `origin/main` and fails a
+     migration versioned at or below main's newest, which golang-migrate would
+     never apply (reliant#1399). It fetches because migsafety reads the local
+     `origin/main` as last fetched, and a branch reviewed while main moved
+     passes it against a stale head.
 
 generate and docs run in scratch checkouts of HEAD, at the same time as the
 other phases. A regenerate that changes only generated paths (`--amend`) is

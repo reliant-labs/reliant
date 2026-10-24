@@ -64,9 +64,11 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	case "migration-order":
+		os.Exit(runMigrationOrder(args, os.Stdout, os.Stderr))
 	case "plan", "run":
 	default:
-		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, shard, weights or changed-tests)\n", cmd)
+		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order, shard, weights or changed-tests)\n", cmd)
 		os.Exit(2)
 	}
 	fs := newFlagSet(cmd)
@@ -74,7 +76,7 @@ func main() {
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
 	full := fs.Bool("full", false, "run everything (also TEST_FULL=1)")
-	lanes := fs.String("lanes", "go,web,electron,forge-generate,docs-generate", "comma-separated lanes to consider")
+	lanes := fs.String("lanes", defaultLanes, "comma-separated lanes to consider")
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
@@ -246,7 +248,7 @@ func hookCommands(root string, names []string) (map[string][]string, error) {
 
 func failSafe(base, head, why string) *Plan {
 	lf := LaneFull{Full: true, Reasons: []string{why}}
-	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}}
+	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}}
 }
 
 func firstLine(s string) string {
@@ -451,6 +453,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		{laneElectron, pl.Electron.LaneFull, "electron tests", nil, nil},
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
 		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
+		{laneMigOrder, pl.MigOrder.LaneFull, "migration order", nil, nil},
 	}
 	for _, lp := range lanePlans {
 		if !enabled[lp.l] {
@@ -466,7 +469,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 				}
 				p.f("  - %s\n", r)
 			}
-		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen):
+		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder):
 			p.f("\n[%s] skip: nothing it reads changed\n", lp.l)
 		case len(lp.list) == 0:
 			p.f("\n[%s] skip: no test reaches a changed file\n", lp.l)
@@ -536,6 +539,12 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
 			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv, prerequisite: true})
 		}
+	}
+	// Cheapest of all (a fetch and a directory listing) and the one that
+	// matters most before a merge: a migration below main's newest is never
+	// applied, and no test notices.
+	if enabled[laneMigOrder] && pl.MigOrder.Full {
+		out = append(out, step{name: "migration order is above origin/main's newest", dir: r.root, argv: []string{"go", "run", "./tools/test-affected", "migration-order"}, prerequisite: true})
 	}
 	// First, so the tests below run against what generate leaves behind. It
 	// writes what it regenerates into the tree, naming every file it changed.
