@@ -3,10 +3,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,4 +101,23 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	usable, err = svc.Usable(ctx, "")
 	require.NoError(t, err)
 	assert.False(t, usable["github"], "self-hosted: GitHub needs a saved connection")
+}
+
+// A control plane the hosted HTTP client refuses (prod's in-cluster
+// http://admin-server URL) disables hosted actions, logged, and never fails
+// the worker's boot: v1.7.52's worker crash-looped on exactly this.
+func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
+	store := &hosteduse.MockStore{}
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, nil))
+
+	assert.Nil(t, newHostedActions(log, store, controlplane.Endpoint{}), "self-hosted: no control plane, no hosted actions")
+	assert.Empty(t, logged.String(), "no control plane is not an error")
+
+	refused := newHostedActions(log, store, controlplane.Endpoint{URL: "http://admin-server.control-plane-prod.svc.cluster.local:8090", InternalServiceSecret: "s"})
+	assert.Nil(t, refused, "a refused URL leaves hosted actions disabled (they fail closed at use)")
+	assert.Contains(t, logged.String(), "hosted HTTP actions are DISABLED")
+	assert.Contains(t, logged.String(), "requires HTTPS")
+
+	assert.NotNil(t, newHostedActions(log, store, controlplane.Endpoint{URL: "https://admin.example.com", InternalServiceSecret: "s"}))
 }

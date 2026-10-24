@@ -574,6 +574,28 @@ type TemporalWorkerDeps struct {
 	WorkflowTaskPollers int32
 }
 
+// newHostedActions is the worker's hosted HTTP action executor: a separate
+// fixed-node execution path, never installed in WorkerIntegrationCredentials
+// or the tool factory. nil (no control plane, or one the client refuses, such
+// as a plain-HTTP URL) leaves hosted actions disabled: each one then fails
+// closed with "hosted HTTP execution is not configured". A refused URL is
+// logged, never fatal: the worker runs every other workflow, and refusing to
+// boot over one feature's configuration took the whole worker down in prod.
+func newHostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint) handlers.HostedActionExecutor {
+	if cp.URL == "" || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+		Store: store, BaseURL: cp.URL,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+	})
+	if err != nil {
+		log.Error("hosted HTTP actions are DISABLED: the control plane URL is refused for hosted HTTP execution", "error", err)
+		return nil
+	}
+	return client
+}
+
 // NewTemporalWorker is the Temporal worker on the shared task queue
 // (workersetup.Worker: its Drain releases in-flight activities, its Ready is
 // "polling"). A scheduled trigger fire launches through the same launcher
@@ -582,20 +604,7 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	// Hosted actions have a separate fixed-node execution path. They are never
-	// installed in WorkerIntegrationCredentials or the tool factory.
-	cp := ControlPlaneEndpoint(d.ControlPlane)
-	var hostedActions handlers.HostedActionExecutor
-	if cp.URL != "" && cp.InternalServiceSecret != "" {
-		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
-			Store: d.DB, BaseURL: cp.URL,
-			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
-		})
-		if err != nil {
-			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
-		}
-		hostedActions = client
-	}
+	hostedActions := newHostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane))
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
