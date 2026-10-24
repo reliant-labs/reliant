@@ -59,7 +59,7 @@ func (s *Service) EnableWorkflow(
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.Workflow, msg.ProjectId)
+	wf, err := launch.ResolveValidatedRunWorkflow(ctx, s.deps.Repo, userID, msg.Workflow, msg.ProjectId)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {

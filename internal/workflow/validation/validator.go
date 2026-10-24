@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 // WorkflowLoader loads a workflow by name. Used for cross-workflow validation.
@@ -74,6 +75,59 @@ func StaticAnalysis(wf *reliantv1.Workflow, loader WorkflowLoader) *Result {
 // StaticAnalysisWithOptions performs all load-time validation on a workflow.
 // Pass options to enable cross-workflow validation and preset-aware validation.
 func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) *Result {
+	if opts == nil || opts.WorkflowLoader == nil || wf == nil {
+		return staticAnalysisOne(wf, opts)
+	}
+	// Compiling a parent's contracts loads referenced workflows, but does not
+	// check every child's structure. Validate each loaded definition as well.
+	// Cache by ref for this pass only: cycles terminate and every check sees
+	// the same definition rather than re-reading a changing project index.
+	type definition struct {
+		ref string
+		wf  *reliantv1.Workflow
+		err error
+	}
+	rootRef := opts.CanonicalWorkflowRef
+	key := workflowref.RefKey
+	queue := []*definition{{ref: rootRef, wf: wf}}
+	loaded := map[string]*definition{}
+	if rootRef != "" {
+		loaded[key(rootRef)] = queue[0]
+	}
+	visited := map[*reliantv1.Workflow]bool{wf: true}
+	options := *opts
+	options.WorkflowLoader = func(ref string) (*reliantv1.Workflow, error) {
+		if hit, ok := loaded[key(ref)]; ok {
+			return hit.wf, hit.err
+		}
+		child, err := opts.WorkflowLoader(ref)
+		entry := &definition{ref: ref, wf: child, err: err}
+		loaded[key(ref)] = entry
+		if child != nil && err == nil && !visited[child] {
+			visited[child] = true
+			queue = append(queue, entry)
+		}
+		return child, err
+	}
+	result := NewResult()
+	for i := 0; i < len(queue); i++ {
+		options.CanonicalWorkflowRef = queue[i].ref
+		checked := staticAnalysisOne(queue[i].wf, &options)
+		if i == 0 {
+			result.Merge(checked)
+			continue
+		}
+		// Admission propagates blocking child errors. Advisory findings stay
+		// on the child's own validation surface: they are not findings on the
+		// parent canvas (whose node IDs and edit locations differ).
+		for _, issue := range checked.Errors() {
+			result.Add(issue)
+		}
+	}
+	return result
+}
+
+func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result {
 	result := NewResult()
 
 	if wf == nil {

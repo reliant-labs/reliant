@@ -89,7 +89,7 @@ type LaunchWorkflows struct{ Repo launch.WorkflowResolver }
 
 // ResolveRunWorkflow implements WorkflowResolver.
 func (w LaunchWorkflows) ResolveRunWorkflow(ctx context.Context, userID, workflow, projectID string) (*reliantv1.Workflow, error) {
-	return launch.ResolveRunWorkflow(ctx, w.Repo, userID, workflow, projectID)
+	return launch.ResolveValidatedRunWorkflow(ctx, w.Repo, userID, workflow, projectID)
 }
 
 // ResolveDeclaration reads the declaration t activates from its workflow and
