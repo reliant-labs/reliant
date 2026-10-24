@@ -264,7 +264,7 @@
    * (:root), so overriding only the inputs above has no effect here.
    */
   --color-accent: hsl(var(--primary));
-  --color-accent-hover: hsl(var(--primary) / 0.85);
+  --color-accent-hover: hsl(var(--primary-hover));
   --color-on-accent: hsl(var(--primary-foreground));
   --color-accent-surface: hsl(var(--primary) / 0.12);
   --color-accent-border: hsl(var(--primary) / 0.38);
@@ -347,29 +347,30 @@
     --autofill-bg: var(--background);
 
     /* VIBRANT BLUE LIGHT THEME - colorful & modern */
-    --background: 0 0% 98%;          /* Soft white, not harsh */
-    --foreground: 0 0% 15%;          /* True neutral dark gray */
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 15%;
-    --primary: 217 91% 60%;          /* Vibrant blue */
+    --background: 220 14% 98%;          /* Soft white, not harsh */
+    --foreground: 220 10% 12%;          /* True neutral dark gray */
+    --card: 220 0% 100%;
+    --card-foreground: 220 10% 12%;
+    --popover: 220 0% 100%;
+    --popover-foreground: 220 10% 12%;
+    --primary: 221 83% 50%;          /* Vibrant blue */
     --primary-foreground: 0 0% 100%;
-    --secondary: 280 85% 65%;        /* Purple accent */
-    --secondary-foreground: 0 0% 100%;
-    --muted: 210 40% 96%;            /* Very light blue-gray */
-    --muted-foreground: 215 16% 45%; /* AA (4.5:1) on page, card, muted and input wells */
-    --accent: 210 40% 96%;           /* Light blue accent */
-    --accent-foreground: 217 91% 60%;
+    --primary-hover: 221 83% 44%; /* the pressed/hovered fill: darker in light, lighter in dark, so its label keeps contrast */
+    --secondary: 220 14% 94%;        /* Purple accent */
+    --secondary-foreground: 220 10% 12%;
+    --muted: 220 14% 95.5%;            /* Very light blue-gray */
+    --muted-foreground: 220 12% 41%; /* AA (4.5:1) on page, card, muted and input wells */
+    --accent: 220 14% 95.5%;           /* Light blue accent */
+    --accent-foreground: 220 10% 12%;
     --destructive: 0 70% 50%;
     /* A destructive fill's hover/pressed step: darker, so its white label
        gains contrast (an alpha step over a light page would lose it). */
     --destructive-hover: 0 70% 44%;
     --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;           /* Light blue-gray border */
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
+    --border: 220 14% 89.5%;           /* Light blue-gray border */
+    --input: 220 14% 83.5%;
+    --ring: 221 83% 50%;
 
     /* Code colors fallback (before themed data attributes apply) */
     --code-bg: #f5f5f5;
@@ -377,8 +378,8 @@
     --code-accent: #333333;
 
     /* Config panel input surfaces */
-    --config-input-bg: 210 40% 96%;
-    --config-input-border: 214 32% 82%;
+    --config-input-bg: 220 14% 97%;
+    --config-input-border: 220 14% 83.5%;
     --radius: 0.5rem;
 
     /* Semantic colors for status, success, warning, info.
@@ -392,7 +393,7 @@
     --success-foreground: 0 0% 100%;
     --success-ink: 142 76% 24%;
     --warning: 38 92% 50%;           /* Amber/Orange for warnings */
-    --warning-foreground: 0 0% 100%;
+    --warning-foreground: 38 70% 12%; /* dark label: white on amber is ~2:1 */
     --warning-ink: 38 92% 28%;
     --info: 199 89% 48%;             /* Blue for info states */
     --info-foreground: 0 0% 100%;
@@ -457,29 +458,30 @@
     color-scheme: dark;
 
     /* VIBRANT BLUE DARK THEME - colorful & modern */
-    --background: 222 47% 11%;       /* Page — the darkest surface */
-    --foreground: 210 40% 98%;       /* Soft white text */
-    --card: 222 47% 17%;             /* Lifted a full step above the page */
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 22%;          /* Floats above cards */
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 70%;          /* Bright blue */
-    --primary-foreground: 222 47% 11%;
-    --secondary: 280 85% 70%;        /* Purple accent */
-    --secondary-foreground: 222 47% 11%;
-    --muted: 217 33% 21%;            /* Reads against the lifted card */
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 21%;           /* Kept in step with --muted */
-    --accent-foreground: 210 40% 98%;
+    --background: 220 12% 8.5%;       /* Page — the darkest surface */
+    --foreground: 220 10% 95%;       /* Soft white text */
+    --card: 220 12% 12%;             /* Lifted a full step above the page */
+    --card-foreground: 220 10% 95%;
+    --popover: 220 12% 15.5%;          /* Floats above cards */
+    --popover-foreground: 220 10% 95%;
+    --primary: 215 92% 70%;          /* Bright blue */
+    --primary-foreground: 222 47% 9%;
+    --primary-hover: 215 92% 77%; /* the pressed/hovered fill: darker in light, lighter in dark, so its label keeps contrast */
+    --secondary: 220 12% 19%;        /* Purple accent */
+    --secondary-foreground: 220 10% 95%;
+    --muted: 220 12% 18.5%;            /* Reads against the lifted card */
+    --muted-foreground: 220 12% 66%;
+    --accent: 220 12% 18.5%;           /* Kept in step with --muted */
+    --accent-foreground: 220 10% 95%;
     /* 50%, not 55%: white on 55% is 4.40:1, under AA for a filled
        destructive button's label (colorSchemeTokenContract.test.ts). */
     --destructive: 0 70% 50%;
     --destructive-hover: 0 70% 44%;
     --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 32%;           /* Carries the card edge on its own */
-    --input: 217 33% 32%;
-    --ring: 217 91% 70%;
+    --border: 220 12% 21.5%;           /* Carries the card edge on its own */
+    --input: 220 12% 27%;
+    --ring: 215 92% 70%;
 
     /* Code colors fallback (before themed data attributes apply) */
     --code-bg: #1f1f1f;
@@ -487,8 +489,8 @@
     --code-accent: #b8b8b8;
 
     /* Config panel input surfaces */
-    --config-input-bg: 217 33% 18%;
-    --config-input-border: 217 33% 32%;
+    --config-input-bg: 220 12% 9.5%;
+    --config-input-border: 220 12% 27%;
 
     /* Semantic colors for dark mode. The bright fills already read as text
        on dark surfaces (≥4.7:1 tinted), so the inks equal the fills. A
@@ -497,7 +499,7 @@
     --success-foreground: 142 80% 10%;
     --success-ink: var(--success);
     --warning: 38 92% 55%;
-    --warning-foreground: 0 0% 100%;
+    --warning-foreground: 38 70% 10%;
     --warning-ink: var(--warning);
     --info: 199 89% 58%;
     --info-foreground: 0 0% 100%;

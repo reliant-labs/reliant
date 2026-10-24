@@ -11,20 +11,10 @@ import { useEffect } from "react";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
+import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
 
 
-const COLOR_SCHEME_MAP: Record<string, string> = {
-  blue: "professional-blue",
-  neutral: "refined-neutral",
-  teal: "modern-teal",
-  slate: "slate",
-  forest: "forest",
-  purple: "purple-classic",
-  pink: "vibrant-pink",
-  orange: "energetic-orange",
-  red: "bold-red",
-  black: "pure-black",
-};
+const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
 
 export function useThemeInitialization() {
   useEffect(() => {

@@ -13,7 +13,7 @@
  * its own meaning (reliant's primary action color) without disturbing the
  * ~159 existing `bg-accent` call sites elsewhere in the app.
  *
- * e2e/color-schemes.spec.ts screenshots three regions of it in all ten
+ * e2e/color-schemes.spec.ts screenshots its regions in every
  * schemes, light and dark:
  *
  *   forge-library  every forge-ui component the app used before R5 S1 (the

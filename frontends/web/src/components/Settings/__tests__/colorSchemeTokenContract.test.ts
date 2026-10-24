@@ -291,35 +291,6 @@ describe('forge token bridge in every color scheme', () => {
     danger: [['danger', 1, 'on-danger'], ['danger-hover', 1, 'on-danger']],
   }
 
-  /**
-   * Palette debt the forge Button exposes but does not own: in these schemes
-   * the theme's own `--primary-foreground` on `--primary` is below WCAG AA
-   * 4.5:1, the hover twin (`/ 0.85` alpha in the bridge above) lightens the
-   * fill further, and the focus outline, which is `--primary`, is below 3:1
-   * against the page. Every filled primary element in the
-   * app paints these pairs, and reliant's previous Button painted them too;
-   * the fix is a palette decision, not a Button one.
-   *
-   * This list is a ratchet in both directions: a scheme that gains a failure
-   * fails the test, and so does a palette fix, until its entry is deleted.
-   */
-  const PALETTE_DEBT: Record<string, string[]> = {
-    'professional-blue light': ['primary', 'primary hover'],
-    'modern-teal light': ['focus', 'primary', 'primary hover'],
-    'modern-teal dark': ['primary', 'primary hover'],
-    'slate dark': ['primary', 'primary hover'],
-    'forest light': ['primary', 'primary hover'],
-    'forest dark': ['primary', 'primary hover'],
-    'vibrant-pink light': ['primary', 'primary hover'],
-    'vibrant-pink dark': ['primary', 'primary hover'],
-    'energetic-orange light': ['focus', 'primary', 'primary hover'],
-    'energetic-orange dark': ['primary', 'primary hover'],
-    'bold-red light': ['primary', 'primary hover'],
-    'bold-red dark': ['primary', 'primary hover'],
-    'purple-classic light': ['primary hover'],
-    'purple-classic dark': ['primary', 'primary hover'],
-  }
-
   function buttonFailures(scheme: string, mode: 'light' | 'dark') {
     const html = computeAll(htmlDecls(scheme, mode))
     const inherited = new Map<string, string>()
@@ -328,36 +299,29 @@ describe('forge token bridge in every color scheme', () => {
     const scoped = computeAll(inherited)
     const color = (token: string) => parseHsl(scoped.get(`--color-${token}`)!)
 
-    const owned: string[] = []
-    const palette = new Set<string>()
+    const failures: string[] = []
     for (const surfaceToken of ['surface', 'surface-muted', 'surface-sunken']) {
       const surface = over(color(surfaceToken), [1, 1, 1])
-      if (contrast(over(color('accent'), surface), surface) < 3) palette.add('focus')
+      const ring = contrast(over(color('accent'), surface), surface)
+      if (ring < 3) failures.push(`focus outline on ${surfaceToken}: ${ring.toFixed(2)}:1`)
       for (const [variant, states] of Object.entries(BUTTON_PAINTS)) {
         states.forEach(([fillToken, alpha, textToken], i) => {
           const fill = fillToken ? over({ ...color(fillToken), a: color(fillToken).a * alpha }, surface) : surface
           const ratio = contrast(over(color(textToken), fill), fill)
           if (ratio >= 4.5) return
           const name = i ? `${variant} hover` : variant
-          // A filled variant's label is the theme's own token pair; a neutral
-          // variant's composite is the Button's.
-          if (variant === 'primary' || variant === 'danger') palette.add(name)
-          else owned.push(`${name} on ${surfaceToken}: ${ratio.toFixed(2)}:1`)
+          failures.push(`${name} on ${surfaceToken}: ${ratio.toFixed(2)}:1`)
         })
       }
     }
-    return { owned, palette: [...palette].sort() }
+    return failures
   }
 
-  it.each(cases)('keeps the forge Button\'s own variants at WCAG AA in %s %s', (scheme, mode) => {
-    expect(buttonFailures(scheme, mode).owned, `neutral Button variants below 4.5:1 in ${scheme} ${mode}`).toEqual([])
-  })
-
-  it.each(cases)('holds the palette debt the forge Button exposes in %s %s to its recorded list', (scheme, mode) => {
-    const want = [...(PALETTE_DEBT[`${scheme} ${mode}`] ?? [])].sort()
-    expect(
-      buttonFailures(scheme, mode).palette,
-      `palette pairs below their WCAG floor in ${scheme} ${mode} — update PALETTE_DEBT only to delete a fixed entry`,
-    ).toEqual(want)
+  // Zero exceptions: every label of every variant, at rest and on hover, is
+  // AA on every surface, and the focus outline clears 3:1, in every scheme.
+  // (A PALETTE_DEBT list used to exempt primary pairs in 14 scheme-modes; the
+  // 2026-10-24 retune removed the debt, and this holds it at zero.)
+  it.each(cases)('keeps every forge Button label at AA and its focus outline at 3:1 in %s %s', (scheme, mode) => {
+    expect(buttonFailures(scheme, mode), `forge Button pairs below their WCAG floor in ${scheme} ${mode}`).toEqual([])
   })
 })

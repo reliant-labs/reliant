@@ -10,7 +10,7 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 // a dev-only harness: no backend, no session. Against CI's `vite preview` of
 // a production build the route redirects to / and this suite skips.
 //
-// Four regions per scheme × mode — 80 baselines in
+// Four regions per scheme × mode — 48 baselines in
 // color-schemes.spec.ts-snapshots/:
 //
 //   library   every forge-ui component the app imported before R5 S1

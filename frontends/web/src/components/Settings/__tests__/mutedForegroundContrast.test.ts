@@ -19,6 +19,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { COLOR_SCHEMES } from '../../../lib/forgeTokens'
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INDEX_CSS = fs.readFileSync(path.resolve(__dirname, '../../../index.css'), 'utf-8')
 const THEMES_CSS = fs.readFileSync(path.resolve(__dirname, '../../../themes/professional-themes.css'), 'utf-8')
@@ -94,8 +96,8 @@ function themes(mode: 'light' | 'dark'): Array<[string, string]> {
 describe.each(['light', 'dark'] as const)('muted-foreground contrast (%s)', (mode) => {
   const all = themes(mode)
 
-  it('covers the base theme and all ten color schemes', () => {
-    expect(all).toHaveLength(11)
+  it('covers the base theme and every color scheme', () => {
+    expect(all).toHaveLength(1 + COLOR_SCHEMES.length)
   })
 
   it.each(all)('%s: muted text is AA on every surface it sits on', (_name, body) => {

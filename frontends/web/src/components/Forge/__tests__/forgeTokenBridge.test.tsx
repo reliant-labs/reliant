@@ -25,7 +25,7 @@
  *      in index.css). That is the single most likely wrong "fix".
  *
  * Actual color resolution was verified in a real browser across
- * professional-blue / forest / pure-black / vibrant-pink in both modes:
+ * professional-blue / modern-teal / pure-black / purple-classic in both modes:
  * all 32 utilities resolved to opaque colors, and `.forge-ui` was confirmed
  * to flip `accent` from reliant's muted tint to its primary action color.
  */

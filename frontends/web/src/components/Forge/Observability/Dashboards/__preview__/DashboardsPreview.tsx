@@ -47,10 +47,6 @@ const SCHEMES = [
   "refined-neutral",
   "modern-teal",
   "slate",
-  "forest",
-  "vibrant-pink",
-  "energetic-orange",
-  "bold-red",
   "purple-classic",
   "pure-black",
 ] as const;

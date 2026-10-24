@@ -11,6 +11,7 @@ import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
+import { COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
 
 // Setting key prefixes for organization
 export const SETTINGS_KEYS = {
@@ -381,18 +382,7 @@ export class SettingsSyncService {
     }
 
 
-    const COLOR_SCHEME_MAP: Record<string, string> = {
-      blue: "professional-blue",
-      neutral: "refined-neutral",
-      teal: "modern-teal",
-      slate: "slate",
-      forest: "forest",
-      purple: "purple-classic",
-      pink: "vibrant-pink",
-      orange: "energetic-orange",
-      red: "bold-red",
-      black: "pure-black",
-    };
+    const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
 
     // Apply theme mode (light/dark)
     const theme = this.getSetting(SETTINGS_KEYS.THEME, "");
