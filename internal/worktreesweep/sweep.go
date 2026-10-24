@@ -135,13 +135,9 @@ func ParseAutoArchiveMode(v string) AutoArchiveMode {
 
 // AutoArchiveStore is what archiving a finished worktree needs.
 type AutoArchiveStore interface {
-	ListChats(ctx context.Context, filters core.ChatFilters) ([]*core.Chat, error)
+	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ArchiveWorktree(ctx context.Context, id string) error
 }
-
-// liveChatScan bounds the chats read to see whether any still uses a
-// worktree. A project at the bound is unknown, and unknown is not archived.
-const liveChatScan = 1000
 
 type autoArchive struct {
 	mode   AutoArchiveMode
@@ -156,10 +152,13 @@ type Sweeper struct {
 	keep   KeepFilesSetting
 	auto   *autoArchive
 	// candidates and archived count this pass's finished active worktrees.
-	candidates atomic.Int64
-	archived   atomic.Int64
-	now        func() time.Time
-	slots      chan struct{}
+	idleDone      atomic.Int64
+	blockedByChat atomic.Int64
+	archiveErrors atomic.Int64
+	candidates    atomic.Int64
+	archived      atomic.Int64
+	now           func() time.Time
+	slots         chan struct{}
 	// inflight is the rows with a request out to a daemon.
 	inflight leases
 	// owner names this process in a clean-up's metadata, so a flag left by a
@@ -238,6 +237,9 @@ type target struct{ userID, daemonID string }
 // Sweep reconciles every reclaim candidate against the daemon that owns it,
 // with at most sweepWorkers daemons in flight.
 func (s *Sweeper) Sweep(ctx context.Context) error {
+	s.idleDone.Store(0)
+	s.blockedByChat.Store(0)
+	s.archiveErrors.Store(0)
 	s.candidates.Store(0)
 	s.archived.Store(0)
 	cands, err := s.store.ListWorktreesForReclaim(ctx)
@@ -316,7 +318,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	}
 	wg.Wait()
 	if s.auto != nil {
-		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "finished", s.candidates.Load(), "archived", s.archived.Load())
+		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "idle_done", s.idleDone.Load(), "blocked_by_chat", s.blockedByChat.Load(), "errors", s.archiveErrors.Load(), "finished", s.candidates.Load(), "archived", s.archived.Load())
 	}
 	return nil
 }
@@ -885,18 +887,33 @@ func (s *Sweeper) recordHold(ctx context.Context, wt *core.Worktree, reason work
 // it. The daemon has already checked the files; the server checks that no
 // chat still uses it. In dry-run mode it only counts and logs.
 func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.Worktree) {
+	s.idleDone.Add(1)
 	a := s.auto
-	if a == nil || wt.IsMain || wt.DeletedAt != nil || (s.keep != nil && s.keep.KeepFiles(ctx, userID)) {
+	reason := ""
+	switch {
+	case a == nil:
+		reason = "auto-archive disabled"
+	case wt.IsMain:
+		reason = "main checkout"
+	case wt.DeletedAt != nil:
+		reason = "already archived"
+	case s.keep != nil && s.keep.KeepFiles(ctx, userID):
+		reason = "keep files enabled"
+	}
+	if reason != "" {
+		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", reason)
 		return
 	}
-	chats, err := a.store.ListChats(ctx, core.ChatFilters{UserID: userID, ProjectID: &wt.ProjectID, ExcludeArchived: true, Limit: liveChatScan})
-	if err != nil || len(chats) >= liveChatScan {
+	chatID, err := a.store.GetLiveChatIDForWorktree(ctx, wt.ID)
+	if err != nil {
+		s.archiveErrors.Add(1)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not check bound chat", "worktreeID", wt.ID, "error", err)
 		return
 	}
-	for _, c := range chats {
-		if c.WorktreeID != nil && *c.WorktreeID == wt.ID {
-			return
-		}
+	if chatID != "" {
+		s.blockedByChat.Add(1)
+		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", "bound to live chat", "chatID", chatID)
+		return
 	}
 	s.candidates.Add(1)
 	if a.mode != AutoArchiveOn {
@@ -904,6 +921,7 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 		return
 	}
 	if err := a.store.ArchiveWorktree(ctx, wt.ID); err != nil {
+		s.archiveErrors.Add(1)
 		logging.WarnContext(ctx, "[WorktreeSweep] could not auto-archive worktree", "worktreeID", wt.ID, "error", err)
 		return
 	}
