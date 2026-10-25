@@ -9,9 +9,14 @@
  * otherwise be invisible until someone hit a denial in the wild.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport, renderWithTransport } from "../../../lib/test-utils";
+import { serviceHandlers } from "../../../test/serviceTransport";
 
 const listConnectors = vi.fn();
 const listAvailableTools = vi.fn();
@@ -19,16 +24,22 @@ const listDaemons = vi.fn();
 const authorizeClient = vi.fn();
 const createDaemon = vi.fn();
 
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: {
-    connector: () => ({
-      listConnectors,
-      listAvailableTools,
-      authorizeClient,
+// ConnectorService and the daemon list are reached through connectClient, so
+// they answer at the transport. Each render gets a fresh query cache.
+function render(ui: ReactElement) {
+  return renderWithTransport(ui, {
+    transport: mockTransport({
+      ...serviceHandlers("ConnectorService", {
+        listConnectors: (req) => listConnectors(req),
+        listAvailableTools: (req) => listAvailableTools(req),
+        authorizeClient: (req) => authorizeClient(req),
+      }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: (req) => listDaemons(req) }),
     }),
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
+  });
+}
+
+afterEach(() => setTransport(null));
 
 vi.mock("../../../services/controlPlane/daemon", () => ({
   createDaemon: (...a: unknown[]) => createDaemon(...a),

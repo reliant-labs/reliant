@@ -39,7 +39,8 @@ import { toast } from "sonner";
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
 import { useApprove, useDeny } from "@/hooks/approval-service-hooks_gen";
 import { answerQuestion } from "@/hooks/question-queries";
-import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
+import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
+import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
 import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
@@ -663,7 +664,7 @@ function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: stri
               onSuccess: () => {
                 toast.success("Automation paused");
                 // A paused automation is no longer listed as failing.
-                void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+                void queryClient.invalidateQueries({ queryKey: inboxServiceKeys.all });
               },
               onError: (error) => toast.error("Could not pause the automation", { description: errorText(error) }),
             },

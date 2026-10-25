@@ -27,7 +27,7 @@ vi.mock("../../lib/notifications", async (importOriginal) => {
 });
 
 import { queryClient } from "../../lib/query-client";
-import { inboxKeys } from "../../hooks/inbox-queries";
+import { inboxServiceKeys } from "../../hooks/inbox-service-hooks_gen";
 import { QueryObserver } from "@tanstack/react-query";
 import { STREAM_REFETCH_INTERVAL_MS, resetStreamInvalidation, useGlobalUpdatesStore } from "../globalUpdatesStore";
 
@@ -48,8 +48,8 @@ function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>)
 
 beforeEach(() => {
   queryClient.clear();
-  queryClient.setQueryData(inboxKeys.list(), { items: [] });
-  queryClient.setQueryData(inboxKeys.list("p1"), { items: [] });
+  queryClient.setQueryData(inboxServiceKeys.listInbox({}), { items: [] });
+  queryClient.setQueryData(inboxServiceKeys.listInbox({ projectId: "p1" }), { items: [] });
 });
 
 afterEach(() => {
@@ -63,8 +63,8 @@ describe("globalUpdatesStore → Inbox", () => {
     [UserUpdateType.CHAT_STATE_CHANGE, { state: 1, previous_state: 1, reason: "workflow_failed" }],
   ] as const)("update %s marks every scope's inbox (list and badge) stale", (type, data) => {
     useGlobalUpdatesStore.getState().handleUpdate([buildUpdate(type, data)]);
-    expect(queryClient.getQueryState(inboxKeys.list())?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(inboxKeys.list("p1"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(inboxServiceKeys.listInbox({}))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(inboxServiceKeys.listInbox({ projectId: "p1" }))?.isInvalidated).toBe(true);
   });
 
   it("a reconnect replay of many activity changes refetches the observed inbox once", async () => {
@@ -72,7 +72,7 @@ describe("globalUpdatesStore → Inbox", () => {
     try {
       const listInbox = vi.fn().mockResolvedValue({ items: [] });
       const observer = new QueryObserver(queryClient, {
-        queryKey: inboxKeys.list(),
+        queryKey: inboxServiceKeys.listInbox({}),
         queryFn: listInbox,
         staleTime: Infinity,
       });
@@ -99,6 +99,6 @@ describe("globalUpdatesStore → Inbox", () => {
     useGlobalUpdatesStore
       .getState()
       .handleUpdate([buildUpdate(UserUpdateType.CHAT_TITLE_CHANGED, { title: "x" })]);
-    expect(queryClient.getQueryState(inboxKeys.list())?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(inboxServiceKeys.listInbox({}))?.isInvalidated).toBe(false);
   });
 });
