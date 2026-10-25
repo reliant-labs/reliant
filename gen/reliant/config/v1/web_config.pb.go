@@ -49,6 +49,11 @@ const (
 // control plane, a local Supabase, the dev API floor in lib/apiurl_gen.ts).
 // A MANAGED deployment states AUTH_MODE = "cloud", and checkWebConfig() then
 // requires the keys the managed app cannot run without (see auth_mode).
+// AUTH_MODE = "self-hosted" is the same app as unset, spelled out: a project
+// that renders this document from another repository must name the mode
+// (forge refuses a cross-repo document that leaves a required_when selector
+// unstated, because a managed document that lost every key reads exactly
+// like a self-hosted one — prod-web, 2026-10-24).
 //
 // FLAGS ARE STRINGS, "true" or unset, read with `=== "true"` exactly as the
 // VITE_* reads they replace. Not proto bools: forge's generated zod coerces
@@ -279,7 +284,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xdf(\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xbf)\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -294,9 +299,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xd8\x01\n" +
 	"\vdisable_tls\x18\x05 \x01(\tB\xb6\x01\x82\xce\x18\xb1\x01\n" +
 	"\vDISABLE_TLS*\xa1\x01\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.R\n" +
-	"disableTls\x12\xb3\x02\n" +
-	"\tauth_mode\x18\x06 \x01(\tB\x95\x02\x82\xce\x18\x90\x02\n" +
-	"\tAUTH_MODE*\xfb\x01\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev.J\x05cloudR\bauthMode\x12\xba\x01\n" +
+	"disableTls\x12\x93\x03\n" +
+	"\tauth_mode\x18\x06 \x01(\tB\xf5\x02\x82\xce\x18\xf0\x02\n" +
+	"\tAUTH_MODE*\xce\x02\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.J\x05cloudJ\vself-hostedR\bauthMode\x12\xba\x01\n" +
 	"\fsupabase_url\x18\a \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
 	"\fSUPABASE_URL\x1a\x16http://127.0.0.1:54321*UThe Supabase project the browser signs in against. Default: a local `supabase start`.r\x12\n" +
 	"\tauth_mode\x12\x05cloudR\vsupabaseUrl\x12\xd7\x01\n" +

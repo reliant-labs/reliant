@@ -33,6 +33,11 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 // control plane, a local Supabase, the dev API floor in lib/apiurl_gen.ts).
 // A MANAGED deployment states AUTH_MODE = "cloud", and checkWebConfig() then
 // requires the keys the managed app cannot run without (see auth_mode).
+// AUTH_MODE = "self-hosted" is the same app as unset, spelled out: a project
+// that renders this document from another repository must name the mode
+// (forge refuses a cross-repo document that leaves a required_when selector
+// unstated, because a managed document that lost every key reads exactly
+// like a self-hosted one — prod-web, 2026-10-24).
 //
 // FLAGS ARE STRINGS, "true" or unset, read with `=== "true"` exactly as the
 // VITE_* reads they replace. Not proto bools: forge's generated zod coerces
@@ -76,8 +81,8 @@ message ReliantWebConfig {
   // ── Identity ──────────────────────────────────────────────────────────
   string auth_mode = 6 [(forge.v1.config) = {
     env_var: "AUTH_MODE"
-    description: "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev."
-    allowed_values: ["cloud"]
+    description: "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two."
+    allowed_values: ["cloud", "self-hosted"]
   }];
 
   string supabase_url = 7 [(forge.v1.config) = {

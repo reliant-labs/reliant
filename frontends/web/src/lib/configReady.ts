@@ -26,7 +26,9 @@ const FLAG_KEYS = [
   "OTEL_REPLAY",
 ] as const;
 
-const AUTH_MODES = ["", "cloud"];
+// "self-hosted" is unset spelled out, for a document another project renders
+// (it must state its mode; see web_config.proto).
+const AUTH_MODES = ["", "cloud", "self-hosted"];
 
 /**
  * Why this renderer's runtime config cannot work, or [] when it can.
@@ -84,7 +86,7 @@ export function checkWebConfig(): string[] {
   const problems: string[] = [];
   if (!AUTH_MODES.includes(config.AUTH_MODE)) {
     problems.push(
-      `AUTH_MODE is "${config.AUTH_MODE}"; it must be "cloud" (a managed deployment) or unset.`,
+      `AUTH_MODE is "${config.AUTH_MODE}"; it must be "cloud" (a managed deployment), "self-hosted" or unset.`,
     );
   }
   for (const key of FLAG_KEYS) {

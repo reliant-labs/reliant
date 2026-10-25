@@ -77,6 +77,11 @@ describe("checkWebConfig", () => {
     expect(checkWebConfig().join("\n")).toContain('AUTH_MODE is "clould"');
   });
 
+  it("accepts AUTH_MODE \"self-hosted\": the self-hosted app, with its mode stated", () => {
+    setRuntimeConfig({ AUTH_MODE: "self-hosted" });
+    expect(checkWebConfig()).toEqual([]);
+  });
+
   it("refuses a flag that is not \"true\", \"false\" or unset", () => {
     setRuntimeConfig({ DISABLE_TLS: "yes" });
     expect(checkWebConfig()).toEqual([

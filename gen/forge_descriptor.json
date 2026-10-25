@@ -39812,12 +39812,13 @@
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
-          "Description": "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev.",
+          "Description": "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. \"self-hosted\" or unset: self-hosted or local dev. A document rendered by another project must state one of the two.",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "reliant/config/v1/web_config.proto",
           "AllowedValues": [
-            "cloud"
+            "cloud",
+            "self-hosted"
           ]
         },
         {
@@ -40059,7 +40060,7 @@
       ],
       "Frontend": "web",
       "ProtoFile": "reliant/config/v1/web_config.proto",
-      "Line": 45,
+      "Line": 50,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -40318,7 +40319,7 @@
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
     "reliant/config/v1/server_config.proto": "dbb2a79cb172226c5ec4c48b07950e0446ff6e7f04e1b1057d4c85306d49e86c",
     "reliant/config/v1/vault_config.proto": "e0c1e732880cc444791cb314c802fb5af73ee007c6a37c6333f6f4367a45d192",
-    "reliant/config/v1/web_config.proto": "a265cf8fa479b2018e0b05bc50e492b3dcf26855c581a66890a88a25a7790aeb",
+    "reliant/config/v1/web_config.proto": "cb909dc9c05caa85bc3ab3689f22ac7322965aeea013ead4d812976e6b69c230",
     "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
