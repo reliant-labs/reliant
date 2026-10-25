@@ -249,7 +249,11 @@ export interface PanelResult {
   seriesMeta: SeriesMeta[];
   /** Series (groups) that matched before the cap; 0 when unknown. Compare with `series.length`. */
   seriesTotal: number;
-  /** Non-fatal notes as stable codes: mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds. */
+  /**
+   * Non-fatal notes, "<code>" or "<code>: <detail>": mixed_bounds, mixed_temporality, step_raised,
+   * metric_stored_as_n_kinds, metric_kind_mismatch, and metric_absent (a series' metric has no data
+   * in the scope and range; its series is empty).
+   */
   warnings: string[];
   /** With `explain`: the statements the panel compiles to. Empty otherwise. */
   compiledSql: CompiledStatement[];
