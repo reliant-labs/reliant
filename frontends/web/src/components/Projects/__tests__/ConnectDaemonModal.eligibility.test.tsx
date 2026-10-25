@@ -19,7 +19,7 @@
  * be refused is a UI that teaches users the product is broken, and here it was
  * spending real money instead.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -68,6 +68,7 @@ vi.mock("../../forge-ui/modal", () => ({
 import { ConnectDaemonModal } from "../ConnectDaemonModal";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { renderWithQuery } from "@/test/renderWithQuery";
 
 // The daemon list is read through connectClient(DaemonRegistryService).
 beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
@@ -97,7 +98,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: false,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     expect(
       screen.queryByRole("button", { name: /Reliant Cloud/i }),
@@ -116,7 +117,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: false,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     // The panel that replaces the tile carries the reason plus both ways out.
     expect(
@@ -131,7 +132,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
   // Never block an entitled user — the failure mode of an over-eager gate is
   // just as bad as the one we're closing.
   it("still provisions for an eligible user", async () => {
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Reliant Cloud/i }));
 
@@ -153,7 +154,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: true,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     expect(
       screen.queryByRole("button", { name: /Reliant Cloud/i }),
