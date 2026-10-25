@@ -160,7 +160,12 @@ test.describe('forge components across color schemes', () => {
         await expect(tooltips).toHaveScreenshot(`r5-tooltip-hover-${scheme}-${mode}.png`, SHOT);
         await page.mouse.move(0, 0);
         await expect(page.getByRole('tooltip')).toHaveCount(0);
-        await page.getByRole('button', { name: 'Copy path' }).focus();
+        // From the keyboard: a hint shows for focus the user can see
+        // (:focus-visible), and a programmatic focus after the mode toggle's
+        // click is not that.
+        await page.getByTestId('toggle-dark').focus();
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('button', { name: 'Copy path' })).toBeFocused();
         await expect(page.getByRole('tooltip')).toBeVisible();
         await expect(tooltips).toHaveScreenshot(`r5-tooltip-focus-${scheme}-${mode}.png`, SHOT);
 
