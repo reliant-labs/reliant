@@ -11,7 +11,8 @@
 #   services/deploy/v1/deploy.proto -> frontends/web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts
 #   services/billing/v1/billing.proto -> gen/controlplane/services/billing/v1/*.go
 #
-# Regenerate with:  make proto-generate-controlplane
+# Regenerate with:  task generate:controlplane  (forge.yaml's `controlplane-client`
+# generate hook, so `task generate:forge` runs it too)
 # (after `node .github/scripts/sync-controlplane-proto.mjs` when the contract changed)
 version: v2
 managed:

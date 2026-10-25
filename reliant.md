@@ -20,29 +20,33 @@ Reliant is a **multi-tenant distributed system** with three server roles — **A
 
 ## Running reliant to build reliant
 
-There might be 10 reliant processes running at a time, each for a different feature, with dynamically allocated ports (`cat .dev-ports.sh` or `./.reliant/tools/port-info.sh`). We typically use 1 central reliant to iterate on all of the others.
+`forge env up dev` in this checkout runs the product alone (`deploy/kcl/dev/`): api, worker and gateway under air, the `frontends/web` Vite server, and forge host Postgres 16, NATS and Temporal; no control plane, no docker, no k3d. `forge env up dev` in `../control-plane` is the full platform (billing, LLM gateway, managed workspaces, Electron) and needs k3d. There might be 10 stacks running at a time, one per worktree, each on its own 100-port block with its own data: never assume a port. `./.reliant/tools/port-info.sh` (`--cp` for control-plane's) or `forge env config dev` prints them.
 
-- You **cannot** simply kill or pkill reliant processes — you might be killing yourself, not the intended task.
+- You **cannot** simply kill or pkill reliant processes — you might be killing yourself, not the intended task. `forge env down dev` stops only the stack of the checkout it runs in.
 - Air and Vite hot-reload, so you typically don't need to kill anything, **ever**.
 - You are often working in a worktree: keep edits in that worktree. When looking for a file, check both your worktree and the main git worktree.
+- `task --list` names every task; each runs the forge `forge.yaml` pins, never whatever `forge` is on PATH.
 
 ## Database (Postgres only)
 
-- Migrations are forge migrations in `db/migrations/` (`<YYYYMMDDHHMMSS>_<name>.up.sql`, forward only, applied by forge's migrator). Create them with `make migration NAME=<name>` — never hand-write the version. Each one says whether the previous release survives it: `-- forge:backward-compatible — <why>` (the default; expand/contract) or `-- forge:breaks-rollback <why>`, enforced by `forge lint --migration-safety`. One file runs as one transaction; a `CREATE INDEX CONCURRENTLY` must be the only statement in its file (see `internal/db/SCHEMA.md`).
-- The forge ORM projects the applied schema into `internal/store`: after a migration run the pinned `forge generate` (`make forge-generate-check`) and commit what it writes. Queries live in `internal/store/<entity>_repo_ext.go`; `internal/db` is the hand Repository facade over them (rules: `internal/db/SCHEMA.md`). There is no sqlc.
+- Migrations are forge migrations in `db/migrations/` (`<YYYYMMDDHHMMSS>_<name>.up.sql`, forward only, applied by forge's migrator). Create them with `task db:migration NAME=<name>` — never hand-write the version. Each one says whether the previous release survives it: `-- forge:backward-compatible — <why>` (the default; expand/contract) or `-- forge:breaks-rollback <why>`, enforced by `forge lint --migration-safety`. One file runs as one transaction; a `CREATE INDEX CONCURRENTLY` must be the only statement in its file (see `internal/db/SCHEMA.md`).
+- The forge ORM projects the applied schema into `internal/store`: after a migration run `task generate:forge` (`task generate:check` fails if you forgot) and commit what it writes. Queries live in `internal/store/<entity>_repo_ext.go`; `internal/db` is the hand Repository facade over them (rules: `internal/db/SCHEMA.md`). There is no sqlc.
 - Key tables: `chats`, `messages`, `message_content_blocks` (text, tool calls), `workflows`, `projects`, `worktrees`.
-- Two dev Postgres servers — not drift, different stacks: **5433** is this repo's own docker-compose (`make postgres-up`, `scripts/dev.sh`, the Make test targets); **5434** is the control-plane `forge env up` stack's, database `reliant`, holding real data — read-only, never drop or mutate it.
+- Each dev stack has its own reliant database, named by `forge env config dev`: this checkout's stack runs one on its port block; control-plane's is on its docker-compose Postgres, **localhost:5434**, holding real data — read-only, never drop or mutate it.
 
 ## Logs
 
-For the usual `forge env up` stack, every log — backend, browser console, Electron — is under `../control-plane/.forge/logs/dev/` (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_reliant-web.log` = UI `[browser:<level>]` lines), NOT `./data/`. Only this repo's own `scripts/dev.sh` stack logs to `./data/logs*`. Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep.
+Every log — backend, browser console, Electron — is under `.forge/logs/dev/` of the checkout that ran `forge env up dev`: `./.forge/logs/dev/` for this checkout's stack, `../control-plane/.forge/logs/dev/` for control-plane's (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_web.log` / `frontend_reliant-web.log` = UI `[browser:<level>]` lines). Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep. `./.reliant/tools/log-search.sh` greps them.
 
 ## Merging to main: the merge-gate status is required
+
+Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed, ~5 min), before every merge; the **release gate**, `task release:gate` (`scripts/release-gate.sh`: everything, `-race`, slow tests, integration, e2e; recorded per sha), before every release — `task release:tag` refuses a commit without a green record.
 
 GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
 commit status (ruleset "main: merge-gate required", head must be up to date
 with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
-merge queue posts it on the exact squashed commit its gate verified:
+merge queue merges main into the branch (never a rebase), squashes, runs
+`scripts/merge-gate.sh --amend` on that exact commit and posts the status:
 
 ```bash
 /home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
@@ -57,6 +61,8 @@ comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.lo
 gh pr merge <pr> --squash
 ```
 
+GitHub CI (`.github/workflows/ci.yml`) is a thin wrapper over the same tasks: `task ci:merge` on a PR, `task release:gate` on main and nightly.
+
 ## Load these skills before touching their area
 
 - `web-styling` — any styling/layout change under `frontends/web/src` (semantic tokens, the `bg-muted` elevation trap).
@@ -70,40 +76,38 @@ packages plus their reverse dependencies, `-short`; the vitest files importing a
 changed web module; electron when it or a file it reads changed) and says why each ran:
 
 ```bash
-make test-affected                         # diff vs merge-base with origin/main, all lanes
-make test-affected-plan                    # same decision, nothing run
-make test-affected LANES=go                # one lane; TEST_BASE=<rev> moves the base, TEST_FULL=1 runs all
-make test-short PKGS=./internal/<pkg>/...  # one package by hand: -short, cached, no -race, 60s/pkg
+task test:affected                          # diff vs merge-base with origin/main, all lanes
+task test:affected:plan                     # same decision, nothing run
+task test:affected LANES=go                 # one lane; TEST_BASE=<rev> moves the base, TEST_FULL=1 runs all
+task test:short -- ./internal/<pkg>/...     # one package by hand: -short, cached, no -race
+task ci:merge                               # the merge gate, before you hand a branch to the queue
 ```
 
-`go.mod`, `package.json`, `Makefile`, config, or a path nothing claims runs the whole
-lane. A migration also runs the DB-backed packages it reaches, but only when you
-set `DATABASE_URL`. Rule table and blind spots: `dev-docs/testing-affected.md`.
+`go.mod`, `package.json`, `Taskfile.yml`, config, or a path nothing claims runs the whole
+lane. A migration also runs the DB-backed packages it reaches. Rule table and
+blind spots: `dev-docs/testing-affected.md`.
 Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under load.
 
-- **Never `make test` / `make test-all`** — they run `make stop`, which stops
-  other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
-  (no `-short`) once at the end.
-- **CI has two tiers.** A PR runs only what its diff reaches: `go test -short`
-  (DB tests still on) over the packages `tools/test-affected` selects, and only
-  the lint/codegen/web/Playwright lanes its paths can affect, in ~5 minutes.
-  Pushes to main and the nightly run everything, in full. So a
-  `testing.Short()`-gated test, or a package your diff does not reach, runs
-  only on main: when you touch code one covers, run its package without
-  `-short` yourself, or dispatch PR CI on your branch (full tier). New and
-  changed tests run 3x on the PR: a test that fails on a repeat is a flake to
-  fix, never to re-run. A red main opens a `ci:main-red` issue. Details:
-  `dev-docs/testing-affected.md`, "CI tiers".
-- **DB-backed tests use `DATABASE_URL` and only `DATABASE_URL`.** Unset, a bare
-  `go test` skips them loudly and connects to nothing; `REQUIRE_TEST_DB=1`
-  makes that a failure. The Make test targets pass `DATABASE_URL` for you —
-  yours if set, otherwise the compose Postgres on 5433, a server shared with
-  everyone on this machine. So give them a database of your own:
-  `DATABASE_URL='postgres://postgres:postgres@localhost:<port>/<your_db>?sslmode=disable'`.
-  Never 5434 (the control-plane stack's real data).
-- `-short` skips DB-backed tests (the shared Postgres is the bottleneck). When
-  you change SQL or a repo method:
-  `DATABASE_URL=<your db> REQUIRE_TEST_DB=1 make test-short PKGS=...`.
+- **Use `task`, not `make`.** The Makefile is one-line `task` forwarders kept
+  for one merge (P8 L5 deletes it). Nothing here stops another agent's
+  environment any more. For the full lane of one package run
+  `task test -- ./internal/<pkg>/...` (no `-short`, `-race`) once at the end;
+  never the unscoped `task test` as a quick check (the whole module, web and
+  electron).
+- **Two gate tiers.** The merge gate (and a PR's CI) runs only what the diff
+  reaches, `-short`, direct importers only. The release gate on main runs
+  everything in full: `-race`, every slow test, integration, e2e. So a slow
+  test, or a package two imports away from your change, runs only there: when
+  you touch code one covers, run its package with `task test -- ./<pkg>/...`.
+  New and changed tests run 3x (`task test:flake`): a test that fails on a
+  repeat is a flake to fix, never to re-run. A red main opens a `ci:main-red`
+  issue. Details: `dev-docs/merge-and-release-gates.md`.
+- **DB-backed tests need no database from you.** They use forge pgtest's
+  shared embedded Postgres (the major `forge.yaml` declares, booted on first
+  use and shared by every test process on the machine; each test gets its own
+  copy of a migrated template), or `FORGE_TEST_POSTGRES_URL` (a maintenance
+  DSN on that major) when you point them at a server of your own. They **never
+  read `DATABASE_URL`**, and they run under `-short` too.
 - No `-count=1` or `-race` in the inner loop — they defeat the test cache,
   which is correct for hermetic tests. Never set a private `GOCACHE`.
 - The cache only sees files the test process itself reads. A test that execs a
@@ -111,7 +115,7 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `testing.Short()` or `os.ReadFile` those inputs itself.
 - A new test that takes >2s: first make it fast — a fixed wait on a production
   timeout or backoff gets a package-level var or option the test shrinks. Only
-  if it is inherently slow (a cluster, a real subprocess) does it get
-  `if testing.Short() { t.Skip("<why>; skipped under -short") }`, which moves it
-  off PRs to main/nightly. Gate it, never weaken the assertion.
+  if it is inherently slow (a cluster, a real subprocess) does it call
+  `testkit.Slow(t, "<why>")` first, which moves it off the merge gate into the
+  release gate. Gate it, never weaken the assertion.
 - Anything expected to run >~2 min: `run_in_background` + `shell_wait`.
