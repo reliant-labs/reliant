@@ -29,11 +29,16 @@ func TestFinalizeRecoveryQuarantineInventoryMismatchReturnsOriginal(t *testing.T
 	c.RecoveryRef = "refs/heads/reliant-recovery/" + id + "/" + c.CaptureID + "/" + c.RepoID
 	capture, err := CaptureRecovery(ctx, path, c)
 	require.NoError(t, err)
-	now := time.Now().UTC()
+	// Keep the real context deadline clear of loaded-host Git subprocess
+	// latency while the injected logical clock still enforces a 25s lease.
+	now := time.Now().UTC().Add(5 * time.Minute)
 	activity := RecoveryActivity{Generation: 1, ObservationID: "epoch", ObservedSince: now.Add(-8 * 24 * time.Hour), LastActivity: now.Add(-8 * 24 * time.Hour), ObservedThrough: now, Complete: true}
 	req := RecoveryRequest{RecoveryID: "journal", Worktree: Worktree{ID: id, Path: path, State: StateArchived, Fence: "123", Checkouts: []Checkout{{RepoPath: parent, Rel: ""}}}, Captures: []RecoveryCapture{capture}, Activity: activity, Receipts: []RecoveryReceipt{{Capture: capture, VerifiedAt: now, VerifierVersion: "test"}}}
 	req.Authorization = &RecoveryAuthorization{RecoveryID: req.RecoveryID, CaptureID: capture.CaptureID, WorktreeID: id, Fence: "123", ObservationID: activity.ObservationID, ManifestDigest: RecoveryWorkspaceDigest(req.Captures), ExpiresAt: now.Add(25 * time.Second)}
 	r := NewReclaimer(root)
+	// Freeze the authorization clock: this fixture tests inventory mutation,
+	// not host scheduling latency. Expiry is tested independently below.
+	r.Now = func() time.Time { return now }
 	mutated := false
 	deps := RecoveryFinalizeDeps{Verify: func(context.Context, RecoveryCapture) (RecoveryReceipt, error) { return req.Receipts[0], nil }, Observe: func(context.Context, string) (RecoveryActivity, error) { return activity, nil }, Acquire: func(context.Context, []string) (RecoveryLease, error) { return finalizeTestLease{}, nil }, CheckProcessUse: func(context.Context, []string) error {
 		if !mutated {
