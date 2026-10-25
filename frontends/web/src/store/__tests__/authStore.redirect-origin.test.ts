@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Regression cover for the loopback OAuth redirect.
@@ -84,6 +84,15 @@ const redirectTargetFrom = (mock: ReturnType<typeof vi.fn>): string => {
   if (!call) throw new Error('provider redirect was never requested')
   return (call[0] as { options: { redirectTo: string } }).options.redirectTo
 }
+
+// The first import of the store transforms its whole module graph; each later
+// one (after vi.resetModules) only re-evaluates it. Pay the transform once
+// here, under the hook budget, instead of inside the first test's: on a
+// loaded machine it alone outran the 10s test timeout (merge gates of
+// reliant#1512 and the Trigger lane, 2026-10-25).
+beforeAll(async () => {
+  await import('@/store/authStore')
+})
 
 describe('OAuth redirect target in a packaged Electron build', () => {
   beforeEach(() => {

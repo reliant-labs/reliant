@@ -50,7 +50,7 @@
  * session's access token rather than from an email lookup.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const updateUserMock = vi.fn()
 const resendMock = vi.fn()
@@ -114,6 +114,15 @@ const pendingUser = {
 }
 
 const loadStore = async () => (await import('@/store/authStore')).useAuthStore
+
+// The first import of the store transforms its whole module graph; each later
+// one (after vi.resetModules) only re-evaluates it. Pay the transform once
+// here, under the hook budget, instead of inside the first test's: on a
+// loaded machine it alone outran the 10s test timeout (merge gates of
+// reliant#1512 and the Trigger lane, 2026-10-25).
+beforeAll(async () => {
+  await import('@/store/authStore')
+})
 
 beforeEach(() => {
   vi.resetModules()
