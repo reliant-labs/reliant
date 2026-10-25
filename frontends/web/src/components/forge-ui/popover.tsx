@@ -36,6 +36,12 @@ import { createPortal } from "react-dom";
  * Open state is uncontrolled by default; pass `open` + `onOpenChange` to own
  * it. `children` may be a function of `{ close }` for content that closes the
  * panel itself.
+ *
+ * Anchored to a POINT instead (a context menu at the pointer): pass `anchor`
+ * ({ x, y } in viewport pixels) with a controlled `open`, and no trigger. The
+ * panel opens below-right of the point and flips left or above when there is
+ * no room; Escape and choosing return focus to whatever had it when the panel
+ * opened. Name the panel with `label`, since there is no trigger to name it.
  */
 
 export interface PopoverTriggerProps {
@@ -52,7 +58,19 @@ export interface PopoverTriggerProps {
 export type PopoverOpenVia = "keyboard" | "keyboard-last" | "pointer";
 
 export interface PopoverProps {
-  trigger: React.ReactNode | ((props: PopoverTriggerProps) => React.ReactElement);
+  /** The control that opens the panel. Omit it only with `anchor`. */
+  trigger?: React.ReactNode | ((props: PopoverTriggerProps) => React.ReactElement);
+  /**
+   * A viewport point to open at, instead of the trigger's edge (a context
+   * menu). Use with a controlled `open`.
+   */
+  anchor?: { x: number; y: number };
+  /**
+   * How an `anchor` open was triggered, which decides where focus lands:
+   * "keyboard" (Shift+F10, the ContextMenu key) moves it to the first
+   * focusable element. Defaults to "pointer". A trigger knows this itself.
+   */
+  openVia?: PopoverOpenVia;
   children: React.ReactNode | ((api: { close: () => void }) => React.ReactNode);
   /** Controlled open state; pair with onOpenChange. */
   open?: boolean;
@@ -96,6 +114,8 @@ const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : us
 
 export default function Popover({
   trigger,
+  anchor,
+  openVia,
   children,
   open: controlledOpen,
   onOpenChange,
@@ -114,6 +134,9 @@ export default function Popover({
   const open = controlledOpen ?? uncontrolledOpen;
   const triggerRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Where focus goes back to on close: the trigger, or — anchored to a point
+  // with no trigger — whatever was focused when the panel opened.
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const openedVia = useRef<PopoverOpenVia>("pointer");
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const triggerId = useId();
@@ -130,7 +153,7 @@ export default function Popover({
   const close = useCallback(
     (returnFocus = true) => {
       setOpen(false);
-      if (returnFocus) triggerRef.current?.focus();
+      if (returnFocus) (triggerRef.current ?? restoreFocusRef.current)?.focus();
     },
     [setOpen],
   );
@@ -144,12 +167,33 @@ export default function Popover({
     [disabled, open, setOpen],
   );
 
+  const anchorX = anchor?.x;
+  const anchorY = anchor?.y;
   const reposition = useCallback(() => {
-    const anchor = triggerRef.current;
     const panel = panelRef.current;
-    if (!anchor || !panel) return;
-    const a = anchor.getBoundingClientRect();
+    if (!panel) return;
     const p = panel.getBoundingClientRect();
+    if (anchorX !== undefined && anchorY !== undefined) {
+      // A point: below-right of it, flipped left / above when it would
+      // overflow, then clamped like a trigger-anchored panel.
+      let left =
+        anchorX + p.width <= window.innerWidth - VIEWPORT_PADDING ? anchorX : anchorX - p.width;
+      let top =
+        anchorY + p.height <= window.innerHeight - VIEWPORT_PADDING ? anchorY : anchorY - p.height;
+      left = Math.min(
+        Math.max(left, VIEWPORT_PADDING),
+        Math.max(VIEWPORT_PADDING, window.innerWidth - p.width - VIEWPORT_PADDING),
+      );
+      top = Math.min(
+        Math.max(top, VIEWPORT_PADDING),
+        Math.max(VIEWPORT_PADDING, window.innerHeight - p.height - VIEWPORT_PADDING),
+      );
+      setPosition((cur) => (cur && cur.top === top && cur.left === left ? cur : { top, left }));
+      return;
+    }
+    const anchorEl = triggerRef.current;
+    if (!anchorEl) return;
+    const a = anchorEl.getBoundingClientRect();
     const below = a.bottom + GAP;
     const above = a.top - p.height - GAP;
     const fitsBelow = below + p.height <= window.innerHeight - VIEWPORT_PADDING;
@@ -172,12 +216,21 @@ export default function Popover({
       Math.max(VIEWPORT_PADDING, window.innerHeight - p.height - VIEWPORT_PADDING),
     );
     setPosition((cur) => (cur && cur.top === top && cur.left === left ? cur : { top, left }));
-  }, [align, side]);
+  }, [align, side, anchorX, anchorY]);
 
   useIsomorphicLayoutEffect(() => {
     if (open) reposition();
     else setPosition(null);
   }, [open, reposition]);
+
+  // Remember what had focus as the panel opens, so a trigger-less panel can
+  // hand it back.
+  useIsomorphicLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    restoreFocusRef.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [open]);
 
   // Follow the trigger while open: the page scrolling (any scroller — capture
   // phase), the window resizing, or the panel's own content changing size.
@@ -206,14 +259,14 @@ export default function Popover({
     const panel = panelRef.current;
     if (!panel || !position || focusedForOpen.current) return;
     focusedForOpen.current = true;
+    const via = anchor ? (openVia ?? "pointer") : openedVia.current;
     if (onOpenFocus) {
-      onOpenFocus(panel, openedVia.current);
+      onOpenFocus(panel, via);
       return;
     }
-    const first =
-      openedVia.current === "pointer" ? null : panel.querySelector<HTMLElement>(FOCUSABLE);
+    const first = via === "pointer" ? null : panel.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? panel).focus({ preventScroll: true });
-  }, [open, position, onOpenFocus]);
+  }, [open, position, onOpenFocus, anchor, openVia]);
 
   // A press outside both the trigger and the panel dismisses, leaving focus
   // where the press put it.
@@ -290,7 +343,7 @@ export default function Popover({
   };
 
   const triggerElement =
-    typeof trigger === "function" ? (
+    trigger === undefined ? null : typeof trigger === "function" ? (
       trigger(triggerProps)
     ) : (
       <button
@@ -313,7 +366,7 @@ export default function Popover({
             role={role}
             tabIndex={-1}
             aria-label={label}
-            aria-labelledby={label ? undefined : triggerId}
+            aria-labelledby={label || trigger === undefined ? undefined : triggerId}
             className={`fixed z-50 rounded-lg border border-border bg-surface shadow-lg focus:outline-none ${panelClassName ?? ""}`}
             style={{
               top: position?.top ?? 0,

@@ -15,8 +15,15 @@ import {
   Trash2,
 } from "lucide-react";
 import { FileIcon } from "./FileIcon";
-import { ContextMenu } from "../ui/ContextMenu";
-import type { ContextMenuItem } from "../ui/ContextMenu";
+import ContextMenu from "../forge-ui/context_menu";
+import type { MenuItem } from "../forge-ui/dropdown_menu";
+import {
+  contextMenuOpening,
+  menuGroups,
+  MENU_SEPARATOR,
+  type ContextMenuOpening,
+} from "../../lib/contextMenuOpening";
+import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import type { FileNode } from "./index";
 import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
@@ -129,10 +136,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     ? expandedPaths.has(node.path) 
     : internalIsExpanded;
   
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuOpening | null>(null);
   const [creatingInline, setCreatingInline] = useState<"file" | "folder" | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -244,7 +248,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setContextMenu(contextMenuOpening(e));
   };
 
   const copyToClipboard = (text: string) => {
@@ -322,8 +326,8 @@ export const FileTreeItem = memo(function FileTreeItem({
     }
   };
 
-  const getContextMenuItems = (): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
+  const getContextMenuItems = (): Array<MenuItem | typeof MENU_SEPARATOR> => {
+    const items: Array<MenuItem | typeof MENU_SEPARATOR> = [];
 
     if (isDirectory) {
       items.push({
@@ -356,7 +360,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Add file operations
     if (isDirectory) {
       items.push(
-        { label: "", onClick: () => {}, separator: true },
+        MENU_SEPARATOR,
         {
           label: "New File",
           icon: <FilePlus className="w-4 h-4" />,
@@ -389,7 +393,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Copy operations
     const fullPath = buildFullPath(effectiveWorktree?.path, node.path);
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Copy Path",
         icon: <Copy className="w-4 h-4" />,
@@ -412,7 +416,7 @@ export const FileTreeItem = memo(function FileTreeItem({
 
     // Cut/Copy operations (for both files and directories)
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Cut",
         icon: <Scissors className="w-4 h-4" />,
@@ -443,7 +447,7 @@ export const FileTreeItem = memo(function FileTreeItem({
     // Paste operation (only for directories)
     if (isDirectory && operation && filePath && fileName) {
       items.push(
-        { label: "", onClick: () => {}, separator: true },
+        MENU_SEPARATOR,
         {
           label: `Paste ${operation === "cut" ? "(Move)" : "(Copy)"}`,
           icon: <ClipboardPaste className="w-4 h-4" />,
@@ -495,7 +499,7 @@ export const FileTreeItem = memo(function FileTreeItem({
 
     // Delete
     items.push(
-      { label: "", onClick: () => {}, separator: true },
+      MENU_SEPARATOR,
       {
         label: "Delete",
         icon: <Trash2 className="w-4 h-4" />,
@@ -722,9 +726,20 @@ export const FileTreeItem = memo(function FileTreeItem({
       {/* Context Menu */}
       {contextMenu && (
         <ContextMenu
-          items={getContextMenuItems()}
+          label={`${node.name} actions`}
+          groups={menuGroups(getContextMenuItems())}
+          open
           position={contextMenu}
-          onClose={() => setContextMenu(null)}
+          openVia={contextMenu.via}
+          onOpenChange={(open) => {
+            if (open) return;
+            setContextMenu(null);
+            // Back to the composer, unless the chosen item focused an input
+            // of its own (inline new file/folder): after its state commits.
+            requestAnimationFrame(() => {
+              if (!isInputFocused()) focusChatInput();
+            });
+          }}
         />
       )}
 

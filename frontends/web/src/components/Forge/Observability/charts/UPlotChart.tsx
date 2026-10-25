@@ -23,7 +23,7 @@
  *
  * A marker is a moment on the time axis — a version first seen, or a release
  * promoted, from control-plane DeliveryInsightsService.ListReleases.
- * Each is drawn as a dashed vertical rule with a short label, and named in the
+ * Each is drawn as a dashed vertical rule, summarized below the plot, and named in the
  * caption. A chart takes them from its `markers` prop or, absent that, from
  * the nearest ObsChartMarkersProvider — the seam that lets one provider put
  * release markers on every time-series chart of the area at once.
@@ -103,7 +103,7 @@ const NO_LAYOUT: ExemplarLayout = { left: 0, top: 0, width: 0, height: 0, dots: 
 
 /**
  * A stretch of the time axis to shade: an alert firing. Drawn as a tinted
- * band behind the series with its label at the top, and named in the caption.
+ * band behind the series, summarized below the plot and named in the caption.
  */
 export interface ChartBand {
   /** Epoch seconds. */
@@ -129,7 +129,7 @@ const TONE_VAR: Record<ChartTone, string> = {
 export interface ChartMarker {
   /** Epoch seconds. */
   timeSec: number;
-  /** Short, drawn beside the rule ("v1.8.2"). */
+  /** Short, included in the annotation summary ("v1.8.2"). */
   label: string;
   /** Longer, for the caption ("prod promoted v1.8.2"). Defaults to `label`. */
   description?: string;
@@ -208,6 +208,14 @@ export function UPlotChart({
     [compact, own, inherited, timestamps]
   );
   const shown = useMemo(() => visibleBands(bands, timestamps), [bands, timestamps]);
+  const extent = useMemo(() => timeExtent(timestamps, markers), [timestamps, markers]);
+  const annotationCounts = [
+    markers.length ? `${markers.length} release${markers.length === 1 ? "" : "s"}` : "",
+    shown.length ? `${shown.length} alert${shown.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean).join(" · ");
+  const annotationSummary = annotationCounts
+    ? `${annotationCounts}: ${[...markers.map((m) => m.label), ...shown.map((b) => b.label)].join(", ")}`
+    : "";
 
   // uPlot wants columns: x, then one array per series.
   const stacked = area === "stacked" && !compact;
@@ -243,10 +251,9 @@ export function UPlotChart({
       scales: {
         x: {
           time: true,
-          range: (_u, min, max) => [
-            Math.min(min, ...markers.map((m) => m.timeSec)),
-            Math.max(max, ...markers.map((m) => m.timeSec)),
-          ],
+          // uPlot 1.6.32 expands a singleton by 1000 days BEFORE this
+          // callback. Never trust its min/max; use the actual observations.
+          range: () => extent,
         },
         // An area is read against its baseline: start at zero, with headroom above.
         ...(area && !compact
@@ -259,9 +266,9 @@ export function UPlotChart({
           ? {
               // Bands go under the series (drawAxes runs before the series
               // paint); markers over them.
-              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette, compact)] : [],
+              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette)] : [],
               draw: [
-                ...(markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette, compact)] : []),
+                ...(markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette)] : []),
                 ...(exemplars ? [layoutExemplars] : []),
               ],
               ready: exemplars ? [layoutExemplars] : [],
@@ -290,7 +297,13 @@ export function UPlotChart({
             width: compact ? 1.25 : 1.5,
             dash: s.dashed ? [4, 3] : undefined,
             fill: seriesFill(s, index, series, stroke, { area, compact, stacked, solid }),
-            points: { show: false },
+            // A line cannot show a singleton or an observation surrounded
+            // by nulls. Draw just those glyphs, never connect across a gap.
+            points: {
+              show: false,
+              size: compact ? 4 : 6,
+              filter: (u: uPlot, seriesIdx: number) => isolatedIndexes(u.data[seriesIdx]),
+            },
             spanGaps: false,
             // A stacked column holds the running total; the cursor reads the series' own value.
             value: stacked
@@ -324,7 +337,7 @@ export function UPlotChart({
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars, extent]);
 
   useEffect(() => {
     if (exemplars && layout) placedCallback.current?.(layout.dots.map((dot) => dot.index));
@@ -364,6 +377,11 @@ export function UPlotChart({
             );
           })}
         </div>
+      )}
+      {!compact && annotationSummary && (
+        <p className="min-w-0 truncate text-xs text-muted-foreground" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
+          {annotationSummary}
+        </p>
       )}
       <figcaption className="sr-only">{caption}</figcaption>
     </figure>
@@ -447,6 +465,31 @@ function layoutOf(u: uPlot, exemplars: readonly ChartExemplar[]): ExemplarLayout
   };
 }
 
+/**
+ * Bounds come from observations, never uPlot's pre-expanded singleton range.
+ * With no second timestamp there is no known bucket cadence: use a one-minute
+ * viewport centered on the observation, not a fabricated daily history.
+ * Markers have already been filtered to the observed bucket span.
+ */
+export function timeExtent(timestamps: readonly number[], markers: readonly ChartMarker[] = []): [number, number] {
+  const first = timestamps[0];
+  const last = timestamps[timestamps.length - 1];
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return [0, 60];
+  const min = Math.min(first, ...markers.map((m) => m.timeSec));
+  const max = Math.max(last, ...markers.map((m) => m.timeSec));
+  return min === max ? [min - 30, max + 30] : [min, max];
+}
+
+/** Only observations with no adjacent measured neighbour need a glyph. */
+export function isolatedIndexes(values: ArrayLike<number | null | undefined>): number[] {
+  const present = (i: number) => values[i] != null && Number.isFinite(values[i]);
+  const indexes: number[] = [];
+  for (let i = 0; i < values.length; i++) {
+    if (present(i) && !present(i - 1) && !present(i + 1)) indexes.push(i);
+  }
+  return indexes;
+}
+
 /** "Requests: latest 12/s, between 3/s and 40/s. Errors: no data." */
 export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefined): string {
   return series
@@ -500,13 +543,11 @@ export function describeBands(bands: readonly ChartBand[]): string {
   return `Shaded: ${bands.map((b) => `${b.label} from ${at(b.startSec)} to ${at(b.endSec)}`).join("; ")}.`;
 }
 
-function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette, compact: boolean) {
+function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette) {
   const { ctx } = u;
   const { top, height } = u.bbox;
   const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
   ctx.save();
-  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.textBaseline = "bottom";
   for (const band of bands) {
     const x0 = u.valToPos(band.startSec, "x", true);
     const x1 = Math.max(u.valToPos(band.endSec, "x", true), x0 + 2 * ratio);
@@ -515,21 +556,15 @@ function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette, comp
     ctx.fillRect(x0, top, x1 - x0, height);
     ctx.fillStyle = withAlpha(color, 0.55);
     ctx.fillRect(x0, top, x1 - x0, 2 * ratio);
-    if (!compact) {
-      ctx.fillStyle = color;
-      ctx.fillText(band.label, x0 + 3 * ratio, top + height - 2 * ratio);
-    }
   }
   ctx.restore();
 }
 
-function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette, compact = false) {
+function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette) {
   const { ctx } = u;
   const { top, height } = u.bbox;
   const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
   ctx.save();
-  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.textBaseline = "top";
   for (const marker of markers) {
     const x = Math.round(u.valToPos(marker.timeSec, "x", true));
     const color = marker.tone ? palette.tones[marker.tone] : palette.axis;
@@ -541,7 +576,6 @@ function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette
     ctx.moveTo(x, top);
     ctx.lineTo(x, top + height);
     ctx.stroke();
-    if (!compact) ctx.fillText(marker.label, x + 3 * ratio, top + 2 * ratio);
   }
   ctx.restore();
 }

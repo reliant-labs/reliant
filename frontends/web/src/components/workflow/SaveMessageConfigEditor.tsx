@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MessageSquarePlus, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SaveMessageConfig } from '../../types/workflow'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import { ProtoFieldRenderer } from './ProtoFieldRenderer'
 import type { ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import {

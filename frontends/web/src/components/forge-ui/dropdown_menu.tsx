@@ -21,6 +21,9 @@ import Popover, { type PopoverOpenVia, type PopoverTriggerProps } from "./popove
  * Escape closes and returns focus to the trigger; Tab closes. Choosing an
  * item closes the menu and returns focus to the trigger BEFORE its onClick
  * runs, so a dialog the item opens restores focus to the trigger on close.
+ *
+ * With `anchor` and no trigger it opens at a point instead: that is how
+ * context_menu is built.
  */
 
 export interface MenuItem {
@@ -47,7 +50,12 @@ export interface MenuGroup {
 }
 
 export interface DropdownMenuProps {
-  trigger: React.ReactNode | ((props: PopoverTriggerProps) => React.ReactElement);
+  /** The menu button. Omit it only with `anchor`. */
+  trigger?: React.ReactNode | ((props: PopoverTriggerProps) => React.ReactElement);
+  /** A viewport point to open at instead of the trigger (see context_menu). */
+  anchor?: { x: number; y: number };
+  /** How an `anchor` open was triggered (see popover). */
+  openVia?: PopoverOpenVia;
   groups: MenuGroup[];
   /** Which trigger edge the menu lines up with. Defaults to "right". */
   align?: "left" | "right";
@@ -88,6 +96,8 @@ function CheckMark({ visible }: { visible: boolean }) {
 
 export default function DropdownMenu({
   trigger,
+  anchor,
+  openVia,
   groups,
   align = "right",
   label,
@@ -153,6 +163,8 @@ export default function DropdownMenu({
   return (
     <Popover
       trigger={trigger}
+      anchor={anchor}
+      openVia={openVia}
       open={open}
       onOpenChange={onOpenChange}
       align={align}

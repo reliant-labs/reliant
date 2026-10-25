@@ -17,7 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { placeExemplars, stackValues, UPlotChart, type ChartExemplar, type ChartSeries } from "../UPlotChart";
+import { isolatedIndexes, timeExtent, placeExemplars, stackValues, UPlotChart, type ChartExemplar, type ChartSeries } from "../UPlotChart";
 
 interface Built {
   opts: any;
@@ -64,6 +64,43 @@ const last = () => built[built.length - 1]!;
 
 beforeEach(() => {
   built.length = 0;
+});
+
+describe("sparse time series", () => {
+  it("bounds an October 2026 singleton independently of uPlot's poisoned callback max", () => {
+    const time = Date.UTC(2026, 9, 25) / 1000;
+    render(<UPlotChart timestamps={[time]} series={[series("DAU", [7])]} height={120} label="DAU" />);
+    expect(last().opts.scales.x.range({}, time, time + 86_400_000)).toEqual([time - 30, time + 30]);
+    expect(last().data).toEqual([[time], [7]]);
+    expect(timeExtent([time, time + 86400])).toEqual([time, time + 86400]);
+    expect(timeExtent([time, time + 60], [{ timeSec: time + 90, label: "release" }])).toEqual([time, time + 90]);
+  });
+
+  it("draws isolated glyphs without bridging nulls or adding history, in full charts and sparklines", () => {
+    expect(isolatedIndexes([7, null, 9])).toEqual([0, 2]);
+    expect(isolatedIndexes([null, 0, null, 1, 2, null, NaN])).toEqual([1]);
+    for (const compact of [false, true]) {
+      render(<UPlotChart timestamps={TIMES.slice(0, 3)} series={[series("RPCs", [7, null, 9])]} height={120} label="sparse" compact={compact} />);
+      const opts = last().opts.series[1];
+      expect(opts.points.filter({ data: last().data }, 1)).toEqual([0, 2]);
+      expect(opts.spanGaps).toBe(false);
+      expect(last().data[1]).toEqual([7, null, 9]);
+    }
+  });
+
+  it("summarizes crowded annotations outside the data plot and keeps every accessible description", () => {
+    const markers = TIMES.map((timeSec, i) => ({ timeSec, label: `release-${i}`, description: `production promoted release ${i}` }));
+    const bands = TIMES.map((startSec, i) => ({ startSec, endSec: startSec + 60, label: `RPC errors ${i}` }));
+    render(<UPlotChart timestamps={TIMES} series={[series("RPCs", [7, 8, 9, 8, 7])]} height={120} label="crowded" markers={markers} bands={bands} />);
+    const summary = screen.getByTestId("chart-annotations");
+    expect(summary).toHaveClass("truncate");
+    expect(summary).toHaveTextContent("5 releases · 5 alerts:");
+    const caption = screen.getByRole("group", { name: "crowded" }).querySelector("figcaption")!;
+    for (let i = 0; i < 5; i++) {
+      expect(caption).toHaveTextContent(`production promoted release ${i}`);
+      expect(caption).toHaveTextContent(`RPC errors ${i}`);
+    }
+  });
 });
 
 describe("stackValues", () => {

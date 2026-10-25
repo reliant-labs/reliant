@@ -16,9 +16,7 @@ vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 // The real Dropdown is used here on purpose: these tests assert open/close
 // behavior (choose-an-option and Escape), which a passthrough mock would fake.

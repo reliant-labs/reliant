@@ -115,12 +115,21 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   }
   const data = query.data;
   if (!data || !hasData(panel, data)) {
-    return compact ? (
-      <p className="text-xs text-ink-muted">No data</p>
-    ) : (
-      <p className="py-4 text-center text-xs text-ink-muted" data-testid="obs-panel-empty">
-        {EMPTY_COPY[panel.kind] ?? "No data in this window"}
-      </p>
+    if (compact) return <p className="text-xs text-ink-muted">No data</p>;
+    const absent = absentMetrics(data);
+    return (
+      <div className="py-4 text-center text-xs text-ink-muted" data-testid="obs-panel-empty">
+        <p>{EMPTY_COPY[panel.kind] ?? "No data in this window"}</p>
+        {absent.length > 0 && (
+          <p className="mt-1" data-testid="obs-panel-absent">
+            {absent.map((detail) => (
+              <span key={detail} className="block font-mono">
+                {detail}
+              </span>
+            ))}
+          </p>
+        )}
+      </div>
     );
   }
   const unit = unitOf(panel, data);
@@ -228,6 +237,16 @@ function PanelNote({ children, testId }: { children: ReactNode; testId: string }
       <span>{children}</span>
     </p>
   );
+}
+
+/** The details of a result's metric_absent warnings: which metric has no data, and where. */
+export function absentMetrics(result: PanelResult | undefined): string[] {
+  const out: string[] = [];
+  for (const warning of result?.warnings ?? []) {
+    const [code, ...detail] = warning.split(": ");
+    if (code === "metric_absent" && detail.length > 0) out.push(detail.join(": "));
+  }
+  return out;
 }
 
 export function hasData(panel: Pick<Panel, "kind">, result: PanelResult): boolean {
