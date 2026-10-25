@@ -45,7 +45,6 @@ vi.mock("@/api/grpc-client", () => ({
     trigger: () => ({ listTriggers: mocks.listTriggers }),
     worktree: () => ({ listWorktrees: mocks.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
-    project: () => ({ listProjectDaemons: mocks.listProjectDaemons }),
   },
 }));
 
@@ -59,6 +58,7 @@ beforeEach(() => {
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
     }),
       "CatalogService.SearchCatalog": { response: {} },
+      ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons }),
     }));
 });
 afterEach(() => {

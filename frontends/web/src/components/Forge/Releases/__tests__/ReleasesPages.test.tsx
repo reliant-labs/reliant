@@ -9,8 +9,10 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+import { renderWithQuery } from "@/test/renderWithQuery";
 
 import type { PromoteControl, ReleasesListProps } from "../ReleasesList";
 import type { ReleaseDetailProps } from "../ReleaseDetail";
@@ -98,7 +100,7 @@ beforeEach(() => {
 
 describe("ReleasesPage", () => {
   it("hands the list the recorded envs: prod first, previews apart, no local ones", () => {
-    render(<ReleasesPage />);
+    renderWithQuery(<ReleasesPage />);
     const { envs } = listProps.mock.calls.at(-1)![0] as ReleasesListProps;
     expect(envs.map((env) => [env.name, env.kind, env.current])).toEqual([
       ["prod", "long", "v1"],
@@ -108,7 +110,7 @@ describe("ReleasesPage", () => {
   });
 
   it("opens the plan dialog for a promote, titled with the release and the env", async () => {
-    render(<ReleasesPage />);
+    renderWithQuery(<ReleasesPage />);
     expect(screen.queryByTestId("plan-dialog")).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "promote" }));
     expect(screen.getByTestId("plan-dialog")).toHaveTextContent("Promote v2 to prod");
@@ -116,14 +118,14 @@ describe("ReleasesPage", () => {
   });
 
   it("titles a rollback as one, naming the env first", async () => {
-    render(<ReleasesPage />);
+    renderWithQuery(<ReleasesPage />);
     await userEvent.setup().click(screen.getByRole("button", { name: "rollback" }));
     expect(screen.getByTestId("plan-dialog")).toHaveTextContent("Roll back prod to 20261018.084518");
   });
 
   it("with no Reliant project to plan against, says why and opens nothing", async () => {
     consoleState.projectId = null;
-    render(<ReleasesPage />);
+    renderWithQuery(<ReleasesPage />);
     expect(screen.getByTestId("blocked")).toHaveTextContent("Open the project in Reliant, with its daemon running, to promote from here.");
     await userEvent.setup().click(screen.getByRole("button", { name: "promote" }));
     expect(screen.queryByTestId("plan-dialog")).not.toBeInTheDocument();
@@ -132,7 +134,7 @@ describe("ReleasesPage", () => {
 
 describe("ReleasePage", () => {
   it("reads the version from the path and links Activity pre-filtered to it", async () => {
-    render(<ReleasePage />);
+    renderWithQuery(<ReleasePage />);
     const props = detailProps.mock.calls.at(-1)![0] as ReleaseDetailProps;
     expect(props.version).toBe("v1");
     expect(props.listHref).toBe("/p/releases");
