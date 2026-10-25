@@ -174,11 +174,12 @@ const NO_PROCESSES: PackageProcess[] = [];
  * without one. The fetch is the cold-start seed; the stream keeps it live.
  */
 export function usePackageProcesses(worktreeId?: string) {
-  const query = useListPackageProcesses({ worktreeId: worktreeId || undefined });
-  const processes = query.data?.processes;
-  const data = useMemo(() => processes?.map(packageProcessFromProto) ?? NO_PROCESSES, [processes]);
-  return { ...query, data };
+  const query = useListPackageProcesses({ worktreeId: worktreeId || undefined }, { select: packageProcessesOf });
+  return { ...query, data: query.data ?? NO_PROCESSES };
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const packageProcessesOf = (response: ListPackageProcessesResponse) => response.processes.map(packageProcessFromProto);
 
 /** A process's captured logs, fetched while `processId` is set. */
 export function useProcessLogs(processId: string | null) {

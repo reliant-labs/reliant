@@ -111,11 +111,12 @@ const NO_PROCESSES: BackgroundProcess[] = [];
  * fetch is the cold-start seed; the stream keeps it live.
  */
 export function useBackgroundProcesses() {
-  const query = useListProcesses(ALL_PROCESSES);
-  const processes = query.data?.processes;
-  const data = useMemo(() => processes?.map(backgroundProcessFromProto) ?? NO_PROCESSES, [processes]);
-  return { ...query, data };
+  const query = useListProcesses(ALL_PROCESSES, { select: backgroundProcessesOf });
+  return { ...query, data: query.data ?? NO_PROCESSES };
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const backgroundProcessesOf = (response: ListBackgroundProcessesResponse) => response.processes.map(backgroundProcessFromProto);
 
 /** A process's captured stdout/stderr, fetched while `processId` is set. */
 export function useBackgroundProcessOutput(processId: string | null) {

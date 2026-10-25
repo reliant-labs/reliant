@@ -504,13 +504,20 @@ describe("StepPalette: searching", () => {
 
   it("shows designed error-with-retry and empty states", async () => {
     const user = userEvent.setup();
-    searchCatalog.mockRejectedValueOnce(new Error("down"));
+    // Fail the "zzzz" search itself, not whichever call comes first: under
+    // load the debounce can settle on a prefix mid-typing, and a one-shot
+    // rejection would land on that stale search instead.
+    let down = true;
+    searchCatalog.mockImplementation(async (req: SearchCatalogRequest) => {
+      if (down && req.query === "zzzz") throw new Error("down");
+      return page([]);
+    });
     renderPalette();
     await screen.findByText("Call LLM");
 
     await user.type(input(), "zzzz");
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't search integrations.");
-    searchCatalog.mockResolvedValue(page([]));
+    down = false;
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No steps match “zzzz”")).toBeInTheDocument();
   });

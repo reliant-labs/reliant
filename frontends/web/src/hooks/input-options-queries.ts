@@ -14,20 +14,17 @@
  */
 
 import { useMemo } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import type { InfiniteData } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
-  CatalogService,
   InputOptionsConnectionState,
   type InputOption as ProtoInputOption,
+  type ListInputOptionsResponse,
 } from "@/gen/reliant/v1/catalog_pb";
 import { ActingIdentity } from "@/gen/reliant/v1/trigger_pb";
 import { jsToProtoValue, protoValueToJs } from "@/api/proto-utils";
-import { connectClient } from "@/lib/connect";
-import { catalogServiceKeys, useListInputOptions } from "./catalog-service-hooks_gen";
-
-const client = connectClient(CatalogService);
+import { catalogServiceKeys, useListInputOptions, useListInputOptionsInfinite } from "./catalog-service-hooks_gen";
 
 export const INPUT_OPTIONS_STALE_MS = 60_000;
 const PAGE_SIZE = 50;
@@ -46,9 +43,10 @@ export interface InputOption {
 
 export type InputOptionsConnectionKey = "connected" | "needs_connection" | "unknown";
 
-export interface InputOptionsPage {
+/** A listing as far as it has been paged: every loaded page's options, in order. */
+export interface InputOptionsListing {
   options: InputOption[];
-  nextPageToken: string;
+  /** The first page's answer: whether the listing needs a connection. */
   connectionState: InputOptionsConnectionKey;
 }
 
@@ -114,35 +112,22 @@ function listRequest(p: InputOptionsParams) {
   };
 }
 
-/**
- * The paged listing's key: the generated key of the first page's request,
- * plus a suffix, because an infinite query caches `{ pages }` and must never
- * share an entry with a plain useListInputOptions of the same request.
- */
-export const inputOptionsPageKey = (p: InputOptionsParams) =>
-  [...catalogServiceKeys.listInputOptions(listRequest(p)), "pages"] as const;
-
 /** What a listing is apart from its query: typing changes the query and nothing else. */
 function listingIdentity(p: InputOptionsParams): string {
-  return JSON.stringify(inputOptionsPageKey({ ...p, query: undefined }));
+  return JSON.stringify(catalogServiceKeys.listInputOptionsInfinite(listRequest({ ...p, query: undefined })));
+}
+
+// Module-level, so React Query re-maps only when a page lands.
+function listingOf(data: InfiniteData<ListInputOptionsResponse, string>): InputOptionsListing {
+  return {
+    options: data.pages.flatMap((page) => page.options.map(optionFromProto)),
+    connectionState: connectionStateKey(data.pages[0]?.connectionState ?? InputOptionsConnectionState.UNSPECIFIED),
+  };
 }
 
 export function useInputOptions(params: InputOptionsParams) {
-  return useInfiniteQuery<InputOptionsPage, Error>({
-    queryKey: inputOptionsPageKey(params),
-    queryFn: async ({ pageParam, signal }) => {
-      const response = await client.listInputOptions(
-        { ...listRequest(params), pageToken: (pageParam as string) || "" },
-        { signal },
-      );
-      return {
-        options: response.options.map(optionFromProto),
-        nextPageToken: response.nextPageToken,
-        connectionState: connectionStateKey(response.connectionState),
-      };
-    },
-    initialPageParam: "",
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  return useListInputOptionsInfinite(listRequest(params), {
+    select: listingOf,
     enabled: params.enabled !== false && !!params.type,
     staleTime: INPUT_OPTIONS_STALE_MS,
     // Typing narrows the list in place: the previous query's options stay
@@ -161,14 +146,13 @@ export function useInputOptions(params: InputOptionsParams) {
 /** Labels for stored values the current options do not contain (an id → a login). */
 export function useResolvedInputOptions(type: string, connectionId: string | undefined, values: readonly string[], enabled = true) {
   const resolve = useMemo(() => [...values].sort(), [values]);
-  const query = useListInputOptions(
+  return useListInputOptions(
     { type, connectionId: connectionId || undefined, resolve },
-    { enabled: enabled && !!type && values.length > 0, staleTime: INPUT_OPTIONS_STALE_MS, retry: false },
+    { enabled: enabled && !!type && values.length > 0, staleTime: INPUT_OPTIONS_STALE_MS, retry: false, select: optionsOf },
   );
-  const options = query.data?.options;
-  const data = useMemo(() => options?.map(optionFromProto), [options]);
-  return { ...query, data };
 }
+
+const optionsOf = (response: ListInputOptionsResponse) => response.options.map(optionFromProto);
 
 /** The reason a listing failed, in words for "Couldn't load repositories: …". */
 export function inputOptionsErrorReason(error: unknown): string {

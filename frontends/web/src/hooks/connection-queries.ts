@@ -29,6 +29,7 @@ import {
   type Integration as ProtoIntegration,
   type IntegrationAuthMethod as ProtoAuthMethod,
   type IntegrationConnectionParam as ProtoConnectionParam,
+  type ListConnectionsResponse,
 } from "../gen/reliant/v1/connection_pb";
 import { unavailableIntegrationIds } from "../lib/integrationAvailability";
 import { catalogServiceKeys } from "./catalog-service-hooks_gen";
@@ -173,11 +174,11 @@ export function connectionErrorMessage(error: unknown): string {
 
 /** The caller's connections to one integration. */
 export function useConnections(integrationId: string | undefined) {
-  const query = useListConnections({ integrationId }, { enabled: !!integrationId, staleTime: 30_000 });
-  const connections = query.data?.connections;
-  const data = useMemo(() => connections?.map(connectionFromProto), [connections]);
-  return { ...query, data };
+  return useListConnections({ integrationId }, { enabled: !!integrationId, staleTime: 30_000, select: connectionsOf });
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const connectionsOf = (response: ListConnectionsResponse) => response.connections.map(connectionFromProto);
 
 /**
  * The integrations nobody can connect on this deployment (every connection

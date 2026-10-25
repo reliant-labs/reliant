@@ -7,9 +7,7 @@
  * its status as a string, mapped from that cache entry.
  */
 
-import { useMemo } from "react";
-
-import { TaskStatus as ProtoTaskStatus, type Task } from "../gen/reliant/v1/task_pb";
+import { TaskStatus as ProtoTaskStatus, type ListTasksResponse, type Task } from "../gen/reliant/v1/task_pb";
 import { queryClient } from "../lib/query-client";
 import { planServiceKeys, useGetPlanByChatId } from "./plan-service-hooks_gen";
 import { taskServiceKeys, useListTasks } from "./task-service-hooks_gen";
@@ -86,11 +84,11 @@ export function usePlanForChat(chatId?: string | null) {
  */
 export function useTasksForChat(chatId?: string | null) {
   const planId = usePlanForChat(chatId).data?.plan?.id;
-  const query = useListTasks({ planId }, { enabled: !!planId });
-  const tasks = query.data?.tasks;
-  const data = useMemo(() => tasks?.map(taskItemFromProto), [tasks]);
-  return { ...query, data };
+  return useListTasks({ planId }, { enabled: !!planId, select: taskItemsOf });
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const taskItemsOf = (response: ListTasksResponse) => response.tasks.map(taskItemFromProto);
 
 /** Derived stats from tasks for a chat. */
 export function useTaskStats(chatId?: string | null) {

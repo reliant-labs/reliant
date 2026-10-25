@@ -85,6 +85,7 @@ interface Section {
 
 const DEBOUNCE_MS = 300;
 const PAGE_JUMP = 10;
+const NO_OPTIONS: InputOption[] = [];
 
 function asValues(value: IntegrationValuePickerProps["value"], multi: boolean): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -173,9 +174,8 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
     actingIdentity,
     enabled: !scopeMissing && !disabled,
   });
-  const pages = useMemo(() => optionsQuery.data?.pages ?? [], [optionsQuery.data]);
-  const needsConnection = pages[0]?.connectionState === "needs_connection";
-  const loaded = useMemo(() => pages.flatMap((page) => page.options), [pages]);
+  const needsConnection = optionsQuery.data?.connectionState === "needs_connection";
+  const loaded = optionsQuery.data?.options ?? NO_OPTIONS;
   const byValue = useMemo(() => new Map(loaded.map((o) => [o.value, o])), [loaded]);
 
   // Stored values the loaded options do not label (an id stored for a login,

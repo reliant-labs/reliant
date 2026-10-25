@@ -12,7 +12,6 @@
  * config changing on disk) invalidates the same scope (invalidateMcpQueries).
  */
 
-import { useMemo } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
@@ -23,6 +22,8 @@ import {
   type MCPServer as ProtoMCPServer,
   type MCPServerConfig as ProtoMCPServerConfig,
   type MCPTool as ProtoMCPTool,
+  type ListRecommendedResponse,
+  type ListServersResponse,
   type RecommendedServer as ProtoRecommendedServer,
 } from "../gen/reliant/v1/mcp_pb";
 import { connectClient } from "../lib/connect";
@@ -178,19 +179,17 @@ export const MCP_STALE_MS = 30_000;
 
 /** A project's installed servers, with their live status. */
 export function useMcpServers(projectId: string | null) {
-  const query = useListServers({ projectId: projectId ?? "" }, { enabled: !!projectId, staleTime: MCP_STALE_MS });
-  const servers = query.data?.servers;
-  const data = useMemo(() => servers?.map(serverFromProto), [servers]);
-  return { ...query, data };
+  return useListServers({ projectId: projectId ?? "" }, { enabled: !!projectId, staleTime: MCP_STALE_MS, select: serversOf });
 }
 
 /** The recommended servers for a project, each marked installed or not. */
 export function useMcpRecommended(projectId: string | null) {
-  const query = useListRecommended({ projectId: projectId ?? "" }, { enabled: !!projectId, staleTime: MCP_STALE_MS });
-  const recommended = query.data?.recommended;
-  const data = useMemo(() => recommended?.map(recommendedFromProto), [recommended]);
-  return { ...query, data };
+  return useListRecommended({ projectId: projectId ?? "" }, { enabled: !!projectId, staleTime: MCP_STALE_MS, select: recommendedOf });
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const serversOf = (response: ListServersResponse) => response.servers.map(serverFromProto);
+const recommendedOf = (response: ListRecommendedResponse) => response.recommended.map(recommendedFromProto);
 
 /** A project's installed servers, from the cache when fresh (the onboarding checklist's probe). */
 export async function fetchMcpServers(queryClient: QueryClient, projectId: string): Promise<MCPServer[]> {
