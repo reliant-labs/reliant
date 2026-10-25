@@ -18,11 +18,11 @@ describe("formatResumeError", () => {
   const quota = (header: string) =>
     new ConnectError("compute budget exhausted", Code.ResourceExhausted, new Headers({ [header]: "compute_budget_exhausted" }));
 
-  it("names the spent entitlement for a quota refusal, under either reason header", () => {
-    for (const header of ["x-forge-error-reason", "x-reliant-reason"]) {
-      expect(formatResumeError(quota(header))).toBe(copy);
-      expect(isQuotaResumeError(quota(header))).toBe(true);
-    }
+  it("names the spent entitlement for a quota refusal, by its reason", () => {
+    expect(formatResumeError(quota("x-forge-error-reason"))).toBe(copy);
+    expect(isQuotaResumeError(quota("x-forge-error-reason"))).toBe(true);
+    // The retired header is not read.
+    expect(isQuotaResumeError(quota("x-reliant-reason"))).toBe(false);
   });
 
   it("keys on the reason, not the wording: a reasonless ResourceExhausted is passed through", () => {
@@ -45,8 +45,16 @@ describe("isDaemonPendingError", () => {
       ),
     ).toBe(true);
     expect(
-      isDaemonPendingError(new ConnectError("your machine is still starting: no daemon connected", Code.Unavailable)),
+      isDaemonPendingError(
+        new ConnectError("your machine is still starting", Code.Unavailable, new Headers({ "x-forge-error-reason": "daemon_starting" })),
+      ),
     ).toBe(true);
+  });
+
+  it("reads an RPC error by its reason only, never its text", () => {
+    expect(
+      isDaemonPendingError(new ConnectError("your machine is still starting: no daemon connected", Code.Unavailable)),
+    ).toBe(false);
   });
 
   it("does not claim a genuine failure", () => {

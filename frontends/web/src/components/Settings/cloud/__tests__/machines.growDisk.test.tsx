@@ -265,7 +265,7 @@ describe('machine detail — grow disk', () => {
     const user = userEvent.setup()
     mocks.growDaemonDisk.mockRejectedValueOnce(
       new ConnectError('520 GB is more than your plan allows', Code.PermissionDenied, {
-        'x-reliant-reason': 'daemon_storage_denied',
+        'x-forge-error-reason': 'daemon_storage_denied',
       }),
     )
     showMachine(machine())

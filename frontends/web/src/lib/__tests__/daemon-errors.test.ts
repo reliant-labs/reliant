@@ -3,7 +3,8 @@
  * signal (toolexec.ErrDaemonPending, internal/toolexec/daemon_router.go)
  * classifies as a retryable wait, not a raw error — which is the whole
  * point of the fix: before it, the router's flat "no daemon available for
- * user X" error fell through this classifier and rendered verbatim.
+ * user X" error fell through this classifier and rendered verbatim. The
+ * signal is the reason (daemon_starting, no_daemon), never the text.
  */
 import { describe, expect, it } from "vitest";
 import { ConnectError, Code } from "@connectrpc/connect";
@@ -22,9 +23,13 @@ const PENDING_DAEMON_MESSAGE =
 const GENUINE_NO_DAEMON_MESSAGE =
   "resolving daemon for command: no daemon available for user 94e41478-542b-4fd9-a68a-25d66de92c4f";
 
+function withReason(message: string, code: Code, reason: string): ConnectError {
+  return new ConnectError(message, code, new Headers({ "x-forge-error-reason": reason }));
+}
+
 describe("isDaemonConnectingError classifies the pending-daemon signal", () => {
-  it("treats ErrDaemonPending's message as a connecting/waiting error", () => {
-    const err = new ConnectError(PENDING_DAEMON_MESSAGE, Code.Unavailable);
+  it("treats ErrDaemonPending (reason daemon_starting) as a connecting/waiting error", () => {
+    const err = withReason(PENDING_DAEMON_MESSAGE, Code.Unavailable, "daemon_starting");
     expect(isDaemonConnectingError(err)).toBe(true);
   });
 
@@ -33,8 +38,9 @@ describe("isDaemonConnectingError classifies the pending-daemon signal", () => {
     expect(isDaemonConnectingError(err)).toBe(false);
   });
 
-  it("plain Error objects carrying the marker are also recognized", () => {
-    expect(isDaemonConnectingError(new Error(PENDING_DAEMON_MESSAGE))).toBe(true);
+  it("does not read the message: the old marker text alone is not a wait", () => {
+    expect(isDaemonConnectingError(new ConnectError(PENDING_DAEMON_MESSAGE, Code.Unavailable))).toBe(false);
+    expect(isDaemonConnectingError(new Error(PENDING_DAEMON_MESSAGE))).toBe(false);
   });
 });
 
@@ -57,14 +63,15 @@ describe("end to end: the pending signal renders as a wait state, not a raw erro
 
 describe("isNoMachineError", () => {
   it("recognises toolexec.ErrNoDaemon — no machine at all — and nothing that is a wait", () => {
-    const none = new ConnectError(
+    const none = withReason(
       "resolving daemon for command: no daemon available: no machine is connected to your account yet",
       Code.FailedPrecondition,
+      "no_daemon",
     );
     expect(isNoMachineError(none)).toBe(true);
     expect(isDaemonConnectingError(none)).toBe(false);
 
-    expect(isNoMachineError(new ConnectError(PENDING_DAEMON_MESSAGE, Code.Unavailable))).toBe(false);
-    expect(isNoMachineError(new ConnectError("no daemon connected for user", Code.Unavailable))).toBe(false);
+    expect(isNoMachineError(withReason(PENDING_DAEMON_MESSAGE, Code.Unavailable, "daemon_starting"))).toBe(false);
+    expect(isNoMachineError(withReason("no daemon connected for user", Code.Unavailable, "daemon_not_connected"))).toBe(false);
   });
 });

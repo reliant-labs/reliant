@@ -234,11 +234,6 @@ var corsExposedHeaders = []string{
 	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
 	// so the deploy panel says which grant to ask for without parsing prose.
 	"X-Forge-Error-Scopes",
-	// The pre-svcerr reason header (forge_api_disabled here; the billing and
-	// daemon-gate reasons on the control plane). Read as a fallback until
-	// both servers send X-Forge-Error-Reason (P9 R3, expand/contract), then
-	// deleted with the web's fallback.
-	"X-Reliant-Reason",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An
