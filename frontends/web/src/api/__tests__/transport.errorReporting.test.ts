@@ -53,6 +53,7 @@ describe("the machine is still starting (ELECTRON-AV)", () => {
         new ConnectError(
           "resolving daemon for command: your machine is still starting: no daemon connected: daemon record exists but has not registered yet (still starting)",
           Code.Unavailable,
+          new Headers({ "x-forge-error-reason": "daemon_starting" }),
         ),
     );
     await expect(call("reliant.v1.FileSystemService", "GetFileTree")).rejects.toMatchObject({
@@ -75,7 +76,7 @@ describe("an anonymous account asked for a cloud machine", () => {
         new ConnectError(
           "sign in with an email account to start a cloud machine",
           Code.FailedPrecondition,
-          new Headers({ "x-reliant-reason": "account_required" }),
+          new Headers({ "x-forge-error-reason": "account_required" }),
         ),
     );
     await expect(call("controlplane.v1.DaemonService", "CreateDaemon")).rejects.toMatchObject({

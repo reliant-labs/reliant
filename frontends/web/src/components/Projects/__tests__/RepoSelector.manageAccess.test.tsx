@@ -9,6 +9,7 @@
  * flow, and it re-reads the list when the user comes back from it.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GitRepo } from "../../../services/controlPlane/git/types";
@@ -182,7 +183,7 @@ describe("RepoSelector — managing GitHub repository access", () => {
   it("distinguishes reconnecting from changing repository access", () => {
     // The two actions are different and the copy has to say so, or the user
     // reaches for the wrong one — which is how this bug was reported.
-    mocks.reposQuery.error = new Error("no git credential found for provider");
+    mocks.reposQuery.error = new ConnectError("no git credential found for provider", Code.Unavailable, new Headers({ "x-forge-error-reason": "git_credential_not_connected" }));
     mocks.reposQuery.isError = true;
 
     render(<RepoSelector onSelect={vi.fn()} />);

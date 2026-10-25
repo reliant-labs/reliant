@@ -141,7 +141,7 @@ describe("notifications", () => {
 
 describe("alerting's answers", () => {
   it("tells 'not configured' and 'still routed' from an outage, and retries only the outage", () => {
-    const notConfigured = new ConnectError("alerting is not configured on this server", Code.Unavailable);
+    const notConfigured = new ConnectError("alerting is not configured on this server", Code.Unavailable, new Headers({ "x-forge-error-reason": "observability_not_configured" }));
     const inUse = new ConnectError("a route still names it", Code.FailedPrecondition);
     const outage = new ConnectError("upstream connect error", Code.Unavailable);
     expect(alertingErrorKind(notConfigured)).toBe("not-configured");

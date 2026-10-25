@@ -250,7 +250,7 @@ func TestUnclaimedPathFailsSafe(t *testing.T) {
 }
 
 func TestInertPathsSelectNothing(t *testing.T) {
-	for _, p := range []string{"docs/automations/overview.mdx", "README.md", ".github/workflows/pr-ci.yml", "research/x/PLAN.md"} {
+	for _, p := range []string{"docs/automations/overview.mdx", "README.md", ".github/workflows/ci.yml", "research/x/PLAN.md"} {
 		pl := classify(p)
 		if pl.Go.Full || pl.Web.Full || len(pl.Go.Packages) != 0 || len(pl.Web.Tests) != 0 {
 			t.Errorf("%s selected something: go=%v/%v web=%v/%v", p, pl.Go.Full, pl.Go.Packages, pl.Web.Full, pl.Web.Tests)
@@ -273,7 +273,7 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 			t.Errorf("%s: the reason must name the path: %v", p, pl.ForgeGen.Reasons)
 		}
 	}
-	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/pr-ci.yml"} {
+	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/ci.yml"} {
 		if pl := classify(p); pl.ForgeGen.Full {
 			t.Errorf("%s is not a forge input: forge-generate must not run (%v)", p, pl.ForgeGen.Reasons)
 		}
@@ -343,7 +343,7 @@ func TestDocGenInputsRunTheDocsCheck(t *testing.T) {
 	}
 	// Not in any generator's build: another package, a test file, a
 	// build-tagged file, docs prose.
-	for _, p := range []string{"internal/other/other.go", "internal/leaf/leaf_test.go", "internal/leaf/live_test.go", "docs/automations/overview.mdx", ".github/workflows/pr-ci.yml"} {
+	for _, p := range []string{"internal/other/other.go", "internal/leaf/leaf_test.go", "internal/leaf/live_test.go", "docs/automations/overview.mdx", ".github/workflows/ci.yml"} {
 		if pl := classify(p); pl.DocGen.Full {
 			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
 		}

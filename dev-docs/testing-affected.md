@@ -1,17 +1,18 @@
 # Run only the tests your change can reach
 
 ```bash
-make test-affected        # run them
-make test-affected-plan   # print what would run, and why, without running it
+task test:affected        # run them
+task test:affected:plan   # print what would run, and why, without running it
 ```
 
-`make test-affected` diffs your tree against the merge-base with `origin/main`
+`task test:affected` diffs your tree against the merge-base with `origin/main`
 (committed, staged, unstaged and untracked files all count), works out which
 tests can observe each changed path, and runs only those. It prints the reason
 next to every selection, so a surprising test is one line away from its cause.
 
 It is the first thing to run before pushing. It does not replace the full lane
-(`go test ./...`, `npm test`): that is what a release or a `go.mod` bump needs.
+(`task test`): that is what the release gate runs, and what a `go.mod` bump
+needs.
 
 It is also the test step of the **merge gate** (`task ci:merge`), whose other
 half is the **release gate** (`task release:gate`) that runs everything on main
@@ -24,24 +25,23 @@ before a release: `dev-docs/merge-and-release-gates.md`.
 | Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
-| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
-| docs-generate | `make docs-generate-check`, second (in a heavy slot): every docs generator (the Makefile's `DOCGEN_TARGETS`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
+| forge-generate | `task generate:check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
+| docs-generate | `task generate:docs:check`, second (in a heavy slot): every docs generator (`Taskfile.yml`'s `generate:docs`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
 | migration-order | `go run ./tools/test-affected migration-order`, first: fetches `origin/main` and fails a migration the branch added whose version is at or below main's newest (never applied; the migrator refuses to start on it, reliant#1399). Fails closed when `origin/main` cannot be fetched (`MIGRATION_ORDER_OFFLINE=1` to override) | any added or changed file under `db/migrations/` (a deletion cannot put a file below the head) |
 
-The forge-generate lane is CI's **forge generate is a no-op** check, run
-locally. CI runs that check on main only (it alone cost a PR 110-160s), so
-running this lane before pushing a proto, migration or handler change is how a
-PR finds out.
+The forge-generate lane is the merge gate's **generate** phase, run locally
+(the merge gate runs only the affected `generate.hooks` when nothing forge
+itself reads changed; this lane always runs the whole forge generate).
 It leaves what it regenerated in your tree, so the fix is to commit those
 files. It judges only what generate changes, not whether the tree is clean, so
 your uncommitted edits are fine; do not edit files while it runs. Its blind
 spot is a `//forge:` directive in a Go file other than `doc.go`.
 
-The docs-generate lane is the docs half of CI's **Generated code is up to
-date** job, run locally: that job runs the same `make docs-generate-check`, and
-`DOCGEN_TARGETS` in the Makefile is the one list of docs generators (every
-target that runs a `tools/docgen` program or
-`scripts/generate-mintlify-reference.py`). It exists because a hand edit to a
+The docs-generate lane is the gates' **docs** check, run locally: the merge
+gate runs `task generate:docs` when the diff reaches a docs input, the release
+gate runs the same `task generate:docs:check` on every release, and
+`Taskfile.yml`'s `generate:docs` is the one list of docs generators (every task
+that runs a `tools/docgen` program or `scripts/generate-mintlify-reference.py`). It exists because a hand edit to a
 generated doc passed every local check: #1228 edited the generated
 workflow-builder `SKILL.md`, the next regeneration reverted it, and #1230 had to
 move the text into `tools/docgen/assembler`. Like forge-generate, it judges only
@@ -62,9 +62,9 @@ selects it (`docGenInput` in `plan.go`):
   (`generated/docs-source/**`, `docs/reference/*.mdx`, `docs/changelog.mdx`,
   `shortcutsData.generated.ts`, `field_descriptions.go`, the workflow-builder
   `SKILL.md`). `TestDocGenTargetsCoverEveryDocsGenerator` checks the list
-  against the Makefile recipes and the generators' own sources, and checks
-  that `DOCGEN_TARGETS` names every docs generator and that CI runs
-  `make docs-generate-check` instead of naming targets itself.
+  against the Taskfile's docs tasks and the generators' own sources, and checks
+  that `generate:docs` names every docs generator and that the gates (and
+  `ci.yml`) run the list instead of naming a docs task themselves.
 
 `-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
 the changed packages and the packages that import one by name. The plan lists
@@ -73,7 +73,8 @@ what it left out as `deferred`. The merge gate runs that mode
 closure described below.
 
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
-`TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
+`TEST_FULL=1` runs every lane in full; `task test:affected LANES=go,web` picks
+lanes. For other
 flags: `go run ./tools/test-affected -h` (`-json` prints the plan,
 `-files a,b` or `-files @list.txt` asks "what if only these changed?").
 
@@ -116,8 +117,8 @@ so none of them notices a lockfile `npm ci` would reject. When a diff changes a
 `npm ci --dry-run --ignore-scripts` there (~10s; it validates the lockfile
 against the manifest and touches nothing), provided a lane that installs from
 that project is enabled. #1343 shipped a lockfile every fresh install rejected
-("Missing: zone.js from lock file") with every local test green. PR CI installs
-with plain `npm ci` for the same reason: an `npm ci || npm install` fallback
+("Missing: zone.js from lock file") with every local test green. The gates and
+CI install with plain `npm ci` for the same reason: an `npm ci || npm install` fallback
 repaired the drift on the runner and hid it.
 
 ## How the selection works, and where it errs
@@ -183,105 +184,76 @@ cannot see).
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
 
-## CI tiers: which tests run where
+## Gates and CI: which tests run where
 
-`make test-affected` is the local inner loop. GitHub's PR CI
-(`.github/workflows/pr-ci.yml`) runs on every PR, every push to main, nightly
-(06:17 UTC) and on manual dispatch. The event picks the tier:
+`task test:affected` is the local inner loop. Before a merge and before a
+release, the two gates run (`dev-docs/merge-and-release-gates.md`):
 
-| Event | Tier | Go | Everything else |
-|---|---|---|---|
-| `pull_request` | **fast**, job `Backend (Go, short)` | `go test -short` over the packages **this selector** picks for the PR's diff | only the lanes the diff can reach (below) |
-| push to `main`, nightly `schedule`, `workflow_dispatch` | **full**, job `Backend (Go, full)` | `go test` over every package | every lane |
+| Gate | Go | Everything else |
+|---|---|---|
+| **merge** (`task ci:merge`) | this selector with `-reach direct`, `-short`, cached, no `-race`: the changed packages and their direct importers | the web and electron lanes this selector picks, `go build ./...`, `forge lint --scope <changed dirs>`, and the forge-generate / docs-generate / migration checks when their inputs changed |
+| **release** (`task release:gate`) | `task test`: every package, `-race -count=1`, no `-short`, so every slow test runs; then `task test:integration` and `task test:e2e` | unscoped `forge lint` (golangci-lint, buf, the frontends), `go vet`, `task generate:check`, `task generate:docs:check` |
 
-The PR tier is built to finish in about five minutes, and selection is how:
-the org's runners are shared, so a job a PR does not need is a slot another PR
-waits for. Nothing a PR skips is deleted; it runs on the next push to main.
+Nothing the merge gate skips is deleted; it runs in the release gate, and a
+release can only be cut from a commit the release gate recorded green.
 
-- **What decides a PR's lanes.** The `Detect what changed` job runs this tool
-  (`plan -base <merge base>`) for the Go package and vitest file selection, and
-  path patterns (in the job's script) for the rest: lint and the e2e stories
-  run unless the change is confined to `frontends/web/`, `electron/`, docs, research or
-  `.github/`; codegen drift runs unless it is confined to the frontends,
-  electron, research or `.github/` (the generated `frontends/web/src/gen/` and
-  `shortcutsData.generated.ts` still count); the web build runs on `frontends/web/`, the
-  root Node manifests, `electron/release.config.json` or `verify-bundle.mjs`;
-  Playwright on `frontends/web/` changes that are not unit tests; the electron package on
-  `electron/` or the web build config. Its job summary prints the decision.
-- **A PR that changes `pr-ci.yml` runs everything**, so a CI change is proven
-  against the whole PR path it changes.
+GitHub CI (`.github/workflows/ci.yml`) is a thin wrapper over the same tasks,
+so it cannot disagree with a local run:
+
+| Event | Job | Runs |
+|---|---|---|
+| `pull_request` | `Merge gate` | `task ci:merge -- --base <the PR's base>`, then `task test:flake` and `task ci:repo-checks` |
+| push to `main`, nightly `schedule` (06:17 UTC), `workflow_dispatch` | `Release gate` | `task release:gate -- <sha>`, which records its verdict as a git note (`refs/notes/release-gate`) when the ref is `main`, then `task ci:repo-checks` |
+
+- **The lanes no gate covers** run beside them, selected by
+  `scripts/ci-lanes.sh` (`task ci:lanes`): the renderer's release build and
+  `verify-bundle` (`task build:web:verify`) on a change under
+  `frontends/web/`, the root Node manifests, `electron/release.config.json` or
+  `verify-bundle.mjs`; Playwright (`task test:web:e2e`) on `frontends/web/`
+  changes that are not unit tests; the electron package (`task
+  build:electron:smoke`) on `electron/` or the web build config; and the
+  vendored control-plane contract (`task contract:controlplane:check`) on
+  `proto-vendor/controlplane/`. Off a pull request every lane runs, except the
+  control-plane contract, which judges only a push that changed what it checks
+  (a nightly would only report that control-plane moved, control-plane's own
+  gate to catch). A change to CI itself (`ci.yml`, `.github/actions/`,
+  `ci-lanes.sh`, `Taskfile.yml`) runs every lane.
 - **New and changed tests run three times.** `tools/test-affected
   changed-tests` names every Test function the diff adds or edits (by
-  function, in files that build without tags); the `New and changed Go tests
-  (x3)` job runs them with `-count=3`. A test that fails on a repeat is a
-  flake: fix it at the root, never by re-running.
-- **`CI result`** is the run's single verdict (green when every job that ran
-  passed; a lane the change skipped is fine) and its summary shows each job's
-  queue wait and run time.
-
-- **DB-backed tests run in both tiers**, `-short` included, and never skip.
+  function, in files that build without tags); `task test:flake`
+  (`scripts/test-flake.sh`) runs them with `-short -count=3`. A test that fails
+  on a repeat is a flake: fix it at the root, never by re-running.
+- **`CI result`** is the run's single verdict: green when every job that ran
+  passed, and the tier's gate ran. On a PR a lane the change does not reach is
+  skipped, which is fine; off a PR every lane but the contract must have run.
+- **DB-backed tests run in every tier**, `-short` included, and never skip.
   Each test gets its own copy of a template database on forge pgtest's server
   (`internal/db/testutil.go`): an embedded Postgres of the major `forge.yaml`
   declares (`database.postgres_version`), shared by every test process on the
   machine, or `FORGE_TEST_POSTGRES_URL`'s server, which must run that major.
-  Tests never read `DATABASE_URL`, and `REQUIRE_TEST_DB` no longer means
-  anything: a server that cannot boot fails the test.
-- **A short-gated test runs only on main and nightly.** Gating is for tests that
-  are inherently slow: a NATS cluster (`*_Cluster_*`), a real subprocess or a
-  daemon that must outlive a kill. A test that is slow because it waits out a
-  production timeout or backoff should be made fast instead (inject the
-  duration through a package-level var or an option) so it keeps running on
-  every PR.
-- **To run the full tier before merging**, run the package without `-short`
-  locally (`go test ./internal/<pkg>/...`), or start PR CI on your branch with
-  `gh workflow run pr-ci.yml --ref <branch>`.
-- **A red main is surfaced.** `gate-health.yml` audits main's newest PR CI run
+  Tests never read `DATABASE_URL`, and CI runs no Postgres service container.
+- **A slow test runs only in the release gate.** A test that takes more than
+  about two seconds under `-short` calls `testkit.Slow(t, "<why>")` (or an older
+  `testing.Short()` skip). Gating is for tests that are inherently slow: a NATS
+  cluster (`*_Cluster_*`), a real subprocess or a daemon that must outlive a
+  kill. A test that is slow because it waits out a production timeout or
+  backoff should be made fast instead (inject the duration through a
+  package-level var or an option) so it keeps running before every merge.
+- **To run the release tier before merging**, run the package without
+  `-short` (`task test -- ./internal/<pkg>/...`), or run the whole gate on a
+  commit: `task release:gate -- <sha>` (`RG_ONLY=test,integration` for a
+  subset, never recorded), or `gh workflow run ci.yml --ref <branch>`.
+- **A red main is surfaced.** `gate-health.yml` audits main's newest CI run
   after every run on main, and keeps one issue labelled `ci:main-red` open while
-  it is red. It also fails unless every `Backend (Go, full) N/M` shard, 1 to M,
-  ran and passed on main.
-- **The tiers cannot silently merge.** The job name carries the tier, so the two
-  have separate check histories. `TestCITestTierReachedGoTest`
-  (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
-  (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
-- **The Go tests run in up to 6 shards** (`Backend (Go, short) 1/2`, ...).
-  `go list ./... | go run ./tools/test-affected shard` prints the matrix: as
-  few shards as keep each under its weight target (one for a PR that reaches a
-  handful of packages, six for the whole module), balanced by measured
-  duration in `tools/test-affected/go-test-weights.tsv`, slowest first. Every
-  package runs in exactly one shard whatever the weights say; a stale weights
-  file only costs balance. `CI result` fails when a shard did not pass (and on
-  main when none ran). Every test job restores ONE package cache, which the
-  main-only `Go package cache` job produces: the compiled non-test packages
-  every test binary imports, and nothing else (no test variants, which a PR
-  invalidates by construction). ~540 MB compressed, restored in ~10-15s; the
-  old everything-cache was 3.2 GB and cost 1-4 minutes per job. The codegen
-  job keeps its own cache, because the Makefile builds generators with
-  `-trimpath`, a different compile key. The same job saves the module cache
-  without its `.zip` files (a build reads only the extracted trees), so a
-  PR's `go test` fetches a module only when go.sum moved. Refresh the weights when a shard
-  runs much longer than the others: `gh run view <run-id> --log | go run
-  ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **The test Postgres runs without durability** (fsync, synchronous_commit
-  and full_page_writes off; pgtest's embedded server is configured that way):
-  per-test template databases made the DB-backed packages fsync-bound
-  (internal/db 166s -> 54s). The short tier also passes `-vet=off`: vet, like
-  golangci-lint, runs on main.
-- **Other jobs**: `Lint (forge)` (at the pinned forge; blocks). On a PR:
-  `go build ./...` (every package compiles) and forge's fast gating lanes over
-  the whole project (`forge lint --no-fix --contract --migration-safety
-  --generated-drift --create-nullability --computed-fields --read-only-fields
-  --tracing --graph`, ~12-40s). golangci-lint and buf lint run on main only:
-  golangci-lint took 4-7 minutes even scoped to a few central packages. Run
-  `forge lint` locally before pushing Go or proto changes. Web
-  lint/typecheck/build, vitest (`Web (vitest K/N)`, one runner per 150
-  selected files, up to four), Playwright (one runner), the e2e stories, and
-  `Generated code is up to date` (`make docs-generate-check`, the
-  docs-generate lane above, then `make generate-all` drift; on main also
-  `forge generate is a no-op`, the forge-generate lane above).
-- **license-gate and Pin Drift** run on a PR only when it touches a dependency
-  manifest, a lockfile, the pin or their own scripts; on main, always.
+  it is red. It also fails unless that run's `Release gate` job ran and passed.
+- **license-gate and Pin Drift** (`task licenses`, `task pin:drift`,
+  `task pin:ancestry`) run on a PR only when it touches a dependency manifest,
+  a lockfile, the pin or their own scripts; on main, always.
 - **Caches are saved only on main.** A PR restores main's caches and never
-  saves its own: a PR-scoped cache is unreachable from any other ref.
+  saves its own: a PR-scoped cache is unreachable from any other ref. The
+  `Go package cache` job (pushes to main) saves the `-trimpath` compile of every
+  package (`task build:packages`), which every job's `go` reuses in any
+  checkout; the release gate saves the embedded Postgres binaries pgtest boots.
 
 ## Parallelism and timeouts
 

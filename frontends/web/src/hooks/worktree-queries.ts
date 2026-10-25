@@ -29,6 +29,7 @@ import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
+  partialMatchKey,
   useQueryClient,
   type InfiniteData,
   type Query,
@@ -320,14 +321,14 @@ export function getCachedWorktrees(projectId?: string, qc: QueryClient = appQuer
 export function hasLoadedWorktrees(projectId: string, qc: QueryClient = appQueryClient): boolean {
   return worktreeQueries(qc).some((query) => {
     if (query.state.status === "pending") return false;
-    if (!query.queryKey.some((part) => typeof part === "string" && LIST_METHODS.has(part))) return false;
+    if (!isListQuery(query)) return false;
     return requestOf(query)?.projectId === projectId;
   });
 }
 
 /** True when a cache event is about a WorktreeService read. */
 export function isWorktreeQueryKey(queryKey: readonly unknown[]): boolean {
-  return queryKey[0] === worktreeServiceKeys.all[0];
+  return partialMatchKey(queryKey, worktreeServiceKeys.all);
 }
 
 /** The selected workspace, resolved against the cache. */
@@ -433,11 +434,13 @@ function requestOf(query: Query): Record<string, unknown> | undefined {
 }
 
 // The reads whose rows a change to any one workspace can move: its status,
-// path or archive state is in them.
-const LIST_METHODS = new Set(["listWorktrees", "listArchivedWorktrees"]);
+// path or archive state is in them. Each scope covers every request of its
+// rpc, the infinite pages included.
+const LIST_SCOPES = [worktreeServiceKeys.listWorktrees.all, worktreeServiceKeys.listArchivedWorktrees.all];
 
-const isListQuery = (query: Query) =>
-  query.queryKey.some((part) => typeof part === "string" && LIST_METHODS.has(part));
+function isListQuery(query: Query): boolean {
+  return LIST_SCOPES.some((scope) => partialMatchKey(query.queryKey, scope));
+}
 
 /**
  * Invalidate what one workspace's change can make stale: the reads that name
@@ -475,9 +478,8 @@ export function invalidateWorktreeLists(qc: QueryClient): Promise<void> {
 /** Re-run discovery (both the foreground and the background hint's reads) for a project. */
 export function invalidateDiscoveredWorktrees(qc: QueryClient, projectId: string): Promise<void> {
   return qc.invalidateQueries({
-    queryKey: worktreeServiceKeys.all,
-    predicate: (query) =>
-      query.queryKey.includes("discoverWorktrees") && requestOf(query)?.projectId === projectId,
+    queryKey: worktreeServiceKeys.discoverWorktrees.all,
+    predicate: (query) => requestOf(query)?.projectId === projectId,
   });
 }
 

@@ -127,6 +127,14 @@ function removeToken(el: Element, attr: string, token: string) {
   else el.removeAttribute(attr);
 }
 
+// The first focusable element inside a wrapper. Almost every trigger IS its
+// wrapper's first child (a button), so that is checked before the subtree.
+function focusableIn(host: HTMLElement): HTMLElement | null {
+  const first = host.firstElementChild;
+  if (first instanceof HTMLElement && first.matches(FOCUSABLE)) return first;
+  return host.querySelector<HTMLElement>(FOCUSABLE);
+}
+
 function isFocusVisible(el: Element): boolean {
   try {
     return el.matches(":focus-visible");
@@ -238,7 +246,7 @@ export default function Tooltip({
   const describedElement = useCallback((): HTMLElement | null => {
     if (!host) return null;
     if (typeof children === "function") return host;
-    return host.querySelector<HTMLElement>(FOCUSABLE) ?? host;
+    return focusableIn(host) ?? host;
   }, [host, children]);
 
   const show = useCallback(() => {
@@ -274,20 +282,36 @@ export default function Tooltip({
 
   useEffect(() => clearTimers, [clearTimers]);
 
-  // Attach the hint to a ReactNode trigger. Every render: the wrapped
-  // element can change (a button gains `disabled`, a child is swapped).
+  // Attach the hint to a ReactNode trigger. Checked every render — the
+  // wrapped element can change (a button gains `disabled`, a child is
+  // swapped) — but the DOM is written only when the attachment moves: a
+  // list of a few hundred hinted rows re-renders without touching them.
+  const attached = useRef<{ el: HTMLElement; attr: string; madeFocusable: boolean } | null>(null);
+  const detach = useCallback(() => {
+    const cur = attached.current;
+    if (!cur) return;
+    removeToken(cur.el, cur.attr, textId);
+    if (cur.madeFocusable) cur.el.removeAttribute("tabindex");
+    attached.current = null;
+  }, [textId]);
   useIsomorphicLayoutEffect(() => {
-    if (!active || !host || typeof children === "function") return;
-    const inner = host.querySelector<HTMLElement>(FOCUSABLE);
+    if (!active || !host || typeof children === "function") {
+      detach();
+      return;
+    }
+    const inner = focusableIn(host);
     const target = inner ?? host;
+    const cur = attached.current;
+    if (cur && (cur.el !== target || cur.attr !== attr)) detach();
+    if (!attached.current) {
+      const madeFocusable = !inner && focusable && !host.hasAttribute("tabindex");
+      if (madeFocusable) host.tabIndex = 0;
+      attached.current = { el: target, attr, madeFocusable };
+    }
+    // A re-render of the child may have rewritten its own aria-describedby.
     addToken(target, attr, textId);
-    const madeFocusable = !inner && focusable && !host.hasAttribute("tabindex");
-    if (madeFocusable) host.tabIndex = 0;
-    return () => {
-      removeToken(target, attr, textId);
-      if (madeFocusable) host.removeAttribute("tabindex");
-    };
   });
+  useEffect(() => detach, [detach]);
 
   // Hover, press and focus on the trigger. Native listeners: the trigger is
   // the caller's element or a plain wrapper, not a control of ours.

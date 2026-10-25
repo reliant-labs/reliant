@@ -8,7 +8,6 @@ import "@xterm/xterm/css/xterm.css";
 import { logger } from "../../lib/logger";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
-import { isDaemonConnectingError, isNoMachineError } from "../../lib/daemon-errors";
 import { MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
@@ -75,11 +74,10 @@ const WORKING_DIR_UNAVAILABLE_CODE = "working_dir_unavailable";
 // retried it forever: one hidden terminal for a removed worktree retried every
 // ~12s for five hours in prod (2026-10-08, 905 server WARNs).
 const WORKING_DIR_MISSING_CODE = "working_dir_missing";
-// The account has no machine at all. The server sends the router's
-// "no daemon available" text today; a dedicated code is accepted ahead of it.
+// The account has no machine at all (internal/handlers/terminal wsErrorNoMachine).
 const TERMINAL_NO_MACHINE_CODE = "no_machine";
-// The machine is asleep or still starting. Typed so the client stops matching
-// the message prose (which the server still sends, for older clients).
+// The machine is starting, asleep or not connected (wsErrorDaemonUnavailable).
+// The code is the signal; the message text is display copy.
 const DAEMON_UNAVAILABLE_CODE = "daemon_unavailable";
 // Retry cadence while waiting for that directory. Polling is the only signal
 // that it has appeared, so the cap stays short enough that the shell opens
@@ -127,7 +125,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
   const workingDirAttemptsRef = useRef(0);
   // Set when the server says this attempt's working directory is gone for good.
   const workingDirMissingRef = useRef(false);
-  // Set when the server says the account has no machine at all (lib/daemon-errors isNoMachineError).
+  // Set when the server says the account has no machine at all (code no_machine).
   const noMachineRef = useRef(false);
   // Armed while the daemon looks offline but has not yet been offline long
   // enough to act on. See DAEMON_OFFLINE_GRACE_DELAY.
@@ -569,15 +567,11 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
-              if (
-                data.code === TERMINAL_NO_MACHINE_CODE ||
-                isNoMachineError(data.data)
-              ) {
-                // No machine at all. Checked before daemon_unavailable, which
-                // the server also sends for this today: waiting for a machine
-                // that does not exist would spin forever. The overlay offers
-                // to connect one; the daemon-status subscription reconnects
-                // when one appears.
+              if (data.code === TERMINAL_NO_MACHINE_CODE) {
+                // No machine at all: waiting for a machine that does not
+                // exist would spin forever. The overlay offers to connect
+                // one; the daemon-status subscription reconnects when one
+                // appears.
                 noMachineRef.current = true;
                 logger.info("[Terminal] No machine connected to this account", { sessionId });
               } else if (data.code === WORKING_DIR_MISSING_CODE) {
@@ -602,10 +596,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
                   workingDir,
                   detail: data.data,
                 });
-              } else if (
-                data.code === DAEMON_UNAVAILABLE_CODE ||
-                isDaemonConnectingError(data.data)
-              ) {
+              } else if (data.code === DAEMON_UNAVAILABLE_CODE) {
                 // "no daemon connected" — expected while the daemon is
                 // offline. The waiting overlay owns the messaging; writing a
                 // red error per retry was spamming the buffer.

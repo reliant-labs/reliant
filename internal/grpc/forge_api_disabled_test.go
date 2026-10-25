@@ -48,8 +48,7 @@ func requireForgeAPIDisabled(t *testing.T, err error) {
 		"byte-identical: clients from before the reason match on it")
 	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader),
 		"the reason is how the web tells this apart from forge failing")
-	require.Equal(t, forgeAPIDisabledReason, connectErr.Meta().Get("X-Reliant-Reason"),
-		"the legacy header stays until R3w2")
+	require.Empty(t, connectErr.Meta().Get("X-Reliant-Reason"), "the pre-svcerr header is retired (R3w2)")
 }
 
 func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {

@@ -29,8 +29,10 @@ const repoRoot = "../.."
 //   - every path those tasks pass (their inputs and outputs), every repo
 //     path a generator's Go source names, and every directory the Mintlify
 //     script joins onto the repo root is in docGenPaths;
-//   - CI runs the docs check (`task generate:docs:check`, or its `make
-//     docs-generate-check` forwarder) and spells no docs task itself.
+//   - the gates CI runs check the whole list (the release gate runs `task
+//     generate:docs:check`, the merge gate `task generate:docs` when the
+//     diff reaches a docs input), and neither they nor ci.yml spell a docs
+//     task themselves.
 //
 // It reads every file it judges itself, so a cached pass is never stale.
 func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
@@ -127,20 +129,32 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 		}
 	}
 
-	// CI calls the one list rather than keeping a copy.
-	ci, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "pr-ci.yml"))
-	if err != nil {
-		t.Fatal(err)
+	// The gates, and the CI that wraps them, call the one list rather than
+	// keeping a copy.
+	read := func(rel string) []byte {
+		b, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
 	}
-	if !strings.Contains(string(ci), "task generate:docs:check") && !strings.Contains(string(ci), "make docs-generate-check") {
-		t.Error(".github/workflows/pr-ci.yml must run `task generate:docs:check` (CI's \"Generated code is up to date\" job)")
+	for file, want := range map[string]string{
+		"scripts/release-gate.sh": "task generate:docs:check",
+		"scripts/merge-gate.sh":   "task generate:docs",
+	} {
+		if !strings.Contains(string(read(file)), want) {
+			t.Errorf("%s must run `%s` (the docs-generate check)", file, want)
+		}
 	}
-	for _, name := range targets {
-		// The task, and the Makefile forwarder named for it (generate-<name>).
-		legacy := "generate-" + strings.TrimPrefix(name, "generate:docs:")
-		for _, spelled := range []string{name, legacy} {
-			if regexp.MustCompile(`(^|[^\w:-])` + regexp.QuoteMeta(spelled) + `($|[^\w:-])`).Match(ci) {
-				t.Errorf(".github/workflows/pr-ci.yml names %s itself: run `task generate:docs:check`, so the docs tasks are listed once (generate:docs)", spelled)
+	for _, file := range []string{".github/workflows/ci.yml", "scripts/release-gate.sh", "scripts/merge-gate.sh"} {
+		src := read(file)
+		for _, name := range targets {
+			// The task, and the Makefile forwarder named for it (generate-<name>).
+			legacy := "generate-" + strings.TrimPrefix(name, "generate:docs:")
+			for _, spelled := range []string{name, legacy} {
+				if regexp.MustCompile(`(^|[^\w:-])` + regexp.QuoteMeta(spelled) + `($|[^\w:-])`).Match(src) {
+					t.Errorf("%s names %s itself: run `task generate:docs` / `task generate:docs:check`, so the docs tasks are listed once (generate:docs)", file, spelled)
+				}
 			}
 		}
 	}
