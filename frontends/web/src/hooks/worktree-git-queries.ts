@@ -178,6 +178,7 @@ export async function fetchWorktreeChanges(
     queryFn: ({ signal }) => client.getWorktreeChanges(request, { signal }),
     staleTime: 0,
     gcTime: 0,
+    retry: false,
   });
   return changesFromProto(response);
 }
@@ -192,6 +193,7 @@ export async function fetchWorktreeGitStatus(
   const response = await qc.fetchQuery({
     queryKey: worktreeServiceKeys.getWorktreeGitStatus(request),
     queryFn: ({ signal }) => client.getWorktreeGitStatus(request, { signal }),
+    retry: false,
   });
   return gitStatusFromProto(response);
 }

@@ -373,6 +373,9 @@ export async function fetchWorktree(
     queryKey: worktreeServiceKeys.getWorktree(request),
     queryFn: ({ signal }) => client.getWorktree(request, { signal }),
     staleTime: options?.fresh ? 0 : undefined,
+    // The caller decides what a failure means (resolveWorktree: "unknown");
+    // a retry ladder would only hold up app start and workspace switches.
+    retry: false,
   });
   if (!response.worktree) throw new Error("No worktree in response");
   return worktreeFromProto(response.worktree);
@@ -405,6 +408,7 @@ export async function resolveMainWorktree(projectId: string, qc: QueryClient = a
     const response = await qc.fetchQuery({
       queryKey: worktreeServiceKeys.listWorktrees(request),
       queryFn: ({ signal }) => client.listWorktrees(request, { signal }),
+      retry: false,
     });
     const main = response.worktrees.find((w) => w.isMain);
     return main ? worktreeFromProto(main) : null;
@@ -429,6 +433,7 @@ export async function fetchLiveWorktrees(projectId: string, qc: QueryClient = ap
       client.listWorktrees(pageParam ? { ...request, pageToken: pageParam } : request, { signal }),
     initialPageParam: "",
     getNextPageParam: (last: ListWorktreesResponse) => last.nextPageToken || undefined,
+    retry: false,
   });
   return data.pages.flatMap((page) => page.worktrees.map(worktreeFromProto));
 }
