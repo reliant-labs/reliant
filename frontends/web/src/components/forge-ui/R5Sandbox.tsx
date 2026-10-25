@@ -24,8 +24,7 @@ import { Cloud, Copy, Download, FilePlus, FileText, FolderGit2, HelpCircle, Penc
 
 import ContextMenu from "./context_menu";
 import { HelpPopover } from "../workflow/HelpPopover";
-import { SearchableDropdown } from "../ui/SearchableDropdown";
-import { MultiSelectDropdown } from "../ui/MultiSelectDropdown";
+import Combobox from "./combobox";
 
 import Tooltip from "./tooltip";
 
@@ -166,21 +165,25 @@ export function R5Pickers() {
       <SectionTitle>Searchable pickers — a grouped branch picker, a multi-select</SectionTitle>
       <div className="flex max-w-3xl items-start gap-16">
         <div className="w-80 space-y-2" data-testid="pick-branch">
-          <span className="block text-sm font-semibold text-foreground">Base Branch</span>
-          <SearchableDropdown
+          <label htmlFor="r5-base-branch" className="block text-sm font-semibold text-foreground">
+            Base Branch
+          </label>
+          <Combobox
+            id="r5-base-branch"
             options={BRANCHES}
-            value={branch ?? ""}
+            value={branch}
             placeholder="Select base branch"
+            searchPlaceholder="Search branches"
             emptyMessage="No branches found"
-            onSelect={setBranch}
-            groupBy
-            variant="form"
+            onChange={setBranch}
             className="w-full"
           />
         </div>
         <div className="w-80 space-y-2" data-testid="pick-presets">
           <span className="block text-sm font-semibold text-foreground">Presets</span>
-          <MultiSelectDropdown
+          <Combobox
+            multiple
+            aria-label="Presets"
             options={PRESETS}
             value={presets}
             onChange={setPresets}
