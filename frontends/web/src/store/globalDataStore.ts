@@ -3,23 +3,8 @@ import { create } from "zustand";
 import { api } from "../api/client";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
-import { useProjectStore } from "./projectStore";
-import { invalidateWorkflowConfig } from "../hooks/workflow-config-queries";
 
 // Type definitions
-export interface WorkflowDef {
-  name: string;
-  filename: string; // Filename/slug used for API calls
-  description: string;
-  step_count: number;
-  source: "builtin" | "user" | "project"; // Where the workflow comes from
-  updated_at?: string;
-  title?: string; // Definition-level display name
-  is_hidden?: boolean; // Whether the workflow is hidden from the workflow dropdown
-  status?: "draft" | "complete"; // Lifecycle: drafts are never runnable
-  automation_only?: boolean; // Chat trigger off: chat pickers must not offer it (isChatLaunchable)
-}
-
 interface Model {
   id: string;
   name: string;
@@ -57,15 +42,12 @@ interface GlobalDataState {
   // Data
   models: Model[];
   tiers: Record<string, TierResolution>;
-  workflows: WorkflowDef[];
 
   // Loading states
   modelsLoading: boolean;
-  workflowsLoading: boolean;
 
   // Error states
   modelsError: string | null;
-  workflowsError: string | null;
 
   // Initialization
   isInitialized: boolean;
@@ -74,23 +56,16 @@ interface GlobalDataState {
   // Actions
   prefetch: () => Promise<void>;
   refetchModels: () => Promise<void>;
-  refetchWorkflows: (projectId: string) => Promise<void>;
 }
-
-// In-flight dedup: collapse concurrent calls for the same projectId into one request
-let pendingWorkflowFetch: { projectId: string; promise: Promise<void> } | null = null;
 
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
   tiers: {},
-  workflows: [],
 
   modelsLoading: false,
-  workflowsLoading: false,
 
   modelsError: null,
-  workflowsError: null,
 
   isInitialized: false,
   isPrefetching: false,
@@ -116,12 +91,8 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       }
 
       // Set all loading states
-      set({
-        modelsLoading: true,
-        workflowsLoading: true,
-      });
+      set({ modelsLoading: true });
 
-      // Fetch models only - workflows require project context
       const [modelsResult] =
         await Promise.allSettled([
         api.models.list().catch((error) => {
@@ -129,9 +100,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
           throw error;
         }),
       ]);
-
-      // Workflows are fetched per-project, not on prefetch
-      const workflowsResult = { status: "fulfilled" as const, value: { workflows: [] } };
 
     // Update store with results
     const newState = {
@@ -143,19 +111,12 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
         modelsResult.status === "fulfilled"
           ? modelsResult.value.tiers || {}
           : {},
-      workflows:
-        workflowsResult.status === "fulfilled"
-          ? workflowsResult.value.workflows || []
-          : [],
-  
       modelsLoading: false,
-      workflowsLoading: false,
-
+    
       modelsError:
         modelsResult.status === "rejected"
           ? modelsResult.reason?.message || "Failed to fetch models"
           : null,
-      workflowsError: null, // Workflows are fetched per-project, not on prefetch
 
       isInitialized: true,
       isPrefetching: false,
@@ -168,7 +129,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       set({ 
         isPrefetching: false,
         modelsLoading: false,
-        workflowsLoading: false,
       });
     }
   },
@@ -191,31 +151,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     }
   },
 
-  refetchWorkflows: async (projectId: string) => {
-    // Every caller is a change (save, copy, delete, visibility) or a project
-    // switch; the cached definitions and preset lists go stale with it.
-    invalidateWorkflowConfig();
-    // Deduplicate concurrent calls for the same project
-    if (pendingWorkflowFetch && pendingWorkflowFetch.projectId === projectId) {
-      return pendingWorkflowFetch.promise;
-    }
-    set({ workflowsLoading: true, workflowsError: null });
-    const promise = (async () => {
-      try {
-        const response = await api.workflows.list(projectId);
-        set({ workflows: response.workflows || [], workflowsLoading: false });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch workflows";
-        logger.error("[GlobalDataStore] Failed to refetch workflows:", error);
-        set({ workflowsError: errorMessage, workflowsLoading: false });
-      } finally {
-        pendingWorkflowFetch = null;
-      }
-    })();
-    pendingWorkflowFetch = { projectId, promise };
-    return promise;
-  },
 }));
 
 // React context for preloading - NOT CURRENTLY USED but keeping for future optimization
@@ -240,25 +175,6 @@ export const useModels = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { models, tiers, loading: modelsLoading || isPrefetching, error: modelsError };
-};
-
-export const useWorkflows = () => {
-  const workflows = useGlobalDataStore((state) => state.workflows);
-  const workflowsLoading = useGlobalDataStore((state) => state.workflowsLoading);
-  const workflowsError = useGlobalDataStore((state) => state.workflowsError);
-  const isPrefetching = useGlobalDataStore((state) => state.isPrefetching);
-  const refetchWorkflows = useGlobalDataStore((state) => state.refetchWorkflows);
-  const projectId = useProjectStore((state) => state.currentProject?.id);
-
-  // Fetch on demand: if workflows are empty and nothing is already loading, trigger a fetch.
-  // This handles cases where the project store's refetchWorkflows call raced or failed.
-  React.useEffect(() => {
-    if (projectId && workflows.length === 0 && !workflowsLoading && !isPrefetching) {
-      refetchWorkflows(projectId);
-    }
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return { workflows, loading: workflowsLoading || isPrefetching, error: workflowsError };
 };
 
 // Usage:

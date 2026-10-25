@@ -39,7 +39,7 @@ import { ChatSettingsPopover } from "./settings";
 import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
-import { workflowGrpc } from "../../api/workflow-grpc";
+import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
 import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
@@ -74,7 +74,6 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
-import { useWorkflowDefinitionQuery } from "../../hooks/workflow-config-queries";
 import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
@@ -513,7 +512,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           if (cancelled) return;
 
           // Load the workflow schema for the thread's workflow name
-          const schemaResult = await workflowGrpc.getWorkflow(
+          const schemaResult = await fetchWorkflow(
             currentProjectFromStore!.id,
             { name: result.workflowName }
           );

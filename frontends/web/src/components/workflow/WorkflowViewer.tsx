@@ -57,7 +57,7 @@ import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useProjectStore } from '../../store/projectStore'
 import { useWorktreeStore } from '../../store/worktreeStore'
-import { workflowGrpc } from '../../api/workflow-grpc'
+import { saveWorkflow } from '../../hooks/workflow-queries'
 import { cn } from '../../lib/utils'
 
 interface WorkflowViewerProps {
@@ -527,7 +527,7 @@ function WorkflowViewerInner({
       } as Workflow
       
       // Save to backend
-      workflowGrpc.saveWorkflow(projectId, updatedWorkflow)
+      saveWorkflow(projectId, updatedWorkflow)
         .catch(() => {})
         .finally(() => {
           savingPositionsRef.current = false

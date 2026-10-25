@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import Modal from '../../forge-ui/modal'
 import Button from '@/components/forge-ui/button';
 import { fetchDefaultPresets, setDefaultPreset, type Preset } from '../../../hooks/preset-queries'
-import { workflowGrpc } from '../../../api/workflow-grpc'
+import { fetchWorkflow } from '../../../hooks/workflow-queries'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
 import { usePreferencesStore } from '../../../store/preferencesStore'
 import type { InputDef } from '../../../lib/inputHelpers'
@@ -62,7 +62,7 @@ export function PresetConfigModal({
         }
 
         // Fetch workflow definition to get groups
-        const result = await workflowGrpc.getWorkflow(projectId, { name: workflowName })
+        const result = await fetchWorkflow(projectId, { name: workflowName })
         const workflow = result.workflow
         if (!workflow) {
           throw new Error('Workflow not found')

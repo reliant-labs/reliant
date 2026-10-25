@@ -1,4 +1,4 @@
-import { useGlobalDataStore } from "../store/globalDataStore";
+import { getCachedWorkflows, useCachedWorkflows } from "../hooks/workflow-queries";
 
 /** Strip protocol prefixes from a workflow reference. */
 export function stripWorkflowRefPrefix(ref: string): string {
@@ -34,11 +34,10 @@ function resolveFromList(ref: string, workflows: readonly TitledWorkflow[]): str
 
 /** Non-reactive lookup against the cached workflow list (no network). */
 export function getCachedWorkflowDisplayName(ref: string): string {
-  return resolveFromList(ref, useGlobalDataStore.getState().workflows);
+  return resolveFromList(ref, getCachedWorkflows());
 }
 
 /** Reactive lookup against the cached workflow list (no network). */
 export function useWorkflowDisplayName(ref: string): string {
-  const workflows = useGlobalDataStore((state) => state.workflows);
-  return resolveFromList(ref, workflows);
+  return resolveFromList(ref, useCachedWorkflows());
 }

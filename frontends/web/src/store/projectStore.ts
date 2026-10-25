@@ -11,7 +11,6 @@ import { resolveChat } from "../hooks/chat-queries";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
-import { useGlobalDataStore } from "./globalDataStore";
 import { trackEvent } from "../lib/analytics";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
@@ -260,12 +259,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Touch the project to update last active
     get().touchProject(project.id);
     
-    // Always load workflows for the project (they are project-scoped). Presets
-    // need no nudge: their reads are keyed by project (hooks/preset-queries).
-    const globalDataStore = useGlobalDataStore.getState();
-    globalDataStore.refetchWorkflows(project.id).catch((err) => {
-      logger.warn("[ProjectStore] Failed to load workflows for project", { projectId: project.id, error: err });
-    });
+    // Workflows and presets need no nudge: their reads are keyed by project
+    // (hooks/workflow-queries, hooks/preset-queries).
 
     // Always load chats — even with skipClear (e.g. Electron window-context path)
     // loadChats uses singleflight so concurrent calls are deduplicated.

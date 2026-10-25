@@ -74,7 +74,7 @@ import { useWorkspaceRestore, useAutoSaveWorkspaceState } from "./hooks/useWorks
 import { focusChatInput } from "./hooks/useFocusManager";
 import { useTourStore } from "./store/tourStore";
 import { useModalStore } from "./store/modalStore";
-import { useGlobalDataStore } from "./store/globalDataStore";
+import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
@@ -112,8 +112,9 @@ function App() {
   // before initialization.
   const [isBackendReady, setIsBackendReady] = useState(false);
 
-  // Ensure global, project-scoped data (workflows/presets) is loaded whenever a project
-  const cachedWorkflows = useGlobalDataStore((s) => s.workflows);
+  // The current project's workflows as already cached (the tray menu lists
+  // them; it does not fetch them on its own).
+  const cachedWorkflows = useCachedWorkflows();
 
   // Track session start once on mount
   useEffect(() => {
@@ -126,10 +127,6 @@ function App() {
       ? `Reliant - ${currentProject.name}`
       : "Reliant";
   }, [currentProject?.name]);
-
-  // NOTE: Workflows and presets are fetched by projectStore.selectProject().
-  // With singleflight at the gRPC layer, duplicate concurrent calls are deduplicated
-  // automatically, so no secondary trigger is needed here.
 
   // UI state - use persisted values as defaults, initialized lazily from workspace state
   // NOTE: We use lazy initialization with getState() instead of subscribing to the whole

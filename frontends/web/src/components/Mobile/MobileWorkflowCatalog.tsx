@@ -58,7 +58,7 @@ import {
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useWorkflows, type WorkflowDef } from "../../store/globalDataStore";
+import { useWorkflows, type WorkflowDef } from "../../hooks/workflow-queries";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";

@@ -10,8 +10,8 @@
  * and Settings → Presets never disagree after a save.
  *
  * Freshness otherwise: preset matching depends on the workflow's inputs, so a
- * workflow change invalidates the same scope (invalidateWorkflowConfig in
- * workflow-config-queries.ts). The staleTime only bounds how long an edit
+ * workflow change invalidates the same scope (invalidateWorkflows in
+ * workflow-queries.ts, and the stream's WORKFLOW_DRAFT_UPDATED). The staleTime only bounds how long an edit
  * made OUTSIDE the app (a preset YAML changed in an editor) can go unnoticed.
  */
 

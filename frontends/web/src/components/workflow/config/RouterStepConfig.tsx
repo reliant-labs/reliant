@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, Trash2 } from "lucide-react";
 import type { Step, RouterStep } from "../../../types/workflow";
 import { withRouterArgs } from "../../../types/workflow";
@@ -6,8 +6,7 @@ import { CELInput, CELExpressionInput } from "../CELInput";
 import { ModelDropdown, extractModelId } from "../ModelDropdown";
 import { MultiSelectDropdown } from "../../ui/MultiSelectDropdown";
 import { celString, normalizeCelString } from "../../../lib/celAdapter";
-import { api } from "../../../api/client";
-import { useProjectStore } from "../../../store/projectStore";
+import { useWorkflows } from "../../../hooks/workflow-queries";
 import { usePresetsForWorkflow } from "../../../hooks/preset-queries";
 import { canonicalizeBuiltinWorkflowRef } from "../workflowRef";
 import type {
@@ -338,9 +337,6 @@ export function RouterStepConfig({
   onUpdate,
   isReadOnly = false,
 }: RouterStepConfigProps) {
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = currentProject?.id;
-
   const args = getRouterArgs(step);
   const mode = detectMode(args);
   const workflows = (args.workflows ?? []) as Partial<RouterWorkflowCandidate>[];
@@ -371,33 +367,8 @@ export function RouterStepConfig({
 
   // ── Workflow list loading (only needed for workflow mode) ──
 
-  const [existingWorkflows, setExistingWorkflows] = useState<
-    Array<{
-      name: string;
-      filename?: string;
-      description?: string;
-      source?: string;
-    }>
-  >([]);
-  const [loadingWorkflows, setLoadingWorkflows] = useState(true);
-
-  useEffect(() => {
-    if (!projectId) return;
-
-    const fetchWorkflows = async () => {
-      setLoadingWorkflows(true);
-      try {
-        const response = await api.workflows.list(projectId);
-        setExistingWorkflows(response.workflows || []);
-      } catch (error) {
-        console.error("Failed to fetch workflows:", error);
-        setExistingWorkflows([]);
-      } finally {
-        setLoadingWorkflows(false);
-      }
-    };
-    fetchWorkflows();
-  }, [projectId]);
+  // The current project's workflows (the generated ListWorkflows read).
+  const { workflows: existingWorkflows, loading: loadingWorkflows } = useWorkflows();
 
   const builtinWorkflows = existingWorkflows.filter(
     (wf) => wf.source === "builtin",

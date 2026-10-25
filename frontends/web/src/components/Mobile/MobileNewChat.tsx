@@ -51,8 +51,8 @@ import type { Worktree } from "../../store/worktreeStore";
 import { useWorktreeList } from "../../hooks/useWorktreeList";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
-import { useWorkflows } from "../../store/globalDataStore";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
+import { useWorkflows } from "../../hooks/workflow-queries";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
 import {
   DEFAULT_WORKFLOW,
   usePreferencesStore,

@@ -5,7 +5,6 @@ import {
   type Trigger,
   type TriggerDefinitionInput,
 } from "../api/trigger-grpc";
-import { workflowGrpc } from "../api/workflow-grpc";
 import { projectGrpc } from "../api/project-grpc";
 
 export type { Trigger, TriggerEvent, TriggerDefinitionInput } from "../api/trigger-grpc";
@@ -20,7 +19,6 @@ export const triggerKeys = {
   details: () => [...triggerKeys.all, "detail"] as const,
   detail: (id: string) => [...triggerKeys.details(), id] as const,
   events: (id: string) => [...triggerKeys.all, "events", id] as const,
-  workflows: (projectId: string) => [...triggerKeys.all, "workflows", projectId] as const,
   projectDaemons: () => [...triggerKeys.all, "projectDaemons"] as const,
 };
 
@@ -81,22 +79,6 @@ export function useTriggerEvents(
     queryFn: () => triggerGrpc.listEvents(id!),
     enabled: !!id,
     refetchInterval: options.refetchInterval ?? 60_000,
-  });
-}
-
-/**
- * Workflows available in a given project, for the automation form.
- *
- * Not the global `useWorkflows()` store: that one follows the CURRENT project,
- * while an automation's workflow has to be chosen from the project the form
- * has selected, which may be a different one.
- */
-export function useProjectWorkflowList(projectId?: string) {
-  return useQuery({
-    queryKey: triggerKeys.workflows(projectId ?? ""),
-    queryFn: () => workflowGrpc.listWorkflows(projectId!),
-    enabled: !!projectId,
-    staleTime: 60_000,
   });
 }
 

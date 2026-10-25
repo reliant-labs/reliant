@@ -36,7 +36,6 @@ import type {
 } from "../components/Onboarding/types";
 import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
-import { useGlobalDataStore } from "./globalDataStore";
 import { getEventBus } from "../lib/events";
 import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
 import {
@@ -48,6 +47,9 @@ import {
 import { hashKey, partialMatchKey } from "@tanstack/react-query";
 import { fetchProjectPresets } from "../hooks/preset-queries";
 import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
+import { getCachedWorkflows, workflowListFromProto } from "../hooks/workflow-queries";
+import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
+import type { ListWorkflowsResponse } from "../gen/reliant/v1/workflow_pb";
 import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
@@ -409,8 +411,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // 4. Create a workflow
       if (!newItems.has("create-workflow") && projectId) {
         try {
-          const workflows = useGlobalDataStore.getState().workflows;
-          if (workflows.some((w) => w.source === "user")) {
+          if (getCachedWorkflows().some((w) => w.source === "user")) {
             newItems.add("create-workflow");
             changed = true;
           }
@@ -531,12 +532,16 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }),
       );
 
+      // "create-workflow" derives from any workflow list the app reads (the
+      // ListWorkflows entries under workflowServiceKeys).
       unsubscribers.push(
-        useGlobalDataStore.subscribe((state) => {
-          if (
-            !get().completedItems.has("create-workflow") &&
-            state.workflows.some((w) => w.source === "user")
-          ) {
+        queryClient.getQueryCache().subscribe((event) => {
+          if (get().completedItems.has("create-workflow")) return;
+          if (!partialMatchKey(event.query.queryKey, workflowServiceKeys.all)) return;
+          const data = event.query.state.data as Partial<ListWorkflowsResponse> | undefined;
+          if (!Array.isArray(data?.workflows)) return;
+          const { workflows } = workflowListFromProto(data as ListWorkflowsResponse);
+          if (workflows.some((w) => w.source === "user")) {
             get().markComplete("create-workflow");
           }
         }),

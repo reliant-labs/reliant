@@ -89,7 +89,7 @@ import { useLiveValidation } from "./hooks/useLiveValidation";
 import { withFindingMarkers, withProblemMarkers } from "./nodes/problemMarkers";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
-import type { ValidationError } from "../../api/workflow-grpc";
+import type { ValidationError } from "../../hooks/workflow-queries";
 import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 
