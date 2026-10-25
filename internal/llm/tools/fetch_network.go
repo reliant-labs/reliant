@@ -91,10 +91,8 @@ func (n FetchNetwork) CheckIP(ip net.IP) error {
 	if n.AllowPrivate {
 		return nil
 	}
-	for _, a := range addrs {
-		if netguard.IPBlocked(net.IP(a.AsSlice())) {
-			return n.privateBlocked(ip.String())
-		}
+	if netguard.IPBlocked(ip) {
+		return n.privateBlocked(ip.String())
 	}
 	return nil
 }

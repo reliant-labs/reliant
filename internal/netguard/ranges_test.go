@@ -46,6 +46,13 @@ var rangeCases = []struct {
 	{"multicast 224/4", "224.0.0.1", true},
 	{"multicast 239.255.255.250", "239.255.255.250", true},
 	{"reserved 240/4", "240.0.0.1", true},
+
+	// Private Google Access VIPs (private.googleapis.com, restricted.googleapis.com).
+	{"Private Google Access 199.36.153.4/30", "199.36.153.4", true},
+	{"Private Google Access 199.36.153.4/30 upper", "199.36.153.7", true},
+	{"Private Google Access 199.36.153.8/30", "199.36.153.8", true},
+	{"Private Google Access 199.36.153.8/30 upper", "199.36.153.11", true},
+	{"IPv4-mapped Private Google Access", "::ffff:199.36.153.4", true},
 	{"limited broadcast", "255.255.255.255", true},
 
 	// IPv6 special-purpose ranges.
@@ -76,7 +83,9 @@ var rangeCases = []struct {
 	{"NAT64 64:ff9b::/96 private", "64:ff9b::10.0.0.1", true},
 	{"NAT64 64:ff9b::/96 metadata", "64:ff9b::169.254.169.254", true},
 	{"NAT64 64:ff9b::/96 loopback", "64:ff9b::127.0.0.1", true},
-	{"NAT64 64:ff9b::/96 public", "64:ff9b::8.8.8.8", false},
+	// Forge's policy (owner decision): the well-known NAT64 prefix is refused
+	// whole, public embeddings included. Our clusters are IPv4-only.
+	{"NAT64 64:ff9b::/96 public embedding", "64:ff9b::8.8.8.8", true},
 	// RFC 8215 local-use NAT64: the embedding layout depends on the prefix
 	// length the translator uses, which the address does not carry, so the
 	// whole /48 is refused (it is not globally routable either).
@@ -98,6 +107,9 @@ var rangeCases = []struct {
 
 	// Public neighbours of the ranges above stay reachable.
 	{"public 8.8.8.8", "8.8.8.8", false},
+	{"Private Google Access neighbour below", "199.36.153.3", false},
+	{"Private Google Access neighbour between", "199.36.153.12", false},
+	{"Private Google Access /24 neighbour", "199.36.154.4", false},
 	{"public 1.1.1.1", "1.1.1.1", false},
 	{"below 100.64/10", "100.63.255.255", false},
 	{"above 100.64/10", "100.128.0.1", false},
