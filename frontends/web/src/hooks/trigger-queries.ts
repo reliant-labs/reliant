@@ -17,7 +17,7 @@
  */
 
 import { create, isMessage } from "@bufbuild/protobuf";
-import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
