@@ -174,7 +174,7 @@ ci:
               command: [scripts/check-pin-ancestry.sh]
               cache: false
             - name: npm-licenses
-              command: [scripts/check-npm-licenses.sh, web]
+              command: [scripts/check-npm-licenses.sh, frontends/web]
               requires: [npm]
             - name: release-config
               command: [node, .github/scripts/sync-release-config.mjs, --check]
