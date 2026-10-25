@@ -25,7 +25,6 @@ import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";
 import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
-import type { Trigger } from "@/hooks/trigger-model";
 import { TriggerRailProvider, type TriggerRailContextValue } from "../../TriggerRailContext";
 
 const listTriggers = vi.fn();

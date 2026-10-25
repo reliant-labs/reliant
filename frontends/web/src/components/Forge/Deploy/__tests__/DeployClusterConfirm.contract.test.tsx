@@ -241,7 +241,7 @@ describe("a flow with no plan still cannot reach a write", () => {
       { kind: "not-forge-project" as const, meta: planMeta() },
       { kind: "unsupported" as const, meta: planMeta() },
       { kind: "unreachable" as const, meta: planMeta() },
-      { kind: "malformed" as const, meta: planMeta() },
+      { kind: "malformed" as const, meta: planMeta(), raw: "" },
     ]) {
       const { unmount } = render(
         <DeployFlow {...baseFlowProps()} planOutcome={outcome} />

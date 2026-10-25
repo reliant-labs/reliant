@@ -32,7 +32,9 @@ const STUCK: WaitState = {
 class FakeIntersectionObserver {
   static instances: FakeIntersectionObserver[] = [];
   target: Element | null = null;
-  constructor(private readonly callback: IntersectionObserverCallback) {
+  private readonly callback: IntersectionObserverCallback;
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
     FakeIntersectionObserver.instances.push(this);
   }
   observe(target: Element) {

@@ -24,7 +24,7 @@ const loadHook = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  delete (window as Window & { electronAPI?: unknown }).electronAPI
+  delete (window as unknown as { electronAPI?: unknown }).electronAPI
 })
 
 afterEach(() => {
@@ -32,7 +32,7 @@ afterEach(() => {
 })
 
 const asDesktop = () => {
-  ;(window as Window & { electronAPI?: unknown }).electronAPI = {}
+  ;(window as unknown as { electronAPI?: unknown }).electronAPI = {}
 }
 
 describe('useBundledDaemonPending', () => {

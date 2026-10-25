@@ -377,9 +377,10 @@ describe("the job lifecycle", () => {
     expect(result.handle).toBe("dep-abc123");
     expect(result.jobStatus).toBe("running");
     // The carried document is the GUARD PLAN — mode dry_run, not an apply report.
-    expect(result.guardPlan.kind).toBe("report");
-    if (result.guardPlan.kind === "report") {
-      expect(result.guardPlan.report.mode).toBe("dry_run");
+    const guardPlan = result.guardPlan;
+    expect(guardPlan?.kind).toBe("report");
+    if (guardPlan?.kind === "report") {
+      expect(guardPlan.report.mode).toBe("dry_run");
     }
   });
 

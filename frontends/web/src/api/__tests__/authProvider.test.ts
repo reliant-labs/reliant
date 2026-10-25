@@ -120,6 +120,7 @@ describe('authProvider', () => {
       const custom = {
         getToken: vi.fn(async () => 'keychain-token'),
         hasSession: vi.fn(async () => true),
+        refresh: vi.fn(async () => null),
       }
       setAuthTokenProvider(custom)
 
@@ -136,6 +137,7 @@ describe('authProvider', () => {
       setAuthTokenProvider({
         getToken: async () => 'keychain-token',
         hasSession: async () => true,
+        refresh: async () => null,
       })
       setAuthTokenProvider(null)
 

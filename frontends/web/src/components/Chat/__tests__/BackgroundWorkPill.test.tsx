@@ -547,7 +547,7 @@ describe("BackgroundWorkPill", () => {
         success: false,
         message: "This agent isn't currently running",
       });
-      const toastError = vi.spyOn(toast, "error").mockImplementation(() => "");
+      const toastError = vi.spyOn(toast, "error").mockImplementation(async () => {});
 
       renderPill();
       fireEvent.click(screen.getByTestId("background-work-pill"));

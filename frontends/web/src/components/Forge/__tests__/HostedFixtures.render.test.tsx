@@ -43,6 +43,9 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     phase: "unspecified",
     provenance: "v1.5.15 · main@abc1234",
     holds: [],
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     ...overrides,
   };
 }

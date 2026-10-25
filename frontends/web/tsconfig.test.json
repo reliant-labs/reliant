@@ -1,0 +1,17 @@
+{
+  /*
+   * The tests, type-checked. tsconfig.app.json excludes them (Vite's template
+   * split), and vitest strips types without checking them, so before this
+   * project a test importing an export the app had removed still passed both
+   * `tsc -b` and the test run. Same options as the app; its `exclude` replaces
+   * the app's, which puts the tests back. `types` adds the vitest globals the
+   * config enables (`test.globals`) and Node's, for the tests that read files.
+   */
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src"],
+  "exclude": ["src/gen/**/*"]
+}

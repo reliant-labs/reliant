@@ -46,11 +46,14 @@ function trigger(id: string, workflow: string, status: TriggerHealthStatusKey = 
     params: {},
     message: "",
     daemonId: "d",
+    noMachine: false,
     notifyOnComplete: false,
     actingIdentity: "owner",
     health: { status, consecutiveFailures: status === "failing" ? 3 : 0, consecutiveSkips: 0, lastFailureDetail: "" },
     createdAt: "",
     updatedAt: "",
+    source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
   };
 }
 

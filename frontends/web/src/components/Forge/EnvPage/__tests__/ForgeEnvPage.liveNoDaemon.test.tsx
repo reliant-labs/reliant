@@ -224,7 +224,7 @@ const CONVERGENCES: LiveConvergence[] = [
   },
 ];
 
-const getLiveView = vi.fn(() => Promise.resolve([PROD, STAGING]));
+const getLiveView = vi.fn((_project: string) => Promise.resolve([PROD, STAGING]));
 const listEnvironmentConvergences = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? CONVERGENCES : [])
 );
@@ -262,7 +262,7 @@ const PROMOTIONS: CloudPromotion[] = [
   },
 ];
 
-const getEnvironmentStatus = vi.fn(() => Promise.resolve(STATUS));
+const getEnvironmentStatus = vi.fn((_id: string) => Promise.resolve(STATUS));
 const listEnvironmentPromotions = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? PROMOTIONS : [])
 );
@@ -274,14 +274,17 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 
 // The managed store IS the control plane, so the secrets half of Live is a
 // control-plane read too.
-const listSecrets = vi.fn(() =>
-  Promise.resolve([{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] }])
+const listSecrets = vi.fn((_environmentId: string) =>
+  Promise.resolve({
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] as unknown[] }],
+    protected: false,
+  })
 );
-const setSecret = vi.fn(() => Promise.resolve({ version: 4 }));
+const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 4 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (...args: unknown[]) => listSecrets(...(args as [])),
-  setSecret: (...args: unknown[]) => setSecret(...(args as [])),
+  listSecrets: (environmentId: string) => listSecrets(environmentId),
+  setSecret: (input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 

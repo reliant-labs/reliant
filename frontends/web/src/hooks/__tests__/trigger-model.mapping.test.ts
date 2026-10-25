@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 
 import {
   ActingIdentity,
@@ -25,7 +25,7 @@ import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import { definitionFromTrigger, definitionToProto, eventFromProto, triggerFromProto } from "../trigger-model";
 
-function proto(overrides: Partial<Parameters<typeof create<typeof TriggerSchema>>[1]> = {}) {
+function proto(overrides: Omit<MessageInitShape<typeof TriggerSchema>, "$typeName"> = {}) {
   return create(TriggerSchema, {
     id: "trig-1",
     name: "Morning triage",
