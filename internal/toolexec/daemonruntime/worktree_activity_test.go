@@ -15,6 +15,75 @@ import (
 func newTestRecoveryGate() *recoveryAdmission {
 	return &recoveryAdmission{work: map[uint64][]string{}, leases: map[uint64]*WorktreeRecoveryLease{}}
 }
+func TestRecoveryAdmissionUnknownManagedLifetimeSurvivesStartReturn(t *testing.T) {
+	for _, kind := range []string{"background", "terminal"} {
+		t.Run(kind, func(t *testing.T) {
+			g := newTestRecoveryGate()
+			workspace, outside := t.TempDir(), t.TempDir()
+			var running atomic.Bool
+			// This injected registry models an arbitrary shell started outside the
+			// workspace: no cwd/fd/exe mapping can disclose its future delayed write.
+			// Explicit completion is the only release, not returning its start result.
+			g.managedUse = func() error {
+				if running.Load() {
+					return errRecoveryAdmission
+				}
+				return nil
+			}
+			finishStart, err := g.begin(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			initialCwd := outside
+			if admissionOverlap(initialCwd, workspace) {
+				t.Fatal("fixture cwd must be outside")
+			}
+			running.Store(true) // manager publishes process/session before returning
+			finishStart()
+			delayedWrite := func() {
+				if err := os.WriteFile(filepath.Join(workspace, "delayed"), []byte("written"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, root := range []string{workspace, t.TempDir()} {
+				if lease, err := g.acquire([]string{root}); err == nil {
+					lease.Release()
+					t.Fatal("unknown managed lifetime must veto ANY finalizer")
+				}
+			}
+			delayedWrite() // no sleeps: advance the injected managed lifetime
+			running.Store(false)
+			lease, err := g.acquire([]string{workspace})
+			if err != nil {
+				t.Fatal("completion must release veto", err)
+			}
+			lease.Release()
+		})
+	}
+}
+
+func TestRecoveryAdmissionFreshCheckRetainsUnknownManagedVeto(t *testing.T) {
+	g := newTestRecoveryGate()
+	var running atomic.Bool
+	g.managedUse = func() error {
+		if running.Load() {
+			return errRecoveryAdmission
+		}
+		return nil
+	}
+	lease, err := g.acquire([]string{t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Release()
+	// A registry recovered after initial admission is checked again before
+	// removal. Unknown scope must veto even without matching cwd/open files.
+	running.Store(true)
+	if err := lease.Check(context.Background()); err != errRecoveryAdmission {
+		t.Fatalf("fresh lifetime veto missing: %v", err)
+	}
+}
+
 func TestRecoveryAdmissionScopedOverlapAndUnknown(t *testing.T) {
 	g := newTestRecoveryGate()
 	root := t.TempDir()

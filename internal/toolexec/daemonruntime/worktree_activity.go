@@ -21,13 +21,16 @@ var errRecoveryAdmission = errors.New("workspace recovery finalization in progre
 // This gate is daemon-process scoped (commands and stream input share it).
 // Empty work paths mean unknown scope and conflict with any finalization. Only
 // trusted handler code can obtain an exemption; payloads cannot supply one.
-var recoveryAdmissions = recoveryAdmission{work: map[uint64][]string{}, leases: map[uint64]*WorktreeRecoveryLease{}}
+var recoveryAdmissions = recoveryAdmission{work: map[uint64][]string{}, leases: map[uint64]*WorktreeRecoveryLease{}, managedUse: managedRecoveryUse}
 
 type recoveryAdmission struct {
 	mu     sync.Mutex
 	next   uint64
 	work   map[uint64][]string
 	leases map[uint64]*WorktreeRecoveryLease
+	// managedUse continues unknown-scope admission after a start command
+	// returns. It samples actual registry lifetimes, never initial cwd.
+	managedUse func() error
 }
 
 type WorktreeRecoveryLease struct {
@@ -145,6 +148,11 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 			return nil, errors.New("workspace has active daemon work")
 		}
 	}
+	if g.managedUse != nil {
+		if err := g.managedUse(); err != nil {
+			return nil, err
+		}
+	}
 	for _, lease := range g.leases {
 		if admissionConflict(canonical, lease.paths) {
 			return nil, errRecoveryAdmission
@@ -154,6 +162,23 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 	lease := &WorktreeRecoveryLease{gate: g, id: g.next, paths: canonical, deadline: time.Now().Add(2 * time.Minute)}
 	g.leases[lease.id] = lease
 	return lease, nil
+}
+
+// managedRecoveryUse retains the unknown-scope veto for the entire managed
+// process/session lifetime. Arbitrary shells can sleep outside a workspace,
+// then open an absolute path inside it; cwd/fd probes cannot exclude that.
+// Start/creation admission remains held until registry publication, closing
+// the handoff race. Registry completion releases the veto without a poller.
+func managedRecoveryUse() error {
+	for _, p := range shell.GetBackgroundManager().GetAllProcesses() {
+		if p.StatusSafe() == "running" {
+			return errors.New("managed background process has unknown filesystem scope")
+		}
+	}
+	if tm := terminalManager(); tm != nil && len(tm.ListSessions()) != 0 {
+		return errors.New("open terminal session has unknown filesystem scope")
+	}
+	return nil
 }
 
 // Check must run immediately before each destructive action and after parking.
@@ -168,27 +193,9 @@ func (l *WorktreeRecoveryLease) Check(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	for _, p := range shell.GetBackgroundManager().GetAllProcesses() {
-		if p.StatusSafe() != "running" {
-			continue
-		}
-		path, err := canonicalAdmissionPath(p.WorkingDir)
-		if err != nil {
-			return errors.New("managed process scope unknown")
-		}
-		if admissionConflict(l.paths, []string{path}) {
-			return errors.New("workspace has a managed background process")
-		}
-	}
-	if tm := terminalManager(); tm != nil {
-		for _, session := range tm.ListSessions() {
-			path, err := canonicalAdmissionPath(session.WorkingDir)
-			if err != nil {
-				return errors.New("terminal scope unknown")
-			}
-			if admissionConflict(l.paths, []string{path}) {
-				return errors.New("workspace has an open terminal session")
-			}
+	if l.gate.managedUse != nil {
+		if err := l.gate.managedUse(); err != nil {
+			return err
 		}
 	}
 	// No broad PID exclusions, including our own: an fd/cwd we hold under a

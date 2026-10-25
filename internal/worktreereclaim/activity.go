@@ -470,7 +470,7 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 			if total > activityMaxBytes {
 				return errors.New("activity inventory byte budget exceeded")
 			}
-			f, err := os.Open(path)
+			f, err := activityOpenRegular(path)
 			if err != nil {
 				return err
 			}
@@ -538,6 +538,37 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+func activityReadRegular(path string, limit int64) ([]byte, error) {
+	f, err := activityOpenRegular(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	before, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if before.Size() > limit {
+		return nil, errors.New("activity file budget exceeded")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	after, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	current, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit || int64(len(data)) != before.Size() || !sameReflog(before, after) || !sameReflog(before, current) {
+		return nil, errors.New("activity file changed while reading")
+	}
+	return data, nil
+}
+
 func activityGitDir(root string) (string, error) {
 	path := filepath.Join(root, ".git")
 	info, err := os.Lstat(path)
@@ -553,7 +584,7 @@ func activityGitDir(root string) (string, error) {
 	if !info.Mode().IsRegular() || info.Size() > 4096 {
 		return "", errors.New("unsupported git administration pointer")
 	}
-	data, err := os.ReadFile(path)
+	data, err := activityReadRegular(path, 4096)
 	if err != nil {
 		return "", err
 	}
@@ -569,20 +600,20 @@ func activityGitDir(root string) (string, error) {
 }
 func activityGitDigest(ctx context.Context, dir string) (string, error) {
 	h := sha256.New()
-	head, err := os.ReadFile(filepath.Join(dir, "HEAD"))
+	head, err := activityReadRegular(filepath.Join(dir, "HEAD"), 4096)
 	if err != nil {
 		return "", err
 	}
 	fmt.Fprintf(h, "HEAD:%s", head)
 	indexPath := filepath.Join(dir, "index")
-	info, err := os.Stat(indexPath)
+	info, err := os.Lstat(indexPath)
 	if err != nil {
 		return "", err
 	}
-	if info.Size() > 32<<20 {
-		return "", errors.New("activity index budget exceeded")
+	if !info.Mode().IsRegular() || info.Size() > 32<<20 {
+		return "", errors.New("unsupported activity index or budget exceeded")
 	}
-	f, err := os.Open(indexPath)
+	f, err := activityOpenRegular(indexPath)
 	if err != nil {
 		return "", err
 	}
@@ -612,19 +643,19 @@ func activityGitDigest(ctx context.Context, dir string) (string, error) {
 	// Keep actual event times; file rewrite time and empty-log mtimes are not
 	// activity. Hash all events' semantic OID/time fields (not identities/text).
 	logPath := filepath.Join(dir, "logs", "HEAD")
-	logInfo, err := os.Stat(logPath)
+	logInfo, err := os.Lstat(logPath)
 	if err != nil && !os.IsNotExist(err) {
 		return "", err
+	}
+	if err == nil && !logInfo.Mode().IsRegular() {
+		return "", errors.New("unsupported activity reflog file type")
 	}
 	if err == nil && logInfo.Size() > 0 {
 		// Validate stability with the existing reflog parser, then hash each
 		// OID+event time. Rewrites of identities/messages/mtimes are maintenance;
 		// an actual new checkout/commit/reset event is activity, even if its clock
 		// timestamp is older than a preceding record.
-		if _, err := reflogActivity(ctx, logPath); err != nil {
-			return "", err
-		}
-		data, err := os.ReadFile(logPath)
+		data, err := activityReadRegular(logPath, maxActivityReflogBytes)
 		if err != nil {
 			return "", err
 		}
@@ -633,7 +664,13 @@ func activityGitDigest(ctx context.Context, dir string) (string, error) {
 		}
 		scanner := bufio.NewScanner(strings.NewReader(string(data)))
 		scanner.Buffer(make([]byte, 4096), maxActivityReflogLine)
+		if len(data) == 0 || data[len(data)-1] != '\n' {
+			return "", errors.New("incomplete activity reflog")
+		}
 		for scanner.Scan() {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
 			line := scanner.Text()
 			event, err := reflogEventTime(line)
 			if err != nil {
