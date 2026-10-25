@@ -15,23 +15,20 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
 
-import {
-  SettingsService,
-  type GetPreferencesResponse,
-  type GetProviderStatusesResponse,
-  type UpdatePreferencesRequestSchema,
+import type {
+  GetPreferencesResponse,
+  GetProviderStatusesResponse,
+  UpdatePreferencesRequestSchema,
 } from "../gen/reliant/v1/settings_pb";
-import { connectClient } from "../lib/connect";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "@/store/authStore";
 import {
   settingsServiceKeys,
+  settingsServiceQueries,
   useGetPreferences,
   useGetProviderStatuses,
   useUpdatePreferences as useUpdatePreferencesRpc,
 } from "./settings-service-hooks_gen";
-
-const client = connectClient(SettingsService);
 
 /**
  * Whether an outbound RPC can carry a credential.
@@ -91,11 +88,7 @@ export function useProviderStatuses() {
  * useProviderStatuses and the onboarding checklist read it.
  */
 export function fetchProviderStatuses(staleTime = 0): Promise<GetProviderStatusesResponse> {
-  return queryClient.fetchQuery({
-    queryKey: providerStatusesKey(),
-    queryFn: () => client.getProviderStatuses({}),
-    staleTime,
-  });
+  return queryClient.fetchQuery(settingsServiceQueries.getProviderStatuses({}, { staleTime }));
 }
 
 /** A provider credential changed (a sign-in, a key, a sync): refetch the statuses. */
@@ -171,11 +164,7 @@ export function cachedUserPreferences(): UserPreferences {
  * usePreferences.
  */
 export function fetchPreferences(): Promise<GetPreferencesResponse> {
-  return queryClient.fetchQuery({
-    queryKey: preferencesKey(),
-    queryFn: () => client.getPreferences({}),
-    staleTime: 0,
-  });
+  return queryClient.fetchQuery(settingsServiceQueries.getPreferences({}, { staleTime: 0 }));
 }
 
 /** Preferences were written outside a hook: refetch them. */

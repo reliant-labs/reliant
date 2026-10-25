@@ -19,7 +19,6 @@ import { useQueries, type QueryClient } from "@tanstack/react-query";
 
 import {
   CatalogEntryKind,
-  CatalogService,
   type CatalogEntry as ProtoCatalogEntry,
   type CatalogEntrySummary as ProtoCatalogEntrySummary,
   type CatalogFacet as ProtoCatalogFacet,
@@ -29,7 +28,6 @@ import {
   type SearchCatalogResponse,
 } from "../gen/reliant/v1/catalog_pb";
 import { ConnectionAuthKind } from "../gen/reliant/v1/connection_pb";
-import { connectClient } from "../lib/connect";
 import { asJsonSchema, type JsonSchema } from "../lib/jsonSchema";
 import { integrationEventNaming, RAW_EVENT_NAMING, type IntegrationEventNaming } from "../lib/integrationEventNames";
 import {
@@ -40,9 +38,7 @@ import {
   type AuthMethod,
   type ConnectionParam,
 } from "./connection-queries";
-import { catalogServiceKeys, useGetCatalogEntry, useSearchCatalog } from "./catalog-service-hooks_gen";
-
-const client = connectClient(CatalogService);
+import { catalogServiceQueries, useGetCatalogEntry, useSearchCatalog } from "./catalog-service-hooks_gen";
 
 // ── Frontend types ──────────────────────────────────────────────────────────
 
@@ -202,14 +198,10 @@ export const CATALOG_ENTRY_STALE_MS = 5 * 60_000;
 
 /**
  * The query for one entry, for useQueries, prefetchQuery and fetchQuery: the
- * same key and response the generated useGetCatalogEntry uses.
+ * generated useGetCatalogEntry's own options, with the catalog's stale time.
  */
 export function catalogEntryQuery(ref: string) {
-  return {
-    queryKey: catalogServiceKeys.getCatalogEntry({ ref }),
-    queryFn: () => client.getCatalogEntry({ ref }),
-    staleTime: CATALOG_ENTRY_STALE_MS,
-  };
+  return catalogServiceQueries.getCatalogEntry({ ref }, { staleTime: CATALOG_ENTRY_STALE_MS });
 }
 
 /** One catalog entry in full (schemas, connection methods). Shared with the palette's prefetch. */
@@ -220,7 +212,7 @@ export function useCatalogEntry(ref: string | undefined) {
 
 /** The entry already in the cache (the palette prefetches the highlighted row), without fetching. */
 export function cachedCatalogEntry(queryClient: QueryClient, ref: string): CatalogEntry | undefined {
-  return catalogEntryOf(queryClient.getQueryData<GetCatalogEntryResponse>(catalogServiceKeys.getCatalogEntry({ ref })));
+  return catalogEntryOf(queryClient.getQueryData(catalogEntryQuery(ref).queryKey));
 }
 
 /** The entry, from the cache when it is fresh, otherwise fetched into it. */

@@ -53,6 +53,7 @@ import { toast } from "../lib/toast-manager";
 import { useAuthStore } from "../store/authStore";
 import {
   projectServiceKeys,
+  projectServiceQueries,
   useGetProjectGitInfo,
   useGetProjectPrompts,
   useListProjectDaemons,
@@ -280,14 +281,6 @@ export function useProject(projectId: string | null | undefined): Project | unde
   );
 }
 
-function listProjectsQuery(staleTime: number) {
-  return {
-    queryKey: projectsKey(),
-    queryFn: ({ signal }: { signal: AbortSignal }) => client.listProjects(LIST_PROJECTS_REQUEST, { signal }),
-    staleTime,
-  };
-}
-
 /**
  * The project list for an imperative caller, through the hook's entry:
  * concurrent callers share one RPC, and the answer lands where every mounted
@@ -296,7 +289,11 @@ function listProjectsQuery(staleTime: number) {
  * opened from another device).
  */
 export async function fetchProjects(options: { fresh?: boolean } = {}): Promise<Project[]> {
-  const response = await queryClient.fetchQuery(listProjectsQuery(options.fresh ? 0 : PROJECTS_STALE_TIME_MS));
+  const response = await queryClient.fetchQuery(
+    projectServiceQueries.listProjects(LIST_PROJECTS_REQUEST, {
+      staleTime: options.fresh ? 0 : PROJECTS_STALE_TIME_MS,
+    }),
+  );
   return projectsOf(response);
 }
 
@@ -323,11 +320,7 @@ function invalidateProjects(client: QueryClient = queryClient): Promise<void> {
  * workspace). The project store reconciles its selection from the result.
  */
 export async function refreshProject(projectId: string): Promise<Project | undefined> {
-  const response = await queryClient.fetchQuery({
-    queryKey: projectServiceKeys.getProject({ projectId }),
-    queryFn: ({ signal }) => client.getProject({ projectId }, { signal }),
-    staleTime: 0,
-  });
+  const response = await queryClient.fetchQuery(projectServiceQueries.getProject({ projectId }, { staleTime: 0 }));
   const fresh = response.project;
   if (!fresh) return undefined;
   patchCachedProject(projectId, () => fresh);
@@ -511,11 +504,9 @@ export type ProjectGitInfo = GetProjectGitInfoResponse;
 
 /** The main checkout's uncommitted changes, always fresh (the Changes tab keeps its own short cache). */
 export async function fetchProjectChanges(projectId: string): Promise<ProjectChanges> {
-  const response = await queryClient.fetchQuery({
-    queryKey: projectServiceKeys.getProjectChanges({ projectId }),
-    queryFn: ({ signal }) => client.getProjectChanges({ projectId }, { signal }),
-    staleTime: 0,
-  });
+  const response = await queryClient.fetchQuery(
+    projectServiceQueries.getProjectChanges({ projectId }, { staleTime: 0 }),
+  );
   return {
     branch: response.branch,
     files: response.files.map(fileChangeFromProto),

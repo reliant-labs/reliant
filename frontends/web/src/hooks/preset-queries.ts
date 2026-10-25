@@ -37,6 +37,7 @@ import { queryClient } from "../lib/query-client";
 import { useProjectStore } from "../store/projectStore";
 import {
   presetServiceKeys,
+  presetServiceQueries,
   useListPresets,
   useListPresetsForWorkflow,
 } from "./preset-service-hooks_gen";
@@ -170,11 +171,9 @@ export function useProjectPresets(
 
 /** A project's presets for an imperative caller, from cache while fresh. */
 export async function fetchProjectPresets(projectId: string): Promise<Preset[]> {
-  const response = await queryClient.fetchQuery({
-    queryKey: presetServiceKeys.listPresets({ projectId, includeHidden: false }),
-    queryFn: () => client.listPresets({ projectId, includeHidden: false }),
-    staleTime: PRESET_STALE_TIME_MS,
-  });
+  const response = await queryClient.fetchQuery(
+    presetServiceQueries.listPresets({ projectId, includeHidden: false }, { staleTime: PRESET_STALE_TIME_MS }),
+  );
   return response.presets.map(presetFromProto);
 }
 

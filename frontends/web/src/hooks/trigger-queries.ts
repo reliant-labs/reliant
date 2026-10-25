@@ -61,6 +61,7 @@ import {
   useRotateWebhookToken as useRotateWebhookTokenRpc,
   useSetTriggerEnabled as useSetTriggerEnabledRpc,
   useUpdateTrigger as useUpdateTriggerRpc,
+  triggerServiceQueries,
 } from "./trigger-service-hooks_gen";
 
 const client = connectClient(TriggerService);
@@ -175,11 +176,9 @@ export async function resolveTriggerSenders(
   query: { handles?: readonly string[]; senderIds?: readonly string[] },
 ): Promise<ResolvedSender[]> {
   const request = { integration, handles: [...(query.handles ?? [])], senderIds: [...(query.senderIds ?? [])] };
-  const response = await queryClient.fetchQuery({
-    queryKey: triggerServiceKeys.resolveTriggerSenders(request),
-    queryFn: ({ signal }) => client.resolveTriggerSenders(request, { signal }),
-    staleTime: SENDER_NAMES_STALE_MS,
-  });
+  const response = await queryClient.fetchQuery(
+    triggerServiceQueries.resolveTriggerSenders(request, { staleTime: SENDER_NAMES_STALE_MS }),
+  );
   return resolvedSendersFromProto(response);
 }
 
