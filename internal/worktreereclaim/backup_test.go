@@ -31,22 +31,6 @@ func commit(t *testing.T, checkout, file, content string) string {
 	return run(t, checkout, "rev-parse", "HEAD")
 }
 
-// savedAt asserts one of refs is a saved-commit ref of kind ("head" or
-// "reflog") holding exactly sha in the project, and returns it.
-func savedAt(t *testing.T, f *fixture, refs []string, kind, sha string) string {
-	t.Helper()
-	for _, ref := range refs {
-		if strings.Contains(ref, "/orphans/"+kind+"-") && run(t, f.project, "rev-parse", ref) == sha {
-			if !strings.HasPrefix(ref, "refs/reliant/wip/") {
-				t.Fatalf("%s is outside the snapshot namespace", ref)
-			}
-			return ref
-		}
-	}
-	t.Fatalf("no %s ref holding %s among %v", kind, sha, refs)
-	return ""
-}
-
 // A detached unpublished HEAD must not be reclaimed using a local-only ref.
 func TestReconcile_DetachedUnpushedCommitsRequireRemoteRecovery(t *testing.T) {
 	t.Parallel()

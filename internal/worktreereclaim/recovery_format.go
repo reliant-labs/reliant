@@ -59,13 +59,13 @@ func recoveryCaptureGit(ctx context.Context, path string, extra []string, input 
 	prefix := []string{"--no-replace-objects", "-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "commit.gpgSign=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"}
 	cmd := gitCommand(ctx, append(prefix, args...))
 	cmd.Dir = path
-	for _, v := range os.Environ() {
+	for _, v := range os.Environ() { //nolint:forbidigo // sanitize the inherited child process environment, not application configuration
 		k, _, _ := strings.Cut(v, "=")
 		if strings.HasPrefix(k, "GIT_") {
 			continue
 		}
 		cmd.Env = append(cmd.Env, v)
-	} //nolint:forbidigo // sanitized child process environment
+	}
 	cmd.Env = append(cmd.Env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_NO_LAZY_FETCH=1", "GIT_ATTR_NOSYSTEM=1", "LC_ALL=C")
 	cmd.Env = append(cmd.Env, extra...)
 	cmd.Stdin = bytes.NewReader(input)

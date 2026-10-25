@@ -53,7 +53,7 @@ func TestFinalizeRecoveryQuarantineInventoryMismatchReturnsOriginal(t *testing.T
 	out := r.FinalizeRecovery(ctx, req, deps)
 	require.Equal(t, OutcomeHeld, out.Outcome)
 	require.Empty(t, out.RemovedRepoIDs)
-	require.True(t, mutated, "fixture must reach quarantine before mutation")
+	require.True(t, mutated, "fixture must reach quarantine before mutation: %+v", out)
 	data, err := os.ReadFile(filepath.Join(path, "file.txt"))
 	require.NoError(t, err)
 	require.Equal(t, "concurrent write\n", string(data))

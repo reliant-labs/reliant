@@ -109,7 +109,7 @@ func restoreRecoveryCheckout(ctx context.Context, bare, parent, destination, bra
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	var total int64
 	for _, e := range entries {
 		sizeRaw, sizeErr := recoveryGit(ctx, bare, nil, "cat-file", "-s", e.oid)
@@ -615,7 +615,7 @@ func recoveryGit(ctx context.Context, dir string, input []byte, args ...string) 
 	base := []string{"-c", "core.hooksPath=" + os.DevNull, "-c", "core.fsmonitor=false", "-c", "core.autocrlf=false", "-c", "core.safecrlf=false", "-c", "protocol.allow=never", "-c", "gc.auto=0", "-c", "maintenance.auto=false", "-c", "submodule.recurse=false", "-c", "fetch.recurseSubmodules=false"}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
 	cmd.Dir = dir
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_ATTR_NOSYSTEM=1", "GIT_NO_REPLACE_OBJECTS=1", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C"}
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_ATTR_NOSYSTEM=1", "GIT_NO_REPLACE_OBJECTS=1", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C"} //nolint:forbidigo // PATH locates Git in an isolated child environment; it is not application configuration
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
 	}

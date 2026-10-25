@@ -526,11 +526,15 @@ func TestRecreate_KeepsSavedCommitRefsListed(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	require.False(t, exists(path), "unpushed commits no longer keep the directory")
-	gone, _ := e.repo.GetWorktree(e.ctx, wt.ID)
-	require.True(t, gone.CleanupMetadata.DirectoryDeleted)
-	require.Len(t, gone.CleanupMetadata.SnapshotRefs, 1)
-	ref := gone.CleanupMetadata.SnapshotRefs[0]
+	require.True(t, exists(path), "unpushed history requires independent remote recovery before automatic removal")
+	// Exercise recreation of an explicitly retained legacy commit ref without
+	// asking the automatic sweeper to perform the now-forbidden local-only
+	// preservation/removal path.
+	ref := "refs/reliant/wip/" + wt.ID + "/root/orphans/head-test"
+	gitIn(t, e.project.Path, "update-ref", ref, sha)
+	gitIn(t, e.project.Path, "worktree", "unlock", path)
+	gitIn(t, e.project.Path, "worktree", "remove", "--force", path)
+	require.NoError(t, e.repo.UpdateWorktreeCleanupMetadata(e.ctx, wt.ID, &db.CleanupMetadata{DirectoryDeleted: true, SnapshotRefs: []string{ref}}))
 	assert.Equal(t, sha, gitIn(t, e.project.Path, "rev-parse", ref))
 
 	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))

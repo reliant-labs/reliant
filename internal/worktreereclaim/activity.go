@@ -206,7 +206,7 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 	gitDir, err := activityGitDir(root)
 	if err != nil {
 		cancel()
-		watcher.Close()
+		_ = watcher.Close()
 		return err
 	}
 	w := &activityWatch{watcher: watcher, cancel: cancel, watched: map[string]bool{}, root: root, gitDir: gitDir}
@@ -214,7 +214,7 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 	if o.running[key] != nil {
 		o.mu.Unlock()
 		cancel()
-		watcher.Close()
+		_ = watcher.Close()
 		return errors.New("workspace observation already running")
 	}
 	o.running[key] = w
@@ -223,7 +223,7 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 	o.mu.Unlock()
 	if err != nil {
 		cancel()
-		watcher.Close()
+		_ = watcher.Close()
 		o.mu.Lock()
 		delete(o.running, key)
 		o.mu.Unlock()
@@ -236,7 +236,7 @@ func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWatch) {
 	ticker := time.NewTicker(activityPoll)
 	defer ticker.Stop()
-	defer w.watcher.Close()
+	defer func() { _ = w.watcher.Close() }()
 	defer func() {
 		o.mu.Lock()
 		defer o.mu.Unlock()

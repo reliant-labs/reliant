@@ -56,14 +56,14 @@ func recoveryTx(ctx context.Context, db orm.Context, fn func(context.Context) er
 // hide an owner's catalog. Not-owned and absent have the same result.
 func GetWorktreeRecovery(ctx context.Context, db orm.Context, owner, id string) (*core.WorktreeRecovery, error) {
 	r := new(core.WorktreeRecovery)
-	err := db.Bun().NewRaw(`SELECT * FROM worktree_recoveries WHERE id = ? AND owner_user_id = ?`, id, owner).Scan(ctx, r)
+	err := db.Bun().NewRaw(`SELECT id,owner_user_id,source_worktree_id,project_id,daemon_id,capture_id,fence,activity_generation,observation_id,manifest_digest,phase,last_error,idempotency_key,operation_key,operation,target_daemon_id,authorized_until,created_at,updated_at FROM worktree_recoveries WHERE id = ? AND owner_user_id = ?`, id, owner).Scan(ctx, r)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, core.ErrRecoveryNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	err = db.Bun().NewRaw(`SELECT * FROM worktree_recovery_checkouts WHERE recovery_id = ? ORDER BY repo_id`, id).Scan(ctx, &r.Checkouts)
+	err = db.Bun().NewRaw(`SELECT recovery_id,repo_id,rel,remote_url,recovery_ref,commit_oid,manifest_digest,descriptor_json,receipt_json,phase,last_error FROM worktree_recovery_checkouts WHERE recovery_id = ? ORDER BY repo_id`, id).Scan(ctx, &r.Checkouts)
 	return r, err
 }
 

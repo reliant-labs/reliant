@@ -282,6 +282,10 @@ func (r *Reclaimer) FinalizeRecovery(ctx context.Context, req RecoveryRequest, d
 		if _, err := git(ctx, "", nil, "--git-dir="+info.CommonDir, "worktree", "unlock", p); err != nil {
 			return rollback("cannot unlock for quarantine")
 		}
+		// The registration is now unlocked. Reusing its pre-unlock state
+		// makes setLock attempt a second unlock, which Git rejects; that
+		// prevented every finalizer from reaching quarantine verification.
+		info.Locked = false
 		if _, err := git(ctx, "", nil, "--git-dir="+info.CommonDir, "worktree", "move", p, q); err != nil {
 			_ = setLock(ctx, info, p, ArchivedLockReason(w.ID, w.Fence))
 			return rollback("cannot quarantine checkout")

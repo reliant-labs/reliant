@@ -16,7 +16,7 @@ import (
 // RecoverySecretPolicy identifies a deliberately conservative, pinned local
 // publication policy, NOT a guarantee that arbitrary credentials are detectable.
 // Binary, encrypted/encoded, high-entropy and unknown content classes hold.
-const RecoverySecretPolicy = "reliant-text-only-v2"
+const RecoverySecretPolicy = "reliant-text-only-v2" //nolint:gosec // public detector policy version, not a credential
 
 var recoverySecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----`),
@@ -81,7 +81,7 @@ func recoveryScanContent(b []byte) error {
 	// Opaque long strings cannot be assessed safely. Hex hashes/encoded data are
 	// not granted a blanket exception; this intentionally holds some safe text.
 	for _, token := range strings.FieldsFunc(string(b), func(r rune) bool {
-		return !(unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("+/=_-", r))
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("+/=_-", r)
 	}) {
 		if len(token) < 24 {
 			continue
