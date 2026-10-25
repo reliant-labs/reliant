@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import {
@@ -375,7 +375,7 @@ export function ToolsSelector({
                   {QUICK_EXPRESSIONS.map((expr) => {
                     const selected = value.includes(expr.token);
                     return (
-                      <Tooltip content={expr.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                      <Tooltip content={expr.description} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                         key={expr.token}
                         type="button"

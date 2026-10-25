@@ -144,7 +144,7 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
         echo -e "${BLUE}  make changelog${NC}"
         echo -e "${BLUE}  make changelog-draft VERSION=${RELEASE_TAG} [SINCE_TAG=vX.Y.Z]${NC}"
         echo -e "${BLUE}  edit ${CHANGELOG_FILE}${NC}"
-        echo -e "${BLUE}  make generate-changelog${NC}"
+        echo -e "${BLUE}  task generate:docs:changelog${NC}"
         exit 1
     fi
 
@@ -179,7 +179,7 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     fi
 
     echo -e "${YELLOW}📝 Regenerating Mintlify changelog from YAML...${NC}"
-    make generate-changelog
+    task generate:docs:changelog
 fi
 
 # Always cut a branch. Even when this is run from a non-main branch, the

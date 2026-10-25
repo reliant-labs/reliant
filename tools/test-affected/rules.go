@@ -223,15 +223,14 @@ var rules = []rule{
 		reason: "build or generation configuration changed (a subset cannot judge it)",
 	},
 	{
-		// The Taskfile (and the Makefile's one-line forwarders to it) is what
-		// the codegen lanes run: `task generate:forge` and `task
-		// generate:docs`. The Go, web and electron lanes do not go through it
+		// The Taskfile is what the codegen lanes run: `task generate:forge`
+		// and `task generate:docs`. The Go, web and electron lanes do not go through it
 		// (they run go test, vitest and npm test themselves), so a Taskfile
 		// edit no longer runs the whole module, every vitest file and
 		// electron before a merge (17+ minutes); `task test` itself is
 		// judged by the release gate (dev-docs/merge-and-release-gates.md).
 		id:       "task-runner",
-		patterns: []string{"Taskfile.yml", "Makefile"},
+		patterns: []string{"Taskfile.yml"},
 		full:     []lane{laneForgeGen, laneDocGen},
 		reason:   "the task runner the codegen lanes run changed",
 	},

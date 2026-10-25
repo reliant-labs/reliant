@@ -4,7 +4,7 @@ import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
 import { repairLegacyWorkflowParams } from "../lib/paramUtils";
 import { create, type JsonObject } from "@bufbuild/protobuf";
-import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
+import { jsToProtoValue, type ProtoValue } from "./proto-utils";
 import {
   StartChatRequestSchema,
   RunNowRequestSchema,
@@ -18,7 +18,6 @@ import {
   ListArchivedChatsRequestSchema,
   SendMessageRequestSchema,
   SendAgentMessageRequestSchema,
-  ListQueuedAgentMessagesRequestSchema,
   CancelQueuedAgentMessageRequestSchema,
   InterruptThreadRequestSchema,
   ListMessagesRequestSchema,
@@ -31,25 +30,18 @@ import {
   MarkUnreadChatRequestSchema,
   CompactChatRequestSchema,
   BranchChatRequestSchema,
-  ListBranchesRequestSchema,
   SetChatDaemonRequestSchema,
   UpdateWorkflowParamsRequestSchema,
   UpdateChatProviderPolicyRequestSchema,
   ProviderPolicySchema,
   type ProviderPolicy_OnLimit,
   type ChatSelection,
-  GetChatUpdatesRequestSchema,
-  ListChatPlansRequestSchema,
   WorkspaceBranchContextSchema,
-  GetWorkflowExecutionsRequestSchema,
-  GetThreadWorkflowInputsRequestSchema,
-  WorkflowExecutionView,
   ChatState,
   MessageRole,
   DisplayStyle,
 } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
-import { PlanStatus } from "../gen/reliant/v1/common_pb";
 
 export type {
   Chat,
@@ -70,16 +62,12 @@ import type {
   ArchivedChat,
   Message,
   ContentBlock,
-  WorkflowExecutionData,
-  StepExecutionData,
 } from "../types/chat";
 
 import type {
   Chat as ProtoChat,
   Message as ProtoMessage,
   ContentBlock as ProtoContentBlock,
-  WorkflowExecution as ProtoWorkflowExecution,
-  StepExecution as ProtoStepExecution,
 } from "../gen/reliant/v1/chat_pb";
 
 
@@ -109,20 +97,6 @@ function convertProtoMessage(m: ProtoMessage): Message {
   };
 }
 
-function convertProtoStepExecution(s: ProtoStepExecution): StepExecutionData {
-  const { $typeName: _, ...rest } = s;
-  return rest;
-}
-
-function convertProtoWorkflowExecution(w: ProtoWorkflowExecution): WorkflowExecutionData {
-  const { $typeName: _, children, steps, ...rest } = w;
-  return {
-    ...rest,
-    steps: steps.map(convertProtoStepExecution),
-    children: children.map(convertProtoWorkflowExecution),
-  };
-}
-
 function convertProtoChat(proto: ProtoChat): Chat {
   const { $typeName: _, ...rest } = proto;
   return rest;
@@ -147,34 +121,6 @@ export interface QueuedAgentMessageView {
 
 /** AgentMessageKind values the UI distinguishes. */
 export const QUEUED_SENDER_KIND_HUMAN = 5;
-
-export interface BranchInfo {
-  id: string;
-  title: string;
-  branched_at_ordinal: number;
-  created_at: string;
-  message_count: number;
-  last_active: string;
-}
-
-export interface ChatUpdate {
-  sequence_number: number;
-  update_type: string;
-  entity_id: string;
-  data: string; // JSON string
-  created_at: string;
-}
-
-export interface ChatPlan {
-  id: string;
-  chat_id: string;
-  title: string;
-  description?: string;
-  status: PlanStatus;
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
-}
 
 // InputMessage for StartChat/SendMessage requests
 // Supports user and system messages.
@@ -550,30 +496,6 @@ export const chatGrpc = {
     return { success: response.success, message: response.message };
   },
 
-  // The still-undelivered mailbox entries addressed to one thread. Used by the
-  // composer's pending-queue strip: a queued message is not in the transcript
-  // yet, so this list is the only way the user can see it exists.
-  async listQueuedAgentMessages(
-    chatId: string,
-    threadId: string
-  ): Promise<{ messages: QueuedAgentMessageView[] }> {
-    const client = grpcClient.chat();
-    const request = create(ListQueuedAgentMessagesRequestSchema, {
-      chatId,
-      threadId,
-    });
-    const response = await client.listQueuedAgentMessages(request);
-    return {
-      messages: response.messages.map((m) => ({
-        id: m.id,
-        body: m.body,
-        created_at: m.createdAt,
-        sender_kind: m.senderKind,
-        attachments: m.attachments,
-      })),
-    };
-  },
-
   // Revoke a queued entry before the agent drains it. This races the agent's
   // own drain, so `success: false` is a legitimate outcome for a well-formed
   // request — it means the message was already delivered and the row still
@@ -832,27 +754,6 @@ export const chatGrpc = {
     return convertProtoChat(response.chat);
   },
 
-  // List branches of a chat
-  async listBranches(chatId: string): Promise<{
-    branches: BranchInfo[];
-    total: number;
-  }> {
-    const client = grpcClient.chat();
-    const request = create(ListBranchesRequestSchema, { chatId });
-    const response = await client.listBranches(request);
-    return {
-      branches: response.branches.map((b) => ({
-        id: b.id,
-        title: b.title,
-        branched_at_ordinal: Number(b.branchedAtOrdinal ?? 0),
-        created_at: b.createdAt,
-        message_count: 0, // Not available in proto, would need separate query
-        last_active: b.lastActive,
-      })),
-      total: response.total,
-    };
-  },
-
   // Edit a chat's params. The server stores them as the chat's selection (the
   // choice every later run starts from) whether or not a run is live, and signals
   // a live run. `expectedVersion` is the selection version the edit was made
@@ -904,57 +805,6 @@ export const chatGrpc = {
     return response.selection;
   },
 
-  // Fetch chat updates since a sequence number
-  async getUpdates(
-    chatId: string,
-    sinceSeq: number = 0
-  ): Promise<{
-    updates: ChatUpdate[];
-    total: number;
-    latest_sequence: number;
-  }> {
-    const client = grpcClient.chat();
-    const request = create(GetChatUpdatesRequestSchema, {
-      chatId,
-      sinceSeq: BigInt(sinceSeq),
-    });
-    const response = await client.getChatUpdates(request);
-    return {
-      updates: response.updates.map((u) => ({
-        sequence_number: Number(u.sequenceNumber),
-        update_type: u.updateType,
-        entity_id: u.entityId,
-        data: u.data,
-        created_at: u.createdAt,
-      })),
-      total: response.total,
-      latest_sequence: Number(response.latestSequence),
-    };
-  },
-
-  // List plans associated with a chat
-  async listPlans(chatId: string): Promise<{
-    plans: ChatPlan[];
-    total: number;
-  }> {
-    const client = grpcClient.chat();
-    const request = create(ListChatPlansRequestSchema, { chatId });
-    const response = await client.listChatPlans(request);
-    return {
-      plans: response.plans.map((p) => ({
-        id: p.id,
-        chat_id: p.chatId,
-        title: p.title,
-        description: p.description || undefined,
-        status: p.status,
-        created_at: p.createdAt,
-        updated_at: p.updatedAt,
-        completed_at: p.completedAt || undefined,
-      })),
-      total: response.total,
-    };
-  },
-
   // ============================================
   // Convenience aliases
   // ============================================
@@ -977,58 +827,4 @@ export const chatGrpc = {
     };
   },
 
-  // ============================================
-  // Workflow Execution
-  // ============================================
-
-  // Get workflow execution tree for a chat
-  // Returns the latest root workflow (for backwards compat) and all root workflows.
-  //
-  // `view` decides how many steps ride along — see WorkflowExecutionView.
-  // BASIC (the default) is what the timeline renders; FULL is every step,
-  // which only the workflow viewer needs.
-  async getWorkflowExecutions(
-    chatId: string,
-    view: WorkflowExecutionView = WorkflowExecutionView.BASIC,
-  ): Promise<{ latest: WorkflowExecutionData | null; all: WorkflowExecutionData[] }> {
-    const client = grpcClient.chat();
-    const request = create(GetWorkflowExecutionsRequestSchema, { chatId, view });
-    const response = await client.getWorkflowExecutions(request);
-
-    const latest = response.rootWorkflow
-      ? convertProtoWorkflowExecution(response.rootWorkflow)
-      : null;
-    
-    const all = (response.allRootWorkflows || []).map(convertProtoWorkflowExecution);
-
-    return { latest, all };
-  },
-
-  async getThreadWorkflowInputs(
-    chatId: string,
-    threadId: string
-  ): Promise<{
-    workflowName: string;
-    inputs: Record<string, unknown>;
-    isRunning: boolean;
-    /** A sub-agent that stopped on an error: a message resumes it, with these params. */
-    resumable: boolean;
-  }> {
-    const client = grpcClient.chat();
-    const request = create(GetThreadWorkflowInputsRequestSchema, { chatId, threadId });
-    const response = await client.getThreadWorkflowInputs(request);
-
-    // Convert protobuf Value map to plain JS using shared converter
-    const inputs: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(response.inputs)) {
-      inputs[key] = protoValueToJs(value as any);
-    }
-
-    return {
-      workflowName: response.workflowName,
-      inputs,
-      isRunning: response.isRunning,
-      resumable: response.resumable,
-    };
-  },
 };

@@ -17,7 +17,7 @@ import { ContentBlockType, MessageRole, DisplayStyle } from "../../../gen/relian
 import { acknowledgeScrollToMessage } from "../../../lib/scrollToMessage";
 import { useTimelineVirtualizer } from "./useTimelineVirtualizer";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
@@ -1369,7 +1369,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                   pinned
                 />
               </div>
-              <Tooltip content="Jump to" placement="left">
+              <Tooltip content="Jump to" side="left">
                 <button
                   onClick={handleJumpToPinned}
                   className={cn(

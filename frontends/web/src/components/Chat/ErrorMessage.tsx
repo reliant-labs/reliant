@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn, formatErrorMessage } from '../../lib/utils';
 import { ChevronDown,ChevronRight,AlertCircle,AlertTriangle,X } from 'lucide-react';
 interface ErrorMessageProps {
@@ -68,7 +68,7 @@ export function ErrorMessage({ content, onDismiss }: ErrorMessageProps) {
           </span>
           <div className="ml-auto flex items-center gap-1">
             {onDismiss && (
-              <Tooltip content="Dismiss error" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Dismiss error" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => {
                   e.stopPropagation();

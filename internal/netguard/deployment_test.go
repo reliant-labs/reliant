@@ -10,6 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Forge's refused set adds the Private Google Access VIPs and refuses the NAT64
+// well-known prefix whole; the opt-in still opens all of it for a self-hosted
+// deployment.
+func TestForDeployment_ForgeRefusals(t *testing.T) {
+	closed, open := ForDeployment(false), ForDeployment(true)
+	for _, host := range []string{"199.36.153.4", "199.36.153.11", "64:ff9b::8.8.8.8"} {
+		assert.ErrorIs(t, closed.CheckHost(context.Background(), host), ErrBlockedAddress, host)
+		require.NoError(t, open.CheckHost(context.Background(), host), host)
+	}
+}
+
 // A server role dials from a shared process, so ForDeployment refuses private
 // targets unless an operator explicitly opted in. Nothing implied by the
 // deployment's shape (such as an unset control-plane URL) opens them.

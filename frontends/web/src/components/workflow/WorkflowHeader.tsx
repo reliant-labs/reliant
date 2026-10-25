@@ -1,5 +1,5 @@
 import { ArrowLeft, X, Settings, Activity, GitBranch } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
@@ -38,7 +38,7 @@ export function WorkflowHeader({
           {/* Close button — X in Electron, back arrow on web */}
           <Tooltip
             content={isElectron ? "Close Workflow Builder (Esc)" : "Back to app (Esc)"}
-            placement="bottom"
+            side="bottom"
             delay={300}
           >
             <button
@@ -74,7 +74,7 @@ export function WorkflowHeader({
       >
         {/* Dev-only: Temporal UI button */}
         {isDev && (
-          <Tooltip content="Open Temporal UI" placement="bottom" delay={300}>
+          <Tooltip content="Open Temporal UI" side="bottom" delay={300}>
             <button
               onClick={() => {
                 const temporalUIPort = window.RELIANT_CONFIG?.temporalUIPort || 8233;
@@ -90,7 +90,7 @@ export function WorkflowHeader({
         )}
 
         {/* Settings button */}
-        <Tooltip content="Settings" placement="bottom" delay={300}>
+        <Tooltip content="Settings" side="bottom" delay={300}>
           <button
             onClick={onNavigateToSettings}
             className="header-icon-btn p-1.5 rounded text-xs transition-colors"

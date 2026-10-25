@@ -8,7 +8,7 @@
 import { memo, useMemo } from "react";
 import { GitBranch } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import type { ThreadInfo } from "./useThreads";
 
 interface ContextUsageData {
@@ -81,7 +81,7 @@ function MiniContextIndicator({ usage, color }: { usage: ContextUsageData; color
   const tooltipContent = `Context: ${percent.toFixed(0)}% (${formatTokens(usage.threadTokenCount)}/${formatTokens(usage.compactionThreshold)})`;
   
   return (
-    <Tooltip content={tooltipContent} placement="bottom">
+    <Tooltip content={tooltipContent} side="bottom" triggerClassName="block">
       <div className="relative flex items-center justify-center w-4 h-4 flex-shrink-0">
         <svg width={size} height={size} className="transform -rotate-90">
           {/* Background circle */}

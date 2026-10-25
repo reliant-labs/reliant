@@ -235,8 +235,8 @@ describe("STREAM_INVALIDATED_SCOPES covers every stream handler", () => {
     // it holds no query cache. A new subscriber fails here until it is.
     const SUBSCRIBERS: Record<string, StreamInvalidatedScope | { noQueryCache: string }> = {
       "hooks/worktree-queries.ts": "worktrees",
-      "hooks/useWorkflowExecutions.ts": "chatDetails",
-      "hooks/queued-agent-messages.ts": "queuedAgentMessages",
+      "hooks/useWorkflowExecutions.ts": "chatService",
+      "hooks/queued-agent-messages.ts": "chatService",
       "components/Chat/changes/useRepoChanges.ts": { noQueryCache: "component state, with its own fallback poll" },
       "components/FileBrowser/useFileTreePushRefresh.ts": { noQueryCache: "the file tree store, refreshed on show" },
     };

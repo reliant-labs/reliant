@@ -86,7 +86,7 @@ set in `control-plane/deploy/kcl/dev/main.k` (read at process start, so a change
 needs a stack restart). Unset, it falls back to `.reliant/logs/` for a bare
 `npm run dev:electron`.
 
-`.reliant/logs/`, `data/logs/*` and `data/logs.txt` were all retired because a
+`.reliant/logs/` and the old log files under `data/` were all retired because a
 second plausible-looking file is worse than none: greps against it return real
 output while silently missing most of the stream, which is indistinguishable
 from "my code never ran". A plugin that writes its own file recreates that

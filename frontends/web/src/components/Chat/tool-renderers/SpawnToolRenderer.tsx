@@ -32,6 +32,7 @@ import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 import { chatGrpc } from "../../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../../hooks/queued-agent-messages";
 import { newClientMessageId } from "../../../lib/pendingSends";
 import { toast } from "../../../lib/toast-manager";
 
@@ -413,6 +414,7 @@ function SendToAgentForm({
         return;
       }
       setValue("");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
       toast.error(error);

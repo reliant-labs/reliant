@@ -19,7 +19,7 @@ import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { cn } from "@/lib/utils";
 import ErrorBoundary from "../ErrorBoundary";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 interface AreaShellProps {
   /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
@@ -87,7 +87,7 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
           style={{ paddingLeft: trafficLightPadding }}
         >
           <div className="flex cursor-default items-center" style={noDragRegionStyle}>
-            <Tooltip content={exitTooltip} placement="bottom" delay={300}>
+            <Tooltip content={exitTooltip} side="bottom" delay={300}>
               <button
                 type="button"
                 onClick={onClose}

@@ -5,7 +5,7 @@
 // This store manages keyboard shortcuts state. The default shortcuts are
 // generated from the source of truth at: config/shortcuts.yaml
 //
-// To modify shortcuts, edit config/shortcuts.yaml and run: make generate-shortcuts
+// To modify shortcuts, edit config/shortcuts.yaml and run: task generate:docs:shortcuts
 //
 // Bindings are authored and persisted as STRINGS ("Cmd+Shift+P", "Cmd+K C").
 // The platform fold (Cmd -> Meta on macOS, Control elsewhere) happens here at

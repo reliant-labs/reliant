@@ -287,8 +287,8 @@ let client: SupabaseClient | null = null
  * doesn't touch auth keeps working.
  *
  * We do NOT substitute a fallback anon key. There is no local Supabase in this
- * repo to fall back TO — no supabase/config.toml, no compose service, and
- * scripts/dev.sh sets no SUPABASE_*, so the pre-existing
+ * repo to fall back TO — no supabase/config.toml and no compose service, so
+ * the pre-existing
  * `http://127.0.0.1:54321` URL default already points at nothing. Inventing a
  * credential would make a misconfigured build look healthy while pointing
  * somewhere useless, which is the exact failure sync-release-config.mjs was

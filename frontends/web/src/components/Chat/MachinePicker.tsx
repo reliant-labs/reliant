@@ -16,7 +16,7 @@ import {
   NO_MACHINE,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { machineDisplayName } from "@/lib/machineName";
 
 interface MachinePickerProps {
@@ -65,7 +65,7 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, disable
             ? "No machine: can't read or change files in this project. The chat can use the web and your integrations."
             : "The machine this chat runs on: its files, shell and tools."
         }
-        placement="top"
+        side="top"
       >
         <button
           type="button"

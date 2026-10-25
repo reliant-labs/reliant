@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ArrowUpRight, Play, X } from "lucide-react";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import {
@@ -185,7 +185,7 @@ interface ResumeButtonProps {
 
 function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
   return (
-    <Tooltip content={`Resume ${machineDisplayName(daemon)}`} placement="top" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={`Resume ${machineDisplayName(daemon)}`} side="top" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={() => void onResume(daemon.daemonId)}

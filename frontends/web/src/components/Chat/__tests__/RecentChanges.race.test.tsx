@@ -63,8 +63,8 @@ vi.mock("../../Git/GitNotInitialized", () => ({
   GitNotInitialized: () => <div>Git not initialized</div>,
 }));
 
-vi.mock("../../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("../../RightSidebar/shared", () => ({

@@ -222,5 +222,5 @@ func TestRepositoryGeneratedFilesAreCurrent(t *testing.T) {
 	require.NoError(t, err)
 	stale, err := apply(root, out, true)
 	require.NoError(t, err)
-	assert.Empty(t, stale, "run `make generate-integrations` and commit")
+	assert.Empty(t, stale, "run `task generate:forge` and commit")
 }

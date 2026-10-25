@@ -15,7 +15,7 @@ import {
   useImperativeHandle,
   useEffect,
 } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 import { useProjectStore, type Project } from "../../store/projectStore";
 import type { SettingsSection } from "../../routeSchemas";
@@ -170,7 +170,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               content={`Toggle Chat Sidebar (${formatShortcut(
                 "onToggleSidebar"
               )})`}
-              placement="bottom"
+              side="bottom"
               delay={300}
             >
               <button
@@ -192,7 +192,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
             style={noDragRegionStyle}
           >
-            <Tooltip content={`Switch project (${formatShortcut("onOpenProject")})`} placement="bottom" delay={300}>
+            <Tooltip content={`Switch project (${formatShortcut("onOpenProject")})`} side="bottom" delay={300}>
             <button
               type="button"
               className="rounded px-2 py-0.5 transition-colors hover:bg-accent/60"
@@ -231,7 +231,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {isDev && (
               <Tooltip
                 content="Open Temporal UI"
-                placement="bottom"
+                side="bottom"
                 delay={300}
               >
                 <button
@@ -263,7 +263,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 content={`Toggle Terminal (${formatShortcut(
                   "onToggleTerminal"
                 )})`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
               >
                 <button
@@ -282,7 +282,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 content={`Toggle File Browser (${formatShortcut(
                   "onToggleFileBrowser"
                 )})`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
               >
                 <button
@@ -299,7 +299,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {!projectPickerMode && onNavigateToWorktrees && (
               <Tooltip
                 content={`Workspaces (${formatShortcut("onOpenWorktrees")})`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
               >
                 <button
@@ -337,7 +337,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {onNavigateToSettings && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
               >
                 <button
@@ -355,7 +355,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {showWindowControls && (
               <>
                 <div className="h-4 w-px bg-border mx-1" />
-                <Tooltip content="Minimize window" placement="bottom" delay={300}>
+                <Tooltip content="Minimize window" side="bottom" delay={300}>
                 <button
                   onClick={handleMinimize}
                   className="header-icon-btn p-1.5 rounded text-xs transition-colors"
@@ -364,7 +364,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                   <Minus className="w-4 h-4" />
                 </button>
                 </Tooltip>
-                <Tooltip content={isMaximized ? "Restore window" : "Maximize window"} placement="bottom" delay={300}>
+                <Tooltip content={isMaximized ? "Restore window" : "Maximize window"} side="bottom" delay={300}>
                 <button
                   onClick={handleMaximize}
                   className="header-icon-btn p-1.5 rounded text-xs transition-colors"
@@ -373,7 +373,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                   <Square className="w-3.5 h-3.5" />
                 </button>
                 </Tooltip>
-                <Tooltip content="Close window" placement="bottom" delay={300}>
+                <Tooltip content="Close window" side="bottom" delay={300}>
                 <button
                   onClick={handleClose}
                   className="p-1.5 hover:bg-destructive hover:text-destructive-foreground rounded text-xs transition-colors"

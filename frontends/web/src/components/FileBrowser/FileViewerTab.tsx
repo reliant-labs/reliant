@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import {
   Save,
   Loader2,
@@ -1093,7 +1093,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           </div>
           <div className="flex items-center gap-2">
             {hasChanges && (
-              <Tooltip content="Undo all changes and revert to saved version" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Undo all changes and revert to saved version" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={handleRevert}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive-ink"
@@ -1104,7 +1104,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 </Tooltip>
             )}
             {!settings.autoSave && hasChanges && (
-              <Tooltip content="Save (Cmd+S / Ctrl+S)" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Save (Cmd+S / Ctrl+S)" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={() => void handleSave()}
                 disabled={isSaving}

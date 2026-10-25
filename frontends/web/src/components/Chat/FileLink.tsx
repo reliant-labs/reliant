@@ -9,7 +9,7 @@
  * - external: Non-clickable, muted styling
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { memo, useCallback } from "react";
 import { FileText, Ban } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -150,7 +150,7 @@ function FileLinkComponent({
   }
 
   return (
-    <Tooltip content={tooltipMessage} placement="bottom" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={tooltipMessage} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       onClick={handleClick}
       className={cn(

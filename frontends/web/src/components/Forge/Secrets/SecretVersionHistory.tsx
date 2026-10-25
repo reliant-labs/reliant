@@ -36,7 +36,7 @@
  * needs. The bytes are gone; the record that they existed is not.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { useState } from "react";
 import { RotateCcw, Trash2, Flame } from "lucide-react";
 
@@ -255,7 +255,7 @@ function RowAction({
   danger?: boolean;
 }) {
   return (
-    <Tooltip content={title} placement="bottom" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={title} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={onClick}

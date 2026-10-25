@@ -1,5 +1,5 @@
 import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Workflow, Lock } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { isElectron } from "../../lib/constants";
@@ -146,7 +146,7 @@ export function TabbedViewerPanel({
           ))}
         </div>
         {/* Fullscreen Toggle Button */}
-        <Tooltip content={isFullscreen ? "Return to side panel" : "Expand to cover chat"} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+        <Tooltip content={isFullscreen ? "Return to side panel" : "Expand to cover chat"} side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
         <button
           aria-label={isFullscreen ? "Return to side panel" : "Expand to cover chat"}
           onClick={toggleFullscreen}
@@ -306,7 +306,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       )}
 
       {/* Close Button */}
-      <Tooltip content="Close tab (Cmd+W)" placement="bottom" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content="Close tab (Cmd+W)" side="bottom" delay={300} triggerClassName="inline-flex">
       <button
         onMouseDown={(e) => {
           e.stopPropagation();

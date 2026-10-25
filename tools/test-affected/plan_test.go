@@ -205,7 +205,6 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		{"go.sum", []lane{laneGo, laneForgeGen, laneDocGen}},
 		// The codegen lanes run through the Taskfile; the test lanes do not.
 		{"Taskfile.yml", []lane{laneForgeGen, laneDocGen}},
-		{"Makefile", []lane{laneForgeGen, laneDocGen}},
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
 		{"forge.yaml", []lane{laneGo, laneForgeGen}},

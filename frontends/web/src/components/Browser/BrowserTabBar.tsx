@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import { BrowserTab } from "./BrowserTab";
 import { useBrowserStore } from "../../store/browserStore";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 interface BrowserTabBarProps {
   worktreeId: string; // Required: workspace for new tabs
@@ -46,7 +46,7 @@ export function BrowserTabBar({ worktreeId }: BrowserTabBarProps) {
 
       {/* New tab button */}
       <div className="flex-shrink-0 border-l border-border">
-        <Tooltip content="New Tab (⌘T)" placement="bottom" delay={300}>
+        <Tooltip content="New Tab (⌘T)" side="bottom" delay={300}>
           <button
             onClick={handleCreateTab}
             className="p-2 hover:bg-accent transition-colors"

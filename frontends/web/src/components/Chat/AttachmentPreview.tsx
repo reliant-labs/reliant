@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { X } from 'lucide-react';
 import { FileIcon } from '../FileBrowser/FileIcon';
 import { ImagePreviewModal } from './ImagePreviewModal';
@@ -60,7 +60,7 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
                 onClick={() => setPreviewImage({ url: imageUrl, filename: attachment.filename })}
                 title={attachment.filename}
               />
-              <Tooltip content="Remove attachment" placement="top" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Remove attachment" side="top" delay={300} triggerClassName="inline-flex">
 <button
                 type="button"
                 onClick={(e) => {
