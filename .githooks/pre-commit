@@ -20,18 +20,22 @@ echo -e "${YELLOW}Running pre-commit hooks...${NC}"
 # same rule, because --no-verify skips everything here.
 "$(git rev-parse --show-toplevel)/.githooks/check-binary-files.sh"
 
-# Check if Makefile exists
-if [ ! -f Makefile ]; then
-    echo -e "${RED}Error: Makefile not found${NC}"
-    exit 1
+# `task fmt` (Taskfile.yml) formats the Go code. TASK names another task
+# binary; without one on PATH, go-task is run from source at a fixed version.
+if [ -n "${TASK:-}" ]; then
+    read -r -a task <<<"$TASK"
+elif command -v task >/dev/null 2>&1; then
+    task=(task)
+else
+    task=(env GOWORK=off GOFLAGS=-trimpath go run github.com/go-task/task/v3/cmd/task@v3.52.0)
 fi
 
 # Get list of staged Go files before formatting
 STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
 
-# Run make fmt to format code
-echo -e "${YELLOW}Formatting code with 'make fmt'...${NC}"
-if ! make fmt; then
+# Run task fmt to format code
+echo -e "${YELLOW}Formatting code with 'task fmt'...${NC}"
+if ! "${task[@]}" fmt; then
     echo -e "${RED}Error: Code formatting failed${NC}"
     exit 1
 fi

@@ -25,9 +25,9 @@ export const file_reliant_config_v1_daemon_config: GenFile = /*@__PURE__*/
 export type DaemonInstanceConfig = Message<"reliant.config.v1.DaemonInstanceConfig"> & {
   /**
    * Unset: the instance's own directory under ~/.reliant/instances, derived
-   * from the instance key. Containers set it to the mounted volume
-   * (docker-compose.yml, the workspace operator), where derivation would put
-   * the daemon's state on the ephemeral filesystem.
+   * from the instance key. Containers set it to the mounted volume (the
+   * workspace operator's pods), where derivation would put the daemon's state
+   * on the ephemeral filesystem.
    *
    * @generated from field: string data_dir = 1;
    */
@@ -80,8 +80,9 @@ export type DaemonConfig = Message<"reliant.config.v1.DaemonConfig"> & {
   /**
    * The local daemon gateway's daemon port: the port `reliant server gateway`
    * listens for daemons on, under the same TOOLS_DAEMON_PORT the gateway
-   * reads (GatewayConfig). Electron and scripts/dev.sh export it to both. It
-   * is dialled only when no gateway URL is known. Not the port THIS daemon
+   * reads (GatewayConfig). Electron and the dev stack (control-plane's
+   * `forge env up dev`) export it to both. It is dialled only when no gateway
+   * URL is known. Not the port THIS daemon
    * listens on: that is listen_port.
    *
    * @generated from field: int32 gateway_port = 3;

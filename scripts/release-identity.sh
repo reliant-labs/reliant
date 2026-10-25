@@ -3,7 +3,7 @@
 #
 # Every artifact that reports a version derives it here: the web bundle (Vite,
 # frontends/web/vite-plugin-version-json.ts, which also writes /version.json), the Go
-# binary's internal/version.Version (Makefile, release.yml, build-images.yml,
+# binary's internal/version.Version (Taskfile.yml, release.yml, build-images.yml,
 # and control-plane's scripts/build-reliant-image.sh, which builds the prod
 # reliant image). One resolver, so the About page's "app" and "server" lines
 # can only disagree when the two really are different builds.

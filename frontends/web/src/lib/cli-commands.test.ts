@@ -243,7 +243,7 @@ describe('only variables the target binary actually reads are emitted', () => {
   });
 
   // The helper CORS-checks its caller against an allowlist that cannot know a
-  // per-worktree dev port (.dev-ports.sh allocates it at runtime). Without
+  // per-worktree dev port (the dev stack allocates it at runtime). Without
   // RELIANT_WEB_ORIGIN the browser's request is refused as "origin not
   // allowed" — so a dev command that omits it is one the user cannot use.
   it('passes the web origin so the dev server is CORS-allowed', async () => {

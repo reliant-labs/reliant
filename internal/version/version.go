@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 // The four vars below are the release version stamp, written at link time by
-// `-X github.com/reliant-labs/reliant/internal/version.<Name>=...` (see the
-// Makefile's LDFLAGS and .github/workflows/release.yml). `-ldflags -X` can only
+// `-X github.com/reliant-labs/reliant/internal/version.<Name>=...` (see
+// Taskfile.yml's build -ldflags and .github/workflows/release.yml). `-ldflags -X` can only
 // write a package-level string var: converting these to getters, struct fields
 // or consts makes the linker flag silently do nothing, and the binary ships
 // "unknown" with no build error to catch it. They must stay package vars.

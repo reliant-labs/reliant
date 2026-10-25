@@ -18,7 +18,7 @@ import (
 // template runs. Its devDependencies are aliases named for their version.
 const protocGenESDir = "tools/protoc-gen-es"
 
-// TestBufPluginsAreLocalAndPinned keeps `make generate-all` reproducible: the
+// TestBufPluginsAreLocalAndPinned keeps `task generate` reproducible: the
 // same inputs must produce the same bytes on every machine and in CI, or the
 // "Generated code is up to date" gate cannot tell a real change from noise.
 //
@@ -28,7 +28,7 @@ const protocGenESDir = "tools/protoc-gen-es"
 //
 //   - `remote: buf.build/...` runs on the Buf Schema Registry, which
 //     rate-limits (`resource_exhausted: too many requests`) and failed
-//     `make generate-go` for every agent at once. Unpinned, a remote also
+//     `task generate:forge` for every agent at once. Unpinned, a remote also
 //     rewrote committed code whenever upstream released (protoc-gen-es
 //     v2.14.1 -> v2.15.0 on forge_pb.ts).
 //   - `local: protoc-gen-go` is a PATH lookup: the version is whatever this

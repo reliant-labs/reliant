@@ -12,10 +12,6 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "dev:preclean": "node -e \"console.log('preclean ok')\"",
-    "dev": "node scripts/dev-multi.js",
-    "dev:clean": "node scripts/kill-ports.js && npm run dev",
-    "dev:fresh": "rm -f ../.ports.json ../.instance-info && node scripts/kill-ports.js && npm run dev",
     "build:backend": "cd .. && go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant/ && mv dist/reliant.tmp dist/reliant",
     "dev:vite": "npm --prefix ../frontends/web run dev",
     "dev:electron": "node scripts/wait-and-start.js",

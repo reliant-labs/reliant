@@ -6,8 +6,8 @@ public is decided by control-plane's `proto/public-api.txt`; no operator-only
 (`*Admin`) or internal-service API is included.
 
 Nothing here is authored in this repo. To change the contract, change the
-proto in control-plane, then re-run the sync script and
-`npm run proto:generate:controlplane`. control-plane's CI fails if this tree
+proto in control-plane, then run `task contract:controlplane:sync` (the sync
+script, then the client regeneration). control-plane's CI fails if this tree
 differs from what its protos export.
 
 Generated clients:

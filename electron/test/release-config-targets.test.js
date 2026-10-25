@@ -11,8 +11,8 @@
 // main process reads src/build-config.js (the `main` block). Both are written
 // by generate-build-config.mjs, under the wrapper.
 //
-// Worse locally: a dev shell exports RELIANT_API_URL pointing at a local stack
-// (scripts/dev.sh and .dev-ports.sh both do). A target that merely DEFAULTS
+// Worse locally: a dev shell often exports RELIANT_API_URL pointing at a local
+// stack. A target that merely DEFAULTS
 // the config instead of OVERRIDING it bakes localhost into a build labelled
 // "prod". Hence the override assertion below.
 

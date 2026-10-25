@@ -158,7 +158,7 @@ check() {
 echo "pin ancestry (FAILS on a pin that is not on the sibling's main):"
 check "go.mod" "github.com/reliant-labs/forge" forge "${FORGE_REMOTE}" \
   "$(go_require go.mod github.com/reliant-labs/forge)" \
-  "'make pin-forge' (pins forge's current main)"
+  "'task pin:forge' (pins forge's current main)"
 
 if [ "${FAILED}" = "1" ]; then
   exit 1

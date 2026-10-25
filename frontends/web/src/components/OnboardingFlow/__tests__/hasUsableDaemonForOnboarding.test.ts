@@ -3,9 +3,9 @@
  *
  * The "where do you want to run your daemon?" prompt is bootstrap-only —
  * once a daemon is registered for the user (local OR managed), we treat
- * the prompt as answered and advance. The cloud-dev `make dev-electron`
- * flow pairs a local tools-daemon with the Electron app: between the
- * local-daemon-registers-with-the-control-plane moment and the lifecycle
+ * the prompt as answered and advance. The dev stack (control-plane's
+ * `forge env up dev`) pairs a local tools-daemon with the Electron app:
+ * between the local-daemon-registers-with-the-control-plane moment and the lifecycle
  * status flipping to ACTIVE, the row sits at PENDING. We must skip in every
  * such state so the user doesn't see the prompt flash and pre-empt the
  * auto-advance by clicking through.
@@ -32,7 +32,7 @@ describe("hasUsableDaemonForOnboarding", () => {
   });
 
   it("returns true for a single ACTIVE local daemon (the dev-electron case)", () => {
-    // make dev-electron's paired local daemon, post-NATS-connect-event.
+    // The dev stack's paired local daemon, post-NATS-connect-event.
     // Without this skip, the user would see the bootstrap "where" prompt
     // immediately after sign-in even though their daemon is already live.
     expect(

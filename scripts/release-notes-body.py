@@ -2,7 +2,7 @@
 """Render docs/data/releases/<tag>.yaml into a GitHub Release body.
 
 The hand-written YAML is the same source the Mintlify changelog page is built
-from (`make generate-changelog`), so the Release, the docs site and the
+from (`task generate:docs:changelog`), so the Release, the docs site and the
 in-app changelog all say the same thing rather than drifting into three
 descriptions of one release.
 
@@ -25,7 +25,7 @@ def load(path):
 
     Deliberately not PyYAML: the release workflow runs on a bare runner and
     adding a pip install to the release path buys nothing here. The schema is
-    fixed and enforced by `make generate-changelog`, which parses the same
+    fixed and enforced by `task generate:docs:changelog`, which parses the same
     files — it is four scalars and a list of title/description pairs.
     """
     text = path.read_text(encoding="utf-8")
