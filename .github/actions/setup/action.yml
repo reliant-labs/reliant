@@ -19,6 +19,9 @@ inputs:
   ripgrep:
     description: Install ripgrep (internal/llm/tools shells out to rg and skips its tests without it)
     default: "false"
+  free-disk:
+    description: Delete the runner's preinstalled toolchains this repo never uses, for the gates' compiles
+    default: "false"
 
 outputs:
   go-version:
@@ -31,6 +34,22 @@ outputs:
 runs:
   using: composite
   steps:
+    # The gates compile the whole module several times at once (generate and
+    # docs in scratch checkouts beside build, test and lint), which overruns
+    # the ~14 GB a hosted runner has free: the first merge-gate run on CI
+    # failed every phase with "disk quota exceeded". The runner image ships
+    # .NET, Android, GHC, Boost and CodeQL, none of which this repo uses;
+    # removing them frees ~30 GB in seconds. First, so nothing installed
+    # below can be in the way.
+    - name: Free runner disk
+      if: inputs.free-disk == 'true'
+      shell: bash
+      run: |
+        df -h / | tail -1
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+          /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+        df -h / | tail -1
+
     # Taskfile.yml needs Task 3.38+ (`if:` on a task call).
     - name: Install Task
       uses: arduino/setup-task@v2
