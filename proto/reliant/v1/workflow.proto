@@ -33,14 +33,21 @@ service WorkflowService {
   // forge:custom — deletes the caller's workflow draft by the slug of its name
   rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse) {}
 
-  // ValidateWorkflow validates a workflow without saving it
-  rpc ValidateWorkflow(ValidateWorkflowRequest) returns (ValidateWorkflowResponse) {}
+  // ValidateWorkflow validates a workflow without saving it. It only reads,
+  // and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
+  // it rather than a mutation that invalidates every workflow read.
+  rpc ValidateWorkflow(ValidateWorkflowRequest) returns (ValidateWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ImportWorkflow imports a workflow from YAML into the database
   rpc ImportWorkflow(ImportWorkflowRequest) returns (ImportWorkflowResponse) {}
 
-  // ExportWorkflow exports a workflow from the database as YAML
-  rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {}
+  // ExportWorkflow exports a workflow from the database as YAML. A read
+  // (NO_SIDE_EFFECTS), like ValidateWorkflow.
+  rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SetWorkflowVisibility toggles the hidden status of a workflow
   rpc SetWorkflowVisibility(SetWorkflowVisibilityRequest) returns (SetWorkflowVisibilityResponse) {}

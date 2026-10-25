@@ -135,13 +135,9 @@ describe("WorkflowService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useValidateWorkflow(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useValidateWorkflow({} as never), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useImportWorkflow resolves a happy-path response", async () => {
@@ -167,13 +163,9 @@ describe("WorkflowService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useExportWorkflow(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useExportWorkflow({} as never), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useSetWorkflowVisibility resolves a happy-path response", async () => {
