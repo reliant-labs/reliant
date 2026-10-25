@@ -218,11 +218,20 @@ cmd_run() {
 run_step() {
   case "$1" in
     npm)
-      local d
+      local d scripts
       for d in . frontends/web electron tools/protoc-gen-es; do
         [ -f "$d/package-lock.json" ] || continue
-        [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] && continue
-        npm ci --prefix "$d" --ignore-scripts --no-audit --no-fund --loglevel=error || return 1
+        # Current when npm's lockfile copy is newer than the lockfile and, for
+        # electron, its postinstall also fetched the binary its tests load
+        # (node_modules/electron/path.txt). As scripts/merge-gate.sh does:
+        # without it every electron test fails "Electron failed to install
+        # correctly" (release gate a2783da3, 10 of 315).
+        if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+          && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
+          continue
+        fi
+        scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
+        npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error || return 1
       done ;;
     generate) task generate:check ;;
     docs) task generate:docs:check ;;
