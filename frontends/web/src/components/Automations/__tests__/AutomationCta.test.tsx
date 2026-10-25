@@ -28,13 +28,14 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
-    worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),
   },
 }));
 
 // CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
+    // The run form lists workspaces through the generated WorktreeService hooks.
+    "WorktreeService.ListWorktrees": { response: { worktrees: [] } },
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
     "ConnectionService.ListConnections": { response: {} },
   }),

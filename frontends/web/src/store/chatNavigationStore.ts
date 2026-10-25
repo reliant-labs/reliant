@@ -38,8 +38,8 @@ import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
 import { getCachedChatList, getCachedMainWorktree, getChatFromCache } from "../hooks/chat-queries";
 import { sortChats, compareChatGroups } from "../lib/chatListOrder";
-
 import { resolveWorktree } from "../hooks/worktree-queries";
+
 /**
  * Whether a chat is blocked on the user.
  *

@@ -37,9 +37,9 @@ import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { MOBILE_PRIMARY_ACTION } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
-
 import { createWorktree } from "../../hooks/worktree-actions";
 import { type Worktree, fetchLiveWorktrees, getCachedWorktrees } from "../../hooks/worktree-queries";
+
 const MOBILE_FIELD =
   "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20";
 

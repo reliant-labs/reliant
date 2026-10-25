@@ -9,8 +9,8 @@ import { getRelativePath } from "../../lib/fileUtils";
 import { FileChangeStatus } from "../../gen/reliant/v1/common_pb";
 import { FileViewerTab } from "./FileViewerTab";
 import type { FileNode } from "./index";
-
 import { useCurrentWorktree } from "../../hooks/worktree-queries";
+
 interface MonacoDiffViewerProps {
   file: FileChange;
 }

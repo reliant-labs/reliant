@@ -67,14 +67,15 @@ vi.mock("@/store/projectStore", () => {
 
 vi.mock("@/store/worktreeStore", () => {
   const state = () => ({
-    worktrees: [{ id: "wt-main", name: "main", is_main: true }],
-    currentWorktree: null,
-    loadWorktrees: vi.fn(async () => undefined),
-    restoreLastWorktree: vi.fn(() => false),
+    currentWorktreeId: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   });
   return { useWorktreeStore: Object.assign(() => state(), { getState: state }) };
 });
+
+// restoreLastWorktree is a lifecycle action now (it reads the cache, and the
+// main workspace over the network when the cache lacks it).
+vi.mock("@/hooks/worktree-actions", () => ({ restoreLastWorktree: vi.fn(async () => false) }));
 
 vi.mock("@/store/viewerStore", () => {
   const state = () => ({ restoreFromWorkspaceState: vi.fn(), viewers: [] });

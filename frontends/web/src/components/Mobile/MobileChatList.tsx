@@ -95,8 +95,8 @@ import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
-
 import { archiveWorktree } from "../../hooks/worktree-actions";
+
 interface ChatGroup {
   worktreeId: string;
   worktreeName: string;

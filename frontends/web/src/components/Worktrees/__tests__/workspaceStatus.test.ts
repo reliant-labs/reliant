@@ -19,7 +19,6 @@ const cleanStatus = {
   staged_files: [],
   modified_files: [],
   untracked_files: [],
-  has_remote: false,
 };
 
 function worktree(overrides: Partial<Worktree>): Worktree {

@@ -21,8 +21,8 @@ import { useWorktreeStore } from "@/store/worktreeStore";
 import type { Chat } from "@/types/chat";
 
 import { describeRemote } from "./projectSource";
-
 import { resolveWorktree, useWorktreeList } from "../../../hooks/worktree-queries";
+
 /**
  * The current project at a glance: its repository state, how many workspaces
  * it has, and the chats you were last in. Shared by Settings → Projects (under

@@ -55,6 +55,12 @@ vi.mock("../../store/editorStore", () => ({
 vi.mock("../../store/worktreeStore", () => ({
   useWorktreeStore: (selector: (state: typeof mockWorktreeStore) => unknown) => selector(mockWorktreeStore),
 }));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/worktree-queries")>()),
+  ...(await import("../../test/worktreeQueriesMock")).worktreeQueriesMock(() => (mockWorktreeStore)),
+}));
 
 vi.mock("../../lib/monacoTheme", () => ({
   getMonacoLanguage: () => "plaintext",

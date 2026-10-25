@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWorktreeStore } from '../store/worktreeStore';
 import { useProjectStore } from '../store/projectStore';
-
 import { resolveWorktree, type Worktree } from './worktree-queries';
+
 interface WindowContext {
   worktreeId: string | null;
   projectId: string | null;

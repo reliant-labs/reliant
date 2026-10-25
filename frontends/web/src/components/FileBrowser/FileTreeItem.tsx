@@ -27,8 +27,8 @@ import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { cachedUserPreferences } from "../../hooks/settings-queries";
 import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
-
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
+
 export type FileOperationType = "copy" | "delete";
 
 interface FileTreeItemProps {

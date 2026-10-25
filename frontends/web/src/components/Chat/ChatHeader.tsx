@@ -31,9 +31,9 @@ import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
-
 import { loadMainWorktree } from "../../hooks/worktree-actions";
 import { resolveWorktree, type Worktree, getCachedMainWorktree } from "../../hooks/worktree-queries";
+
 interface ChatHeaderProps {
   chatId: string | null;
   /** For new chat view - display "New Chat" with no editing */

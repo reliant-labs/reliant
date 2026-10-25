@@ -76,9 +76,9 @@ import { useTourStore } from "./store/tourStore";
 import { useModalStore } from "./store/modalStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
 import { trackEvent } from "./lib/analytics";
-
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
+
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
 

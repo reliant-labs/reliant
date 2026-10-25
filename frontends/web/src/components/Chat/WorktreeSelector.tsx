@@ -6,8 +6,8 @@ import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { Tooltip } from "../ui/Tooltip";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
-
 import { useCurrentWorktree, useWorktreeList, getCachedWorktree } from "../../hooks/worktree-queries";
+
 interface WorktreeSelectorProps {
   selectedWorktreeId?: string;
   onWorktreeSelect?: (worktreeId: string | null) => void;

@@ -12,8 +12,8 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { requestScrollToMessage } from "../../lib/scrollToMessage";
-
 import { resolveWorktree } from "../../hooks/worktree-queries";
+
 type SearchMode = "history" | "current";
 
 interface ChatSearchResult {

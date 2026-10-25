@@ -11,6 +11,7 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+import { setWorktreesForTest } from "../../test/worktreeCache";
 
 vi.mock("../ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -126,7 +127,7 @@ describe("Sidebar selected chat scroll", () => {
     } as Partial<ReturnType<typeof useActivityStore.getState>>);
 
     // Empty on purpose: the sidebar groups from the chat list alone.
-    useWorktreeStore.setState({
+    setWorktreesForTest({
       worktrees: [],
       currentWorktree: null,
       switchWorktreeContext,

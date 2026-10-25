@@ -7,8 +7,8 @@ import { useViewerStore } from "../../store/viewerStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-
 import { useCurrentWorktree } from "../../hooks/worktree-queries";
+
 interface SingleBrowserViewProps {
   tabId: string;
   viewerId?: string; // Optional viewer ID to update title

@@ -22,8 +22,8 @@ import { useChatStore } from "@/store/chatStore";
 import { useChatNavigationStore } from "@/store/chatNavigationStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useWorktreeStore } from "@/store/worktreeStore";
-
 import { resolveWorktree } from "../../hooks/worktree-queries";
+
 export class RunProjectUnavailableError extends Error {
   constructor() {
     super("That run's project is no longer available.");

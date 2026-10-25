@@ -14,6 +14,7 @@ import {
 } from "../RightSidebar/shared";
 
 import { resolveWorktree } from "../../hooks/worktree-queries";
+
 interface BrowserSidebarContentProps {
   worktreeId?: string;
 }

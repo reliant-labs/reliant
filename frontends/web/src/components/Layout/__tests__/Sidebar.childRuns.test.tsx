@@ -89,6 +89,7 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { setWorktreesForTest } from "../../../test/worktreeCache";
 
 describe("Sidebar and child runs", () => {
   beforeEach(() => {
@@ -98,7 +99,7 @@ describe("Sidebar and child runs", () => {
       ReturnType<typeof useChatStore.getState>
     >);
     // Empty on purpose: the sidebar groups from the chat list alone.
-    useWorktreeStore.setState({
+    setWorktreesForTest({
       worktrees: [],
       currentWorktree: null,
       switchWorktreeContext: vi.fn(async () => undefined),

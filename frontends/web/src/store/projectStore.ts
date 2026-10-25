@@ -13,9 +13,9 @@ import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { trackEvent } from "../lib/analytics";
-
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { resolveWorktree } from "../hooks/worktree-queries";
+
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
 // reordered the module-init graph and broke an unrelated TDZ in chatStore.

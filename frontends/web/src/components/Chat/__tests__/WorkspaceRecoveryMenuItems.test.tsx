@@ -14,12 +14,11 @@ const state = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock("@/api/worktree-grpc", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  worktreeGrpc: { recreate: (id: string) => state.recreate(id) },
-}));
 vi.mock("@/api/client", () => ({
   api: { chatsV2: { update: (chatId: string, updates: unknown) => state.update(chatId, updates) } },
+}));
+vi.mock("@/hooks/worktree-actions", () => ({
+  recreateWorktree: (id: string) => state.recreate(id),
 }));
 vi.mock("@/lib/toast-manager", () => ({
   toast: { success: state.success, error: state.error },

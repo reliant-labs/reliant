@@ -38,8 +38,8 @@ import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
 import { toast } from "sonner";
-
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
+
 interface FileViewerTabProps {
   file: FileNode;
   worktreeId?: string;

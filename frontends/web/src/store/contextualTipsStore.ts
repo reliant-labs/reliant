@@ -17,9 +17,9 @@ import { useTourStore } from "./tourStore";
 import { useProjectStore } from "./projectStore";
 import { getCachedChatList } from "../hooks/chat-queries";
 import { getMessagesFromCache } from "../hooks/message-queries";
-
 import { getCachedWorktrees, hasLoadedWorktrees, isWorktreeQueryKey } from "../hooks/worktree-queries";
 import { queryClient } from "../lib/query-client";
+
 /**
  * Whether the guided tour is currently active. Source of truth: the URL
  * (`?tour=<step-id>`). Reads from `window.location.search` because this

@@ -22,9 +22,9 @@ import { useProjectStore } from "../../store/projectStore";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
 import { MobileWorkflowExecutionEntry } from "./MobileWorkflowExecutionEntry";
 import { MobileScreenHeader } from "./MobileChrome";
-
 import { loadMainWorktree } from "../../hooks/worktree-actions";
 import { useMainWorktree } from "../../hooks/worktree-queries";
+
 export function MobileChatScreen() {
   // `strict: false` rather than `from: "/m/chats/$chatId"`. The route is
   // nested under `_authenticated` → `_mobile`, so its registered id is

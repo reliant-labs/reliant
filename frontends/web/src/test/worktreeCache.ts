@@ -153,3 +153,33 @@ export function selectWorktreeForTest(view: Partial<Worktree> | null, qc: QueryC
   useWorktreeStore.setState({ currentWorktreeId: w.id, currentWorktreeProjectId: w.project_id ?? null });
   return w;
 }
+
+/**
+ * What tests used to write with
+ * `useWorktreeStore.setState({ worktrees, currentWorktree, deletingId })`,
+ * in the shape the app reads now: every row gets its GetWorktree entry, each
+ * project's live (and archived) list holds its rows, main rows answer the
+ * main-workspace read, and `currentWorktree` becomes the selected id. Keys a
+ * test passes that no longer exist (isLoading, hasLoaded, ...) are ignored.
+ */
+export function setWorktreesForTest(
+  state: {
+    worktrees?: Partial<Worktree>[];
+    archivedWorktrees?: Partial<Worktree>[];
+    currentWorktree?: Partial<Worktree> | null;
+    deletingId?: string | null;
+    [ignored: string]: unknown;
+  },
+  qc: QueryClient = appQueryClient,
+): void {
+  const rows = [...(state.worktrees ?? []), ...(state.archivedWorktrees ?? [])].map((w) => buildWorktree(w));
+  const byProject = new Map<string, Worktree[]>();
+  for (const row of rows) {
+    seedWorktree(row, qc);
+    const projectId = row.project_id ?? "";
+    byProject.set(projectId, [...(byProject.get(projectId) ?? []), row]);
+  }
+  for (const [projectId, projectRows] of byProject) seedWorktreeList(projectId, projectRows, qc);
+  if (state.currentWorktree !== undefined) selectWorktreeForTest(state.currentWorktree, qc);
+  if (state.deletingId !== undefined) useWorktreeStore.setState({ deletingId: state.deletingId });
+}

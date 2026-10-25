@@ -12,8 +12,8 @@ import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "../ui/Tooltip";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-
 import { useCurrentWorktree, useWorktreeList } from "../../hooks/worktree-queries";
+
 interface UnifiedPillSelectorProps {
   // Agent props (single selection - orchestrators have sub_agents)
   selectedAgent?: string | null;

@@ -17,14 +17,14 @@ const mocks = vi.hoisted(() => ({
     searchFiles: vi.fn(),
   },
   useProjectStore: { getState: vi.fn() },
-  useWorktreeStore: { getState: vi.fn() },
+  resolveWorktree: vi.fn(),
   useChatStore: { getState: vi.fn() },
   triggerGitStatusRefresh: vi.fn(),
 }));
 
 vi.mock("../filesystem-grpc", () => ({ filesystemGrpc: mocks.filesystemGrpc }));
 vi.mock("../../store/projectStore", () => ({ useProjectStore: mocks.useProjectStore }));
-vi.mock("../../store/worktreeStore", () => ({ useWorktreeStore: mocks.useWorktreeStore }));
+vi.mock("../../hooks/worktree-queries", () => ({ resolveWorktree: mocks.resolveWorktree }));
 vi.mock("../../store/chatStore", () => ({ useChatStore: mocks.useChatStore }));
 vi.mock("../../store/gitStatusStore", () => ({
   triggerGitStatusRefresh: mocks.triggerGitStatusRefresh,
@@ -36,7 +36,7 @@ describe("file APIs name the open chat so the server reads its machine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.useProjectStore.getState.mockReturnValue({ currentProject: { id: "project-1" } });
-    mocks.useWorktreeStore.getState.mockReturnValue({ worktrees: [], resolveWorktree: async () => null });
+    mocks.resolveWorktree.mockResolvedValue(null);
     mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-on-b" });
     mocks.filesystemGrpc.getFileTree.mockResolvedValue([]);
     mocks.filesystemGrpc.getFileContent.mockResolvedValue("hello");

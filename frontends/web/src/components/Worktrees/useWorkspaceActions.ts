@@ -5,9 +5,9 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import type { Chat } from "../../types/chat";
-
 import { deleteWorktree } from "../../hooks/worktree-actions";
 import { resolveWorktree, type Worktree } from "../../hooks/worktree-queries";
+
 type CleanupOptions = { deleteGitBranch: boolean };
 
 /**

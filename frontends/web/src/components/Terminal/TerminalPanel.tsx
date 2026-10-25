@@ -13,8 +13,8 @@ import { useSidebarStore } from "../../store/sidebarStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
 import { Tooltip } from "../ui/Tooltip";
 import { logger } from "../../lib/logger";
-
 import { resolveWorktree, useActiveWorktreeId, isWorktreeKnownGone, useCachedWorktrees, useWorktreeById } from "../../hooks/worktree-queries";
+
 interface TerminalPanelProps {
   hasViewer?: boolean; // Renamed from hasDiffViewer to hasViewer (includes both file viewer and diff viewer)
 }

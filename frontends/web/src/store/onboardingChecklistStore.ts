@@ -50,8 +50,8 @@ import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
-
 import { getCachedWorktrees, isWorktreeQueryKey } from "../hooks/worktree-queries";
+
 /**
  * Whether an outbound RPC from this store can carry a credential.
  *

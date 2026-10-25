@@ -36,9 +36,9 @@ import {
 import { useWorkspaceGitStatus } from "../../hooks/worktree-git-queries";
 import { useArchiveWorkspace, useOpenWorkspace } from "./useWorkspaceActions";
 import { IconAction, TimeCell } from "./WorkspaceTableParts";
-
 import { useCurrentWorktree, type Worktree, useWorktreeById } from "../../hooks/worktree-queries";
 import { updateWorktreeStatus } from "../../hooks/worktree-actions";
+
 interface WorktreeDetailViewProps {
   /**
    * Which workspace to show. Omitted, it follows the app's current workspace

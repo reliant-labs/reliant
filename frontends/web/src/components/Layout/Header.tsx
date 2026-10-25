@@ -29,8 +29,8 @@ import { DetectedPortsChip } from "./DetectedPortsChip";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
-
 import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
+
 interface HeaderProps {
   // Controls logo size in the app bar for tasteful variations
   logoSize?: "sm" | "md" | "lg" | "xl"; // sm:16px, md:20px, lg:24px, xl:28px

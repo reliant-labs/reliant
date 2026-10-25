@@ -21,9 +21,9 @@ import { useChatStore } from "../store/chatStore";
 import { resolveChat } from "../hooks/chat-queries";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
-
 import { restoreLastWorktree } from "./worktree-actions";
 import { resolveWorktree, getCurrentWorktree } from "./worktree-queries";
+
 export interface WorkspaceRestoreResult {
   /** Whether restoration is in progress */
   isRestoring: boolean;

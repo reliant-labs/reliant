@@ -45,9 +45,13 @@ const worktreeList = vi.hoisted(() => ({
   current: [] as Array<Record<string, unknown>>,
 }))
 const MAIN_WORKTREE = { id: 'wt-main', is_main: true, name: 'main', branch: 'main', status: 1 }
-vi.mock('../../../store/worktreeStore', () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({ worktrees: worktreeList.current, loadWorktrees: vi.fn() }),
+vi.mock('../../../hooks/worktree-queries', () => ({
+  useWorktreeList: () => ({
+    worktrees: worktreeList.current,
+    hasMore: false,
+    isLoadingMore: false,
+    loadMore: vi.fn(),
+  }),
 }))
 
 // The sheet has its own tests; here it only needs to report a creation.

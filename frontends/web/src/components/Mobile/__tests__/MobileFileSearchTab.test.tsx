@@ -21,7 +21,7 @@ vi.mock("../../../store/projectStore", () => ({
     selector({ currentProject }),
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
+vi.mock("../../../hooks/worktree-queries", () => ({
   useActiveWorktreeId: () => "wt-1",
 }));
 

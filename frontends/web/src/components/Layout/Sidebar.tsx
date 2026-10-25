@@ -79,6 +79,7 @@ import {
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { resolveWorktree } from "../../hooks/worktree-queries";
+
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
 const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";

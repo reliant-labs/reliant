@@ -18,6 +18,7 @@ import {
 } from "../../lib/workspaceNaming";
 
 import { createWorktree } from "../../hooks/worktree-actions";
+
 interface CreateWorktreeModalProps {
   isOpen: boolean;
   onClose: () => void;
