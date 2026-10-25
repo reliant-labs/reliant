@@ -969,6 +969,28 @@ message Workload {
   // Kubernetes event reason and its message with addresses removed), for a
   // "details" disclosure. Never the headline: health_reason is plain language.
   string health_detail = 20;
+  // When the workload entered its current health, derived from the cluster
+  // collector's continuous readiness series, so it is right whether or not
+  // anyone was looking at the time. Unset when no readiness sample exists in the
+  // range. health_since_known is false when the state was already in place at
+  // the first sample: the real start is then earlier than health_since (the
+  // console says "since at least ...").
+  google.protobuf.Timestamp health_since = 21;
+  bool health_since_known = 22;
+}
+
+// WorkloadHealthChange is one transition of a workload's health, derived from
+// its readiness series (internal/workloadhealth/history). A change is dated to
+// the first sample of the run that caused it. Missing data is UNKNOWN, never
+// HEALTHY.
+message WorkloadHealthChange {
+  string env_id = 1;
+  google.protobuf.Timestamp at = 2;
+  WorkloadHealth from = 3;
+  WorkloadHealth to = 4;
+  WorkloadCause cause = 5;
+  // Plain language, like Workload.health_reason.
+  string reason = 6;
 }
 
 // WorkloadCause says whose side a workload's fault is on.
@@ -1177,6 +1199,9 @@ message GetWorkloadResponse {
   // One summary per environment in scope that reports the workload: kind,
   // health, release_version, pods and the declared config (see Workload).
   repeated Workload workloads = 7;
+  // The workload's health transitions in the range, oldest first, per
+  // environment in scope. Derived from the readiness series, not recorded.
+  repeated WorkloadHealthChange health_changes = 8;
 }
 
 enum WorkloadMetric {
