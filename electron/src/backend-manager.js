@@ -92,6 +92,14 @@ class BackendManager {
     this.resetDaemonCredentialRepair();
     this._credRepairInFlight = false;
     this._credRepairTimer = null;
+    // The repair's only source of time: `now` for the backoff deadlines and
+    // setInterval/clearInterval for the tick. A test hands in a fake so the
+    // attempt count never depends on how fast the machine runs.
+    this.credRepairClock = opts?.credRepairClock ?? {
+      now: () => Date.now(),
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle),
+    };
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -594,14 +602,14 @@ class BackendManager {
       }
     };
 
-    this._credRepairTimer = setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
+    this._credRepairTimer = this.credRepairClock.setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
     this._credRepairTimer.unref?.();
     tick();
   }
 
   stopDaemonCredentialRepairLoop() {
     if (this._credRepairTimer) {
-      clearInterval(this._credRepairTimer);
+      this.credRepairClock.clearInterval(this._credRepairTimer);
       this._credRepairTimer = null;
     }
   }
@@ -652,7 +660,7 @@ class BackendManager {
     if (this._credRepairInFlight) return;
     if (this._credRepairStopped) return;
     if (!this.authStorage) return;
-    if (Date.now() < this._credRepairNextAt) return;
+    if (this.credRepairClock.now() < this._credRepairNextAt) return;
 
     this._credRepairInFlight = true;
     try {
@@ -669,7 +677,7 @@ class BackendManager {
               'waiting for it to pick them up'
           );
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_NO_SESSION:
@@ -683,7 +691,7 @@ class BackendManager {
           // Deliberately does NOT consume an attempt: a long signed-out spell
           // must not leave a later genuine race with only the long tail of
           // the schedule to work with.
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_ALREADY_CURRENT:
@@ -700,10 +708,10 @@ class BackendManager {
           // teaching this switch about it. Treat the unknown as transient:
           // retrying costs one RPC, while wrongly giving up is the bug.
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           log.warn(
             `[BackendManager] Could not mint credentials for the idling daemon ` +
-              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - Date.now()}ms`
+              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - this.credRepairClock.now()}ms`
           );
           return;
       }
