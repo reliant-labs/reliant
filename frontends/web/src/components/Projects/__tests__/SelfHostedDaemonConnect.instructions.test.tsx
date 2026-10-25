@@ -18,11 +18,13 @@
  * a collapsed-but-reachable download block, OS-correct terminal wording), not
  * the classnames that currently produce them.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 const mockUseDaemonStatus = vi.fn();
 
@@ -34,13 +36,13 @@ vi.mock("@/lib/event-context", () => ({
   useEventBus: () => ({ emit: vi.fn() }),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    token: () => ({
-      createToken: vi.fn().mockResolvedValue({ token: "rlat_test" }),
-    }),
-  },
-}));
+// Minting the access token goes through the generated TokenService hook, so
+// it is answered at the transport.
+function renderConnect() {
+  return renderWithTransport(<SelfHostedDaemonConnect />, {
+    transport: mockTransport(serviceHandlers("TokenService", { createToken: async () => ({ token: "rlat_test" }) })),
+  });
+}
 
 // `describeTerminal` lives beside `useDetectedOS` rather than in either
 // caller: the self-hosted panel and the OAuth helper both print a command and
@@ -88,7 +90,7 @@ afterEach(() => {
 
 describe("installing is part of the numbered sequence", () => {
   it("numbers the install step, so nothing the user must do is unnumbered", () => {
-    const { container } = render(<SelfHostedDaemonConnect />);
+    const { container } = renderConnect();
 
     // The defect: the sequence used to start at "1. Generate an access
     // token", with downloading numbered as nothing at all.
@@ -107,7 +109,7 @@ describe("installing is part of the numbered sequence", () => {
   });
 
   it("puts the download block and the terminal steps in different containers", () => {
-    const { container } = render(<SelfHostedDaemonConnect />);
+    const { container } = renderConnect();
 
     // The separation is structural, not a hairline between siblings: two
     // sections, so a tint/elevation change can carry the boundary.
@@ -123,7 +125,7 @@ describe("installing is part of the numbered sequence", () => {
 
 describe("download instructions fold once Reliant is demonstrably installed", () => {
   it("shows them expanded for a user with no daemon and no CLI", () => {
-    render(<SelfHostedDaemonConnect />);
+    renderConnect();
 
     expect(screen.getByText(/Download for/i)).toBeInTheDocument();
     expect(
@@ -140,7 +142,7 @@ describe("download instructions fold once Reliant is demonstrably installed", ()
       loading: false,
     });
 
-    render(<SelfHostedDaemonConnect />);
+    renderConnect();
 
     expect(screen.queryByText(/Download for/i)).not.toBeInTheDocument();
     expect(
@@ -159,7 +161,7 @@ describe("download instructions fold once Reliant is demonstrably installed", ()
       loading: false,
     });
 
-    render(<SelfHostedDaemonConnect />);
+    renderConnect();
     await user.click(
       screen.getByRole("button", { name: /Show download instructions/i }),
     );
@@ -172,7 +174,7 @@ describe("download instructions fold once Reliant is demonstrably installed", ()
 describe("the daemon step says how to open a terminal", () => {
   it("names PowerShell and the Windows key on Windows", () => {
     setPlatform("Win32");
-    render(<SelfHostedDaemonConnect />);
+    renderConnect();
 
     expect(
       screen.getByText(/Start the daemon in PowerShell/i),
@@ -185,7 +187,7 @@ describe("the daemon step says how to open a terminal", () => {
   it("names Terminal and the Spotlight shortcut on macOS", async () => {
     setPlatform("MacIntel");
     setMacArch("arm");
-    render(<SelfHostedDaemonConnect />);
+    renderConnect();
 
     await waitFor(() => {
       expect(

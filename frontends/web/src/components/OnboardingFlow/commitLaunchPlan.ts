@@ -54,12 +54,9 @@
  *    Re-invoking with the same key returns the cached failure. Only
  *    {@link retryCommit}, wired to an explicit Retry button, clears it.
  */
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  DaemonStatus,
-  ListDaemonsRequestSchema,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
+import { queryClient } from "@/lib/query-client";
 import { ACCOUNT_REQUIRED_MACHINE_COPY } from "@/lib/accountRequired";
 import { isAnonymousSession } from "@/lib/anonymousSession";
 import { isCloudCompute } from "./types";
@@ -236,8 +233,9 @@ function defaultDeps(): CommitDeps {
     // The registry list: the one service that knows whether a machine has
     // actually attached, which is the question every branch below asks.
     // See docs/design/one-daemon-list.md.
-    listDaemons: async () =>
-      grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema)),
+    // Read through the shared daemon list, so the answer also refreshes
+    // every mounted reader of it.
+    listDaemons: async () => ({ daemons: await fetchDaemonList(queryClient) }),
     createDaemon: async (args) => {
       const { createDaemon } = await import("@/services/controlPlane/daemon");
       return createDaemon(args);

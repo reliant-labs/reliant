@@ -1,16 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { Copy, Check, Plus, Loader2 } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
-import {
-  ListTokensRequestSchema,
-  CreateTokenRequestSchema,
-  RevokeTokenRequestSchema,
-  UpdateTokenRequestSchema,
-  ScopeListSchema,
-  TokenKind,
-} from "../../gen/reliant/v1/token_pb";
+import { ScopeListSchema, TokenKind } from "../../gen/reliant/v1/token_pb";
 import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
+import { useDaemonTokens } from "../../hooks/token-queries";
+import { useCreateToken, useRevokeToken, useUpdateToken } from "../../hooks/token-service-hooks_gen";
 import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
 import { SettingsPageHeader } from "./SettingsPageHeader";
@@ -33,8 +27,12 @@ const EDITABLE_SCOPES = [
 const REQUIRED_SCOPE = "daemon:connect";
 
 export function TokenSettings() {
-  const [tokens, setTokens] = useState<TokenInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The list is a cached query; each write below refetches it (the generated
+  // TokenService mutations invalidate tokenServiceKeys.all).
+  const tokensQ = useDaemonTokens();
+  const createToken = useCreateToken();
+  const revokeToken = useRevokeToken();
+  const updateToken = useUpdateToken();
   const [creating, setCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [newTokenRaw, setNewTokenRaw] = useState<string | null>(null);
@@ -49,42 +47,18 @@ export function TokenSettings() {
   const [draftName, setDraftName] = useState("");
   const [draftScopes, setDraftScopes] = useState<string[]>([]);
 
-  const fetchTokens = useCallback(async () => {
-    try {
-      setError(null);
-      const res = await grpcClient
-        .token()
-        .listTokens(create(ListTokensRequestSchema, { kind: TokenKind.DAEMON }));
-      setTokens(res.tokens);
-    } catch (err) {
-      console.error("Failed to fetch tokens:", err);
-      setError("Failed to load tokens.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTokens();
-  }, [fetchTokens]);
-
   const handleCreate = async () => {
     if (!newTokenName.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
-      const res = await grpcClient
-        .token()
-        .createToken(
-          create(CreateTokenRequestSchema, {
-            name: newTokenName.trim(),
-            kind: TokenKind.DAEMON,
-          })
-        );
+      const res = await createToken.mutateAsync({
+        name: newTokenName.trim(),
+        kind: TokenKind.DAEMON,
+      });
       setNewTokenRaw(res.token);
       setNewTokenName("");
       setCreating(false);
-      await fetchTokens();
     } catch (err) {
       console.error("Failed to create token:", err);
       setError("Failed to create token.");
@@ -96,11 +70,8 @@ export function TokenSettings() {
   const handleRevoke = async (id: string) => {
     setError(null);
     try {
-      await grpcClient
-        .token()
-        .revokeToken(create(RevokeTokenRequestSchema, { id }));
+      await revokeToken.mutateAsync({ id });
       setRevokingId(null);
-      await fetchTokens();
     } catch (err) {
       console.error("Failed to revoke token:", err);
       setError("Failed to revoke token.");
@@ -142,25 +113,22 @@ export function TokenSettings() {
     setSubmitting(true);
     setError(null);
     try {
-      await grpcClient.token().updateToken(
-        create(UpdateTokenRequestSchema, {
-          id: token.id,
-          ...(name !== token.name ? { name } : {}),
-          ...(scopesChanged
-            ? {
-                scopes: create(ScopeListSchema, {
-                  // daemon:connect is re-added unconditionally: it is what
-                  // makes the credential a daemon credential.
-                  scopes: Array.from(
-                    new Set([REQUIRED_SCOPE, ...draftScopes])
-                  ),
-                }),
-              }
-            : {}),
-        })
-      );
+      await updateToken.mutateAsync({
+        id: token.id,
+        ...(name !== token.name ? { name } : {}),
+        ...(scopesChanged
+          ? {
+              scopes: create(ScopeListSchema, {
+                // daemon:connect is re-added unconditionally: it is what
+                // makes the credential a daemon credential.
+                scopes: Array.from(
+                  new Set([REQUIRED_SCOPE, ...draftScopes])
+                ),
+              }),
+            }
+          : {}),
+      });
       cancelEdit();
-      await fetchTokens();
     } catch (err) {
       console.error("Failed to update token:", err);
       setError("Failed to update token.");
@@ -185,8 +153,11 @@ export function TokenSettings() {
   };
 
   // TokenService.ListTokens returns only LIVE tokens; revoked ones are
-  // filtered server-side.
-  const activeTokens = tokens;
+  // filtered server-side. A failed read keeps the last list it had.
+  const activeTokens = tokensQ.data ?? [];
+  const loading = tokensQ.isPending;
+  // A write's failure names the write; otherwise a failed read says so.
+  const shownError = error ?? (tokensQ.isError ? "Failed to load tokens." : null);
 
   return (
     <div className="space-y-6">
@@ -195,9 +166,9 @@ export function TokenSettings() {
         description="Create tokens that let a self-hosted machine or headless daemon connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
       />
 
-      {error && (
+      {shownError && (
         <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          <p className="text-sm text-red-800 dark:text-red-200">{shownError}</p>
         </div>
       )}
 

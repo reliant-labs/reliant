@@ -21,7 +21,7 @@
  * because Preview is the one surface that is supposed to use it.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -116,13 +116,6 @@ vi.mock("@/api/forge-grpc", () => ({
   },
 }));
 
-// The registry's daemon list, which a daemon tab reads to learn whether a
-// machine is up before topology answers. Empty: no machine is awake, so the
-// tabs fall back to topology, which is what these tests take offline.
-vi.mock("@/hooks/daemonListQuery", () => ({
-  DAEMON_LIST_QUERY_KEY: ["reliant", "daemonRegistry", "list"],
-  fetchDaemonList: () => Promise.resolve([]),
-}));
 
 // ── The control plane ──
 
@@ -199,6 +192,14 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 }));
 
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The registry's daemon list, which a daemon tab reads to learn whether a
+// machine is up before topology answers. Empty: no machine is awake, so the
+// tabs fall back to topology, which is what these tests take offline.
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: async () => ({ daemons: [] }) })));
+afterEach(() => setTransport(null));
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });

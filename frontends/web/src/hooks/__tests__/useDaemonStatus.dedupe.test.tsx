@@ -23,11 +23,13 @@ import React from "react";
 
 const listDaemonsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: listDaemonsMock }) },
-}));
-
 import { useDaemonStatus } from "../useDaemonStatus";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemonsMock() })));
+afterEach(() => setTransport(null));
 
 function Reader() {
   const { daemons } = useDaemonStatus();

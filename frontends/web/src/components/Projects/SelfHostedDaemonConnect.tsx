@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { create } from "@bufbuild/protobuf";
 import { Check, Copy, Download, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { grpcClient } from "@/api/grpc-client";
-import { CreateTokenRequestSchema, TokenKind } from "@/gen/reliant/v1/token_pb";
+import { TokenKind } from "@/gen/reliant/v1/token_pb";
+import { useCreateToken } from "@/hooks/token-service-hooks_gen";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
@@ -103,6 +102,7 @@ export function SelfHostedDaemonConnect({
   const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
   const detectedOS = useDetectedOS();
   const events = useEventBus();
+  const createToken = useCreateToken();
   const notifiedConnectedRef = useRef(false);
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -185,14 +185,12 @@ export function SelfHostedDaemonConnect({
         typeof window !== "undefined" && window.location
           ? `connect-${window.location.hostname}`
           : "connect";
-      const res = await grpcClient
-        .token()
-        .createToken(
-          create(CreateTokenRequestSchema, {
-            name: hostname,
-            kind: TokenKind.DAEMON,
-          }),
-        );
+      // The generated write also refetches a mounted token list (Settings ›
+      // Access Tokens), so the new credential shows there at once.
+      const res = await createToken.mutateAsync({
+        name: hostname,
+        kind: TokenKind.DAEMON,
+      });
       setPat(res.token);
     } catch (err) {
       const msg =
