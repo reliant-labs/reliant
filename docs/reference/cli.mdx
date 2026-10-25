@@ -9181,9 +9181,10 @@ reliant forge obs session <id> [env] [flags]
 
 Real-user browser sessions: who hit errors, and which have a replay
 
-List the env's browser sessions that started in the range, newest first: user,
-entry path, length, page views, interactions, browser errors and whether a
-replay was recorded. [env] defaults to dev; --since defaults to 24h (at most 30d).
+List the env's browser sessions that started in the range, newest first: the
+frontend (APP) and start time, user, entry path, length, page views,
+interactions, browser errors, whether a replay was recorded, and the session id
+(last column). [env] defaults to dev; --since defaults to 24h (at most 30d).
 
 Read one with `cli forge obs session <id>`: a text timeline of what the user did.
 
