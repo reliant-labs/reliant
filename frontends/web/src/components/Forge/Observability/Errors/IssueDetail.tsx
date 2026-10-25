@@ -15,6 +15,7 @@ import Button from "@/components/forge-ui/button";
 import { useIssue, useIssueEvents } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import type { IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";
+import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -25,7 +26,8 @@ import { shortCommit } from "../deliveryScope";
 import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
-import { sessionLink } from "../Sessions/sessionModel";
+import { SessionName } from "../Sessions/SessionName";
+import { rumScopeOf, sessionLink } from "../Sessions/sessionModel";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, frameText, PLATFORM_LABEL } from "./issueModel";
 import { IssueNotFound, IssuesNotConfigured } from "./IssueStates";
@@ -79,7 +81,10 @@ export function IssueDetail({
   const openTrace = (traceId: string, spanId?: string) =>
     navigate({ view: "traces", trace: traceId, span: spanId || undefined, issue: undefined, istatus: undefined, platform: undefined, isort: undefined, q: undefined });
   // A browser error's session, opened a few seconds before the error so the replay shows what led to it.
-  const openSession = (sessionId: string, atMs: number) => navigate(sessionLink(sessionId, atMs > 0 ? atMs - SESSION_LEAD_MS : undefined));
+  const openSession: SessionLinks = {
+    scope: rumScopeOf(scope),
+    open: (sessionId, atMs) => navigate(sessionLink(sessionId, atMs > 0 ? atMs - SESSION_LEAD_MS : undefined)),
+  };
   return (
     <IssueBody
       detail={detail.data}
@@ -97,20 +102,24 @@ export function IssueDetail({
 /** How far before an error its session opens. */
 const SESSION_LEAD_MS = 5_000;
 
-type OpenSession = (sessionId: string, atMs: number) => void;
+/** How an event links to its browser session: where the session is read from (for its name), and how it opens. */
+interface SessionLinks {
+  scope: RumScope;
+  open: (sessionId: string, atMs: number) => void;
+}
 
-function SessionLink({ event, onSession }: { event: IssueEvent; onSession: OpenSession }) {
+function SessionLink({ event, onSession }: { event: IssueEvent; onSession: SessionLinks }) {
   if (!event.sessionId) return null;
   return (
     <button
       type="button"
-      onClick={() => onSession(event.sessionId, event.timeMs)}
+      onClick={() => onSession.open(event.sessionId, event.timeMs)}
       className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`Session ${event.sessionId}`}
       data-testid={`obs-issue-session-${event.sessionId}`}
     >
       <MonitorPlay className="h-3 w-3" aria-hidden="true" />
-      Open session <span className="font-mono">{event.sessionId.slice(0, 12)}</span>
+      <SessionName scope={onSession.scope} sessionId={event.sessionId} />
     </button>
   );
 }
@@ -131,7 +140,7 @@ function IssueBody({
   range: RangePreset;
   back: ReactNode;
   openTrace: (traceId: string, spanId?: string) => void;
-  openSession: OpenSession;
+  openSession: SessionLinks;
   openIssue: (id: string) => void;
 }) {
   const { issue } = detail;
@@ -282,7 +291,7 @@ function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: s
   );
 }
 
-function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void; onSession: OpenSession }) {
+function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void; onSession: SessionLinks }) {
   return (
     <div className="space-y-3 px-4 py-3">
       <p className="whitespace-pre-wrap break-words font-mono text-xs text-foreground" data-testid="obs-issue-latest-message">
@@ -343,7 +352,7 @@ function Versions({ detail }: { detail: IssueDetailModel }) {
   );
 }
 
-function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrace: (traceId: string, spanId?: string) => void; onSession: OpenSession }) {
+function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrace: (traceId: string, spanId?: string) => void; onSession: SessionLinks }) {
   const events = useIssueEvents(issueId);
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
   if (events.isLoading) return <ObsLoadingRows rows={3} testId="obs-issue-events-loading" />;

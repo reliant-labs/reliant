@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
+import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
@@ -28,12 +29,13 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
-import { formatAgo, formatCount, formatDuration, formatWhen } from "../format";
-import { ServiceSelect, shortId } from "../LogsView";
+import { formatAgo, formatCount, formatDuration } from "../format";
+import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
+import { rumScopeOf, sessionTitle } from "./sessionModel";
 import { SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionsViewProps {
@@ -55,11 +57,6 @@ export interface SessionsViewProps {
   navigate: ObsNavigate;
   /** Test seam: the Replayer the player constructs. */
   loadReplayer?: () => Promise<ReplayerCtor>;
-}
-
-/** The scope a RumService call carries: no attribute filters (RumScope has none). */
-export function rumScopeOf(scope: ObsScope, service?: string): RumScope {
-  return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds, services: service ? [service] : [] };
 }
 
 /** What a filter change also resets: the page (its token belongs to the old filters). */
@@ -263,7 +260,6 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
           <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
             <th scope="col" className="px-4 py-2 font-medium">Session</th>
             <th scope="col" className="px-4 py-2 font-medium">Entry</th>
-            <th scope="col" className="px-4 py-2 font-medium">Started</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">Duration</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">Pages</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">Interactions</th>
@@ -278,24 +274,20 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
                   type="button"
                   onClick={() => onOpen(s.sessionId)}
                   className="block max-w-full truncate text-left font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title={s.startedMs ? `Started ${formatAgo(s.startedMs, now)}` : undefined}
                   data-testid={`obs-session-open-${s.sessionId}`}
                 >
-                  {s.userId || <span className="text-muted-foreground">anonymous</span>}
+                  {sessionTitle(s.service, s.startedMs, { now })}
                 </button>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  <span className="font-mono" title={s.sessionId}>
-                    {shortId(s.sessionId)}
-                  </span>
-                  <span className="font-mono">{s.service || "(unnamed)"}</span>
+                  {s.userId ? <span className="text-foreground">{s.userId}</span> : <span>anonymous</span>}
                   {s.envName && <span>{s.envName}</span>}
                   {s.hasReplay && <Tag title="This session's replay was recorded">replay</Tag>}
+                  <Mono value={s.sessionId} length={8} />
                 </p>
               </th>
               <td className="max-w-[16rem] truncate px-4 py-2 font-mono text-xs text-foreground" title={s.entryPath}>
                 {s.entryPath || "/"}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2 text-xs text-muted-foreground" title={s.startedMs ? formatWhen(s.startedMs, now) : undefined}>
-                {s.startedMs ? formatAgo(s.startedMs, now) : "—"}
               </td>
               <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatDuration(Math.max(0, s.endedMs - s.startedMs))}</td>
               <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatCount(s.pageViews)}</td>
