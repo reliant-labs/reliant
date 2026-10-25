@@ -33732,12 +33732,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ValidateWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ValidateWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -33764,12 +33765,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ExportWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.ExportWorkflowResponse",
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -40362,7 +40364,7 @@
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
     "reliant/v1/trigger.proto": "bf4b9bf002405448a9d185e3a16daaff0b61379d7352290130314d0a1d3011ec",
-    "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
+    "reliant/v1/workflow.proto": "ebbec9e5dfa96c5f3dcbf59f3e939ea7b3348309794fdc624f4b1dae582cb30e",
     "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
     "reliant/v1/worktree.proto": "022f4037b2b5c6738267604851499a5d046be6379b057b865f35dbf0b0760e02"
   }

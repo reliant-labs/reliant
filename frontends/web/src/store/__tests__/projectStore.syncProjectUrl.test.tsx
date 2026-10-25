@@ -56,11 +56,6 @@ vi.mock("../../api/chat-grpc", async () => {
     },
   };
 });
-vi.mock("../../api/workflow-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/workflow-grpc")>("../../api/workflow-grpc");
-  return { ...actual, workflowGrpc: { ...actual.workflowGrpc, listWorkflows: vi.fn(async () => []) } };
-});
-
 function makeRouter(initialEntry: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   // Mirrors routes.tsx: `_app` owns validateSearch, `/` and

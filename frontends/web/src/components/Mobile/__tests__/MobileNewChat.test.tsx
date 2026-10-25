@@ -74,7 +74,8 @@ vi.mock('../MobileCreateWorkspaceSheet', () => ({
   ),
 }))
 
-vi.mock('../../../store/globalDataStore', () => ({
+vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
   useWorkflows: () => ({
     workflows: [
       { name: 'builtin://agent', description: 'Basic agentic chat' },

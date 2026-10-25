@@ -15,7 +15,7 @@ import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'
 import { MultiSelectDropdown } from '../../ui/MultiSelectDropdown'
 import { createPreset, updatePreset, type Preset } from '../../../hooks/preset-queries'
-import { workflowGrpc, type WorkflowResponse } from '../../../api/workflow-grpc'
+import { fetchWorkflowList, fetchWorkflow, type WorkflowResponse } from '../../../hooks/workflow-queries'
 import { formatValueForDisplay } from '../../../lib/paramUtils'
 import { ProtoFieldRenderer } from '../ProtoFieldRenderer'
 import { inputDefToSchema } from '../../../lib/nodeFieldAdapter'
@@ -343,7 +343,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     const fetchSchemas = async () => {
       try {
         // List workflows to find available params
-        const workflows = await workflowGrpc.listWorkflows(projectId)
+        const { workflows } = await fetchWorkflowList(projectId)
         if (!mounted || !workflows.length) return
 
         // Prioritize builtin workflows as they're most likely to define standard params
@@ -360,7 +360,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
         
         await Promise.all(workflowsToFetch.map(async (wf: WorkflowResponse) => {
           try {
-            const details = await workflowGrpc.getWorkflow(projectId, { name: wf.name })
+            const details = await fetchWorkflow(projectId, { name: wf.name })
             const workflowInputs = details.workflow?.inputs
             if (workflowInputs) {
               // Merge inputs into schema

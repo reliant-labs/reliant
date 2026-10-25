@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RunSummary } from "@/hooks/run-queries";
 import type { Trigger, TriggerHealthStatusKey } from "@/hooks/trigger-model";
-import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
+import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
 import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "../library/libraryView";
 import { automationHealth } from "@/lib/automationHealth";
 

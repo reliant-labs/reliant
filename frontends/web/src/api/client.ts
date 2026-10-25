@@ -19,34 +19,6 @@ export type { Chat, Message, ContentBlock, Attachment } from "../types/chat";
 export { ChatState } from "../types/chat";
 
 export const api = {
-  workflows: {
-    list: async (projectId: string) => {
-      const { workflowGrpc } = await import("./workflow-grpc");
-      const workflows = await workflowGrpc.listWorkflows(projectId);
-      return {
-        workflows: workflows.map((w) => ({
-          name: w.name,
-          filename: w.filename,
-          description: typeof w.description === 'string' ? w.description : "",
-          step_count: w.stepCount,
-          source: w.source,
-          is_hidden: w.isHidden || false,
-          title: w.title,
-          status: w.status, // "draft" | "complete"; builtin/project are always complete
-          automation_only: w.automationOnly || false,
-          // The graph travels on the wire already, and dropping it here made
-          // the app contradict itself one tap apart: the catalog row read
-          // `step_count` and said "17 steps", while the detail screen read
-          // `nodes` and rendered "This workflow has no steps". Desktop never
-          // noticed because it fetches the graph separately.
-          nodes: w.nodes,
-          edges: w.edges,
-        })),
-        total: workflows.length,
-      };
-    },
-  },
-
   models: {
     // Human-readable driver display names, mirrors the backend's
     // getDriverDisplayName so provider grouping in the picker is stable even

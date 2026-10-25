@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { workflowGrpc, type Workflow } from "../../api/workflow-grpc";
+import { fetchWorkflowList, fetchWorkflow, type Workflow } from "../../hooks/workflow-queries";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import {
@@ -110,14 +110,14 @@ export function useWorkflowDefinition(
     const fetchDef = async () => {
       setLoading(true);
       try {
-        const builtinWorkflowRefs = (await workflowGrpc.listWorkflows(projectId))
+        const builtinWorkflowRefs = (await fetchWorkflowList(projectId)).workflows
           .filter((workflow) => workflow.source === "builtin")
           .map((workflow) => workflow.name);
         const canonicalWorkflowRef = canonicalizeBuiltinWorkflowRef(
           workflowRef,
           builtinWorkflowRefs,
         );
-        const result = await workflowGrpc.getWorkflow(projectId, {
+        const result = await fetchWorkflow(projectId, {
           name: canonicalWorkflowRef,
         });
         if (cancelled) return;

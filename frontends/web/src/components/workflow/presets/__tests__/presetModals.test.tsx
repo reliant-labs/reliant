@@ -38,20 +38,19 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ getWorkflow: mocks.getWorkflow, listWorkflows: mocks.listWorkflows }),
   },
 }));
 
 // PresetService is reached through connectClient (hooks/preset-queries), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {
-  setTransport(mockTransport(serviceHandlers("PresetService", {
+  setTransport(mockTransport({ ...serviceHandlers("WorkflowService", { getWorkflow: mocks.getWorkflow, listWorkflows: mocks.listWorkflows }), ...serviceHandlers("PresetService", {
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
       setDefaultPreset: mocks.setDefaultPreset,
       createPreset: mocks.createPreset,
       updatePreset: mocks.updatePreset,
       deletePreset: mocks.deletePreset,
-    })));
+    }) }));
 });
 afterEach(() => {
   setTransport(null);

@@ -17,9 +17,8 @@
  */
 
 import { create, isMessage } from "@bufbuild/protobuf";
-import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
-import { workflowGrpc } from "../api/workflow-grpc";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
   GetTriggerResponseSchema,
@@ -196,28 +195,6 @@ export async function previewReplay(
   sender?: TriggerSender,
 ): Promise<{ inputs: Record<string, unknown>; prompt: string }> {
   return previewFromProto(await client.previewReplay(previewReplayRequest(projectId, workflow, replay, sender)));
-}
-
-// ── Not TriggerService: what the automation form reads from other services ──
-
-const automationFormKeys = {
-  workflows: (projectId: string) => ["automationForm", "workflows", projectId] as const,
-};
-
-/**
- * Workflows available in a given project, for the automation form.
- *
- * Not the global `useWorkflows()` store: that one follows the CURRENT project,
- * while an automation's workflow has to be chosen from the project the form
- * has selected, which may be a different one.
- */
-export function useProjectWorkflowList(projectId?: string) {
-  return useQuery({
-    queryKey: automationFormKeys.workflows(projectId ?? ""),
-    queryFn: () => workflowGrpc.listWorkflows(projectId!),
-    enabled: !!projectId,
-    staleTime: 60_000,
-  });
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────────

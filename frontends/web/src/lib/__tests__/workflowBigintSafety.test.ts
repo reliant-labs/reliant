@@ -122,7 +122,7 @@ describe("the workflow path is bigint-safe", () => {
 
 /** Files that hold workflow, step or input protos. */
 const GUARDED_FILES = [
-  "api/workflow-grpc.ts",
+  "hooks/workflow-queries.ts",
   "lib/workflowProto.ts",
   "lib/inputHelpers.ts",
   "lib/workflow-flow.ts",

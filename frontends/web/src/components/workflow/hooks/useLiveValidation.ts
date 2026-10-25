@@ -13,7 +13,7 @@
 import { useEffect, useRef } from "react";
 import { toJsonString } from "@bufbuild/protobuf";
 
-import { workflowGrpc, type ValidationError } from "../../../api/workflow-grpc";
+import { validateWorkflow, type ValidationError } from "../../../hooks/workflow-queries";
 import { WorkflowSchema } from "../../../gen/reliant/v1/workflow_v2_pb";
 import { toWorkflowMessage } from "../../../lib/workflowProto";
 import type { Workflow } from "../../../types/workflow";
@@ -78,8 +78,7 @@ export function useLiveValidation({
       lastKeyRef.current = key;
       const seq = ++requestSeqRef.current;
       setStatus("validating");
-      workflowGrpc
-        .validateWorkflow(projectId, workflow)
+      validateWorkflow(projectId, workflow)
         .then((result) => {
           if (seq !== requestSeqRef.current) return;
           setFindings(result.errors);

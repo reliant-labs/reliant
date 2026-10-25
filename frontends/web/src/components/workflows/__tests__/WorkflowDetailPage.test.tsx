@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
     daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
   },
 }));
@@ -57,6 +56,7 @@ beforeEach(() => {
       ...serviceHandlers("TriggerService", { listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees: mocks.listWorktrees }),
+      ...serviceHandlers("WorkflowService", { listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
       ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,

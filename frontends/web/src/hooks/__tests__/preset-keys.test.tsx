@@ -6,7 +6,7 @@
  *  - every write refetches every mounted preset list before it resolves, so
  *    a caller that selects what it just saved finds it;
  *  - setting a default refetches the mounted defaults;
- *  - a workflow change (invalidateWorkflowConfig) reaches the preset lists,
+ *  - a workflow change (invalidateWorkflows) reaches the preset lists,
  *    which the server matches against the workflow's inputs.
  */
 
@@ -27,7 +27,7 @@ import {
   useWorkflowPresets,
 } from "../preset-queries";
 import { presetServiceKeys } from "../preset-service-hooks_gen";
-import { invalidateWorkflowConfig } from "../workflow-config-queries";
+import { invalidateWorkflows } from "../workflow-queries";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -128,7 +128,7 @@ describe("PresetService keys", () => {
     renderHook(() => useWorkflowPresets("p1", "builtin://agent"), { wrapper });
     await waitFor(() => expect(calls.ListPresetsForWorkflow).toBe(1));
 
-    invalidateWorkflowConfig();
+    void invalidateWorkflows();
     await waitFor(() => expect(calls.ListPresetsForWorkflow).toBe(2));
   });
 

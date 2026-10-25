@@ -60,7 +60,6 @@ const listRepos = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons }),
   },
   getGRPCBaseURLPublic: () => "https://api.example.com",
@@ -74,6 +73,7 @@ setTransport(
     ...serviceHandlers("TriggerService", { enableWorkflow, listTriggers }),
     // The run form lists workspaces through the generated WorktreeService hooks.
     ...serviceHandlers("WorktreeService", { listWorktrees }),
+    ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),
     "RepoService.ListRepos": (req) => listRepos(req),
     "CatalogService.SearchCatalog": (req) => searchCatalog(req),
     "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
