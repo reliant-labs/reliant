@@ -883,9 +883,10 @@ func (c *DaemonEventsConsumer) Run(ctx context.Context) error {
 // WorktreeSweepDeps is the database, the router the daemons are asked
 // through, and what the sweep does with finished worktrees.
 type WorktreeSweepDeps struct {
-	DB       *db.Repo
-	Router   *APIDaemonRouter
-	Settings *APISettings
+	ControlPlane *configv1.ControlPlaneConfig
+	DB           *db.Repo
+	Router       *APIDaemonRouter
+	Settings     *APISettings
 }
 
 // NewWorktreeSweep settles archived worktrees' directories through their
@@ -901,7 +902,14 @@ type WorktreeSweepDeps struct {
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	database := d.DB
+	credentials, err := gitTokens(d.ControlPlane)
+	if err != nil {
+		return nil, err
+	}
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+		// Actual-host capability and crash/race proofs are required before
+		// enabling destructive Git recovery. No environment flag bypasses this.
+		WithGitRecovery(database, recoveryCredentials{client: credentials}, false).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
@@ -1225,6 +1233,17 @@ func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 
 // gitTokens is where TokenService gets a hosted user's git tokens: the
 // control plane, as the internal service. nil self-hosted.
+// recoveryCredentials fails closed on self-hosted deployments without the
+// existing credential authority, without preventing ordinary worktree RPCs.
+type recoveryCredentials struct{ client gitcredentialclient.Service }
+
+func (c recoveryCredentials) UserAccessToken(ctx context.Context, userID, provider string) (gitcredentialclient.Token, error) {
+	if c.client == nil {
+		return gitcredentialclient.Token{}, gitcredentialclient.ErrNotConnected
+	}
+	return c.client.UserAccessToken(ctx, userID, provider)
+}
+
 func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, error) {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {

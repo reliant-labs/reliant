@@ -640,22 +640,16 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return *hold
 	}
 	v := classifyAll(ctx, w, checkouts, r.probe())
-	// Commits only this worktree holds do not keep it: they are saved under
-	// refs first (unless the user keeps everything, which removes nothing).
+	// A local ref is not a durable receipt. Dirty/private-history work is held
+	// for the separate Git recovery protocol, never upgraded to safe by a local
+	// saveCommits call. Explicit manual snapshots retain their existing path.
 	var saved []string
-	if (v.Reason == ReasonUnpushed || v.Reason == ReasonUnreachable) && !w.KeepFiles {
-		refs, err := saveCommits(ctx, w, checkouts)
-		saved = refs
-		if err != nil {
-			v = verdict{ReasonUnverified, "could not save its local commits, nothing was removed: " + err.Error()}
-		} else {
-			v = classifyAll(ctx, w, checkouts, r.probe())
-		}
-	}
 	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		res.SnapshotRefs = saved
-		r.shed(ctx, w, sc, &res)
+		if v.Reason != ReasonDirty && v.Reason != ReasonUnpushed && v.Reason != ReasonUnreachable {
+			r.shed(ctx, w, sc, &res)
+		}
 		r.measure(ctx, &res, w.Path)
 		return res
 	}

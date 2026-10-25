@@ -767,9 +767,10 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
-		Router:   g.APIDaemonRouter(),
-		Settings: g.APISettings(),
-		DB:       g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Router:       g.APIDaemonRouter(),
+		Settings:     g.APISettings(),
+		DB:           g.Database(),
 	})
 }
 
@@ -932,13 +933,18 @@ func (g *Graph) newConnection() (*connection.Service, error) {
 
 // newWorktree constructs the worktree handler (internal/handlers/worktree).
 func (g *Graph) newWorktree() (*worktree.Service, error) {
+	credentials, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
 	return worktree.New(worktree.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
-		Temporal: g.TemporalClient().Client,
-		Settler:  g.WorktreeSweep(),
+		GitCredentials: recoveryCredentials{client: credentials},
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
+		Temporal:       g.TemporalClient().Client,
+		Settler:        g.WorktreeSweep(),
 	})
 }
 

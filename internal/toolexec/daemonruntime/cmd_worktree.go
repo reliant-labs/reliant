@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
@@ -54,6 +55,9 @@ func init() {
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
 	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
 	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
+	RegisterCommand("worktree.recovery_observe", handleWorktreeRecoveryObserve)
+	RegisterCommand("worktree.recovery_capture", handleWorktreeRecoveryCapture)
+	RegisterCommand("worktree.recovery_finalize", handleWorktreeRecoveryFinalize)
 }
 
 // =============================================================================
@@ -2701,4 +2705,85 @@ func handleWorktreeReclaim(ctx context.Context, payload []byte, op func(*worktre
 		return nil, fmt.Errorf("worktree root unavailable: %w", err)
 	}
 	return json.Marshal(op(r, ctx, req))
+}
+
+func observeRecoveryWorkspace(ctx context.Context, r *worktreereclaim.Reclaimer, req worktreereclaim.RecoveryRequest) (worktreereclaim.RecoveryActivity, error) {
+	if _, err := uuid.Parse(req.Worktree.ID); err != nil {
+		return worktreereclaim.RecoveryActivity{}, errors.New("invalid worktree identity")
+	}
+	rel, err := filepath.Rel(r.Root, req.Worktree.Path)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, ".reclaim"+string(filepath.Separator)) {
+		return worktreereclaim.RecoveryActivity{}, errors.New("invalid observation path")
+	}
+	var paths []string
+	for _, checkout := range req.Worktree.Checkouts {
+		rel := filepath.FromSlash(checkout.Rel)
+		if rel != "" && (filepath.IsAbs(rel) || filepath.Clean(rel) != rel || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+			return worktreereclaim.RecoveryActivity{}, errors.New("invalid observation checkout")
+		}
+		paths = append(paths, filepath.Join(req.Worktree.Path, rel))
+	}
+	if len(paths) == 0 {
+		return worktreereclaim.RecoveryActivity{}, errors.New("observation checkouts required")
+	}
+	return ObserveWorktreeRecoveries(ctx, paths)
+}
+
+func handleWorktreeRecoveryObserve(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreereclaim.RecoveryRequest
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	activity, err := observeRecoveryWorkspace(ctx, r, req)
+	response := worktreereclaim.RecoveryResponse{Outcome: worktreereclaim.OutcomeHeld, Reason: worktreereclaim.ReasonObservationGap, Activity: activity}
+	if err == nil && worktreereclaim.RecoveryIdleEligible(activity, time.Now()) {
+		response.Outcome = worktreereclaim.OutcomeVerified
+		response.Reason = ""
+	}
+	return json.Marshal(response)
+}
+
+func handleWorktreeRecoveryCapture(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreereclaim.RecoveryRequest
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(r.CaptureRecoveryWorkspace(ctx, req))
+}
+
+func handleWorktreeRecoveryFinalize(ctx context.Context, payload []byte) ([]byte, error) {
+	var req struct {
+		worktreereclaim.RecoveryRequest
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(payload, &req) != nil {
+		return nil, errors.New("invalid recovery payload")
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, err
+	}
+	token := req.Token
+	req.Token = ""
+	result := r.FinalizeRecovery(ctx, req.RecoveryRequest, worktreereclaim.RecoveryFinalizeDeps{
+		Verify: func(ctx context.Context, c worktreereclaim.RecoveryCapture) (worktreereclaim.RecoveryReceipt, error) {
+			return VerifyGitRecovery(ctx, c, token)
+		},
+		Observe: func(ctx context.Context, _ string) (worktreereclaim.RecoveryActivity, error) {
+			return observeRecoveryWorkspace(ctx, r, req.RecoveryRequest)
+		},
+		Acquire: func(ctx context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
+			return AcquireWorktreeRecovery(ctx, paths)
+		},
+		CheckProcessUse: worktreereclaim.CheckProcessUse,
+	})
+	return json.Marshal(result)
 }

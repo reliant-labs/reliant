@@ -21,6 +21,11 @@ import (
 
 // Repository is everything the worktree handlers read and write.
 type Repository interface {
+	GetWorktreeRecovery(context.Context, string, string) (*db.WorktreeRecovery, error)
+	ListWorktreeRecoveries(context.Context, string, string) ([]*db.WorktreeRecovery, error)
+	BeginWorktreeRecoveryOperation(context.Context, string, string, string, string, string) error
+	CompleteWorktreeRecoveryCheckout(context.Context, string, string, string, string, string) error
+	CancelWorktreeRecovery(context.Context, string, string, string) error
 	// Worktree rows: reads, idempotent creates, archive/unarchive, the
 	// cleanup metadata the sweep reads, and the permanent delete.
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
