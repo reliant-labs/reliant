@@ -2,7 +2,7 @@
  * `/m/settings` → "Privacy" section.
  *
  * Renders `MobilePrivacyPanel`, a touch-native rebuild of the desktop
- * `PrivacySettings` panel. Both read and write the same `usePrivacyStore`
+ * `PrivacySettings` panel. Both read and write the same privacy consent (`hooks/privacy-queries`)
  * — only the row/toggle presentation differs.
  */
 

@@ -1,23 +1,16 @@
 /**
- * Mobile-native "Privacy" panel — reuses `usePrivacyStore` exactly as
+ * Mobile-native "Privacy" panel — reads and writes privacy consent exactly as
  * desktop `PrivacySettings` does, so toggling crash reporting or analytics
  * here writes the same backend preference desktop reads.
  */
 
-import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
-import { usePrivacyStore } from "../../store/privacyStore";
+import { usePrivacyConsent, useUpdatePrivacySettings } from "../../hooks/privacy-queries";
 import { MobileToggleRow } from "./MobileSettingsRow";
 
 export function MobilePrivacyPanel() {
-  const { crashReportingEnabled, analyticsEnabled, setCrashReporting, setAnalytics, initialize } =
-    usePrivacyStore();
-
-  useEffect(() => {
-    initialize().catch((err) => {
-      console.error("Failed to initialize privacy settings:", err);
-    });
-  }, [initialize]);
+  const { crashReportingEnabled, analyticsEnabled } = usePrivacyConsent();
+  const { setCrashReporting, setAnalytics } = useUpdatePrivacySettings();
 
   return (
     <div className="divide-y divide-border">

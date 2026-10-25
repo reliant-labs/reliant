@@ -15,8 +15,6 @@ const mocks = vi.hoisted(() => ({
   updateProvider: vi.fn(),
   deleteProvider: vi.fn(),
   validateProviderAPIKey: vi.fn(),
-  getPreferences: vi.fn(),
-  updatePreferences: vi.fn(),
   claudeStart: vi.fn(),
   codexStart: vi.fn(),
 }))
@@ -27,8 +25,6 @@ vi.mock('@/api/client', () => ({
       updateProvider: mocks.updateProvider,
       deleteProvider: mocks.deleteProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
-      getPreferences: mocks.getPreferences,
-      updatePreferences: mocks.updatePreferences,
     },
   },
 }))
@@ -99,8 +95,6 @@ describe('Settings → Providers: one provider at a time', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('confirm', confirmSpy)
-    mocks.getPreferences.mockResolvedValue({ streaming_enabled: false })
-    mocks.updatePreferences.mockResolvedValue({})
     mocks.updateProvider.mockResolvedValue({ message: 'ok' })
     mocks.refetchModels.mockResolvedValue(undefined)
   })

@@ -15,8 +15,8 @@ vi.mock("@sentry/react", () => ({
   replayCanvasIntegration: vi.fn(() => ({ name: "ReplayCanvas" })),
 }));
 vi.mock("../constants", () => ({ isDev: false }));
-vi.mock("../../store/privacyStore", () => ({
-  getPrivacySettings: () => ({ crashReportingEnabled: true, analyticsEnabled: true }),
+vi.mock("../../hooks/privacy-queries", () => ({
+  privacyConsent: () => ({ crashReportingEnabled: true, analyticsEnabled: true }),
 }));
 
 import * as Sentry from "@sentry/react";

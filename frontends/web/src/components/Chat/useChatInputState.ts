@@ -4,7 +4,7 @@ import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { DEFAULT_WORKFLOW, usePreferencesStore } from "../../store/preferencesStore";
+import { useDefaultWorkflow } from "../../hooks/settings-queries";
 import * as chatActions from "../../hooks/chat-actions";
 
 interface UseChatInputStateProps {
@@ -46,8 +46,7 @@ export function useChatInputState({
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user's default workflow from preferences
-  const userDefaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
-  const effectiveDefaultWorkflow = userDefaultWorkflow ?? DEFAULT_WORKFLOW;
+  const effectiveDefaultWorkflow = useDefaultWorkflow();
 
   // Workflow selection state - tracks which workflow is selected.
   // null means use user's default workflow (from preferences).
@@ -178,7 +177,7 @@ export function useChatInputState({
       : currentChat.workflowName || null;
     
     setSelectedWorkflow(workflow);
-  }, [currentChat, effectiveDefaultWorkflow, chatId, userDefaultWorkflow]);
+  }, [currentChat, effectiveDefaultWorkflow, chatId]);
 
   // Reset state when chatId or tabId changes
   useEffect(() => {

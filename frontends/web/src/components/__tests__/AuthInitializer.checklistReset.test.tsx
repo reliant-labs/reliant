@@ -49,9 +49,8 @@ vi.mock("@/store/globalDataStore", () => ({
   useGlobalDataStore: (selector: (s: unknown) => unknown) =>
     selector({ prefetch: vi.fn(async () => undefined) }),
 }));
-vi.mock("@/store/privacyStore", () => ({
-  usePrivacyStore: (selector: (s: unknown) => unknown) =>
-    selector({ initialize: vi.fn(async () => undefined) }),
+vi.mock("@/hooks/privacy-queries", () => ({
+  loadPrivacySettings: vi.fn(async () => undefined),
 }));
 vi.mock("@/store/projectStore", () => ({
   useProjectStore: {

@@ -1,24 +1,11 @@
-import { useEffect } from "react";
-import { usePrivacyStore } from "../../store/privacyStore";
+import { usePrivacyConsent, useUpdatePrivacySettings } from "../../hooks/privacy-queries";
 import { AlertTriangle } from "lucide-react";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function PrivacySettings() {
-  const {
-    crashReportingEnabled,
-    analyticsEnabled,
-    setCrashReporting,
-    setAnalytics,
-    initialize,
-  } = usePrivacyStore();
-
-  useEffect(() => {
-    // Initialize privacy settings (async to load from Electron if available)
-    initialize().catch((err) => {
-      console.error('Failed to initialize privacy settings:', err);
-    });
-  }, [initialize]);
+  const { crashReportingEnabled, analyticsEnabled } = usePrivacyConsent();
+  const { setCrashReporting, setAnalytics } = useUpdatePrivacySettings();
 
   return (
     <div className="space-y-6">

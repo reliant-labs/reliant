@@ -12,7 +12,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { deletePreset, type Preset } from "../../../hooks/preset-queries";
-import { usePreferencesStore } from "../../../store/preferencesStore";
+import { useHiddenItems, useToggleHiddenItem } from "../../../hooks/settings-queries";
 import { RowMenu, type RowMenuAction } from "../../workflows/RowMenu";
 import { WorkflowBadge, WORKFLOW_SOURCE_LABEL } from "../../workflows/WorkflowSourceBadge";
 import { PresetEditModal } from "./PresetEditModal";
@@ -32,8 +32,8 @@ interface PresetListProps {
 export function PresetList({ projectId, presets, availablePresets, onChanged, label }: PresetListProps) {
   const [viewing, setViewing] = useState<Preset | null>(null);
   const [editing, setEditing] = useState<Preset | null>(null);
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
-  const togglePresetVisibility = usePreferencesStore((state) => state.togglePresetVisibility);
+  const { isPresetHidden } = useHiddenItems();
+  const { togglePresetVisibility } = useToggleHiddenItem();
 
   const remove = async (preset: Preset) => {
     if (!window.confirm(`Delete preset "${preset.name}"? This cannot be undone.`)) return;
