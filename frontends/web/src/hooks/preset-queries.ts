@@ -11,8 +11,9 @@
  *
  * Freshness otherwise: preset matching depends on the workflow's inputs, so a
  * workflow change invalidates the same scope (invalidateWorkflows in
- * workflow-queries.ts, and the stream's WORKFLOW_DRAFT_UPDATED). The staleTime only bounds how long an edit
- * made OUTSIDE the app (a preset YAML changed in an editor) can go unnoticed.
+ * workflow-queries.ts, and the stream's WORKFLOW_DRAFT_UPDATED). The
+ * staleTime only bounds how long an edit made OUTSIDE the app (a preset YAML
+ * changed in an editor) can go unnoticed.
  */
 
 import { create } from "@bufbuild/protobuf";

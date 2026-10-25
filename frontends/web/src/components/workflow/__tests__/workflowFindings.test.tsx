@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { ValidationError } from "../../../api/workflow-grpc";
+import type { ValidationError } from "../../../hooks/workflow-queries";
 import { WorkflowStatusChip } from "../WorkflowStatusChip";
 import {
   findingFieldKey,

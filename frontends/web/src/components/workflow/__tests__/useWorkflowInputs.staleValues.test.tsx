@@ -25,11 +25,9 @@ import { ValueSchema } from '@bufbuild/protobuf/wkt'
  * result of the previous one rather than onto a stale snapshot.
  */
 
-vi.mock('../../../api/workflow-grpc', () => ({
-  workflowGrpc: {
-    listWorkflows: vi.fn(async () => []),
-    getWorkflow: vi.fn(async () => ({ workflow: null })),
-  },
+vi.mock('../../../hooks/workflow-queries', () => ({
+  fetchWorkflowList: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })),
+  fetchWorkflow: vi.fn(async () => ({ workflow: undefined })),
 }))
 
 vi.mock('../../../hooks/preset-queries', () => ({

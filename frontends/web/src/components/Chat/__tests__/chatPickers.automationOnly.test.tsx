@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("../../../store/globalDataStore", () => ({
+vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
   useWorkflows: () => ({
     workflows: [
       { name: "builtin://agent", filename: "agent", description: "Basic agentic chat", step_count: 2, source: "builtin", status: "complete" },
