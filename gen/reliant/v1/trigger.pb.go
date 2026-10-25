@@ -4783,8 +4783,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
 	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
-	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xfa\n" +
-	"\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\x80\v\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +
@@ -4798,10 +4797,10 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x00\x12e\n" +
 	"\x12RotateWebhookToken\x12%.reliant.v1.RotateWebhookTokenRequest\x1a&.reliant.v1.RotateWebhookTokenResponse\"\x00\x12Y\n" +
 	"\x0eEnableWorkflow\x12!.reliant.v1.EnableWorkflowRequest\x1a\".reliant.v1.EnableWorkflowResponse\"\x00\x12\\\n" +
-	"\x0fDisableWorkflow\x12\".reliant.v1.DisableWorkflowRequest\x1a#.reliant.v1.DisableWorkflowResponse\"\x00\x12n\n" +
-	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x00\x12_\n" +
-	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12V\n" +
-	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0fDisableWorkflow\x12\".reliant.v1.DisableWorkflowRequest\x1a#.reliant.v1.DisableWorkflowResponse\"\x00\x12q\n" +
+	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12Y\n" +
+	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_trigger_proto_rawDescOnce sync.Once

@@ -34,22 +34,20 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   triggerErrorMessage,
-  triggerGrpc,
   type ActingIdentityKey,
   type EnableWorkflowInput,
   type EnableWorkflowResult,
   type Trigger,
   type WorkflowTriggerOverrideInput,
   type WorkflowTriggerResult,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { triggerKeys, useProjectDaemonInstalls, useTriggers } from "@/hooks/trigger-queries";
+import { useEnableWorkflow, useProjectDaemonInstalls, useTriggers } from "@/hooks/trigger-queries";
 import { useCatalogEntry, useDeclaredTriggerRef, useDeclaredTriggerRefState, useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
@@ -212,7 +210,7 @@ function SetupBody({
   const ids = useId();
   const fid = (key: string) => `${ids}-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const enableWorkflow = useEnableWorkflow();
   const { projects } = useProjects();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const naming = useIntegrationEventNaming();
@@ -434,8 +432,7 @@ function SetupBody({
     if (fieldErrors.length > 0) return;
     setSaving(true);
     try {
-      const outcome = await triggerGrpc.enableWorkflow(buildInput());
-      void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
+      const outcome = await enableWorkflow.mutateAsync(buildInput());
       setResult(outcome);
       if (outcome.enabled) {
         toast.success(mode === "settings" ? `${title} in ${projectName} is saved` : `${title} is on in ${projectName}`);

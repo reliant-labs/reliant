@@ -34,7 +34,6 @@ import { TokenService } from "../gen/reliant/v1/token_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
-import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { InboxService } from "../gen/reliant/v1/inbox_pb";
 import { ConnectionService } from "../gen/reliant/v1/connection_pb";
 import { connectClient, isApiReady, reliantApiBaseUrl, transport } from "../lib/connect";
@@ -84,7 +83,6 @@ export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryServic
 export const createTokenClient = (): Client<typeof TokenService> => connectClient(TokenService);
 export const createConnectorClient = (): Client<typeof ConnectorService> =>
   connectClient(ConnectorService);
-export const createTriggerClient = (): Client<typeof TriggerService> => connectClient(TriggerService);
 export const createConnectionClient = (): Client<typeof ConnectionService> =>
   connectClient(ConnectionService);
 export const createInboxClient = (): Client<typeof InboxService> => connectClient(InboxService);
@@ -108,7 +106,6 @@ export const getScenarioClient = createScenarioClient;
 export const getDaemonRegistryClient = createDaemonRegistryClient;
 export const getTokenClient = createTokenClient;
 export const getConnectorClient = createConnectorClient;
-export const getTriggerClient = createTriggerClient;
 export const getInboxClient = createInboxClient;
 export const getConnectionClient = createConnectionClient;
 
@@ -130,7 +127,6 @@ export const grpcClient = {
   daemonRegistry: getDaemonRegistryClient,
   token: getTokenClient,
   connector: getConnectorClient,
-  trigger: getTriggerClient,
   inbox: getInboxClient,
   connection: getConnectionClient,
 };

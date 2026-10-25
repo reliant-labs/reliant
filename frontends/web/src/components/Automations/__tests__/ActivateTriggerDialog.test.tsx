@@ -47,7 +47,6 @@ const getCatalogEntry = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons }),
   },
@@ -90,6 +89,7 @@ beforeEach(() => {
   // (generated hooks) are answered at the transport.
   setTransport(
     mockTransport({
+      ...serviceHandlers("TriggerService", { createTrigger, rotateWebhookToken }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),

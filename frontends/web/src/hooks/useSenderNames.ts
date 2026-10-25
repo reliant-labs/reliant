@@ -16,12 +16,12 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 
-import { triggerGrpc } from "../api/trigger-grpc";
 import { isGitHubUserId } from "../lib/onlyFromFilter";
 import type { MySender } from "./useMySenderId";
-import { triggerKeys, useTriggerEvents } from "./trigger-queries";
+import { resolvedSendersFromProto } from "./trigger-model";
+import { SENDER_NAMES_STALE_MS, useTriggerEvents } from "./trigger-queries";
+import { useResolveTriggerSenders } from "./trigger-service-hooks_gen";
 
 /** trigger.sender.kind for each integration "Only from" covers. */
 const SENDER_KIND: Record<string, string> = { slack: "slack", github: "github", gmail: "email" };
@@ -66,15 +66,17 @@ export function useSenderNames(
   // Ask GitHub only once what is known locally has loaded: a name the
   // firings or "Me" already carry costs nothing.
   const settled = !events.isLoading && !me?.loading;
-  const lookup = useQuery({
-    queryKey: [...triggerKeys.all, "senderNames", integration, unknown] as const,
-    queryFn: () => triggerGrpc.resolveSenders(integration, { senderIds: unknown }),
-    enabled: settled && unknown.length > 0,
-    staleTime: 10 * 60_000,
-    // A caller with no GitHub connection gets FailedPrecondition every time;
-    // the ids are then shown as themselves rather than retried.
-    retry: false,
-  });
+  const lookup = useResolveTriggerSenders(
+    { integration, senderIds: unknown },
+    {
+      enabled: settled && unknown.length > 0,
+      staleTime: SENDER_NAMES_STALE_MS,
+      // A caller with no GitHub connection gets FailedPrecondition every time;
+      // the ids are then shown as themselves rather than retried.
+      retry: false,
+      select: resolvedSendersFromProto,
+    },
+  );
 
   const nameOf = useCallback(
     (id: string) => known.get(id) ?? lookup.data?.find((found) => found.query === id)?.displayName,

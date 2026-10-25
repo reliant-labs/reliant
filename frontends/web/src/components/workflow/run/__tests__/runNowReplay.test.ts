@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { ReplayCandidate } from "@/api/trigger-grpc";
+import type { ReplayCandidate } from "@/hooks/trigger-model";
 import { candidateLabel, formatPayload, parsePayload } from "../runNowReplay";
 
 describe("parsePayload", () => {

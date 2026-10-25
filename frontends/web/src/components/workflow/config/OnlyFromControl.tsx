@@ -35,7 +35,10 @@ import {
   withOnlyFrom,
   type OnlyFromIntegration,
 } from "../../../lib/onlyFromFilter";
-import { triggerErrorMessage, triggerGrpc } from "../../../api/trigger-grpc";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { triggerErrorMessage } from "@/hooks/trigger-model";
+import { resolveTriggerSenders } from "@/hooks/trigger-queries";
 import { useConnectionSender, useGitHubSender, type MySender } from "../../../hooks/useMySenderId";
 import { useSenderNames, type SenderNames } from "../../../hooks/useSenderNames";
 import { cn } from "../../../lib/utils";
@@ -147,13 +150,14 @@ function ConnectionList(props: ListProps) {
 
 function GitHubList(props: ListProps) {
   const me = useGitHubSender(props.connectionId);
+  const queryClient = useQueryClient();
   // A login is resolved to its user id now, as the caller, so the list holds
   // the person GitHub says the login names today — never the login itself.
   const resolve = async (raw: string, names: SenderNames): Promise<Resolution> => {
     const login = gitHubLogin(raw);
     if (!login) return { error: "" };
     try {
-      const [found] = await triggerGrpc.resolveSenders("github", { handles: [login] });
+      const [found] = await resolveTriggerSenders(queryClient, "github", { handles: [login] });
       if (!found) return { error: `No GitHub user is named ${login}.` };
       names.remember(found.senderId, found.displayName);
       return { id: found.senderId };

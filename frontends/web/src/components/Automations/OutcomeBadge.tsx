@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import Badge from "../forge-ui/badge";
-import type { TriggerOutcome } from "@/api/trigger-grpc";
+import type { TriggerOutcome } from "@/hooks/trigger-model";
 import { triggerEventOutcomeDisplay } from "@/lib/runStatus";
 
 /**

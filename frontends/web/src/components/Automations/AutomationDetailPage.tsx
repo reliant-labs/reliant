@@ -36,14 +36,14 @@ import {
   triggerSchedule,
   type Trigger,
   type TriggerEvent,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import {
   useDeleteTrigger,
-  useFireTrigger,
   useSetTriggerEnabled,
   useTrigger,
   useTriggerEvents,
 } from "@/hooks/trigger-queries";
+import { useFireTrigger } from "@/hooks/trigger-service-hooks_gen";
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -146,7 +146,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 
   const onRunNow = () => {
     eventCountAtFire.current = eventCount;
-    fire.mutate(trigger.id, {
+    fire.mutate({ id: trigger.id }, {
       onSuccess: () => {
         toast.success(`${trigger.name} started`, {
           description: "The run will appear in the history below in a moment.",
@@ -171,7 +171,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   };
 
   const onDelete = () => {
-    deleteTrigger.mutate(trigger.id, {
+    deleteTrigger.mutate({ id: trigger.id }, {
       onSuccess: () => {
         setConfirmingDelete(false);
         toast.success(`Deleted ${trigger.name}`);

@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { ComingUpTimeline, tickLabel } from "../ComingUpTimeline";
 import { laneTicks, timelineModel } from "../comingUp";
 import { renderAtRoute } from "./automationTestUtils";

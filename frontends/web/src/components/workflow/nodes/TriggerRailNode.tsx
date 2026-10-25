@@ -38,7 +38,7 @@ import { describeDeclaredSource, findingFieldLabel, integrationOf, sourceCase, t
 import { useIntegrationEventNaming } from "../../../hooks/catalog-queries";
 import { describeSchedule } from "../../../lib/cronText";
 import { useTriggers } from "../../../hooks/trigger-queries";
-import type { Trigger } from "../../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { cn } from "../../../lib/utils";
 import { useTriggerRailContext, type TriggerRailContextValue } from "../TriggerRailContext";
 import { buildHandleClassName } from "./NodeStatusWrapper";

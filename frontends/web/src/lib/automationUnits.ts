@@ -16,7 +16,7 @@
  * this is what folds them back into the one thing the user turned on.
  */
 
-import type { Trigger } from "../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { normalizeWorkflowRef } from "../components/workflow/useWorkflowInputs";
 import { automationHealth, worstHealth, type AutomationHealthDisplay } from "./automationHealth";
 

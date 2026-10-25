@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { workflowGrpc } from "../api/workflow-grpc";
 import { useGlobalDataStore } from "../store/globalDataStore";
-import { triggerKeys } from "./trigger-queries";
+import { triggerServiceKeys } from "./trigger-service-hooks_gen";
 
 export const workflowLibraryKeys = {
   all: ["workflow-library"] as const,
@@ -65,7 +65,7 @@ export function useDeleteWorkflow(projectId: string) {
     mutationFn: (filename: string) => workflowGrpc.deleteWorkflow(projectId, filename),
     // The server deletes the workflow's automations with it.
     onSuccess: async () => {
-      await Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: triggerKeys.all })]);
+      await Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all })]);
     },
   });
 }

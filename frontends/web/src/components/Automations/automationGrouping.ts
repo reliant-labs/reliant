@@ -13,7 +13,7 @@
  *     ordered by their label, and a group left empty is dropped.
  */
 
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { automationUnits, compareUnits, unitNextFireAt, type AutomationUnit } from "@/lib/automationUnits";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 

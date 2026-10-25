@@ -15,7 +15,7 @@
  *     drawn and the rest are counted.
  */
 
-import { triggerSchedule, type Trigger } from "@/api/trigger-grpc";
+import { triggerSchedule, type Trigger } from "@/hooks/trigger-model";
 import { nextFireTimes } from "@/lib/cronSchedule";
 
 export const TIMELINE_WINDOW_MS = 24 * 60 * 60 * 1000;

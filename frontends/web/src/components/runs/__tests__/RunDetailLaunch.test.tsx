@@ -79,10 +79,6 @@ const rpc = vi.hoisted(() => ({
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     chat: () => ({ getChat: rpc.getChat, startChat: rpc.startChat }),
-    trigger: () => ({
-      listTriggers: rpc.listTriggers,
-      fireTrigger: rpc.fireTrigger,
-    }),
     workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
   },
@@ -102,7 +98,7 @@ beforeEach(() => {
       getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
     }),
       ...serviceHandlers("RunService", { listRuns: rpc.listRuns }),
-      ...serviceHandlers("TriggerService", { getLaunchEvent: rpc.getLaunchEvent }),
+      ...serviceHandlers("TriggerService", { getLaunchEvent: rpc.getLaunchEvent, listTriggers: rpc.listTriggers, fireTrigger: rpc.fireTrigger }),
       ...serviceHandlers("ChatService", { listMessages: rpc.listMessages }),
       "CatalogService.SearchCatalog": { response: {} },
       ...serviceHandlers("ProjectService", { listProjectDaemons: rpc.listProjectDaemons }),

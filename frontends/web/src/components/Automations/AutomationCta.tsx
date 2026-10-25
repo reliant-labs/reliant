@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
-import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
+import { triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
 import { useDeleteTrigger, useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import type { AutomationCtaKind, AutomationCtaSpec } from "@/lib/automationHealth";
 import { workflowEditHref } from "@/lib/workflowsArea";
@@ -127,7 +127,7 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
           confirmLabel="Remove trigger"
           loading={remove.isPending}
           onConfirm={() =>
-            remove.mutate(broken.id, {
+            remove.mutate({ id: broken.id }, {
               onSuccess: () => {
                 setDialog(null);
                 toast.success(`Removed ${broken.name}`);

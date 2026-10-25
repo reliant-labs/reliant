@@ -20,7 +20,7 @@
  * spy-based test would have happily passed against the broken call.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import React from "react";
 import {
   createRootRoute,
@@ -165,6 +165,14 @@ async function selectProjectIgnoringSideEffects(
 }
 
 describe("syncProjectUrl — search params survive project selection", () => {
+  // Each test imports a FRESH projectStore (vi.resetModules), but the first
+  // import in a worker also transforms its whole module graph: ~4-5s alone,
+  // past the test timeout under a loaded full run. Transform it once here,
+  // on the hook's own budget, so every test's import is only an evaluation.
+  beforeAll(async () => {
+    await import("../projectStore");
+  }, 60_000);
+
   beforeEach(() => {
     vi.resetModules();
   });

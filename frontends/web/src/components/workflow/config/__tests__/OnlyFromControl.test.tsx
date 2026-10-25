@@ -32,20 +32,24 @@ import {
 } from "@/gen/reliant/v1/trigger_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
 
 const listConnections = vi.fn();
 const resolveTriggerSenders = vi.fn();
 const listTriggerEvents = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    trigger: () => ({ resolveTriggerSenders, listTriggerEvents }),
-  },
+  grpcClient: {},
   getGRPCBaseURLPublic: () => null,
 }));
 
-// ConnectionService is on its generated hooks, so it is answered at the transport.
-setTransport(mockTransport({ "ConnectionService.ListConnections": (req) => listConnections(req) }));
+// TriggerService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    ...serviceHandlers("TriggerService", { resolveTriggerSenders, listTriggerEvents }),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
+  }),
+);
 
 // Hosted GitHub: no connection row; the account comes from the control
 // plane's git credential, which reports a login and (today) no user id.

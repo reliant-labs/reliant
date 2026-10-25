@@ -109,7 +109,12 @@ service TriggerService {
   // back to the person's current name. It asks the provider with the
   // CALLER's own credential for the integration. GitHub only; a caller with
   // no usable GitHub credential is FailedPrecondition.
-  rpc ResolveTriggerSenders(ResolveTriggerSendersRequest) returns (ResolveTriggerSendersResponse) {}
+  //
+  // It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+  // verb, so without it forge generates a mutation hook for it.
+  rpc ResolveTriggerSenders(ResolveTriggerSendersRequest) returns (ResolveTriggerSendersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListReplayEvents lists the recent events the caller's activations of a
   // workflow's declared triggers received, newest first, so one can be run
@@ -120,7 +125,12 @@ service TriggerService {
   // prompt, as a fire of that event would. Only the mapping applies: the
   // trigger's filter and origin_filter are not evaluated, because the person
   // replaying has decided the event is wanted.
-  rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {}
+  //
+  // It only reads (nothing is fired or recorded), and says so with
+  // NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
+  rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // TriggerKind is the source a stored trigger listens to.
