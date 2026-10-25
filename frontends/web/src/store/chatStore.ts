@@ -1525,7 +1525,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // NOTE: viewerStore no longer has its own worktreeId state
     // The worktree context is managed by worktreeStore (single source of truth)
-    // Browser viewers are filtered based on worktreeStore.currentWorktree?.id
+    // Browser viewers are filtered based on worktreeStore.currentWorktreeId
 
     // Save to workspace state for persistence
     // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
