@@ -3,7 +3,7 @@ import { FolderOpen, Plus, Trash2 } from "lucide-react";
 
 import EmptyState from "../forge-ui/empty_state";
 import Button from "@/components/forge-ui/button";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
@@ -83,7 +83,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
                   Add project
                 </Button>
               )}
-              <Tooltip content="Remove from Reliant (files stay on disk)" placement="left" delay={300}>
+              <Tooltip content="Remove from Reliant (files stay on disk)" side="left" delay={300}>
                 <button
                   type="button"
                   onClick={() => setShowRemoveModal(true)}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { GradientBackground } from '../GradientBackground';
-import { Tooltip } from '../ui/Tooltip';
+import Tooltip from '../forge-ui/tooltip';
 import { isDev } from '../../lib/constants';
 import { openExternalLink } from '../../lib/open-link';
 import { BrandMark } from '../icons/BrandMark';
@@ -59,7 +59,7 @@ export function LoadingSpinner() {
             className="pr-2"
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
-            <Tooltip content="Open Temporal UI" placement="bottom" delay={300}>
+            <Tooltip content="Open Temporal UI" side="bottom" delay={300}>
               <button
                 onClick={() => {
                   const temporalUIPort = window.RELIANT_CONFIG?.temporalUIPort || 8233;

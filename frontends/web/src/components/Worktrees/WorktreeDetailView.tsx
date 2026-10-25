@@ -20,7 +20,7 @@ import { useWindowContext } from "../../hooks/useWindowContext";
 import { GitStatus } from "../Git/GitStatus";
 import { CommitHistory } from "../Git/CommitHistory";
 import Button from "@/components/forge-ui/button";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import Badge from "../forge-ui/badge";
 import Status from "../forge-ui/status";
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
@@ -177,7 +177,7 @@ function WorkspaceDetail({
                   </span>
                 )}
                 {treeState && (
-                  <Tooltip content={treeState.detail} delay={300} wrapperClassName="inline-flex">
+                  <Tooltip content={treeState.detail} delay={300} triggerClassName="inline-flex">
                     <Status tone={treeState.variant} label={treeState.label} size="sm" />
                   </Tooltip>
                 )}
@@ -203,7 +203,7 @@ function WorkspaceDetail({
                     : "Archive this workspace and its chats. You can restore it later."
                 }
                 delay={300}
-                wrapperClassName="inline-flex"
+                triggerClassName="inline-flex"
               >
                 <Button
                   variant="outline"

@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { Check, X, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
@@ -492,7 +492,7 @@ export function ConfigPanel({
               className={`cpv2-field-input flex-1 font-mono ${idError ? "!border-destructive" : ""}`}
               placeholder="node-id"
             />
-            <Tooltip content="Save" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Save" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               type="button"
               onClick={handleIdSave}
@@ -500,7 +500,7 @@ export function ConfigPanel({
               <Check />
             </button>
 </Tooltip>
-            <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               type="button"
               onClick={handleIdCancel}

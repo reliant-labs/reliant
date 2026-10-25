@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useModels } from "../../../store/globalDataStore";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import {
   contextSeverity,
   contextWarningText,
@@ -488,7 +488,7 @@ export function ModelSettingsPage({
                     <Tooltip
                       key={`${local?.daemonId}:${model.id}`}
                       content={`${local?.machineName} is offline — this model is unavailable until it reconnects.`}
-                      wrapperClassName="block w-full"
+                      triggerClassName="block w-full"
                     >
                       {row}
                     </Tooltip>

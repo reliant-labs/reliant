@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 
 import type { AddProjectAction } from "./addProjectActionModel";
 import { pickerButton } from "./buttonStyles";
@@ -31,7 +31,7 @@ function HeaderActionButton({ action }: { action: AddProjectAction }) {
   const descriptionId = useId();
   const Icon = action.icon;
   return (
-    <Tooltip content={action.description} placement="bottom" delay={300}>
+    <Tooltip content={action.description} side="bottom" delay={300}>
       <button
         type="button"
         onClick={action.onClick}

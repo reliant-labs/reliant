@@ -142,8 +142,8 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({
   DiscoverWorktreesModal: () => null,
 }));
-vi.mock("../../ui/Tooltip", () => ({
-  Tooltip: ({ children }: any) => <>{children}</>,
+vi.mock("../../forge-ui/tooltip", () => ({
+  default: ({ children }: any) => <>{children}</>,
 }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
 

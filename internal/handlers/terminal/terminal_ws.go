@@ -75,6 +75,18 @@ const (
 	wsErrorWorkingDirMissing = "working_dir_missing"
 )
 
+// Codes of an "error" sent when the machine, not the command, is why no
+// terminal opened. The browser keys on these, never on the message text
+// (13-p9-frontend-plan.md §7, R3w2).
+const (
+	// wsErrorNoMachine: the account has no machine at all. Nothing to wait
+	// for; the browser offers to connect one and stops retrying.
+	wsErrorNoMachine = "no_machine"
+	// wsErrorDaemonUnavailable: the machine is starting, asleep or not
+	// connected. The browser shows the wait and retries.
+	wsErrorDaemonUnavailable = "daemon_unavailable"
+)
+
 // terminalCheckouts is what TerminalWSHandler reads to tell a working
 // directory that may still appear from one that will not. The api-server
 // cannot see the filesystem, so this is the workspace's recorded state.
@@ -257,7 +269,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			// retries. Said once per window (see logTerminalMachineState).
 			if state, ok := terminalMachineState(err); ok {
 				logTerminalMachineState(ctx, router, userID, state, err, logFields)
-				writeWSJSON(conn, wsMessage{Type: "error", Data: message})
+				writeWSJSON(conn, wsMessage{Type: "error", Code: terminalMachineStateCode(state), Data: message})
 				return
 			}
 			writeWSError(conn, message, append([]any{"error", err}, logFields...)...)
@@ -493,6 +505,20 @@ func terminalMachineState(err error) (state string, ok bool) {
 		return terminalMachineNotAnswering, true
 	default:
 		return "", false
+	}
+}
+
+// terminalMachineStateCode is the wsMessage code the browser reads for a
+// machine state. not_answering has none: a connected daemon that cannot open
+// a shell is shown as the error it is.
+func terminalMachineStateCode(state string) string {
+	switch state {
+	case "no_machine":
+		return wsErrorNoMachine
+	case "starting_or_asleep", "not_connected":
+		return wsErrorDaemonUnavailable
+	default:
+		return ""
 	}
 }
 

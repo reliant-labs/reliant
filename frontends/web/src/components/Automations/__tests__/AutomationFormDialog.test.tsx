@@ -56,17 +56,14 @@ const listProjectDaemons = vi.fn();
 
 const listConnections = vi.fn(async () => ({ connections: [] }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
 
 // PresetService and TriggerService are reached through connectClient (the generated hooks), so
 // it is answered at the transport by the same fakes. So is ConnectionService
 // (generated hooks).
 beforeEach(() => {
   setTransport(mockTransport({
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
       ...serviceHandlers("TriggerService", { createTrigger, updateTrigger }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees }),

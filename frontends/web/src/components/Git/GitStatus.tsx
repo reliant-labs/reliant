@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { ArrowDown, ArrowUp, GitBranch, RefreshCw } from 'lucide-react';
 import { useWorkspaceGitStatus } from '../../hooks/worktree-git-queries';
 import { cn } from '../../lib/utils';
-import { Tooltip } from '../ui/Tooltip';
+import Tooltip from '../forge-ui/tooltip';
 
 interface GitStatusProps {
   worktreeId: string;
@@ -99,7 +99,7 @@ export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
             )}
           </span>
         )}
-        <Tooltip content="Refresh status" delay={300} wrapperClassName="ml-auto flex">
+        <Tooltip content="Refresh status" delay={300} triggerClassName="ml-auto flex">
           <button
             type="button"
             onClick={() => void fetchStatus()}

@@ -11,7 +11,7 @@ import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { logger } from "../../lib/logger";
 import { resolveWorktree, useActiveWorktreeId, isWorktreeKnownGone, useCachedWorktrees, useWorktreeById } from "../../hooks/worktree-queries";
 
@@ -312,7 +312,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
         <div className="flex items-center gap-1">
           {/* Kill Active Terminal Button - only show if active session is in current worktree */}
           {activeSessionId && sessions.some((s) => s.id === activeSessionId) && (
-            <Tooltip content="Kill active terminal" placement="bottom" delay={300}>
+            <Tooltip content="Kill active terminal" side="bottom" delay={300}>
               <button
                 aria-label="Kill active terminal"
                 onClick={(e) => {
@@ -328,7 +328,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           )}
 
           {/* New Terminal Button */}
-          <Tooltip content="New terminal (Cmd+Shift+J)" placement="bottom" delay={300}>
+          <Tooltip content="New terminal (Cmd+Shift+J)" side="bottom" delay={300}>
             <button
               aria-label="New terminal"
               onClick={handleNewTerminal}
@@ -340,7 +340,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           </Tooltip>
 
           {/* Collapse Panel Button */}
-          <Tooltip content="Hide terminal panel (Cmd+J)" placement="bottom" delay={300}>
+          <Tooltip content="Hide terminal panel (Cmd+J)" side="bottom" delay={300}>
             <button
               onClick={hideTerminal}
               className="p-1 hover:bg-accent/20 rounded transition-all"

@@ -223,7 +223,7 @@ describe("STREAM_INVALIDATED_SCOPES covers every stream handler", () => {
       STREAM_INVALIDATED_SCOPES.projects,
       STREAM_INVALIDATED_SCOPES.settings,
       STREAM_INVALIDATED_SCOPES.plans,
-      STREAM_INVALIDATED_SCOPES.daemonList,
+      STREAM_INVALIDATED_SCOPES.daemonRegistry,
     ]) {
       expect(invalidated.some((key) => key && isUnderRoot(key, root))).toBe(true);
     }

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import { useBrowserStore } from "../../store/browserStore";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 
 export function NavigationControls() {
@@ -30,7 +30,7 @@ export function NavigationControls() {
   return (
     <div className="flex items-center gap-1 px-2">
       {/* Back button */}
-      <Tooltip content="Back" placement="bottom" delay={300}>
+      <Tooltip content="Back" side="bottom" delay={300}>
         <button
           onClick={handleGoBack}
           disabled={!activeTab.canGoBack}
@@ -47,7 +47,7 @@ export function NavigationControls() {
       </Tooltip>
 
       {/* Forward button */}
-      <Tooltip content="Forward" placement="bottom" delay={300}>
+      <Tooltip content="Forward" side="bottom" delay={300}>
         <button
           onClick={handleGoForward}
           disabled={!activeTab.canGoForward}
@@ -64,7 +64,7 @@ export function NavigationControls() {
       </Tooltip>
 
       {/* Reload button */}
-      <Tooltip content="Reload" placement="bottom" delay={300}>
+      <Tooltip content="Reload" side="bottom" delay={300}>
         <button
           onClick={handleReload}
           className={cn(

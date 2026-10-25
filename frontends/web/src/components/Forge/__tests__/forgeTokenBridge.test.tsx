@@ -59,7 +59,7 @@ const COLOR_PREFIXES = [
  */
 const NON_COLOR_SUFFIXES = new Set([
   "xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl",
-  "left", "center", "right", "justify", "start", "end", "wrap", "nowrap",
+  "left", "center", "right", "justify", "start", "end", "wrap", "nowrap", "balance", "pretty",
   "b", "t", "l", "r", "x", "y", "0", "2", "4", "8",
   "collapse", "separate", "dashed", "dotted", "solid", "none", "inset",
   "clip", "transparent", "current", "inherit", "white", "black", "auto",
@@ -86,7 +86,7 @@ function declaredTokens(css: string): Set<string> {
  * tailwind.config.js rather than in the bridge, so scanning it would report
  * `bg-card` as an undeclared forge token.
  */
-const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "S2Sandbox.tsx", "__tokenprobe.tsx"]);
+const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "S2Sandbox.tsx", "R5Sandbox.tsx", "__tokenprobe.tsx"]);
 
 /** Color-token names referenced by the installed forge components. */
 function referencedTokens(): Map<string, string[]> {

@@ -8,7 +8,7 @@
  * - Simpler, cleaner UI with less visual noise
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
   ChevronDown,
@@ -903,7 +903,7 @@ function ToolExecutionComponent({
 
           <div className="flex items-center gap-1 shrink-0">
             {hasFileOpenAffordance && (
-              <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
                 className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
@@ -915,7 +915,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
-              <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
@@ -925,7 +925,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
-              <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Push to background" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
@@ -935,7 +935,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {(isExecuting || isCancelling) && onCancel && (
-              <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"

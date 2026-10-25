@@ -49,18 +49,14 @@ const startChat = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
-
 // PresetService is reached through connectClient (hooks/preset-queries), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {
   setTransport(
     mockTransport({
       "ChatService.StartChat": (req: unknown) => startChat(req as never),
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
       ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       ...serviceHandlers("ProjectService", { listProjectDaemons }),

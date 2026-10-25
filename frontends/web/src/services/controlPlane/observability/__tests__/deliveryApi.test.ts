@@ -142,7 +142,7 @@ describe("GetDoraMetrics", () => {
 
 describe("the ledger's two refusals", () => {
   it("tells a non-member from an unavailable environment", () => {
-    expect(deliveryErrorKind(new ConnectError("not a member of this organization", Code.PermissionDenied))).toBe("not-member");
+    expect(deliveryErrorKind(new ConnectError("not a member of this organization", Code.PermissionDenied, new Headers({ "x-forge-error-reason": "not_org_member" })))).toBe("not-member");
     expect(deliveryErrorKind(new ConnectError("one or more environments are not available to this organization", Code.PermissionDenied))).toBe("env-unavailable");
     expect(deliveryErrorKind(new ConnectError("delivery insights are not available to machine credentials", Code.PermissionDenied))).toBe("denied");
     expect(deliveryErrorKind(new ConnectError("boom", Code.Unavailable))).toBe("unavailable");

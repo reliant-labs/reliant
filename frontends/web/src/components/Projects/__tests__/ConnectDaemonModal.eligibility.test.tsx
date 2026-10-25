@@ -19,9 +19,9 @@
  * be refused is a UI that teaches users the product is broken, and here it was
  * spending real money instead.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreateDaemon = vi.fn();
 const mockUseCloudEligibility = vi.fn();
@@ -56,12 +56,6 @@ vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: () => vi.fn() }));
 // control-plane COMMANDS, so the two are stubbed separately. An empty list is
 // the brand-new-user case, which is the one that reaches CreateDaemon.
 const mockListDaemons = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: () => mockListDaemons() }),
-  },
-}));
-
 vi.mock("../../../services/controlPlane/daemon", () => ({
   resumeDaemon: vi.fn(),
 }));
@@ -72,6 +66,13 @@ vi.mock("../../forge-ui/modal", () => ({
 }));
 
 import { ConnectDaemonModal } from "../ConnectDaemonModal";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { renderWithQuery } from "@/test/renderWithQuery";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
+afterEach(() => setTransport(null));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -97,7 +98,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: false,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     expect(
       screen.queryByRole("button", { name: /Reliant Cloud/i }),
@@ -116,7 +117,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: false,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     // The panel that replaces the tile carries the reason plus both ways out.
     expect(
@@ -131,7 +132,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
   // Never block an entitled user — the failure mode of an over-eager gate is
   // just as bad as the one we're closing.
   it("still provisions for an eligible user", async () => {
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     await userEvent.click(screen.getByRole("button", { name: /Reliant Cloud/i }));
 
@@ -153,7 +154,7 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
       isLoading: true,
     });
 
-    render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
     expect(
       screen.queryByRole("button", { name: /Reliant Cloud/i }),

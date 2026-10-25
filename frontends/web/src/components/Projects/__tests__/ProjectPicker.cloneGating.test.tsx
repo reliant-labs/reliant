@@ -12,7 +12,7 @@
  */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 vi.stubGlobal(
@@ -35,17 +35,6 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
 let registryDaemons: unknown[] = [];
 
 const mockListDaemons = vi.fn(async () => ({ daemons: registryDaemons }));
-
-// The picker now reads ONE list, from the registry
-// (docs/design/one-daemon-list.md), so the grpc client is what gets stubbed.
-// It used to poll this list AND control-plane's, and reconcile them by hand.
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
-    }),
-  },
-}));
 
 vi.mock("@/services/controlPlane/daemon", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/controlPlane/daemon")>()),
@@ -108,6 +97,12 @@ vi.mock("@/store/apiKeySetupStore", () => ({
 import { ProjectPicker } from "../ProjectPicker";
 import { markMachineGone, resetGoneMachinesForTest } from "@/lib/goneMachines";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
+afterEach(() => setTransport(null));
 
 const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
 const DAEMON_STATUS_FAILED = DaemonStatus.FAILED;

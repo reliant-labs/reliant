@@ -24,7 +24,7 @@ import {
   DaemonStatus,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
-import { DAEMON_LIST_QUERY_KEY, fetchDaemonList } from "./daemonListQuery";
+import { daemonListQuery } from "./daemon-registry-queries";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { resumeDaemon } from "@/services/controlPlane/daemon";
 import { isAlreadyResumedError } from "@/lib/daemon-resume";
@@ -48,7 +48,7 @@ const TICK_MS = 1_000;
  * Backstop poll of the machine's status while a wait is in progress.
  *
  * NOT the freshness mechanism: the list is the shared, push-invalidated
- * DAEMON_LIST_QUERY_KEY, and the gateway announces every attach, detach and
+ * daemon list (daemon-registry-queries), and the gateway announces every attach, detach and
  * lifecycle transition (provisioning, cloning, suspend, failure) on the user
  * stream. This used to poll its own key every 2s for as long as anything
  * waited — including a terminal parked on a SUSPENDED machine, which waits
@@ -204,13 +204,11 @@ export function useDaemonWait({
   // is then history, not status: the copy says Reliant cannot be reached
   // rather than narrating it (registryUnreachable), and the poll keeps going
   // so it recovers on the first read that succeeds.
-  const { data: daemons, refetch, isError, failureCount } = useQuery<Daemon[]>({
-    queryKey: DAEMON_LIST_QUERY_KEY,
-    queryFn: fetchDaemonList,
+  const { data: daemons, refetch, isError, failureCount } = useQuery(daemonListQuery({
     enabled: waiting && capabilities.cloudDaemons,
     refetchInterval: (query) => {
       if (!waiting) return false;
-      const d = pickDaemon(query.state.data ?? []);
+      const d = pickDaemon(query.state.data?.daemons ?? []);
       const next = classifyDaemonWait({
         daemon: d,
         elapsedMs: 0,
@@ -222,7 +220,7 @@ export function useDaemonWait({
     },
     refetchIntervalInBackground: false,
     staleTime: 0,
-  });
+  }));
 
   // Forget wakes that are over (the machine came up, failed, or never left
   // sleep), so a later wait on the same machine is not mislabelled as a wake.

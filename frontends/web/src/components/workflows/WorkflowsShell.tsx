@@ -55,7 +55,7 @@ import { useProjects } from "@/hooks/project-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
 import DropdownMenu from "../forge-ui/dropdown_menu";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Library> = {
   library: Library,
@@ -224,7 +224,7 @@ function WorkflowsHeader({ onClose, showProject }: { onClose: () => void; showPr
       )}
       <div className="flex-1 self-stretch" style={dragRegionStyle} />
       <div className="flex cursor-default items-center" style={noDragRegionStyle}>
-        <Tooltip content={`${exitLabel} (Esc)`} placement="bottom" delay={300}>
+        <Tooltip content={`${exitLabel} (Esc)`} side="bottom" delay={300}>
           <button
             type="button"
             onClick={onClose}

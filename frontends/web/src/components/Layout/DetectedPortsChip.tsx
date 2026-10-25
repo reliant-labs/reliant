@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 import { type CSSProperties } from "react";
 
@@ -116,7 +116,7 @@ export function DetectedPortsChip() {
                 ? `Port ${ports[0]} detected — open preview`
                 : `${ports.length} ports detected — open preview`
             }
-            placement="top"
+            side="top"
           >
             <button
               type="button"
@@ -139,7 +139,7 @@ export function DetectedPortsChip() {
                 Default access for new ports
               </div>
               <div className="flex overflow-hidden rounded border border-border">
-                <Tooltip content="Only you (and your org) can open a detected port unless you make it public." placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content="Only you (and your org) can open a detected port unless you make it public." side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   disabled={defaultMut.isPending}
@@ -157,7 +157,7 @@ export function DetectedPortsChip() {
                   Only you
                 </button>
 </Tooltip>
-                <Tooltip content="Anyone with the link can open every detected port on this workspace." placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content="Anyone with the link can open every detected port on this workspace." side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   disabled={defaultMut.isPending}
@@ -194,7 +194,7 @@ export function DetectedPortsChip() {
                 key={port}
                 className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-accent"
               >
-                <Tooltip content={previewUrl(port)} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content={previewUrl(port)} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   onClick={() => openPort(port)}
@@ -209,7 +209,7 @@ export function DetectedPortsChip() {
                       isPublic
                         ? "Public — anyone with the link can open this port. Click to make private."
                         : "Only you can open this port. Click to make it public."
-                    } placement="bottom" delay={300} wrapperClassName="inline-flex">
+                    } side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                     type="button"
                     disabled={pending}

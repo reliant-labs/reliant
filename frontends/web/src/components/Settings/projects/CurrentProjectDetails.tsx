@@ -5,7 +5,7 @@ import Badge from "@/components/forge-ui/badge";
 import Card from "@/components/forge-ui/card";
 import Status from "@/components/forge-ui/status";
 import Button from "@/components/forge-ui/button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { useProjectGitInfo, type ProjectGitInfo } from "@/hooks/project-queries";
 import { useChatList } from "@/hooks/chat-queries";
 import { logger } from "@/lib/logger";
@@ -140,7 +140,7 @@ export function CurrentProjectDetails({
               Repository
             </h3>
             {project.is_git_repo && (
-              <Tooltip content="Refresh git status" placement="left" delay={300}>
+              <Tooltip content="Refresh git status" side="left" delay={300}>
                 <button
                   type="button"
                   aria-label="Refresh git status"

@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 interface ChatButtonProps {
   onClick: () => void;
@@ -21,7 +21,7 @@ export function ChatButton({
   compact = false,
 }: ChatButtonProps) {
   return (
-    <Tooltip content={tooltip} placement="top" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={tooltip} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={onClick}
         disabled={disabled}

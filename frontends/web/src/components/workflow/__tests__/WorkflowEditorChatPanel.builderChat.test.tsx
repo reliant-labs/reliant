@@ -132,7 +132,7 @@ vi.mock("../../DaemonWaitState", () => ({
 vi.mock("../../Layout/ConnectDaemonModal", () => ({ ConnectDaemonModal: () => null }));
 vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () => null }));
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
-vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
+vi.mock("../../forge-ui/tooltip", () => ({ default: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));

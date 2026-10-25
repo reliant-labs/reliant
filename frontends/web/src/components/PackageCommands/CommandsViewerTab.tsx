@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, type ReactNode } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
 import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers } from "lucide-react";
 import { useContainerWidth } from "../../hooks/useContainerWidth";
@@ -1522,7 +1522,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       getLeftPadding()
     )}>
       {/* Run button */}
-      <Tooltip content={isRunning ? `${command.name} is running` : `Run ${command.name}`} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+      <Tooltip content={isRunning ? `${command.name} is running` : `Run ${command.name}`} side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
         onClick={onRun}
         disabled={isDisabled}
@@ -1554,7 +1554,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
               {command.relative_path}
             </span>
           )}
-          <Tooltip content={isFavorite ? "Remove from favorites" : "Add to favorites"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={isFavorite ? "Remove from favorites" : "Add to favorites"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
             className={cn(
@@ -1569,7 +1569,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           {runningProcess?.ports && runningProcess.ports.length > 0 && !isCompact && (
             <span className="flex items-center gap-1">
               {runningProcess.ports.slice(0, 2).map((p) => (
-                <Tooltip content={`Open localhost:${p.port} in browser`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content={`Open localhost:${p.port} in browser`} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   key={p.port}
                   onClick={(e) => { e.stopPropagation(); onOpenPort(p.port); }}
@@ -1592,7 +1592,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {(runningProcess || recentProcess) && (
-          <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="View logs" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={() => onViewLogs(runningProcess || recentProcess!)}
             className={cn(
@@ -1800,7 +1800,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {!isRunning && canRerun && onRerun && (
-          <Tooltip content="Rerun command" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Rerun command" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onRerun(); }}
             className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
@@ -1808,7 +1808,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           </button>
 </Tooltip>
         )}
-        <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="View logs" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={(e) => { e.stopPropagation(); onViewLogs(); }}
           className={cn(
@@ -1821,7 +1821,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
         </button>
 </Tooltip>
         {isRunning && onKill && (
-          <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleKill}
             disabled={isCanceling}
@@ -1839,7 +1839,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
 </Tooltip>
         )}
         {!isRunning && onDismiss && (
-          <Tooltip content="Remove from list" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Remove from list" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
             className={cn(
