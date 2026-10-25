@@ -45,9 +45,8 @@ type recoveryEngine struct {
 	enabled     bool
 }
 
-// WithGitRecovery installs the production dependencies but does not enable
-// destructive rollout. The caller must supply an explicit proof-backed gate;
-// production wiring keeps enabled=false until disposable actual-host proof.
+// WithGitRecovery installs dependencies and an explicit rollout gate. Enabling
+// it never bypasses per-workspace inactivity, eligibility or remote proof.
 func (s *Sweeper) WithGitRecovery(store RecoveryStore, credentials RecoveryCredentials, enabled bool) *Sweeper {
 	s.recovery = &recoveryEngine{store: store, credentials: credentials, enabled: enabled}
 	return s
@@ -66,6 +65,17 @@ func (s *Sweeper) reconcileRecoveryJournals(ctx context.Context, owner string) {
 		return
 	}
 	for _, j := range journals {
+		if j.Operation != "" {
+			continue
+		}
+		if j.AuthorizedUntil == nil && (j.Phase == "publishing" || j.Phase == "verified") && !j.UpdatedAt.IsZero() && !s.now().Before(j.UpdatedAt.Add(5*time.Minute)) {
+			// A worker can die after committing the admission claim and before
+			// committing authorization. No remover exists yet. Cancellation
+			// locks the same parent/journal and refuses any newly live authority;
+			// a delayed worker cannot authorize once its claim is released.
+			_ = s.recovery.store.CancelWorktreeRecovery(ctx, owner, j.ID, "preauthorization claim expired; originals and recovery retained, conversation admission released")
+			continue
+		}
 		if j.Phase != "delete_authorized" || j.AuthorizedUntil == nil || s.now().Before(j.AuthorizedUntil.Add(time.Minute)) {
 			continue
 		}

@@ -25,7 +25,7 @@ type GitCredentialProvider interface {
 }
 
 func recoveryToProto(row *core.WorktreeRecovery) *pb.WorktreeRecovery {
-	out := &pb.WorktreeRecovery{Id: row.ID, SourceWorktreeId: row.SourceWorktreeID, ProjectId: row.ProjectID, DaemonId: row.DaemonID, CaptureId: row.CaptureID, Phase: row.Phase, LastError: row.LastError, CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339Nano)}
+	out := &pb.WorktreeRecovery{Id: row.ID, SourceWorktreeId: row.SourceWorktreeID, ProjectId: row.ProjectID, DaemonId: row.DaemonID, CaptureId: row.CaptureID, Phase: row.Phase, LastError: row.LastError, CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: row.UpdatedAt.UTC().Format(time.RFC3339Nano), Operation: row.Operation, OperationKey: row.OperationKey, TargetDaemonId: row.TargetDaemonID}
 	for _, c := range row.Checkouts {
 		out.Checkouts = append(out.Checkouts, &pb.WorktreeRecoveryCheckout{RepoId: c.RepoID, Rel: c.Rel, RemoteUrl: c.RemoteURL, RecoveryRef: c.RecoveryRef, CommitOid: c.CommitOID, ManifestDigest: c.ManifestDigest, Phase: c.Phase, LastError: c.LastError})
 	}
@@ -44,6 +44,17 @@ func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *connect.Reque
 		}
 	}
 	return connect.NewResponse(out), nil
+}
+
+// recoveryInstallationPath never treats a project's path on one machine as an
+// installation on another. The daemon additionally validates the actual clone.
+func recoveryInstallationPath(rows []*core.ProjectDaemon, daemonID string) string {
+	for _, row := range rows {
+		if row.DaemonID == daemonID && row.InstallState == core.ProjectInstallInstalled && filepath.IsAbs(row.Path) && filepath.Clean(row.Path) == row.Path {
+			return row.Path
+		}
+	}
+	return ""
 }
 
 func recoveryCaptures(row *core.WorktreeRecovery) ([]worktreereclaim.RecoveryCapture, error) {
@@ -78,6 +89,14 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	if err != nil || project == nil {
 		return nil, svcerr.FailedPrecondition("Install the source project on the destination machine before restoring this retained recovery")
 	}
+	installations, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, project.ID)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+	destinationRoot := recoveryInstallationPath(installations, req.TargetDaemonId)
+	if destinationRoot == "" {
+		return nil, svcerr.FailedPrecondition("Install the source project on the destination machine before restoring this retained recovery")
+	}
 	captures, err := recoveryCaptures(row)
 	if err != nil {
 		return nil, err
@@ -90,7 +109,7 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	for _, repo := range repos {
 		for _, c := range captures {
 			if repo.ID == c.RepoID && repo.RemoteURL != nil && *repo.RemoteURL == c.RemoteURL && filepath.ToSlash(filepath.Clean(repo.RelativePath)) == filepath.ToSlash(filepath.Clean(c.Rel)) {
-				registered[repo.ID] = filepath.Join(project.Path, repo.RelativePath)
+				registered[repo.ID] = filepath.Join(destinationRoot, repo.RelativePath)
 			}
 		}
 	}
@@ -112,6 +131,15 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	}
 	if wt != nil && (wt.ProjectID != project.ID || wt.Branch != branch || wt.DaemonID == nil || *wt.DaemonID != req.TargetDaemonId) {
 		return nil, svcerr.FailedPrecondition("This restore operation is already bound to a different destination machine")
+	}
+	if row.Phase == "restored" && row.Operation == "restoring" && row.OperationKey == req.IdempotencyKey && row.TargetDaemonID == req.TargetDaemonId {
+		// A completed operation is immutable. The user may already be working
+		// in the result: a lost-response retry must not revalidate their edits,
+		// downgrade the active worktree or replay reconstruction.
+		if wt == nil || wt.Status != int32(pb.WorktreeStatus_WORKTREE_STATUS_ACTIVE) || wt.Path == "" {
+			return nil, svcerr.FailedPrecondition("The completed recovery workspace is no longer available; retained recovery branches were not changed")
+		}
+		return &pb.RestoreWorktreeRecoveryResponse{Recovery: recoveryToProto(row), WorktreeId: wt.ID}, nil
 	}
 	if wt == nil {
 		now := time.Now()

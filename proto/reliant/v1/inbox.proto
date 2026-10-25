@@ -164,6 +164,10 @@ message RecoveryInboxItem {
   string phase = 6;
   int32 checkout_count = 7;
   string last_error = 8;
+  // Persisted operation identity allows safe retry after a client restart.
+  string operation = 9;
+  string operation_key = 10;
+  string target_daemon_id = 11;
 }
 
 message InboxApproval {

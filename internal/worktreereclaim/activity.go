@@ -38,10 +38,10 @@ type ActivityObserver struct {
 	mu        sync.Mutex
 	statePath string
 	now       func() time.Time
-	records   map[string]*activityRecord
+	records   map[string]*recoveryActivityRecord
 	running   map[string]*activityWatch
 }
-type activityRecord struct {
+type recoveryActivityRecord struct {
 	Evidence RecoveryActivity `json:"evidence"`
 	Digest   string           `json:"digest"`
 }
@@ -63,7 +63,7 @@ func NewActivityObserver(statePath string, now func() time.Time) (*ActivityObser
 	if now == nil {
 		now = time.Now
 	}
-	o := &ActivityObserver{statePath: statePath, now: now, records: map[string]*activityRecord{}, running: map[string]*activityWatch{}}
+	o := &ActivityObserver{statePath: statePath, now: now, records: map[string]*recoveryActivityRecord{}, running: map[string]*activityWatch{}}
 	data, err := os.ReadFile(statePath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -77,7 +77,7 @@ func NewActivityObserver(statePath string, now func() time.Time) (*ActivityObser
 		}
 	}
 	if o.records == nil {
-		o.records = map[string]*activityRecord{}
+		o.records = map[string]*recoveryActivityRecord{}
 	}
 	for k, r := range o.records {
 		if r == nil {
@@ -104,16 +104,16 @@ func activityKey(root string) (string, string, error) {
 	digest := sha256.Sum256([]byte(canonical))
 	return canonical, hex.EncodeToString(digest[:]), nil
 }
-func (o *ActivityObserver) recordLocked(key string) *activityRecord {
+func (o *ActivityObserver) recordLocked(key string) *recoveryActivityRecord {
 	r := o.records[key]
 	if r == nil {
-		r = &activityRecord{}
+		r = &recoveryActivityRecord{}
 		o.resetLocked(r)
 		o.records[key] = r
 	}
 	return r
 }
-func (o *ActivityObserver) resetLocked(r *activityRecord) {
+func (o *ActivityObserver) resetLocked(r *recoveryActivityRecord) {
 	now := o.now()
 	r.Evidence.Generation++
 	r.Evidence.ObservationID = uuid.NewString()

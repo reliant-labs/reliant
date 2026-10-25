@@ -289,7 +289,7 @@ func recoveryInboxItem(row *core.WorktreeRecovery) *reliantv1.InboxItem {
 			detail += checkout.RepoID + ": " + checkout.LastError
 		}
 	}
-	return &reliantv1.InboxItem{ItemId: inboxRecoveryPrefix + row.ID, Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_RECOVERY, ProjectId: row.ProjectID, WaitingSince: row.CreatedAt.UTC().Format(time.RFC3339Nano), Payload: &reliantv1.InboxItem_Recovery{Recovery: &reliantv1.RecoveryInboxItem{RecoveryId: row.ID, SourceWorktreeId: row.SourceWorktreeID, ProjectId: row.ProjectID, Phase: row.Phase, CheckoutCount: int32(len(row.Checkouts)), LastError: detail}}}
+	return &reliantv1.InboxItem{ItemId: inboxRecoveryPrefix + row.ID, Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_RECOVERY, ProjectId: row.ProjectID, WaitingSince: row.CreatedAt.UTC().Format(time.RFC3339Nano), Payload: &reliantv1.InboxItem_Recovery{Recovery: &reliantv1.RecoveryInboxItem{RecoveryId: row.ID, SourceWorktreeId: row.SourceWorktreeID, ProjectId: row.ProjectID, Phase: row.Phase, CheckoutCount: int32(len(row.Checkouts)), LastError: detail, Operation: row.Operation, OperationKey: row.OperationKey, TargetDaemonId: row.TargetDaemonID}}}
 }
 
 // inboxItemBlocks reports whether an item blocks a live run: an approval, a

@@ -21,6 +21,10 @@ message WorktreeRecovery {
   string created_at = 8;
   string updated_at = 9;
   repeated WorktreeRecoveryCheckout checkouts = 10;
+  // Durable retry identity; contains no credentials or file content.
+  string operation = 11;
+  string operation_key = 12;
+  string target_daemon_id = 13;
 }
 
 message WorktreeRecoveryCheckout {

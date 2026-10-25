@@ -38,6 +38,7 @@ type Repository interface {
 	// The project a worktree belongs to, checked against the caller.
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 
 	// The chats archived with a worktree.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

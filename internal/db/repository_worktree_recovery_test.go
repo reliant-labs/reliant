@@ -135,6 +135,30 @@ func TestRecoveryArchivedChatWorkflowAdmission(t *testing.T) {
 	require.ErrorIs(t, repo.ClaimWorktreeRecovery(ctx, r.OwnerUserID, r.ID, w.ActivityGeneration), core.ErrRecoveryConflict)
 }
 
+func TestRecoveryClaimAfterReceiptAndCrashCancellation(t *testing.T) {
+	testkit.Slow(t, "private pgtest receipt-first authorization and crashed claim recovery")
+	t.Parallel()
+	repo, r, d := recoveryFixture(t)
+	ctx := context.Background()
+	receipt, _ := json.Marshal(worktreereclaim.RecoveryReceipt{Capture: d, VerifiedAt: time.Now().UTC(), VerifierVersion: "fetch-v1"})
+	require.NoError(t, repo.RecordWorktreeRecoveryReceipt(ctx, r.OwnerUserID, r.ID, d.RepoID, string(receipt)))
+	require.NoError(t, repo.ClaimWorktreeRecovery(ctx, r.OwnerUserID, r.ID, r.ActivityGeneration))
+	claimed, err := repo.GetWorktreeRecovery(ctx, r.OwnerUserID, r.ID)
+	require.NoError(t, err)
+	require.Equal(t, "verified", claimed.Phase, "receipt-first claim must remain authorizable")
+	require.NoError(t, repo.AuthorizeWorktreeRecovery(ctx, r.OwnerUserID, r.ID, time.Now().Add(time.Minute)))
+	_, err = repo.ORM().Bun().NewRaw(`UPDATE worktree_recoveries SET authorized_until=now()-interval '1 second' WHERE id=?`, r.ID).Exec(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.CancelWorktreeRecovery(ctx, r.OwnerUserID, r.ID, "expired"))
+	require.NoError(t, repo.ClaimWorktreeRecovery(ctx, r.OwnerUserID, r.ID, r.ActivityGeneration))
+	// Simulate a worker dying after the claim commit, before authorization.
+	require.ErrorIs(t, repo.RecordWorktreeActivity(ctx, r.SourceWorktreeID), core.ErrWorktreeFinalizing)
+	require.NoError(t, repo.CancelWorktreeRecovery(ctx, r.OwnerUserID, r.ID, "preauthorization claim expired"))
+	require.ErrorIs(t, repo.AuthorizeWorktreeRecovery(ctx, r.OwnerUserID, r.ID, time.Now().Add(time.Minute)), core.ErrRecoveryConflict, "delayed worker cannot resurrect canceled claim")
+	require.NoError(t, repo.RecordWorktreeActivity(ctx, r.SourceWorktreeID))
+	require.NoError(t, repo.UnarchiveWorktree(ctx, r.SourceWorktreeID), "conversation can continue after crashed claim")
+}
+
 func TestRecoveryOperationRetryBindsTargetAndSerializesDelete(t *testing.T) {
 	testkit.Slow(t, "private pgtest operation retry fencing")
 	t.Parallel()

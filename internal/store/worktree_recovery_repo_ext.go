@@ -291,7 +291,9 @@ func ClaimWorktreeRecovery(ctx context.Context, db orm.Context, owner, id string
 		if err != nil {
 			return err
 		}
-		_, err = db.Bun().NewRaw(`UPDATE worktree_recoveries SET phase='publishing',authorized_until=NULL,updated_at=now() WHERE id=?`, id).Exec(ctx)
+		// Claim follows durable receipts in the production pipeline. Do not
+		// demote verified to publishing or authorization can never succeed.
+		_, err = db.Bun().NewRaw(`UPDATE worktree_recoveries SET phase=CASE WHEN NOT EXISTS(SELECT 1 FROM worktree_recovery_checkouts WHERE recovery_id=? AND receipt_json='') THEN 'verified' ELSE 'publishing' END,authorized_until=NULL,updated_at=now() WHERE id=?`, id, id).Exec(ctx)
 		return err
 	})
 }

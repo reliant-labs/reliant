@@ -893,11 +893,11 @@ type WorktreeSweepDeps struct {
 // daemons: WorktreeService and InboxService settle one at a time through it,
 // and the WorktreeSweeper loop sweeps them all.
 //
-// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
-// worktrees its daemon reports finished (clean, merged or pushed, idle over
-// 24h, not in use) and archives nothing; read the finished= count in the
-// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
-// ordinary removal reaches them; "off" never asks.
+// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) observes candidates but
+// does not enroll dirty/unpushed work in Git recovery; "on" admits the Git-only
+// preservation/finalization pipeline after seven days of complete inactivity
+// evidence. Every capture still requires its own eligibility/secret gates and
+// independent remote proof. "off" disables automatic enrollment.
 //
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
@@ -907,9 +907,9 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		return nil, err
 	}
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
-		// Actual-host capability and crash/race proofs are required before
-		// enabling destructive Git recovery. No environment flag bypasses this.
-		WithGitRecovery(database, recoveryCredentials{client: credentials}, false).
+		// The existing explicit rollout setting gates Git recovery too. The
+		// gate does not bypass any per-workspace or remote verification check.
+		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {

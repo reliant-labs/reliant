@@ -33,10 +33,29 @@ func TestRecoveryDescriptorMustMatchCatalog(t *testing.T) {
 	}
 }
 
+func TestRecoveryDestinationRequiresInstalledProject(t *testing.T) {
+	rows := []*core.ProjectDaemon{
+		{DaemonID: "other", Path: "/other", InstallState: core.ProjectInstallInstalled},
+		{DaemonID: "queued", Path: "/queued", InstallState: core.ProjectInstallInstalling},
+		{DaemonID: "target", Path: "/machine-specific/clone", InstallState: core.ProjectInstallInstalled},
+	}
+	if got := recoveryInstallationPath(rows, "target"); got != "/machine-specific/clone" {
+		t.Fatalf("destination installation = %q", got)
+	}
+	for _, daemon := range []string{"missing", "queued"} {
+		if recoveryInstallationPath(rows, daemon) != "" {
+			t.Fatalf("accepted uninstalled destination %s", daemon)
+		}
+	}
+}
+
 func TestRecoveryPublicPayloadDoesNotExposeDescriptor(t *testing.T) {
-	row := &core.WorktreeRecovery{ID: "retained", SourceWorktreeID: "deleted-source", DaemonID: "deleted-machine", Phase: "held", CreatedAt: time.Now(), UpdatedAt: time.Now(), Checkouts: []core.RecoveryCheckout{{RepoID: "repo", Phase: "held", LastError: "remote denied", DescriptorJSON: "internal", ReceiptJSON: "internal"}}}
+	row := &core.WorktreeRecovery{ID: "retained", SourceWorktreeID: "deleted-source", DaemonID: "deleted-machine", Phase: "held", Operation: "restoring", OperationKey: "stable-key", TargetDaemonID: "target", CreatedAt: time.Now(), UpdatedAt: time.Now(), Checkouts: []core.RecoveryCheckout{{RepoID: "repo", Phase: "held", LastError: "remote denied", DescriptorJSON: "internal", ReceiptJSON: "internal"}}}
 	got := recoveryToProto(row)
 	if got.Id != "retained" || got.SourceWorktreeId != "deleted-source" || len(got.Checkouts) != 1 || got.Checkouts[0].LastError != "remote denied" {
 		t.Fatal("retained recovery identity/progress missing")
+	}
+	if got.Operation != "restoring" || got.OperationKey != "stable-key" || got.TargetDaemonId != "target" {
+		t.Fatal("durable operation retry identity missing")
 	}
 }
