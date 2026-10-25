@@ -52,6 +52,23 @@ import { worktreeServiceKeys } from "./worktree-service-hooks_gen";
 
 const client = connectClient(WorktreeService);
 
+/** Durable Git recovery is NOT inbox undismiss or original-branch recreation. */
+export async function restoreWorktreeRecovery(recoveryId: string, targetDaemonId: string, idempotencyKey: string) {
+  const response = await client.restoreWorktreeRecovery({ recoveryId, targetDaemonId, idempotencyKey });
+  await Promise.all([
+    invalidateWorktreeQueries(appQueryClient),
+    appQueryClient.invalidateQueries({ queryKey: ["inbox"] }),
+  ]);
+  return response;
+}
+
+/** Only this explicit action deletes the exact retained recovery branches. */
+export async function deleteWorktreeRecovery(recoveryId: string, idempotencyKey: string) {
+  const response = await client.deleteWorktreeRecovery({ recoveryId, idempotencyKey });
+  await appQueryClient.invalidateQueries({ queryKey: ["inbox"] });
+  return response;
+}
+
 /**
  * Said once when a workspace action found its machine asleep: the server woke
  * it, and the action finishes by itself once the machine is back, so this is

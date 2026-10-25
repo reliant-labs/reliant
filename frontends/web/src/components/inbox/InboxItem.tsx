@@ -57,6 +57,7 @@ import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { StorageAction, totalHeldBytes } from "./StorageAction";
+import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
 export const ALREADY_HANDLED_MS = 2000;
@@ -226,6 +227,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.RECOVERY:
+      return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
       return <HardDrive className={cn(className, "text-warning-ink")} aria-label="Storage" />;
     default:
@@ -235,6 +238,7 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 
 /** The run's (or the automation's) display name. */
 export function subjectName(item: InboxItemData): string {
+  if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
   }
@@ -382,6 +386,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "recovery": {
+      const text = `${payload.value.checkoutCount} repositories · ${payload.value.phase}${payload.value.lastError ? ` · Held: ${payload.value.lastError}` : ""}`;
+      return { node: text, title: text };
+    }
     case "storage": {
       const text = storageDetail(payload.value);
       return text ? { node: text, title: text } : null;
@@ -481,6 +489,8 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
           Finish setup
         </a>
       );
+    case "recovery":
+      return <RecoveryAction recovery={payload.value} />;
     case "storage":
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
