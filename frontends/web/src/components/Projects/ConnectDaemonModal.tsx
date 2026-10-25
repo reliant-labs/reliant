@@ -36,12 +36,9 @@
  * Extracted from ProjectPicker.tsx so the gate is directly testable.
  */
 import { useCallback, useEffect, useState } from "react";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  DaemonStatus,
-  ListDaemonsRequestSchema,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { useQueryClient } from "@tanstack/react-query";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
 import { ArrowLeft, Check, Cloud, Loader2, Monitor } from "lucide-react";
 import Modal from "../forge-ui/modal";
 import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
@@ -70,6 +67,7 @@ export function ConnectDaemonModal({
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudStarted, setCloudStarted] = useState(false);
 
+  const queryClient = useQueryClient();
   const goToBilling = useGoToBilling();
   const {
     eligible,
@@ -115,9 +113,7 @@ export function ConnectDaemonModal({
       // The registry list, not control-plane's: it is the one that knows
       // whether a machine has actually attached, which is exactly the question
       // being asked here (docs/design/one-daemon-list.md).
-      const { daemons } = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
+      const daemons = await fetchDaemonList(queryClient);
       if (daemons.some((d) => d.status === DaemonStatus.ACTIVE)) {
         // Already have an active daemon — nothing to provision; the picker
         // will pick it up on the next poll.

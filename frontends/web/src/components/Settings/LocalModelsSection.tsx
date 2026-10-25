@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { create } from "@bufbuild/protobuf";
 import { Check, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
 import {
-  RefreshLocalModelsRequestSchema,
-  SetLocalModelEndpointsRequestSchema,
-} from "../../gen/reliant/v1/daemon_registry_pb";
+  useRefreshLocalModels,
+  useSetLocalModelEndpoints,
+} from "../../hooks/daemon-registry-service-hooks_gen";
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
 import type {
   LocalModelEndpoint,
@@ -273,13 +271,16 @@ export function LocalModelsMachineCard({ daemon }: { daemon: DaemonInfo }) {
   const endpoints = inventory?.endpoints ?? [];
   const hasEmbeddings = endpoints.some((e) => e.models.some((m) => !m.supportsChat));
 
+  // Generated writes: each also refetches the daemon list, which carries the
+  // inventory every other machine card and the model picker read.
+  const refreshRpc = useRefreshLocalModels();
+  const setEndpointsRpc = useSetLocalModelEndpoints();
+
   const refresh = async () => {
     setBusy("refresh");
     setRpcError(null);
     try {
-      const res = await grpcClient
-        .daemonRegistry()
-        .refreshLocalModels(create(RefreshLocalModelsRequestSchema, { daemonId: daemon.daemonId }));
+      const res = await refreshRpc.mutateAsync({ daemonId: daemon.daemonId });
       setFresh(res.localModels);
     } catch (e) {
       setRpcError(`Couldn't refresh: ${errorText(e)}`);
@@ -292,11 +293,7 @@ export function LocalModelsMachineCard({ daemon }: { daemon: DaemonInfo }) {
     setBusy("save");
     setRpcError(null);
     try {
-      const res = await grpcClient
-        .daemonRegistry()
-        .setLocalModelEndpoints(
-          create(SetLocalModelEndpointsRequestSchema, { daemonId: daemon.daemonId, baseUrls }),
-        );
+      const res = await setEndpointsRpc.mutateAsync({ daemonId: daemon.daemonId, baseUrls });
       setFresh(res.localModels);
     } catch (e) {
       setRpcError(`Couldn't save endpoints: ${errorText(e)}`);

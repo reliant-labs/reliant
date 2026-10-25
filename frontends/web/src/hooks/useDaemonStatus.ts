@@ -1,13 +1,13 @@
 import { useCallback, useEffect } from "react";
-import { useQuery, useQueryClient, type Query, type QueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { DaemonStatus } from "../gen/reliant/v1/daemon_registry_pb";
-import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
-import { DAEMON_LIST_QUERY_KEY, fetchDaemonList } from "./daemonListQuery";
-
-// The key and fetcher live in daemonListQuery so readers that are not this
-// hook (useDaemonWait) can share the cache without importing it.
-export { DAEMON_LIST_QUERY_KEY, fetchDaemonList };
+import {
+  cachedDaemonList,
+  daemonListQuery,
+  EMPTY_DAEMON_LIST,
+  invalidateDaemonList,
+} from "./daemon-registry-queries";
 
 /**
  * Safety net, not the freshness mechanism.
@@ -25,22 +25,6 @@ export { DAEMON_LIST_QUERY_KEY, fetchDaemonList };
  * every observer's interval when the query fetches, so they share a phase.
  */
 export const DAEMON_LIST_FALLBACK_POLL_MS = 60_000;
-
-/**
- * Mark every daemon-list cache stale; observed ones refetch at once.
- *
- * Also covers the onboarding gate's attempt-scoped list
- * (["onboarding", "daemons", "gate", …]), which waits on a daemon appearing
- * and has to hear about it the moment it does.
- */
-export function invalidateDaemonList(
-  queryClient: QueryClient,
-  options: { predicate?: (query: Query) => boolean } = {},
-): void {
-  const { predicate } = options;
-  void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY, predicate });
-  void queryClient.invalidateQueries({ queryKey: ["onboarding", "daemons"], predicate });
-}
 
 /**
  * How often, at most, a heartbeat that contradicts the cached list re-reads it
@@ -63,7 +47,7 @@ const lastContradictionRead = new Map<string, number>();
  * left alone: its first reader's fetch answers.
  */
 export function reconcileDaemonHeartbeat(queryClient: QueryClient, daemonId: string, now = Date.now()): void {
-  const list = queryClient.getQueryData<DaemonInfo[]>(DAEMON_LIST_QUERY_KEY);
+  const list = cachedDaemonList(queryClient);
   if (!list) return;
   const daemon = list.find((d) => d.daemonId === daemonId);
   if (daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE)) return;
@@ -88,8 +72,8 @@ export function resetDaemonHeartbeatReconcile(): void {
  * RPC traffic by the number of mounted consumers — the user observed 4x
  * fan-out per cycle in practice.
  *
- * The implementation is now a single shared React Query keyed by
- * DAEMON_LIST_QUERY_KEY, refreshed by push and backstopped by a slow poll —
+ * The implementation is now the single shared daemon-list entry
+ * (daemon-registry-queries), refreshed by push and backstopped by a slow poll —
  * see DAEMON_LIST_FALLBACK_POLL_MS.
  */
 export function useDaemonStatus() {
@@ -128,7 +112,7 @@ export function useDaemonStatus() {
       try {
         if (!api?.isDaemonConnected) return;
         if (await api.isDaemonConnected()) {
-          void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+          invalidateDaemonList(queryClient);
         }
       } catch {
         // A failed probe just falls back to the event + poll.
@@ -144,9 +128,7 @@ export function useDaemonStatus() {
     });
   }, [queryClient]);
 
-  const { data, dataUpdatedAt, isError, failureCount } = useQuery<DaemonInfo[]>({
-    queryKey: DAEMON_LIST_QUERY_KEY,
-    queryFn: fetchDaemonList,
+  const { data, dataUpdatedAt, isError, failureCount } = useQuery(daemonListQuery({
     refetchInterval: DAEMON_LIST_FALLBACK_POLL_MS,
     // A hidden window has no one reading the list; focus catches it up.
     refetchIntervalInBackground: false,
@@ -162,8 +144,8 @@ export function useDaemonStatus() {
     // "always" refetches irrespective of staleness, and `refresh()` and every
     // push signal invalidate.
     staleTime: DAEMON_LIST_FALLBACK_POLL_MS,
-    placeholderData: [],
-  });
+    placeholderData: EMPTY_DAEMON_LIST,
+  }));
 
   const refresh = useCallback(() => {
     invalidateDaemonList(queryClient);

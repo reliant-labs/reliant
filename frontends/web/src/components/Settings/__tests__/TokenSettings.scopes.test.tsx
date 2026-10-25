@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { TokenKind } from "../../../gen/reliant/v1/token_pb";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 // A daemon credential is PERMANENT (control-plane migration 00112), so there
 // is no expiry to bound it and "what can this token do" is the only audit
@@ -13,11 +15,13 @@ const createToken = vi.fn();
 const revokeToken = vi.fn();
 const updateToken = vi.fn();
 
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: {
-    token: () => ({ listTokens, createToken, revokeToken, updateToken }),
-  },
-}));
+// TokenService is reached through connectClient (the generated hooks), so the
+// fakes answer at the transport.
+function renderTokens() {
+  return renderWithTransport(<TokenSettings />, {
+    transport: mockTransport(serviceHandlers("TokenService", { listTokens, createToken, revokeToken, updateToken })),
+  });
+}
 
 import { TokenSettings } from "../TokenSettings";
 
@@ -47,7 +51,7 @@ describe("TokenSettings — permissions and editing", () => {
   it("shows the permissions a token carries", async () => {
     // Mutation caught: rendering the row without scopes, which leaves a
     // permanent credential's authority invisible.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     expect(screen.getByText("daemon:connect")).toBeInTheDocument();
     expect(screen.getByText("deploy:write")).toBeInTheDocument();
@@ -55,7 +59,7 @@ describe("TokenSettings — permissions and editing", () => {
   });
 
   it("shows which daemon a token is bound to", async () => {
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     expect(screen.getByText(/daemon-7/)).toBeInTheDocument();
   });
@@ -63,7 +67,7 @@ describe("TokenSettings — permissions and editing", () => {
   it("reports a permanent token as never expiring, not as blank", async () => {
     // A blank expiry column reads as missing data. "Never expires" is the
     // actual fact, and it is the reason revoking matters.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     expect(screen.getByText(/never expires/i)).toBeInTheDocument();
   });
@@ -71,7 +75,7 @@ describe("TokenSettings — permissions and editing", () => {
   it("renames through UpdateToken without sending scopes", async () => {
     // Mutation caught: sending an empty scopes list on a rename, which would
     // strip every permission the daemon holds.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
@@ -88,7 +92,7 @@ describe("TokenSettings — permissions and editing", () => {
   it("edits permissions through UpdateToken, carrying the full set", async () => {
     // The request replaces the whole set, so unticking one permission must
     // send the REMAINING ones, not the removed one.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
@@ -105,7 +109,7 @@ describe("TokenSettings — permissions and editing", () => {
   });
 
   it("refreshes the list after an edit", async () => {
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     expect(listTokens).toHaveBeenCalledTimes(1);
 
@@ -120,7 +124,7 @@ describe("TokenSettings — permissions and editing", () => {
   it("warns that revoking disconnects the bound daemon", async () => {
     // Revoking a daemon credential is not just housekeeping: it drops that
     // daemon. The confirmation has to say so.
-    render(<TokenSettings />);
+    renderTokens();
     await screen.findByText("build-box");
     fireEvent.click(screen.getByRole("button", { name: /revoke/i }));
     expect(await screen.findByText(/disconnect/i)).toBeInTheDocument();

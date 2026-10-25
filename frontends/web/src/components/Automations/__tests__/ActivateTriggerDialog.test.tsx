@@ -46,9 +46,7 @@ const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons }),
-  },
+  grpcClient: {},
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
 
@@ -88,6 +86,8 @@ beforeEach(() => {
   // (generated hooks) are answered at the transport.
   setTransport(
     mockTransport({
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
       ...serviceHandlers("TriggerService", { createTrigger, rotateWebhookToken }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees }),

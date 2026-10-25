@@ -21,17 +21,6 @@ const mockCreateDaemon = vi.fn();
 const mockCreateProjectFromRepo = vi.fn();
 const mockCloneRepo = vi.fn();
 
-// The LIST comes from the daemon registry — the one daemon list
-// (docs/design/one-daemon-list.md) — while CreateDaemon stays a control-plane
-// command, so the two are stubbed separately.
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: (...args: unknown[]) => mockListDaemons(...(args as [])),
-    }),
-  },
-}));
-
 vi.mock("@/services/controlPlane/daemon", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/controlPlane/daemon")>();
   return {
@@ -55,6 +44,12 @@ vi.mock("@/services/controlPlane/git", async (importOriginal) => {
 
 import { addRepoProject, pickOnboardingDaemon } from "../addRepoProject";
 import { markMachineGone, resetGoneMachinesForTest } from "@/lib/goneMachines";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
+afterEach(() => setTransport(null));
 
 function makeDaemon(partial: Partial<Daemon>): Daemon {
   return partial as unknown as Daemon;

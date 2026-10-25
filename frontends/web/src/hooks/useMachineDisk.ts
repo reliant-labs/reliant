@@ -1,11 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { create } from "@bufbuild/protobuf";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { grpcClient } from "@/api/grpc-client";
-import { ClearMachineCachesRequestSchema } from "@/gen/reliant/v1/daemon_registry_pb";
-import { invalidateDaemonList } from "@/hooks/useDaemonStatus";
+import { useClearMachineCaches as useClearMachineCachesRpc } from "@/hooks/daemon-registry-service-hooks_gen";
 import { inboxKeys } from "@/hooks/inbox-queries";
 
 /**
@@ -13,14 +10,14 @@ import { inboxKeys } from "@/hooks/inbox-queries";
  * decides what is safe and runs the clean-up in the background; progress shows
  * as `DiskConsumer.clearing` on the next disk report, which the gateway
  * announces — so this only refreshes the lists, it does not poll.
+ *
+ * The generated write refetches the daemon list (every DaemonRegistryService
+ * read); the disk-pressure inbox item is refreshed here.
  */
 export function useClearMachineCaches() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (request: { daemonId: string; kinds: string[] }) =>
-      grpcClient.daemonRegistry().clearMachineCaches(create(ClearMachineCachesRequestSchema, request)),
+  return useClearMachineCachesRpc({
     onSettled: () => {
-      invalidateDaemonList(queryClient);
       void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
     },
   });

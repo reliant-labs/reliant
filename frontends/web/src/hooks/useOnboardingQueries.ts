@@ -1,11 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
-import {
-  DAEMON_LIST_FALLBACK_POLL_MS,
-  DAEMON_LIST_QUERY_KEY,
-  fetchDaemonList,
-  invalidateDaemonList,
-} from '@/hooks/useDaemonStatus';
+import { DAEMON_LIST_FALLBACK_POLL_MS } from '@/hooks/useDaemonStatus';
+import { daemonListQuery, invalidateDaemonList } from '@/hooks/daemon-registry-queries';
 import {
   createDaemon,
   resumeDaemon,
@@ -167,20 +163,18 @@ export function useCloudEligibility() {
 // of its own, which the mobile list passes while the tab is hidden. With no
 // option, the shared fallback poll applies.
 export function useDaemonList(options?: { refetchInterval?: number | false; enabled?: boolean }) {
-  return useQuery({
+  // The registry, not control-plane: one list that knows both whether a
+  // machine has attached and what it is doing. See
+  // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
+  // control-plane transport — create/resume/suspend/delete are genuine
+  // control-plane commands, and only the list moved.
+  return useQuery(daemonListQuery({
     // Disabled, it still returns what another reader already fetched.
     enabled: options?.enabled ?? true,
-    queryKey: DAEMON_LIST_QUERY_KEY,
-    // The registry, not control-plane: one list that knows both whether a
-    // machine has attached and what it is doing. See
-    // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
-    // control-plane transport — create/resume/suspend/delete are genuine
-    // control-plane commands, and only the list moved.
-    queryFn: fetchDaemonList,
     staleTime: DAEMON_LIST_FALLBACK_POLL_MS,
     refetchInterval: options?.refetchInterval ?? DAEMON_LIST_FALLBACK_POLL_MS,
     refetchIntervalInBackground: false,
-  });
+  }));
 }
 
 /**
