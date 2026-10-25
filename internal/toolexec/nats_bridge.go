@@ -45,7 +45,14 @@ type NATSToolBridge struct {
 	// ctx and cancel control the lifetime of the entire bridge.
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	// wg counts the bridge's goroutines; Close waits for them. Every Add
+	// goes through goTracked, under trackMu, so none can race Close's Wait:
+	// a subscription callback still running when Close begins (nats.go
+	// delivers on its own goroutines, and Close unsubscribes only after
+	// waiting) would otherwise Add to a WaitGroup that is being waited on.
+	wg      sync.WaitGroup
+	trackMu sync.RWMutex
+	closed  bool // guarded by trackMu
 
 	// inFlight bounds the number of concurrently-handled request/reply
 	// messages. See handleAsync.
@@ -128,9 +135,7 @@ func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload f
 		return
 	}
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	if !b.goTracked(func() {
 		defer func() { <-b.inFlight }()
 		defer func() {
 			// A panic here would otherwise take down the whole gateway
@@ -142,7 +147,25 @@ func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload f
 			}
 		}()
 		fn()
+	}) {
+		<-b.inFlight // the bridge is closing; the caller is left to time out
+	}
+}
+
+// goTracked runs fn on a goroutine Close waits for, and reports false — fn
+// not run — once Close has begun.
+func (b *NATSToolBridge) goTracked(fn func()) bool {
+	b.trackMu.RLock()
+	defer b.trackMu.RUnlock()
+	if b.closed {
+		return false
+	}
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		fn()
 	}()
+	return true
 }
 
 // assembleRequest feeds a received message through the request-chunk
@@ -847,9 +870,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 	logging.DebugContext(userCtx, "[NATSToolBridge] Starting terminal output forwarder",
 		"userID", userID, "sessionID", sessionID, "subject", subject)
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	started := b.goTracked(func() {
 		defer unsub()
 		for {
 			select {
@@ -873,7 +894,10 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 				observability.NATSPublishTotal.WithLabelValues("daemon.terminal.output").Inc()
 			}
 		}
-	}()
+	})
+	if !started {
+		unsub() // the bridge is closing
+	}
 }
 
 // startProcessOutputForwarder subscribes to local process output and publishes
@@ -891,9 +915,7 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 	logging.DebugContext(userCtx, "[NATSToolBridge] Starting process output forwarder",
 		"userID", userID, "processID", processID, "subject", subject)
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	started := b.goTracked(func() {
 		defer unsub()
 		for {
 			select {
@@ -917,7 +939,10 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 				observability.NATSPublishTotal.WithLabelValues("daemon.process.output").Inc()
 			}
 		}
-	}()
+	})
+	if !started {
+		unsub() // the bridge is closing
+	}
 }
 
 // sanitizePendingSubjectToken mirrors control-plane's
@@ -1257,6 +1282,12 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 
 // Close cancels the bridge context, waits for goroutines, and unsubscribes everything.
 func (b *NATSToolBridge) Close() error {
+	// No goroutine starts after this (goTracked), so the Wait below cannot
+	// race an Add from a subscription callback still running.
+	b.trackMu.Lock()
+	b.closed = true
+	b.trackMu.Unlock()
+
 	// Cancel all goroutines (bridge-level context).
 	b.cancel()
 	b.wg.Wait()
