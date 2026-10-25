@@ -89,7 +89,7 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
-import { setWorktreesForTest } from "../../../test/worktreeCache";
+import { getCachedWorktrees } from "../../../hooks/worktree-queries";
 
 describe("Sidebar and child runs", () => {
   beforeEach(() => {
@@ -99,9 +99,9 @@ describe("Sidebar and child runs", () => {
       ReturnType<typeof useChatStore.getState>
     >);
     // Empty on purpose: the sidebar groups from the chat list alone.
-    setWorktreesForTest({
-      worktrees: [],
-      currentWorktree: null,
+    useWorktreeStore.setState({
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
     useProjectStore.setState({
@@ -135,7 +135,7 @@ describe("Sidebar and child runs", () => {
       expect(screen.getByText("agent/112")).toBeInTheDocument();
       expect(screen.getByText("feature/test")).toBeInTheDocument();
       expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
-      expect(useWorktreeStore.getState().worktrees).toEqual([]);
+      expect(getCachedWorktrees()).toEqual([]);
     } finally {
       chats.pop();
     }

@@ -24,7 +24,6 @@ import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import type { ContextMenuItem } from "../ui/ContextMenu";
-import { setWorktreesForTest } from "../../test/worktreeCache";
 
 vi.mock("../ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -169,9 +168,9 @@ beforeEach(() => {
   >);
   useActivityStore.setState({ activities: new Map() } as Partial<ReturnType<typeof useActivityStore.getState>>);
   // Empty on purpose: the sidebar groups from the chat list alone.
-  setWorktreesForTest({
-    worktrees: [],
-    currentWorktree: null,
+  useWorktreeStore.setState({
+    currentWorktreeId: null,
+    currentWorktreeProjectId: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
   useProjectStore.setState({

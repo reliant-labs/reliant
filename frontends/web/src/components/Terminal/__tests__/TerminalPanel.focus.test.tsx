@@ -292,7 +292,6 @@ beforeEach(() => {
   setWorktreesForTest({
     worktrees: [mainWorktree, creatingWorktree],
     currentWorktree: creatingWorktree,
-    hasLoaded: true,
   });
 });
 

@@ -99,7 +99,6 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
-import { setWorktreesForTest } from "../../../test/worktreeCache";
 
 describe("Sidebar activity indicators", () => {
   beforeEach(() => {
@@ -107,9 +106,9 @@ describe("Sidebar activity indicators", () => {
     useChatStore.setState({ activeChatId: null, selectChat: vi.fn() } as Partial<
       ReturnType<typeof useChatStore.getState>
     >);
-    setWorktreesForTest({
-      worktrees: [],
-      currentWorktree: null,
+    useWorktreeStore.setState({
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
     useProjectStore.setState({

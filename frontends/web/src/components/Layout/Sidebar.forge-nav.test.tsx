@@ -33,7 +33,6 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
-import { setWorktreesForTest } from "../../test/worktreeCache";
 
 vi.mock("../ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -137,9 +136,9 @@ describe("Sidebar forge nav entry", () => {
       activities: new Map<string, ChatActivity>(),
     } as Partial<ReturnType<typeof useActivityStore.getState>>);
 
-    setWorktreesForTest({
-      worktrees: [],
-      currentWorktree: null,
+    useWorktreeStore.setState({
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
 
