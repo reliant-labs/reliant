@@ -7,9 +7,9 @@ describe('Workflow Auto-Layout', () => {
     const workflow: Workflow = {
       name: 'linear-workflow',
       nodes: [
-        { id: 'step1', type: 'run', command: 'echo "1"' },
-        { id: 'step2', type: 'run', command: 'echo "2"' },
-        { id: 'step3', type: 'run', command: 'echo "3"' },
+        { id: 'step1', type: 'run' },
+        { id: 'step2', type: 'run' },
+        { id: 'step3', type: 'run' },
       ],
       edges: [
         { from: 'step1', default: ['step2'] },
@@ -29,18 +29,18 @@ describe('Workflow Auto-Layout', () => {
     const pos2 = layouted.ui!.positions!['step2']!
     const pos3 = layouted.ui!.positions!['step3']!
 
-    expect(pos2.x).toBeGreaterThanOrEqual(pos1.x)
-    expect(pos3.x).toBeGreaterThanOrEqual(pos2.x)
+    expect(pos2.x).toBeGreaterThanOrEqual(pos1.x!)
+    expect(pos3.x).toBeGreaterThanOrEqual(pos2.x!)
   })
 
   it('should handle branching workflows', () => {
     const workflow: Workflow = {
       name: 'branching-workflow',
       nodes: [
-        { id: 'start', type: 'run', command: 'echo "start"' },
-        { id: 'branch-a', type: 'run', command: 'echo "A"' },
-        { id: 'branch-b', type: 'run', command: 'echo "B"' },
-        { id: 'merge', type: 'run', command: 'echo "merge"' },
+        { id: 'start', type: 'run' },
+        { id: 'branch-a', type: 'run' },
+        { id: 'branch-b', type: 'run' },
+        { id: 'merge', type: 'run' },
       ],
       edges: [
         { 
@@ -58,7 +58,7 @@ describe('Workflow Auto-Layout', () => {
     const layouted = autoLayoutWorkflow(workflow)
 
     // All nodes should have positions in ui.positions
-    layouted.nodes.forEach(step => {
+    layouted.nodes!.forEach(step => {
       expect(layouted.ui?.positions?.[step.id!]).toBeDefined()
     })
 
@@ -67,15 +67,15 @@ describe('Workflow Auto-Layout', () => {
     const mergePos = layouted.ui!.positions!['merge']!
 
     // Merge should be to the right of or at same X as start (workflows flow left-to-right)
-    expect(mergePos.x).toBeGreaterThanOrEqual(startPos.x)
+    expect(mergePos.x).toBeGreaterThanOrEqual(startPos.x!)
   })
 
   it('should re-layout workflows even if they have existing positions', () => {
     const workflow: Workflow = {
       name: 'positioned-workflow',
       nodes: [
-        { id: 'step1', type: 'run', command: 'echo "1"' },
-        { id: 'step2', type: 'run', command: 'echo "2"' },
+        { id: 'step1', type: 'run' },
+        { id: 'step2', type: 'run' },
       ],
       edges: [
         { from: 'step1', default: ['step2'] },
@@ -94,16 +94,16 @@ describe('Workflow Auto-Layout', () => {
     expect(layouted.ui?.positions?.['step1']).toBeDefined()
     expect(layouted.ui?.positions?.['step2']).toBeDefined()
     // Nodes should be arranged left-to-right
-    expect(layouted.ui!.positions!['step2']!.x).toBeGreaterThanOrEqual(layouted.ui!.positions!['step1']!.x)
+    expect(layouted.ui!.positions!['step2']!.x).toBeGreaterThanOrEqual(layouted.ui!.positions!['step1']!.x!)
   })
 
   it('should layout workflows with workflow and run steps', () => {
     const workflow: Workflow = {
       name: 'workflow-with-run-steps',
       nodes: [
-        { id: 'workflow-1', type: 'workflow', ref: 'builtin://agent' },
-        { id: 'safety-check', type: 'run', command: 'check' },
-        { id: 'success', type: 'run', command: 'echo success' },
+        { id: 'workflow-1', type: 'workflow' },
+        { id: 'safety-check', type: 'run' },
+        { id: 'success', type: 'run' },
       ],
       edges: [
         { from: 'workflow-1', default: ['safety-check'] },
@@ -115,7 +115,7 @@ describe('Workflow Auto-Layout', () => {
     const layouted = autoLayoutWorkflow(workflow)
 
     // All nodes should have positions in ui.positions
-    layouted.nodes.forEach(step => {
+    layouted.nodes!.forEach(step => {
       expect(layouted.ui?.positions?.[step.id!]).toBeDefined()
     })
   })
@@ -124,10 +124,10 @@ describe('Workflow Auto-Layout', () => {
     const workflow: Workflow = {
       name: 'fanout-edge-layout',
       nodes: [
-        { id: 'source', type: 'run', command: 'echo source' },
-        { id: 'target-a', type: 'run', command: 'echo a' },
-        { id: 'target-b', type: 'run', command: 'echo b' },
-        { id: 'target-c', type: 'run', command: 'echo c' },
+        { id: 'source', type: 'run' },
+        { id: 'target-a', type: 'run' },
+        { id: 'target-b', type: 'run' },
+        { id: 'target-c', type: 'run' },
       ],
       edges: [
         {
@@ -139,7 +139,7 @@ describe('Workflow Auto-Layout', () => {
             },
           ],
           default: ['target-c'],
-        } as Workflow['edges'][number],
+        } as NonNullable<Workflow['edges']>[number],
       ],
     }
 
@@ -156,9 +156,9 @@ describe('Workflow Auto-Layout', () => {
     const workflow: Workflow = {
       name: 'event-scoped-switches',
       nodes: [
-        { id: 'run-1', type: 'run', command: 'echo start' },
-        { id: 'success', type: 'run', command: 'echo success' },
-        { id: 'failure', type: 'run', command: 'echo failure' },
+        { id: 'run-1', type: 'run' },
+        { id: 'success', type: 'run' },
+        { id: 'failure', type: 'run' },
       ],
       edges: [
         {
@@ -188,9 +188,9 @@ describe('Workflow Auto-Layout', () => {
     const workflow = {
       name: 'legacy-scalar-targets',
       nodes: [
-        { id: 'start', type: 'run', command: 'echo start' },
-        { id: 'branch-a', type: 'run', command: 'echo a' },
-        { id: 'branch-b', type: 'run', command: 'echo b' },
+        { id: 'start', type: 'run' },
+        { id: 'branch-a', type: 'run' },
+        { id: 'branch-b', type: 'run' },
       ],
       edges: [
         {

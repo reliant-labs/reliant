@@ -182,6 +182,7 @@ describe('runAntigravityOAuthFlow', () => {
     completeAntigravityOAuthMock.mockResolvedValue({
       success: false,
       message: 'Token exchange failed',
+      created: false,
     })
 
     const result = await runAntigravityOAuthFlow()

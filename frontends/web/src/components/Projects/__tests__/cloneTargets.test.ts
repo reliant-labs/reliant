@@ -28,8 +28,7 @@ const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 function daemon(overrides: Partial<CloudDaemon> & { status: number }): CloudDaemon {
   return {
     daemonId: "daemon-1",
-    hosthostname: "machine",
-    status: overrides.status,
+    hostname: "machine",
     lastStatusMessage: "",
     ...overrides,
   } as CloudDaemon;

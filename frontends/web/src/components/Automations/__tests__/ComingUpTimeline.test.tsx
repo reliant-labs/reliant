@@ -28,11 +28,15 @@ function trigger(overrides: Partial<Trigger> & Pick<Trigger, "id">): Trigger {
     params: {},
     message: "",
     daemonId: "d1",
+    noMachine: false,
+    notifyOnComplete: false,
+    actingIdentity: "owner",
     health: { status: "healthy", consecutiveFailures: 0, consecutiveSkips: 0, lastFailureDetail: "" },
     createdAt: "",
     updatedAt: "",
     source: { kind: "schedule", schedule: { cron: ["0 9 * * *"], timezone: "Europe/London", overlap: "skip" } },
     nextFireAt: "2026-10-02T08:00:00Z",
+    webhookManaged: false,
     ...overrides,
   };
 }

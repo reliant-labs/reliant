@@ -130,7 +130,7 @@ describe("how the dispatcher shares Escape with an open overlay", () => {
 
 describe("ImagePreviewModal Escape handling", () => {
   it("closes when Escape is pressed while the global dispatcher owns Escape", () => {
-    const dispatcher = mountGlobalDispatcher();
+    mountGlobalDispatcher();
     const onClose = vi.fn();
 
     render(

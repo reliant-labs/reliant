@@ -64,6 +64,9 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     phase: "unspecified",
     provenance: "v2.0.0 · main@abc1234",
     holds: [],
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     ...overrides,
   };
 }
@@ -98,8 +101,8 @@ describe("where an environment runs", () => {
   });
 
   it("reads ONLY `destination` — forge's redundant `hosted` flag decides nothing", () => {
-    expect(whereOf({ hosted: true } as ForgeTopologyEnv, null)).toBe("unknown");
-    expect(whereOf({ hosted: true, destination: "cluster" } as ForgeTopologyEnv, null)).toBe("cluster");
+    expect(whereOf({ env: "cloud", hosted: true } as ForgeTopologyEnv, null)).toBe("unknown");
+    expect(whereOf({ env: "cloud", hosted: true, destination: "cluster" } as ForgeTopologyEnv, null)).toBe("cluster");
   });
 
   it("gives Reliant cloud a different treatment from unknown and from cluster", () => {

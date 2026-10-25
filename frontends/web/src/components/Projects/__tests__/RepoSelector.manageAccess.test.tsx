@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
   credential: {
     hasToken: true,
     scopes: "",
-    installUrl: "https://github.com/apps/reliant-labs/installations/new",
+    installUrl: "https://github.com/apps/reliant-labs/installations/new" as string | undefined,
     installations: [] as Array<{
       accountLogin: string;
       accountType: string;
