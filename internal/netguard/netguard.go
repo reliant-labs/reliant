@@ -4,7 +4,9 @@
 // link-local and cloud-metadata addresses, in two forms: Policy (URL/host
 // checks plus a dial-time Control hook, for user-supplied endpoint URLs) and
 // Guard (a dialer that vets resolved IPs, for integration/MCP HTTP clients).
-// Both decide with one predicate, IPBlocked (ranges.go). It must not import
+// Both decide with one predicate, IPBlocked, which delegates to forge's
+// netguard.Refused: the refused ranges, the IPv4 decoding of IPv6 transition
+// forms and the NAT64 refusal live there, not here. It must not import
 // os/exec.
 //
 // Guard.DialContext dials, so forge's exclusion gate reads the package as an
@@ -23,16 +25,44 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"syscall"
 	"time"
+
+	forgenetguard "github.com/reliant-labs/forge/pkg/netguard"
 )
 
 // ErrBlockedAddress is returned (wrapped) when a destination is refused by
 // policy. Callers show it to the user as-is; it never mentions internals
 // beyond the address the user themselves typed.
 var ErrBlockedAddress = errors.New("address is not allowed")
+
+// IPBlocked reports whether ip is not a routable public unicast address: the
+// one predicate behind both Policy and Guard, so the two cannot disagree. It
+// is forge's netguard.Refused, so it refuses the IPv4 addresses hidden inside
+// IPv6 transition forms, the Private Google Access VIPs, and the NAT64
+// well-known prefix whole. A nil or malformed ip is blocked.
+func IPBlocked(ip net.IP) bool {
+	_, refused := forgenetguard.Refused(addrOf(ip))
+	return refused
+}
+
+// addrOf converts ip to a netip.Addr; a nil or malformed ip becomes the zero
+// Addr, which forge's netguard refuses.
+func addrOf(ip net.IP) netip.Addr {
+	addr, _ := netip.AddrFromSlice(ip)
+	return addr
+}
+
+// loopbackOnly admits loopback and nothing else of the refused set. The
+// exception applies to the address itself, so a transition address that merely
+// embeds loopback stays refused.
+var loopbackOnly = forgenetguard.Policy{Allow: []netip.Prefix{
+	netip.MustParsePrefix("127.0.0.0/8"),
+	netip.MustParsePrefix("::1/128"),
+}}
 
 // Policy decides which network destinations a user-supplied URL may reach.
 //
@@ -185,8 +215,9 @@ func New() *Guard {
 }
 
 func (g *Guard) blocked(ip net.IP) bool {
-	if g.AllowLoopback && ip.IsLoopback() {
-		return false
+	if g.AllowLoopback {
+		_, refused := loopbackOnly.Refused(addrOf(ip))
+		return refused
 	}
 	return IPBlocked(ip)
 }
