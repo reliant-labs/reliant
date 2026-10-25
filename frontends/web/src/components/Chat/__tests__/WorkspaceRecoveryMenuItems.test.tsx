@@ -2,10 +2,10 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Worktree } from "../../../store/worktreeStore";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { WorkspaceRecoveryMenuItems } from "../WorkspaceRecoveryMenuItems";
+import { type Worktree } from "../../../hooks/worktree-queries";
 
 const state = vi.hoisted(() => ({
   recreate: vi.fn(),

@@ -23,8 +23,8 @@ import {
   type ReplaceInFilesResult,
 } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface FindReplaceProps {
   isOpen: boolean;

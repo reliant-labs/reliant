@@ -19,11 +19,12 @@ import { ChevronLeft, FolderGit2 } from "lucide-react";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { useChat } from "../../store/chatStoreHooks";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
 import { MobileWorkflowExecutionEntry } from "./MobileWorkflowExecutionEntry";
 import { MobileScreenHeader } from "./MobileChrome";
 
+import { loadMainWorktree } from "../../hooks/worktree-actions";
+import { useMainWorktree } from "../../hooks/worktree-queries";
 export function MobileChatScreen() {
   // `strict: false` rather than `from: "/m/chats/$chatId"`. The route is
   // nested under `_authenticated` → `_mobile`, so its registered id is
@@ -32,8 +33,6 @@ export function MobileChatScreen() {
   const { chatId } = useParams({ strict: false });
   const chat = useChat(chatId);
   const currentProject = useProjectStore((s) => s.currentProject);
-  const worktrees = useWorktreeStore((s) => s.worktrees);
-  const loadMainWorktree = useWorktreeStore((s) => s.loadMainWorktree);
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
@@ -61,13 +60,13 @@ export function MobileChatScreen() {
   // same default MobileNewChat resolves to when creating a chat. Without
   // loading the main workspace here, that fallback has nothing to resolve
   // against. Only that one row: the screen never lists workspaces.
-  const hasMain = worktrees.some((w) => w.is_main && !w.deleted_at);
+  const main = useMainWorktree(currentProject?.id);
+  const mainWorktree = main && !main.deleted_at ? main : undefined;
   useEffect(() => {
-    if (!currentProject) return;
-    if (!hasMain) void loadMainWorktree(currentProject.id);
-  }, [currentProject, hasMain, loadMainWorktree]);
+    // Selects main when nothing is selected yet; the row is already cached.
+    if (currentProject) void loadMainWorktree(currentProject.id);
+  }, [currentProject]);
 
-  const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;
 
   // `useParams({ strict: false })` types every param as optional, so chatId is

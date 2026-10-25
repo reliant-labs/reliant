@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import type { Worktree as GrpcWorktree } from "../../api/worktree-grpc";
 
 // ---------------------------------------------------------------------------
 // CreateWorktree returns BEFORE the workspace exists on disk: the row comes back
@@ -34,6 +33,7 @@ vi.mock("../../lib/toast-manager", () => ({
 import { useWorktreeStore } from "../worktreeStore";
 import { triggerRefetch } from "../refetchStore";
 import { toast } from "../../lib/toast-manager";
+import type { Worktree as GrpcWorktree } from "../../hooks/worktree-queries";
 
 const projectId = "project-1";
 const now = "2026-01-01T00:00:00.000Z";

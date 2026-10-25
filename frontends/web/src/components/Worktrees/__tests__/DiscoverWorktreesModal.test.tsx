@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DiscoveredWorktree, StaleWorktree } from "../../../api/worktree-grpc";
 
 const h = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
@@ -15,6 +14,7 @@ vi.mock("../../../store/worktreeStore", () => ({
 }));
 
 import { DiscoverWorktreesModal } from "../DiscoverWorktreesModal";
+import { type DiscoveredWorktree, type StaleWorktree } from "../../../hooks/worktree-queries";
 
 const wt = (o: Partial<DiscoveredWorktree>): DiscoveredWorktree => ({
   path: "/w/a",

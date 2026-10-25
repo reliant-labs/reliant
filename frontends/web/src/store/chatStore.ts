@@ -1533,7 +1533,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // so it can be properly restored on reload
     const projectId = useProjectStore.getState().currentProject?.id;
     const currentWorktreeId =
-      useWorktreeStore.getState().currentWorktree?.id ?? null;
+      useWorktreeStore.getState().currentWorktreeId ?? null;
     if (projectId) {
       useWorkspaceStateStore
         .getState()
@@ -1618,7 +1618,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Determine the target worktree context
     const targetWorktreeId =
-      worktreeId ?? useWorktreeStore.getState().currentWorktree?.id ?? null;
+      worktreeId ?? useWorktreeStore.getState().currentWorktreeId ?? null;
 
     // NOTE: viewerStore no longer has its own worktreeId state
     // The worktree context is managed by worktreeStore (single source of truth)

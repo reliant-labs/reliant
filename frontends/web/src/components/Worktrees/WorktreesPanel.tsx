@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { externalWorktreesKey } from "./useExternalWorktrees";
 import {
   AlertCircle,
   Archive,
@@ -13,7 +12,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
 import { CreateWorktreeModal } from "./CreateWorktreeModal";
@@ -36,7 +35,13 @@ import {
   WorkspaceNameCell,
 } from "./WorkspaceTableParts";
 import type { Chat } from "../../types/chat";
-
+import {
+  invalidateDiscoveredWorktrees,
+  invalidateWorktreeLists,
+  useCurrentWorktree,
+  useWorktreeList,
+  type Worktree,
+} from "../../hooks/worktree-queries";
 interface WorktreesPanelProps {
   /** Padding around the panel. The viewer tab relies on the default. */
   paddingClass?: string;
@@ -67,19 +72,23 @@ export function WorktreesPanel({
   selectedId,
   onOpened,
 }: WorktreesPanelProps) {
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const refreshWorktreeList = useWorktreeStore((state) => state.refreshWorktrees);
-  const loadMoreWorktrees = useWorktreeStore((state) => state.loadMoreWorktrees);
-  const hasMore = useWorktreeStore((state) => state.nextPageToken !== "");
-  const isLoadingMore = useWorktreeStore((state) => state.isLoadingMore);
-  const isLoading = useWorktreeStore((state) => state.isLoading);
+  const currentWorktree = useCurrentWorktree();
   const deletingId = useWorktreeStore((state) => state.deletingId);
-  const error = useWorktreeStore((state) => state.error);
 
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
+  // First page on open; further pages on request. The panel is the one place
+  // that lists workspaces for their own sake, so it is where paging lives.
+  const {
+    worktrees: allWorktrees,
+    hasMore,
+    isLoading,
+    isLoadingMore,
+    error: listError,
+    loadMore: loadMoreWorktrees,
+  } = useWorktreeList(currentProject?.id);
+  const error = listError ? listError.message || "Failed to load worktrees" : null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
@@ -96,21 +105,7 @@ export function WorktreesPanel({
   );
   const highlightedId = selectedId === undefined ? currentWorktree?.id : selectedId;
 
-  const refreshWorktrees = () => {
-    if (currentProject) {
-      return refreshWorktreeList(currentProject.id);
-    }
-    return Promise.resolve();
-  };
-
-  // First page on open; further pages on request. The panel is the one place
-  // that lists workspaces for their own sake, so it is where paging lives.
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  useEffect(() => {
-    if (currentProject) {
-      void loadWorktrees(currentProject.id);
-    }
-  }, [currentProject, loadWorktrees]);
+  const refreshWorktrees = () => invalidateWorktreeLists(queryClient);
 
   const handleSelect = (worktree: Worktree) => {
     if (onSelect) onSelect(worktree);
@@ -328,7 +323,7 @@ export function WorktreesPanel({
                 type="button"
                 className="text-xs text-primary hover:underline disabled:opacity-60"
                 disabled={isLoadingMore}
-                onClick={() => void loadMoreWorktrees(currentProject.id)}
+                onClick={loadMoreWorktrees}
                 data-testid="load-more-workspaces"
               >
                 {isLoadingMore ? "Loading…" : "Load more workspaces"}
@@ -358,7 +353,7 @@ export function WorktreesPanel({
         isOpen={showDiscoverModal}
         onClose={() => {
           setShowDiscoverModal(false);
-          void queryClient.invalidateQueries({ queryKey: externalWorktreesKey(currentProject.id) });
+          void invalidateDiscoveredWorktrees(queryClient, currentProject.id);
         }}
         onWorktreesImported={() => refreshWorktrees()}
         projectId={currentProject.id}

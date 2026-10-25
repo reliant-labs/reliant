@@ -47,8 +47,6 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
-import type { Worktree } from "../../store/worktreeStore";
-import { useWorktreeList } from "../../hooks/useWorktreeList";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
 import { useWorkflows } from "../../store/globalDataStore";
@@ -77,6 +75,7 @@ import {
   defaultMachineDaemon,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
+import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to

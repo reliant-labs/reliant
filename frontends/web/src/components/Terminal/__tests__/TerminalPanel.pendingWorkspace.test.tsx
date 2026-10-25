@@ -4,7 +4,6 @@ import { mockTransport } from "@/lib/test-utils";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import React from "react";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 
 // ---------------------------------------------------------------------------
 // Opening the terminal on a just-created workspace started the shell in the
@@ -38,6 +37,7 @@ import { TerminalPanel } from "../TerminalPanel";
 import { useWorktreeStore } from "../../../store/worktreeStore";
 import { useTerminalStore } from "../../../store/terminalStore";
 import { useProjectStore } from "../../../store/projectStore";
+import { type Worktree } from "../../../hooks/worktree-queries";
 
 const projectId = "project-1";
 const projectPath = "/home/u/src/proj";

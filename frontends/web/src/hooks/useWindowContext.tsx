@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
+import { useWorktreeStore } from '../store/worktreeStore';
 import { useProjectStore } from '../store/projectStore';
 
+import { resolveWorktree, type Worktree } from './worktree-queries';
 interface WindowContext {
   worktreeId: string | null;
   projectId: string | null;
@@ -23,7 +24,6 @@ export function useWindowContext() {
   const [windowContext, setWindowContext] = useState<WindowContext | null>(null);
   const [isElectron, setIsElectron] = useState(false);
   const selectWorktree = useWorktreeStore((state) => state.selectWorktree);
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const selectProject = useProjectStore((state) => state.selectProject);
   const projects = useProjectStore((state) => state.projects);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -143,7 +143,7 @@ export function useWindowContext() {
         unsubSetContext();
       };
     }
-  }, [selectWorktree, selectProject, resolveWorktree, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
+  }, [selectWorktree, selectProject, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
 
   const openInNewWindow = useCallback(async (worktreeData: Partial<Worktree>) => {
     if (!window.electronAPI) {

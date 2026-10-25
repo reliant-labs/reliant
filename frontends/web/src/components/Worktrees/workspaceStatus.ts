@@ -1,9 +1,9 @@
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import type { WorktreeGitStatus } from "../../api/worktree-grpc";
-import type { Worktree } from "../../store/worktreeStore";
 import type { Chat } from "../../types/chat";
 import type { StatusTone } from "../forge-ui/status";
 import { formatBytes } from "../../lib/formatBytes";
+import { type Worktree } from "../../hooks/worktree-queries";
+import { type WorktreeGitStatus } from "../../hooks/worktree-git-queries";
 
 /** forge-ui Status tones. */
 export type StatusVariant = StatusTone;

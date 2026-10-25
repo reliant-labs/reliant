@@ -9,8 +9,8 @@ import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { isNoMachineError } from "../../lib/daemon-errors";
 import { NoMachineState } from "../NoMachineState";
 import { useProjectStore } from "../../store/projectStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface GlobalSearchProps {
   isOpen: boolean;

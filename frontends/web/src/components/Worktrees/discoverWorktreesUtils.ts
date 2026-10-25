@@ -1,4 +1,4 @@
-import type { DiscoveredWorktree } from "../../api/worktree-grpc";
+import { type DiscoveredWorktree } from "../../hooks/worktree-queries";
 
 export interface RepoGroup {
   repoId: string;

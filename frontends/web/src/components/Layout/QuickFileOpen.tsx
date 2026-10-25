@@ -4,11 +4,11 @@ import { createPortal } from "react-dom";
 import { Search, FileText, Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useProjectStore } from "../../store/projectStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { getFileTree, FILE_TREE_DEPTH_MAX } from "../../api/fileSystem";
 import type { FileNode } from "../FileBrowser";
 import { focusChatInput } from "../../hooks/useFocusManager";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 export interface QuickFileOpenRef {
   open: () => void;

@@ -3,7 +3,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 
 const mocks = vi.hoisted(() => ({
   worktrees: [] as Worktree[],
@@ -128,6 +127,7 @@ vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModa
 vi.mock("../../Worktrees/AddRepoModal", () => ({ AddRepoModal: () => null }));
 
 import { WorkspacesSection } from "../WorkspacesSection";
+import { type Worktree } from "../../../hooks/worktree-queries";
 
 function worktree(overrides: Partial<Worktree>): Worktree {
   return {

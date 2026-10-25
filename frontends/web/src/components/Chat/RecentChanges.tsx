@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
-import { worktreeGrpc, type WorktreeRepoStatus } from "../../api/worktree-grpc";
-import { logger } from "../../lib/logger";
+import { useWorktreeRepoStatuses, type WorktreeRepoStatus } from "../../hooks/worktree-git-queries";
 import { cn } from "../../lib/utils";
-import { matchesRefetchScope, subscribeToRefetch } from "../../store/refetchStore";
 import { RepoChangesPanel } from "./changes/RepoChangesPanel";
 import { SyncCounts } from "./changes/BranchHeader";
 import { IconButton } from "./changes/IconButton";
@@ -120,74 +118,11 @@ function MultiRepoSection({
 
 export function RecentChanges(props: RecentChangesProps) {
   const { worktreeId, projectId, onClose, inline = false, onFileSelect } = props;
-  const [repoStatuses, setRepoStatuses] = useState<WorktreeRepoStatus[] | null>(null);
-  const [statusesLoaded, setStatusesLoaded] = useState(false);
+  // The per-repo status list. Empty / single → single-repo panel. Errors fall
+  // back to it too (older daemons). The stream's worktree_changes refreshes it.
+  const { data: repoStatuses } = useWorktreeRepoStatuses(worktreeId);
 
-  // Fetch the per-repo status list. Empty / single → single-repo panel.
-  // Errors fall back to it too (older daemons or stubbed test envs).
-  useEffect(() => {
-    if (!worktreeId) {
-      setRepoStatuses(null);
-      setStatusesLoaded(true);
-      return;
-    }
-    let cancelled = false;
-    setStatusesLoaded(false);
-    const load = async () => {
-      try {
-        const fn = (worktreeGrpc as { listRepoStatuses?: typeof worktreeGrpc.listRepoStatuses }).listRepoStatuses;
-        if (typeof fn !== "function") {
-          if (!cancelled) {
-            setRepoStatuses(null);
-            setStatusesLoaded(true);
-          }
-          return;
-        }
-        const statuses = await worktreeGrpc.listRepoStatuses(worktreeId);
-        if (!cancelled) {
-          setRepoStatuses(statuses);
-          setStatusesLoaded(true);
-        }
-      } catch (err) {
-        logger.debug("[RecentChanges] listRepoStatuses unavailable, falling back to single-repo panel", err);
-        if (!cancelled) {
-          setRepoStatuses(null);
-          setStatusesLoaded(true);
-        }
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [worktreeId]);
-
-  // Refetch repo statuses when the backend signals a worktree change.
-  useEffect(() => {
-    if (!worktreeId) return;
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const unsubscribe = subscribeToRefetch("worktree_changes", (event) => {
-      if (!matchesRefetchScope(event, { worktreeId, projectId })) return;
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(async () => {
-        debounceTimer = null;
-        try {
-          const fn = (worktreeGrpc as { listRepoStatuses?: typeof worktreeGrpc.listRepoStatuses }).listRepoStatuses;
-          if (typeof fn !== "function") return;
-          const statuses = await worktreeGrpc.listRepoStatuses(worktreeId);
-          setRepoStatuses(statuses);
-        } catch (err) {
-          logger.debug("[RecentChanges] failed to refetch repo statuses", err);
-        }
-      }, 500);
-    });
-    return () => {
-      unsubscribe();
-      if (debounceTimer) clearTimeout(debounceTimer);
-    };
-  }, [worktreeId, projectId]);
-
-  if (statusesLoaded && repoStatuses && repoStatuses.length >= 2 && worktreeId) {
+  if (repoStatuses && repoStatuses.length >= 2 && worktreeId) {
     // Open the first repo with changes; if none has any, open the first so
     // the panel isn't a wall of collapsed headers.
     const firstWithChanges = repoStatuses.findIndex((s) => s.has_changes && !s.error);

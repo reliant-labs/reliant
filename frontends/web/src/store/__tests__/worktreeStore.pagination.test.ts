@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import type { Worktree as GrpcWorktree } from "../../api/worktree-grpc";
 
 const listMock = vi.hoisted(() => vi.fn());
 const getMainMock = vi.hoisted(() => vi.fn());
@@ -17,6 +16,7 @@ vi.mock("../../lib/toast-manager", () => ({
 
 import { useWorktreeStore } from "../worktreeStore";
 import { useWorkspaceStateStore } from "../workspaceStateStore";
+import type { Worktree as GrpcWorktree } from "../../hooks/worktree-queries";
 
 const projectId = "project-1";
 const now = "2026-01-01T00:00:00.000Z";

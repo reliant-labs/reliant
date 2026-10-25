@@ -3,8 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import type { Worktree } from "../../store/worktreeStore";
 import { usePreferences } from "../../hooks/settings-queries";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface DeleteWorktreeModalProps {
   isOpen: boolean;

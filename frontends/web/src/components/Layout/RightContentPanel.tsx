@@ -5,7 +5,7 @@ import { RightSidebar } from "../FileBrowser/RightSidebar";
 import { RecentChanges } from "../Chat/RecentChanges";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 export type RightContentView = "files" | "changes" | null;
 
