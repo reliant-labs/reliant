@@ -82,6 +82,10 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("./AddToChatPopup", () => ({ AddToChatPopup: () => null }));
 vi.mock("../Chat/ImagePreviewModal", () => ({ ImagePreviewModal: () => null }));
 
+// Generous: under a loaded machine a render round-trip can pass the 1s
+// default, and these waits are for an outcome, not a deadline.
+const WAIT = { timeout: 5000 };
+
 const FILE: FileNode = {
   name: "example.ts",
   path: "/workspace/example.ts",
@@ -96,7 +100,7 @@ function editor() {
 
 async function openFile() {
   render(<FileViewerTab file={FILE} isActive />);
-  await waitFor(() => expect(editor().value).toBe("old text"));
+  await waitFor(() => expect(editor().value).toBe("old text"), WAIT);
   expect(fileSystemMocks.getFileContent).toHaveBeenCalledTimes(1);
 }
 
@@ -122,7 +126,7 @@ describe("FileViewerTab after a Replace All", () => {
     fileSystemMocks.getFileContent.mockResolvedValue("new text");
     act(() => notifyFilesRewritten({ worktreeId: "wt-1", paths: ["/workspace/example.ts"] }));
 
-    await waitFor(() => expect(editor().value).toBe("new text"));
+    await waitFor(() => expect(editor().value).toBe("new text"), WAIT);
     expect(fileSystemMocks.getFileContent).toHaveBeenCalledTimes(2);
     // Reloaded as the saved text, so nothing reads as an unsaved change.
     expect(screen.queryByText("• Modified")).not.toBeInTheDocument();

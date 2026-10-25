@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from "react";
 import Tooltip from "../forge-ui/tooltip";
 import {
   Save,
@@ -252,20 +252,22 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   }, [clearLoadingTimer, loadPreview, revokePreviewUrl]);
 
   // Something other than this editor rewrote the file on disk (a Replace
-  // All, lib/fileRewrites). A clean buffer reloads, so a later save cannot
-  // write the old text back over the change; a dirty one is left alone, since
-  // nothing may overwrite an unsaved edit.
-  const bufferRef = useRef({ content, originalContent });
-  useEffect(() => {
-    bufferRef.current = { content, originalContent };
-  }, [content, originalContent]);
+  // All, lib/fileRewrites). A clean text buffer reloads, so a later save
+  // cannot write the old text back over the change; a dirty one is left
+  // alone, since nothing may overwrite an unsaved edit.
+  //
+  // Both the buffer mirror and the subscription are layout effects, which run
+  // inside the commit: once a buffer is on screen, a rewrite sees it.
+  const bufferRef = useRef({ content, originalContent, isTextPreview });
+  useLayoutEffect(() => {
+    bufferRef.current = { content, originalContent, isTextPreview };
+  }, [content, originalContent, isTextPreview]);
 
-  useEffect(() => {
-    if (!isTextPreview) return;
+  useLayoutEffect(() => {
     return subscribeFileRewrites((rewrite) => {
       if (!rewriteTouches(rewrite, file.path, effectiveWorktreeId)) return;
       const before = bufferRef.current;
-      if (before.content !== before.originalContent) return;
+      if (!before.isTextPreview || before.content !== before.originalContent) return;
       const requestId = loadRequestIdRef.current;
       void (async () => {
         try {
@@ -286,7 +288,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         }
       })();
     });
-  }, [effectiveWorktreeId, file.path, isTextPreview]);
+  }, [effectiveWorktreeId, file.path]);
 
   // Re-open the file on the shared cadence while the machine comes up, so the
   // editor fills itself in rather than making the user close and reopen the tab.
