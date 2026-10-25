@@ -2,24 +2,27 @@
  * The sidebar footer pill (WORKFLOW_UI.md §4.3, §6.6): counts live automation
  * runs the chat list does not show, links to Runs filtered to them, and is
  * absent when there are none. It reads ListRuns once and is refreshed by the
- * update stream's invalidation of the runs lists, never by polling.
+ * update stream's invalidation of runServiceKeys.all, never by polling.
  */
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RunDisplayState } from "../../../gen/reliant/v1/run_pb";
-import type { RunSummary } from "../../../api/run-grpc";
+import { RunDisplayState, type ListRunsRequest } from "../../../gen/reliant/v1/run_pb";
+import type { RunSummary } from "../../../hooks/run-queries";
+import { runServiceKeys } from "../../../hooks/run-service-hooks_gen";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 
-const { listRuns } = vi.hoisted(() => ({ listRuns: vi.fn() }));
-
-vi.mock("../../../api/run-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/run-grpc")>("../../../api/run-grpc");
-  return { ...actual, runGrpc: { ...actual.runGrpc, list: listRuns } };
-});
-
 import { AutomationActivityPill } from "../AutomationActivityPill";
-import { runKeys, summarizeLiveAutomations, LIVE_AUTOMATION_LIMIT } from "../../../hooks/run-queries";
+import { summarizeLiveAutomations, LIVE_AUTOMATION_LIMIT } from "../../../hooks/run-queries";
+
+const listRuns = vi.fn<(request: ListRunsRequest) => unknown>();
+
+/** One ListRuns row, as the server sends it. */
+function protoRun(chatId: string, launchKind: string, displayState: RunDisplayState) {
+  return { id: `wf-${chatId}`, sessionId: chatId, title: chatId, launchKind, displayState };
+}
 
 function run(chatId: string, launchKind: string, displayState: RunDisplayState): RunSummary {
   return {
@@ -41,7 +44,12 @@ function run(chatId: string, launchKind: string, displayState: RunDisplayState):
   } as RunSummary;
 }
 
-beforeEach(() => listRuns.mockReset());
+beforeEach(() => {
+  listRuns.mockReset();
+  setTransport(mockTransport({ "RunService.ListRuns": (request) => listRuns(request as ListRunsRequest) }));
+});
+
+afterEach(() => setTransport(null));
 
 describe("summarizeLiveAutomations", () => {
   it("counts live automation runs, separating the ones that need you", () => {
@@ -72,8 +80,8 @@ describe("summarizeLiveAutomations", () => {
 });
 
 describe("AutomationActivityPill", () => {
-  it("reads one page of live runs, under the runs-list key the update stream invalidates", async () => {
-    listRuns.mockResolvedValue({ runs: [run("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+  it("reads one page of live runs, under the RunService key the update stream invalidates", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
     const { queryClient } = renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} />);
 
     await screen.findByTestId("automation-activity-pill");
@@ -87,13 +95,13 @@ describe("AutomationActivityPill", () => {
     expect(request.projectId).toBeUndefined();
     expect(request.startedAfter).toBeUndefined();
 
-    const pillQuery = queryClient.getQueryCache().find({ queryKey: runKeys.lists(), exact: false });
+    const pillQuery = queryClient.getQueryCache().find({ queryKey: runServiceKeys.all, exact: false });
     expect(pillQuery?.options).not.toHaveProperty("refetchInterval");
   });
 
   it("shows the count and links to live runs", async () => {
     listRuns.mockResolvedValue({
-      runs: [run("a", "schedule", RunDisplayState.RUNNING), run("b", "schedule", RunDisplayState.RUNNING)],
+      runs: [protoRun("a", "schedule", RunDisplayState.RUNNING), protoRun("b", "schedule", RunDisplayState.RUNNING)],
       nextPageToken: "",
     });
     const onOpenRuns = vi.fn();
@@ -112,7 +120,7 @@ describe("AutomationActivityPill", () => {
   // points at it. So the pill opens the Inbox, not Runs.
   it("shows how many need you, and opens the Inbox", async () => {
     listRuns.mockResolvedValue({
-      runs: [run("a", "schedule", RunDisplayState.RUNNING), run("b", "agent.start_run", RunDisplayState.NEEDS_INPUT)],
+      runs: [protoRun("a", "schedule", RunDisplayState.RUNNING), protoRun("b", "agent.start_run", RunDisplayState.NEEDS_INPUT)],
       nextPageToken: "",
     });
     const onOpenRuns = vi.fn();
@@ -129,7 +137,7 @@ describe("AutomationActivityPill", () => {
   });
 
   it("says the count is a floor when the server has more", async () => {
-    listRuns.mockResolvedValue({ runs: [run("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "next" });
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "next" });
     renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} />);
 
     expect(await screen.findByTestId("automation-activity-pill-running")).toHaveTextContent(
@@ -138,7 +146,7 @@ describe("AutomationActivityPill", () => {
   });
 
   it("hides at zero, including when the only live run is already a sidebar row", async () => {
-    listRuns.mockResolvedValue({ runs: [run("adopted", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    listRuns.mockResolvedValue({ runs: [protoRun("adopted", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
     renderWithQuery(<AutomationActivityPill listedChatIds={new Set(["adopted"])} />);
 
     await waitFor(() => expect(listRuns).toHaveBeenCalled());

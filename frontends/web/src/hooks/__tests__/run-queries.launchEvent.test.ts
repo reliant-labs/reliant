@@ -13,7 +13,7 @@ import { create } from "@bufbuild/protobuf";
 import { TriggerEventKind, TriggerEventSchema } from "@/gen/reliant/v1/trigger_pb";
 import { ContentBlockType, MessageRole } from "@/gen/reliant/v1/chat_pb";
 import type { Message } from "@/types/chat";
-import { buildListRunsRequest, firstPromptOf, launchEventFromProto } from "../run-grpc";
+import { buildListRunsRequest, firstPromptOf, launchEventFromProto } from "../run-queries";
 
 describe("launchEventFromProto", () => {
   it.each([

@@ -745,7 +745,7 @@ export type LibrarySearch = Partial<z.output<typeof librarySearchSchema>>;
 /**
  * The Runs list's state filter, in the words a user picks (§5.2), not the
  * wire enum. One chip can cover several display states ("Live" is queued,
- * running, paused and waiting for a machine); run-grpc maps them.
+ * running, paused and waiting for a machine); run-queries maps them.
  */
 export const RUN_STATE_FILTER_KEYS = ["needs_you", "live", "failed", "completed", "cancelled"] as const;
 export type RunStateFilterKey = (typeof RUN_STATE_FILTER_KEYS)[number];

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Archive } from "lucide-react";
 
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatusFromDisplayState } from "@/lib/runStatus";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";

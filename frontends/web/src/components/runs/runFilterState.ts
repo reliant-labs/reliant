@@ -7,7 +7,7 @@
  * rather than by a rendered page.
  */
 
-import { RUN_STATE_FILTERS } from "@/api/run-grpc";
+import { RUN_STATE_FILTERS } from "@/hooks/run-queries";
 import { launchKindDisplay } from "@/lib/runStatus";
 import {
   RUN_KIND_FILTER_KEYS,

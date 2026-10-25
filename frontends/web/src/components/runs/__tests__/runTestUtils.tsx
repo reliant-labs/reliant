@@ -19,7 +19,7 @@ import {
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import { create } from "@bufbuild/protobuf";
 import { CatalogEntryKind, SearchCatalogResponseSchema, type SearchCatalogResponse } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";

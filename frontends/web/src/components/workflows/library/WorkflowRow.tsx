@@ -23,7 +23,7 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, Play } from "lucide-react";
 
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../runs/RunStatusIndicator";

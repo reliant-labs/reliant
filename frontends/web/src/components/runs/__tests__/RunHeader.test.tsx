@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import type { Chat } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { RunHeader, type RunHeaderActions } from "../RunHeader";
 import { answerGithubTriggerTypes, renderRunsAt } from "./runTestUtils";
 import { setTransport } from "@/lib/connect";

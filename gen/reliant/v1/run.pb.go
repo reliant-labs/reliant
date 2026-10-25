@@ -1629,14 +1629,14 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x1bRUN_DISPLAY_STATE_COMPLETED\x10\x05\x12\x1c\n" +
 	"\x18RUN_DISPLAY_STATE_FAILED\x10\x06\x12\x1f\n" +
 	"\x1bRUN_DISPLAY_STATE_CANCELLED\x10\a\x12)\n" +
-	"%RUN_DISPLAY_STATE_WAITING_FOR_MACHINE\x10\b2\xca\x05\n" +
+	"%RUN_DISPLAY_STATE_WAITING_FOR_MACHINE\x10\b2\xcd\x05\n" +
 	"\n" +
 	"RunService\x12G\n" +
 	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"\x00\x12J\n" +
 	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"\x00\x12A\n" +
 	"\x06GetRun\x12\x19.reliant.v1.GetRunRequest\x1a\x1a.reliant.v1.GetRunResponse\"\x00\x12G\n" +
-	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12e\n" +
-	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x00\x12G\n" +
+	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12h\n" +
+	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x03\x90\x02\x01\x12G\n" +
 	"\bPauseRun\x12\x1b.reliant.v1.PauseRunRequest\x1a\x1c.reliant.v1.PauseRunResponse\"\x00\x12J\n" +
 	"\tResumeRun\x12\x1c.reliant.v1.ResumeRunRequest\x1a\x1d.reliant.v1.ResumeRunResponse\"\x00\x12J\n" +
 	"\tCancelRun\x12\x1c.reliant.v1.CancelRunRequest\x1a\x1d.reliant.v1.CancelRunResponse\"\x00\x12S\n" +

@@ -36,7 +36,6 @@ import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
 import { TriggerService } from "../gen/reliant/v1/trigger_pb";
-import { RunService } from "../gen/reliant/v1/run_pb";
 import { InboxService } from "../gen/reliant/v1/inbox_pb";
 import { ConnectionService } from "../gen/reliant/v1/connection_pb";
 import { connectClient, isApiReady, reliantApiBaseUrl, transport } from "../lib/connect";
@@ -90,7 +89,6 @@ export const createConnectorClient = (): Client<typeof ConnectorService> =>
 export const createTriggerClient = (): Client<typeof TriggerService> => connectClient(TriggerService);
 export const createConnectionClient = (): Client<typeof ConnectionService> =>
   connectClient(ConnectionService);
-export const createRunClient = (): Client<typeof RunService> => connectClient(RunService);
 export const createInboxClient = (): Client<typeof InboxService> => connectClient(InboxService);
 
 // connectClient memoizes per service, so the "get" and "create" spellings
@@ -114,7 +112,6 @@ export const getDaemonRegistryClient = createDaemonRegistryClient;
 export const getTokenClient = createTokenClient;
 export const getConnectorClient = createConnectorClient;
 export const getTriggerClient = createTriggerClient;
-export const getRunClient = createRunClient;
 export const getInboxClient = createInboxClient;
 export const getConnectionClient = createConnectionClient;
 
@@ -138,7 +135,6 @@ export const grpcClient = {
   token: getTokenClient,
   connector: getConnectorClient,
   trigger: getTriggerClient,
-  run: getRunClient,
   inbox: getInboxClient,
   connection: getConnectionClient,
 };

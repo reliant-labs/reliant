@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { buildListRunsRequest, runFromProto, RUN_STATE_FILTERS } from "../run-grpc";
+import { buildListRunsRequest, runFromProto, RUN_STATE_FILTERS } from "../run-queries";
 import { create } from "@bufbuild/protobuf";
 import { RunSchema } from "@/gen/reliant/v1/run_pb";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
@@ -43,7 +43,7 @@ describe("buildListRunsRequest", () => {
         q: "  nightly ",
         range: "7d",
       },
-      { now: NOW, pageToken: "tok-2" },
+      { now: NOW },
     );
     expect(request.projectId).toBe("proj-1");
     expect(request.workflow).toEqual(["builtin://agent", "triage"]);
@@ -56,7 +56,6 @@ describe("buildListRunsRequest", () => {
     ]);
     expect(request.query).toBe("nightly");
     expect(timestampDate(request.startedAfter!).toISOString()).toBe("2026-09-27T12:00:00.000Z");
-    expect(request.pageToken).toBe("tok-2");
   });
 
   it("Live covers queued, running, paused and waiting-for-machine", () => {

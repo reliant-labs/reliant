@@ -90,6 +90,9 @@ type RunServiceClient interface {
 	// the response's meaning (one row per workflow, no paging, no total), and a
 	// flag that changes what a response means is how a caller ends up paging a
 	// result that cannot be paged.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
 	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
@@ -144,6 +147,7 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RunServiceLastRunPerWorkflowProcedure,
 			connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		pauseRun: connect.NewClient[v1.PauseRunRequest, v1.PauseRunResponse](
@@ -265,6 +269,9 @@ type RunServiceHandler interface {
 	// the response's meaning (one row per workflow, no paging, no total), and a
 	// flag that changes what a response means is how a caller ends up paging a
 	// result that cannot be paged.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
 	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
@@ -315,6 +322,7 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		RunServiceLastRunPerWorkflowProcedure,
 		svc.LastRunPerWorkflow,
 		connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServicePauseRunHandler := connect.NewUnaryHandler(

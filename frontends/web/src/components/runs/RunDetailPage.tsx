@@ -15,7 +15,7 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import type { Chat } from "@/api/client";
-import { runErrorMessage } from "@/api/run-grpc";
+import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useAdoptRun, useRunControl } from "@/hooks/run-queries";
 import { useProjectStore } from "@/store/projectStore";
@@ -84,7 +84,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
       openInProject();
       return;
     }
-    adopt.mutate(chat.id, {
+    adopt.mutate({ chatId: chat.id }, {
       onSuccess: () => {
         toast.success("Added to your chats", { description: "It stays in the chat list from now on." });
         openInProject();
