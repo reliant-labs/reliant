@@ -201,6 +201,11 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
           )}
         </div>
       </div>
+      {item.payload.case === "recovery" && !handled && (
+        <div className="mt-2 pl-7 max-sm:pl-0">
+          <RecoveryAction key={item.payload.value.recoveryId} recovery={item.payload.value} />
+        </div>
+      )}
       {expanded && !handled && (
         <div className="mt-2 pl-7 max-sm:pl-0">
           <Expansion item={item} onRaceOrError={onRaceOrError} />
@@ -490,7 +495,8 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
         </a>
       );
     case "recovery":
-      return <RecoveryAction recovery={payload.value} />;
+      // The full-width action lives below the row, not inside its nonwrapping controls.
+      return null;
     case "storage":
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />

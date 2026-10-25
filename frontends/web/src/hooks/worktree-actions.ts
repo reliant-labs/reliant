@@ -65,7 +65,10 @@ export async function restoreWorktreeRecovery(recoveryId: string, targetDaemonId
 /** Only this explicit action deletes the exact retained recovery branches. */
 export async function deleteWorktreeRecovery(recoveryId: string, idempotencyKey: string) {
   const response = await client.deleteWorktreeRecovery({ recoveryId, idempotencyKey });
-  await appQueryClient.invalidateQueries({ queryKey: ["inbox"] });
+  await Promise.all([
+    appQueryClient.invalidateQueries({ queryKey: worktreeServiceKeys.all }),
+    appQueryClient.invalidateQueries({ queryKey: ["inbox"] }),
+  ]);
   return response;
 }
 
