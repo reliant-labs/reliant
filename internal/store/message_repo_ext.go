@@ -462,23 +462,31 @@ func messagesFromRows(rows []*Message) []*core.Message {
 
 // validUTF8 protects the database boundary from raw subprocess and provider
 // bytes that reached a Go string without being valid text. PostgreSQL text
-// rejects malformed UTF-8, so one bad byte must not make an entire message
-// write fail. Valid text returns unchanged.
+// rejects malformed UTF-8 and the NUL byte (valid UTF-8, but not storable in a
+// text column: "invalid byte sequence for encoding \"UTF8\": 0x00"), so one
+// bad byte must not make an entire message write fail — in prod a NUL in a
+// tool result exhausted a sub-agent's save_message retries and ended the
+// agent (2026-10-19). Both become U+FFFD. Storable text returns unchanged.
 func validUTF8(text string) string {
-	if utf8.ValidString(text) {
+	if storableText(text) {
 		return text
 	}
-	return strings.ToValidUTF8(text, "\uFFFD")
+	return strings.ReplaceAll(strings.ToValidUTF8(text, "\uFFFD"), "\x00", "\uFFFD")
 }
 
-// validUTF8Ptr is validUTF8 through a pointer, keeping a valid value's
+// validUTF8Ptr is validUTF8 through a pointer, keeping a storable value's
 // pointer as it is.
 func validUTF8Ptr(text *string) *string {
-	if text == nil || utf8.ValidString(*text) {
+	if text == nil || storableText(*text) {
 		return text
 	}
 	v := validUTF8(*text)
 	return &v
+}
+
+// storableText reports whether PostgreSQL text accepts text as it is.
+func storableText(text string) bool {
+	return utf8.ValidString(text) && strings.IndexByte(text, 0) < 0
 }
 
 func intToInt64Ptr(i *int) *int64 {

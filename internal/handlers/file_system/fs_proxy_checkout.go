@@ -10,39 +10,17 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// missingDirMarkers are how a daemon's filesystem error says "that path does
-// not exist". The daemon reports errors as text across the wire — a
-// DaemonCommandResponse carries error_message and no error kind — so the text
-// is what there is to match: Go's ENOENT on Unix, and the two Win32 messages
-// for a missing file and a missing directory.
-var missingDirMarkers = []string{
-	"no such file or directory",
-	"cannot find the file specified",
-	"cannot find the path specified",
-}
-
 // isMissingPathError reports whether a daemon fs command failed because the
-// path it was asked about does not exist.
-//
-// A program the daemon could not start fails with ENOENT too ("fork/exec
-// /usr/bin/rg: no such file or directory"). That is the daemon's install, not
-// the user's files, so it is excluded and stays a server error.
+// path it was asked about does not exist. The daemon reports errors as text
+// across the wire, so the text is what there is to match; the markers (and the
+// fork/exec exclusion: a program the daemon could not start is its install,
+// not the user's files) live with the router's daemon-reported failure, which
+// classifies the same text as a user error (toolexec.IsMissingPathText).
 func isMissingPathError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "fork/exec") {
-		return false
-	}
-	for _, marker := range missingDirMarkers {
-		if strings.Contains(msg, marker) {
-			return true
-		}
-	}
-	return false
+	return err != nil && toolexec.IsMissingPathText(err.Error())
 }
 
 // checkoutMissingError turns "the project's root does not exist on this
