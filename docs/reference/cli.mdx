@@ -219,6 +219,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | A metrics panel: one or more metrics over time, as the console's explorer runs it |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`reliant forge obs session`](#reliant-forge-obs-session) | What one user did: a text timeline of navigations, clicks, failed requests and errors |
+| [`reliant forge obs sessions`](#reliant-forge-obs-sessions) | Real-user browser sessions: who hit errors, and which have a replay |
 | [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
@@ -7514,6 +7516,8 @@ reliant forge obs
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`session`](#reliant-forge-obs-session) | What one user did: a text timeline of navigations, clicks, failed requests and errors |
+| [`sessions`](#reliant-forge-obs-sessions) | Real-user browser sessions: who hit errors, and which have a replay |
 | [`status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
@@ -9069,6 +9073,173 @@ reliant forge obs query [env] [flags]
 | `--sql-file` | `string` | - | read the statement from this file (- for stdin) |
 | `--step` | `duration` | `0s` | the `{step}` parameter / a panel's bucket width (default: about 120 points) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs session
+
+What one user did: a text timeline of navigations, clicks, failed requests and errors
+
+Show one browser session as a text timeline, oldest first, with the time since
+the session started: the pages the user opened, the elements they clicked (a
+masked selector, never the text), the requests that failed (method, path,
+status, duration), the errors raised (with the issue each belongs to) and the
+custom events the app recorded. Failed requests and errors carry their trace
+id, so the next step is `cli forge obs trace <id>`. [env] defaults to dev.
+
+Paths have their query and fragment cut. No recording bytes are printed: the
+replay itself is for the console's player.
+
+  cli forge obs session 91b955b313a1a86644ea53730a92deab prod
+  cli forge obs session 91b955b313a1a86644ea53730a92deab prod --json
+
+Exit 0 when the session is found, 1 for a bad id or a session the env does not
+have (or one older than the 30 days sessions are kept), 2 when it could not be
+looked up. A session over --limit entries continues with --page-token. The session is
+looked for in the last 30 days; --since, --from and --to narrow that (a
+hosted timeline reads at most 7 days).
+
+JSON schema forge.obs.session/v1. --fields takes dotted paths of:
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  session
+  session.duration_ms
+  session.ended
+  session.entry_path
+  session.errors
+  session.has_replay
+  session.id
+  session.interactions
+  session.page_views
+  session.service
+  session.started
+  session.user_id
+  session.version
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  timeline
+  timeline.duration_ms
+  timeline.element
+  timeline.error_type
+  timeline.fingerprint
+  timeline.issue_id
+  timeline.kind
+  timeline.message
+  timeline.method
+  timeline.name
+  timeline.offset_ms
+  timeline.path
+  timeline.props.*
+  timeline.selector
+  timeline.service
+  timeline.span_id
+  timeline.status
+  timeline.time
+  timeline.trace_id
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs session <id> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `200` | most items to return |
+| `--page-token` | `string` | - | resume the timeline from a next_page_token |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `720h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs sessions
+
+Real-user browser sessions: who hit errors, and which have a replay
+
+List the env's browser sessions that started in the range, newest first: user,
+entry path, length, page views, interactions, browser errors and whether a
+replay was recorded. [env] defaults to dev; --since defaults to 24h (at most 30d).
+
+Read one with `cli forge obs session <id>`: a text timeline of what the user did.
+
+  cli forge obs sessions prod --has-error
+  cli forge obs sessions prod --user user-42 --since 7d
+  cli forge obs sessions prod --path /checkout --has-replay --json
+
+Sessions are derived by the control plane from the browser's telemetry: a local
+ClickStack has no session tables, so a local env answers "could not look".
+
+JSON schema forge.obs.sessions/v1. --fields takes dotted paths of:
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  sessions
+  sessions.duration_ms
+  sessions.ended
+  sessions.entry_path
+  sessions.errors
+  sessions.has_replay
+  sessions.id
+  sessions.interactions
+  sessions.page_views
+  sessions.service
+  sessions.started
+  sessions.user_id
+  sessions.version
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs sessions [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--has-error` | `bool` | - | only sessions with at least one browser error |
+| `--has-replay` | `bool` | - | only sessions with a recorded replay |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `25` | most items to return |
+| `--page-token` | `string` | - | resume from a next_page_token |
+| `--path` | `string` | - | only sessions whose entry path contains this, case-insensitive |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `24h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | only this user id (the userId the app identified the session with) |
 
 ---
 
