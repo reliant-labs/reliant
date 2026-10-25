@@ -25,7 +25,7 @@ import {
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
-import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
+import { privacyConsent, subscribePrivacyConsent } from "../hooks/privacy-queries";
 import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
@@ -192,7 +192,7 @@ let unsubscribeConsent: (() => void) | null = null;
 export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
-  if (!getPrivacySettings().crashReportingEnabled) return Promise.resolve(false);
+  if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
 
   started = start().catch((err) => {
     console.warn("[telemetry] init failed:", err);
@@ -215,7 +215,7 @@ async function start(): Promise<boolean> {
   }
 
   // Consent may have been withdrawn while the version was being read.
-  if (!getPrivacySettings().crashReportingEnabled) return false;
+  if (!privacyConsent().crashReportingEnabled) return false;
 
   const buildVersion = appBuild()?.version ?? "unknown";
   const config = buildTelemetryConfig({
@@ -247,8 +247,8 @@ async function start(): Promise<boolean> {
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
 
-  unsubscribeConsent = usePrivacyStore.subscribe((state) => {
-    if (!state.crashReportingEnabled) disableTelemetry();
+  unsubscribeConsent = subscribePrivacyConsent((consent) => {
+    if (!consent.crashReportingEnabled) disableTelemetry();
   });
 
   try {
@@ -289,7 +289,7 @@ export function reportErrorToTelemetry(
   componentStack?: string | null,
 ): void {
   if (!clickstackEnabled()) return;
-  if (!getPrivacySettings().crashReportingEnabled) return;
+  if (!privacyConsent().crashReportingEnabled) return;
   reportException(
     error,
     componentStack

@@ -30,7 +30,7 @@ import { useProjectDaemonInstalls } from "@/hooks/trigger-queries";
 import { CardInset } from "@/components/forge-ui/card";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import type { InputDef } from "@/lib/inputHelpers";
-import { usePreferencesStore } from "@/store/preferencesStore";
+import { useHiddenItems } from "@/hooks/settings-queries";
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
 import { TypedInputsProvider } from "../inputs/TypedInputField";
 import { useWorkflowDefinition } from "../useWorkflowDefinition";
@@ -140,7 +140,7 @@ export function RunWorkflowForm({
     projectId,
     workflowRef,
   );
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+  const { isPresetHidden } = useHiddenItems();
 
   // Handlers compose onto the latest value, never a render's stale snapshot:
   // a default-preset fetch can resolve between renders.

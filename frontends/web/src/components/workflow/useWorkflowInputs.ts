@@ -5,7 +5,7 @@ import { fromJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Workflow } from "../../hooks/workflow-queries";
 import { fetchDefaultPresets, useWorkflowPresets, type Preset } from "../../hooks/preset-queries";
-import { usePreferencesStore } from "../../store/preferencesStore";
+import { useHiddenItems } from "../../hooks/settings-queries";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDefault } from "../../lib/inputHelpers";
@@ -219,7 +219,7 @@ export function useWorkflowInputs({
   }, [workflowDef, projectId, presetsLoading, presets, fullWorkflowRef, enabled, selectedPresets, storedPresetsFromStep]);
 
   // Get hidden preset check
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+  const { isPresetHidden } = useHiddenItems();
 
   // Get presets filtered by tag and hidden state
   const getPresetsForGroup = useCallback(

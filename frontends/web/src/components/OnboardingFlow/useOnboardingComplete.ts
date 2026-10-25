@@ -14,8 +14,8 @@ const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_N
 async function defaultProjectPath(isCloud: boolean): Promise<string> {
   if (isCloud) return CLOUD_DEFAULT_PROJECT_PATH;
   try {
-    const { listDirectory } = await import("@/api/filesystem-grpc");
-    const result = await listDirectory("");
+    const { fetchDirectoryListing } = await import("@/hooks/file-system-queries");
+    const result = await fetchDirectoryListing("");
     const home = result.path || "~";
     return `${home}/Projects/${DEFAULT_PROJECT_NAME}`;
   } catch {

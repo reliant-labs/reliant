@@ -10,9 +10,8 @@ const mocks = vi.hoisted(() => ({
   waitForConfig: vi.fn(),
 }))
 
-vi.mock('@/store/privacyStore', () => ({
-  usePrivacyStore: (selector: (state: { initialize: typeof mocks.initializePrivacy }) => unknown) =>
-    selector({ initialize: mocks.initializePrivacy }),
+vi.mock('@/hooks/privacy-queries', () => ({
+  loadPrivacySettings: mocks.initializePrivacy,
 }))
 
 vi.mock('@/services/settingsSync', () => ({

@@ -18,15 +18,12 @@ import { providerAccountHandlers } from "../../../../test/providerAccountTranspo
 
 const mocks = vi.hoisted(() => ({
   listAccounts: vi.fn(),
-  getPreferences: vi.fn(),
   updateProvider: vi.fn(),
 }));
 
 vi.mock("../../../../api/client", () => ({
   api: {
     settings: {
-      getPreferences: mocks.getPreferences,
-      updatePreferences: vi.fn(),
       updateProvider: mocks.updateProvider,
       validateProviderAPIKey: vi.fn(),
     },
@@ -100,9 +97,13 @@ const statuses = [
 
 beforeEach(() => {
   Object.values(mocks).forEach((m) => m.mockReset());
-  mocks.getPreferences.mockResolvedValue({});
   useAuthStore.setState({ session: { access_token: "t" } as never });
-  setTransport(mockTransport(providerAccountHandlers({ listAccounts: mocks.listAccounts })));
+  setTransport(
+    mockTransport({
+      ...providerAccountHandlers({ listAccounts: mocks.listAccounts }),
+      "SettingsService.GetPreferences": () => ({}),
+    }),
+  );
 });
 
 afterEach(() => setTransport(null));

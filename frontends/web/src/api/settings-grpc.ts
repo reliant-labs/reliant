@@ -3,13 +3,9 @@
 import { grpcClient } from "./grpc-client";
 import { create } from "@bufbuild/protobuf";
 import {
-  fetchPreferences,
   fetchProviderStatuses,
-  invalidatePreferences,
   invalidateProviderStatuses,
 } from "../hooks/settings-queries";
-import { ConfigScope } from "../gen/reliant/v1/common_pb";
-import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
 import type {
   Setting as ProtoSetting,
   ProviderStatus as ProtoProviderStatus,
@@ -22,8 +18,6 @@ import {
   // Sub-phase 6b: UI Settings
   GetShortcutsRequestSchema,
   UpdateShortcutsRequestSchema,
-  UpdatePreferencesRequestSchema,
-  SetHiddenItemRequestSchema,
   // Sub-phase 6d: Provider Settings
   ValidateProviderAPIKeyRequestSchema,
   SyncReliantProviderRequestSchema,
@@ -33,9 +27,6 @@ import {
   StartCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthResponse_Status,
-  // Sub-phase 6e: Privacy
-  GetPrivacySettingsRequestSchema,
-  UpdatePrivacySettingsRequestSchema,
 } from "../gen/reliant/v1/settings_pb";
 
 // ============================================
@@ -73,26 +64,6 @@ export interface SignInOutcome {
   identityMismatch?: string;
   /** The account's label (its detected email, else a name), for the confirmation line. */
   accountLabel?: string;
-}
-
-export interface Preferences {
-  streaming_enabled: boolean;
-  worktree_archive_mode: string;
-  worktree_default_delete_branch: boolean;
-  additional: Record<string, string>;
-  branch_copy_uncommitted_files_default: boolean;
-  default_mcp_scope: ConfigScope;
-  default_workflow_scope: ConfigScope;
-  default_workflow: string;
-  hide_builtin_workflows: boolean;
-  hide_builtin_presets: boolean;
-  hidden_workflow_slugs: string[];
-  hidden_preset_slugs: string[];
-}
-
-export interface PrivacySettings {
-  analytics_enabled: boolean;
-  crash_reporting_enabled: boolean;
 }
 
 // ============================================
@@ -202,74 +173,6 @@ export const settingsGrpc = {
     const client = grpcClient.settings();
     const request = create(UpdateShortcutsRequestSchema, { shortcuts });
     const response = await client.updateShortcuts(request);
-    return {
-      success: response.success,
-      message: response.message,
-    };
-  },
-
-  /**
-   * Through hooks/settings-queries' cache entry: concurrent calls share one
-   * RPC, and every mounted usePreferences sees the answer.
-   */
-  async getPreferences(): Promise<Preferences> {
-    const response = await fetchPreferences();
-    return {
-      streaming_enabled: response.streamingEnabled,
-      worktree_archive_mode: response.worktreeArchiveMode,
-      worktree_default_delete_branch: response.worktreeDefaultDeleteBranch,
-      additional: response.additional,
-      branch_copy_uncommitted_files_default:
-        response.branchCopyUncommittedFilesDefault,
-      default_mcp_scope: response.defaultMcpScope ?? ConfigScope.PROJECT,
-      default_workflow_scope:
-        response.defaultWorkflowScope ?? ConfigScope.PROJECT,
-      default_workflow: response.defaultWorkflow || "builtin://agent",
-      hide_builtin_workflows: response.hideBuiltinWorkflows ?? false,
-      hide_builtin_presets: response.hideBuiltinPresets ?? false,
-      hidden_workflow_slugs: response.hiddenWorkflowSlugs ?? [],
-      hidden_preset_slugs: response.hiddenPresetSlugs ?? [],
-    };
-  },
-
-  async updatePreferences(prefs: Partial<Preferences>): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(UpdatePreferencesRequestSchema, {
-      streamingEnabled: prefs.streaming_enabled,
-      worktreeArchiveMode: prefs.worktree_archive_mode,
-      worktreeDefaultDeleteBranch: prefs.worktree_default_delete_branch,
-      additional: prefs.additional || {},
-      branchCopyUncommittedFilesDefault:
-        prefs.branch_copy_uncommitted_files_default,
-      defaultMcpScope: prefs.default_mcp_scope,
-      defaultWorkflowScope: prefs.default_workflow_scope,
-      defaultWorkflow: prefs.default_workflow,
-      hideBuiltinWorkflows: prefs.hide_builtin_workflows,
-      hideBuiltinPresets: prefs.hide_builtin_presets,
-    });
-    const response = await client.updatePreferences(request);
-    invalidatePreferences();
-    return {
-      success: response.success,
-      message: response.message,
-    };
-  },
-
-  async setHiddenItem(itemType: HiddenItemType, slug: string, hidden: boolean): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(SetHiddenItemRequestSchema, {
-      itemType: itemType,
-      slug,
-      hidden,
-    });
-    const response = await client.setHiddenItem(request);
-    invalidatePreferences();
     return {
       success: response.success,
       message: response.message,
@@ -480,42 +383,6 @@ export const settingsGrpc = {
       created: response.created,
       identityMismatch: response.identityMismatch || undefined,
       accountLabel: response.account?.label || undefined,
-    };
-  },
-
-  // ============================================
-  // Sub-phase 6e: Privacy Settings
-  // ============================================
-
-  async getPrivacySettings(): Promise<PrivacySettings> {
-    const client = grpcClient.settings();
-    const request = create(GetPrivacySettingsRequestSchema, {});
-    const response = await client.getPrivacySettings(request);
-    return {
-      analytics_enabled: response.analyticsEnabled,
-      crash_reporting_enabled: response.crashReportingEnabled,
-    };
-  },
-
-  async updatePrivacySettings(settings: Partial<PrivacySettings>): Promise<{
-    success: boolean;
-    message: string;
-    analytics_enabled: boolean;
-    crash_reporting_enabled: boolean;
-    requires_restart: boolean;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(UpdatePrivacySettingsRequestSchema, {
-      analyticsEnabled: settings.analytics_enabled,
-      crashReportingEnabled: settings.crash_reporting_enabled,
-    });
-    const response = await client.updatePrivacySettings(request);
-    return {
-      success: response.success,
-      message: response.message,
-      analytics_enabled: response.analyticsEnabled,
-      crash_reporting_enabled: response.crashReportingEnabled,
-      requires_restart: response.requiresRestart,
     };
   },
 };

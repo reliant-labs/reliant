@@ -62,17 +62,17 @@ vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
   }),
 }));
 
-vi.mock("../../../store/preferencesStore", () => {
-  const state = {
-    preferences: { defaultWorkflow: "builtin://agent" },
-    isLoading: false,
-    loadPreferences: vi.fn(),
-    isWorkflowHidden: () => false,
-    updatePreferences: vi.fn(),
-  };
-  const usePreferencesStore = (selector?: (s: typeof state) => unknown) => (selector ? selector(state) : state);
-  return { DEFAULT_WORKFLOW: "builtin://agent", usePreferencesStore };
-});
+// Stable objects: the pickers memoize on them.
+const prefs = vi.hoisted(() => ({
+  hidden: { isWorkflowHidden: () => false, isPresetHidden: () => false },
+  update: { isPending: false, mutateAsync: async () => undefined },
+}));
+vi.mock("../../../hooks/settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/settings-queries")>()),
+  useDefaultWorkflow: () => "builtin://agent",
+  useHiddenItems: () => prefs.hidden,
+  useUpdateScopePreferences: () => prefs.update,
+}));
 
 const { WorkflowSelector } = await import("../WorkflowSelector");
 const { AgentSelector } = await import("../AgentSelector");

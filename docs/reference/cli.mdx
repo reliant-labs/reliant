@@ -7856,6 +7856,16 @@ HyperDX-format file (with "tiles") is for the local HyperDX only and is not ship
 
 Errors carry the file, line and column of the offending value.
 
+--against `<env>` also checks every metrics panel against that env's telemetry over
+--since (default 24h): a series whose metric is stored as a different kind than
+its metricType fails the check (the panel reads the wrong table, or refuses its
+aggregation), and a series whose metric has no data at all is reported. No data
+is often a misspelt name or one the collector drops before storage, and sometimes
+a counter that only exists once something fails; --strict fails on it too.
+
+  cli forge obs dashboards check --against prod
+  cli forge obs dashboards check --against dev --since 6h --strict
+
 ```
 reliant forge obs dashboards check [flags]
 ```
@@ -7864,7 +7874,11 @@ reliant forge obs dashboards check [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--against` | `string` | - | also check every metrics panel against this env's telemetry |
+| `--backend` | `string` | - | with --against: local | cloud (default: from the env's declaration) |
 | `--output`, `-o` | `string` | `bin` | build output directory holding observability/metrics-schema.json |
+| `--since` | `duration` | `24h0m0s` | with --against: the window a metric must have data in |
+| `--strict` | `bool` | - | with --against: a metric with no data in the window fails the check too |
 
 ---
 
@@ -9181,9 +9195,10 @@ reliant forge obs session <id> [env] [flags]
 
 Real-user browser sessions: who hit errors, and which have a replay
 
-List the env's browser sessions that started in the range, newest first: user,
-entry path, length, page views, interactions, browser errors and whether a
-replay was recorded. [env] defaults to dev; --since defaults to 24h (at most 30d).
+List the env's browser sessions that started in the range, newest first: the
+frontend (APP) and start time, user, entry path, length, page views,
+interactions, browser errors, whether a replay was recorded, and the session id
+(last column). [env] defaults to dev; --since defaults to 24h (at most 30d).
 
 Read one with `cli forge obs session <id>`: a text timeline of what the user did.
 

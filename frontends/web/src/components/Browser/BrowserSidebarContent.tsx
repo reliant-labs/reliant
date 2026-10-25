@@ -1,13 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Globe, X, Plus, Star, Trash2 } from "lucide-react";
 import { useBrowserStore, type BrowserTab } from "../../store/browserStore";
-import { useBookmarksStore, type Bookmark } from "../../store/bookmarksStore";
+import { useBookmarkActions, useBookmarks, type Bookmark } from "../../hooks/settings-queries";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import Tooltip from "../forge-ui/tooltip";
 import { toast } from "../../lib/toast-manager";
-import { logger } from "../../lib/logger";
 import {
   SidebarSection,
   SidebarEmptyState,
@@ -30,10 +29,8 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const closeWorktreeTabs = useBrowserStore((state) => state.closeWorktreeTabs);
   
   // Bookmarks state
-  const bookmarks = useBookmarksStore((state) => state.bookmarks);
-  const loadBookmarks = useBookmarksStore((state) => state.loadBookmarks);
-  const addBookmark = useBookmarksStore((state) => state.addBookmark);
-  const removeBookmark = useBookmarksStore((state) => state.removeBookmark);
+  const bookmarks = useBookmarks();
+  const { addBookmark, removeBookmark } = useBookmarkActions();
   
   // Viewer state
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
@@ -46,13 +43,6 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const worktreeTabs = worktreeId 
     ? tabs.filter(t => t.worktreeId === worktreeId)
     : tabs;
-
-  // Load bookmarks on mount
-  useEffect(() => {
-    loadBookmarks().catch((error) => {
-      logger.error("[BrowserSidebarContent] Failed to load bookmarks:", error);
-    });
-  }, [loadBookmarks]);
 
   const handleTabClick = async (tab: BrowserTab) => {
     if (!currentProject?.id || !worktreeId) return;

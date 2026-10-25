@@ -13,7 +13,6 @@ import Button from '@/components/forge-ui/button';
 import { fetchDefaultPresets, setDefaultPreset, type Preset } from '../../../hooks/preset-queries'
 import { fetchWorkflow } from '../../../hooks/workflow-queries'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
-import { usePreferencesStore } from '../../../store/preferencesStore'
 import type { InputDef } from '../../../lib/inputHelpers'
 import { getInputPresetConfig } from '../../../lib/inputHelpers'
 interface PresetConfigModalProps {
@@ -42,25 +41,11 @@ export function PresetConfigModal({
   const [selectedPresets, setSelectedPresets] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const { preferences, loadPreferences } = usePreferencesStore()
-
-  // Ensure preferences are loaded when modal opens
-  useEffect(() => {
-    if (!preferences) {
-      loadPreferences()
-    }
-  }, [preferences, loadPreferences])
-
   // Load workflow definition and current defaults
   useEffect(() => {
     const load = async () => {
       setIsLoading(true)
       try {
-        // Wait for preferences to be loaded if they're not already
-        if (!preferences) {
-          await loadPreferences()
-        }
-
         // Fetch workflow definition to get groups
         const result = await fetchWorkflow(projectId, { name: workflowName })
         const workflow = result.workflow
@@ -99,7 +84,7 @@ export function PresetConfigModal({
       }
     }
     load()
-  }, [projectId, workflowName, preferences, loadPreferences])
+  }, [projectId, workflowName])
 
   const handleSave = async () => {
     setIsSaving(true)

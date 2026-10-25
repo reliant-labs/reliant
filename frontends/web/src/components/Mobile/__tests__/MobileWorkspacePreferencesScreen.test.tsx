@@ -7,15 +7,6 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("../../../api/client", () => ({
-  api: {
-    settings: {
-      getPreferences: vi.fn().mockResolvedValue({}),
-      updatePreferences: vi.fn(),
-    },
-  },
-}));
-
 const { MobileWorkspacePreferencesScreen } = await import(
   "../MobileWorkspacePreferencesScreen"
 );

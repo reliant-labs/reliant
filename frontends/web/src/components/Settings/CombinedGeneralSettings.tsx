@@ -19,6 +19,7 @@ import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
 import { ModelPreferences } from "./ModelPreferences";
+import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
 import {
   useApiKeySetupStore,
   resetApiKeySetupDismissed,
@@ -405,8 +406,9 @@ export function CombinedGeneralSettings({
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
   // Streaming preference state
-  const [streamingEnabled, setStreamingEnabled] = useState<boolean>(false);
-  const [loadingPreferences, setLoadingPreferences] = useState<boolean>(true);
+  const { data: userPreferences, isPending: loadingPreferences } = usePreferences();
+  const streamingEnabled = userPreferences.streamingEnabled;
+  const updatePreferences = useUpdatePreferences();
   // Per-tag model tuning (model/thinking/temperature/compaction) is power-user
   // detail that all defaults to Auto — keep it collapsed so it doesn't lead.
   const [showModelTuning, setShowModelTuning] = useState<boolean>(false);
@@ -572,29 +574,10 @@ export function CombinedGeneralSettings({
   };
 
 
-  // Load streaming and notification preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const data = await api.settings.getPreferences();
-        setStreamingEnabled((data.streaming_enabled as boolean) ?? false);
-        // Convert backend settings to interaction mode
-      } catch (error) {
-        console.error("Failed to load preferences:", error);
-      } finally {
-        setLoadingPreferences(false);
-      }
-    };
-    loadPreferences();
-  }, []);
-
-  // Handle streaming toggle
+  // Handle streaming toggle: it flips at once and back if the server refuses.
   const handleStreamingToggle = async (enabled: boolean) => {
     try {
-      await api.settings.updatePreferences({
-        streaming_enabled: enabled,
-      });
-      setStreamingEnabled(enabled);
+      await updatePreferences.mutateAsync({ streamingEnabled: enabled });
     } catch (error) {
       console.error("Failed to update streaming preference:", error);
     }

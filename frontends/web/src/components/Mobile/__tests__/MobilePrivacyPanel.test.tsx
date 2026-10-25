@@ -1,9 +1,9 @@
 /**
- * MobilePrivacyPanel renders and writes through the same usePrivacyStore
- * actions desktop PrivacySettings uses.
+ * MobilePrivacyPanel renders and writes through the same privacy-consent
+ * hooks desktop PrivacySettings uses.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -14,16 +14,14 @@ const MOBILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const mocks = vi.hoisted(() => ({
   setCrashReporting: vi.fn(),
   setAnalytics: vi.fn(),
-  initialize: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../store/privacyStore", () => ({
-  usePrivacyStore: () => ({
-    crashReportingEnabled: true,
-    analyticsEnabled: true,
+vi.mock("../../../hooks/privacy-queries", () => ({
+  usePrivacyConsent: () => ({ crashReportingEnabled: true, analyticsEnabled: true }),
+  useUpdatePrivacySettings: () => ({
+    isPending: false,
     setCrashReporting: mocks.setCrashReporting,
     setAnalytics: mocks.setAnalytics,
-    initialize: mocks.initialize,
   }),
 }));
 
@@ -34,7 +32,6 @@ describe("MobilePrivacyPanel", () => {
     render(<MobilePrivacyPanel />);
     expect(await screen.findByText(/crash and error reporting/i)).toBeInTheDocument();
     expect(screen.getByText(/analytics and usage data/i)).toBeInTheDocument();
-    await waitFor(() => expect(mocks.initialize).toHaveBeenCalled());
   });
 
   it("writes through the same setCrashReporting action desktop uses", async () => {

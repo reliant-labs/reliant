@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from "react";
 import Tooltip from "../forge-ui/tooltip";
 import {
   Save,
@@ -19,6 +19,7 @@ import {
   type FilePreviewInfo,
 } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
+import { rewriteTouches, subscribeFileRewrites } from "../../lib/fileRewrites";
 import { useEditorStore } from "../../store/editorStore";
 import {
   getMonacoLanguage,
@@ -249,6 +250,45 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       revokePreviewUrl();
     };
   }, [clearLoadingTimer, loadPreview, revokePreviewUrl]);
+
+  // Something other than this editor rewrote the file on disk (a Replace
+  // All, lib/fileRewrites). A clean text buffer reloads, so a later save
+  // cannot write the old text back over the change; a dirty one is left
+  // alone, since nothing may overwrite an unsaved edit.
+  //
+  // Both the buffer mirror and the subscription are layout effects, which run
+  // inside the commit: once a buffer is on screen, a rewrite sees it.
+  const bufferRef = useRef({ content, originalContent, isTextPreview });
+  useLayoutEffect(() => {
+    bufferRef.current = { content, originalContent, isTextPreview };
+  }, [content, originalContent, isTextPreview]);
+
+  useLayoutEffect(() => {
+    return subscribeFileRewrites((rewrite) => {
+      if (!rewriteTouches(rewrite, file.path, effectiveWorktreeId)) return;
+      const before = bufferRef.current;
+      if (!before.isTextPreview || before.content !== before.originalContent) return;
+      const requestId = loadRequestIdRef.current;
+      void (async () => {
+        try {
+          const fresh = await getFileContent(file.path, effectiveWorktreeId);
+          const now = bufferRef.current;
+          // Typed into, or reopened, while the read was in flight.
+          if (
+            loadRequestIdRef.current !== requestId ||
+            now.content !== now.originalContent ||
+            now.originalContent !== before.originalContent
+          ) {
+            return;
+          }
+          setContent(fresh);
+          setOriginalContent(fresh);
+        } catch (err) {
+          console.error("Failed to reload a rewritten file:", err);
+        }
+      })();
+    });
+  }, [effectiveWorktreeId, file.path]);
 
   // Re-open the file on the shared cadence while the machine comes up, so the
   // editor fills itself in rather than making the user close and reopen the tab.
