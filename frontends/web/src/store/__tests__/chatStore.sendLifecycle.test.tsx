@@ -130,7 +130,7 @@ function sentIds(): string[] {
 }
 
 const daemonConnecting = () =>
-  new ConnectError("unavailable: no daemon connected for user", Code.Internal);
+  new ConnectError("unavailable: no daemon connected for user", Code.Internal, new Headers({ "x-forge-error-reason": "daemon_not_connected" }));
 
 const refused = () =>
   new ConnectError("model \"gpt-0\" is not a known model", Code.InvalidArgument);

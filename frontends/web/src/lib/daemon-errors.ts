@@ -15,8 +15,7 @@ import { DAEMON_CONNECTING_REASONS, hasErrorReason } from "./errorReasons";
  * daemon RPCs (chat send, file tree, editor, terminal, search) fail with one
  * of the DAEMON_CONNECTING_REASONS. The Connect CODE is not the signal — the
  * same states have surfaced as `internal` and as `unavailable` — the reason is
- * (lib/errorReasons.ts, which also holds the "no daemon connected" message
- * marker older servers are still matched by).
+ * (lib/errorReasons.ts).
  *
  * This module answers exactly one question: *is this error the machine, or is
  * it real?* What to SAY about it, how long to wait, and when to give up are
@@ -51,9 +50,9 @@ export function isNoMachineError(error: unknown): boolean {
  * or is suspended — as an RPC error's reason or as it reads inside a tool
  * result ("the machine for this request is suspended and will wake…").
  *
- * The tool-result text is the FALLBACK, and it stays after the RPC markers
- * go: the LLM reads daemonoffline.ErrorSubstring in tool text, and a string
- * has no metadata to carry a reason. A run's state is read structurally from
+ * The tool-result text is the one text match left (RPC errors are read by
+ * reason only): the LLM reads daemonoffline.ErrorSubstring in tool text, and a
+ * string has no metadata to carry a reason. A run's state is read structurally from
  * `ChatActivity.WAITING_FOR_DAEMON` / `RunDisplayState.WAITING_FOR_MACHINE`
  * (WORKFLOW_UI.md §9.2, G7); never parse tool text where that is available.
  */

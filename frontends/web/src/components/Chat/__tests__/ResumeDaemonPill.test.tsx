@@ -52,8 +52,14 @@ describe("ResumeDaemonPill", () => {
     expect(screen.queryByText(/Resuming/)).toBeNull();
   });
 
-  it("treats 'daemon is not suspended' as success: no error box, pill gone", async () => {
-    state.resume.mockRejectedValue(new ConnectError("daemon is not suspended", Code.FailedPrecondition));
+  it("treats daemon_not_suspended as success: no error box, pill gone", async () => {
+    state.resume.mockRejectedValue(
+      new ConnectError(
+        "daemon is not suspended",
+        Code.FailedPrecondition,
+        new Headers({ "x-forge-error-reason": "daemon_not_suspended" }),
+      ),
+    );
     renderWithQuery(<ResumeDaemonPill placement="inline" />);
 
     fireEvent.click(await screen.findByText("Resume ws-1"));
@@ -77,7 +83,7 @@ describe("ResumeDaemonPill", () => {
     const err = new ConnectError(
       "no compute subscription",
       Code.FailedPrecondition,
-      new Headers({ "x-reliant-reason": "no_compute_subscription" }),
+      new Headers({ "x-forge-error-reason": "no_compute_subscription" }),
     );
     state.resume.mockRejectedValue(err);
     renderWithQuery(<ResumeDaemonPill placement="inline" />);

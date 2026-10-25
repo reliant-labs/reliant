@@ -119,7 +119,7 @@ function changes(files: Array<{ path: string; status: FileChangeStatus }>) {
  * app records it.
  */
 function wokeTheMachine(): Promise<never> {
-  const err = new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable, undefined, [
+  const err = new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable, new Headers({ "x-forge-error-reason": "daemon_waking" }), [
     { desc: DaemonWakingSchema, value: { daemonId: "daemon-b" } },
   ]);
   return machineWakeInterceptor(() => Promise.reject(err))({} as never) as Promise<never>;
