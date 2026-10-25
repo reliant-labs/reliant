@@ -27,20 +27,20 @@ import React from "react";
 //   * WorkflowExecutionUpdate / ExecutionLogUpdate (streaming-grpc.ts,
 //     types/streaming.ts) are parsed but never consumed by any reader.
 // The live path that actually drives the workflow UI is THIS hook's fetch of
-// chatGrpc.getWorkflowExecutions + the "workflow_executions" refetch pulse.
+// ChatService.GetWorkflowExecutions + the "workflow_executions" refetch pulse.
 // ---------------------------------------------------------------------------
 
-// Minimal mock of the grpc module — the hook only touches
-// chatGrpc.getWorkflowExecutions. Mocking the whole module also keeps the real
-// grpc-client (and its supabase import) out of the test.
+// The fake server: the hook only reads ChatService.GetWorkflowExecutions.
 const getWorkflowExecutionsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: {
-    getWorkflowExecutions: getWorkflowExecutionsMock,
-  },
-}));
+// Answered at the transport: the hook reads the generated
+// GetWorkflowExecutions entry, so the fake stands in for the server.
+beforeEach(() => setTransport(mockTransport(workflowExecutionsAnswer(getWorkflowExecutionsMock))));
+afterEach(() => setTransport(null));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { workflowExecutionsAnswer } from "@/test/chatPullReads";
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
 import { WorkflowExecutionView, WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import { triggerRefetch } from "../../store/refetchStore";
@@ -101,8 +101,8 @@ describe("useWorkflowExecutions (characterization)", () => {
     // A reader that does not ask for a view gets the cheap one: the timeline's
     // handful of steps, not the chat's entire step history.
     expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId, WorkflowExecutionView.BASIC);
-    expect(result.current.data).toEqual(latest);
-    expect(result.current.allWorkflows).toEqual(all);
+    expect(result.current.data).toMatchObject(latest);
+    expect(result.current.allWorkflows).toMatchObject(all);
   });
 
   it("does not fetch when chatId is null", async () => {

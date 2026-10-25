@@ -26,14 +26,16 @@ import React from "react";
 
 const getWorkflowExecutionsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: {
-    getWorkflowExecutions: getWorkflowExecutionsMock,
-  },
-}));
+// Answered at the transport: the hook reads the generated
+// GetWorkflowExecutions entry, so the fake stands in for the server.
+beforeEach(() => setTransport(mockTransport(workflowExecutionsAnswer(getWorkflowExecutionsMock))));
+afterEach(() => setTransport(null));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { workflowExecutionsAnswer } from "@/test/chatPullReads";
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
-import { chatDetailKeys } from "../chat-detail-keys";
+import { chatServiceKeys } from "../chat-service-hooks_gen";
 import { WorkflowExecutionView } from "../../gen/reliant/v1/chat_pb";
 
 const CHAT = "chat-retention";
@@ -85,7 +87,7 @@ describe("useWorkflowExecutions retention", () => {
       vi.advanceTimersByTime(10 * 60_000);
     });
 
-    const key = chatDetailKeys.workflowExecutionsView(CHAT, WorkflowExecutionView.BASIC);
+    const key = chatServiceKeys.getWorkflowExecutions({ chatId: CHAT, view: WorkflowExecutionView.BASIC });
     expect(client.getQueryData(key)).toBeDefined();
   });
 

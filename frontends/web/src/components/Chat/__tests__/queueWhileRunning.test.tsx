@@ -17,7 +17,7 @@
  */
 
 import { fireEvent, screen } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 
@@ -121,6 +121,14 @@ vi.mock("../WorkflowSelector", () => ({
 }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads() })));
+afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
   const editor = screen.getByTestId("chat-input");

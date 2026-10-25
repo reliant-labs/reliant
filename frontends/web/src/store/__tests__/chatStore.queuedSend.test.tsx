@@ -51,16 +51,6 @@ vi.mock("../../api/client", async () => {
   };
 });
 
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>(
-    "../../api/chat-grpc",
-  );
-  return {
-    ...actual,
-    chatGrpc: { ...actual.chatGrpc, listQueuedAgentMessages: listQueuedMock },
-  };
-});
-
 import { useChatStore } from "../chatStore";
 import { useGlobalUpdatesStore } from "../globalUpdatesStore";
 import { useProjectStore } from "../projectStore";
@@ -73,6 +63,15 @@ import {
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
 import { initEventBus } from "../../lib/events";
+import { setTransport } from "@/lib/connect";
+import { chatServiceKeys } from "../../hooks/chat-service-hooks_gen";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedMock) })));
+afterEach(() => setTransport(null));
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -157,7 +156,7 @@ async function deliverDrain(rowId: string) {
 /** The mailbox read the enqueue announcement triggers. */
 async function readMailbox() {
   await act(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["queuedAgentMessages"] });
+    await queryClient.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
   });
   await settle();
 }
@@ -205,7 +204,7 @@ beforeEach(() => {
   listQueuedMock.mockReset();
   listQueuedMock.mockResolvedValue({ messages: [] });
   clearAllMessagesCache();
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
   useChatStore.setState({
     activeChatId: null,
     streamingMessages: {},
@@ -227,7 +226,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
 });
 
 describe("a send to an executing run is on screen exactly once", () => {

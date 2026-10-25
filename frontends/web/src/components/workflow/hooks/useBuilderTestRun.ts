@@ -22,7 +22,7 @@ import type { Edge, Node } from '@xyflow/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useGlobalUpdatesStore } from '../../../store/globalUpdatesStore'
 import { useChatActivity } from '../../../store/activityStore'
-import { chatDetailKeys } from '../../../hooks/chat-detail-keys'
+import { chatServiceKeys } from '../../../hooks/chat-service-hooks_gen'
 import { chatKeys, useChat } from '../../../hooks/chat-queries'
 import { useWorkflowExecutions } from '../../../hooks/useWorkflowExecutions'
 import { WorkflowExecutionView } from '../../../gen/reliant/v1/chat_pb'
@@ -142,7 +142,7 @@ export function useBuilderRun(
   useEffect(() => {
     if (!testChatId || settledVersion === 0) return
     void queryClient.invalidateQueries(
-      { queryKey: chatDetailKeys.workflowExecutionsView(testChatId, WorkflowExecutionView.FULL) },
+      { queryKey: chatServiceKeys.getWorkflowExecutions({ chatId: testChatId, view: WorkflowExecutionView.FULL }) },
       { cancelRefetch: false },
     )
   }, [queryClient, testChatId, settledVersion])

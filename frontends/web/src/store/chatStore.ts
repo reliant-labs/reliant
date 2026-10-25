@@ -135,7 +135,8 @@ import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
 } from "../hooks/message-queries";
-import { chatDetailKeys } from "../hooks/chat-detail-keys";
+import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
+import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
@@ -4058,7 +4059,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     clearMessagesCache(chatId);
     // The execution tree is retained exactly as long as the messages (gcTime:
     // Infinity, see useWorkflowExecutions), so it is released with them.
-    queryClient.removeQueries({ queryKey: chatDetailKeys.workflowExecutions(chatId) });
+    queryClient.removeQueries({ queryKey: workflowExecutionsOfChat(chatId) });
     // A page may still be in flight for the evicted chat; its finally-block
     // delete would otherwise be the only thing clearing this, and an aborted
     // teardown would leave a tombstone that blocks paging if the chat returns.
@@ -4112,6 +4113,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.
     queryClient.removeQueries({ queryKey: chatKeys.all });
+    queryClient.removeQueries({ queryKey: chatServiceKeys.archivedChat });
     // Messages are homed in the RQ cache — drop all their entries too.
     clearAllMessagesCache();
 

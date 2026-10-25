@@ -52,11 +52,6 @@ vi.mock("../../api/client", async () => {
   };
 });
 
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
-  return { ...actual, chatGrpc: { ...actual.chatGrpc, listQueuedAgentMessages: listQueuedMock } };
-});
-
 // Retry without waiting out the real poll.
 vi.mock("../../lib/daemon-wait", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/daemon-wait")>()),
@@ -78,6 +73,15 @@ import { queryClient } from "../../lib/query-client";
 import { initEventBus } from "../../lib/events";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { clearAttempts } from "../../lib/pendingSends";
+import { setTransport } from "@/lib/connect";
+import { chatServiceKeys } from "../../hooks/chat-service-hooks_gen";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedMock) })));
+afterEach(() => setTransport(null));
 
 type Placement = { transcript: string[]; strip: string[] };
 let renders: Placement[] = [];
@@ -195,7 +199,7 @@ beforeEach(() => {
     hasMore: false,
     oldestSeq: 0,
   });
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
   useActivityStore.getState().setActivity(CHAT, ChatActivity.IDLE);
   useProjectStore.setState({ currentProject: { id: "p1", name: "p", path: "/p" } } as never);
   homeChat();
@@ -207,7 +211,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  queryClient.removeQueries({ queryKey: ["queuedAgentMessages"] });
+  queryClient.removeQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
 });
 
 describe("a send that fails for good", () => {
@@ -512,7 +516,7 @@ describe("a send to a run waiting on its machine", () => {
 
     // A mailbox read that lands before the server's row exists keeps it.
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ["queuedAgentMessages"] });
+      await queryClient.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
     });
     await settle();
     expect(latest().strip).toEqual([clientMessageId]);
@@ -529,7 +533,7 @@ describe("a send to a run waiting on its machine", () => {
     await act(async () => {
       answer({ ...saved(clientMessageId), queued: true });
       await sent;
-      await queryClient.invalidateQueries({ queryKey: ["queuedAgentMessages"] });
+      await queryClient.invalidateQueries({ queryKey: chatServiceKeys.queuedAgentMessage });
     });
     await settle();
 
