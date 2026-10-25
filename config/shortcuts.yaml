@@ -9,7 +9,7 @@
 #   - generated/docs-source/settings/keyboard-shortcuts.generated.md (Documentation source)
 #
 # To regenerate after changes:
-#   make generate-shortcuts
+#   task generate:docs:shortcuts
 #
 # BINDING SYNTAX:
 #   - "Cmd+X"          → Cmd on Mac, Ctrl on Windows (most common)

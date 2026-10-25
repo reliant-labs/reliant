@@ -191,7 +191,7 @@ func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 	f.idle()
 	ignore(t, f, "data/\n.env*\n*.db\n*.sqlite\nsecrets/\n.forge/\nweird/\n")
 	for name, rel := range map[string]string{
-		"data": "data/logs/l.log", "env": ".env.local", "db": "local.db", "sqlite": "x/app.sqlite",
+		"data": "data/l.log", "env": ".env.local", "db": "local.db", "sqlite": "x/app.sqlite",
 		"secrets": "secrets/key", "hostinfra": ".forge/hostinfra/pg/PG_VERSION", "unknown": "weird/thing.bin",
 	} {
 		w := f.worktree("d-"+name, "feat/d-"+name)

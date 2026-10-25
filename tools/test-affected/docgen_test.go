@@ -149,12 +149,8 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 	for _, file := range []string{".github/workflows/ci.yml", "scripts/release-gate.sh", "scripts/merge-gate.sh"} {
 		src := read(file)
 		for _, name := range targets {
-			// The task, and the Makefile forwarder named for it (generate-<name>).
-			legacy := "generate-" + strings.TrimPrefix(name, "generate:docs:")
-			for _, spelled := range []string{name, legacy} {
-				if regexp.MustCompile(`(^|[^\w:-])` + regexp.QuoteMeta(spelled) + `($|[^\w:-])`).Match(src) {
-					t.Errorf("%s names %s itself: run `task generate:docs` / `task generate:docs:check`, so the docs tasks are listed once (generate:docs)", file, spelled)
-				}
+			if regexp.MustCompile(`(^|[^\w:-])` + regexp.QuoteMeta(name) + `($|[^\w:-])`).Match(src) {
+				t.Errorf("%s names %s itself: run `task generate:docs` / `task generate:docs:check`, so the docs tasks are listed once (generate:docs)", file, name)
 			}
 		}
 	}

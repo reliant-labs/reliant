@@ -6,7 +6,7 @@ bases; each linked git worktree gets a disjoint 100-port block (base +
 block*100, memoized by forge, at most `dev_stack.max_stacks` = 8 stacks). All
 bases sit in 21000-21099, so stack N owns 21N00-21N99 and the whole range is
 21000-21799: clear of control-plane's dev blocks (3000-3799, 6060-6961,
-8081-8898, 19000-19794, 30880-31587, 38080+, 39190+), of 5433/5434, and of the
+8081-8898, 19000-19794, 30880-31587, 38080+, 39190+), of its Postgres (5434), and of the
 kernel's ephemeral range (32768+), so an outbound connection never lands on a
 port a stack is about to bind. Keep every new base inside 21000-21099 and
 distinct from the others below.

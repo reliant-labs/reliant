@@ -32,7 +32,7 @@
 //
 // A dev shell here has usually already exported RELIANT_API_URL /
 // RELIANT_SERVER_URL / RELIANT_GATEWAY_URL and sometimes VITE_* pointing at a
-// LOCAL stack — scripts/dev.sh and .dev-ports.sh both do it. `vite build` reads
+// LOCAL stack (a dev stack's environment carries them). `vite build` reads
 // VITE_* straight from the environment, so deferring to an inherited value
 // would bake localhost into a build labelled "prod", and the mistake would only
 // surface later as a packaged app talking to a port on the builder's laptop.

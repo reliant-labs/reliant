@@ -418,8 +418,8 @@ class BackendManager {
    * The absent case is a normal steady state, not a defect and not an upgrade
    * artifact, so it is not warned about. The Go side derives the field from
    * the data directory's own position under ~/.reliant/instances, and a
-   * container that sets DAEMON_DATA_DIR=/data (docker-compose.yml and
-   * docker-compose.cloud.yml both do) has no such position, so it legitimately
+   * container that sets DAEMON_DATA_DIR to its mounted volume (the workspace
+   * operator's pods do) has no such position, so it legitimately
    * writes no stamp at all. Deriving it from the path rather than the caller
    * is also what makes the field trustworthy here: a record cannot claim one
    * instance while sitting in another's directory.

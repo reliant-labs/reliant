@@ -8,7 +8,7 @@
 // to describe what a human may bind, not what the model may set — and writes
 // the result to internal/llm/tools/toolcatalog/catalog_generated.go.
 //
-// Run it with `go generate ./internal/llm/tools/...` or `make generate-tool-catalog`.
+// Run it with `go generate ./internal/llm/tools/...` or `task generate:forge`.
 //
 // It is a generator rather than a hand-written list because the alternative is
 // two lists that must agree and are edited separately. We shipped registry /

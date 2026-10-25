@@ -79,7 +79,7 @@ func waitForStagingFilter(t *testing.T, repo, started string, within time.Durati
 // has changed.
 func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
 	if testing.Short() {
-		t.Skip("builds a slow-to-stage repo and cancels real git index writes mid-flight (~3s); runs in make test")
+		t.Skip("builds a slow-to-stage repo and cancels real git index writes mid-flight (~3s); runs in task test")
 	}
 	tests := []struct {
 		name        string

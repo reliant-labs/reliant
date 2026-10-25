@@ -21,7 +21,7 @@
 # contract mocks/decorators, the descriptor, the open-procedure set and the
 # ORM in internal/store (database.orm below), and runs generate.hooks below:
 # the compiled-code generators forge does not own. Taskfile.yml is the
-# entrypoint (`task --list`; the Makefile forwards to it for one merge). After
+# entrypoint (`task --list`). After
 # changing a proto, a contract.go interface, a migration or a hook's input,
 # run `task generate:check` (forge generate at forge_version below, which
 # must equal go.mod's) and commit what it writes: the generated mocks assert

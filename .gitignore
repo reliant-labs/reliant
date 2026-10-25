@@ -80,8 +80,6 @@ coverage-final.json
 # .dockerignore is TRACKED: it excludes the machine-local go.work from the
 # build context, and an untracked copy means CI builds without that exclusion.
 Dockerfile.local
-docker-compose.override.yml
-docker-logs.txt
 /tmp/.buildx-cache/
 
 # Reliant directory - ignore everything except specific files
@@ -196,21 +194,6 @@ $RECYCLE.BIN/
 # Test sqllite db.
 :memory:
 
-# Dynamic port configuration (generated at runtime)
-.ports.json
-.ports-*.json
-.instance-info
-.instance-*.info
-# Sourced shell fragment written by scripts/dev.sh (was .env.ports — renamed
-# so nothing in the tree is named .env*, which is a secrets-file convention
-# this project does not use).
-.dev-ports.sh
-
-# Supervisor pid for `task dev-electron`, written by
-# scripts/dev-electron-supervise.sh and read by `task dev-electron-stop`.
-# Per-worktree runtime state, same as .dev-ports.sh above.
-.dev-electron.pid
-
 # Temporal artifacts (logs, pids, db)
 .temporal/
 temporal.db
@@ -261,7 +244,7 @@ browser-data/
 nul
 dev/
 
-# Generated documentation and presets (rebuilt during make generate)
+# Generated documentation and presets (rebuilt by task generate)
 # Source of truth files and what they generate:
 #
 # Keyboard Shortcuts (from config/shortcuts.yaml):
@@ -290,7 +273,7 @@ dev/
 # and the generated TypeScript are all checked in
 # deliberately.
 #
-# They used to be ignored on the reasoning that `make generate` re-creates
+# They used to be ignored on the reasoning that `task generate` re-creates
 # them, so committing them was redundant. What that costs is worse than the
 # duplication: a fresh clone or `git worktree add` does not compile until
 # someone runs codegen, which means CI, a new contributor, and every
@@ -299,7 +282,7 @@ dev/
 # so nobody sees what changed until it breaks at runtime.
 #
 # The rule now is that a checkout builds as-cloned. Regenerating must be a
-# no-op: if `make generate` produces a diff, commit it in the same change
+# no-op: if `task generate` produces a diff, commit it in the same change
 # that caused it.
 
 # Temp build artifacts (docgen binaries - use `go run` instead of building)
