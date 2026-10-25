@@ -427,7 +427,7 @@ export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }:
       <p id={`${id}-hint`} className={hintClass}>
         {worktreesQuery.isLoading
           ? "Loading this project's workspaces…"
-          : !!worktreesQuery.error
+          : worktreesQuery.error
             ? "Could not load this project's workspaces; the main checkout is still available."
             : "The checkout the run works in."}
       </p>

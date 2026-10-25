@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// Is main green, and did the full test tier actually run on it?
+// Is main green, and did the release gate actually run on it?
 //
 // ## Why this exists
 //
-// PR CI runs Go tests in two tiers (pr-ci.yml): `-short` on pull requests, the
-// full suite on pushes to main and nightly. Every testing.Short()-gated test —
-// the ones that wait out real timeouts, start a NATS cluster, and so on — now
-// runs ONLY on main. So a red main is no longer "a PR that slipped through"; it
-// is the one place those tests can fail at all, and it has to be seen.
+// CI runs two tiers (ci.yml, dev-docs/merge-and-release-gates.md): the merge
+// gate on pull requests (affected tests, `-short`, direct importers only) and
+// the release gate on pushes to main and nightly (everything: `-race`, every
+// slow test, integration, e2e). Every slow test and every transitive
+// dependent runs ONLY in the release gate. So a red main is no longer "a PR
+// that slipped through"; it is the one place those tests can fail at all, and
+// it has to be seen.
 //
 // A red push run notifies only the person who merged, and a red scheduled run
 // notifies only whoever last edited the cron. Neither is a durable signal. This
@@ -16,16 +18,15 @@
 //
 // ## What counts as red
 //
-// It reads the newest COMPLETED pr-ci.yml run on the branch that has a verdict
+// It reads the newest COMPLETED ci.yml run on the branch that has a verdict
 // (push, schedule or workflow_dispatch; a run cancelled because a newer one
 // superseded it has no verdict and is passed over) and reports red when:
 //
 //   - the run's conclusion is anything but success, or
-//   - the required sharded tier (default "Backend (Go, full)", run as
-//     "Backend (Go, full) N/M" shard jobs) is missing from that run, lacks a
-//     shard, or has one that did not succeed. "Missing" is the tiers silently
-//     merging: if main ever stops running the full tier, this fails rather
-//     than reporting a green run that ran only the short one.
+//   - the required job (default "Release gate") is missing from that run or
+//     did not succeed. "Missing" is the tiers silently merging: if main ever
+//     stops running the release gate, this fails rather than reporting a
+//     green run that ran only the lanes.
 //
 // ## Usage
 //
@@ -40,7 +41,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 
-import { shardedTierProblems } from "./gate-health-lib.mjs";
+import { requiredJobProblems } from "./gate-health-lib.mjs";
 
 const args = process.argv.slice(2);
 
@@ -49,9 +50,9 @@ function argValue(flag, fallback) {
   return i !== -1 && args[i + 1] !== undefined ? args[i + 1] : fallback;
 }
 
-const workflow = argValue("--workflow", "pr-ci.yml");
+const workflow = argValue("--workflow", "ci.yml");
 const branch = argValue("--branch", "main");
-const requiredTier = argValue("--require-shards", "Backend (Go, full)");
+const requiredJob = argValue("--require-job", "Release gate");
 const runCount = Number(argValue("--runs", "15"));
 const reportPath = argValue("--report", "");
 const repo = argValue("--repo", "");
@@ -106,7 +107,7 @@ if (runs.length === 0) {
 const run = runs[0];
 const jobs = JSON.parse(gh(["run", "view", String(run.databaseId), "--json", "jobs"])).jobs ?? [];
 const failedJobs = jobs.filter((job) => job.conclusion && !["success", "skipped", "neutral"].includes(job.conclusion));
-const tierProblems = shardedTierProblems(jobs, requiredTier);
+const tierProblems = requiredJobProblems(jobs, requiredJob);
 
 const reasons = [];
 if (run.conclusion !== "success") {
@@ -114,8 +115,8 @@ if (run.conclusion !== "success") {
 }
 if (tierProblems.length > 0) {
   reasons.push(
-    `${tierProblems.join("; ")} (the full test tier is the only place every short-gated test ` +
-      `runs; did the backend job's tier selection change?)`,
+    `${tierProblems.join("; ")} (the release gate is the only place every slow test, the race ` +
+      `detector and integration/e2e run; did ci.yml's release-gate job selection change?)`,
   );
 }
 
@@ -124,18 +125,19 @@ const sha = run.headSha.slice(0, 12);
 
 const body = [
   red
-    ? `PR CI is **red** on \`${branch}\` at \`${sha}\` (${run.event}): ${reasons.join("; ")}.`
-    : `PR CI is green on \`${branch}\` at \`${sha}\` (${run.event}).`,
+    ? `CI is **red** on \`${branch}\` at \`${sha}\` (${run.event}): ${reasons.join("; ")}.`
+    : `CI is green on \`${branch}\` at \`${sha}\` (${run.event}).`,
   "",
   `Run: ${run.url}`,
   ...(failedJobs.length
     ? ["", "Failed jobs:", ...failedJobs.map((job) => `- [${job.name}](${job.url}) — \`${job.conclusion}\``)]
     : []),
   "",
-  "The full Go test tier runs only on `main` (push and nightly); pull requests run `go test -short`. " +
+  "The release gate runs only on `main` (push and nightly); pull requests run the merge gate. " +
     "A test that fails here may never have run on the PR that broke it. Reproduce locally with " +
-    "`go test ./<pkg>/...` (no `-short`), or run the full tier on a branch with PR CI's " +
-    "`workflow_dispatch`. This issue is opened and closed by `.github/workflows/gate-health.yml`.",
+    "`task release:gate -- <sha>` (or `RG_ONLY=<step> scripts/release-gate.sh run <sha>`), or run " +
+    "it on a branch with ci.yml's `workflow_dispatch`. This issue is opened and closed by " +
+    "`.github/workflows/gate-health.yml`.",
 ].join("\n");
 
 if (reportPath) writeFileSync(reportPath, `${body}\n`);
@@ -144,7 +146,7 @@ setOutput("run_url", run.url);
 setOutput("sha", sha);
 
 if (asJson) {
-  console.log(JSON.stringify({ workflow, branch, requiredTier, red, reasons, run, failedJobs }, null, 2));
+  console.log(JSON.stringify({ workflow, branch, requiredJob, red, reasons, run, failedJobs }, null, 2));
 } else {
   console.log(body);
 }
