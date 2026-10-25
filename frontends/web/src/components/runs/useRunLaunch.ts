@@ -13,12 +13,12 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { api } from "@/api/client";
 import type { LaunchEvent } from "@/hooks/run-queries";
 import { triggerSchedule } from "@/hooks/trigger-model";
 import { chatKeys } from "@/hooks/chat-queries";
 import { useLaunchEvent } from "@/hooks/run-queries";
 import { useTriggerById } from "@/hooks/trigger-queries";
+import * as chatActions from "../../hooks/chat-actions";
 
 export interface RunLaunch {
   /** Still loading; render no launch-derived text yet (§4.4). */
@@ -41,7 +41,7 @@ export function useRunLaunch(chat: { id: string; launchKind?: string; triggerId?
   // A parent that is gone stays gone, so one failed lookup is the answer.
   const parent = useQuery({
     queryKey: [...chatKeys.detail(parentChatId), "as-parent"] as const,
-    queryFn: () => api.chatsV2.get(parentChatId!),
+    queryFn: () => chatActions.getChat(parentChatId!),
     enabled: !!parentChatId,
     retry: false,
     staleTime: 60_000,

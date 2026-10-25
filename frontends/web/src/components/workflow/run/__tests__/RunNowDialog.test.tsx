@@ -59,7 +59,6 @@ const listProjectDaemons = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    chat: () => ({ runNow, startChat }),
     daemonRegistry: () => ({ listDaemons }),
   },
 }));
@@ -69,6 +68,8 @@ vi.mock("@/api/grpc-client", () => ({
 beforeEach(() => {
   setTransport(
     mockTransport({
+      "ChatService.RunNow": (req: unknown) => runNow(req as never),
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
       ...serviceHandlers("TriggerService", { listReplayEvents, previewReplay }),
       ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),

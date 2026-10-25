@@ -20,7 +20,7 @@ import { Link } from "@tanstack/react-router";
 import { ConnectError } from "@connectrpc/connect";
 import { FlaskConical } from "lucide-react";
 
-import { chatGrpc, MessageRole } from "@/api/chat-grpc";
+import { MessageRole } from "@/hooks/chat-model";
 import { useChat } from "@/hooks/chat-queries";
 import { isLiveRunStatus, runStatus } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,7 @@ import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import "../config/config-panel.css";
+import * as chatActions from "@/hooks/chat-actions";
 
 /** What a test run was started with; "Run again" starts the next one with the same. */
 export interface TestRunRequest {
@@ -138,14 +139,14 @@ export function BuilderTestRunPanel({
       if (!slug) return;
       setSavedEpoch((epoch) => epoch + 1);
 
-      const { chat: started } = await chatGrpc.start({
+      const started = await chatActions.startChat({
         project_id: projectId,
         worktree_id: value.worktreeId,
         daemon_id: value.daemonId,
         workflow: slug,
         messages: [{ role: MessageRole.USER, content: prompt.trim() }],
         workflow_params: value.params,
-        selected_presets: value.presets,
+        selectedPresets: value.presets,
         builder_test: true,
       });
       onStarted(started.id, { prompt: prompt.trim(), value });

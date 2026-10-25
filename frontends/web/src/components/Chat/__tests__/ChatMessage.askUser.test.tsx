@@ -30,7 +30,7 @@ vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ branchChat: vi.fn(), connectChatToMachine: vi.fn() }) },
 }));
 vi.mock("../../../api/client", () => ({
-  api: { toolCalls: { cancel: vi.fn(), convertToBackground: vi.fn() } },
+  api: {},
 }));
 vi.mock("../../../lib/logger", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },

@@ -20,7 +20,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createTestQueryClient } from "../../test/renderWithQuery";
-import type { QueuedAgentMessageView } from "../../api/chat-grpc";
+import type { QueuedAgentMessageView } from "../chat-model";
 
 const CHAT_ID = "chat-abc";
 const THREAD_ID = "thread-xyz";

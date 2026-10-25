@@ -16,7 +16,7 @@
  *                         and never reaches sendAgentMessage.
  */
 
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
@@ -35,11 +35,6 @@ globalThis.ResizeObserver ??= class {
 const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
   sendAgentMessageMock: vi.fn(),
   toastErrorMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -127,7 +122,7 @@ import { emptyChatPullReads } from "@/test/chatPullReads";
 
 // ChatService's pull reads are generated-key reads, so they are answered at
 // the transport.
-beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads() })));
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
 afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
@@ -166,13 +161,15 @@ describe("queueing a message while the agent is running", () => {
     // preventDefault ran, so the browser never inserts the newline.
     expect(notPrevented).toBe(false);
 
-    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
     expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      MAIN_THREAD_ID,
-      "check the migration file",
-      [],
-      expect.any(String),
+      expect.objectContaining({
+        chatId: CHAT_ID,
+        threadId: MAIN_THREAD_ID,
+        message: "check the migration file",
+        attachments: [],
+        clientMessageId: expect.any(String),
+      }),
     );
     // Queueing is not sending: the ordinary turn-starting path stays untouched.
     expect(onSend).not.toHaveBeenCalled();
@@ -199,14 +196,16 @@ describe("queueing a message while the agent is running", () => {
     const editor = typeInComposer("look at this");
     pressEnter(editor);
 
+    await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
     expect(toastErrorMock).not.toHaveBeenCalled();
-    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      MAIN_THREAD_ID,
-      "look at this",
-      ["att-1"],
-      expect.any(String),
+      expect.objectContaining({
+        chatId: CHAT_ID,
+        threadId: MAIN_THREAD_ID,
+        message: "look at this",
+        attachments: ["att-1"],
+        clientMessageId: expect.any(String),
+      }),
     );
   });
 

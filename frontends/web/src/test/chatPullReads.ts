@@ -2,7 +2,7 @@
 
 /**
  * Transport answers for ChatService's pull reads (the generated keys), for
- * tests that used to mock `chatGrpc` by method. Each takes the fake the test
+ * tests that used to mock the chat client by method. Each takes the fake the test
  * already had, called with the arguments the hand wrapper took, and answers
  * the RPC with what that fake returns in the wrapper's shape.
  */

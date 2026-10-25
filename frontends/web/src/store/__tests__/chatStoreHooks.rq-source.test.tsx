@@ -15,22 +15,11 @@ import type { Chat } from "../../types/chat";
 import { chatKeys, patchChatCaches, seedChatDetail } from "../../hooks/chat-queries";
 
 // A hook asked for a chat that is not in the cache fetches it. The server
-// these tests stand in for has none of them; unmocked, the fetch was a real
-// RPC that settled after the test.
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
-  const { Code, ConnectError } = await import("@connectrpc/connect");
-  return {
-    ...actual,
-    chatGrpc: {
-      ...actual.chatGrpc,
-      get: vi.fn(async (chatId: string) => {
-        throw new ConnectError(`chat ${chatId} not found`, Code.NotFound);
-      }),
-    },
-  };
-});
+// these tests stand in for has none of them: GetChat answers NotFound.
+import { Code, ConnectError } from "@connectrpc/connect";
+import { setTransport } from "../../lib/connect";
 import { queryClient } from "../../lib/query-client";
+import { mockTransport } from "../../lib/test-utils";
 import { useChatStore } from "../chatStore";
 import { useActiveChat, useChat } from "../chatStoreHooks";
 
@@ -62,9 +51,17 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   queryClient.clear();
   useChatStore.setState({ activeChatId: null });
+  setTransport(
+    mockTransport({
+      "ChatService.GetChat": (req: unknown) => {
+        throw new ConnectError(`chat ${(req as { chatId: string }).chatId} not found`, Code.NotFound);
+      },
+    }),
+  );
 });
 
 afterEach(() => {
+  setTransport(null);
   cleanup();
   queryClient.clear();
   useChatStore.setState({ activeChatId: null });

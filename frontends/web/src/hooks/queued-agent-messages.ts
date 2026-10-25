@@ -69,7 +69,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
-import type { QueuedAgentMessageView } from "../api/chat-grpc";
+import type { QueuedAgentMessageView } from "./chat-model";
 import {
   ListQueuedAgentMessagesResponseSchema,
   QueuedAgentMessageSchema,

@@ -6,6 +6,8 @@ import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { WorkspaceRecoveryMenuItems } from "../WorkspaceRecoveryMenuItems";
 import { type Worktree } from "../../../hooks/worktree-queries";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
 const state = vi.hoisted(() => ({
   recreate: vi.fn(),
@@ -14,9 +16,6 @@ const state = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock("@/api/client", () => ({
-  api: { chatsV2: { update: (chatId: string, updates: unknown) => state.update(chatId, updates) } },
-}));
 vi.mock("@/hooks/worktree-actions", () => ({
   recreateWorktree: (id: string) => state.recreate(id),
 }));
@@ -48,9 +47,14 @@ beforeEach(() => {
   state.update.mockReset();
   state.success.mockReset();
   state.error.mockReset();
+  // `state.update(request)` answers UpdateChat with the chat it updated.
+  setTransport(
+    mockTransport({ "ChatService.UpdateChat": async (req: unknown) => ({ chat: await state.update(req) }) }),
+  );
 });
 
 afterEach(() => {
+  setTransport(null);
   vi.restoreAllMocks();
 });
 
@@ -86,7 +90,7 @@ describe("WorkspaceRecoveryMenuItems", () => {
     fireEvent.click(screen.getByText("Move to main checkout"));
 
     expect(confirmSpy.mock.calls[0][0]).toContain("/home/workspace/projects/reliant-labs");
-    await waitFor(() => expect(state.update).toHaveBeenCalledWith("chat-1", { worktree_id: "wt-main" }));
+    await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ chatId: "chat-1", worktreeId: "wt-main" })));
     await waitFor(() => expect(state.success).toHaveBeenCalled());
   });
 
@@ -106,7 +110,7 @@ describe("WorkspaceRecoveryMenuItems", () => {
 
     fireEvent.click(screen.getByText("Move to main checkout"));
 
-    await waitFor(() => expect(state.update).toHaveBeenCalledWith("chat-1", { worktree_id: "" }));
+    await waitFor(() => expect(state.update).toHaveBeenCalledWith(expect.objectContaining({ chatId: "chat-1", worktreeId: "" })));
   });
 
   it("offers nothing for a chat that is already on the main checkout", () => {

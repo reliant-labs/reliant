@@ -30,6 +30,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { indexSearchSchema } from "../../routeSchemas";
+import { mockTransport } from "../../lib/test-utils";
 
 // projectStore pulls in the gRPC client graph via its sibling stores; none of
 // it is exercised here (syncProjectUrl only touches the router), so the heavy
@@ -44,18 +45,9 @@ vi.mock("../../hooks/project-queries", async (importOriginal) => ({
 }));
 
 // Selecting a project also loads its chats, presets and workflows in the
-// background. Unmocked, each was a real RPC that settled after the test — and
-// under load, late enough to time the test out.
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
-  return {
-    ...actual,
-    chatGrpc: {
-      ...actual.chatGrpc,
-      list: vi.fn(async () => ({ chats: [], total: 0, lastUserUpdateSequence: 0 })),
-    },
-  };
-});
+// background. Unanswered, each was a real RPC that settled after the test — and
+// under load, late enough to time the test out. The chat list is answered at
+// the transport (beforeEach).
 function makeRouter(initialEntry: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   // Mirrors routes.tsx: `_app` owns validateSearch, `/` and
@@ -168,8 +160,11 @@ describe("syncProjectUrl — search params survive project selection", () => {
     await import("../projectStore");
   }, 60_000);
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
+    // The transport seam of the module instance the re-imported store uses.
+    const { setTransport } = await import("../../lib/connect");
+    setTransport(mockTransport({ "ChatService.ListChats": { response: { chats: [] } } }));
   });
 
   afterEach(() => {
