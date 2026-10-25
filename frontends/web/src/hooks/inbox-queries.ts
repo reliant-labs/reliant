@@ -16,22 +16,21 @@
  * focus, even while fresh.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { create as createStore } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { grpcClient } from "../api/grpc-client";
-import {
-  CleanupStorageRequestSchema,
-  DismissInboxItemRequestSchema,
-  ListInboxRequestSchema,
-  RestoreInboxItemRequestSchema,
-  type ListInboxResponse,
-} from "../gen/reliant/v1/inbox_pb";
+import type { ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { useProjectStore } from "../store/projectStore";
+import {
+  inboxServiceKeys,
+  useCleanupStorage as useCleanupStorageRpc,
+  useDismissInboxItem,
+  useListInbox,
+  useRestoreInboxItem,
+} from "./inbox-service-hooks_gen";
 
 export type { InboxItem, ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 export { InboxItemKind } from "../gen/reliant/v1/inbox_pb";
@@ -67,13 +66,13 @@ export function useInboxProjectId(): string | undefined {
   return scope === "project" ? projectId : undefined;
 }
 
-// ── Key factory ─────────────────────────────────────────────────────────────
-
-export const inboxKeys = {
-  all: ["inbox"] as const,
-  lists: () => [...inboxKeys.all, "list"] as const,
-  list: (projectId?: string) => [...inboxKeys.lists(), projectId ?? "*"] as const,
-};
+// ── Keys ────────────────────────────────────────────────────────────────────
+//
+// The Inbox is InboxService on forge's generated keys: one ListInbox entry per
+// scope (`inboxServiceKeys.listInbox({ projectId })`), every one of them under
+// `inboxServiceKeys.listInbox.all`. Every write below is a generated mutation,
+// which invalidates `inboxServiceKeys.all` on success; the stream invalidates
+// the same root (store/streamInvalidatedScopes, `inbox`).
 
 /**
  * Whether a user update can change what the Inbox holds. Exported so the
@@ -107,17 +106,13 @@ export interface InboxCounts {
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
 /** The one Inbox read: items (default limit, 100) and the counts. */
-function inboxListQuery(projectId?: string) {
-  return {
-    queryKey: inboxKeys.list(projectId),
-    queryFn: () => grpcClient.inbox().listInbox(create(ListInboxRequestSchema, { projectId })),
-    refetchOnWindowFocus: "always" as const,
-  };
+function inboxRequest(projectId?: string) {
+  return { projectId };
 }
 
 /** The Inbox's items in the server's priority order (default limit, 100). */
 export function useInbox(projectId?: string) {
-  return useQuery(inboxListQuery(projectId));
+  return useListInbox(inboxRequest(projectId), { refetchOnWindowFocus: "always" });
 }
 
 function countsOf(response: ListInboxResponse): InboxCounts {
@@ -131,16 +126,21 @@ function countsOf(response: ListInboxResponse): InboxCounts {
  * refetch for a few KB of items saved.
  */
 export function useInboxCounts(projectId?: string) {
-  return useQuery({ ...inboxListQuery(projectId), select: countsOf });
+  return useListInbox(inboxRequest(projectId), { refetchOnWindowFocus: "always", select: countsOf });
 }
 
 // ── Cache helpers ───────────────────────────────────────────────────────────
 
 /** Drop items from every cached list (each scope holds its own copy). */
 function dropFromLists(client: QueryClient, ids: Set<string>): void {
-  client.setQueriesData<ListInboxResponse>({ queryKey: inboxKeys.lists() }, (previous) =>
+  client.setQueriesData<ListInboxResponse>({ queryKey: inboxServiceKeys.listInbox.all }, (previous) =>
     previous ? { ...previous, items: previous.items.filter((item) => !ids.has(item.itemId)) } : previous,
   );
+}
+
+/** Mark every Inbox read stale; observed ones refetch. */
+export function invalidateInbox(client: QueryClient = appQueryClient): Promise<void> {
+  return client.invalidateQueries({ queryKey: inboxServiceKeys.all });
 }
 
 /**
@@ -150,63 +150,48 @@ function dropFromLists(client: QueryClient, ids: Set<string>): void {
  */
 export function removeInboxItems(itemIds: string[], client = appQueryClient): void {
   dropFromLists(client, new Set(itemIds));
-  void client.invalidateQueries({ queryKey: inboxKeys.all });
+  void invalidateInbox(client);
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────
 
 /**
- * Dismiss items — one row, or a whole section. They leave every cached list
- * immediately; on error the lists are put back. Any kind can be dismissed:
- * hiding an approval or a question does not resolve it.
+ * Dismiss items — one row, or a whole section: `mutate({ itemIds })`. They
+ * leave every cached list immediately; on error the lists are put back and
+ * read again. Any kind can be dismissed: hiding an approval or a question does
+ * not resolve it.
  */
 export function useDismissInboxItems() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (itemIds: string[]) => {
-      await grpcClient.inbox().dismissInboxItem(create(DismissInboxItemRequestSchema, { itemIds }));
-    },
-    onMutate: async (itemIds) => {
-      await queryClient.cancelQueries({ queryKey: inboxKeys.lists() });
-      const previous = queryClient.getQueriesData<ListInboxResponse>({ queryKey: inboxKeys.lists() });
+  return useDismissInboxItem({
+    onMutate: async ({ itemIds = [] }) => {
+      await queryClient.cancelQueries({ queryKey: inboxServiceKeys.listInbox.all });
+      const previous = queryClient.getQueriesData<ListInboxResponse>({ queryKey: inboxServiceKeys.listInbox.all });
       dropFromLists(queryClient, new Set(itemIds));
       return { previous };
     },
-    onError: (_error, _itemIds, context) => {
+    onError: (_error, _request, context) => {
       for (const [key, data] of context?.previous ?? []) queryClient.setQueryData(key, data);
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+      void invalidateInbox(queryClient);
     },
   });
 }
 
-/** Undo a dismissal: the items come back on the next read. */
-export function useRestoreInboxItems() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (itemIds: string[]) => {
-      await grpcClient.inbox().restoreInboxItem(create(RestoreInboxItemRequestSchema, { itemIds }));
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
-    },
-  });
-}
+/** Undo a dismissal (`mutate({ itemIds })`): the items come back on the next read. */
+export const useRestoreInboxItems = useRestoreInboxItem;
 
 /**
  * Clean up a machine's held worktrees: the machine saves each one's work to a
  * local ref, verifies it, and removes the directory. The caller passes exactly
  * the ids the user confirmed. Whatever the machine reports, the storage item is
- * read again afterwards, so the list shows what is actually left.
+ * read again afterwards (the generated write on success, here on failure), so
+ * the list shows what is actually left.
  */
 export function useCleanupStorage() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (request: { daemonId: string; worktreeIds: string[] }) =>
-      grpcClient.inbox().cleanupStorage(create(CleanupStorageRequestSchema, request)),
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+  return useCleanupStorageRpc({
+    onError: () => {
+      void invalidateInbox(queryClient);
     },
   });
 }

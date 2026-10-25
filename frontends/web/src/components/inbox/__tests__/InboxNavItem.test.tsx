@@ -8,7 +8,7 @@
  */
 
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
@@ -16,10 +16,11 @@ import { create } from "@bufbuild/protobuf";
 import { ListInboxResponseSchema } from "@/gen/reliant/v1/inbox_pb";
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
 
-const listInbox = vi.hoisted(() => vi.fn());
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { inbox: () => ({ listInbox }) },
-}));
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+
+// The counts are InboxService's generated ListInbox: answered at the transport.
+const listInbox = vi.fn();
 
 import { InboxNavItem } from "../InboxNavItem";
 import { useActivityStore } from "@/store/activityStore";
@@ -31,8 +32,11 @@ function renderItem(ui: ReactNode) {
 
 beforeEach(() => {
   listInbox.mockReset();
+  setTransport(mockTransport({ "InboxService.ListInbox": (req) => listInbox(req) }));
   useActivityStore.setState({ entries: new Map(), activities: new Map(), maxSeenSeq: 0 });
 });
+
+afterEach(() => setTransport(null));
 
 describe("InboxNavItem", () => {
   it("shows blocking_count as a number and a dot for informational items", async () => {

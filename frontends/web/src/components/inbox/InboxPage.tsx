@@ -100,12 +100,12 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
 
   const onDismiss = (dismissed: InboxItemData[], what: string) => {
     const ids = dismissed.map((item) => item.itemId);
-    dismiss.mutate(ids, {
+    dismiss.mutate({ itemIds: ids }, {
       onSuccess: () =>
         toast.notify(`Dismissed ${what}`, {
           // Long enough to notice and reach for Undo; the default 4s is not.
           duration: 8000,
-          action: { label: "Undo", onClick: () => restore.mutate(ids) },
+          action: { label: "Undo", onClick: () => restore.mutate({ itemIds: ids }) },
         }),
       onError: (error) => void toast.error(error),
     });
