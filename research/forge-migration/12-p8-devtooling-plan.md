@@ -17,7 +17,7 @@ holds up. Three facts found here change the shape, though:
    It needs k3d (daemon-gateway and workspace-controller run on
    `k3d-control-plane-v2` / `k3d-cp-daemon-v2`: `_on_cp = forge.OnCluster
    {target = _devhost_k8s}`, `deploy/kcl/dev/main.k:2489`). The cloud
-   workspaces run in a kata sandbox that cannot run k3d. Separately, reliant
+   workspaces run in a kata sandbox, where k3d needs a `/dev/kmsg` workaround (verified 2026-10-25; this plan originally said it cannot run k3d). Separately, reliant
    is **public** and control-plane is **private**
    (`gh repo view reliant-labs/{reliant,control-plane} --json visibility`). So
    "control-plane is the only dev path" would leave an outside contributor
@@ -378,7 +378,7 @@ is product behavior for users' repos, not reliant's tooling.
 
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
-| **D-P8-1** | The dev path | (a) control-plane's `forge env up dev` only (PLAN as written); (b) that **plus** a host-only `forge env up dev` in reliant | **(b).** (a) cannot run in the kata sandbox (k3d), and it gives the public repo no dev path. (b) is also D4's shape: reliant declares its workloads and control-plane binds them. Devil's advocate: two stacks to maintain. That cost is real until F6 lets control-plane import reliant's declarations, and then the duplication goes away |
+| **D-P8-1** | The dev path | (a) control-plane's `forge env up dev` only (PLAN as written); (b) that **plus** a host-only `forge env up dev` in reliant | **(b).** (a) needs the `/dev/kmsg` workaround in the kata sandbox (originally written as "cannot run"), and it gives the public repo no dev path. (b) is also D4's shape: reliant declares its workloads and control-plane binds them. Devil's advocate: two stacks to maintain. That cost is real until F6 lets control-plane import reliant's declarations, and then the duplication goes away |
 | **D-P8-2** | Test database | pgtest embedded by default, tests stop reading `DATABASE_URL`, vs. keep the explicit-DSN contract | **pgtest embedded**, `FORGE_TEST_POSTGRES_URL` as the only override |
 | **D-P8-3** | DB tests under `-short` | run them vs. keep skipping | **run them** (hermetic, cache-sound); gate any measured >2s |
 | **D-P8-4** | Where the 18 generators live | all Taskfile `generate:*` (PLAN's wording), vs. hybrid | **hybrid**: the 5 compiled-code generators become forge `generate.hooks`, so `forge generate` is one command and `verify-generated` is one drift gate; the 13 docs generators + refcheck become `task generate:docs` with a gate row |

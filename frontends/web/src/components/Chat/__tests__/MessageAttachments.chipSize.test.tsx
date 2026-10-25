@@ -18,7 +18,7 @@ import { MessageGeneratedImages } from "../MessageGeneratedImages";
 import type { Attachment } from "../../../types/chat";
 
 const getAttachmentAsBlob = vi.fn(
-  async () => new Blob(["png-bytes"], { type: "image/png" }),
+  async (_id: string) => new Blob(["png-bytes"], { type: "image/png" }),
 );
 
 vi.mock("../../../hooks/attachment-queries", () => ({

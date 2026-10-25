@@ -132,10 +132,7 @@ const WebSocketMock = vi.fn().mockImplementation(() => ({
 }))
 
 // Add static constants to the constructor
-WebSocketMock.CONNECTING = 0
-WebSocketMock.OPEN = 1
-WebSocketMock.CLOSING = 2
-WebSocketMock.CLOSED = 3
+Object.assign(WebSocketMock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 })
 
 global.WebSocket = WebSocketMock as unknown as typeof WebSocket
 // ── Unit tests do not reach the network ────────────────────────────────────

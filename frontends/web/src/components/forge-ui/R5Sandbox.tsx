@@ -9,8 +9,17 @@
  *                button that explains itself, a help icon in running text;
  *                the spec hovers the disabled button, then focuses the
  *                toolbar's first button from the keyboard
+ *   r5-menus     ?view=r5-menus — a file list with a context menu (the file
+ *                tree's and the sidebar's shape: icons, a separator, a
+ *                disabled and a danger item) and a help popover beside a
+ *                field label; the spec right-clicks a row, then opens the
+ *                help
  */
-import { Copy, Download, HelpCircle, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Copy, Download, FilePlus, FileText, HelpCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
+
+import ContextMenu from "./context_menu";
+import { HelpPopover } from "../workflow/HelpPopover";
 
 import Tooltip from "./tooltip";
 
@@ -61,6 +70,70 @@ export function R5Tooltips() {
           </Tooltip>
         </p>
       </div>
+    </div>
+  );
+}
+
+const FILES = ["main.go", "go.mod", "README.md"];
+
+export function R5Menus() {
+  const [menu, setMenu] = useState<{ x: number; y: number; file: string } | null>(null);
+  return (
+    <div className="space-y-6 p-16" data-testid="r5-menus" style={{ minHeight: 420 }}>
+      <SectionTitle>Context menu and help popover — the file tree, a step field</SectionTitle>
+      <div className="flex max-w-3xl items-start gap-16">
+        <ul aria-label="Files" className="w-56 rounded-lg border border-border bg-card py-1">
+          {FILES.map((file) => (
+            <li key={file}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ x: e.clientX, y: e.clientY, file });
+                }}
+              >
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                {file}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="w-72 space-y-1.5">
+          <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+            Inject message
+            <HelpPopover
+              title="Inject message"
+              content={"Adds a message to the thread BEFORE the step runs.\n\n• Inherit: added on first execution only\n• New: first message in the new thread"}
+            />
+          </span>
+          <div className="h-8 rounded-md border border-border bg-card" />
+        </div>
+      </div>
+      {menu && (
+        <ContextMenu
+          label={`${menu.file} actions`}
+          open
+          position={{ x: menu.x, y: menu.y }}
+          onOpenChange={(open) => !open && setMenu(null)}
+          groups={[
+            {
+              items: [
+                { label: "Open", icon: <FileText className="h-4 w-4" />, onClick: () => undefined },
+                { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => undefined },
+              ],
+            },
+            {
+              items: [
+                { label: "New File", icon: <FilePlus className="h-4 w-4" />, onClick: () => undefined, disabled: true },
+                { label: "Copy path", icon: <Copy className="h-4 w-4" />, onClick: () => undefined },
+              ],
+            },
+            { items: [{ label: "Delete", icon: <Trash2 className="h-4 w-4" />, onClick: () => undefined, variant: "danger" }] },
+          ]}
+        />
+      )}
     </div>
   );
 }

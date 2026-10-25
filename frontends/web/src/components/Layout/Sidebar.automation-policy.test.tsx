@@ -16,32 +16,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
-import type { ContextMenuItem } from "../ui/ContextMenu";
 
 vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-// The menu renders its items as plain buttons so a test can pick one.
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: ({ items }: { items: ContextMenuItem[] }) => (
-    <div data-testid="context-menu">
-      {items
-        .filter((item) => !item.separator)
-        .map((item) => (
-          <button key={item.label} type="button" onClick={item.onClick}>
-            {item.label}
-          </button>
-        ))}
-    </div>
-  ),
 }));
 
 vi.mock("../../hooks/useDebounce", () => ({
@@ -117,7 +100,7 @@ function chat(overrides: Partial<ChatFixture> & { id: string }): ChatFixture {
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: WORKTREE_ID,
     projectId: PROJECT_ID,
     ...overrides,
@@ -179,7 +162,7 @@ beforeEach(() => {
       name: "Project",
       path: "/tmp/project",
       is_git_repo: true,
-      worktree_count: 1,
+      is_forge: false,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
       last_active: "2024-01-01T00:00:00.000Z",
@@ -269,7 +252,7 @@ describe("Move back to Runs", () => {
     act(() => {
       row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
     });
-    return screen.getByTestId("context-menu");
+    return screen.getByRole("menu", { name: "Chat actions" });
   }
 
   it("is offered on an adopted run and not on an interactive chat", () => {

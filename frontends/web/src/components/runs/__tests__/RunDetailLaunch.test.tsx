@@ -56,8 +56,6 @@ import {
   worktreesResponse,
 } from "../../workflow/run/__tests__/runFormFixtures";
 import { renderRunsAt } from "./runTestUtils";
-import { setTransport } from "@/lib/connect";
-import { mockTransport } from "@/lib/test-utils";
 
 const rpc = vi.hoisted(() => ({
   getChat: vi.fn(),
@@ -129,7 +127,7 @@ vi.mock("@/store/globalUpdatesStore", () => ({
 
 import { RunDetail } from "../RunDetailPage";
 
-function protoChat(overrides: Partial<ProtoChat> = {}) {
+function protoChat(overrides: Partial<Omit<ProtoChat, "$typeName">> = {}) {
   return create(ChatSchema, {
     id: "chat-1",
     title: "Nightly triage · 2026-10-06 09:00",

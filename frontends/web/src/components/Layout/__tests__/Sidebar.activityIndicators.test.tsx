@@ -25,7 +25,7 @@ import { useActivityStore } from "../../../store/activityStore";
 vi.mock("../../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("../../ui/ContextMenu", () => ({ ContextMenu: () => null }));
+vi.mock("../../forge-ui/context_menu", () => ({ default: () => null }));
 vi.mock("../../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
 // RunService is reached through the generated hooks, so it is answered at
@@ -66,7 +66,7 @@ const chats: Array<Record<string, unknown>> = Object.entries(rows).map(([id, row
   unread: row.unread,
   activity: row.activity,
   workingThreads: row.workingThreads,
-  state: ChatState.ACTIVE,
+  state: ChatState.IDLE,
   worktreeId: "worktree-1",
   projectId: "project-1",
 }));
@@ -114,7 +114,7 @@ describe("Sidebar activity indicators", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",

@@ -39,6 +39,7 @@ import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type Dashb
 import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
 import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
+import ChartCorrectnessPreview from "../../charts/__preview__/ChartCorrectnessPreview";
 
 const BASE = "/forge-dashboards-preview";
 
@@ -213,7 +214,7 @@ export default function DashboardsPreview() {
     >
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={api}>
-          {page === "list" ? (
+          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page === "list" ? (
             <DashboardsList
               key={caseId}
               project={FIXTURE_PROJECT}

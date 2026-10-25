@@ -16,9 +16,7 @@ vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 // The real Dropdown is used here on purpose: these tests assert open/close
 // behavior (choose-an-option and Escape), which a passthrough mock would fake.
@@ -47,7 +45,7 @@ const mockChatListData = [
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: "worktree-1",
     projectId: "project-1",
   },
@@ -111,7 +109,7 @@ describe("Sidebar selected chat scroll", () => {
             updatedAt: "2024-01-01T00:00:00.000Z",
             lastMessageAt: "2024-01-01T00:00:00.000Z",
             unread: false,
-            state: ChatState.ACTIVE,
+            state: ChatState.IDLE,
             worktreeId: "worktree-1",
             projectId: "project-1",
           },
@@ -138,7 +136,7 @@ describe("Sidebar selected chat scroll", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",

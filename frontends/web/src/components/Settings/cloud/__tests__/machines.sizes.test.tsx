@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   getComputeSubscription: vi.fn(async () => ({}) as unknown),
   getComputeEligibility: vi.fn(async () => ({}) as unknown),
-  createEnvironment: vi.fn(async () => ({})),
+  createEnvironment: vi.fn(async (_input: unknown) => ({})),
   navigate: vi.fn(),
 }));
 

@@ -172,7 +172,7 @@ describe("end to end through globalUpdatesStore", () => {
     const { UserStreamingService } = await import("../../api/streaming-grpc");
     const requested: Array<[string | undefined, bigint]> = [];
     const connect = vi
-      .spyOn(UserStreamingService.prototype as never, "establishConnection")
+      .spyOn(UserStreamingService.prototype as unknown as { establishConnection: () => Promise<void> }, "establishConnection")
       .mockImplementation(async function (this: unknown) {
         const svc = this as { subscribedChatId?: string; lastChatSequence: bigint };
         requested.push([svc.subscribedChatId, svc.lastChatSequence]);

@@ -107,7 +107,7 @@ async function saveAndReload(inputs: Record<string, Param>): Promise<{ workflow:
 interface DefaultCase {
   type: string;
   /** Set the default through the editor's own control. */
-  set: () => Promise<void> | void;
+  set: () => unknown;
   /** getInputDefault after reload. */
   expected: unknown;
   /** Show the default again, as the reloaded editor does. */

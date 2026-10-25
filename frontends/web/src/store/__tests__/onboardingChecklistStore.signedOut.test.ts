@@ -19,7 +19,7 @@
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 const readSetting = vi.fn();
-const upsertStringSetting = vi.fn(async () => undefined);
+const upsertStringSetting = vi.fn(async (_key: string, _value: string) => undefined);
 
 vi.mock("../../lib/settingsPersistence", () => ({
   readSetting: (key: string) => readSetting(key),

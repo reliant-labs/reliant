@@ -54,6 +54,10 @@ const SELF_MANAGED: LiveEnv = {
   phase: "succeeded",
   provenance: "",
   holds: [],
+  releaseProvenance: null,
+  observed: { state: "not-reported" },
+  drift: { state: "not-reported" },
+  driftDetail: "",
   declaredShape: {
     kind: "self_managed",
     workloads: [{ name: "api", runtime: "cluster", cluster: "gke" }],

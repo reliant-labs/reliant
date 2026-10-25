@@ -24,7 +24,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConnectError, Code } from "@connectrpc/connect";
+import { ConnectError } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 
 import {
@@ -124,13 +124,6 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
   isEntitlementDenial: (err: unknown) =>
     err instanceof ConnectError && !!err.metadata.get("x-forge-error-reason"),
 }));
-
-/** Builds the shape the server really returns for an entitlement denial. */
-function deniedError(message: string, code: Code, reason: string): ConnectError {
-  const headers = new Headers();
-  headers.set("x-forge-error-reason", reason);
-  return new ConnectError(message, code, headers);
-}
 
 // Redeem-coupon mutation, mocked so the coupon UI can be driven
 // deterministically without a network layer. `mutate` mimics TanStack's
@@ -299,7 +292,7 @@ describe("ComputeStep loading gate", () => {
 
     await act(async () => {
       renderComputeStep({
-        daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
+        daemons: [makeDaemon({ daemonId: "d-1", status: DaemonStatus.ACTIVE })],
         loading: false,
         onNext,
         updatePlan,

@@ -23,6 +23,7 @@ import {
   DOMAIN_STATE_EXPLANATIONS,
   DOMAIN_STATE_LABELS,
   DOMAIN_STATE_NEXT_STEPS,
+  type DomainDnsRecord,
   type ForgeDomain,
 } from "@/services/forge/domains";
 
@@ -31,22 +32,26 @@ import { DomainStateBadge } from "../DomainStateBadge";
 import { DnsRecordsTable } from "../DnsRecordsTable";
 
 /** An apex domain's records as the control plane actually returns them. */
-const APEX_RECORDS = [
-  { type: "A", name: "hounders.club", value: "34.63.203.181" },
+const APEX_RECORDS: DomainDnsRecord[] = [
+  { type: "A", name: "hounders.club", value: "34.63.203.181", check: "unchecked", detail: "" },
   {
     type: "TXT",
     name: "_reliant-challenge.hounders.club",
     value: "reliant-verify-8f3a91c2e7b04d56",
+    check: "unchecked",
+    detail: "",
   },
 ];
 
 /** A subdomain's: a CNAME to the ingress name, not the address. */
-const SUBDOMAIN_RECORDS = [
-  { type: "CNAME", name: "www.hounders.club", value: "ingress.reliantlabs.dev" },
+const SUBDOMAIN_RECORDS: DomainDnsRecord[] = [
+  { type: "CNAME", name: "www.hounders.club", value: "ingress.reliantlabs.dev", check: "unchecked", detail: "" },
   {
     type: "TXT",
     name: "_reliant-challenge.www.hounders.club",
     value: "reliant-verify-1122334455667788",
+    check: "unchecked",
+    detail: "",
   },
 ];
 

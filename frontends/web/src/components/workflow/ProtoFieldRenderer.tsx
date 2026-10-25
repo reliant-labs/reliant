@@ -1,7 +1,7 @@
 import { AlertTriangle, ALargeSmall, Braces, List } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../lib/utils'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import ToggleSwitch from '../forge-ui/toggle_switch'
 import { CELInput } from './CELInput'
 import { InsertDataMenu } from './InsertDataMenu'

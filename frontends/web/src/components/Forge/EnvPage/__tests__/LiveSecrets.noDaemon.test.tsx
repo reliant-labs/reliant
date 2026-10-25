@@ -115,6 +115,10 @@ const BUILT: LiveEnv = {
   phase: "succeeded",
   provenance: "",
   holds: [],
+  releaseProvenance: null,
+  observed: { state: "not-reported" },
+  drift: { state: "not-reported" },
+  driftDetail: "",
   declaredShape: {
     kind: "persistent",
     workloads: [{ name: "api", runtime: "hosted", cluster: "" }],

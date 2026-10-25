@@ -20,7 +20,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 import { ChatState, ChatActivity } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -31,9 +30,7 @@ vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
@@ -51,7 +48,7 @@ const mockChatListData: Array<Record<string, unknown>> = [
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: MAIN_WORKTREE_ID,
     projectId: "project-1",
   },
@@ -62,7 +59,7 @@ const mockChatListData: Array<Record<string, unknown>> = [
     updatedAt: "2024-01-02T00:00:00.000Z",
     lastMessageAt: "2024-01-02T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: MAIN_WORKTREE_ID,
     projectId: "project-1",
   },
@@ -161,7 +158,7 @@ describe("Sidebar visibility for CLI-launched chats", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",

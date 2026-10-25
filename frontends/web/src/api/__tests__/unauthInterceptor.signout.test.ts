@@ -83,10 +83,17 @@ function buildRequest(headers: Record<string, string> = {}) {
 }
 
 /** The 401-signout interceptor is the last stage of the authed chain. */
-async function loadUnauthInterceptor() {
+/**
+ * The interceptor, typed for these tests: a request here is the handful of
+ * fields the interceptor reads, and a `next` answers with whatever the test
+ * asserts on — neither is a whole Connect request or response.
+ */
+type LooseInterceptor = (next: (req: any) => Promise<unknown>) => (req: unknown) => Promise<unknown>
+
+async function loadUnauthInterceptor(): Promise<LooseInterceptor> {
   const { buildInterceptors } = await import('../transport')
   const chain = buildInterceptors({ withAuth: true })
-  return chain[chain.length - 1]
+  return chain[chain.length - 1] as unknown as LooseInterceptor
 }
 
 describe('unauthInterceptor — 401 sign-out discrimination', () => {

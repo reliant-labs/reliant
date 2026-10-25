@@ -116,6 +116,8 @@ describe("what needs attention", () => {
     errorRateSeries: [],
     requestTrend: [],
     errorTrend: [],
+    source: "",
+    operatorData: false,
     ...over,
   });
   const workload = (name: string, health: Workload["health"], healthReason = ""): Workload =>

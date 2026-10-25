@@ -93,11 +93,11 @@ describe('workspaceStateStore', () => {
 
     it('should set and get activeView', () => {
       act(() => {
-        useWorkspaceStateStore.getState().setActiveView(projectId, 'settings');
+        useWorkspaceStateStore.getState().setActiveView(projectId, 'worktrees');
       });
       
       const state = useWorkspaceStateStore.getState().getProjectState(projectId);
-      expect(state.activeView).toBe('settings');
+      expect(state.activeView).toBe('worktrees');
     });
 
     it('should remove project state', () => {
@@ -350,7 +350,7 @@ describe('workspaceStateStore', () => {
     it('should maintain separate state for different projects', () => {
       act(() => {
         useWorkspaceStateStore.getState().setActiveView(project1, 'files');
-        useWorkspaceStateStore.getState().setActiveView(project2, 'settings');
+        useWorkspaceStateStore.getState().setActiveView(project2, 'worktrees');
         
         useWorkspaceStateStore.getState().setActiveChatId(project1, null, 'p1-chat');
         useWorkspaceStateStore.getState().setActiveChatId(project2, null, 'p2-chat');
@@ -360,7 +360,7 @@ describe('workspaceStateStore', () => {
       const state2 = useWorkspaceStateStore.getState().getProjectState(project2);
       
       expect(state1.activeView).toBe('files');
-      expect(state2.activeView).toBe('settings');
+      expect(state2.activeView).toBe('worktrees');
       
       const wt1 = useWorkspaceStateStore.getState().getWorktreeState(project1, null);
       const wt2 = useWorkspaceStateStore.getState().getWorktreeState(project2, null);
@@ -417,7 +417,7 @@ describe('workspaceStateStore', () => {
         store.setLastProject(projectId);
         store.setLeftSidebarExpandedGlobal(false);
         store.setLastWorktree(projectId, 'worktree-1');
-        store.setActiveView(projectId, 'settings');
+        store.setActiveView(projectId, 'worktrees');
         store.setNewChatDraft(projectId, 'draft');
         store.setLastWorkflowViewerMode(projectId, 'side');
       };
@@ -453,7 +453,7 @@ describe('workspaceStateStore', () => {
     it('should reset all state to defaults', () => {
       act(() => {
         useWorkspaceStateStore.getState().setLastProject('project-1');
-        useWorkspaceStateStore.getState().setActiveView('project-1', 'settings');
+        useWorkspaceStateStore.getState().setActiveView('project-1', 'worktrees');
         useWorkspaceStateStore.getState().setActiveChatId('project-1', null, 'chat-1');
         
         useWorkspaceStateStore.getState().reset();
