@@ -1,41 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Globe, Save, Check, ExternalLink } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { toast } from "../../lib/toast-manager";
-import { api } from "../../api/client";
+import {
+  FALLBACK_BROWSER_PAGE,
+  useBrowserPreferences,
+  useUpdateBrowserPreferences,
+} from "../../hooks/settings-queries";
 import { cn } from "../../lib/utils";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function BrowserSettings() {
-  const [defaultPage, setDefaultPage] = useState("https://www.google.com");
-  const [openLinksInApp, setOpenLinksInApp] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const { data: browserPrefs, isPending: isLoading } = useBrowserPreferences();
+  const { mutateAsync: updateBrowserPrefs } = useUpdateBrowserPreferences();
+  // The homepage field's edit, until saved; null shows the stored page.
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Load settings on mount
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    setIsLoading(true);
-    try {
-      const preferences = await api.settings.getPreferences();
-      // Browser default page stored in additional settings
-      if (preferences.additional?.browserDefaultPage) {
-        setDefaultPage(preferences.additional.browserDefaultPage);
-      }
-      // Open links in app preference (default true)
-      if (preferences.additional?.browserOpenLinksInApp !== undefined) {
-        setOpenLinksInApp(preferences.additional.browserOpenLinksInApp === "true");
-      }
-    } catch (error) {
-      console.error("Failed to load browser settings:", error);
-      toast.error("Failed to load browser settings");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const defaultPage = pageDraft ?? (browserPrefs.defaultPage || FALLBACK_BROWSER_PAGE);
+  const openLinksInApp = browserPrefs.openLinksInApp;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -45,12 +27,12 @@ export function BrowserSettings() {
       if (!urlToSave.startsWith('http://') && !urlToSave.startsWith('https://') && !urlToSave.startsWith('about:')) {
         urlToSave = 'https://' + urlToSave;
       }
-      
-      await api.settings.updatePreferences({ browserDefaultPage: urlToSave });
-      
-      // Update the local state to show the normalized URL
-      setDefaultPage(urlToSave);
-      
+
+      await updateBrowserPrefs({ defaultPage: urlToSave });
+
+      // The field now shows the stored (normalized) URL
+      setPageDraft(null);
+
       toast.success("Browser settings saved");
     } catch (error) {
       console.error("Failed to save browser settings:", error);
@@ -60,22 +42,18 @@ export function BrowserSettings() {
     }
   };
 
+  // The checkbox flips at once and back if the server refuses.
   const handleToggleOpenLinksInApp = async () => {
     const newValue = !openLinksInApp;
-    setOpenLinksInApp(newValue);
     try {
-      await api.settings.updatePreferences({ 
-        browserOpenLinksInApp: newValue.toString() 
-      });
-      toast.success(newValue 
-        ? "Links will open in Reliant's browser" 
+      await updateBrowserPrefs({ openLinksInApp: newValue });
+      toast.success(newValue
+        ? "Links will open in Reliant's browser"
         : "Links will open in your system browser"
       );
     } catch (error) {
       console.error("Failed to save link preference:", error);
       toast.error("Failed to save preference");
-      // Revert on error
-      setOpenLinksInApp(!newValue);
     }
   };
 
@@ -146,7 +124,7 @@ export function BrowserSettings() {
               <input
                 type="url"
                 value={defaultPage}
-                onChange={(e) => setDefaultPage(e.target.value)}
+                onChange={(e) => setPageDraft(e.target.value)}
                 placeholder="https://www.google.com"
                 className="w-full pl-10 pr-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
               />

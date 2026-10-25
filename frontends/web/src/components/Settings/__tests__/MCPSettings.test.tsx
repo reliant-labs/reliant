@@ -13,7 +13,6 @@ const listServersMock = vi.fn();
 const listRecommendedMock = vi.fn();
 const restartServerMock = vi.fn();
 const updatePreferencesMock = vi.fn();
-const loadPreferencesMock = vi.fn();
 
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (
@@ -21,13 +20,11 @@ vi.mock("../../../store/projectStore", () => ({
   ) => selector({ currentProject: { id: "project-test" } }),
 }));
 
-vi.mock("../../../store/preferencesStore", () => ({
-  usePreferencesStore: () => ({
-    preferences: { defaultMcpScope: ConfigScope.PROJECT },
-    updatePreferences: updatePreferencesMock,
-    loadPreferences: loadPreferencesMock,
-    isLoading: false,
-  }),
+const scopePrefs = vi.hoisted(() => ({ data: { defaultMcpScope: 2 /* ConfigScope.PROJECT */ }, isPending: false }));
+vi.mock("../../../hooks/settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/settings-queries")>()),
+  useScopePreferences: () => scopePrefs,
+  useUpdateScopePreferences: () => ({ isPending: false, mutateAsync: updatePreferencesMock }),
 }));
 
 vi.mock("sonner", () => ({

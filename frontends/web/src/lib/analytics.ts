@@ -26,7 +26,7 @@
  */
 
 import * as Sentry from "@sentry/react";
-import { getPrivacySettings } from "../store/privacyStore";
+import { privacyConsent } from "../hooks/privacy-queries";
 import { track } from "@reliantlabs/forge-web-runtime";
 import { isDev } from "./constants";
 import { clickstackEnabled, sentryEnabled } from "./telemetrySinks";
@@ -36,7 +36,7 @@ export const PRODUCT_EVENT_PREFIX = "product.";
 
 function isEnabled(): boolean {
   if (isDev) return false;
-  return getPrivacySettings().analyticsEnabled;
+  return privacyConsent().analyticsEnabled;
 }
 
 /**

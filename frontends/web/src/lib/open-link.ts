@@ -1,4 +1,4 @@
-import { api } from "../api/client";
+import { readBrowserPreferences } from "../hooks/settings-queries";
 import { useBrowserStore } from "../store/browserStore";
 import { useProjectStore } from "../store/projectStore";
 import { useViewerStore } from "../store/viewerStore";
@@ -25,8 +25,7 @@ export async function openLink(
 
   try {
     // Check user preference
-    const preferences = await api.settings.getPreferences();
-    const openInApp = preferences.additional?.browserOpenLinksInApp !== "false"; // Default true
+    const { openLinksInApp: openInApp } = await readBrowserPreferences(); // Default true
 
     // The embedded browser is an Electron <webview> and does not exist in the web
     // build — never mount it there. In web, always fall through to a new browser tab.

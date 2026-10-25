@@ -6,8 +6,6 @@ const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
   updateProvider: vi.fn(),
   validateProviderAPIKey: vi.fn(),
-  getPreferences: vi.fn(),
-  updatePreferences: vi.fn(),
   useApiKeySetupSetState: vi.fn(),
   resetApiKeySetupDismissed: vi.fn(),
   provisionManagedKey: vi.fn(),
@@ -18,8 +16,6 @@ vi.mock('@/api/client', () => ({
     settings: {
       updateProvider: mocks.updateProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
-      getPreferences: mocks.getPreferences,
-      updatePreferences: mocks.updatePreferences,
     },
   },
 }))
@@ -85,8 +81,6 @@ function renderWithClient(ui: React.ReactElement) {
 describe('CombinedGeneralSettings Reliant provider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.getPreferences.mockResolvedValue({ streaming_enabled: false })
-    mocks.updatePreferences.mockResolvedValue({})
     mocks.refetchModels.mockResolvedValue(undefined)
   })
 

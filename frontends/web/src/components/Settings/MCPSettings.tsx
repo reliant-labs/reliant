@@ -29,7 +29,7 @@ import {
   useUpdateServerConfig,
 } from "../../hooks/mcp-service-hooks_gen";
 import { useProjectStore } from "../../store/projectStore";
-import { usePreferencesStore } from "../../store/preferencesStore";
+import { useScopePreferences, useUpdateScopePreferences } from "../../hooks/settings-queries";
 import { toast } from "sonner";
 import Button from "@/components/forge-ui/button";
 import { MCPCustomServerModal } from "./MCPCustomServerModal";
@@ -200,19 +200,8 @@ export function MCPSettings() {
     Record<string, string>
   >({});
 
-  const {
-    preferences,
-    updatePreferences,
-    loadPreferences,
-    isLoading: preferencesLoading,
-  } = usePreferencesStore();
-  const defaultMcpScope = preferences?.defaultMcpScope ?? ConfigScope.PROJECT;
-
-  useEffect(() => {
-    if (!preferences && !preferencesLoading) {
-      loadPreferences();
-    }
-  }, [preferences, preferencesLoading, loadPreferences]);
+  const { defaultMcpScope } = useScopePreferences().data;
+  const { mutateAsync: updatePreferences } = useUpdateScopePreferences();
 
   const recommendedByName = useMemo(() => {
     return new Map(recommendedServers.map((server) => [server.name, server]));

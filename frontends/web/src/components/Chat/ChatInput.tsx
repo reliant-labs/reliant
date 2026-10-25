@@ -41,7 +41,7 @@ import type { InputDef } from "../../lib/inputHelpers";
 import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
 import { QUEUED_SENDER_KIND_HUMAN } from "../../hooks/chat-model";
 import { useProjectStore } from "../../store/projectStore";
-import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
+import { useDefaultWorkflow, useHiddenItems } from "../../hooks/settings-queries";
 import { useChatStore } from "../../store/chatStore";
 import {
   useChat,
@@ -389,9 +389,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const [isSyncing, setIsSyncing] = useState(false);
 
     // Get user's default workflow preference
-    const userDefaultWorkflow = usePreferencesStore(
-      (state) => state.preferences?.defaultWorkflow
-    ) || DEFAULT_WORKFLOW;
+    const userDefaultWorkflow = useDefaultWorkflow();
 
     // Compute the effective workflow name
     // selectedWorkflow is the user's selection (null = use user's default)
@@ -426,7 +424,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     // Get hidden preset check function
-    const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+    const { isPresetHidden } = useHiddenItems();
 
     // Fetch compatible presets for the selected workflow
     const { presets, loading: presetsLoading } = usePresetsForWorkflow(

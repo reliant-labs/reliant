@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-import { getPrivacySettings } from "../store/privacyStore";
+import { privacyConsent } from "../hooks/privacy-queries";
 import { appBuild } from "./appBuild";
 import { loadConfig } from "./config_gen";
 import { isDev } from "./constants";
@@ -71,7 +71,7 @@ export async function initSentry() {
   }
 
   // Respect user privacy settings
-  const { crashReportingEnabled } = getPrivacySettings();
+  const { crashReportingEnabled } = privacyConsent();
   if (!crashReportingEnabled) {
     return;
   }
@@ -140,7 +140,7 @@ export async function initSentry() {
     },
     beforeSend(event, hint) {
       // Check privacy settings before sending
-      const { crashReportingEnabled } = getPrivacySettings();
+      const { crashReportingEnabled } = privacyConsent();
       if (!crashReportingEnabled) {
         return null;
       }

@@ -1,8 +1,7 @@
 import { getCatalogClient } from "./grpc-client";
-import { settingsGrpc, type Preferences } from "./settings-grpc";
+import { settingsGrpc } from "./settings-grpc";
 import { addProviderApiKey, disconnectProvider } from "../hooks/provider-account-queries";
 import { logger } from "../lib/logger";
-import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
 
 // Re-export types for consumers
 export type { Chat, Message, ContentBlock, Attachment } from "../types/chat";
@@ -217,52 +216,6 @@ export const api = {
       return { message: result.message };
     },
 
-    getPreferences: async () => {
-      const prefs = await settingsGrpc.getPreferences();
-      // Return strongly typed - settings-grpc.ts has proper Preferences interface
-      return prefs;
-    },
-
-    updatePreferences: async (preferences: Record<string, unknown>) => {
-      // Extract known fields and put rest in additional
-      const {
-        streaming_enabled,
-        worktree_archive_mode,
-        worktree_default_delete_branch,
-        default_mcp_scope,
-        default_workflow_scope,
-        default_workflow,
-        hide_builtin_workflows,
-        hide_builtin_presets,
-        branch_copy_uncommitted_files_default,
-        ...additional
-      } = preferences as Record<string, unknown>;
-
-      const result = await settingsGrpc.updatePreferences({
-        streaming_enabled: streaming_enabled as boolean | undefined,
-        worktree_archive_mode: worktree_archive_mode as string | undefined,
-        worktree_default_delete_branch: worktree_default_delete_branch as
-          | boolean
-          | undefined,
-        branch_copy_uncommitted_files_default: branch_copy_uncommitted_files_default as
-          | boolean
-          | undefined,
-        default_mcp_scope: default_mcp_scope as Preferences["default_mcp_scope"] | undefined,
-        default_workflow_scope: default_workflow_scope as Preferences["default_workflow_scope"] | undefined,
-        default_workflow: default_workflow as string | undefined,
-        hide_builtin_workflows: hide_builtin_workflows as boolean | undefined,
-        hide_builtin_presets: hide_builtin_presets as boolean | undefined,
-        additional: Object.fromEntries(
-          Object.entries(additional).map(([k, v]) => [k, String(v)])
-        ),
-      });
-      return { message: result.message };
-    },
-
-    setHiddenItem: async (itemType: HiddenItemType, slug: string, hidden: boolean) => {
-      return settingsGrpc.setHiddenItem(itemType, slug, hidden);
-    },
-
     getProviders: async () => {
       const providers = await settingsGrpc.getProviderStatuses();
       return providers.map((p) => ({
@@ -299,17 +252,6 @@ export const api = {
 
     syncReliantProvider: async (forceRotate = false) => {
       return settingsGrpc.syncReliantProvider(forceRotate);
-    },
-
-    getPrivacySettings: async () => {
-      return settingsGrpc.getPrivacySettings();
-    },
-
-    updatePrivacySettings: async (settings: {
-      analytics_enabled?: boolean;
-      crash_reporting_enabled?: boolean;
-    }) => {
-      return settingsGrpc.updatePrivacySettings(settings);
     },
 
     listSettings: async (projectId?: string) => {

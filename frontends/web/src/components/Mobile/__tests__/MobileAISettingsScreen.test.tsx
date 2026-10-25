@@ -15,8 +15,6 @@ const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
   updateProvider: vi.fn(),
   validateProviderAPIKey: vi.fn(),
-  getPreferences: vi.fn(),
-  updatePreferences: vi.fn(),
   provisionManagedKey: vi.fn(),
 }));
 
@@ -26,8 +24,6 @@ vi.mock("../../../api/client", () => ({
       getProviders: mocks.getProviders,
       updateProvider: mocks.updateProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
-      getPreferences: mocks.getPreferences,
-      updatePreferences: mocks.updatePreferences,
     },
   },
 }));
@@ -73,8 +69,6 @@ const { MobileAISettingsScreen } = await import("../MobileAISettingsScreen");
 beforeEach(() => {
   mocks.getProviders.mockReset();
   mocks.getProviders.mockResolvedValue([]);
-  mocks.getPreferences.mockReset();
-  mocks.getPreferences.mockResolvedValue({});
 });
 
 describe("MobileAISettingsScreen", () => {

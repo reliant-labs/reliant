@@ -1,25 +1,37 @@
 /**
- * SettingsService reads that components render — preferences and provider
- * statuses — on the generated hooks and keys.
+ * SettingsService server state — preferences (worktree, config scope, default
+ * workflow, hidden workflows/presets, browser bookmarks and link handling)
+ * and provider statuses — on the generated hooks and keys. Privacy consent is
+ * in ./privacy-queries (telemetry reads it, and must not import the auth
+ * store this module gates on).
  *
  * Each cache entry holds exactly what the generated hook fetches (a
  * `GetPreferencesResponse` under `settingsServiceKeys.getPreferences({})`, …)
- * and is converted on read. The imperative side — api/settings-grpc.ts, which
- * the zustand settings stores still call — reads through the SAME entries
- * (fetchPreferences / fetchProviderStatuses below) and invalidates them after
- * a write, so a store and a mounted hook can never show two answers.
+ * and every reader projects it with `select`; there is no zustand copy of any
+ * of it. A write patches the entry at once and puts it back if the server
+ * refuses (a switch that waits a round-trip reads as ignoring the click);
+ * being the generated mutation, success invalidates `settingsServiceKeys.all`,
+ * and the stream's `config_health` invalidates the same root
+ * (store/streamInvalidatedScopes `settings`), so another device's change
+ * reaches every reader too.
+ *
+ * Non-React readers (the browser tab default, link handling) read the same
+ * entry through the imperative functions below.
  */
 
 import { useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
 
-import type {
-  GetPreferencesResponse,
-  GetProviderStatusesResponse,
-  UpdatePreferencesRequestSchema,
+import { ConfigScope } from "../gen/reliant/v1/common_pb";
+import {
+  HiddenItemType,
+  type GetPreferencesResponse,
+  type GetProviderStatusesResponse,
+  type UpdatePreferencesRequestSchema,
 } from "../gen/reliant/v1/settings_pb";
+import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "@/store/authStore";
 import {
@@ -27,6 +39,7 @@ import {
   settingsServiceQueries,
   useGetPreferences,
   useGetProviderStatuses,
+  useSetHiddenItem as useSetHiddenItemRpc,
   useUpdatePreferences as useUpdatePreferencesRpc,
 } from "./settings-service-hooks_gen";
 
@@ -98,7 +111,7 @@ export function invalidateProviderStatuses(): void {
 
 // --- Preferences ---
 
-// Types (matching settingsStore)
+// Types
 export type WorktreeArchiveMode = "ask_me" | "always_cleanup" | "always_keep";
 
 export interface WorktreePreferences {
@@ -158,20 +171,6 @@ export function cachedUserPreferences(): UserPreferences {
   return userPreferencesOf(queryClient.getQueryData<GetPreferencesResponse>(preferencesKey()));
 }
 
-/**
- * GetPreferences for an imperative caller, through the hook's cache entry:
- * concurrent callers share one RPC and the answer refreshes every mounted
- * usePreferences.
- */
-export function fetchPreferences(): Promise<GetPreferencesResponse> {
-  return queryClient.fetchQuery(settingsServiceQueries.getPreferences({}, { staleTime: 0 }));
-}
-
-/** Preferences were written outside a hook: refetch them. */
-export function invalidatePreferences(): void {
-  void queryClient.invalidateQueries({ queryKey: preferencesKey() });
-}
-
 type UpdatePreferencesInit = MessageInitShape<typeof UpdatePreferencesRequestSchema>;
 
 function toUpdateRequest(prefs: Partial<UserPreferences>): UpdatePreferencesInit {
@@ -192,7 +191,7 @@ function toUpdateRequest(prefs: Partial<UserPreferences>): UpdatePreferencesInit
   return req;
 }
 
-/** The cached GetPreferences answer with an update applied (the fields toUpdateRequest sets). */
+/** The cached GetPreferences answer with an update applied (every field UpdatePreferences writes). */
 function applyUpdate(prev: GetPreferencesResponse, req: UpdatePreferencesInit): GetPreferencesResponse {
   return {
     ...prev,
@@ -201,30 +200,62 @@ function applyUpdate(prev: GetPreferencesResponse, req: UpdatePreferencesInit): 
     worktreeDefaultDeleteBranch: req.worktreeDefaultDeleteBranch ?? prev.worktreeDefaultDeleteBranch,
     branchCopyUncommittedFilesDefault:
       req.branchCopyUncommittedFilesDefault ?? prev.branchCopyUncommittedFilesDefault,
+    defaultMcpScope: req.defaultMcpScope ?? prev.defaultMcpScope,
+    defaultWorkflowScope: req.defaultWorkflowScope ?? prev.defaultWorkflowScope,
+    defaultWorkflow: req.defaultWorkflow ?? prev.defaultWorkflow,
+    hideBuiltinWorkflows: req.hideBuiltinWorkflows ?? prev.hideBuiltinWorkflows,
+    hideBuiltinPresets: req.hideBuiltinPresets ?? prev.hideBuiltinPresets,
     additional: { ...prev.additional, ...req.additional },
   };
 }
 
+interface PreferencesSnapshot {
+  previous: GetPreferencesResponse | undefined;
+}
+
+/** Patch the cached preferences at once; returns what was there, to put back. */
+async function patchPreferences(
+  qc: QueryClient,
+  patch: (prev: GetPreferencesResponse) => GetPreferencesResponse,
+): Promise<PreferencesSnapshot> {
+  await qc.cancelQueries({ queryKey: preferencesKey() });
+  const previous = qc.getQueryData<GetPreferencesResponse>(preferencesKey());
+  if (previous) qc.setQueryData(preferencesKey(), patch(previous));
+  return { previous };
+}
+
+function restorePreferences(qc: QueryClient, snapshot: PreferencesSnapshot | undefined): void {
+  if (snapshot?.previous) qc.setQueryData(preferencesKey(), snapshot.previous);
+}
+
 /**
- * Update some preferences. The cached answer changes at once and rolls back
- * if the server refuses; being the generated mutation, success invalidates
- * settingsServiceKeys.all, so every reader converges on what was stored.
+ * The cached preferences, fetched first when nothing is cached — for a write
+ * that rewrites a whole value (the bookmark list) and must start from the
+ * stored one, not from an empty default.
  */
-export function useUpdatePreferences() {
+function preferencesForWrite(qc: QueryClient): Promise<GetPreferencesResponse> {
+  return qc.ensureQueryData(settingsServiceQueries.getPreferences({}));
+}
+
+/**
+ * UpdatePreferences with the request as the RPC takes it. The cached answer
+ * changes at once and rolls back if the server refuses; being the generated
+ * mutation, success invalidates settingsServiceKeys.all, so every reader
+ * converges on what was stored.
+ */
+function usePreferencesWrite() {
   const qc = useQueryClient();
-  const rpc = useUpdatePreferencesRpc({
-    onMutate: async (req) => {
-      await qc.cancelQueries({ queryKey: preferencesKey() });
-      const previous = qc.getQueryData<GetPreferencesResponse>(preferencesKey());
-      if (previous) qc.setQueryData(preferencesKey(), applyUpdate(previous, req));
-      return { previous };
-    },
+  return useUpdatePreferencesRpc({
+    onMutate: (req) => patchPreferences(qc, (prev) => applyUpdate(prev, req)),
     // onMutate's return reaches onError typed (the generated hooks infer
     // TanStack's TContext from onMutate).
-    onError: (_err, _req, context) => {
-      if (context?.previous) qc.setQueryData(preferencesKey(), context.previous);
-    },
+    onError: (_err, _req, context) => restorePreferences(qc, context),
   });
+}
+
+/** Update some of the UI preferences (streaming, worktree, delete confirmation). */
+export function useUpdatePreferences() {
+  const rpc = usePreferencesWrite();
   return {
     ...rpc,
     mutate: (prefs: Partial<UserPreferences>) => rpc.mutate(toUpdateRequest(prefs)),
@@ -241,4 +272,258 @@ export function useUpdateWorktreePreferences() {
     mutateAsync: (worktreePrefs: Partial<WorktreePreferences>) =>
       updatePrefs.mutateAsync({ worktree: { ...cachedUserPreferences().worktree, ...worktreePrefs } }),
   };
+}
+
+// --- Config scope + default workflow ---
+
+/** The workflow a new chat runs when the user has picked none (the backend's default too). */
+export const DEFAULT_WORKFLOW = "builtin://agent";
+
+export interface ScopePreferences {
+  defaultMcpScope: ConfigScope;
+  defaultWorkflowScope: ConfigScope;
+  defaultWorkflow: string;
+  hideBuiltinWorkflows: boolean;
+  hideBuiltinPresets: boolean;
+}
+
+const DEFAULT_SCOPE_PREFERENCES: ScopePreferences = {
+  defaultMcpScope: ConfigScope.PROJECT,
+  defaultWorkflowScope: ConfigScope.PROJECT,
+  defaultWorkflow: DEFAULT_WORKFLOW,
+  hideBuiltinWorkflows: false,
+  hideBuiltinPresets: false,
+};
+
+function scopePreferencesOf(response: GetPreferencesResponse): ScopePreferences {
+  return {
+    // UNSPECIFIED means project scope.
+    defaultMcpScope: response.defaultMcpScope || ConfigScope.PROJECT,
+    defaultWorkflowScope: response.defaultWorkflowScope || ConfigScope.PROJECT,
+    defaultWorkflow: response.defaultWorkflow || DEFAULT_WORKFLOW,
+    hideBuiltinWorkflows: response.hideBuiltinWorkflows,
+    hideBuiltinPresets: response.hideBuiltinPresets,
+  };
+}
+
+/**
+ * Where new MCP servers and workflows are saved, the default workflow, and
+ * whether builtins are hidden. The defaults until the answer arrives (and
+ * signed out); `isPending` says which.
+ */
+export function useScopePreferences(): { data: ScopePreferences; isPending: boolean } {
+  const hasSession = useHasSession();
+  const q = useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: scopePreferencesOf });
+  return { data: q.data ?? DEFAULT_SCOPE_PREFERENCES, isPending: q.isPending };
+}
+
+/** The workflow a new chat runs: the user's default, else DEFAULT_WORKFLOW. */
+export function useDefaultWorkflow(): string {
+  return useScopePreferences().data.defaultWorkflow;
+}
+
+/** Change the config-scope preferences or the default workflow: `mutateAsync({ defaultWorkflow })`. */
+export function useUpdateScopePreferences() {
+  const rpc = usePreferencesWrite();
+  const { mutateAsync } = rpc;
+  const update = useMemo(
+    () => (prefs: Partial<ScopePreferences>) =>
+      mutateAsync({
+        defaultMcpScope: prefs.defaultMcpScope,
+        defaultWorkflowScope: prefs.defaultWorkflowScope,
+        defaultWorkflow: prefs.defaultWorkflow,
+        hideBuiltinWorkflows: prefs.hideBuiltinWorkflows,
+        hideBuiltinPresets: prefs.hideBuiltinPresets,
+      }).then(() => undefined),
+    [mutateAsync],
+  );
+  return { isPending: rpc.isPending, mutateAsync: update };
+}
+
+// --- Hidden workflows and presets ---
+
+export interface HiddenItems {
+  isWorkflowHidden: (slug: string) => boolean;
+  isPresetHidden: (slug: string) => boolean;
+}
+
+const NOTHING_HIDDEN: HiddenItems = { isWorkflowHidden: () => false, isPresetHidden: () => false };
+
+function hiddenItemsOf(response: GetPreferencesResponse): HiddenItems {
+  const workflows = new Set(response.hiddenWorkflowSlugs);
+  const presets = new Set(response.hiddenPresetSlugs);
+  return { isWorkflowHidden: (slug) => workflows.has(slug), isPresetHidden: (slug) => presets.has(slug) };
+}
+
+/**
+ * Which builtin workflows and presets the user hid from the pickers. Nothing
+ * is hidden until the answer arrives. The predicates change identity when the
+ * hidden set does, so a memo keyed on them recomputes.
+ */
+export function useHiddenItems(): HiddenItems {
+  const hasSession = useHasSession();
+  const q = useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: hiddenItemsOf });
+  return q.data ?? NOTHING_HIDDEN;
+}
+
+function hiddenSlugsField(itemType: HiddenItemType | undefined) {
+  return itemType === HiddenItemType.PRESET ? "hiddenPresetSlugs" : "hiddenWorkflowSlugs";
+}
+
+function withHidden(
+  prev: GetPreferencesResponse,
+  itemType: HiddenItemType | undefined,
+  slug: string,
+  hidden: boolean,
+): GetPreferencesResponse {
+  const field = hiddenSlugsField(itemType);
+  const rest = prev[field].filter((s) => s !== slug);
+  return { ...prev, [field]: hidden ? [...rest, slug] : rest };
+}
+
+/**
+ * Show or hide a workflow / preset in the pickers. It moves at once and comes
+ * back if the server refuses; the returned promise rejects then, for the
+ * caller's toast.
+ */
+export function useToggleHiddenItem() {
+  const qc = useQueryClient();
+  const rpc = useSetHiddenItemRpc({
+    onMutate: ({ itemType, slug, hidden }) =>
+      patchPreferences(qc, (prev) => withHidden(prev, itemType, slug ?? "", hidden ?? false)),
+    onError: (_err, _req, context) => restorePreferences(qc, context),
+  });
+  const { mutateAsync } = rpc;
+  return useMemo(() => {
+    const toggle = (itemType: HiddenItemType) => async (slug: string) => {
+      const prefs = qc.getQueryData<GetPreferencesResponse>(preferencesKey());
+      const hidden = !(prefs?.[hiddenSlugsField(itemType)] ?? []).includes(slug);
+      await mutateAsync({ itemType, slug, hidden });
+    };
+    return {
+      toggleWorkflowVisibility: toggle(HiddenItemType.WORKFLOW),
+      togglePresetVisibility: toggle(HiddenItemType.PRESET),
+    };
+  }, [qc, mutateAsync]);
+}
+
+// --- Browser: default page, link handling, bookmarks (in `additional`) ---
+
+export const BROWSER_DEFAULT_PAGE = "browserDefaultPage";
+export const BROWSER_OPEN_LINKS_IN_APP = "browserOpenLinksInApp";
+const BROWSER_BOOKMARKS = "browserBookmarks";
+
+export const FALLBACK_BROWSER_PAGE = "https://www.google.com";
+
+export interface BrowserPreferences {
+  /** The page a new tab opens; empty when the user set none. */
+  defaultPage: string;
+  /** Whether links open in the embedded browser (the default) or the system one. */
+  openLinksInApp: boolean;
+}
+
+function browserPreferencesOf(response: GetPreferencesResponse | undefined): BrowserPreferences {
+  return {
+    defaultPage: response?.additional[BROWSER_DEFAULT_PAGE] ?? "",
+    openLinksInApp: response?.additional[BROWSER_OPEN_LINKS_IN_APP] !== "false",
+  };
+}
+
+export function useBrowserPreferences(): { data: BrowserPreferences; isPending: boolean } {
+  const hasSession = useHasSession();
+  const q = useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: browserPreferencesOf });
+  return { data: q.data ?? browserPreferencesOf(undefined), isPending: q.isPending };
+}
+
+/**
+ * The browser preferences for a non-React caller (a new tab, a link click).
+ * A fresh cached answer is used as is; otherwise this fetches (and rejects
+ * if that fails — each caller has its own fallback).
+ */
+export async function readBrowserPreferences(): Promise<BrowserPreferences> {
+  return browserPreferencesOf(
+    await queryClient.fetchQuery(settingsServiceQueries.getPreferences({}, { staleTime: 60_000 })),
+  );
+}
+
+export function useUpdateBrowserPreferences() {
+  const rpc = usePreferencesWrite();
+  const { mutateAsync } = rpc;
+  const update = useMemo(
+    () => (prefs: Partial<BrowserPreferences>) => {
+      const additional: Record<string, string> = {};
+      if (prefs.defaultPage !== undefined) additional[BROWSER_DEFAULT_PAGE] = prefs.defaultPage;
+      if (prefs.openLinksInApp !== undefined) additional[BROWSER_OPEN_LINKS_IN_APP] = String(prefs.openLinksInApp);
+      return mutateAsync({ additional }).then(() => undefined);
+    },
+    [mutateAsync],
+  );
+  return { isPending: rpc.isPending, mutateAsync: update };
+}
+
+export interface Bookmark {
+  id: string;
+  title: string;
+  url: string;
+  favicon?: string;
+  createdAt: string;
+}
+
+const NO_BOOKMARKS: Bookmark[] = [];
+
+function bookmarksOf(response: GetPreferencesResponse | undefined): Bookmark[] {
+  const json = response?.additional[BROWSER_BOOKMARKS];
+  if (!json) return NO_BOOKMARKS;
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as Bookmark[]) : NO_BOOKMARKS;
+  } catch (error) {
+    logger.error("[settings] stored bookmarks are not JSON:", error);
+    return NO_BOOKMARKS;
+  }
+}
+
+/** The user's browser bookmarks (none until the answer arrives). */
+export function useBookmarks(): Bookmark[] {
+  const hasSession = useHasSession();
+  const q = useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: bookmarksOf });
+  return q.data ?? NO_BOOKMARKS;
+}
+
+/**
+ * Add or remove a bookmark. The list is one stored value, so each write
+ * starts from the stored list (fetched first if nothing is cached — never an
+ * empty default, which would overwrite it). The sidebar shows the change at
+ * once and puts the list back if the server refuses; the promise rejects
+ * then, for the caller's toast.
+ */
+export function useBookmarkActions() {
+  const qc = useQueryClient();
+  const rpc = usePreferencesWrite();
+  const { mutateAsync } = rpc;
+  return useMemo(() => {
+    const write = (bookmarks: Bookmark[]) =>
+      mutateAsync({ additional: { [BROWSER_BOOKMARKS]: JSON.stringify(bookmarks) } }).then(() => undefined);
+    return {
+      addBookmark: async (bookmark: Omit<Bookmark, "id" | "createdAt">) => {
+        const current = bookmarksOf(await preferencesForWrite(qc));
+        if (current.some((b) => b.url === bookmark.url)) {
+          logger.warn("[settings] URL already bookmarked:", bookmark.url);
+          return;
+        }
+        await write([
+          ...current,
+          {
+            ...bookmark,
+            id: `bookmark_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      },
+      removeBookmark: async (id: string) => {
+        const current = bookmarksOf(await preferencesForWrite(qc));
+        await write(current.filter((b) => b.id !== id));
+      },
+    };
+  }, [qc, mutateAsync]);
 }

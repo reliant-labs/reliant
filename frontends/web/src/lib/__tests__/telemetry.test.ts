@@ -41,9 +41,9 @@ vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
 vi.mock("@hyperdx/browser", () => ({
   default: { setGlobalAttributes: runtime.setGlobalAttributes },
 }));
-vi.mock("../../store/privacyStore", () => ({
-  getPrivacySettings: () => privacy.state,
-  usePrivacyStore: { subscribe: privacy.subscribe },
+vi.mock("../../hooks/privacy-queries", () => ({
+  privacyConsent: () => privacy.state,
+  subscribePrivacyConsent: privacy.subscribe,
 }));
 vi.mock("../constants", () => ({ isDev: false }));
 vi.mock("../appBuild", () => ({

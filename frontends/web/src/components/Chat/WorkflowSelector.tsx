@@ -5,7 +5,7 @@ import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
 import { useWorkflows } from "../../hooks/workflow-queries";
-import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
+import { useDefaultWorkflow, useHiddenItems, useUpdateScopePreferences } from "../../hooks/settings-queries";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
@@ -66,18 +66,11 @@ export function WorkflowSelector({
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   const { workflows, loading: workflowsLoading } = useWorkflows();
-  const { preferences, isLoading: preferencesLoading, loadPreferences, isWorkflowHidden } = usePreferencesStore();
-  const updatePreferences = usePreferencesStore((state) => state.updatePreferences);
+  const { isWorkflowHidden } = useHiddenItems();
+  const { mutateAsync: updatePreferences } = useUpdateScopePreferences();
 
-  // Ensure preferences are loaded
-  useEffect(() => {
-    if (!preferences && !preferencesLoading) {
-      loadPreferences();
-    }
-  }, [preferences, preferencesLoading, loadPreferences]);
-
-  // Get user's default workflow from preferences, fallback to builtin://agent
-  const userDefaultWorkflow = preferences?.defaultWorkflow || DEFAULT_WORKFLOW;
+  // The user's default workflow, else builtin://agent
+  const userDefaultWorkflow = useDefaultWorkflow();
 
   // Separate workflows into builtin and custom, filter out hidden, deduplicate, and sort
   const { builtinWorkflows, customWorkflows } = useMemo(() => {

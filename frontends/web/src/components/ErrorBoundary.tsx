@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
 import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
-import { getPrivacySettings } from '../store/privacyStore';
+import { privacyConsent } from '../hooks/privacy-queries';
 import Button from '@/components/forge-ui/button';
 import { isDev } from '../lib/constants';
 import { sentryEnabled } from '../lib/telemetrySinks';
@@ -205,7 +205,7 @@ export function reportCaughtError(error: unknown, componentStack?: string | null
   // whether or not crash reporting is on.
   recordClientError('boundary', error);
   // Only report if user has crash reporting enabled
-  const { crashReportingEnabled } = getPrivacySettings();
+  const { crashReportingEnabled } = privacyConsent();
   if (!crashReportingEnabled) return;
   if (sentryEnabled()) {
     Sentry.captureException(error, {

@@ -42,7 +42,7 @@
  * new pattern for this one screen.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
@@ -51,10 +51,7 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
 import { useWorkflows } from "../../hooks/workflow-queries";
 import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
-import {
-  DEFAULT_WORKFLOW,
-  usePreferencesStore,
-} from "../../store/preferencesStore";
+import { useDefaultWorkflow, useHiddenItems } from "../../hooks/settings-queries";
 import {
   normalizeWorkflowRef,
 } from "../workflow/useWorkflowInputs";
@@ -119,20 +116,13 @@ export function MobileNewChat() {
   const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
 
   const { workflows, loading: workflowsLoading } = useWorkflows();
-  const preferences = usePreferencesStore((s) => s.preferences);
-  const preferencesLoading = usePreferencesStore((s) => s.isLoading);
-  const loadPreferences = usePreferencesStore((s) => s.loadPreferences);
-  const isWorkflowHidden = usePreferencesStore((s) => s.isWorkflowHidden);
+  const { isWorkflowHidden } = useHiddenItems();
 
-  const userDefaultWorkflow = preferences?.defaultWorkflow || DEFAULT_WORKFLOW;
+  const userDefaultWorkflow = useDefaultWorkflow();
 
   // null means "whatever the user's default is" — resolved at send time so a
   // preferences load that lands after mount is still respected.
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!preferences && !preferencesLoading) void loadPreferences();
-  }, [preferences, preferencesLoading, loadPreferences]);
 
   // The user's pick on this screen wins over the one the URL arrived with.
   const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);

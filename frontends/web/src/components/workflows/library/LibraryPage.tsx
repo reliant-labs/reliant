@@ -37,7 +37,7 @@ import {
   useSetWorkflowVisibility,
   useWorkflowLibrary,
 } from "@/hooks/workflow-library-queries";
-import { usePreferencesStore } from "@/store/preferencesStore";
+import { useHiddenItems, useScopePreferences, useToggleHiddenItem, useUpdateScopePreferences } from "@/hooks/settings-queries";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import { downloadWorkflow } from "@/hooks/workflow-queries";
@@ -306,10 +306,12 @@ function LibraryBody({ projectId }: { projectId: string }) {
   }, [deleting, allTriggers.data, triggers.data]);
   const copyWorkflow = useCopyWorkflow(projectId);
   const setVisibility = useSetWorkflowVisibility(projectId);
-  const defaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
-  const updatePreferences = usePreferencesStore((state) => state.updatePreferences);
-  const isWorkflowHidden = usePreferencesStore((state) => state.isWorkflowHidden);
-  const toggleWorkflowVisibility = usePreferencesStore((state) => state.toggleWorkflowVisibility);
+  const scopePreferences = useScopePreferences();
+  // Unknown until the answer arrives: no "default" badge rather than a guess.
+  const defaultWorkflow = scopePreferences.isPending ? undefined : scopePreferences.data.defaultWorkflow;
+  const { mutateAsync: updatePreferences } = useUpdateScopePreferences();
+  const { isWorkflowHidden } = useHiddenItems();
+  const { toggleWorkflowVisibility } = useToggleHiddenItem();
 
   const view = useMemo(
     () =>

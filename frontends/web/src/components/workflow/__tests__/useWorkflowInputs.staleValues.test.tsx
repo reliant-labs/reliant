@@ -35,9 +35,11 @@ vi.mock('../../../hooks/preset-queries', () => ({
   useWorkflowPresets: () => ({ presets: [], loading: false }),
 }))
 
-vi.mock('../../../store/preferencesStore', () => ({
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({ isPresetHidden: () => false }),
+// One stable object: the hook memoizes on the predicate.
+const hidden = vi.hoisted(() => ({ isWorkflowHidden: () => false, isPresetHidden: () => false }))
+vi.mock('../../../hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/settings-queries')>()),
+  useHiddenItems: () => hidden,
 }))
 
 import { useWorkflowInputs } from '../useWorkflowInputs'

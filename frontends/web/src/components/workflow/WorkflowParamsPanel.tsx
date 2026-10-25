@@ -11,7 +11,7 @@ import {
   usePresetsForWorkflow,
   type Preset,
 } from "../../hooks/preset-queries";
-import { usePreferencesStore } from "../../store/preferencesStore";
+import { useHiddenItems } from "../../hooks/settings-queries";
 import { PresetPicker } from "./PresetPicker";
 import { ProtoFieldRenderer } from "./ProtoFieldRenderer";
 import { inputDefToSchema } from "../../lib/nodeFieldAdapter";
@@ -110,7 +110,7 @@ export function WorkflowParamsPanel({
   const { presets: fetchedPresets, loading: presetsLoading } = usePresetsForWorkflow(workflowName);
 
   // Get hidden preset check
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+  const { isPresetHidden } = useHiddenItems();
 
   // Combine prop presets with fetched presets (prop takes precedence if provided)
   // Filter out hidden presets

@@ -6,14 +6,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../store/privacyStore", () => ({
-  usePrivacyStore: () => ({
-    crashReportingEnabled: true,
-    analyticsEnabled: true,
-    setCrashReporting: vi.fn(),
-    setAnalytics: vi.fn(),
-    initialize: vi.fn().mockResolvedValue(undefined),
-  }),
+vi.mock("../../../hooks/privacy-queries", () => ({
+  usePrivacyConsent: () => ({ crashReportingEnabled: true, analyticsEnabled: true }),
+  useUpdatePrivacySettings: () => ({ isPending: false, setCrashReporting: vi.fn(), setAnalytics: vi.fn() }),
 }));
 
 const { MobilePrivacyScreen } = await import("../MobilePrivacyScreen");
