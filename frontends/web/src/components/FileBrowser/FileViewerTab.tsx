@@ -19,6 +19,7 @@ import {
   type FilePreviewInfo,
 } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
+import { rewriteTouches, subscribeFileRewrites } from "../../lib/fileRewrites";
 import { useEditorStore } from "../../store/editorStore";
 import {
   getMonacoLanguage,
@@ -249,6 +250,43 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       revokePreviewUrl();
     };
   }, [clearLoadingTimer, loadPreview, revokePreviewUrl]);
+
+  // Something other than this editor rewrote the file on disk (a Replace
+  // All, lib/fileRewrites). A clean buffer reloads, so a later save cannot
+  // write the old text back over the change; a dirty one is left alone, since
+  // nothing may overwrite an unsaved edit.
+  const bufferRef = useRef({ content, originalContent });
+  useEffect(() => {
+    bufferRef.current = { content, originalContent };
+  }, [content, originalContent]);
+
+  useEffect(() => {
+    if (!isTextPreview) return;
+    return subscribeFileRewrites((rewrite) => {
+      if (!rewriteTouches(rewrite, file.path, effectiveWorktreeId)) return;
+      const before = bufferRef.current;
+      if (before.content !== before.originalContent) return;
+      const requestId = loadRequestIdRef.current;
+      void (async () => {
+        try {
+          const fresh = await getFileContent(file.path, effectiveWorktreeId);
+          const now = bufferRef.current;
+          // Typed into, or reopened, while the read was in flight.
+          if (
+            loadRequestIdRef.current !== requestId ||
+            now.content !== now.originalContent ||
+            now.originalContent !== before.originalContent
+          ) {
+            return;
+          }
+          setContent(fresh);
+          setOriginalContent(fresh);
+        } catch (err) {
+          console.error("Failed to reload a rewritten file:", err);
+        }
+      })();
+    });
+  }, [effectiveWorktreeId, file.path, isTextPreview]);
 
   // Re-open the file on the shared cadence while the machine comes up, so the
   // editor fills itself in rather than making the user close and reopen the tab.
