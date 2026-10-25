@@ -1,5 +1,5 @@
 import { Hand, MousePointer2, Undo, Redo, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, Wand2 } from 'lucide-react'
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from '../../lib/utils'
 
 export type InteractionMode = 'pan' | 'select'
@@ -46,7 +46,7 @@ export function FloatingToolbar({
 
   return (
     <div className="flex items-center gap-1 rounded-2xl border border-border/80 bg-card/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-sm">
-      <Tooltip content="Pan Mode (Hand Tool)" placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content="Pan Mode (Hand Tool)" side="top" delay={300} triggerClassName="inline-flex">
 <button
         onClick={() => onModeChange('pan')}
         className={toolbarButtonClass(mode === 'pan')}
@@ -56,7 +56,7 @@ export function FloatingToolbar({
       </button>
 </Tooltip>
 
-      <Tooltip content="Selection Mode (Box Select)" placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content="Selection Mode (Box Select)" side="top" delay={300} triggerClassName="inline-flex">
 <button
         onClick={() => onModeChange('select')}
         className={toolbarButtonClass(mode === 'select')}
@@ -69,7 +69,7 @@ export function FloatingToolbar({
       {!isReadOnly && (
         <>
           {onLockToggle && (
-            <Tooltip content={isLocked ? "Unlock steps" : "Lock steps"} placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content={isLocked ? "Unlock steps" : "Lock steps"} side="top" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onLockToggle}
               className={toolbarButtonClass(isLocked)}
@@ -82,7 +82,7 @@ export function FloatingToolbar({
 
           <div className="mx-1 h-6 w-px bg-border/80" />
 
-          <Tooltip content="Undo (Ctrl+Z)" placement="top" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Undo (Ctrl+Z)" side="top" delay={300} triggerClassName="inline-flex">
 <button
             onClick={onUndo}
             disabled={!canUndo}
@@ -93,7 +93,7 @@ export function FloatingToolbar({
           </button>
 </Tooltip>
 
-          <Tooltip content="Redo (Ctrl+Shift+Z)" placement="top" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Redo (Ctrl+Shift+Z)" side="top" delay={300} triggerClassName="inline-flex">
 <button
             onClick={onRedo}
             disabled={!canRedo}
@@ -111,7 +111,7 @@ export function FloatingToolbar({
           <div className="mx-1 h-6 w-px bg-border/80" />
 
           {onZoomOut && (
-            <Tooltip content="Zoom Out" placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Zoom Out" side="top" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onZoomOut}
               className={toolbarButtonClass()}
@@ -123,7 +123,7 @@ export function FloatingToolbar({
           )}
 
           {onZoomIn && (
-            <Tooltip content="Zoom In" placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Zoom In" side="top" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onZoomIn}
               className={toolbarButtonClass()}
@@ -135,7 +135,7 @@ export function FloatingToolbar({
           )}
 
           {onFitView && (
-            <Tooltip content="Fit to View" placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Fit to View" side="top" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onFitView}
               className={toolbarButtonClass()}
@@ -147,7 +147,7 @@ export function FloatingToolbar({
           )}
 
           {!isReadOnly && onOrganizeNodes && (
-            <Tooltip content="Organize steps" placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Organize steps" side="top" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onOrganizeNodes}
               className={toolbarButtonClass()}

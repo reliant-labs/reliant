@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 interface ContextUsageIndicatorProps {
   /** Current token count in thread */
@@ -58,7 +58,7 @@ export const ContextUsageIndicator = memo(function ContextUsageIndicator({
       )}/${formatTokens(compactionThreshold)} tokens)`;
 
   return (
-    <Tooltip content={tooltipContent} placement="bottom">
+    <Tooltip content={tooltipContent} side="bottom" triggerClassName="block">
       <div
         className={cn(
           "relative flex items-center justify-center transition-all duration-200 flex-shrink-0",

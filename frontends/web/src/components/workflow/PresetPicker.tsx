@@ -5,7 +5,7 @@ import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { createPortal } from "react-dom";
 import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import {
   deletePreset,
   setDefaultPreset,
@@ -318,8 +318,7 @@ export function PresetPicker({
               ? `Preset: ${selectedPreset.name}`
               : "Select a preset"
         }
-        placement="top"
-      >
+        side="top" triggerClassName="block">
         <button
           ref={buttonRef}
           onClick={handleTriggerClick}
@@ -416,7 +415,7 @@ export function PresetPicker({
 
       {/* Save Button */}
       {onSave && (
-        <Tooltip content={saveTooltip} placement="top">
+        <Tooltip content={saveTooltip} side="top">
           <button
             type="button"
             onClick={onSave}

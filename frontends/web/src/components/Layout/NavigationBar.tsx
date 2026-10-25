@@ -1,6 +1,6 @@
 import { MessageSquare, FolderOpen, FileText, History, Workflow, Bot, FolderGit2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { isDev } from "../../lib/constants";
 
 export type NavigationTab =
@@ -99,7 +99,7 @@ export function NavigationBar({
             <Tooltip
               key={item.id}
               content={item.tooltip}
-              placement="right"
+              side="right"
               delay={300}
             >
               <button

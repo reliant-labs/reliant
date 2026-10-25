@@ -46,7 +46,7 @@
 import { AlertTriangle, Boxes, Layers, Package, ShieldCheck, Target } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   blockingFindings,
   guardVerdictOf,
@@ -179,7 +179,7 @@ export function TargetPanel({ plan }: { plan: ForgeDeployReport }) {
           and omitting it invites them to go and check kubectl themselves — where
           they would find a context that has nothing to do with this deploy. */}
       {currentContext && (
-        <Tooltip content="Your kubectl current-context. Forge NEVER reads it and never falls back to it: a deploy goes to the context this environment declares. It is shown only so you can see the difference.">
+        <Tooltip content="Your kubectl current-context. Forge NEVER reads it and never falls back to it: a deploy goes to the context this environment declares. It is shown only so you can see the difference." triggerClassName="block">
           <p data-testid="deploy-current-context" className="text-2xs text-muted-foreground">
             Not the target: your kubectl current-context is{" "}
             <span className="font-mono">{currentContext}</span>.

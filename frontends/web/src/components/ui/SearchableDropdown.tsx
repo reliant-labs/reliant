@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Search, Check, X } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "./Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 export interface DropdownOption {
   value: string;
@@ -401,7 +401,7 @@ export function SearchableDropdown({
   );
 
   return title ? (
-    <Tooltip content={title} placement="top">
+    <Tooltip content={title} side="top" triggerClassName="block">
       {dropdownContent}
     </Tooltip>
   ) : (

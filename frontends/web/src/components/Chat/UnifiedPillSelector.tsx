@@ -10,7 +10,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { AgentSelector } from "./AgentSelector";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useCurrentWorktree, useWorktreeList } from "../../hooks/worktree-queries";
 
@@ -146,7 +146,7 @@ export function UnifiedPillSelector({
                 ? "Select a git workspace for this chat" 
                 : "Workspace can only be set on new chats"
             } 
-            placement="top"
+            side="top"
           >
             <button
               onClick={() => {

@@ -18,7 +18,7 @@ import { Clock, OctagonX, Paperclip, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
 import {
   chatGrpc,
@@ -256,7 +256,7 @@ export function QueuedMessages({
         <div className="flex justify-end">
           <Tooltip
             content="Stop what the agent is doing so it reads your queued messages now"
-            placement="top"
+            side="top"
           >
             <button
               type="button"
@@ -347,7 +347,7 @@ export function QueuedMessages({
                 quietly send the rest too — and the version that claimed a
                 single row raced the agent's own delivery to do it. */}
             <div className="flex flex-shrink-0 items-center gap-1">
-              <Tooltip content="Remove this message from the queue" placement="top">
+              <Tooltip content="Remove this message from the queue" side="top">
                 <button
                   type="button"
                   aria-label="Cancel queued message"

@@ -25,8 +25,8 @@ import { useChatListPreferencesStore } from "../../store/chatListPreferencesStor
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 // The menu renders its items as plain buttons so a test can pick one.

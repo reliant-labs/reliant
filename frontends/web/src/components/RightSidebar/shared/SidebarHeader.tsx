@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../../../lib/utils";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 
 interface SidebarHeaderProps {
   /** Optional title or project name on the left */
@@ -82,7 +82,7 @@ export function SidebarHeaderButton({
   className,
 }: SidebarHeaderButtonProps) {
   return (
-    <Tooltip content={tooltip} placement="bottom">
+    <Tooltip content={tooltip} side="bottom">
       <button
         onClick={onClick}
         disabled={disabled}

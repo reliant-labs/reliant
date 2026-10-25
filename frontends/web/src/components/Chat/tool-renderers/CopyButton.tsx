@@ -3,7 +3,7 @@
  * Shows a subtle copy icon that changes to a checkmark on success.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { memo, useState, useCallback } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -30,7 +30,7 @@ function CopyButtonComponent({ content, className }: CopyButtonProps) {
   }, [content]);
 
   return (
-    <Tooltip content={copied ? 'Copied!' : 'Copy to clipboard'} placement="bottom" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={copied ? 'Copied!' : 'Copy to clipboard'} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={handleCopy}

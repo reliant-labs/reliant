@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import Button from "@/components/forge-ui/button";
 import {
@@ -935,7 +935,7 @@ function SelfHostedMachinesTable({
                   return removal.allowed ? (
                     button
                   ) : (
-                    <Tooltip content={removal.reason ?? ""} placement="left">
+                    <Tooltip content={removal.reason ?? ""} side="left">
                       {button}
                     </Tooltip>
                   );
@@ -1913,7 +1913,7 @@ function EnvironmentDetail({
                 return removal.allowed ? (
                   button
                 ) : (
-                  <Tooltip content={removal.reason ?? ""} placement="bottom">
+                  <Tooltip content={removal.reason ?? ""} side="bottom">
                     {button}
                   </Tooltip>
                 );

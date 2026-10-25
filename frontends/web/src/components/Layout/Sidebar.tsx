@@ -57,7 +57,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import Button from "@/components/forge-ui/button";
 import { ContextMenu } from "../ui/ContextMenu";
 import type { ContextMenuItem } from "../ui/ContextMenu";
@@ -151,7 +151,7 @@ function AutomationOriginGlyph({ chat }: { chat: Chat }) {
     ? launch.startedByLine
     : `${launch.startedByLine}. Shown while open; reply to keep it in your chats.`;
   return (
-    <Tooltip content={label} placement="top" delay={300}>
+    <Tooltip content={label} side="top" delay={300}>
       <span
         role="img"
         aria-label={label}
@@ -309,7 +309,7 @@ const ChatItem = memo(function ChatItem({
       onContextMenu={(e) => onContextMenu(e, chat)}
     >
       {unread && (
-        <Tooltip content="Unread messages" placement="top" delay={300}>
+        <Tooltip content="Unread messages" side="top" delay={300} triggerClassName="block">
           <div
             className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
             data-testid={`chat-unread-dot-${chat.id}`}
@@ -325,7 +325,7 @@ const ChatItem = memo(function ChatItem({
           data-testid={`chat-needs-input-${chat.id}`}
           data-activity-state={chat.activityState}
         >
-          <Tooltip content={needsInput.label} placement="left" delay={300}>
+          <Tooltip content={needsInput.label} side="left" delay={300}>
             <span role="img" aria-label={needsInput.label} className="flex">
               <MessageCircleQuestion className="h-3.5 w-3.5 text-warning-ink" aria-hidden="true" />
               {/* Agents still running beside the question: the running dot,
@@ -348,7 +348,7 @@ const ChatItem = memo(function ChatItem({
           data-testid={`chat-activity-dot-${chat.id}`}
           data-activity-state={chat.activityState}
         >
-          <Tooltip content={runStatus.label} placement="left" delay={300}>
+          <Tooltip content={runStatus.label} side="left" delay={300}>
             <RunStatusDot status={runStatus} size="lg" />
           </Tooltip>
         </div>
@@ -393,7 +393,7 @@ const ChatItem = memo(function ChatItem({
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <Tooltip content="More options" placement="left" delay={300}>
+        <Tooltip content="More options" side="left" delay={300}>
           <button
             onClick={(e) => onContextMenu(e, chat)}
             className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
@@ -407,7 +407,7 @@ const ChatItem = memo(function ChatItem({
         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
           {relativeTime}
         </span>
-        <Tooltip content="Archive chat" placement="left" delay={300}>
+        <Tooltip content="Archive chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -486,7 +486,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <Tooltip content="Restore chat" placement="left" delay={300}>
+        <Tooltip content="Restore chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -503,7 +503,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
           {relativeTime}
         </span>
-        <Tooltip content="Delete chat" placement="left" delay={300}>
+        <Tooltip content="Delete chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -619,7 +619,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           {onNewChat && (
             <Tooltip
               content="New chat in this workspace"
-              placement="left"
+              side="left"
               delay={300}
             >
               <button
@@ -638,7 +638,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           {onArchiveWorktree && (
             <Tooltip
               content="Archive this workspace"
-              placement="left"
+              side="left"
               delay={300}
             >
               <button
@@ -1501,7 +1501,7 @@ function SidebarComponent({
 
       // Icon showing this workspace is archived
       const subtitle = group.isWorktreeArchived ? (
-        <Tooltip content="Workspace archived" placement="right" delay={300}>
+        <Tooltip content="Workspace archived" side="right" delay={300}>
           <Archive className="w-3 h-3 text-muted-foreground/60" />
         </Tooltip>
       ) : null;
@@ -1626,9 +1626,9 @@ function SidebarComponent({
             trigger={(props) => (
               <Tooltip
                 content={`Sort: ${currentSortOption.label}`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
-                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
               >
                 <button
                   type="button"
@@ -1683,9 +1683,9 @@ function SidebarComponent({
             trigger={(props) => (
               <Tooltip
                 content="View options"
-                placement="bottom"
+                side="bottom"
                 delay={300}
-                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
               >
                 <button
                   type="button"

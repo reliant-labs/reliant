@@ -5,7 +5,7 @@
  * Used by both Package Commands and Background Processes views.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useRef, useState, useMemo } from "react";
 import {
   RefreshCw,
@@ -222,7 +222,7 @@ export function TerminalOutput({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50">
         {onBack && (
-          <Tooltip content="Back" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Back" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={onBack}
             className="p-1.5 hover:bg-muted rounded transition-colors" aria-label="Back">
@@ -250,7 +250,7 @@ export function TerminalOutput({
 
         <div className="flex items-center gap-1">
           {isRunning && onKill && (
-            <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               onClick={handleKill}
               disabled={isCanceling}
@@ -269,7 +269,7 @@ export function TerminalOutput({
 </Tooltip>
           )}
           {onRefresh && (
-            <Tooltip content="Refresh" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Refresh" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               onClick={onRefresh}
               className="p-1.5 hover:bg-muted rounded transition-colors" aria-label="Refresh">
@@ -277,7 +277,7 @@ export function TerminalOutput({
             </button>
 </Tooltip>
           )}
-          <Tooltip content="Copy output" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Copy output" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleCopy}
             className="p-1.5 hover:bg-muted rounded transition-colors"

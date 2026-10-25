@@ -12,7 +12,7 @@
  */
 import { Copy, Download, HelpCircle, RefreshCw } from "lucide-react";
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "./tooltip";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-sm font-medium text-foreground">{children}</h2>;
@@ -27,24 +27,24 @@ export function R5Tooltips() {
       <SectionTitle>Tooltip — a toolbar, a disabled action, a help icon</SectionTitle>
       <div className="flex max-w-3xl items-start gap-16">
         <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
-          <Tooltip content="Copy path" placement="bottom" wrapperClassName="inline-flex">
+          <Tooltip content="Copy path" side="bottom" triggerClassName="inline-flex">
             <button type="button" className={iconButton} aria-label="Copy path">
               <Copy className="h-4 w-4" />
             </button>
           </Tooltip>
-          <Tooltip content="Download" placement="bottom" wrapperClassName="inline-flex">
+          <Tooltip content="Download" side="bottom" triggerClassName="inline-flex">
             <button type="button" className={iconButton} aria-label="Download">
               <Download className="h-4 w-4" />
             </button>
           </Tooltip>
-          <Tooltip content="Refresh" placement="bottom" wrapperClassName="inline-flex">
+          <Tooltip content="Refresh" side="bottom" triggerClassName="inline-flex">
             <button type="button" className={iconButton} aria-label="Refresh">
               <RefreshCw className="h-4 w-4" />
             </button>
           </Tooltip>
         </div>
 
-        <Tooltip content="Save the workflow first: steps attach to a saved revision, not a draft." placement="top">
+        <Tooltip content="Save the workflow first: steps attach to a saved revision, not a draft." side="top">
           <button
             type="button"
             disabled
@@ -56,7 +56,7 @@ export function R5Tooltips() {
 
         <p className="flex items-center gap-1 text-sm text-muted-foreground">
           Entry steps run in parallel
-          <Tooltip content="Every entry step starts when the workflow does." placement="right" wrapperClassName="inline-flex">
+          <Tooltip content="Every entry step starts when the workflow does." side="right" triggerClassName="inline-flex">
             <HelpCircle className="h-3.5 w-3.5" aria-label="About entry steps" />
           </Tooltip>
         </p>

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useWorkflows } from "../../hooks/workflow-queries";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
@@ -180,7 +180,7 @@ export function WorkflowSelector({
 
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>
-      <Tooltip content={`Workflow: ${displayText}`} placement="top">
+      <Tooltip content={`Workflow: ${displayText}`} side="top">
         <button
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}

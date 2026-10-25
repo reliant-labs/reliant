@@ -28,7 +28,7 @@ import { Cpu, Rocket, Upload } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Button from "@/components/forge-ui/button";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import { liveKindLabel, type LiveEnv } from "@/services/forge/live";
 import type { EnvLifecycle } from "@/services/forge/roster";
@@ -172,7 +172,7 @@ function StatusLine({ headline }: { headline: EnvHeadline }) {
   );
   if (headline.detail === "") return line;
   return (
-    <Tooltip content={headline.detail} placement="bottom" wrapperClassName="min-w-0">
+    <Tooltip content={headline.detail} side="bottom" triggerClassName="min-w-0">
       {line}
     </Tooltip>
   );
@@ -207,7 +207,7 @@ function ActionButton({
   );
   if (!action.disabledReason) return button;
   return (
-    <Tooltip content={action.disabledReason} placement="bottom">
+    <Tooltip content={action.disabledReason} side="bottom">
       <span className="inline-flex">
         {button}
         <span id={`${testId}-reason`} className="sr-only">
