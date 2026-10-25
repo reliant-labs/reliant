@@ -182,7 +182,7 @@ test.describe('forge components across color schemes', () => {
         await expect(menus).toHaveScreenshot(`r5-contextmenu-${scheme}-${mode}.png`, SHOT);
         await page.keyboard.press('Escape');
         await expect(page.getByText('Copy path')).toHaveCount(0);
-        await page.getByRole('button', { name: 'Help' }).click();
+        await page.getByRole('button', { name: /^Help/ }).click();
         await expect(page.getByText(/BEFORE the step runs/)).toBeVisible();
         await page.mouse.move(0, 0);
         await expect(menus).toHaveScreenshot(`r5-helppopover-${scheme}-${mode}.png`, SHOT);
