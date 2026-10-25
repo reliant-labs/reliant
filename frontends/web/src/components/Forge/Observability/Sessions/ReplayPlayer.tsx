@@ -19,6 +19,13 @@
  * `UNSAFE_replayCanvas` — the one option that adds `allow-scripts` — is pinned
  * off, and nothing recorded canvas anyway.
  *
+ * A recording can also be FORGED (the ingest key is public and bodies are never
+ * inspected), so it can name remote images, stylesheets and fonts that would be
+ * fetched from the viewer's browser. The replay document is therefore confined
+ * to a no-network policy (replayConfinement.ts), which also explains why the
+ * sandbox keeps `allow-same-origin`: rrweb cannot rebuild into an opaque origin.
+ * The player says so in the line beside the badge: external assets do not load.
+ *
  * ── LOADING ────────────────────────────────────────────────────────────────
  *
  * The Replayer is ~400 KB and only this component needs it, so it is imported
@@ -41,6 +48,7 @@ import { cn } from "@/lib/utils";
 
 import { formatDuration } from "../format";
 import { ReplayFeed, type ReplayFeedState } from "./replayFeed";
+import { confineReplayDocument, FULL_SNAPSHOT_REBUILT } from "./replayConfinement";
 import { formatOffset, PARTIAL_GAP_MS } from "./sessionModel";
 
 /** The slice of rrweb's Replayer this player drives. */
@@ -199,6 +207,10 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             showWarning: false,
             triggerFocus: false,
           });
+          // Before the first snapshot is built into it (that happens on the
+          // pause/play below), and again after every rebuild.
+          confineReplayDocument(replayer.iframe?.contentDocument);
+          replayer.on(FULL_SNAPSHOT_REBUILT, () => confineReplayDocument(replayer.iframe?.contentDocument));
           buffer = [];
           replayerRef.current = replayer;
           replayer.iframe?.setAttribute("title", "Session replay (masked)");
@@ -365,6 +377,13 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
         >
           <span data-testid="replay-masked-badge">Masked recording</span>
         </Tag>
+        <span
+          className="text-xs text-muted-foreground"
+          title="A recording comes from the browser and can name any address. The replay is confined so that opening one never contacts those hosts: anything the page loaded from elsewhere shows as blank or unstyled."
+          data-testid="replay-external-note"
+        >
+          External images, stylesheets and fonts are not loaded.
+        </span>
         {feed?.phase === "live" && (
           <span title="This session may still be recording: new events appear as each upload completes." data-testid="replay-live">
             <Status tone="neutral" pulse size="sm" label="Live" />
