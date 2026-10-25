@@ -4,11 +4,11 @@
  * The full record of a run's steps (ChatService.ListStepExecutions): per
  * attempt, what the step was given (its resolved inputs), what it produced and
  * why it failed. The builder's Run tab inspects a step from these; the lean
- * execution tree (GetWorkflowExecutions) carries none of it.
+ * execution tree (GetWorkflowExecutions) carries none of it. Read through the
+ * generated useListStepExecutions (BuilderRunContext); this is its view model.
  */
 
-import type { StepExecution } from "../gen/reliant/v1/chat_pb";
-import { grpcClient } from "./grpc-client";
+import type { ListStepExecutionsResponse, StepExecution } from "../../../gen/reliant/v1/chat_pb";
 
 export interface StepRecord {
   id: string;
@@ -62,11 +62,7 @@ export function toStepRecord(execution: StepExecution): StepRecord {
   };
 }
 
-/** A chat's step records, newest first; `nodePath` scopes them to one node and what ran inside it. */
-export async function listStepExecutions(
-  chatId: string,
-  nodePath?: string,
-): Promise<{ records: StepRecord[]; truncated: boolean }> {
-  const response = await grpcClient.chat().listStepExecutions({ chatId, nodePath: nodePath || undefined });
+/** A run's step records, newest first, as ListStepExecutions answered them. */
+export function toStepRecords(response: ListStepExecutionsResponse): { records: StepRecord[]; truncated: boolean } {
   return { records: response.stepExecutions.map(toStepRecord), truncated: response.truncated };
 }

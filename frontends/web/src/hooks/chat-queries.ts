@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat } from "../api/client";
-import type { ChatSelection } from "../gen/reliant/v1/chat_pb";
+import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { queryClient } from "../lib/query-client";
+import { chatServiceKeys, useListArchivedChats } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
 
 // ── Query key factory ───────────────────────────────────────────────────────
@@ -15,9 +16,6 @@ export const chatKeys = {
   detail: (chatId?: string) => [...chatKeys.details(), chatId] as const,
   // The chat's server-side selection: a ChatSelection, or null when it has none.
   selection: (chatId?: string) => [...chatKeys.detail(chatId), "selection"] as const,
-  archived: () => [...chatKeys.all, "archived"] as const,
-  search: (projectId: string, query: string) =>
-    [...chatKeys.all, "search", projectId, query] as const,
 };
 
 // ── Cache patch helpers ─────────────────────────────────────────────────────
@@ -298,11 +296,27 @@ export function markChatSelectionsUnmaintained(): void {
   });
 }
 
-export function useArchivedChats() {
-  return useQuery({
-    queryKey: chatKeys.archived(),
-    queryFn: () => api.chatsV2.listArchived(),
+/**
+ * An archived row as the sidebar lists it: the chat, with its workspace's name
+ * and deletion time flattened in.
+ */
+function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
+  return response.chats.map(({ chat, worktreeName, worktreeDeletedAt }) => {
+    const { $typeName: _, ...rest } = chat ?? ({} as Partial<ProtoChat>);
+    return { ...rest, worktreeName, worktreeDeletedAt } as Chat;
   });
+}
+
+/**
+ * The archived list is a pull read on the generated key (entity scope
+ * `chatServiceKeys.archivedChat`): the stream only says it changed, and every
+ * archive, restore and delete — hand or streamed — invalidates that scope.
+ * Unlike the live list it seeds no detail entry, so a refetch of it (a
+ * generated ChatService mutation invalidates `chatServiceKeys.all`) never
+ * writes over stream-maintained chat state.
+ */
+export function useArchivedChats() {
+  return useListArchivedChats({}, { select: toArchivedChats });
 }
 
 // ── Mutation hooks ──────────────────────────────────────────────────────────
@@ -323,6 +337,8 @@ export function useDeleteChat() {
     mutationFn: (chatId: string) => api.chatsV2.delete(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
+      // Deletes can come from the archived list too.
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }
@@ -345,7 +361,7 @@ export function useArchiveChat() {
     mutationFn: (chatId: string) => api.chatsV2.archive(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }
@@ -358,7 +374,7 @@ export function useUnarchiveChat() {
       // The chat list carries each chat's workspace, so the restored chat shows
       // with the right group as soon as the list refetches.
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+      queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     },
   });
 }

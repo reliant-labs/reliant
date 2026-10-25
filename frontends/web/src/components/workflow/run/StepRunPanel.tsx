@@ -13,7 +13,7 @@ import { Link } from "@tanstack/react-router";
 import { Check, ChevronDown, ChevronRight, Copy } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
-import type { StepRecord } from "../../../api/step-executions-grpc";
+import type { StepRecord } from "./stepRecord";
 import { humanizeField } from "../workflowFindings";
 import { runErrorFieldKey, type RunNodeStatus } from "./builderRun";
 import { useStepRun, type StepRun } from "./BuilderRunContext";

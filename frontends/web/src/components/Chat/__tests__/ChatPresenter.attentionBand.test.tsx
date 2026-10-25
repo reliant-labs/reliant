@@ -18,7 +18,7 @@
  */
 
 import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
@@ -28,11 +28,6 @@ const HUMAN = 5;
 
 const { listQueuedAgentMessagesMock } = vi.hoisted(() => ({
   listQueuedAgentMessagesMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { listQueuedAgentMessages: listQueuedAgentMessagesMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 // chat.workflowId is the chat's main thread id — the mailbox the composer
@@ -108,6 +103,12 @@ import { useThreadActivityStore } from "../../../store/threadActivityStore";
 import { setTransport } from "../../../lib/connect";
 import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
 
 // The background-work pill lists the daemon's processes (BackgroundService,
 // on its generated hooks); none are running here.

@@ -33,6 +33,7 @@ import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { chatGrpc } from "../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { useChatStore } from "../../store/chatStore";
 import {
   useBackgroundWork,
@@ -251,6 +252,7 @@ function FailedSpawnRow({
         return;
       }
       setRetry("requested");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[BackgroundWorkPill] Failed to ask the parent to retry a failed agent", {
         chatId,

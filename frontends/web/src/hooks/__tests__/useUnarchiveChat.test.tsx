@@ -14,6 +14,7 @@ vi.mock("../../api/client", () => ({
 }));
 
 import { useUnarchiveChat, chatKeys } from "../chat-queries";
+import { chatServiceKeys } from "../chat-service-hooks_gen";
 
 let queryClient: QueryClient;
 
@@ -42,7 +43,7 @@ describe("useUnarchiveChat", () => {
 
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: chatKeys.lists() });
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: chatKeys.archived() });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: chatServiceKeys.archivedChat });
     });
   });
 });

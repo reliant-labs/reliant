@@ -31,6 +31,7 @@ import { queryClient } from "../lib/query-client";
 import { invalidateDaemonList, reconcileDaemonHeartbeat } from "../hooks/useDaemonStatus";
 import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection, markChatSelectionsUnmaintained } from "../hooks/chat-queries";
+import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { triggersInvalidatingUpdate } from "../hooks/trigger-queries";
@@ -742,7 +743,7 @@ function handleChatStateChange(update: UserUpdate) {
     logger.info(`${LOG_PREFIX} Chat archived: ${chat_id.slice(0, 8)}`);
     applyChatPatch(projectId, chat_id, { state: nextState });
     // The archived list needs a refetch — we can't construct an ArchivedChat row.
-    queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+    queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
 
     // An automation run that finished successfully archives itself. Nobody
     // put it away, so whoever is watching it finish stays on it, with its
@@ -773,7 +774,7 @@ function handleChatStateChange(update: UserUpdate) {
   if (isBeingRestored) {
     logger.info(`${LOG_PREFIX} Chat restored: ${chat_id.slice(0, 8)}`);
     applyChatPatch(projectId, chat_id, { state: nextState });
-    queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+    queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
     return;
   }
 
@@ -1072,7 +1073,7 @@ function handleChatDeleted(update: UserUpdate) {
     update.project_id || useProjectStore.getState().currentProject?.id;
   removeChatFromListCache(projectId, chat_id);
   // Deletes can come from the archived list too — refetch it.
-  queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+  queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
   // Release the chat's retained memory (messages cache is gcTime: Infinity,
   // per-chat Zustand slices have no TTL).
   useChatStore.getState().evictChat(chat_id);

@@ -17,7 +17,7 @@
  */
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 
@@ -47,7 +47,6 @@ const {
 vi.mock("../../../api/chat-grpc", () => ({
   chatGrpc: {
     sendAgentMessage: sendAgentMessageMock,
-    listQueuedAgentMessages: listQueuedAgentMessagesMock,
     cancelQueuedAgentMessage: cancelQueuedAgentMessageMock,
   },
   QUEUED_SENDER_KIND_HUMAN: 5,
@@ -126,6 +125,14 @@ vi.mock("../WorkflowSelector", () => ({
 }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
 
 const HUMAN = 5;
 

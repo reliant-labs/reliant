@@ -74,6 +74,7 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import { fetchThreadWorkflowInputs } from "../../hooks/chat-pull-queries";
 import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
@@ -507,7 +508,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const fetchThreadParams = async () => {
         try {
           // Fetch the thread's workflow inputs from the backend
-          const result = await chatGrpc.getThreadWorkflowInputs(chatId, selectedThreadId);
+          const result = await fetchThreadWorkflowInputs(chatId, selectedThreadId);
 
           if (cancelled) return;
 

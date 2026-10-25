@@ -1,12 +1,13 @@
 // ChatSearch - Search chat history and within current chat (Cmd+Shift+C)
 import { MessageRole, ContentBlockType } from "../../gen/reliant/v1/chat_pb";
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, MessageSquare, Loader2, Clock, ArrowRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChat, useChatList } from "../../hooks/chat-queries";
+import { useChatSearch } from "../../hooks/chat-pull-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
@@ -72,7 +73,6 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   }, [onClose]);
   const [mode, setMode] = useState<SearchMode>("history");
   const [query, setQuery] = useState("");
-  const [chatResults, setChatResults] = useState<ChatSearchResult[]>([]);
   const [messageResults, setMessageResults] = useState<MessageSearchResult[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,6 +83,12 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
 
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
+  // History mode: the most recent chats, or the matches for the query.
+  const chatSearch = useChatSearch(currentProject?.id, query, isOpen && mode === "history");
+  const chatResults = useMemo<ChatSearchResult[]>(
+    () => (mode === "history" ? chatSearch.results.map((hit) => ({ ...hit, messageCount: 0 })) : []),
+    [mode, chatSearch.results],
+  );
   const activeChatId = useChatStore((state) => state.activeChatId);
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
@@ -97,24 +103,9 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const closeAndFocus = useCallback(() => {
     setIsOpen(false);
     setQuery("");
-    setChatResults([]);
     setMessageResults([]);
     focusChatInput();
   }, [setIsOpen]);
-
-  // Load recent chats for initial display (defined before hooks that use it)
-  const loadRecentChats = useCallback(() => {
-    const recent = [...chats]
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, 10)
-      .map((chat) => ({
-        chatId: chat.id,
-        title: chat.title,
-        updatedAt: chat.updatedAt,
-        messageCount: 0,
-      }));
-    setChatResults(recent);
-  }, [chats]);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
@@ -123,17 +114,11 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
       setMode(initialMode);
       setQuery("");
       setHighlightedIndex(0);
-      
-      // Load initial results
-      if (initialMode === "history") {
-        loadRecentChats();
-      }
-      
       setTimeout(() => inputRef.current?.focus(), 50);
     },
     close: closeAndFocus,
     isOpen: () => isOpen,
-  }), [isOpen, loadRecentChats, closeAndFocus, setIsOpen]);
+  }), [isOpen, closeAndFocus, setIsOpen]);
   
   // Sync with external isOpen state
   useEffect(() => {
@@ -141,70 +126,13 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
       const mode = initialMode ?? "current";
       setQuery("");
       setHighlightedIndex(0);
-      setChatResults([]);
       setMessageResults([]);
+      // The chat-switcher view lists the recent chats until there is a query;
+      // "current" searches the open conversation and has nothing to show yet.
       setMode(mode);
-      // Seed the list only for the chat-switcher view; "current" searches the
-      // open conversation and has nothing to show until there is a query.
-      if (mode === "history") loadRecentChats();
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [externalIsOpen, initialMode, loadRecentChats]);
-
-  // Search chat history
-  const searchChatHistory = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
-      loadRecentChats();
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      if (currentProject) {
-        // Use backend FTS search
-        const results = await api.chatsV2.search(currentProject.id, searchQuery);
-        setChatResults(
-          results.slice(0, 15).map((chat) => ({
-            chatId: chat.id,
-            title: chat.title,
-            updatedAt: chat.updatedAt,
-            messageCount: 0,
-          }))
-        );
-      } else {
-        // Fallback to client-side search
-        const filtered = chats
-          .filter((chat) => 
-            chat.title.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-          .slice(0, 15)
-          .map((chat) => ({
-            chatId: chat.id,
-            title: chat.title,
-            updatedAt: chat.updatedAt,
-            messageCount: 0,
-          }));
-        setChatResults(filtered);
-      }
-    } catch (error) {
-      console.error("Chat search failed:", error);
-      // Fallback to client-side
-      const filtered = chats
-        .filter((chat) => 
-          chat.title.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .slice(0, 15)
-        .map((chat) => ({
-          chatId: chat.id,
-          title: chat.title,
-          updatedAt: chat.updatedAt,
-          messageCount: 0,
-        }));
-      setChatResults(filtered);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentProject, chats, loadRecentChats]);
+  }, [externalIsOpen, initialMode]);
 
   // Search within current chat
   const searchCurrentChat = useCallback(async (searchQuery: string) => {
@@ -265,12 +193,10 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
       clearTimeout(searchTimeoutRef.current);
     }
 
+    // History mode searches through useChatSearch, debounced there.
+    if (mode !== "current") return;
     searchTimeoutRef.current = setTimeout(() => {
-      if (mode === "history") {
-        searchChatHistory(query);
-      } else {
-        searchCurrentChat(query);
-      }
+      searchCurrentChat(query);
     }, 300);
 
     return () => {
@@ -278,18 +204,13 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [query, mode, searchChatHistory, searchCurrentChat]);
+  }, [query, mode, searchCurrentChat]);
 
   // Reset results when mode changes
   useEffect(() => {
     setHighlightedIndex(0);
-    if (mode === "history") {
-      setMessageResults([]);
-      if (!query) loadRecentChats();
-    } else {
-      setChatResults([]);
-    }
-  }, [mode, loadRecentChats, query]);
+    if (mode === "history") setMessageResults([]);
+  }, [mode]);
 
   // Close on click outside
   useEffect(() => {
@@ -500,7 +421,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
             className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground"
             autoFocus
           />
-          {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          {(mode === "history" ? chatSearch.isLoading : isLoading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
         </div>
 
         {/* Results */}
