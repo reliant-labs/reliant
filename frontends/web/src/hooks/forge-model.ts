@@ -1,11 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Thin wrapper over `reliant.v1.ForgeService`.
+ * ForgeService's frontend model. Pure: no React, no client. The reads and
+ * writes are the generated hooks, composed in `forge-queries.ts`; this module
+ * is what their reads `select` through, what their writes' requests are built
+ * from, and how a write's refusal becomes data.
  *
- * Each call returns forge's own report already CLASSIFIED into a ForgeOutcome —
- * see services/forge/topology.ts. Doing that here rather than in a component
- * means the five non-error outcomes (not a forge project, forge too old, cluster
+ * Each response is CLASSIFIED into a ForgeOutcome — see
+ * services/forge/topology.ts. Doing that here rather than in a component means
+ * the five non-error outcomes (not a forge project, forge too old, cluster
  * unreachable, malformed body, a real report) are resolved once, in one place,
  * and every caller has to handle them by construction instead of destructuring
  * `report_json` and hoping.
@@ -17,27 +20,26 @@
  * design avoids.
  */
 
-import { create } from "@bufbuild/protobuf";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createForgeClient } from "./grpc-client";
 import {
   ForgeDeployJobStatus,
   ForgeDeployRefusalReason,
   ForgeDeployRefusalSchema,
   ForgePromoteRefusalReason,
   ForgePromoteRefusalSchema,
-  GetForgeDeployStatusRequestSchema,
-  GetForgeEnvShapeRequestSchema,
-  GetForgeEnvStatusRequestSchema,
-  GetForgeTopologyRequestSchema,
-  ListForgeSecretsRequestSchema,
-  PlanForgeDeployRequestSchema,
-  PlanForgePromoteRequestSchema,
-  PromoteForgeEnvRequestSchema,
-  StartForgeDeployPlanRequestSchema,
-  StartForgeDeployRequestSchema,
-  VerifyForgeEnvRequestSchema,
+  type GetForgeDeployStatusResponse,
+  type GetForgeEnvShapeResponse,
+  type GetForgeEnvStatusResponse,
+  type GetForgeTopologyResponse,
+  type PlanForgeDeployResponse,
+  type PlanForgePromoteResponse,
+  type PromoteForgeEnvRequestSchema,
+  type PromoteForgeEnvResponse,
+  type StartForgeDeployRequestSchema,
+  type StartForgeDeployResponse,
+  type VerifyForgeEnvResponse,
 } from "../gen/reliant/v1/forge_pb";
 import type {
   DeployConfirmationToken,
@@ -52,135 +54,120 @@ import type { ForgeEnvShapeReport } from "../services/forge/register";
 import { normalizeEnvStatus, type ForgeEnvStatusReport } from "../services/forge/status";
 import {
   classifyForgeResponse,
+  mergeVerifyIntoTopology,
   type ForgeOutcome,
   type ForgeTopologyReport,
   type ForgeVerifyReport,
 } from "../services/forge/topology";
 
-export interface GetTopologyArgs {
-  projectId: string;
-  /**
-   * Reconcile every declared environment against its live cluster.
-   *
-   * Off by default and normally left off: with verify the call reads EVERY
-   * env's cluster under a 110s budget and can fail as a whole. The screen loads
-   * the ledger first and upgrades one env at a time via verifyEnv, so a single
-   * slow cluster cannot keep the rest of the topology off the screen.
-   */
-  verify?: boolean;
-  /** Narrow to these environments. Empty means all declared. */
-  envs?: string[];
+// ── Retry policy ────────────────────────────────────────────────────────────
+
+/**
+ * Codes on which asking the daemon again cannot change the answer.
+ *
+ * FailedPrecondition is the one that matters: it is what the api-server now
+ * answers when forge RAN and failed (a KCL render error, a provider the
+ * command refuses) and when the daemon is too old for the command. Both are
+ * facts about state a retry does not touch, and retrying them only delays the
+ * sentence that says what to fix.
+ *
+ * DeadlineExceeded is a forge command that ran out of its budget — up to a
+ * minute or more of forge on the user's machine. A second identical request
+ * costs the same and almost always ends the same way, doubling the wait before
+ * the tab can say so.
+ */
+const NON_RETRYABLE_FORGE_CODES: ReadonlySet<Code> = new Set([
+  Code.DeadlineExceeded,
+  Code.FailedPrecondition,
+  Code.NotFound,
+  Code.InvalidArgument,
+  Code.PermissionDenied,
+  Code.Unauthenticated,
+]);
+
+/**
+ * forgeRetry: at most ONE retry, and none for an answer. A thrown error on a
+ * forge query is a transport or daemon problem (every meaningful non-success
+ * arrives as data — see the useForgeTopology comment), and hammering a daemon
+ * that is not answering only delays telling the user.
+ */
+export function forgeRetry(failureCount: number, error: unknown): boolean {
+  if (error instanceof ConnectError && NON_RETRYABLE_FORGE_CODES.has(error.code)) return false;
+  return failureCount < 1;
 }
 
-export async function getTopology(
-  args: GetTopologyArgs
-): Promise<ForgeOutcome<ForgeTopologyReport>> {
-  const res = await createForgeClient().getTopology(
-    create(GetForgeTopologyRequestSchema, {
-      projectId: args.projectId,
-      verify: args.verify ?? false,
-      envs: args.envs ?? [],
-    })
-  );
+// ── Reads: what each one `select`s through ──────────────────────────────────
+//
+// Module-level functions, not closures, so React Query re-runs a select only
+// when the cached response changes: a topology report is a large document, and
+// every forge screen observes it.
+
+export function topologyOutcomeOf(res: GetForgeTopologyResponse): ForgeOutcome<ForgeTopologyReport> {
   return classifyForgeResponse<ForgeTopologyReport>(res.meta, res.reportJson);
 }
 
-export async function verifyEnv(
-  projectId: string,
-  env: string
-): Promise<ForgeOutcome<ForgeVerifyReport>> {
-  const res = await createForgeClient().verifyEnv(
-    create(VerifyForgeEnvRequestSchema, { projectId, env })
-  );
+export function verifyOutcomeOf(res: VerifyForgeEnvResponse): ForgeOutcome<ForgeVerifyReport> {
   return classifyForgeResponse<ForgeVerifyReport>(res.meta, res.reportJson);
 }
 
 /**
- * listSecrets returns forge's secret report: NAMES and BOOLEANS only, never a
- * value. The proto message is constrained by a reflection test on the Go side so
- * no field can carry one; nothing here re-widens it.
+ * One environment's status with forge's `runtime` block lifted to the top
+ * level — see normalizeEnvStatus for why.
  */
-export async function listSecrets(
-  projectId: string,
-  env: string
-): Promise<ForgeOutcome<Record<string, unknown>>> {
-  const res = await createForgeClient().listSecrets(
-    create(ListForgeSecretsRequestSchema, { projectId, env })
-  );
-  return classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
-}
-
-/**
- * getEnvStatus returns one environment's status with forge's `runtime` block
- * lifted to the top level — see normalizeEnvStatus for why.
- */
-export async function getEnvStatus(
-  projectId: string,
-  env: string
-): Promise<ForgeOutcome<ForgeEnvStatusReport>> {
-  const res = await createForgeClient().getEnvStatus(
-    create(GetForgeEnvStatusRequestSchema, { projectId, env })
-  );
+export function envStatusOutcomeOf(res: GetForgeEnvStatusResponse): ForgeOutcome<ForgeEnvStatusReport> {
   const outcome = classifyForgeResponse<Record<string, unknown>>(res.meta, res.reportJson);
   if (outcome.kind !== "report") return outcome;
   return { ...outcome, report: normalizeEnvStatus(outcome.report) };
 }
 
 /**
- * getEnvShape returns forge's own projection of ONE environment's render —
+ * Forge's own projection of ONE environment's render —
  * `{project, env, kind, shape, provenance}`, the same projection
- * `forge env build` records.
- *
- * THE ONLY DAEMON CALL ON THE REGISTER PATH, and it is here because only the
- * daemon can read the user's checkout. What happens with the answer does NOT
- * go through the daemon: Preview hands the shape to the browser, which calls
- * control-plane EnsureEnvironment itself with the user's session (see
- * services/forge/register.ts). After that the environment is in Live and
- * needs no daemon again.
- *
- * `shape.secrets[]` carries names and providers only (F-13); there is no field
- * on this path that could hold a value.
+ * `forge env build` records. `shape.secrets[]` carries names and providers
+ * only (F-13); there is no field on this path that could hold a value.
  */
-export async function getEnvShape(
-  projectId: string,
-  env: string
-): Promise<ForgeOutcome<ForgeEnvShapeReport>> {
-  const res = await createForgeClient().getEnvShape(
-    create(GetForgeEnvShapeRequestSchema, { projectId, env })
-  );
+export function envShapeOutcomeOf(res: GetForgeEnvShapeResponse): ForgeOutcome<ForgeEnvShapeReport> {
   return classifyForgeResponse<ForgeEnvShapeReport>(res.meta, res.reportJson);
 }
 
-// ── Promote: two methods, and the naming is the guard ────────────────────────
-//
-// PlanPromote and ApplyPromote stay two clearly-named functions here, mirroring
-// the two RPCs. They are NOT unified behind one function with a `dryRun` flag,
-// and the reason is the same one that shaped the proto: a boolean defaults to
-// false, false would be the destructive value, and every call site that forgot
-// the argument would write. There is a backend test that fails if anyone adds a
-// dry_run field to the request; collapsing them on this side would reintroduce
-// exactly what that test defends, one layer up.
-
-/**
- * planPromote previews binding an environment to a release.
- *
- * READ-ONLY, safe and idempotent: forge computes the plan and writes nothing.
- * `dry_run` is true and `applied` false in every document it returns.
- */
-export async function planPromote(args: {
-  projectId: string;
-  env: string;
-  release: string;
-}): Promise<ForgeOutcome<ForgePromotePlan>> {
-  const res = await createForgeClient().planPromote(
-    create(PlanForgePromoteRequestSchema, {
-      projectId: args.projectId,
-      env: args.env,
-      release: args.release,
-    })
-  );
+/** A promote preview. `dry_run` is true and `applied` false in every document it returns. */
+export function promotePlanOutcomeOf(res: PlanForgePromoteResponse): ForgeOutcome<ForgePromotePlan> {
   return classifyForgeResponse<ForgePromotePlan>(res.meta, res.reportJson);
 }
+
+/** A deploy preview. Every document it returns has mode "dry_run". */
+export function deployPlanOutcomeOf(res: PlanForgeDeployResponse): ForgeOutcome<ForgeDeployReport> {
+  return classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
+}
+
+/**
+ * The cached topology RESPONSE with one environment's verification merged into
+ * its report — see useVerifyForgeEnv for why the merge is this narrow.
+ *
+ * The cache holds the server's response and every reader selects through
+ * topologyOutcomeOf, so the merge is written back as the response's
+ * report_json. A response whose report did not classify as a report is
+ * returned untouched: there is nothing to merge into.
+ */
+export function withVerifiedEnv(
+  previous: GetForgeTopologyResponse,
+  env: string,
+  verify: ForgeVerifyReport
+): GetForgeTopologyResponse {
+  const outcome = topologyOutcomeOf(previous);
+  if (outcome.kind !== "report") return previous;
+  return { ...previous, reportJson: JSON.stringify(mergeVerifyIntoTopology(outcome.report, env, verify)) };
+}
+
+// ── Promote: the write, and its refusal as data ──────────────────────────────
+//
+// PlanPromote and ApplyPromote stay two clearly-named rpcs with two hooks. They
+// are NOT unified behind one call with a `dryRun` flag, and the reason is the
+// same one that shaped the proto: a boolean defaults to false, false would be
+// the destructive value, and every call site that forgot the argument would
+// write. There is a backend test that fails if anyone adds a dry_run field to
+// the request; collapsing them on this side would reintroduce exactly what that
+// test defends, one layer up.
 
 /**
  * The outcome of an attempted write. A refusal is not an error to be shown as a
@@ -194,50 +181,40 @@ export type ApplyPromoteResult =
   | { kind: "refused"; refusal: PromoteRefusal };
 
 /**
- * applyPromote WRITES the binding. This is the only function in this module
- * that changes state.
- *
- * The name says apply rather than promote precisely so it cannot be reached by
- * an autocomplete for the generic verb, and the token is a required argument of
- * a type that cannot express "neither claim" — see PromoteConfirmationToken.
- * The caller cannot construct one except from a plan it rendered, because
+ * The ApplyPromote request. The token is a required argument of a type that
+ * cannot express "neither claim" — see PromoteConfirmationToken — and the
+ * caller cannot construct one except from a plan it rendered, because
  * confirmationTokenFor is the only producer.
- *
- * A refusal arrives as a FailedPrecondition carrying a ForgePromoteRefusal
- * detail, and is returned as data. Letting it propagate as an error would leave
- * every call site to re-derive that nothing was written from an error string;
- * lifting it here means the caller handles all three outcomes by construction.
  */
-export async function applyPromote(args: {
+export function applyPromoteRequest(args: {
   projectId: string;
   env: string;
   release: string;
   token: PromoteConfirmationToken;
-}): Promise<ApplyPromoteResult> {
-  try {
-    const res = await createForgeClient().applyPromote(
-      create(PromoteForgeEnvRequestSchema, {
-        projectId: args.projectId,
-        env: args.env,
-        release: args.release,
-        // Exactly one of these is set, enforced by the token's type. The server
-        // rejects neither-set as InvalidArgument and both-set as contradictory.
-        expectedCurrentRelease: args.token.expectUnbound
-          ? ""
-          : args.token.expectedCurrentRelease,
-        expectUnbound: args.token.expectUnbound === true,
-      })
-    );
-    return { kind: "applied", outcome: classifyForgeResponse<ForgePromotePlan>(res.meta, res.reportJson) };
-  } catch (error) {
-    const refusal = promoteRefusalOf(error);
-    if (refusal) return { kind: "refused", refusal };
-    throw error;
-  }
+}): MessageInitShape<typeof PromoteForgeEnvRequestSchema> {
+  return {
+    projectId: args.projectId,
+    env: args.env,
+    release: args.release,
+    // Exactly one of these is set, enforced by the token's type. The server
+    // rejects neither-set as InvalidArgument and both-set as contradictory.
+    expectedCurrentRelease: args.token.expectUnbound ? "" : args.token.expectedCurrentRelease,
+    expectUnbound: args.token.expectUnbound === true,
+  };
+}
+
+export function appliedPromoteOf(res: PromoteForgeEnvResponse): ApplyPromoteResult {
+  return { kind: "applied", outcome: classifyForgeResponse<ForgePromotePlan>(res.meta, res.reportJson) };
 }
 
 /**
  * promoteRefusalOf pulls the structured refusal off a connect error.
+ *
+ * A refusal arrives as a FailedPrecondition carrying a ForgePromoteRefusal
+ * detail, and the domain hook returns it as data. Letting it propagate as an
+ * error would leave every call site to re-derive that nothing was written from
+ * an error string; lifting it means the caller handles all three outcomes by
+ * construction.
  *
  * THE DETAIL IS READ, NOT THE MESSAGE. The server's text is "promote refused,
  * nothing was written: <detail>", and matching on that string would break the
@@ -250,7 +227,7 @@ export async function applyPromote(args: {
  * "refused but unexplained", and inventing an empty refusal panel would claim
  * facts about the binding that never arrived.
  */
-function promoteRefusalOf(error: unknown): PromoteRefusal | null {
+export function promoteRefusalOf(error: unknown): PromoteRefusal | null {
   if (!(error instanceof ConnectError)) return null;
   if (error.code !== Code.FailedPrecondition) return null;
 
@@ -271,88 +248,15 @@ function promoteRefusalOf(error: unknown): PromoteRefusal | null {
   return null;
 }
 
-// ── Deploy: three methods, and the naming is the guard ───────────────────────
+// ── Deploy: three rpcs, and the naming is the guard ─────────────────────────
 //
-// planDeploy, startDeploy and getDeployStatus mirror the three RPCs exactly.
-// There is deliberately NO fourth function that wraps plan-then-start, and no
-// `deploy()` of any kind: a single call that both previews and applies is the
-// shape this whole path is built to make unavailable, and a backend reflection
-// test (TestNoUnguardedDeployRPCExists) fails if a fourth deploy-ish method
-// appears on the service. The write is `startDeploy` — named for what it does,
-// so it cannot be reached by autocompleting the generic verb.
-
-/**
- * planDeploy previews deploying an environment. APPLIES NOTHING.
- *
- * Forge renders the env, evaluates the declared-cluster guard, runs the
- * preflight against the live target and returns before the first kubectl apply.
- * Read-only and idempotent, so it needs no confirmation token — there is nothing
- * to confirm. Every document it returns has mode "dry_run".
- *
- * It does READ the live cluster (the preflight checks Secret keys and image
- * metadata), so a timeout here means live state is unknown rather than that
- * something is broken.
- */
-export async function planDeploy(args: {
-  projectId: string;
-  env: string;
-}): Promise<ForgeOutcome<ForgeDeployReport>> {
-  const res = await createForgeClient().planDeploy(
-    create(PlanForgeDeployRequestSchema, {
-      projectId: args.projectId,
-      env: args.env,
-    })
-  );
-  return classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
-}
-
-/**
- * startDeployPlan begins working out WHAT A DEPLOY WOULD SHIP, as a background
- * job, and returns a handle. Poll it with getDeployStatus.
- *
- * It builds from the chosen checkout, pushes, and cuts a release — so it takes
- * minutes, which is why it cannot be awaited inline. It writes no promotion and
- * applies nothing, so no environment changes and no approval is needed: this is
- * the call that PRODUCES the thing to approve.
- *
- * Its result is NOT a deploy report, and the status it is polled through marks
- * that explicitly (planOnly). Approving a deploy means taking that plan's digest
- * to startDeploy.
- */
-export async function startDeployPlan(args: {
-  projectId: string;
-  env: string;
-}): Promise<StartDeployResult> {
-  try {
-    const res = await createForgeClient().startDeployPlan(
-      create(StartForgeDeployPlanRequestSchema, {
-        projectId: args.projectId,
-        env: args.env,
-      })
-    );
-
-    if ((res.handle ?? "").trim() === "") {
-      return {
-        kind: "not-started",
-        outcome: classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson),
-      };
-    }
-    return {
-      kind: "started",
-      handle: res.handle,
-      env: res.env,
-      startedAt: res.startedAt,
-      jobStatus: deployJobDispositionOf(res.jobStatus),
-      // No plan exists yet — that is what this job is computing. A guard plan
-      // here would be a document the caller could mistake for the answer.
-      guardPlan: null,
-    };
-  } catch (error) {
-    const refusal = deployRefusalOf(error);
-    if (refusal) return { kind: "refused", refusal };
-    throw error;
-  }
-}
+// PlanDeploy, StartDeploy and GetDeployStatus are three rpcs with three hooks.
+// There is deliberately NO hook that wraps plan-then-start, and no `deploy()`
+// of any kind: a single call that both previews and applies is the shape this
+// whole path is built to make unavailable, and a backend reflection test
+// (TestNoUnguardedDeployRPCExists) fails if a fourth deploy-ish method appears
+// on the service. The write is StartDeploy — named for what it does, so it
+// cannot be reached by autocompleting the generic verb.
 
 /**
  * The outcome of an attempted start. A refusal is not an error to be shown as a
@@ -388,71 +292,87 @@ export type StartDeployResult =
   | { kind: "not-started"; outcome: ForgeOutcome<ForgeDeployReport> };
 
 /**
- * startDeploy STARTS A REAL DEPLOY TO A LIVE CLUSTER. This is the only function
- * in this module that mutates anything outside the repo.
+ * StartDeployPlan's answer. That rpc begins working out WHAT A DEPLOY WOULD
+ * SHIP, as a background job: it builds from the chosen checkout, pushes, and
+ * cuts a release, writes no promotion and applies nothing. Its result is NOT a
+ * deploy report, and the status it is polled through marks that explicitly
+ * (planOnly).
+ */
+export function startDeployPlanResultOf(res: StartForgeDeployResponse): StartDeployResult {
+  if ((res.handle ?? "").trim() === "") {
+    return {
+      kind: "not-started",
+      outcome: classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson),
+    };
+  }
+  return {
+    kind: "started",
+    handle: res.handle,
+    env: res.env,
+    startedAt: res.startedAt,
+    jobStatus: deployJobDispositionOf(res.jobStatus),
+    // No plan exists yet — that is what this job is computing. A guard plan
+    // here would be a document the caller could mistake for the answer.
+    guardPlan: null,
+  };
+}
+
+/**
+ * The StartDeploy request — A REAL DEPLOY TO A LIVE CLUSTER.
  *
  * The token is a required argument of a type that cannot express "no cluster
  * claim" or "neither release claim", and the caller cannot construct one except
  * from a plan it rendered, because deployTokenFor is the only producer. The
  * server re-plans and starts nothing unless every claim still holds.
  *
- * The call returns a handle immediately; the apply runs detached. A synchronous
- * RPC is not available at all here — forge's default rollout budget is five
- * minutes PER RESOURCE, and a killed child would leave a half-converged cluster
- * with nobody able to say what shipped.
+ * `approval` is THE APPROVED PLAN, derived from the plan document the operator
+ * read — see DeployApproveStep, which is its only producer. The token
+ * authorises the TARGET; the approval authorises the CHANGE SET. Without it the
+ * deploy would approve whatever forge computes when it runs, which is what
+ * approving by digest exists to stop.
  */
-export async function startDeploy(args: {
+export function startDeployRequest(args: {
   projectId: string;
   env: string;
   token: DeployConfirmationToken;
-  /**
-   * THE APPROVED PLAN. Required, and derived from the plan document the
-   * operator read — see DeployApproveStep, which is its only producer.
-   *
-   * The token above authorises the TARGET; this authorises the CHANGE SET.
-   * Without it the deploy would approve whatever forge computes when it runs,
-   * which is what approving by digest exists to stop.
-   */
   approval: PlanApproval;
-}): Promise<StartDeployResult> {
-  try {
-    const res = await createForgeClient().startDeploy(
-      create(StartForgeDeployRequestSchema, {
-        projectId: args.projectId,
-        env: args.env,
-        // THE CLUSTER CLAIM. Required, and it came off the rendered plan.
-        expectedDeclaredContext: args.token.expectedDeclaredContext,
-        // Exactly one of these is a real claim, enforced by the token's type.
-        // The server rejects neither-set as InvalidArgument and both-set as
-        // contradictory.
-        expectedCurrentRelease: args.token.expectUnbound
-          ? ""
-          : args.token.expectedCurrentRelease,
-        expectUnbound: args.token.expectUnbound === true,
-        // THE CONTENT CLAIM.
-        approveDigest: args.approval.approveDigest,
-        releaseVersion: args.approval.releaseVersion,
-        acknowledgedFindings: args.approval.acknowledgedFindings,
-      })
-    );
+}): MessageInitShape<typeof StartForgeDeployRequestSchema> {
+  return {
+    projectId: args.projectId,
+    env: args.env,
+    // THE CLUSTER CLAIM. Required, and it came off the rendered plan.
+    expectedDeclaredContext: args.token.expectedDeclaredContext,
+    // Exactly one of these is a real claim, enforced by the token's type.
+    // The server rejects neither-set as InvalidArgument and both-set as
+    // contradictory.
+    expectedCurrentRelease: args.token.expectUnbound ? "" : args.token.expectedCurrentRelease,
+    expectUnbound: args.token.expectUnbound === true,
+    // THE CONTENT CLAIM.
+    approveDigest: args.approval.approveDigest,
+    releaseVersion: args.approval.releaseVersion,
+    acknowledgedFindings: args.approval.acknowledgedFindings,
+  };
+}
 
-    const guardPlan = classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
-    if ((res.handle ?? "").trim() === "") {
-      return { kind: "not-started", outcome: guardPlan };
-    }
-    return {
-      kind: "started",
-      handle: res.handle,
-      env: res.env,
-      startedAt: res.startedAt,
-      jobStatus: deployJobDispositionOf(res.jobStatus),
-      guardPlan,
-    };
-  } catch (error) {
-    const refusal = deployRefusalOf(error);
-    if (refusal) return { kind: "refused", refusal };
-    throw error;
+/**
+ * StartDeploy's answer. The call returns a handle immediately; the apply runs
+ * detached. A synchronous RPC is not available at all here — forge's default
+ * rollout budget is five minutes PER RESOURCE, and a killed child would leave a
+ * half-converged cluster with nobody able to say what shipped.
+ */
+export function startDeployResultOf(res: StartForgeDeployResponse): StartDeployResult {
+  const guardPlan = classifyForgeResponse<ForgeDeployReport>(res.meta, res.reportJson);
+  if ((res.handle ?? "").trim() === "") {
+    return { kind: "not-started", outcome: guardPlan };
   }
+  return {
+    kind: "started",
+    handle: res.handle,
+    env: res.env,
+    startedAt: res.startedAt,
+    jobStatus: deployJobDispositionOf(res.jobStatus),
+    guardPlan,
+  };
 }
 
 /** One poll of a running or finished deploy. */
@@ -562,24 +482,14 @@ function deployJobRefusalOf(
 }
 
 /**
- * getDeployStatus polls a deploy by handle.
+ * deployStatusOf reads one poll of a deploy by handle.
  *
  * A handle the daemon does not recognise is NOT an error: the job registry is in
  * memory, so a daemon that restarted mid-apply has lost the handle for a deploy
  * that may well have landed. That arrives as a successful response with
  * jobStatus `unknown`, and it stays `unknown` all the way to the screen.
  */
-export async function getDeployStatus(args: {
-  projectId: string;
-  handle: string;
-}): Promise<DeployStatus> {
-  const res = await createForgeClient().getDeployStatus(
-    create(GetForgeDeployStatusRequestSchema, {
-      projectId: args.projectId,
-      handle: args.handle,
-    })
-  );
-
+export function deployStatusOf(res: GetForgeDeployStatusResponse): DeployStatus {
   return {
     handle: res.handle,
     env: res.env,
@@ -636,7 +546,7 @@ function deployJobDispositionOf(status: ForgeDeployJobStatus | undefined): Deplo
  * and inventing an empty refusal panel would claim facts about the cluster that
  * never arrived.
  */
-function deployRefusalOf(error: unknown): DeployRefusal | null {
+export function deployRefusalOf(error: unknown): DeployRefusal | null {
   if (!(error instanceof ConnectError)) return null;
   if (error.code !== Code.FailedPrecondition) return null;
 
@@ -674,17 +584,3 @@ function deployRefusalReasonOf(reason: ForgeDeployRefusalReason | undefined): De
       return "unknown";
   }
 }
-
-export const forgeGrpc = {
-  getTopology,
-  verifyEnv,
-  listSecrets,
-  getEnvStatus,
-  getEnvShape,
-  planPromote,
-  applyPromote,
-  planDeploy,
-  startDeployPlan,
-  startDeploy,
-  getDeployStatus,
-};

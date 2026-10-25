@@ -29,7 +29,7 @@
  *                           the cluster converging toward two manifest streams.
  *
  * The facts are read off the structured error detail, never parsed from the
- * message string. See deployRefusalOf in api/forge-grpc.ts.
+ * message string. See deployRefusalOf in hooks/forge-model.ts.
  */
 
 import Button from "@/components/forge-ui/button";

@@ -102,21 +102,16 @@ const getTopology = vi.fn<() => Promise<unknown>>(OFFLINE);
 const getEnvShape = vi.fn<() => Promise<unknown>>(OFFLINE);
 const getEnvStatus = vi.fn<() => Promise<unknown>>(OFFLINE);
 
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: () => getTopology(),
-    getEnvShape: () => getEnvShape(),
-    getEnvStatus: () => getEnvStatus(),
-    verifyEnv: () => OFFLINE(),
-    listSecrets: () => OFFLINE(),
-    planPromote: () => OFFLINE(),
-    applyPromote: () => OFFLINE(),
-    planDeploy: () => OFFLINE(),
-    startDeploy: () => OFFLINE(),
-    getDeployStatus: () => OFFLINE(),
-  },
-}));
+/**
+ * A forge report as ForgeService sends it: forge ran, and this is its document.
+ * The page classifies it (hooks/forge-model.ts) exactly as a real reply.
+ */
+function forgeReport(report: Record<string, unknown>) {
+  return { meta: { isForgeProject: true, supported: true }, reportJson: JSON.stringify(report) };
+}
 
+// ForgeService is answered at the transport (below), as the generated hooks
+// read it: these three per test, every other rpc offline.
 
 // ── The control plane ──
 
@@ -198,11 +193,24 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 
 // The registry's daemon list, which a daemon tab reads to learn whether a
 // machine is up before topology answers. Empty: no machine is awake, so the
 // tabs fall back to topology, which is what these tests take offline.
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: async () => ({ daemons: [] }) })));
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport(
+      { listDaemons: async () => ({ daemons: [] }) },
+      {
+        ...Object.fromEntries(ForgeService.methods.map((method) => [`ForgeService.${method.name}`, () => OFFLINE()])),
+        "ForgeService.GetTopology": () => getTopology(),
+        "ForgeService.GetEnvShape": () => getEnvShape(),
+        "ForgeService.GetEnvStatus": () => getEnvStatus(),
+      }
+    )
+  )
+);
 afterEach(() => setTransport(null));
 
 function renderPage() {
@@ -239,9 +247,9 @@ describe("an environment Reliant has no record of, with the daemon offline", () 
 describe("Register", () => {
   beforeEach(() => {
     // The daemon is up for Preview: forge renders the checkout.
-    getTopology.mockResolvedValue({ kind: "report", report: { project: "hounders", environments: [] } });
-    getEnvShape.mockResolvedValue({ kind: "report", report: SHAPE_REPORT });
-    getEnvStatus.mockResolvedValue({ kind: "report", report: {} });
+    getTopology.mockResolvedValue(forgeReport({ project: "hounders", environments: [] }));
+    getEnvShape.mockResolvedValue(forgeReport(SHAPE_REPORT));
+    getEnvStatus.mockResolvedValue(forgeReport({}));
   });
 
   it("shows an unregistered env as 'would be created' and registers forge's shape", async () => {
@@ -277,10 +285,9 @@ describe("Register", () => {
   it("refuses rather than guessing when forge did not state the kind", async () => {
     // An environment's kind is immutable, so a guess produces a row that can
     // only be abandoned. No button is offered at all.
-    getEnvShape.mockResolvedValue({
-      kind: "report",
-      report: { ...SHAPE_REPORT, kind: "", shape: { ...SHAPE_REPORT.shape, kind: "" } },
-    });
+    getEnvShape.mockResolvedValue(
+      forgeReport({ ...SHAPE_REPORT, kind: "", shape: { ...SHAPE_REPORT.shape, kind: "" } })
+    );
     renderPage();
 
     const reason = await screen.findByTestId("register-unavailable", {}, { timeout: 5000 });
@@ -292,16 +299,15 @@ describe("Register", () => {
   it("refuses a render that carries secret values (F-13)", async () => {
     // Defence in depth: the browser must never TRANSMIT one, which is cheaper
     // to enforce before the request exists than to rely on the server alone.
-    getEnvShape.mockResolvedValue({
-      kind: "report",
-      report: {
+    getEnvShape.mockResolvedValue(
+      forgeReport({
         ...SHAPE_REPORT,
         shape: {
           ...SHAPE_REPORT.shape,
           secrets: [{ name: "DATABASE_URL", provider: "hosted", value: "postgres://…" }],
         },
-      },
-    });
+      })
+    );
     renderPage();
 
     expect(await screen.findByTestId("register-unavailable", {}, { timeout: 5000 })).toHaveTextContent(
@@ -324,9 +330,9 @@ describe("acceptance: unregistered → Register → daemon offline → Overview 
     const user = userEvent.setup();
 
     // ── 1. An unregistered env's Overview offers "would be created". ──
-    getTopology.mockResolvedValue({ kind: "report", report: { project: "hounders", environments: [] } });
-    getEnvShape.mockResolvedValue({ kind: "report", report: SHAPE_REPORT });
-    getEnvStatus.mockResolvedValue({ kind: "report", report: {} });
+    getTopology.mockResolvedValue(forgeReport({ project: "hounders", environments: [] }));
+    getEnvShape.mockResolvedValue(forgeReport(SHAPE_REPORT));
+    getEnvStatus.mockResolvedValue(forgeReport({}));
 
     const first = renderPage();
     const panel = await screen.findByTestId("register-env-panel", {}, { timeout: 5000 });
