@@ -23,7 +23,8 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 //   r5        the R5 overlays (components/forge-ui/R5Sandbox.tsx), each
 //             opened: r5-tooltip-hover (a disabled button's reason, hovered),
 //             r5-tooltip-focus (a toolbar button focused), r5-contextmenu (a
-//             file row right-clicked), r5-helppopover (a field's help open)
+//             file row right-clicked), r5-helppopover (a field's help open),
+//             r5-picker-single / r5-picker-multi (each picker opened)
 //   s2        the R5 S2 primitives as their call sites render them
 //             (components/forge-ui/S2Sandbox.tsx): s2-sites (switches, text
 //             fields), s2-menus (a row menu and a multi-select filter, each
@@ -186,6 +187,20 @@ test.describe('forge components across color schemes', () => {
         await expect(page.getByText(/BEFORE the step runs/)).toBeVisible();
         await page.mouse.move(0, 0);
         await expect(menus).toHaveScreenshot(`r5-helppopover-${scheme}-${mode}.png`, SHOT);
+
+        // The pickers' panels sit below their triggers, inside the region.
+        await openHarness(page, '?view=r5-pickers', scheme, mode);
+        const pickers = page.getByTestId('r5-pickers');
+        await page.getByTestId('pick-branch').getByRole('button').first().click();
+        await expect(page.getByText('Remote Branches')).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(pickers).toHaveScreenshot(`r5-picker-single-${scheme}-${mode}.png`, SHOT);
+        await page.keyboard.press('Escape');
+        await expect(page.getByText('Remote Branches')).toHaveCount(0);
+        await page.getByTestId('pick-presets').getByRole('button').first().click();
+        await expect(page.getByText('Breaks the work into steps')).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(pickers).toHaveScreenshot(`r5-picker-multi-${scheme}-${mode}.png`, SHOT);
 
 
         expect(errors).toEqual([]);

@@ -4,7 +4,7 @@ import type { Param } from '../../types/workflow'
 import { ConfigurationPanel } from './ConfigurationPanel'
 import { WorkflowParamsEditorContent } from './WorkflowParamsEditor'
 import { CELExpressionInput } from './CELInput'
-import { MultiSelectDropdown, type MultiSelectOption } from '../ui/MultiSelectDropdown'
+import Combobox, { type ComboboxOption } from '../forge-ui/combobox'
 import { HelpPopover } from './HelpPopover'
 import { ConfigPanelTabBar, type ConfigTab } from './config/ConfigPanelTabBar'
 
@@ -115,7 +115,7 @@ function EntryEditor({
   const entryArray = Array.isArray(entry) ? entry : entry ? [entry] : []
   
   // Convert node IDs to dropdown options
-  const options: MultiSelectOption[] = nodeIds.map(nodeId => ({
+  const options: ComboboxOption[] = nodeIds.map(nodeId => ({
     value: nodeId,
     label: nodeId,
   }))
@@ -144,7 +144,9 @@ function EntryEditor({
           No steps in this workflow. Add a step to choose where it starts.
         </p>
       ) : (
-        <MultiSelectDropdown
+        <Combobox
+          multiple
+          aria-label="Entry steps"
           options={options}
           value={entryArray}
           onChange={handleChange}

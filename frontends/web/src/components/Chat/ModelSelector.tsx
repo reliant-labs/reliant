@@ -1,23 +1,21 @@
 import { useState, useEffect, useMemo } from "react";
 import { Sparkles } from "lucide-react";
-import {
-  SearchableDropdown,
-  type DropdownOption,
-} from "../ui/SearchableDropdown";
+import Combobox, { type ComboboxOption } from "../forge-ui/combobox";
 import { useModels } from "../../store/globalDataStore";
 
 interface ModelSelectorProps {
   onSelect: (modelId: string | null) => void;
   defaultModel?: string | null;
-  compact?: boolean; // If true, show a more compact UI
-  iconOnly?: boolean; // If true, show only the icon
+  /** Accessible name when no <label htmlFor={id}> names it. Defaults to "Model". */
+  "aria-label"?: string;
+  id?: string;
 }
 
 function ModelSelectorComponent({
   onSelect,
   defaultModel = null,
-  compact = false,
-  iconOnly = false,
+  "aria-label": ariaLabel,
+  id,
 }: ModelSelectorProps) {
   const [selectedModel, setSelectedModel] = useState<string | null>(
     defaultModel
@@ -86,7 +84,7 @@ function ModelSelectorComponent({
 
   // Convert models to dropdown options (useMemo ensures React detects when description changes)
   // Now grouped by provider (the human-readable API name from backend like "Anthropic", "OpenRouter")
-  const dropdownOptions = useMemo<DropdownOption[]>(() => {
+  const dropdownOptions = useMemo<ComboboxOption[]>(() => {
     const driverIcon = (driverId: string) => {
       return (
         <div
@@ -107,7 +105,7 @@ function ModelSelectorComponent({
       // Model options grouped by provider/API
       // The provider field now contains human-readable names like "Anthropic", "OpenRouter"
       ...models.map(
-        (model): DropdownOption => ({
+        (model): ComboboxOption => ({
           value: model.id,
           label: model.name,
           // Use driverId for icon color (falls back to provider if driverId not set)
@@ -119,40 +117,17 @@ function ModelSelectorComponent({
     ];
   }, [autoDescription, models]);
 
-  // Dynamic tooltip showing current selection
-  const getTooltipTitle = () => {
-    if (!selectedModel) {
-      return "Model: Auto";
-    }
-    const model = models.find((m) => m.id === selectedModel);
-    return model ? `Model: ${model.name}` : `Model: ${selectedModel}`;
-  };
-
-  if (loading) {
-    return (
-      <div
-        className={`chat-button flex items-center text-sm bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] rounded border-2 border-[var(--chat-border)] font-semibold ${
-          compact ? "px-1.5 h-6 text-2xs" : "px-3 py-1.5 w-full"
-        }`}
-        style={{ minHeight: compact ? "24px" : "auto" }}
-      >
-        <span className="truncate text-muted-foreground">Loading...</span>
-      </div>
-    );
-  }
-
   return (
-    <SearchableDropdown
+    <Combobox
+      id={id}
+      aria-label={id ? ariaLabel : (ariaLabel ?? "Model")}
       options={dropdownOptions}
       value={selectedModel || ""}
-      placeholder={compact ? "Select model..." : "Search and select model..."}
+      placeholder={loading ? "Loading models..." : "Select a model"}
+      searchPlaceholder="Search models"
       emptyMessage="No models found"
-      onSelect={(value) => handleSelect(value === "" ? null : value)}
-      clearable={true}
-      groupBy={true}
-      compact={compact}
-      iconOnly={iconOnly}
-      title={getTooltipTitle()}
+      onChange={(value) => handleSelect(value ? value : null)}
+      loading={loading}
     />
   );
 }

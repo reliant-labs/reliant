@@ -14,12 +14,17 @@
  *                disabled and a danger item) and a help popover beside a
  *                field label; the spec right-clicks a row, then opens the
  *                help
+ *   r5-pickers   ?view=r5-pickers — the searchable pickers: a grouped
+ *                branch picker (the new-workspace dialog's) and a
+ *                multi-select of presets (the workflow settings'); the spec
+ *                opens each one
  */
 import { useState } from "react";
-import { Copy, Download, FilePlus, FileText, HelpCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Cloud, Copy, Download, FilePlus, FileText, FolderGit2, HelpCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
 import ContextMenu from "./context_menu";
 import { HelpPopover } from "../workflow/HelpPopover";
+import Combobox from "./combobox";
 
 import Tooltip from "./tooltip";
 
@@ -134,6 +139,59 @@ export function R5Menus() {
           ]}
         />
       )}
+    </div>
+  );
+}
+
+const BRANCHES = [
+  { value: "main", label: "main", description: "current", icon: <FolderGit2 className="h-3.5 w-3.5" />, group: "Local Branches" },
+  { value: "p9-r5", label: "p9-r5", icon: <FolderGit2 className="h-3.5 w-3.5" />, group: "Local Branches" },
+  { value: "origin/main", label: "main", description: "remote", icon: <Cloud className="h-3.5 w-3.5" />, group: "Remote Branches" },
+  { value: "origin/release", label: "release", description: "remote", icon: <Cloud className="h-3.5 w-3.5" />, group: "Remote Branches" },
+];
+
+const PRESETS = [
+  { value: "reviewer", label: "reviewer", description: "Reads the diff and leaves comments" },
+  { value: "tester", label: "tester", description: "Writes and runs the tests" },
+  { value: "planner", label: "planner", description: "Breaks the work into steps" },
+  { value: "docs", label: "docs", description: "Keeps the docs in step" },
+];
+
+export function R5Pickers() {
+  const [branch, setBranch] = useState<string | null>("main");
+  const [presets, setPresets] = useState<string[]>(["reviewer", "tester"]);
+  return (
+    <div className="space-y-6 p-16" data-testid="r5-pickers" style={{ minHeight: 520 }}>
+      <SectionTitle>Searchable pickers — a grouped branch picker, a multi-select</SectionTitle>
+      <div className="flex max-w-3xl items-start gap-16">
+        <div className="w-80 space-y-2" data-testid="pick-branch">
+          <label htmlFor="r5-base-branch" className="block text-sm font-semibold text-foreground">
+            Base Branch
+          </label>
+          <Combobox
+            id="r5-base-branch"
+            options={BRANCHES}
+            value={branch}
+            placeholder="Select base branch"
+            searchPlaceholder="Search branches"
+            emptyMessage="No branches found"
+            onChange={setBranch}
+            className="w-full"
+          />
+        </div>
+        <div className="w-80 space-y-2" data-testid="pick-presets">
+          <span className="block text-sm font-semibold text-foreground">Presets</span>
+          <Combobox
+            multiple
+            aria-label="Presets"
+            options={PRESETS}
+            value={presets}
+            onChange={setPresets}
+            placeholder="Select presets..."
+            emptyMessage="No presets found"
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { Step, RouterStep } from "../../../types/workflow";
 import { withRouterArgs } from "../../../types/workflow";
 import { CELInput, CELExpressionInput } from "../CELInput";
 import { ModelDropdown, extractModelId } from "../ModelDropdown";
-import { MultiSelectDropdown } from "../../ui/MultiSelectDropdown";
+import Combobox from "../../forge-ui/combobox";
 import { celString, normalizeCelString } from "../../../lib/celAdapter";
 import { useWorkflows } from "../../../hooks/workflow-queries";
 import { usePresetsForWorkflow } from "../../../hooks/preset-queries";
@@ -203,10 +203,12 @@ function RouterCandidateCard({
 
       {/* Presets multi-select */}
       <div>
-        <label className="cpv2-card-field-label">
+        <label className="cpv2-card-field-label" htmlFor={`router-candidate-${index}-presets`}>
           Presets
         </label>
-        <MultiSelectDropdown
+        <Combobox
+          multiple
+          id={`router-candidate-${index}-presets`}
           options={presetOptions}
           value={candidate.presets ?? []}
           onChange={(selected) => onUpdate(index, { presets: selected })}
@@ -216,6 +218,7 @@ function RouterCandidateCard({
               : "Select presets..."
           }
           emptyMessage="No presets available for this workflow"
+          loading={presetsLoading}
           disabled={isReadOnly || !candidate.ref || presetsLoading}
         />
       </div>
