@@ -177,6 +177,19 @@ service ObservabilityService {
     };
   }
 
+  // GetServiceSignals answers, per service in the scope, which signals it
+  // EMITS (traces, logs, profiles with data in the range) and which the
+  // recorded release of its environments DECLARES on: the console's answer to
+  // "should this service offer a Profiles view". One bounded statement over
+  // the telemetry plus the bundles the control plane already holds. Max range
+  // 7 days, at most 500 services, cached for a minute.
+  rpc GetServiceSignals(GetServiceSignalsRequest) returns (GetServiceSignalsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // ListWorkloads returns, per environment, workload and container: image,
   // service.version, replicas observed, restarts in the window, the last
   // terminated reason (OOMKilled, ...), CPU and memory against requests and
@@ -881,6 +894,38 @@ message ListAttributeValuesResponse {
 message AttributeValue {
   string value = 1;
   int64 count = 2;
+}
+
+// === Service signals ===
+
+message GetServiceSignalsRequest {
+  // Max range 7 days. Traces and logs honour every part of the scope;
+  // profiles honour the environments and services and ignore attribute
+  // filters (what GetFlamegraph reads).
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+}
+
+message GetServiceSignalsResponse {
+  // By service name.
+  repeated ServiceSignals services = 1;
+  // True when more services emitted than the 500 listed.
+  bool truncated = 2;
+}
+
+// ServiceSignals is one service's signals. A signal name is "traces", "logs"
+// or "profiles".
+message ServiceSignals {
+  string service = 1;
+  // The signals with data from the service in the range, sorted.
+  repeated string emitting = 2;
+  // The signals the current release of at least one environment in scope
+  // declares on for the workload named like the service, sorted. Meaningful
+  // only when declaration_known.
+  repeated string declared = 3;
+  // True when an environment in scope records the spec of a workload named
+  // like the service. False: nothing is known of what it declares, and
+  // `declared` is empty for that reason, not because it declares nothing.
+  bool declaration_known = 4;
 }
 
 // === Workloads (infra for customers; console v2 owner decision 4, contract K2) ===

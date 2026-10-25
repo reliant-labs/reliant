@@ -15,12 +15,12 @@
  * the groups against each other: one line each, on the same axes.
  */
 
-import { ArrowLeft, FileText, GitBranch } from "lucide-react";
+import { ArrowLeft, FileText, Flame, GitBranch } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useServiceOverview } from "@/hooks/observability-queries";
-import type { ObsScope, ServiceHealth } from "@/services/controlPlane/observability/types";
+import type { ObsScope, ServiceHealth, ServiceSignal } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ import { formatCount, formatDuration, formatPercent, formatRate } from "./format
 import { groupLabel } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { signalState, useSignalsIndex, type SignalsIndex } from "./serviceSignals";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 /** An error rate at or above this reads as a problem, and is drawn in the destructive tone. */
@@ -67,7 +68,7 @@ export function OverviewView({
   const services = overview.data?.services ?? [];
   const selected = service ? services.filter((candidate) => candidate.name === service) : [];
   if (service && selected.length > 0) {
-    return <ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} />;
+    return <ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} scope={scope} range={range} />;
   }
   if (services.length === 0) {
     return <ObsNoData what="telemetry" range={range} onWiden={() => navigate({ range: "7d" })} />;
@@ -214,8 +215,28 @@ function MetricCell({
   );
 }
 
-function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; groupBy: string[]; navigate: ObsNavigate }) {
+/** The service page's jumps to each signal view, in order. */
+const SIGNAL_JUMPS: { signal: ServiceSignal; label: string; icon: typeof FileText }[] = [
+  { signal: "logs", label: "Logs", icon: FileText },
+  { signal: "traces", label: "Traces", icon: GitBranch },
+  { signal: "profiles", label: "Profiles", icon: Flame },
+];
+
+function ServiceDetail({
+  rows,
+  groupBy,
+  navigate,
+  scope,
+  range,
+}: {
+  rows: ServiceHealth[];
+  groupBy: string[];
+  navigate: ObsNavigate;
+  scope: ObsScope;
+  range: RangePreset;
+}) {
   const health = rows[0];
+  const signals = useSignalsIndex(scope, range);
   const compared = groupBy.length > 0 && rows.length > 1;
   // Every group's trend on one shared axis.
   const timestamps = [...new Set(rows.flatMap((row) => row.timestamps))].sort((a, b) => a - b);
@@ -251,24 +272,7 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "logs", service: health.name })}
-            leftIcon={<FileText className="h-3.5 w-3.5" />}
-          >
-            Logs
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "traces", service: health.name })}
-            leftIcon={<GitBranch className="h-3.5 w-3.5" />}
-          >
-            Traces
-          </Button>
-        </div>
+        <SignalJumps service={health.name} signals={signals} navigate={navigate} />
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
         <Card padding="md">
@@ -370,4 +374,36 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
 
 function Headline({ value, destructive }: { value: string; destructive?: boolean }) {
   return <span className={cn("text-sm font-semibold tabular-nums", destructive ? "text-destructive" : "text-foreground")}>{value}</span>;
+}
+
+/**
+ * Logs, Traces and Profiles for one service: the ones it sends, the idle ones
+ * it declares muted with why, and none it neither sends nor declares
+ * (serviceSignals.ts).
+ */
+function SignalJumps({ service, signals, navigate }: { service: string; signals: SignalsIndex | null; navigate: ObsNavigate }) {
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="obs-service-signals">
+      {SIGNAL_JUMPS.map(({ signal, label, icon: Icon }) => {
+        const state = signalState(signals, service, signal);
+        if (state.kind === "absent") return null;
+        const idle = state.kind === "idle" ? state : null;
+        return (
+          <Button
+            key={signal}
+            variant="outline"
+            size="sm"
+            disabled={!!idle}
+            title={idle?.hint}
+            onClick={() => navigate({ view: signal, service })}
+            leftIcon={<Icon className="h-3.5 w-3.5" />}
+            data-testid={`obs-service-${signal}`}
+          >
+            {label}
+            {idle && <span className="text-2xs text-muted-foreground">{idle.badge}</span>}
+          </Button>
+        );
+      })}
+    </div>
+  );
 }

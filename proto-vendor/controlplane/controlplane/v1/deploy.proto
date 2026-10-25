@@ -1779,6 +1779,13 @@ message DeclaredWorkload {
   string source_repo = 13;
   string source_commit = 14;
   string bundle_id = 15;
+  // The telemetry signals the declaration switches OFF, sorted: "traces",
+  // "logs", "metrics", "profiles". Read from the OpenTelemetry switches forge
+  // renders into the workload's environment (OTEL_<SIGNAL>_EXPORTER=none, every
+  // signal for OTEL_SDK_DISABLED=true); a signal not listed is declared on.
+  // Only those switches are read, and only this verdict leaves: never a value.
+  // Meaningless when spec_recorded is false.
+  repeated string telemetry_off = 16;
 }
 
 message DeclaredPort {

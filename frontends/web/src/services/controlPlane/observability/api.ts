@@ -78,6 +78,9 @@ import type {
   WorkloadMetric,
   Flamegraph,
   GetFlamegraphRequest,
+  GetServiceSignalsRequest,
+  ServiceSignal,
+  ServiceSignalsResult,
   ListTracesRequest,
   ListTracesResult,
   LogRecord,
@@ -100,6 +103,7 @@ import type {
   TraceRed,
   TraceSummary,
 } from "./types";
+import { SERVICE_SIGNALS } from "./types";
 import type { MetricKind, SeriesMeta } from "./metricsTypes";
 
 function client() {
@@ -493,6 +497,29 @@ export async function getFlamegraph(req: GetFlamegraphRequest): Promise<Flamegra
     unit: res.unit,
     stackCount: res.stackCount,
     availableProfileTypes: [...res.availableProfileTypes],
+    truncated: res.truncated,
+  };
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+const signalsOf = (values: string[]): ServiceSignal[] =>
+  values.filter((value): value is ServiceSignal => (SERVICE_SIGNALS as readonly string[]).includes(value));
+
+/**
+ * Which signals each service in the scope sends and declares: one bounded
+ * server-side statement, cached a minute. Attribute filters are not applied
+ * (a filter that matches nothing must not hide the view that would show it).
+ */
+export async function getServiceSignals(req: GetServiceSignalsRequest): Promise<ServiceSignalsResult> {
+  const res = await client().getServiceSignals({ scope: scope(req, req.window) });
+  return {
+    services: res.services.map((s) => ({
+      service: s.service,
+      emitting: signalsOf(s.emitting),
+      declared: signalsOf(s.declared),
+      declarationKnown: s.declarationKnown,
+    })),
     truncated: res.truncated,
   };
 }

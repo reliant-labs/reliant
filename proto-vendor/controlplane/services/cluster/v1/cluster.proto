@@ -131,6 +131,18 @@ message Cluster {
   // is. See ClusterIssuer.
   ClusterIssuer issuer = 15;
 
+  // The SHA-256 fingerprint of the registered CA certificate (the first
+  // CERTIFICATE block of the uploaded bundle), over its DER encoding, as
+  // colon-separated uppercase hex — the form `openssl x509 -fingerprint
+  // -sha256` and `kubectl` print, so it can be compared against a cluster's own
+  // CA by eye. Computed on the server from the stored CA; the CA itself is never
+  // returned. Empty until ConnectCluster has stored a CA.
+  string ca_fingerprint = 16;
+
+  // When the registration row last changed: a connect or re-connect (new
+  // address, CA or token) moves it.
+  google.protobuf.Timestamp updated_at = 17;
+
   // Tags and names that once carried hub workload identity. The platform
   // authenticates to a connected cluster only with the scoped credential the
   // owner uploaded, so there is no auth mode and no cloud resource name.
@@ -138,9 +150,10 @@ message Cluster {
   reserved "auth", "cloud_cluster";
 
   // THERE IS NO ca_pem AND NO token HERE, AND THAT IS DELIBERATE. The CA is
-  // not secret but it is bulky and nothing in a UI needs it, and a token must
-  // never be returned at all — a field that exists is a field some future
-  // handler populates. See ConnectClusterRequest.token.
+  // not secret but it is bulky and nothing in a UI needs it (ca_fingerprint is
+  // what identifies it), and a token must never be returned at all — a field
+  // that exists is a field some future handler populates. See
+  // ConnectClusterRequest.token.
 }
 
 message ListClustersRequest {}

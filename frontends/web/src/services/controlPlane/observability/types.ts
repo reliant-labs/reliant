@@ -483,6 +483,34 @@ export interface Flamegraph {
   truncated: boolean;
 }
 
+// ── Service signals ──────────────────────────────────────────────────────────
+
+/** The signals a service has a view of its own for (GetServiceSignals). */
+export const SERVICE_SIGNALS = ["logs", "traces", "profiles"] as const;
+export type ServiceSignal = (typeof SERVICE_SIGNALS)[number];
+
+export interface GetServiceSignalsRequest extends ObsScope {
+  window: TimeWindow;
+}
+
+/** One service: what it sends, and what the current release of its environments switches on. */
+export interface ServiceSignals {
+  service: string;
+  /** Signals with data from the service in the window. */
+  emitting: ServiceSignal[];
+  /** Signals the release declares on; meaningful only when `declarationKnown`. */
+  declared: ServiceSignal[];
+  /** False: no environment in scope records the workload's spec, so nothing is known of what it declares. */
+  declarationKnown: boolean;
+}
+
+export interface ServiceSignalsResult {
+  /** By service name. */
+  services: ServiceSignals[];
+  /** More services sent data than the server lists (500). */
+  truncated: boolean;
+}
+
 // ── Usage and billing ────────────────────────────────────────────────────────
 
 /** What the gateway does with the org's telemetry right now. */
