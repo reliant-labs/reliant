@@ -30,12 +30,6 @@ const { listDaemonsMock, listQueuedMock } = vi.hoisted(() => ({
   listQueuedMock: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: listDaemonsMock }) },
-}));
-vi.mock("../../api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: listDaemonsMock }) },
-}));
 vi.mock("../../api/chat-grpc", () => ({
   chatGrpc: { listQueuedAgentMessages: listQueuedMock },
 }));
@@ -44,6 +38,12 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 import { useDaemonStatus } from "../useDaemonStatus";
 import { useQueuedAgentMessages } from "../queued-agent-messages";
 import { OomKillBanner } from "../../components/Chat/OomKillBanner";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemonsMock() })));
+afterEach(() => setTransport(null));
 
 const MINUTE = 60_000;
 

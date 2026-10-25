@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { DaemonInfoSchema, DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
@@ -9,6 +9,8 @@ import {
   LocalModelInfoSchema,
   LocalModelInventorySchema,
 } from "../../../gen/reliant/v1/tools_daemon_pb";
+import { renderWithTransport } from "@/lib/test-utils";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
 
 const mocks = vi.hoisted(() => ({
   daemons: [] as DaemonInfo[],
@@ -19,14 +21,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: mocks.daemons, loading: false, refresh: vi.fn() }),
 }));
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      refreshLocalModels: mocks.refreshLocalModels,
-      setLocalModelEndpoints: mocks.setLocalModelEndpoints,
+// The writes go through the generated DaemonRegistryService hooks, so the
+// fakes answer at the transport.
+function renderSection() {
+  return renderWithTransport(<LocalModelsSection />, {
+    transport: daemonRegistryTransport({
+      refreshLocalModels: (req) => mocks.refreshLocalModels(req),
+      setLocalModelEndpoints: (req) => mocks.setLocalModelEndpoints(req),
     }),
-  },
-}));
+  });
+}
 
 import { LocalModelsSection } from "../LocalModelsSection";
 
@@ -82,7 +86,7 @@ beforeEach(() => {
 
 describe("LocalModelsSection", () => {
   it("renders a machine with endpoints, models, capability chips and a plain-words error", () => {
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText("Sean's MacBook")).toBeTruthy();
     expect(screen.getByText("Online")).toBeTruthy();
     expect(screen.getByText("Ollama")).toBeTruthy();
@@ -96,21 +100,21 @@ describe("LocalModelsSection", () => {
   });
 
   it("hides embedding models until the toggle is on", async () => {
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.queryByText("nomic-embed-text")).toBeNull();
     await userEvent.click(screen.getByLabelText("Show embedding models"));
     expect(screen.getByText("nomic-embed-text")).toBeTruthy();
   });
 
   it("Test connection calls refreshLocalModels for that daemon", async () => {
-    render(<LocalModelsSection />);
+    renderSection();
     await userEvent.click(screen.getByRole("button", { name: /test connection/i }));
     await waitFor(() => expect(mocks.refreshLocalModels).toHaveBeenCalledTimes(1));
     expect(mocks.refreshLocalModels.mock.calls[0][0].daemonId).toBe("d1");
   });
 
   it("adding an endpoint sends the full configured list plus the new URL", async () => {
-    render(<LocalModelsSection />);
+    renderSection();
     await userEvent.type(screen.getByLabelText("Endpoint URL"), "http://localhost:1234/v1");
     await userEvent.click(screen.getByRole("button", { name: /add endpoint/i }));
     await waitFor(() => expect(mocks.setLocalModelEndpoints).toHaveBeenCalledTimes(1));
@@ -120,7 +124,7 @@ describe("LocalModelsSection", () => {
   });
 
   it("rejects a malformed URL without calling the RPC", async () => {
-    render(<LocalModelsSection />);
+    renderSection();
     await userEvent.type(screen.getByLabelText("Endpoint URL"), "not a url");
     await userEvent.click(screen.getByRole("button", { name: /add endpoint/i }));
     expect(screen.getByText(/doesn't look like a URL/)).toBeTruthy();
@@ -128,7 +132,7 @@ describe("LocalModelsSection", () => {
   });
 
   it("removing a configured endpoint sends the list without it; detected ones have no remove", async () => {
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.queryByLabelText("Remove http://localhost:11434/v1")).toBeNull();
     await userEvent.click(screen.getByLabelText("Remove http://gpu-box.lan:8000/v1"));
     await waitFor(() => expect(mocks.setLocalModelEndpoints).toHaveBeenCalledTimes(1));
@@ -137,7 +141,7 @@ describe("LocalModelsSection", () => {
 
   it("an offline machine is read-only with an explanation", () => {
     mocks.daemons = [daemon({ status: DaemonStatus.DISCONNECTED })];
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/Machine is offline — local models are unavailable until it reconnects/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /test connection/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /add endpoint/i })).toBeNull();
@@ -146,13 +150,13 @@ describe("LocalModelsSection", () => {
 
   it("explains local models when there are no machines", () => {
     mocks.daemons = [];
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/run on your machine through the Reliant daemon/)).toBeTruthy();
   });
 
   it("shows a getting-started block when a machine has no endpoints", () => {
     mocks.daemons = [daemon({ localModels: create(LocalModelInventorySchema, { endpoints: [] }) })];
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/ollama pull qwen3/)).toBeTruthy();
   });
 
@@ -160,7 +164,7 @@ describe("LocalModelsSection", () => {
     mocks.daemons = [
       daemon({ daemonType: "managed", localModels: create(LocalModelInventorySchema, { endpoints: [] }) }),
     ];
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/cloud machine, so it has no GPU of its own/)).toBeTruthy();
     expect(screen.queryByText(/ollama pull qwen3/)).toBeNull();
   });
@@ -185,7 +189,7 @@ describe("LocalModelsSection context warnings", () => {
 
   it("shows a warning chip at 4096 and the Ollama fix block", () => {
     withModels("ollama", [4096]);
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/4K context — too small for agent work/)).toBeTruthy();
     const fix = screen.getByTestId("ollama-context-fix");
     expect(fix.textContent).toMatch(/Ollama is giving these models a 4K context/);
@@ -196,25 +200,25 @@ describe("LocalModelsSection context warnings", () => {
 
   it("shows only a soft note at 32768", () => {
     withModels("ollama", [32768]);
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.getByText(/32K context — smaller than the ~64K/)).toBeTruthy();
     expect(screen.queryByText(/too small for agent work/)).toBeNull();
   });
 
   it("shows nothing at 65536 or when the context is unknown", () => {
     withModels("ollama", [65536, 0]);
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.queryByText(/context —/)).toBeNull();
     expect(screen.queryByTestId("ollama-context-fix")).toBeNull();
   });
 
   it("renders the fix once per endpoint, not per model, and not for non-Ollama servers", () => {
     withModels("ollama", [4096, 8192], true);
-    const { unmount } = render(<LocalModelsSection />);
+    const { unmount } = renderSection();
     expect(screen.getAllByTestId("ollama-context-fix")).toHaveLength(2);
     unmount();
     withModels("vllm", [4096]);
-    render(<LocalModelsSection />);
+    renderSection();
     expect(screen.queryByTestId("ollama-context-fix")).toBeNull();
     expect(screen.getByText(/4K context — too small/)).toBeTruthy();
   });

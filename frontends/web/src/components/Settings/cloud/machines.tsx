@@ -86,13 +86,11 @@ import {
   suspendDaemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
 import {
   DaemonStatus,
-  ListDaemonsRequestSchema,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { daemonListQuery, fetchDaemonList, invalidateDaemonList } from "@/hooks/daemon-registry-queries";
 import {
   LIFECYCLE_PHASE_UNSPECIFIED,
   lifecyclePlan,
@@ -140,14 +138,12 @@ const RepoSelector = React.lazy(() =>
 );
 
 // ── Query keys ──────────────────────────────────────────────────────────────
+// The machine LIST is not here: it is the one shared daemon list
+// (daemon-registry-queries), which the list view and the detail view both read
+// on their own cadence. A restart's 2s poll therefore refreshes every reader
+// of the list while it runs — one list, one answer
+// (docs/design/one-daemon-list.md).
 const QK = {
-  daemons: ["cp", "environments", "list"] as const,
-  // The detail view reads the same registry list but on its own cadence (2s
-  // during a restart). A separate key rather than sharing QK.daemons: two
-  // observers of one key negotiate a single interval, so sharing would either
-  // slow the restart progress copy to the list's 15s or speed the whole list
-  // up to 2s for every mounted consumer.
-  detailList: ["cp", "environments", "detailList"] as const,
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
   // Shared with the header DetectedPortsChip's one-click-public toggle so a
   // "Make public" there invalidates this panel's rules query and vice-versa.
@@ -523,17 +519,10 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // calls control-plane's GetDaemon, which is kept deliberately: port-access
   // rules, the workspace base domain and the provisioning spec are
   // control-plane concerns with no reliant equivalent.
-  const daemonsQ = useQuery({
-    queryKey: QK.daemons,
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons;
-    },
+  const daemonsQ = useQuery(daemonListQuery({
     staleTime: 10_000,
     refetchInterval: 15_000,
-  });
+  }));
 
   // THE GATE. GetCurrentUserComputeEligibility is the server's own prediction
   // of internal/svcdaemon.checkDaemonSizeAllowed, and it is the only thing that
@@ -562,7 +551,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // would just move the denial to after the click.
   const canCreate = Boolean(eligibilityQ.data?.eligible) && allowedSizes.length > 0;
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
+  const invalidate = () => invalidateDaemonList(qc);
 
   const suspendMut = useMutation({
     mutationFn: (id: string) => suspendDaemon(id),
@@ -1607,16 +1596,9 @@ function EnvironmentDetail({
   // domain, idle timeout, storage) come from control-plane's GetDaemon, which
   // is kept deliberately for exactly this: they have no reliant equivalent.
   // See docs/design/one-daemon-list.md.
-  const listQ = useQuery({
-    queryKey: QK.detailList,
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons;
-    },
+  const listQ = useQuery(daemonListQuery({
     refetchInterval: restartStage ? 2_000 : 15_000,
-  });
+  }));
   const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
 
   const daemonQ = useQuery({
@@ -1635,8 +1617,7 @@ function EnvironmentDetail({
 
   const refetchAll = () => {
     qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
-    qc.invalidateQueries({ queryKey: QK.detailList });
-    qc.invalidateQueries({ queryKey: QK.daemons });
+    invalidateDaemonList(qc);
   };
 
   const suspendMut = useMutation({
@@ -1651,7 +1632,7 @@ function EnvironmentDetail({
   });
   const deleteMut = useMutation({
     mutationFn: () => deleteDaemon(daemonId),
-    onSuccess: () => { setDeleteOpen(false); qc.invalidateQueries({ queryKey: QK.daemons }); onBack(); },
+    onSuccess: () => { setDeleteOpen(false); invalidateDaemonList(qc); onBack(); },
     onError: (e) => setError(describeError(e, "Failed to delete machine")),
   });
 
@@ -1681,11 +1662,9 @@ function EnvironmentDetail({
       // list keeps the signal restartMachine waits on (phase SUSPENDED) and
       // the status the UI shows from coming out of two different services,
       // which is the disagreement docs/design/one-daemon-list.md removes.
+      // Through the shared entry, so each poll also moves the page's status.
       poll: async () => {
-        const resp = await grpcClient
-          .daemonRegistry()
-          .listDaemons(create(ListDaemonsRequestSchema));
-        const row = resp.daemons.find((d) => d.daemonId === daemonId);
+        const row = (await fetchDaemonList(qc)).find((d) => d.daemonId === daemonId);
         return {
           phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
           status: row?.status ?? 0,

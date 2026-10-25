@@ -19,7 +19,6 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ activeDaemon: state.activeId ? { daemonId: state.activeId } : undefined }),
-  invalidateDaemonList: vi.fn(),
   reconcileDaemonHeartbeat: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));

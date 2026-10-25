@@ -24,12 +24,14 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
 }));
 
 const listDaemons = vi.hoisted(() => vi.fn());
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons }) },
-}));
-
 import { useDaemonWait } from "../useDaemonWait";
-import { DAEMON_LIST_QUERY_KEY, invalidateDaemonList } from "../useDaemonStatus";
+import { cachedDaemonList, invalidateDaemonList } from "../daemon-registry-queries";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemons() })));
+afterEach(() => setTransport(null));
 
 function daemon(status: DaemonStatus): DaemonInfo {
   return create(DaemonInfoSchema, { daemonId: "d1", status });
@@ -74,7 +76,7 @@ describe("useDaemonWait's status reads", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(client.getQueryData(DAEMON_LIST_QUERY_KEY)).toHaveLength(1);
+    expect(cachedDaemonList(client)).toHaveLength(1);
 
     // The gateway's `daemons` refetch reaches the waiting surface.
     listDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.ACTIVE)] });

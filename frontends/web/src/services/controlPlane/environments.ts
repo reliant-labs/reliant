@@ -1,7 +1,6 @@
 /**
  * Environments service — thin wrappers around the control-plane public
- * `controlplane.v1.DaemonService` + `BillingService`, plus the daemon
- * personal-access-token (`reliant.v1.TokenService`, kind DAEMON) surface.
+ * `controlplane.v1.DaemonService` + `BillingService`.
  *
  * This is the data layer for the in-app Settings → Environments section
  * (`components/Settings/cloud/machines.tsx`), which ports admin-web's
@@ -11,17 +10,15 @@
  * for `listDaemons` / the `Daemon` type / status constants rather than
  * duplicating them — onboarding (ComputeStep, DaemonConnectingGate) already
  * depends on that module. This file only ADDS the create/get/update/lifecycle
- * + port-access + token RPCs the section needs on top.
+ * + port-access RPCs the section needs on top.
  *
- * Two transports are in play, matching the rest of the app:
- *   - Daemon lifecycle + billing → `getControlPlaneClient(...)`
- *     (controlplane.v1 public, dials admin-server).
- *   - Access tokens → `grpcClient.token()` (reliant.v1.TokenService on
- *     reliant's api-server, which fronts the deployment's token authority).
+ * Daemon lifecycle + billing go through `getControlPlaneClient(...)`
+ * (controlplane.v1 public, dials admin-server). Access tokens are not here:
+ * they are reliant.v1.TokenService on forge's generated hooks
+ * (`hooks/token-queries.ts`).
  */
 import { ConnectError } from "@connectrpc/connect";
 
-import { grpcClient } from "@/api/grpc-client";
 import { DaemonService } from "@/gen/controlplane/services/daemon/v1/daemon_pb";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import {
@@ -33,8 +30,6 @@ import {
   type PortAccessRule,
   type Subscription,
 } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import type { TokenInfo } from "@/gen/reliant/v1/token_pb";
-import { TokenKind } from "@/gen/reliant/v1/token_pb";
 import { getControlPlaneClient } from "./client";
 
 // Re-export the shared daemon surface so the section imports everything from
@@ -182,30 +177,4 @@ export async function setDefaultPortAccess(args: {
 export async function getComputeSubscription(): Promise<Subscription | null> {
   const res = await getControlPlaneClient(BillingService).getCurrentUserComputeSubscription({});
   return res.subscription ?? null;
-}
-
-// ── Access tokens (reliant.v1.TokenService, TokenKind.DAEMON) ───────────────
-
-export async function listDaemonTokens(): Promise<TokenInfo[]> {
-  const res = await grpcClient.token().listTokens({ kind: TokenKind.DAEMON });
-  return res.tokens;
-}
-
-export interface CreateDaemonTokenResult {
-  /** Raw token — shown exactly once. */
-  token: string;
-  tokenId: string;
-}
-
-export async function createDaemonToken(name: string): Promise<CreateDaemonTokenResult> {
-  const res = await grpcClient
-    .token()
-    .createToken({ name, kind: TokenKind.DAEMON });
-  // CreateTokenResponse carries the id on `info`, not at the top level.
-  return { token: res.token, tokenId: res.info?.id ?? "" };
-}
-
-export async function revokeDaemonToken(tokenId: string): Promise<void> {
-  // RevokeTokenRequest's field is `id`, not `token_id`.
-  await grpcClient.token().revokeToken({ id: tokenId });
 }

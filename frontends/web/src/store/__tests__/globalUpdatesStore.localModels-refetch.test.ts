@@ -12,7 +12,7 @@ vi.mock("../../api/streaming-grpc", () => ({
 }));
 
 import { queryClient } from "../../lib/query-client";
-import { DAEMON_LIST_QUERY_KEY } from "../../hooks/useDaemonStatus";
+import { DAEMON_LIST_QUERY_KEY, EMPTY_DAEMON_LIST } from "../../hooks/daemon-registry-queries";
 import { useGlobalDataStore } from "../globalDataStore";
 import { useGlobalUpdatesStore } from "../globalUpdatesStore";
 
@@ -33,7 +33,7 @@ let refetchModels: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   queryClient.clear();
-  queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, []);
+  queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, EMPTY_DAEMON_LIST);
   refetchModels = vi.fn(async () => {});
   useGlobalDataStore.setState({ refetchModels } as never);
 });
