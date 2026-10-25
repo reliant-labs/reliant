@@ -5,7 +5,7 @@ import { useBookmarksStore, type Bookmark } from "../../store/bookmarksStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
 import {
@@ -173,7 +173,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
           onToggle={() => setTabsExpanded(!tabsExpanded)}
           actions={
             <>
-              <Tooltip content="New tab" placement="left">
+              <Tooltip content="New tab" side="left">
                 <button
                   onClick={handleNewTab}
                   className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
@@ -182,7 +182,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                 </button>
               </Tooltip>
               {worktreeTabs.length > 1 && (
-                <Tooltip content="Close all tabs" placement="left">
+                <Tooltip content="Close all tabs" side="left">
                   <button
                     onClick={handleCloseAllTabs}
                     className="p-1 text-muted-foreground hover:text-destructive-ink hover:bg-destructive/10 rounded transition-colors"
@@ -238,7 +238,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {!isBookmarked(tab.url) && (
-                      <Tooltip content="Add to bookmarks" placement="left">
+                      <Tooltip content="Add to bookmarks" side="left">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -250,7 +250,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
                         </button>
                       </Tooltip>
                     )}
-                    <Tooltip content="Close tab" placement="left">
+                    <Tooltip content="Close tab" side="left">
                       <button
                         onClick={(e) => handleCloseTab(e, tab.id)}
                         className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"
@@ -316,7 +316,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Tooltip content="Remove bookmark" placement="left">
+                    <Tooltip content="Remove bookmark" side="left">
                       <button
                         onClick={(e) => handleRemoveBookmark(e, bookmark.id)}
                         className="p-1 rounded hover:bg-destructive/20 hover:text-destructive-ink"

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, AlertCircle, X, ChevronDown, ChevronRight } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ConfigSeverity } from "../../gen/reliant/v1/settings_pb";
 import { useGetConfigHealth } from "../../hooks/settings-service-hooks_gen";
 
@@ -92,7 +92,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
     <div ref={dropdownRef} className={cn("relative", className)}>
       <Tooltip
         content={`${health.errorCount} error${health.errorCount !== 1 ? "s" : ""}, ${health.warningCount} warning${health.warningCount !== 1 ? "s" : ""}`}
-        placement="bottom"
+        side="bottom"
         delay={300}
       >
         <button

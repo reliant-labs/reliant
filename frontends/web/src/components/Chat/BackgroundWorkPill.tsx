@@ -26,7 +26,7 @@
  * the asking thread, where the composer answers it.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -155,7 +155,7 @@ function SpawnRow({
             spawn.toolCallId
               ? "Cancel background agent"
               : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
-          } placement="bottom" delay={300} wrapperClassName="inline-flex">
+          } side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           type="button"
           onClick={handleCancel}
@@ -294,9 +294,9 @@ function FailedSpawnRow({
               ? "Ask its parent to resume this agent where it stopped"
               : "This agent's parent is not known, so it cannot be asked to retry it"
           }
-          placement="bottom"
+          side="bottom"
           delay={300}
-          wrapperClassName="inline-flex"
+          triggerClassName="inline-flex"
         >
           <button
             type="button"
@@ -308,7 +308,7 @@ function FailedSpawnRow({
             <RotateCw className={cn("h-3.5 w-3.5 text-foreground", retry === "sending" && "animate-spin")} />
           </button>
         </Tooltip>
-        <Tooltip content="Dismiss" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Dismiss" side="bottom" delay={300} triggerClassName="inline-flex">
           <button
             type="button"
             onClick={handleDismiss}

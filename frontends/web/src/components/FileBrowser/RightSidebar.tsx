@@ -20,7 +20,7 @@ import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
 import { copyFile, moveFile, copyDirectoryRecursive, createFolder, deleteFileOrFolder } from "../../api/fileSystem";
 import { toast } from "../../lib/toast-manager";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
@@ -500,7 +500,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     >
       {/* Tabs */}
       <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <Tooltip content="Files (Cmd+K F)" placement="bottom" delay={300}>
+        <Tooltip content="Files (Cmd+K F)" side="bottom" delay={300}>
           <button
             aria-label="Files"
             onClick={handleFilesTabClick}
@@ -519,7 +519,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <Files className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Changes (Cmd+K G)" placement="bottom" delay={300}>
+        <Tooltip content="Changes (Cmd+K G)" side="bottom" delay={300}>
           <button
             aria-label="Changes"
             onClick={() => handleTabClick("changes")}
@@ -538,7 +538,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <GitBranch className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Processes: monitor running commands (Cmd+K R)" placement="bottom" delay={300}>
+        <Tooltip content="Processes: monitor running commands (Cmd+K R)" side="bottom" delay={300}>
           <button
             aria-label="Processes"
             onClick={() => handleTabClick("processes")}
@@ -562,7 +562,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content="Tasks (Cmd+K K)" placement="bottom" delay={300}>
+        <Tooltip content="Tasks (Cmd+K K)" side="bottom" delay={300}>
           <button
             aria-label="Tasks"
             onClick={() => handleTabClick("tasks")}
@@ -600,7 +600,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {/* The in-app browser is an Electron <webview> — hide its sidebar entirely
             in the web build, where it cannot be mounted. */}
         {isElectron() && (
-          <Tooltip content="Browser (Cmd+K V)" placement="bottom" delay={300}>
+          <Tooltip content="Browser (Cmd+K V)" side="bottom" delay={300}>
             <button
             aria-label="Browser"
               onClick={() => handleTabClick("browser")}
@@ -632,7 +632,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {currentProject && (
           <>
             <span className="self-center h-4 w-px bg-border mx-1" />
-            <Tooltip content={isTerminalOpen ? "Hide terminal (Cmd+J)" : "Show terminal (Cmd+J)"} placement="bottom" delay={300}>
+            <Tooltip content={isTerminalOpen ? "Hide terminal (Cmd+J)" : "Show terminal (Cmd+J)"} side="bottom" delay={300}>
               <button
                 onClick={toggleTerminal}
                 tabIndex={-1}

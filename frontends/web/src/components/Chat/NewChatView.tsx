@@ -43,7 +43,7 @@ import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
 import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
@@ -406,7 +406,7 @@ export function NewChatView({
                 <div className="relative" ref={workspaceDropdownRef}>
                   <Tooltip
                     content="Workspaces are isolated copies of your codebase, powered by git worktrees — run multiple agents in parallel without conflicts."
-                    placement="top"
+                    side="top"
                   >
                     <button
                       onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
@@ -505,7 +505,7 @@ export function NewChatView({
                 {/* Quick create workspace */}
                 <Tooltip
                   content="Create an isolated copy of your codebase (a git worktree) so another agent can work in parallel without conflicts."
-                  placement="top"
+                  side="top"
                 >
                   <button
                     onClick={() => setShowCreateWorktreeModal(true)}

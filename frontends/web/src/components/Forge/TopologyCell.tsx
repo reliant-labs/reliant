@@ -20,7 +20,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   shortDigest,
   stateExplanation,
@@ -44,7 +44,7 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
         data-testid={`cell-${env}-${cell.image}`}
         data-absent="true"
       >
-        <Tooltip content={`${cell.image} is not in this environment's release`}>
+        <Tooltip content={`${cell.image} is not in this environment's release`} triggerClassName="block">
           <span
             className="inline-flex h-6 w-full items-center justify-center rounded-md text-muted-foreground/60"
             aria-label={`${cell.image}: not in this release`}
@@ -73,7 +73,7 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
 
   return (
     <td className="px-3 py-2 align-middle" data-testid={`cell-${env}-${cell.image}`}>
-      <Tooltip content={tooltip}>
+      <Tooltip content={tooltip} triggerClassName="block">
         <span
           // data-certainty is the stable hook the contract test reads. The
           // classes below are the human-visible half of the same fact.

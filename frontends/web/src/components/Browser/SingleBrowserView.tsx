@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ChevronLeft, ChevronRight, RotateCw, Search, Lock, Code } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useBrowserStore } from "../../store/browserStore";
@@ -292,7 +292,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
       {/* Navigation Controls and Address Bar */}
       <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/10 border-b border-border flex-shrink-0">
         {/* Navigation Buttons */}
-        <Tooltip content="Go Back" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Go Back" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={handleGoBack}
           disabled={!tab.canGoBack}
@@ -306,7 +306,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
         </button>
 </Tooltip>
 
-        <Tooltip content="Go Forward" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Go Forward" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={handleGoForward}
           disabled={!tab.canGoForward}
@@ -320,7 +320,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
         </button>
 </Tooltip>
 
-        <Tooltip content="Reload" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Reload" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={handleReload}
           className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Reload">
@@ -360,7 +360,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
           </div>
         </form>
 
-        <Tooltip content="Open DevTools" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Open DevTools" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={handleOpenDevTools}
           className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Open DevTools">

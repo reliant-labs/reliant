@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { focusChatInput } from "../../hooks/useFocusManager";
@@ -117,7 +117,7 @@ export function ImagePreviewModal({
         </div>
         
         {/* Close button */}
-        <Tooltip content="Close (ESC)" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+        <Tooltip content="Close (ESC)" side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
           onClick={onClose}
           className="p-1.5 hover:bg-white/10 rounded-md transition-colors flex-shrink-0" aria-label="Close (ESC)">

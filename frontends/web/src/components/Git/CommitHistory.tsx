@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { useWorktreeCommits } from '../../hooks/worktree-git-queries';
 import { cn } from '../../lib/utils';
 import { toast } from '../../lib/toast-manager';
-import { Tooltip } from '../ui/Tooltip';
+import Tooltip from '../forge-ui/tooltip';
 
 interface CommitHistoryProps {
   worktreeId: string;
@@ -102,7 +102,7 @@ export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, 
           {data.total === 1 ? "commit" : "commits"}
           {compareLabel && <span className="font-mono"> · {compareLabel}</span>}
         </p>
-        <Tooltip content="Refresh commits" delay={300} wrapperClassName="flex">
+        <Tooltip content="Refresh commits" delay={300} triggerClassName="flex">
           <button
             type="button"
             onClick={() => void fetchCommits()}
@@ -132,7 +132,7 @@ export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, 
                 {commit.message}
               </p>
               <div className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
-                <Tooltip content="Copy full hash" delay={300} wrapperClassName="flex">
+                <Tooltip content="Copy full hash" delay={300} triggerClassName="flex">
                   <button
                     type="button"
                     onClick={() => void copyToClipboard(commit.hash, commit.short_hash)}

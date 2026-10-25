@@ -32,7 +32,7 @@ import { DragDropOverlay } from "./DragDropOverlay";
 import { api } from "../../api/client";
 import type { ConnectionStatus } from "../../types/streaming";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { getAcceptedMimeTypes } from "../../lib/filetypes";
 import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
@@ -1925,7 +1925,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
                         return (
                           <div className="relative">
-                            <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
+                            <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
 <button
                               className={cn(
                                 "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
@@ -1955,7 +1955,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                 ? "Hide settings"
                                 : "Show all settings"
                             }
-                            placement="top"
+                            side="top"
                           >
                             <button
                               data-contextual-tip="params-toggle"

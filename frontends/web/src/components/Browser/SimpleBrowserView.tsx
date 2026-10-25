@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { Globe, Plus, X, ChevronLeft, ChevronRight, RotateCw, Search, Lock, Code } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useBrowserStore } from "../../store/browserStore";
@@ -336,7 +336,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
         </div>
 
         {/* New Tab Button */}
-        <Tooltip content="New Tab" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+        <Tooltip content="New Tab" side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
           onClick={handleCreateTab}
           className="px-3 py-1.5 hover:bg-accent transition-colors border-l border-border flex-shrink-0" aria-label="New Tab">
@@ -349,7 +349,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
       {selectedTab && (
         <div className="flex items-center gap-2 px-2 py-1.5 bg-muted/10 border-b border-border flex-shrink-0">
           {/* Navigation Buttons */}
-          <Tooltip content="Go Back" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Go Back" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleGoBack}
             disabled={!selectedTab.canGoBack}
@@ -363,7 +363,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
           </button>
 </Tooltip>
 
-          <Tooltip content="Go Forward" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Go Forward" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleGoForward}
             disabled={!selectedTab.canGoForward}
@@ -377,7 +377,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
           </button>
 </Tooltip>
 
-          <Tooltip content="Reload" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Reload" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleReload}
             className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Reload">
@@ -419,7 +419,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
             </div>
           </form>
 
-          <Tooltip content="Open DevTools" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Open DevTools" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleOpenDevTools}
             className="p-1.5 rounded hover:bg-accent transition-colors" aria-label="Open DevTools">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import {
   GitMerge,
   RefreshCw,
@@ -122,7 +122,7 @@ export function FloatingWorkflowSidebar({
               const Icon = getNodeIcon(node.id)
               const bgColor = getNodeBgColor(node.id)
               return (
-                <Tooltip key={node.id} content={node.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip key={node.id} content={node.description} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   onClick={() => onAddStep(node.id)}

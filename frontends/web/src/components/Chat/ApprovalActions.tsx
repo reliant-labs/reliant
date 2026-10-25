@@ -7,7 +7,7 @@
  * shortcut.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 
@@ -41,7 +41,7 @@ export function ApprovalActions({
 
   return (
     <div className={cn("flex items-center gap-2", isNarrow && "flex-1 flex-wrap")}>
-      <Tooltip content={approveLabel} placement="bottom" delay={300} wrapperClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
+      <Tooltip content={approveLabel} side="bottom" delay={300} triggerClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
 <button
         type="button"
         onClick={onApprove}
@@ -63,7 +63,7 @@ export function ApprovalActions({
       </button>
 </Tooltip>
 
-      <Tooltip content={denyLabel} placement="bottom" delay={300} wrapperClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
+      <Tooltip content={denyLabel} side="bottom" delay={300} triggerClassName={isNarrow ? "flex flex-1" : "inline-flex"}>
 <button
         type="button"
         onClick={onDeny}

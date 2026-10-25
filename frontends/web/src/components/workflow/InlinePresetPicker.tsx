@@ -4,7 +4,7 @@ import { useCallback, useState, useRef, useEffect } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import type { Preset } from "../../hooks/preset-queries";
 import { isCelTemplate } from "../../lib/celTemplate";
 
@@ -105,7 +105,7 @@ export function InlinePresetPicker({
               ? `${groupLabel ? groupLabel + ": " : ""}${selectedPreset.name}`
               : `Select ${groupLabel ? groupLabel + " preset" : "a preset"}`
         }
-        placement="top"
+        side="top"
       >
         <button
           type="button"

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, GitBranch, RefreshCw, X } from "lucide-react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { IconButton } from "./IconButton";
 import { pluralize } from "./fileStatus";
@@ -70,7 +70,7 @@ export function SyncCounts({ ahead, behind }: { ahead: number; behind: number })
     behind > 0 ? `${pluralize(behind, "commit")} to pull` : null,
   ].filter(Boolean);
   return (
-    <Tooltip content={parts.join(", ")} delay={300} wrapperClassName="flex shrink-0">
+    <Tooltip content={parts.join(", ")} delay={300} triggerClassName="flex shrink-0">
       <span className="flex items-center gap-1.5 font-mono text-2xs tabular-nums text-muted-foreground">
         {ahead > 0 && (
           <span className="flex items-center" aria-label={`${ahead} ahead`}>
