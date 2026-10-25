@@ -1,16 +1,18 @@
 /**
  * MobileChatSearchTab — chat title search via the same server-side FTS
- * (`api.chatsV2.search`) desktop's `ChatSearch` history mode uses.
+ * (ChatService.SearchChats, useChatSearch) desktop's `ChatSearch` history
+ * mode uses.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { SearchChatsRequest } from "@/gen/reliant/v1/chat_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
+/** The fake server: `search(projectId, query)` answers the matching chats. */
 const search = vi.fn();
-vi.mock("../../../api/client", () => ({
-  api: { chatsV2: { search: (...args: unknown[]) => search(...args) } },
-}));
 
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector: (s: unknown) => unknown) =>
@@ -66,7 +68,17 @@ function renderTab(query: string) {
 
 beforeEach(() => {
   search.mockReset();
+  setTransport(
+    mockTransport({
+      "ChatService.SearchChats": async (request: unknown) => {
+        const { projectId, query } = request as SearchChatsRequest;
+        return { chats: (await search(projectId, query)) ?? [] };
+      },
+    }),
+  );
 });
+
+afterEach(() => setTransport(null));
 
 describe("MobileChatSearchTab", () => {
   it("shows recent chats when the query is empty", async () => {

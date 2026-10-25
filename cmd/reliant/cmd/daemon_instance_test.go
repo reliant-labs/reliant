@@ -96,10 +96,10 @@ func TestResolveDataDir_AllFourCommandsAgree(t *testing.T) {
 	}
 }
 
-// TestResolveDataDir_ExplicitDataDirWins covers the containers.
-// docker-compose.yml and docker-compose.cloud.yml both set DAEMON_DATA_DIR=/data
-// where the volume is mounted; derivation would put daemon state on the
-// container's ephemeral filesystem instead.
+// TestResolveDataDir_ExplicitDataDirWins covers the containers: the workspace
+// operator's pods set DAEMON_DATA_DIR to where the volume is mounted;
+// derivation would put daemon state on the container's ephemeral filesystem
+// instead.
 func TestResolveDataDir_ExplicitDataDirWins(t *testing.T) {
 	isolateInstanceEnv(t)
 	worktree := initGitRepo(t)

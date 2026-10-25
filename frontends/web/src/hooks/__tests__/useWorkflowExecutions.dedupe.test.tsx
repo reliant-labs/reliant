@@ -22,12 +22,14 @@ import React from "react";
 
 const getWorkflowExecutionsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: {
-    getWorkflowExecutions: getWorkflowExecutionsMock,
-  },
-}));
+// Answered at the transport: the hook reads the generated
+// GetWorkflowExecutions entry, so the fake stands in for the server.
+beforeEach(() => setTransport(mockTransport(workflowExecutionsAnswer(getWorkflowExecutionsMock))));
+afterEach(() => setTransport(null));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { workflowExecutionsAnswer } from "@/test/chatPullReads";
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
 import { triggerRefetch } from "../../store/refetchStore";
 import { WorkflowExecutionView } from "../../gen/reliant/v1/chat_pb";

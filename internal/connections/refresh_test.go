@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/stretchr/testify/require"
 )
 
@@ -103,6 +104,55 @@ func TestRefresh_TwoWorkersRaceResolvedByGeneration(t *testing.T) {
 	}
 	require.Equal(t, 1, int(e.gh.refreshCalls.Load()), "the loser must read the winner's generation, not refresh again")
 	require.Equal(t, "active", mustStatus(t, e, conn.ID), "a lost race must not push the connection into needs_reauth")
+}
+
+// secretsAfter runs before() once, just before the first GetSecrets: the
+// moment between a caller's connection read and its secrets read.
+type secretsAfter struct {
+	db.ConnectionStore
+	once   sync.Once
+	before func()
+}
+
+func (s *secretsAfter) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+	s.once.Do(s.before)
+	return s.ConnectionStore.GetSecrets(ctx, userID, id)
+}
+
+// The interleaving behind TestRefresh_TwoWorkersRaceResolvedByGeneration's
+// flake, made deterministic: worker B reads the connection (its access
+// token expired), worker A refreshes and commits, and only then does B read
+// the secrets. B holds A's NEW generation beside the OLD expiry, so the
+// generation check alone sees nothing replaced and B refreshed a second time.
+// The locked view (generation and expiry read together) must show that A's
+// token, issued after B's read, is the answer.
+func TestRefresh_StaleExpiryBesideFreshGenerationDoesNotRefreshAgain(t *testing.T) {
+	e := newEnv(t)
+	conn := e.connect("alice", "a")
+	e.expireAccessToken(conn.ID)
+	genBefore := e.generation(conn.ID, core.SecretFieldAccessToken)
+	doer := redirectingDoer{target: e.gh.srv}
+	workerA := connections.NewTokenSource(e.store, e.vault, e.providers, doer)
+	var tokA string
+	store := &secretsAfter{ConnectionStore: e.store, before: func() {
+		tok, err := workerA.Token(context.Background(), "alice", conn.ID)
+		require.NoError(t, err)
+		tokA = reveal(t, tok)
+	}}
+	workerB := connections.NewTokenSource(store, e.vault, e.providers, doer)
+
+	tokB, err := workerB.Token(context.Background(), "alice", conn.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, int(e.gh.refreshCalls.Load()), "B must take A's refreshed token, not refresh again")
+	require.Equal(t, tokA, reveal(t, tokB), "B returns the token A's refresh issued")
+	require.Equal(t, genBefore+1, e.generation(conn.ID, core.SecretFieldAccessToken), "exactly one rewrite")
+}
+
+func reveal(t *testing.T, s vault.Secret) string {
+	t.Helper()
+	var out string
+	require.NoError(t, s.Use(func(b []byte) error { out = string(b); return nil }))
+	return out
 }
 
 func mustStatus(t *testing.T, e *env, id string) string {

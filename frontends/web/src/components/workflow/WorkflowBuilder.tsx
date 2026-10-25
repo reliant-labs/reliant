@@ -72,7 +72,7 @@ import {
   CheckCircle2,
   PencilRuler,
 } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { splitFindings, type DraftStatus } from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
 import { WorkflowStatusChip } from "./WorkflowStatusChip";

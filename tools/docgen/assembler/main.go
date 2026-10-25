@@ -858,7 +858,7 @@ func generateInputTypesSummary() string {
 func extractTopLevelSchema(schemaPath string) (string, error) {
 	content, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return "", fmt.Errorf("reading workflow schema: %w (run 'make generate-schema' first)", err)
+		return "", fmt.Errorf("reading workflow schema: %w (run 'task generate:docs:schema' first)", err)
 	}
 
 	text := cleanMarkdown(string(content))
@@ -885,7 +885,7 @@ func extractTopLevelSchema(schemaPath string) (string, error) {
 func extractScenarioEssentials(scenarioPath string) (string, error) {
 	content, err := os.ReadFile(scenarioPath)
 	if err != nil {
-		return "", fmt.Errorf("reading scenario schema: %w (run 'make generate-scenario-schema' first)", err)
+		return "", fmt.Errorf("reading scenario schema: %w (run 'task generate:docs:scenario-schema' first)", err)
 	}
 
 	text := cleanMarkdown(string(content))
@@ -1227,7 +1227,7 @@ func resolveReferenceFile(docsDir, filename string) (string, error) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("could not find %s under %s or %s (run 'make generate-schema generate-scenario-schema' first)", filename, candidates[0], candidates[1])
+	return "", fmt.Errorf("could not find %s under %s or %s (run 'task generate:docs:schema generate:docs:scenario-schema' first)", filename, candidates[0], candidates[1])
 }
 
 func extractSection(text, startMarker, endMarker string) string {

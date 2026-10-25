@@ -6,7 +6,7 @@
  */
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { create } from "@bufbuild/protobuf";
 
@@ -16,11 +16,14 @@ import { useActivityStore } from "../../../store/activityStore";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import type { Message } from "../../../api/client";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
 
 const state = vi.hoisted(() => ({
   chat: undefined as Record<string, unknown> | undefined,
-  retry: vi.fn(async (_chatId: string, _useModel?: string) => true),
+  // The fake RetryUsageLimitWait: `retry(request)` answers whether a run woke.
+  retry: vi.fn(async (_request: { chatId: string; useModel?: string }) => true),
   selection: null as Record<string, unknown> | null,
   models: [] as Array<Record<string, unknown>>,
   tiers: {} as Record<string, unknown>,
@@ -38,10 +41,6 @@ vi.mock("../../../store/globalDataStore", () => ({
 vi.mock("../../../hooks/provider-account-queries", () => ({
   useProviderAccounts: () => ({ kind: "ready", accounts: state.accounts }),
 }));
-vi.mock("../../../api/client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../api/client")>();
-  return { ...actual, api: { ...actual.api, chatsV2: { ...actual.api.chatsV2, retryUsageLimitWait: state.retry } } };
-});
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useDaemonList: () => ({ data: state.daemons, isLoading: false }),
   useResumeDaemon: () => ({ mutate: vi.fn(), isPending: false }),
@@ -106,7 +105,21 @@ function renderPresenter() {
   );
 }
 
+afterEach(() => setTransport(null));
+
+/** A RetryUsageLimitWait request: a plain retry, or one that answers with `useModel`. */
+function retryOf(chatId: string, useModel?: string) {
+  return expect.objectContaining(useModel === undefined ? { chatId } : { chatId, useModel });
+}
+
 beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "ChatService.RetryUsageLimitWait": async (req: unknown) => ({
+        woken: await state.retry(req as { chatId: string; useModel?: string }),
+      }),
+    }),
+  );
   state.retry.mockClear();
   onStop.mockClear();
   state.selection = null;
@@ -151,7 +164,7 @@ describe("ChatPresenter: a run held for a usage limit", () => {
   it("Retry now wakes the server's timer for this chat", async () => {
     renderPresenter();
     fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
-    await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1"));
+    await waitFor(() => expect(state.retry).toHaveBeenCalledWith(retryOf("chat-1")));
   });
 
   it("offers no model switch when nothing else can serve", () => {
@@ -171,14 +184,14 @@ describe("ChatPresenter: a run held for a usage limit", () => {
     it("\"Use <model> now\" sends use_model, not a plain retry", async () => {
       renderPresenter();
       fireEvent.click(screen.getByRole("button", { name: "Use GPT-5.6 Sol · Codex now" }));
-      await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1", "gpt-5.6-sol@codex"));
+      await waitFor(() => expect(state.retry).toHaveBeenCalledWith(retryOf("chat-1", "gpt-5.6-sol@codex")));
     });
 
     it("Retry now stays a plain retry beside it", async () => {
       renderPresenter();
       fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
-      await waitFor(() => expect(state.retry).toHaveBeenCalledWith("chat-1"));
-      expect(state.retry).not.toHaveBeenCalledWith("chat-1", expect.anything());
+      await waitFor(() => expect(state.retry).toHaveBeenCalledWith(retryOf("chat-1")));
+      expect(state.retry.mock.calls.some(([request]) => request.useModel)).toBe(false);
     });
 
     it("names the account of the limited provider that returns first", () => {

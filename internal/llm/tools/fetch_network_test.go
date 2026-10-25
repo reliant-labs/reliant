@@ -68,6 +68,19 @@ func TestFetchNetwork_PrivateIsBlockedByDefaultAndAllowedWithTheOptIn(t *testing
 	}
 }
 
+// Forge's refused set: the Private Google Access VIPs and the NAT64
+// well-known prefix (public embeddings included) are private-tier, so the
+// opt-in opens them and nothing else does.
+func TestFetchNetwork_ForgeRefusalsArePrivateTier(t *testing.T) {
+	for _, ip := range []string{"199.36.153.4", "199.36.153.11", "64:ff9b::8.8.8.8"} {
+		err := localDefault().CheckIP(net.ParseIP(ip))
+		require.Error(t, err, ip)
+		assert.ErrorIs(t, err, netguard.ErrBlockedAddress)
+		assert.Contains(t, err.Error(), optInSetting)
+		assert.NoError(t, localOptedIn().CheckIP(net.ParseIP(ip)), ip)
+	}
+}
+
 // The refusal tells the user which setting lets them choose otherwise, and says
 // nothing of the sort for what no setting can unblock or for a managed daemon.
 func TestFetchNetwork_RefusalNamesTheSetting(t *testing.T) {

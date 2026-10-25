@@ -43,9 +43,9 @@ type daemonInstanceFlags struct {
 // the repo root and `daemon stop` from electron/ addressed two different
 // daemons, and stop reported "No daemon running" over a live one. Empty means
 // "derive", and derivation is stable no matter where the command is invoked
-// from. Containers set DAEMON_DATA_DIR to their mounted volume
-// (docker-compose.yml, the workspace operator), where derivation would put the
-// daemon's state on the ephemeral filesystem.
+// from. Containers set DAEMON_DATA_DIR to their mounted volume (the workspace
+// operator's pods), where derivation would put the daemon's state on the
+// ephemeral filesystem.
 func daemonInstance(cfg *configv1.DaemonInstanceConfig) daemonInstanceFlags {
 	return daemonInstanceFlags{
 		dataDir:   cfg.GetDataDir(),

@@ -47,7 +47,7 @@ import {
   type TriggerDefinitionInput,
   type TriggerSender,
 } from "./trigger-model";
-import type { ReplayEventInput } from "../api/chat-grpc";
+import type { ReplayEventInput } from "./chat-model";
 import {
   triggerServiceKeys,
   useCreateTrigger as useCreateTriggerRpc,

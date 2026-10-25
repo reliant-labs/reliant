@@ -28,7 +28,7 @@
  * In-graph event types (message_created, pre_tool_use, …) stay EventNode.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { memo, type MouseEvent, type ReactNode } from "react";
 import { Handle, Position, useNodeConnections } from "@xyflow/react";
 import { AlertOctagon, AlertTriangle, CalendarClock, Clock, MessageCircle, Plug, Plus, Webhook, Workflow, Zap } from "lucide-react";
@@ -266,7 +266,7 @@ function DeclaredCard({ rail, line, compact }: { rail: TriggerRailContextValue; 
 function PersonalCard({ rail, line, compact }: { rail: TriggerRailContextValue | null; line: TriggerRailLine; compact: boolean }) {
   const { trigger, scheduleText, health, paused, failing } = line;
   return (
-    <Tooltip content={health.detail ?? health.label} placement="bottom" delay={300} wrapperClassName="flex w-full">
+    <Tooltip content={health.detail ?? health.label} side="bottom" delay={300} triggerClassName="flex w-full">
       <button
         type="button"
         onClick={stop(() => rail?.onEditTrigger(trigger))}
@@ -293,7 +293,7 @@ function PersonalCard({ rail, line, compact }: { rail: TriggerRailContextValue |
 
 function OrphanCard({ rail, orphan, compact }: { rail: TriggerRailContextValue | null; orphan: Trigger; compact: boolean }) {
   return (
-    <Tooltip content={orphan.health.lastFailureDetail || "Its trigger is gone"} placement="bottom" delay={300} wrapperClassName="flex w-full">
+    <Tooltip content={orphan.health.lastFailureDetail || "Its trigger is gone"} side="bottom" delay={300} triggerClassName="flex w-full">
       <button
         type="button"
         onClick={stop(() => rail?.onEditTrigger(orphan))}

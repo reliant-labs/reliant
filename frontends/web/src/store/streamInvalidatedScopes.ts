@@ -6,6 +6,11 @@
  * refetchStore subscribers both of them drive (worktree-queries,
  * useWorkflowExecutions, queued-agent-messages).
  *
+ * A root covers every key under it, so a handler may invalidate a narrower
+ * scope of a registered root (`chatServiceKeys.archivedChat` under
+ * `chatService`). Register the root once: two overlapping roots would sweep
+ * the reads under both twice.
+ *
  * Why one list: REFETCH signals are ephemeral. One sent while the stream is
  * down is never replayed, so on reconnect globalUpdatesStore re-reads every
  * root here (sweepStreamInvalidatedScopes) — once, coalesced, and only the
@@ -28,8 +33,7 @@
 
 import type { QueryKey } from "@tanstack/react-query";
 import { chatKeys } from "../hooks/chat-queries";
-import { chatDetailKeys } from "../hooks/chat-detail-keys";
-import { queuedAgentMessageKeys } from "../hooks/queued-agent-messages";
+import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { daemonRegistryServiceKeys } from "../hooks/daemon-registry-service-hooks_gen";
 import { runServiceKeys } from "../hooks/run-service-hooks_gen";
@@ -45,12 +49,14 @@ import { planServiceKeys } from "../hooks/plan-service-hooks_gen";
 import { taskServiceKeys } from "../hooks/task-service-hooks_gen";
 
 export const STREAM_INVALIDATED_SCOPES = {
-  // Chat list/detail/archived reads (chat lifecycle updates).
+  // Chat list/detail reads (chat lifecycle updates). Hand keys: the stream
+  // patches these in place.
   chats: chatKeys.all,
-  // A chat's execution tree (`workflow_executions`, useWorkflowExecutions).
-  chatDetails: chatDetailKeys.all,
-  // A thread's mailbox (`agent_mailbox`, queued-agent-messages).
-  queuedAgentMessages: queuedAgentMessageKeys.all,
+  // ChatService's pull reads on generated keys: the archived list (chat
+  // lifecycle updates, `.archivedChat`), a chat's execution tree
+  // (`workflow_executions`, useWorkflowExecutions), a thread's mailbox
+  // (`agent_mailbox`, queued-agent-messages, `.queuedAgentMessage`).
+  chatService: chatServiceKeys.all,
   // Pending approvals (a chat going idle).
   approvals: approvalServiceKeys.all,
   // The one daemon list, every reader of it (`daemons`, `daemon_local_models`,

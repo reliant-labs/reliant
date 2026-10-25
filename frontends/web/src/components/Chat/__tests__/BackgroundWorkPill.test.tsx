@@ -58,7 +58,6 @@ import type { BackgroundProcessSchema } from "../../../gen/reliant/v1/background
 import { setTransport } from "../../../lib/connect";
 import { mockTransport } from "../../../lib/test-utils";
 import { BackgroundWorkPill, DISMISSED_FAILED_AGENTS_KEY } from "../BackgroundWorkPill";
-import { chatGrpc } from "../../../api/chat-grpc";
 import { toast } from "../../../lib/toast-manager";
 
 const originalCancelToolCall = useChatStore.getState().cancelToolCall;
@@ -119,6 +118,8 @@ function setChatRunning(running: boolean) {
 }
 
 /** What BackgroundService.ListProcesses answers for the test that is running. */
+/** The fake ChatService.SendAgentMessage: what a Retry sends. */
+const sendAgentMessage = vi.fn();
 let daemonProcesses: MessageInitShape<typeof BackgroundProcessSchema>[] = [];
 
 function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPill>> = {}) {
@@ -139,7 +140,13 @@ beforeEach(() => {
   useThreadActivityStore.getState().clearAll();
   // BackgroundService is on its generated hooks: its process list is answered at the transport.
   daemonProcesses = [];
-  setTransport(mockTransport({ "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }) }));
+  sendAgentMessage.mockReset();
+  setTransport(
+    mockTransport({
+      "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }),
+      "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessage(req),
+    }),
+  );
   useChatStore.setState({ cancelToolCall: originalCancelToolCall });
   setChatRunning(true);
 });
@@ -502,9 +509,7 @@ describe("BackgroundWorkPill", () => {
 
     it("shows a failed agent on its own row, and Retry asks its parent to resume it", async () => {
       chatWithSpawns(failedSpawn());
-      const send = vi
-        .spyOn(chatGrpc, "sendAgentMessage")
-        .mockResolvedValue({ success: true, message: "Queued" });
+      const send = sendAgentMessage.mockResolvedValue({ success: true, message: "Queued" });
       const onSelectThread = vi.fn();
 
       renderPill({ onSelectThread });
@@ -520,8 +525,10 @@ describe("BackgroundWorkPill", () => {
 
       fireEvent.click(screen.getByLabelText("Retry failed agent implementer"));
 
-      expect(send).toHaveBeenCalledTimes(1);
-      const [chatId, toThread, message] = send.mock.calls[0];
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      const [{ chatId, threadId: toThread, message }] = send.mock.calls[0] as [
+        { chatId: string; threadId: string; message: string },
+      ];
       expect(chatId).toBe(CHAT_ID);
       expect(toThread).toBe("main-thread");
       expect(message).toContain('spawn(agent_id="thread-42"');
@@ -536,7 +543,7 @@ describe("BackgroundWorkPill", () => {
 
     it("surfaces a refused retry and lets the user try again", async () => {
       chatWithSpawns(failedSpawn());
-      vi.spyOn(chatGrpc, "sendAgentMessage").mockResolvedValue({
+      sendAgentMessage.mockResolvedValue({
         success: false,
         message: "This agent isn't currently running",
       });

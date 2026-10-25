@@ -38,7 +38,7 @@ var fixtureTemplate struct {
 // the repo's 2s line for a -short test; and with every heavy slot busy the
 // machine sustains only ~30 execs a second across ALL its processes. Under
 // -short the package ran ~3100 git processes and took 44-108s, then timed out
-// at make test-affected's 60s with ~2100. The reaper's own git work per pass
+// at task test:affected's 60s with ~2100. The reaper's own git work per pass
 // is already cut and pinned (gitbudget_test.go) — one full pass is ~31 — so
 // what is left in -short is the tests below a full pass plus the two guards,
 // TestGitProcessesPerPass and TestGitFileReadersAgreeWithGit.

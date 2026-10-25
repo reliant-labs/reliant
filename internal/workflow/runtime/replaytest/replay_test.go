@@ -27,7 +27,7 @@ import (
 // generatorMode is flipped to true by an init() in the build-tag-gated
 // generator files (-tags replayfixtures). In generator runs the replay test
 // skips: the fixtures on disk are being rewritten by the same binary, so
-// replaying them mid-run would be meaningless. `make replay-fixtures` runs
+// replaying them mid-run would be meaningless. `task replay-fixtures` runs
 // the untagged replay test immediately after generation instead.
 var generatorMode bool
 
@@ -109,7 +109,7 @@ func quietProcessLogging() {
 // fixture will wedge with a non-determinism error (TMPRL1100).
 //
 // The frozen sets are what stop a regeneration from hiding a break. The
-// current set is rewritten by `make replay-fixtures`, so on its own it only
+// current set is rewritten by `task replay-fixtures`, so on its own it only
 // ever proves that the code replays histories the code itself just recorded —
 // which is how #641 reordered the run's startup, regenerated every fixture,
 // passed this test, and wedged chats 97654413 and 3f03dc31 on the 2026-10-09
@@ -126,7 +126,7 @@ func TestReplayFixtures(t *testing.T) {
 		t.Fatalf("glob fixtures: %v", err)
 	}
 	if len(current) == 0 {
-		t.Fatal("no history fixtures found under fixtures/ — the replay-compatibility gate is not testing anything; run `make replay-fixtures` and check the results in")
+		t.Fatal("no history fixtures found under fixtures/ — the replay-compatibility gate is not testing anything; run `task replay-fixtures` and check the results in")
 	}
 	frozen, err := filepath.Glob(filepath.Join("fixtures", "frozen", "*", "*.json"))
 	if err != nil {
@@ -208,8 +208,8 @@ Make the change replay-compatible:
   1. Gate it with workflow.GetVersion, so a history recorded before the change
      (no marker) keeps its recorded order and a new run takes the new one.
   2. Freeze the shape the in-flight runs were recorded with, BEFORE you
-     regenerate:  make freeze-replay-fixtures NAME=<yyyy-mm-dd>-<what-changed>
-  3. Regenerate the current set:  make replay-fixtures
+     regenerate:  task replay-fixtures:freeze NAME=<yyyy-mm-dd>-<what-changed>
+  3. Regenerate the current set:  task replay-fixtures
 
 See internal/workflow/runtime/replaytest/fixtures/README.md.`
 

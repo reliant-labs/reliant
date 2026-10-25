@@ -18,13 +18,10 @@ import { Clock, OctagonX, Paperclip, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
-import {
-  chatGrpc,
-  QUEUED_SENDER_KIND_HUMAN,
-  type QueuedAgentMessageView,
-} from "../../api/chat-grpc";
+import { QUEUED_SENDER_KIND_HUMAN, type QueuedAgentMessageView } from "../../hooks/chat-model";
+import * as chatActions from "../../hooks/chat-actions";
 
 
 const AGE_TICK_MS = 1_000;
@@ -126,7 +123,7 @@ export function QueuedMessages({
   const cancel = useCallback(
     async (messageId: string): Promise<boolean> => {
       if (!chatId) return false;
-      const response = await chatGrpc.cancelQueuedAgentMessage(chatId, messageId);
+      const response = await chatActions.cancelQueuedAgentMessage(chatId, messageId);
       if (!response.success) {
         // Already delivered. Re-read rather than pretending the message is
         // gone when the agent has it.
@@ -194,7 +191,7 @@ export function QueuedMessages({
     if (!chatId || !threadId || !onInterrupted) return;
     setInterrupting(true);
     try {
-      await chatGrpc.interruptThread(chatId, threadId);
+      await chatActions.interruptThread(chatId, threadId);
 
       await onInterrupted();
       await onRefresh();
@@ -256,7 +253,7 @@ export function QueuedMessages({
         <div className="flex justify-end">
           <Tooltip
             content="Stop what the agent is doing so it reads your queued messages now"
-            placement="top"
+            side="top"
           >
             <button
               type="button"
@@ -347,7 +344,7 @@ export function QueuedMessages({
                 quietly send the rest too — and the version that claimed a
                 single row raced the agent's own delivery to do it. */}
             <div className="flex flex-shrink-0 items-center gap-1">
-              <Tooltip content="Remove this message from the queue" placement="top">
+              <Tooltip content="Remove this message from the queue" side="top">
                 <button
                   type="button"
                   aria-label="Cancel queued message"

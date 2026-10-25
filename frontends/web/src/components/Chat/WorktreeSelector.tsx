@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { useCurrentWorktree, useWorktreeList, getCachedWorktree } from "../../hooks/worktree-queries";
 
@@ -97,7 +97,7 @@ export function WorktreeSelector({
             ? "Select a git workspace for this chat"
             : "Workspace can only be set on new chats"
         }
-        placement="top"
+        side="top"
       >
         <button
         onClick={() => canSelectWorktree && setIsOpen(!isOpen)}

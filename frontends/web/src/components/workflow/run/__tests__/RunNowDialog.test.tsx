@@ -57,17 +57,13 @@ const previewReplay = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    chat: () => ({ runNow, startChat }),
-  },
-}));
-
 // PresetService and TriggerService are reached through connectClient (the generated hooks), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {
   setTransport(
     mockTransport({
+      "ChatService.RunNow": (req: unknown) => runNow(req as never),
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
       // The daemon list is read through connectClient(DaemonRegistryService).
       ...serviceHandlers("DaemonRegistryService", { listDaemons }),
       ...serviceHandlers("TriggerService", { listReplayEvents, previewReplay }),

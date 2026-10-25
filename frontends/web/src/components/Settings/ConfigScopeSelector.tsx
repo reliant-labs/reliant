@@ -3,7 +3,7 @@
 import { Globe, FolderGit, FolderLock, HelpCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ConfigScope } from "../../gen/reliant/v1/common_pb";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 export interface ConfigScopeSelectorProps {
   /** Currently selected scope */
@@ -78,7 +78,7 @@ export function ConfigScopeSelector({
       <div className="flex items-center gap-2">
         <label className="text-sm font-medium text-foreground">{label}</label>
         {helpText && (
-          <Tooltip content={helpText} placement="top">
+          <Tooltip content={helpText} side="top">
             <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
           </Tooltip>
         )}

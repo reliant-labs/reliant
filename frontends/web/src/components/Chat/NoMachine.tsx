@@ -14,7 +14,7 @@ import { CloudOff } from "lucide-react";
 import { toast } from "sonner";
 import { useChatStore } from "@/store/chatStore";
 import { NO_MACHINE_COMPOSER_HINT, NO_MACHINE_EXPLAINER, NO_MACHINE_PILL } from "@/lib/chatMachine";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ConnectMachineDialog } from "./ConnectMachineDialog";
 
 /** Header pill: "No machine · web & integrations". Opens Connect a machine. */
@@ -22,7 +22,7 @@ export function NoMachinePill({ chatId }: { chatId: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Tooltip content={`${NO_MACHINE_EXPLAINER}. Click to connect a machine.`} placement="bottom" wrapperClassName="inline-flex">
+      <Tooltip content={`${NO_MACHINE_EXPLAINER}. Click to connect a machine.`} side="bottom" triggerClassName="inline-flex">
         <button
           type="button"
           onClick={() => setOpen(true)}

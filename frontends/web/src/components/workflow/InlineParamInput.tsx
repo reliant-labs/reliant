@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { formatValueForDisplay } from "../../lib/paramUtils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDescription, getInputDefault, getInputEnumValues, getInputMulti, getInputMin, getInputMax } from "../../lib/inputHelpers";
 import type { LucideIcon } from "lucide-react";
@@ -119,7 +119,7 @@ export function InlineParamInput({
     default:
       // For unsupported types, show a label-only pill
       return (
-        <Tooltip content={`${displayName}: ${getInputDescription(schema) || "No description"}`} placement="top">
+        <Tooltip content={`${displayName}: ${getInputDescription(schema) || "No description"}`} side="top" triggerClassName="block">
           <div
             className={cn(
               "flex items-center gap-1 rounded-full text-xs font-medium h-6 px-2.5",
@@ -193,7 +193,7 @@ function InlineEnumInput({
     <div ref={dropdownRef} className={cn("relative", className)}>
       <Tooltip 
         content={getInputDescription(schema) || `${displayName}: ${currentValue}`} 
-        placement="top"
+        side="top"
       >
         <button
           onClick={() => canInteract && setIsOpen(!isOpen)}
@@ -333,7 +333,7 @@ function InlineMultiEnumInput({
     <div ref={dropdownRef} className={cn("relative", className)}>
       <Tooltip 
         content={getInputDescription(schema) || `${displayName}: ${selectedValues.length} selected`} 
-        placement="top"
+        side="top"
       >
         <button
           onClick={() => canInteract && setIsOpen(!isOpen)}
@@ -453,7 +453,7 @@ function InlineBooleanInput({
   return (
     <Tooltip 
       content={getInputDescription(schema) || `${displayName}: ${isOn ? "On" : "Off"}`} 
-      placement="top"
+      side="top"
     >
       <button
         onClick={() => canInteract && onChange(!isOn)}
@@ -556,7 +556,7 @@ function InlineStringInput({
   return (
     <Tooltip 
       content={getInputDescription(schema) || `${displayName}: ${currentValue || "(empty)"}`} 
-      placement="top"
+      side="top"
     >
       <button
         onClick={() => canInteract && setIsEditing(true)}
@@ -667,7 +667,7 @@ function InlineNumberInput({
   return (
     <Tooltip 
       content={getInputDescription(schema) || `${displayName}: ${displayValue || "(empty)"}`} 
-      placement="top"
+      side="top"
     >
       <button
         onClick={() => canInteract && setIsEditing(true)}

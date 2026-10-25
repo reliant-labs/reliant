@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { api } from "@/api/client";
 import { chatKeys } from "@/hooks/chat-queries";
 import { isLiveRunStatus, runStatus, type RunStatusDisplay } from "@/lib/runStatus";
+import * as chatActions from "../../hooks/chat-actions";
 
 /** How often a still-live launched run is re-read while its history is open. */
 const LIVE_RUN_REFETCH_MS = 15_000;
@@ -25,7 +25,7 @@ export function useLaunchedRunStatus(chatId?: string): {
 } {
   const { data: chat, isError } = useQuery({
     queryKey: chatKeys.detail(chatId),
-    queryFn: () => api.chatsV2.get(chatId!),
+    queryFn: () => chatActions.getChat(chatId!),
     enabled: !!chatId,
     refetchInterval: (query) => {
       const current = query.state.data;

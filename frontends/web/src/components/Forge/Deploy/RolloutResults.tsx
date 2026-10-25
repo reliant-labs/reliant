@@ -18,7 +18,7 @@
  */
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   rolloutModeOf,
   rolloutStateOf,

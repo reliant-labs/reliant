@@ -217,7 +217,7 @@ func TestGetPortsForPids_AttributesPortsToOwningPID(t *testing.T) {
 func skipRealPortScanUnderShort(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
-		t.Skip("drives real ps/lsof port scans (seconds each on a loaded macOS box); runs in make test")
+		t.Skip("drives real ps/lsof port scans (seconds each on a loaded macOS box); runs in task test")
 	}
 }
 

@@ -29,7 +29,7 @@ go run tools/docgen/shortcuts/main.go config/shortcuts.yaml frontends/web/src/st
 
 # Generate protobuf code (pinned buf + local plugins)
 echo "📦 Generating protobuf code..."
-make proto-generate
+task generate:forge
 
 # Build V2 backend
 echo "📦 Building V2 backend..."

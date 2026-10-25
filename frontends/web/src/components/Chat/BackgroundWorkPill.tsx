@@ -26,13 +26,13 @@
  * the asking thread, where the composer answers it.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
-import { chatGrpc } from "../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { useChatStore } from "../../store/chatStore";
 import {
   useBackgroundWork,
@@ -42,6 +42,7 @@ import {
   type FailedSpawn,
   type WaitingQuestion,
 } from "./useBackgroundWork";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -155,7 +156,7 @@ function SpawnRow({
             spawn.toolCallId
               ? "Cancel background agent"
               : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
-          } placement="bottom" delay={300} wrapperClassName="inline-flex">
+          } side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           type="button"
           onClick={handleCancel}
@@ -240,7 +241,7 @@ function FailedSpawnRow({
     try {
       // To the PARENT, not the agent: the parent was told this agent failed
       // and owns the plan it belongs to, so it is the one that resumes it.
-      const response = await chatGrpc.sendAgentMessage(
+      const response = await chatActions.sendAgentMessage(
         chatId,
         spawn.parentThreadId,
         failedAgentRetryMessage(spawn),
@@ -251,6 +252,7 @@ function FailedSpawnRow({
         return;
       }
       setRetry("requested");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[BackgroundWorkPill] Failed to ask the parent to retry a failed agent", {
         chatId,
@@ -294,9 +296,9 @@ function FailedSpawnRow({
               ? "Ask its parent to resume this agent where it stopped"
               : "This agent's parent is not known, so it cannot be asked to retry it"
           }
-          placement="bottom"
+          side="bottom"
           delay={300}
-          wrapperClassName="inline-flex"
+          triggerClassName="inline-flex"
         >
           <button
             type="button"
@@ -308,7 +310,7 @@ function FailedSpawnRow({
             <RotateCw className={cn("h-3.5 w-3.5 text-foreground", retry === "sending" && "animate-spin")} />
           </button>
         </Tooltip>
-        <Tooltip content="Dismiss" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Dismiss" side="bottom" delay={300} triggerClassName="inline-flex">
           <button
             type="button"
             onClick={handleDismiss}

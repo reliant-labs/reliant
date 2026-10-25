@@ -28,9 +28,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 // The origin half is the server URL the command resolves.
 message DaemonInstanceConfig {
   // Unset: the instance's own directory under ~/.reliant/instances, derived
-  // from the instance key. Containers set it to the mounted volume
-  // (docker-compose.yml, the workspace operator), where derivation would put
-  // the daemon's state on the ephemeral filesystem.
+  // from the instance key. Containers set it to the mounted volume (the
+  // workspace operator's pods), where derivation would put the daemon's state
+  // on the ephemeral filesystem.
   string data_dir = 1 [(forge.v1.config) = {
     env_var: "DAEMON_DATA_DIR"
     flag: "data-dir"
@@ -74,8 +74,9 @@ message DaemonConfig {
 
   // The local daemon gateway's daemon port: the port `reliant server gateway`
   // listens for daemons on, under the same TOOLS_DAEMON_PORT the gateway
-  // reads (GatewayConfig). Electron and scripts/dev.sh export it to both. It
-  // is dialled only when no gateway URL is known. Not the port THIS daemon
+  // reads (GatewayConfig). Electron and the dev stack (control-plane's
+  // `forge env up dev`) export it to both. It is dialled only when no gateway
+  // URL is known. Not the port THIS daemon
   // listens on: that is listen_port.
   int32 gateway_port = 3 [(forge.v1.config) = {
     env_var: "TOOLS_DAEMON_PORT"

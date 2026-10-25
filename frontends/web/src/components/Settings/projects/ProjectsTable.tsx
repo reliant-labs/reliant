@@ -1,7 +1,7 @@
 import { ArrowUpRight, Trash2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { collapseHomePath, splitPathForDisplay } from "@/lib/pathUtils";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
@@ -144,7 +144,7 @@ export function ProjectsTable({
                         <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </Tooltip>
-                    <Tooltip content="Remove from Reliant (files stay on disk)" placement="left" delay={300}>
+                    <Tooltip content="Remove from Reliant (files stay on disk)" side="left" delay={300}>
                       <button
                         type="button"
                         onClick={() => onRemove(project)}

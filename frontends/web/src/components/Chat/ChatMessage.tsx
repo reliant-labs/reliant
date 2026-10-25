@@ -9,7 +9,7 @@ import {
   Fragment,
   type JSX,
 } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -46,7 +46,6 @@ import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-import { api } from "../../api/client";
 import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
@@ -54,6 +53,7 @@ import {
   type ToolResultData as ProcessedToolResultData,
   type MessageSegment,
 } from "../../lib/messageProcessor";
+import * as chatActions from "../../hooks/chat-actions";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -519,7 +519,7 @@ function ChatMessageComponent({
           },
           onConvertToBackground: async (toolCallId: string) => {
             if (chatId) {
-              await api.toolCalls.convertToBackground(toolCallId);
+              await chatActions.convertToolCallToBackground(toolCallId);
             }
           },
         };
@@ -742,7 +742,7 @@ function ChatMessageComponent({
       )}
       {/* Separates the timestamp (information) from the buttons (actions). */}
       {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
-      <Tooltip content={copied ? "Copied" : "Copy message"} placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content={copied ? "Copied" : "Copy message"} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -767,9 +767,9 @@ function ChatMessageComponent({
               ? "Waiting for message to save"
               : "Branch from this message"
         }
-        placement="top"
+        side="top"
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
       <button
         onClick={(e) => {

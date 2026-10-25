@@ -2,7 +2,7 @@ import { useId } from "react";
 import { ArrowDown, ArrowUp, ArrowUpFromLine, ExternalLink, GitPullRequest, Loader2, X } from "lucide-react";
 import type { ExistingPRResponse } from "../../../api/git";
 import Button from "@/components/forge-ui/button";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { pluralize } from "./fileStatus";
 import { MOD, SHIFT } from "./keys";
@@ -129,7 +129,7 @@ export function CommitComposer({
       />
 
       <div className="flex w-full">
-        <Tooltip content={commitHint} delay={300} wrapperClassName="flex min-w-0 flex-1">
+        <Tooltip content={commitHint} delay={300} triggerClassName="flex min-w-0 flex-1">
           <Button
             variant="primary"
             size="md"
@@ -141,7 +141,7 @@ export function CommitComposer({
             {op === "commit" ? "Committing…" : commitLabel}
           </Button>
         </Tooltip>
-        <Tooltip content={`Commit and push (${MOD}${SHIFT}Enter)`} delay={300} wrapperClassName="flex">
+        <Tooltip content={`Commit and push (${MOD}${SHIFT}Enter)`} delay={300} triggerClassName="flex">
           <button
             type="button"
             aria-label="Commit and push"
@@ -166,7 +166,7 @@ export function CommitComposer({
       {showSyncRow && (
         <div className="flex flex-wrap gap-2">
           {ahead > 0 && (
-            <Tooltip content={`Push ${pluralize(ahead, "commit")} to the remote`} delay={300} wrapperClassName="flex min-w-0 flex-1">
+            <Tooltip content={`Push ${pluralize(ahead, "commit")} to the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
                 size="sm"
@@ -181,7 +181,7 @@ export function CommitComposer({
             </Tooltip>
           )}
           {behind > 0 && (
-            <Tooltip content={`Pull ${pluralize(behind, "commit")} from the remote`} delay={300} wrapperClassName="flex min-w-0 flex-1">
+            <Tooltip content={`Pull ${pluralize(behind, "commit")} from the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
                 size="sm"
@@ -216,7 +216,7 @@ function PullRequestAction({
   if (existing?.exists && existing.url) {
     const state = existing.state ? existing.state.toLowerCase() : "";
     return (
-      <Tooltip content={existing.title ? `Open “${existing.title}” on GitHub` : "Open pull request on GitHub"} delay={300} wrapperClassName="flex min-w-0 flex-1">
+      <Tooltip content={existing.title ? `Open “${existing.title}” on GitHub` : "Open pull request on GitHub"} delay={300} triggerClassName="flex min-w-0 flex-1">
         <a
           href={existing.url}
           target="_blank"
@@ -239,7 +239,7 @@ function PullRequestAction({
     <Tooltip
       content={ghCliMissing ? "Install the GitHub CLI (gh) from cli.github.com to create pull requests" : "Open a pull request for this branch"}
       delay={300}
-      wrapperClassName="flex min-w-0 flex-1"
+      triggerClassName="flex min-w-0 flex-1"
     >
       <Button
         variant="outline"

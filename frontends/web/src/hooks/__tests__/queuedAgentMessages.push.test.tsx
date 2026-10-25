@@ -25,13 +25,16 @@ const { listQueuedAgentMessagesMock } = vi.hoisted(() => ({
   listQueuedAgentMessagesMock: vi.fn(),
 }));
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: { listQueuedAgentMessages: listQueuedAgentMessagesMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
-
 import { useQueuedAgentMessages } from "../queued-agent-messages";
 import { useChatStore } from "../../store/chatStore";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
 
 function mailboxRefetch(): ChatUpdate {
   // What streaming-grpc hands the store for a REFETCH chat update: the JSON

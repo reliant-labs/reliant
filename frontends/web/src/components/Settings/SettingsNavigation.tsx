@@ -1,6 +1,6 @@
 import { cn } from "../../lib/utils";
 import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Layers } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import type { SettingsSection } from "../../routeSchemas";
@@ -170,7 +170,7 @@ export function SettingsNavigation({
                     </button>
                   );
                   return isCollapsed ? (
-                    <Tooltip key={section.id} content={section.label} placement="right" wrapperClassName="block w-full">
+                    <Tooltip key={section.id} content={section.label} side="right" triggerClassName="block w-full">
                       {item}
                     </Tooltip>
                   ) : (

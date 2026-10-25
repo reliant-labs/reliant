@@ -50,10 +50,10 @@ describe("ResumeDaemonPill", () => {
     state.resume.mockResolvedValue(undefined);
     renderWithQuery(<ResumeDaemonPill placement="inline" />);
 
-    fireEvent.click(await screen.findByText("Resume ws-1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resume ws-1" }));
 
     await waitFor(() => expect(state.resume).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByText("Resume ws-1")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Resume ws-1" })).toBeNull());
     expect(screen.queryByText(/Resuming/)).toBeNull();
   });
 
@@ -67,9 +67,9 @@ describe("ResumeDaemonPill", () => {
     );
     renderWithQuery(<ResumeDaemonPill placement="inline" />);
 
-    fireEvent.click(await screen.findByText("Resume ws-1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resume ws-1" }));
 
-    await waitFor(() => expect(screen.queryByText("Resume ws-1")).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Resume ws-1" })).toBeNull());
     expect(screen.queryByText(/not suspended/)).toBeNull();
     expect(screen.queryByText("Upgrade plan")).toBeNull();
   });
@@ -78,7 +78,7 @@ describe("ResumeDaemonPill", () => {
     state.resume.mockRejectedValue(new ConnectError("cannot resume external daemon", Code.FailedPrecondition));
     renderWithQuery(<ResumeDaemonPill placement="inline" />);
 
-    fireEvent.click(await screen.findByText("Resume ws-1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resume ws-1" }));
 
     expect(await screen.findByText(/cannot resume external daemon/)).toBeTruthy();
     expect(screen.queryByText("Upgrade plan")).toBeNull();
@@ -93,7 +93,7 @@ describe("ResumeDaemonPill", () => {
     state.resume.mockRejectedValue(err);
     renderWithQuery(<ResumeDaemonPill placement="inline" />);
 
-    fireEvent.click(await screen.findByText("Resume ws-1"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resume ws-1" }));
 
     expect(await screen.findByText("Upgrade plan")).toBeTruthy();
   });

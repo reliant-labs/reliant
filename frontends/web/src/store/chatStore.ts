@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, type Chat, type Message } from "../api/client";
+import type { Chat, Message } from "../api/client";
 import type { ContentBlock } from "../types/chat";
 import {
   MessageRole,
@@ -111,7 +111,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
+import { QUEUED_SENDER_KIND_HUMAN } from "../hooks/chat-model";
 import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -135,13 +135,15 @@ import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
 } from "../hooks/message-queries";
-import { chatDetailKeys } from "../hooks/chat-detail-keys";
+import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
+import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
   STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
 import { trackEvent } from "../lib/analytics";
+import * as chatActions from "../hooks/chat-actions";
 
 // Lazy getter to avoid circular dependency with globalUpdatesStore.
 // `var` (not `let`) is intentional: globalUpdatesStore.ts calls
@@ -1216,7 +1218,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     return singleflight(`loadChats:${projectId}`, async () => {
       set({ error: null });
       try {
-        const response = await api.chatsV2.list(projectId);
+        const response = await chatActions.listChats(projectId);
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
@@ -1313,7 +1315,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       firstMessage,
       attachmentIds ?? [],
     ]);
-    const chat = await api.chatsV2.start({
+    const chat = await chatActions.startChat({
       project_id: projectId,
       messages: firstMessage
         ? [{ role: MessageRole.USER, content: firstMessage }]
@@ -1388,7 +1390,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       // The chat names its own project; the selected project may be a different
       // one (deep link, cross-project tab), and the server rejects a mismatch.
-      chat = await api.chatsV2.start({
+      chat = await chatActions.startChat({
         chat_id: chatId,
         messages: [{ role: MessageRole.USER, content: firstMessage }],
         attachments: attachmentIds,
@@ -1761,12 +1763,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         client_message_id: clientMessageId,
       };
 
-      let response: Awaited<ReturnType<typeof api.chatsV2.sendMessage>>;
+      let response: Awaited<ReturnType<typeof chatActions.sendMessage>>;
       // In the transcript, the strip must not show the server's row a second
       // time while the request is in flight.
       if (!showInQueue) beginPendingSend(clientMessageId);
       try {
-        response = await api.chatsV2.sendMessage(
+        response = await chatActions.sendMessage(
           chatId,
           content,
           attachmentIds,
@@ -1954,7 +1956,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logger.debug(
         `[ChatStore] Loading messages for chat ${chatId.slice(0, 8)}`,
       );
-      const response = await api.chatsV2.listMessages(chatId);
+      const response = await chatActions.listMessages(chatId);
       // Canonical order — chat-global seq, a true total order across threads.
       const messages = sortMessagesForDisplay(
         (response.messages || []).map(normalizeMessageAttachmentFields),
@@ -2082,7 +2084,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         pageSize: OLDER_MESSAGES_PAGE_SIZE,
       });
 
-      const response = await api.chatsV2.listMessages(chatId, {
+      const response = await chatActions.listMessages(chatId, {
         recent: OLDER_MESSAGES_PAGE_SIZE,
         beforeSeq,
       });
@@ -3563,7 +3565,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Then make the API call to actually cancel the workflow
     try {
-      await api.chatsV2.cancel(chatId);
+      await chatActions.cancelChat(chatId);
     } catch (error) {
       logger.error("Failed to cancel chat:", error);
       // UI state already updated optimistically, so no need to update again
@@ -3621,7 +3623,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Make the API call to actually pause the workflow. Registered so a send
     // issued after this pause waits for it (see pausesInFlight).
-    const pausing = api.chatsV2.pause(chatId).then(
+    const pausing = chatActions.pauseChat(chatId).then(
       () => undefined,
       (error) => {
         logger.error("Failed to pause chat:", error);
@@ -3652,7 +3654,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Make the API call to actually resume the workflow
     try {
-      await api.chatsV2.resume(chatId);
+      await chatActions.resumeChat(chatId);
     } catch (error) {
       logger.error("Failed to resume chat:", error);
       // Revert optimistic update on error
@@ -3726,7 +3728,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const baselineSeq = useActivityStore.getState().maxSeenSeq;
 
       // Use the get endpoint to check if chat exists and get its state
-      const chat = await api.chatsV2.get(chatId);
+      const chat = await chatActions.getChat(chatId);
 
       // NOTE: auto_approve and is_planning_mode were removed from backend
       // Mode is tracked in chatParamsStore, not on chat object.
@@ -3761,7 +3763,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       // Branch using message ID - the backend will look up the message directly
       // This works for both local messages and inherited messages from parent chats
-      const { chat: newChat } = await api.chatsV2.branch(chatId, {
+      const { chat: newChat } = await chatActions.branchChat(chatId, {
         messageId,
       });
 
@@ -3793,7 +3795,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   branchChatWithoutMachine: async (chatId: string, messageId: string) => {
-    const { chat: newChat } = await api.chatsV2.branch(chatId, {
+    const { chat: newChat } = await chatActions.branchChat(chatId, {
       messageId,
       noMachine: true,
     });
@@ -3808,7 +3810,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   connectChatToMachine: async (chatId: string, daemonId: string) => {
-    const updated = await api.chatsV2.setDaemon(chatId, daemonId);
+    const updated = await chatActions.setChatDaemon(chatId, daemonId);
     // The response is the connected chat (no_machine cleared). Install it now
     // rather than waiting on chat_config_changed, so the pill, the composer
     // hint and the request_machine card all flip on this render.
@@ -3836,7 +3838,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     try {
       // Branch using message ID - the backend will look up the message directly
-      const { chat: newChat } = await api.chatsV2.branch(chatId, {
+      const { chat: newChat } = await chatActions.branchChat(chatId, {
         messageId,
         worktreeId,
       });
@@ -3964,7 +3966,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   cancelToolCall: async (_chatId: string, toolCallId: string) => {
     try {
-      await api.toolCalls.cancel(toolCallId);
+      await chatActions.cancelToolCall(toolCallId);
       logger.info("Tool call cancelled successfully", toolCallId);
     } catch (error) {
       logger.error("Failed to cancel tool call", toolCallId, error);
@@ -3974,7 +3976,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   convertToBackground: async (_chatId: string, toolCallId: string) => {
     try {
-      const result = await api.toolCalls.convertToBackground(toolCallId);
+      const result = await chatActions.convertToolCallToBackground(toolCallId);
       logger.info(
         "Tool call converted to background successfully",
         toolCallId,
@@ -4015,7 +4017,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     try {
-      const result = await api.chatsV2.dismiss(chatId);
+      const result = await chatActions.dismissChat(chatId);
 
       // If state actually changed, update local state immediately for responsiveness
       // (global WebSocket will also deliver this update)
@@ -4059,7 +4061,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     clearMessagesCache(chatId);
     // The execution tree is retained exactly as long as the messages (gcTime:
     // Infinity, see useWorkflowExecutions), so it is released with them.
-    queryClient.removeQueries({ queryKey: chatDetailKeys.workflowExecutions(chatId) });
+    queryClient.removeQueries({ queryKey: workflowExecutionsOfChat(chatId) });
     // A page may still be in flight for the evicted chat; its finally-block
     // delete would otherwise be the only thing clearing this, and an aborted
     // teardown would leave a tombstone that blocks paging if the chat returns.
@@ -4113,6 +4115,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.
     queryClient.removeQueries({ queryKey: chatKeys.all });
+    queryClient.removeQueries({ queryKey: chatServiceKeys.archivedChat });
     // Messages are homed in the RQ cache — drop all their entries too.
     clearAllMessagesCache();
 

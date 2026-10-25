@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { cn } from "../../../lib/utils";
 
 interface IconButtonProps {
@@ -26,7 +26,7 @@ export function IconButton({
   children,
 }: IconButtonProps) {
   return (
-    <Tooltip content={tooltip ?? label} delay={300} wrapperClassName="flex">
+    <Tooltip content={tooltip ?? label} delay={300} triggerClassName="flex">
       <button
         type="button"
         aria-label={label}
