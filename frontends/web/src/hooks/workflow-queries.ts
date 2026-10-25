@@ -47,7 +47,12 @@ import { useProjectStore } from "../store/projectStore";
 import type { Edge, Step, Workflow } from "../types/workflow";
 import { presetServiceKeys } from "./preset-service-hooks_gen";
 import { triggerServiceKeys } from "./trigger-service-hooks_gen";
-import { useGetWorkflow, useListWorkflows, workflowServiceKeys } from "./workflow-service-hooks_gen";
+import {
+  useGetWorkflow,
+  useListWorkflows,
+  workflowServiceKeys,
+  workflowServiceQueries,
+} from "./workflow-service-hooks_gen";
 
 export type {
   Workflow,
@@ -336,15 +341,6 @@ export function isOfferedInChatPicker(workflow: {
 // Reads
 // ============================================
 
-function listQuery(projectId: string, includeHidden: boolean) {
-  const req = { projectId, includeHidden };
-  return {
-    queryKey: workflowServiceKeys.listWorkflows(req),
-    queryFn: ({ signal }: { signal?: AbortSignal }) => client.listWorkflows(req, { signal }),
-    staleTime: WORKFLOW_STALE_TIME_MS,
-  };
-}
-
 /**
  * A project's workflows and the ones that failed to load. `includeHidden` is
  * for management views (the Library, the builder, the Run form); the chat
@@ -379,7 +375,11 @@ export function useProjectWorkflowList(projectId: string | undefined) {
 
 /** A project's workflows for an imperative caller, from cache while fresh. */
 export async function fetchWorkflowList(projectId: string, includeHidden = false): Promise<ListWorkflowsResult> {
-  return workflowListFromProto(await queryClient.fetchQuery(listQuery(projectId, includeHidden)));
+  return workflowListFromProto(
+    await queryClient.fetchQuery(
+      workflowServiceQueries.listWorkflows({ projectId, includeHidden }, { staleTime: WORKFLOW_STALE_TIME_MS }),
+    ),
+  );
 }
 
 const NO_WORKFLOW_DEFS: WorkflowDef[] = [];
@@ -431,14 +431,6 @@ function getRequest(projectId: string, ref: WorkflowRef) {
   return create(GetWorkflowRequestSchema, { projectId, name: ref.name || "", draftId: ref.draftId });
 }
 
-function getQuery(projectId: string, ref: WorkflowRef) {
-  const req = getRequest(projectId, ref);
-  return {
-    queryKey: workflowServiceKeys.getWorkflow(req),
-    queryFn: ({ signal }: { signal?: AbortSignal }) => client.getWorkflow(req, { signal }),
-  };
-}
-
 /**
  * A workflow's definition by name, as a mounted read. `data.workflow` is
  * undefined when the workflow failed to parse (`data.parseError` says why).
@@ -462,10 +454,11 @@ export async function fetchWorkflow(
   ref: WorkflowRef,
   options: { fresh?: boolean } = {},
 ): Promise<GetWorkflowResult> {
-  const response = await queryClient.fetchQuery({
-    ...getQuery(projectId, ref),
-    staleTime: options.fresh ? 0 : WORKFLOW_STALE_TIME_MS,
-  });
+  const response = await queryClient.fetchQuery(
+    workflowServiceQueries.getWorkflow(getRequest(projectId, ref), {
+      staleTime: options.fresh ? 0 : WORKFLOW_STALE_TIME_MS,
+    }),
+  );
   return workflowFromProto(response);
 }
 

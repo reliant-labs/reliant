@@ -9,15 +9,11 @@
  * attachment at once share ONE GetAttachment, and a delete drops the entry.
  */
 
-import {
-  AttachmentService,
-  type AttachmentInfo,
-  type GetAttachmentResponse,
-} from "../gen/reliant/v1/attachment_pb";
+import { AttachmentService, type AttachmentInfo } from "../gen/reliant/v1/attachment_pb";
 import { connectClient } from "../lib/connect";
 import type { AttachmentType } from "../lib/filetypes";
 import { queryClient } from "../lib/query-client";
-import { attachmentServiceKeys } from "./attachment-service-hooks_gen";
+import { attachmentServiceKeys, attachmentServiceQueries } from "./attachment-service-hooks_gen";
 
 /** A composer draft attachment, as attachmentStore and the chips render it. */
 export interface Attachment {
@@ -74,12 +70,9 @@ export async function deleteAttachment(attachmentId: string): Promise<void> {
  * `gcTime: 0` — the entry goes as soon as nobody is waiting on it.
  */
 export async function fetchAttachmentBlob(attachmentId: string): Promise<Blob> {
-  const response = await queryClient.fetchQuery<GetAttachmentResponse>({
-    queryKey: attachmentServiceKeys.getAttachment({ attachmentId }),
-    queryFn: () => client.getAttachment({ attachmentId }),
-    staleTime: 0,
-    gcTime: 0,
-  });
+  const response = await queryClient.fetchQuery(
+    attachmentServiceQueries.getAttachment({ attachmentId }, { staleTime: 0, gcTime: 0 }),
+  );
   if (!response.attachment) {
     throw new Error("Attachment not found");
   }

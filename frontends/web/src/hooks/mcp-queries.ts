@@ -17,7 +17,6 @@ import type { QueryClient } from "@tanstack/react-query";
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
 import {
   MCPServerStatus,
-  MCPService,
   type ConfigField as ProtoConfigField,
   type MCPServer as ProtoMCPServer,
   type MCPServerConfig as ProtoMCPServerConfig,
@@ -26,12 +25,9 @@ import {
   type ListServersResponse,
   type RecommendedServer as ProtoRecommendedServer,
 } from "../gen/reliant/v1/mcp_pb";
-import { connectClient } from "../lib/connect";
-import { mcpServiceKeys, useListRecommended, useListServers } from "./mcp-service-hooks_gen";
+import { mcpServiceKeys, mcpServiceQueries, useListRecommended, useListServers } from "./mcp-service-hooks_gen";
 
 export { ConfigScope, MCPServerStatus };
-
-const client = connectClient(MCPService);
 
 // ── Frontend types ──────────────────────────────────────────────────────────
 
@@ -193,11 +189,7 @@ const recommendedOf = (response: ListRecommendedResponse) => response.recommende
 
 /** A project's installed servers, from the cache when fresh (the onboarding checklist's probe). */
 export async function fetchMcpServers(queryClient: QueryClient, projectId: string): Promise<MCPServer[]> {
-  const response = await queryClient.fetchQuery({
-    queryKey: mcpServiceKeys.listServers({ projectId }),
-    queryFn: () => client.listServers({ projectId }),
-    staleTime: MCP_STALE_MS,
-  });
+  const response = await queryClient.fetchQuery(mcpServiceQueries.listServers({ projectId }, { staleTime: MCP_STALE_MS }));
   return response.servers.map(serverFromProto);
 }
 
@@ -206,11 +198,7 @@ export async function fetchMcpServers(queryClient: QueryClient, projectId: strin
  * the list is current even when the server reconnected since.
  */
 export async function fetchMcpServerTools(queryClient: QueryClient, projectId: string, name: string): Promise<MCPTool[]> {
-  const response = await queryClient.fetchQuery({
-    queryKey: mcpServiceKeys.getServerTools({ projectId, name }),
-    queryFn: () => client.getServerTools({ projectId, name }),
-    staleTime: 0,
-  });
+  const response = await queryClient.fetchQuery(mcpServiceQueries.getServerTools({ projectId, name }, { staleTime: 0 }));
   return response.tools.map(toolFromProto);
 }
 
