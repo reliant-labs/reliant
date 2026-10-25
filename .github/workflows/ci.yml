@@ -121,6 +121,8 @@ jobs:
         with:
           node: "true"
           ripgrep: "true"
+          free-disk: "true"
+          buf: "true"
       # MG_LOGDIR keeps the phase logs where the upload below finds them.
       - name: task ci:merge
         run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}"
@@ -167,6 +169,8 @@ jobs:
         with:
           node: "true"
           ripgrep: "true"
+          free-disk: "true"
+          buf: "true"
       - name: Identify the record's author
         run: |
           git config user.name "github-actions[bot]"
