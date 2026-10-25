@@ -66,6 +66,9 @@ const (
 	// ObservabilityServiceListAttributeValuesProcedure is the fully-qualified name of the
 	// ObservabilityService's ListAttributeValues RPC.
 	ObservabilityServiceListAttributeValuesProcedure = "/controlplane.v1.ObservabilityService/ListAttributeValues"
+	// ObservabilityServiceGetServiceSignalsProcedure is the fully-qualified name of the
+	// ObservabilityService's GetServiceSignals RPC.
+	ObservabilityServiceGetServiceSignalsProcedure = "/controlplane.v1.ObservabilityService/GetServiceSignals"
 	// ObservabilityServiceListWorkloadsProcedure is the fully-qualified name of the
 	// ObservabilityService's ListWorkloads RPC.
 	ObservabilityServiceListWorkloadsProcedure = "/controlplane.v1.ObservabilityService/ListWorkloads"
@@ -154,6 +157,13 @@ type ObservabilityServiceClient interface {
 	// current selection. Bounded (max 100 values, max range 7 days) and cached
 	// for a minute.
 	ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error)
+	// GetServiceSignals answers, per service in the scope, which signals it
+	// EMITS (traces, logs, profiles with data in the range) and which the
+	// recorded release of its environments DECLARES on: the console's answer to
+	// "should this service offer a Profiles view". One bounded statement over
+	// the telemetry plus the bundles the control plane already holds. Max range
+	// 7 days, at most 500 services, cached for a minute.
+	GetServiceSignals(context.Context, *connect.Request[v1.GetServiceSignalsRequest]) (*connect.Response[v1.GetServiceSignalsResponse], error)
 	// ListWorkloads returns, per environment, workload and container: image,
 	// service.version, replicas observed, restarts in the window, the last
 	// terminated reason (OOMKilled, ...), CPU and memory against requests and
@@ -272,6 +282,12 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
 			connect.WithClientOptions(opts...),
 		),
+		getServiceSignals: connect.NewClient[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetServiceSignalsProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+			connect.WithClientOptions(opts...),
+		),
 		listWorkloads: connect.NewClient[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceListWorkloadsProcedure,
@@ -318,6 +334,7 @@ type observabilityServiceClient struct {
 	getFlamegraph         *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
 	queryPanel            *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
 	listAttributeValues   *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
+	getServiceSignals     *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
 	listWorkloads         *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
 	getWorkload           *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
 	getDashboards         *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
@@ -380,6 +397,11 @@ func (c *observabilityServiceClient) QueryPanel(ctx context.Context, req *connec
 // ListAttributeValues calls controlplane.v1.ObservabilityService.ListAttributeValues.
 func (c *observabilityServiceClient) ListAttributeValues(ctx context.Context, req *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error) {
 	return c.listAttributeValues.CallUnary(ctx, req)
+}
+
+// GetServiceSignals calls controlplane.v1.ObservabilityService.GetServiceSignals.
+func (c *observabilityServiceClient) GetServiceSignals(ctx context.Context, req *connect.Request[v1.GetServiceSignalsRequest]) (*connect.Response[v1.GetServiceSignalsResponse], error) {
+	return c.getServiceSignals.CallUnary(ctx, req)
 }
 
 // ListWorkloads calls controlplane.v1.ObservabilityService.ListWorkloads.
@@ -479,6 +501,13 @@ type ObservabilityServiceHandler interface {
 	// current selection. Bounded (max 100 values, max range 7 days) and cached
 	// for a minute.
 	ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error)
+	// GetServiceSignals answers, per service in the scope, which signals it
+	// EMITS (traces, logs, profiles with data in the range) and which the
+	// recorded release of its environments DECLARES on: the console's answer to
+	// "should this service offer a Profiles view". One bounded statement over
+	// the telemetry plus the bundles the control plane already holds. Max range
+	// 7 days, at most 500 services, cached for a minute.
+	GetServiceSignals(context.Context, *connect.Request[v1.GetServiceSignalsRequest]) (*connect.Response[v1.GetServiceSignalsResponse], error)
 	// ListWorkloads returns, per environment, workload and container: image,
 	// service.version, replicas observed, restarts in the window, the last
 	// terminated reason (OOMKilled, ...), CPU and memory against requests and
@@ -593,6 +622,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("ListAttributeValues")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetServiceSignalsHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetServiceSignalsProcedure,
+		svc.GetServiceSignals,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceSignals")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceListWorkloadsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceListWorkloadsProcedure,
 		svc.ListWorkloads,
@@ -647,6 +682,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceQueryPanelHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListAttributeValuesProcedure:
 			observabilityServiceListAttributeValuesHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetServiceSignalsProcedure:
+			observabilityServiceGetServiceSignalsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListWorkloadsProcedure:
 			observabilityServiceListWorkloadsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetWorkloadProcedure:
@@ -708,6 +745,10 @@ func (UnimplementedObservabilityServiceHandler) QueryPanel(context.Context, *con
 
 func (UnimplementedObservabilityServiceHandler) ListAttributeValues(context.Context, *connect.Request[v1.ListAttributeValuesRequest]) (*connect.Response[v1.ListAttributeValuesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListAttributeValues is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetServiceSignals(context.Context, *connect.Request[v1.GetServiceSignalsRequest]) (*connect.Response[v1.GetServiceSignalsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetServiceSignals is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) ListWorkloads(context.Context, *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error) {
