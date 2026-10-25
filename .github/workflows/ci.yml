@@ -97,7 +97,12 @@ jobs:
           BASE: ${{ steps.base.outputs.base }}
         run: |
           set -euo pipefail
-          if [ "${EVENT_NAME}" = pull_request ]; then task ci:lanes -- --base "${BASE}"; else task ci:lanes -- --full; fi | tee -a "$GITHUB_OUTPUT"
+          case "${EVENT_NAME}" in
+            pull_request) task ci:lanes -- --base "${BASE}" ;;
+            # The control-plane contract judges what a push changed here.
+            push) task ci:lanes -- --full --base "${BASE}" ;;
+            *) task ci:lanes -- --full ;;
+          esac | tee -a "$GITHUB_OUTPUT"
 
   # ── The merge tier (pull requests) ────────────────────────────────────────
   merge-gate:
@@ -348,8 +353,9 @@ jobs:
   # Green only when every job that ran passed. On a PR a lane the change does
   # not reach is skipped, which is fine, but the merge gate must have run. Off
   # a PR every lane runs (scripts/ci-lanes.sh --full), so a skip there is a
-  # broken `if:`, never a pass: everything but the merge gate (and go-cache,
-  # which only a push runs) must have succeeded.
+  # broken `if:`, never a pass: everything but the merge gate, go-cache (only a
+  # push runs it) and cp-contract (only a change to the vendored contract
+  # does) must have succeeded.
   ci-result:
     name: CI result
     needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package]
@@ -368,7 +374,7 @@ jobs:
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
           if [ "${EVENT_NAME}" != pull_request ]; then
-            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
           bad=$(grep . <<< "${bad}" | sort -u || true)
