@@ -436,6 +436,28 @@ service DeployService {
     };
   }
 
+  // RecordReleaseMigrations fills the migration manifest of a release cut
+  // before forge recorded one — the backfill that lets forge's release-time
+  // migration-order guard see what an environment already applied. It is NOT
+  // an update: the manifest is evidence in its own append-only child row, the
+  // release row is untouched, a release that already records an equal
+  // manifest answers recorded=false, and a DIFFERENT one is AlreadyExists.
+  rpc RecordReleaseMigrations(RecordReleaseMigrationsRequest) returns (RecordReleaseMigrationsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      activity: {
+        verb: "record_migrations"
+        target: {
+          kind: "release"
+          id: "version"
+          label: "version"
+        }
+        detail: ["project"]
+      }
+    };
+  }
+
   // ListReleases feeds the promote picker. Releases are immutable, so there
   // is deliberately no UpdateRelease anywhere in this service — a correction
   // is a new release.
@@ -1300,6 +1322,28 @@ message CutReleaseRequest {
   // (DeployRelease.commits). Recorded as the claim it is; not part of the
   // release's identity, so a retry with a different range is still a retry.
   DeployCommitRange commits = 10;
+
+  // The migration directories the release embeds (DeployRelease.migrations).
+  // Allowed beside snapshot_release, which forge sends WITHOUT it: the
+  // snapshot document is decoded strictly into this server's pinned forge
+  // Release, so the manifest rides here. A retry that carries one for a
+  // release recorded without one fills it; it never replaces one.
+  DeployMigrationManifest migrations = 11;
+}
+
+// RecordReleaseMigrationsRequest records the migration manifest of a release
+// cut before forge recorded one (`forge env releases backfill-migrations`).
+message RecordReleaseMigrationsRequest {
+  string version = 1;
+  // The forge project, as on CutReleaseRequest; empty is the legacy namespace.
+  string project = 2;
+  DeployMigrationManifest migrations = 3;
+}
+
+message RecordReleaseMigrationsResponse {
+  DeployRelease release = 1;
+  // False when the release already recorded this same manifest: a retry.
+  bool recorded = 2;
 }
 
 message CutReleaseResponse {

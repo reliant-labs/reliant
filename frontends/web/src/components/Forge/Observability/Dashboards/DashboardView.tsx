@@ -101,6 +101,8 @@ export interface DashboardHrefs extends ExploreHrefs {
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
+  /** One browser session (a sessions panel's row). Absent: rows are not links. */
+  session?: (sessionId: string) => string;
   dashboard: (ref: DashboardRef, search?: DashboardSearch) => string;
 }
 
@@ -246,6 +248,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
     exploreLink?.(dashboardPivot(panel, { service: search.service, compare }), { range: search.range ? range : undefined }) ?? null;
   const links = {
     traceHref: hrefs.trace,
+    sessionHref: hrefs.session,
     searchHref: (panel: Panel) => {
       const { logs, traces } = drillSearches(panel, {}, { range, service: search.service });
       return panel.signal === "logs" ? hrefs.logs(logs) : hrefs.traces(traces);

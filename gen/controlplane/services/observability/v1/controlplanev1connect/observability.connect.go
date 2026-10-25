@@ -101,6 +101,13 @@ type ObservabilityServiceClient interface {
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
 	// QueryMetric returns time series for one metric: an aggregation, optional
 	// group-by attribute keys, and a step. Max range 30 days.
+	//
+	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
+	// runs the same evaluator and also returns series_meta, series_total and
+	// warnings. Removed in a follow-up once the console and forge's cloud backend
+	// no longer call it.
+	//
+	// Deprecated: do not use.
 	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes
@@ -339,6 +346,8 @@ func (c *observabilityServiceClient) ListMetrics(ctx context.Context, req *conne
 }
 
 // QueryMetric calls controlplane.v1.ObservabilityService.QueryMetric.
+//
+// Deprecated: do not use.
 func (c *observabilityServiceClient) QueryMetric(ctx context.Context, req *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
 	return c.queryMetric.CallUnary(ctx, req)
 }
@@ -417,6 +426,13 @@ type ObservabilityServiceHandler interface {
 	ListMetrics(context.Context, *connect.Request[v1.ListMetricsRequest]) (*connect.Response[v1.ListMetricsResponse], error)
 	// QueryMetric returns time series for one metric: an aggregation, optional
 	// group-by attribute keys, and a step. Max range 30 days.
+	//
+	// Deprecated: it is a one-series line panel; call QueryPanel instead, which
+	// runs the same evaluator and also returns series_meta, series_total and
+	// warnings. Removed in a follow-up once the console and forge's cloud backend
+	// no longer call it.
+	//
+	// Deprecated: do not use.
 	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
 	// GetMetric is the metric detail the explorer's side pane opens on: the
 	// catalog entry, the export-interval estimate, whether the metric mixes

@@ -22,13 +22,14 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
  * Dashboards are not one either: native dashboards are console pages of their
  * own (Observability › Dashboards, decision DB).
  */
-export const OBS_VIEWS = ["overview", "alerts", "errors", "logs", "traces", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "errors", "sessions", "logs", "traces", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
   alerts: "Alerts",
   errors: "Errors",
+  sessions: "Sessions",
   logs: "Logs",
   traces: "Traces",
   profiles: "Profiles",
@@ -78,12 +79,13 @@ export interface ObsSearch {
   range?: RangePreset;
   service?: string;
   severity?: string;
+  /** Logs: the query. Traces: the root operation. Errors: title or culprit. Sessions: entry path contains. */
   q?: string;
   trace?: string;
   span?: string;
   profileType?: string;
   live?: boolean;
-  /** Traces: only the ones with a failed span. */
+  /** Traces: only the ones with a failed span. Sessions: only the ones that raised a browser error. */
   errors?: boolean;
   /** Traces: only the ones slower than this ("500ms", "1s"). */
   minDuration?: string;
@@ -116,6 +118,20 @@ export interface ObsSearch {
   platform?: IssuePlatform;
   /** Errors: the order. Absent: most recently seen first. */
   isort?: IssueSort;
+  /** Sessions: the session open in detail (its rum.sessionId). */
+  session?: string;
+  /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
+  t?: number;
+  /** Sessions: only the ones with a recorded replay. */
+  replay?: boolean;
+  /** Sessions: only this user id's. */
+  user?: string;
+  /**
+   * Sessions: the page tokens walked to reach the page shown, oldest first —
+   * the last is the page's own. Absent: the first page. A trail, not one
+   * token, so Previous is a link too.
+   */
+  cursor?: string[];
 }
 
 export const ALERTS_TABS = ["firing", "history", "silences", "rules", "receivers"] as const;
@@ -149,6 +165,11 @@ export const OBS_SEARCH_KEYS = [
   "istatus",
   "platform",
   "isort",
+  "session",
+  "t",
+  "replay",
+  "user",
+  "cursor",
 ] as const satisfies readonly (keyof ObsSearch)[];
 
 /**

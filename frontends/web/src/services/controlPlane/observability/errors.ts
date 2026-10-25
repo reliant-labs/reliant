@@ -173,3 +173,28 @@ export function releaseHealthRetry(failureCount: number, error: unknown): boolea
   if (releaseHealthErrorKind(error) !== "unavailable") return false;
   return failureCount < 1;
 }
+
+/**
+ * What a RumService failure means. Sessions add two answers:
+ *
+ *   not-configured  Unimplemented (a control plane from before sessions) or
+ *                   Unavailable "sessions are not configured on this server".
+ *                   Explained in place, never retried.
+ *   not-found       NotFound: no such session in the scope — none at all, or
+ *                   one of another environment or service (the server words
+ *                   them the same).
+ *
+ * Everything else reads as obsErrorKind does.
+ */
+export type RumErrorKind = ObsErrorKind | "not-configured" | "not-found";
+
+export function rumErrorKind(error: unknown): RumErrorKind {
+  if (notOnThisServer(error)) return "not-configured";
+  if (error instanceof ConnectError && error.code === Code.NotFound) return "not-found";
+  return obsErrorKind(error);
+}
+
+export function rumRetry(failureCount: number, error: unknown): boolean {
+  if (rumErrorKind(error) !== "unavailable") return false;
+  return failureCount < 1;
+}

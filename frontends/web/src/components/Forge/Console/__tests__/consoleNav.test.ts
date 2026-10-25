@@ -36,7 +36,7 @@ describe("buildConsoleNav", () => {
   it("lists Observability's views as its children (D9)", () => {
     const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, alertsFiring: 2 });
     const obs = items.find((item) => item.label === "Observability")!;
-    expect(obs.children?.map((child) => child.label)).toEqual(["Errors", "Logs", "Traces", "Metrics", "Profiles", "Dashboards", "Alerts"]);
+    expect(obs.children?.map((child) => child.label)).toEqual(["Errors", "Sessions", "Logs", "Traces", "Metrics", "Profiles", "Dashboards", "Alerts"]);
     expect(obs.children?.find((child) => child.label === "Alerts")?.badge).toMatchObject({ type: "count", value: 2, tone: "danger" });
   });
 

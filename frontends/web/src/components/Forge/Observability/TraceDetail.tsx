@@ -8,9 +8,13 @@
  *
  * The selected span is in the URL (`span`), so a link can point at the one
  * slow call in a trace of four hundred.
+ *
+ * A trace that began in a browser carries the session it ran in
+ * (`rum.sessionId` on its browser spans), and opens that session — its
+ * timeline and, when recorded, its masked replay — at the trace's start.
  */
 
-import { ArrowLeft, Flame, FileText, LineChart } from "lucide-react";
+import { ArrowLeft, Flame, FileText, LineChart, MonitorPlay } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
@@ -24,6 +28,7 @@ import { formatDuration, formatTimestamp } from "./format";
 import { shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
+import { rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
 import { TraceWaterfall } from "./waterfall/TraceWaterfall";
 import { traceExtent } from "./waterfall/traceTree";
 
@@ -47,6 +52,7 @@ export function TraceDetail({
   const extent = trace.data ? traceExtent(spans) : null;
   const exploreHref = useExploreHref();
   const metricsHref = (span: Span | undefined) => (span ? (exploreHref?.(tracePivot(span), { range: "1h" }) ?? null) : null);
+  const sessionId = rumSessionIdOf(spans);
 
   const back = (
     <Button
@@ -134,6 +140,18 @@ export function TraceDetail({
           >
             Flamegraph
           </Button>
+          {sessionId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(sessionLink(sessionId, extent ? extent.startMs - SESSION_LEAD_MS : undefined))}
+              leftIcon={<MonitorPlay className="h-3.5 w-3.5" />}
+              data-testid="trace-session"
+              title={`Browser session ${sessionId}`}
+            >
+              Session
+            </Button>
+          )}
         </div>
       </div>
 
@@ -163,6 +181,9 @@ export function TraceDetail({
     </div>
   );
 }
+
+/** How far before the trace its session opens, to show what led to it. */
+const SESSION_LEAD_MS = 2_000;
 
 function SpanDetails({
   span,

@@ -156,6 +156,7 @@ describe("the URL round trip", () => {
         "alerts", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort",
+        "session", "t", "replay", "user", "cursor",
       ].sort()
     );
   });

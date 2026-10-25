@@ -56,6 +56,8 @@ export interface DrillTarget {
 export interface PanelLinks {
   /** Opens one trace (an issue's sample). */
   traceHref?: (traceId: string) => string;
+  /** Opens one browser session (a sessions panel's row): its timeline and replay. */
+  sessionHref?: (sessionId: string) => string;
   /** Logs / Traces for a search panel. */
   searchHref?: (panel: Panel) => string;
   /** A series or row clicked: the drill-down menu, opened at `at` (viewport px). */
@@ -170,7 +172,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     case "sessions":
       return (
         <>
-          <SessionsList data={data} compact={compact} />
+          <SessionsList data={data} sessionHref={links?.sessionHref} compact={compact} />
           {truncated}
         </>
       );
@@ -658,7 +660,7 @@ function IssuesList({ data, traceHref, compact }: { data: PanelResult; traceHref
 }
 
 /** Sessions: who, where they came in, how long, what they did, and whether it went wrong. */
-function SessionsList({ data, compact }: { data: PanelResult; compact: boolean }) {
+function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessionHref?: (sessionId: string) => string; compact: boolean }) {
   const sessions = compact ? data.sessions.slice(0, 3) : data.sessions;
   return (
     <div className={cn(!compact && "max-h-96 overflow-auto")}>
@@ -699,7 +701,18 @@ function SessionsList({ data, compact }: { data: PanelResult; compact: boolean }
             <tr key={session.sessionId} className="border-b border-border/70 last:border-b-0" data-session={session.sessionId}>
               <td className="h-9 pr-3">
                 <span className="inline-flex items-center gap-1.5">
-                  <Mono value={session.sessionId} length={8} copy={!compact} />
+                  {sessionHref ? (
+                    <Link
+                      href={sessionHref(session.sessionId)}
+                      className="no-color font-mono text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
+                      title={session.hasReplay ? "Open this session and watch its replay" : "Open this session's timeline"}
+                      data-testid={`obs-panel-session-${session.sessionId}`}
+                    >
+                      {session.sessionId.length > 8 ? `${session.sessionId.slice(0, 8)}…` : session.sessionId}
+                    </Link>
+                  ) : (
+                    <Mono value={session.sessionId} length={8} copy={!compact} />
+                  )}
                   {session.hasReplay && !compact && <Tag title="This session's replay was recorded">replay</Tag>}
                 </span>
               </td>

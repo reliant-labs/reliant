@@ -8,7 +8,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { ArrowLeft, ExternalLink, GitCommitHorizontal } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitCommitHorizontal, MonitorPlay } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
@@ -25,6 +25,7 @@ import { shortCommit } from "../deliveryScope";
 import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
+import { sessionLink } from "../Sessions/sessionModel";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, frameText, PLATFORM_LABEL } from "./issueModel";
 import { IssueNotFound, IssuesNotConfigured } from "./IssueStates";
@@ -77,7 +78,41 @@ export function IssueDetail({
   }
   const openTrace = (traceId: string, spanId?: string) =>
     navigate({ view: "traces", trace: traceId, span: spanId || undefined, issue: undefined, istatus: undefined, platform: undefined, isort: undefined, q: undefined });
-  return <IssueBody detail={detail.data} scope={scope} subject={subject} range={range} back={back} openTrace={openTrace} openIssue={(id) => navigate({ issue: id })} />;
+  // A browser error's session, opened a few seconds before the error so the replay shows what led to it.
+  const openSession = (sessionId: string, atMs: number) => navigate(sessionLink(sessionId, atMs > 0 ? atMs - SESSION_LEAD_MS : undefined));
+  return (
+    <IssueBody
+      detail={detail.data}
+      scope={scope}
+      subject={subject}
+      range={range}
+      back={back}
+      openTrace={openTrace}
+      openSession={openSession}
+      openIssue={(id) => navigate({ issue: id })}
+    />
+  );
+}
+
+/** How far before an error its session opens. */
+const SESSION_LEAD_MS = 5_000;
+
+type OpenSession = (sessionId: string, atMs: number) => void;
+
+function SessionLink({ event, onSession }: { event: IssueEvent; onSession: OpenSession }) {
+  if (!event.sessionId) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onSession(event.sessionId, event.timeMs)}
+      className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      title={`Session ${event.sessionId}`}
+      data-testid={`obs-issue-session-${event.sessionId}`}
+    >
+      <MonitorPlay className="h-3 w-3" aria-hidden="true" />
+      Open session <span className="font-mono">{event.sessionId.slice(0, 12)}</span>
+    </button>
+  );
 }
 
 function IssueBody({
@@ -87,6 +122,7 @@ function IssueBody({
   range,
   back,
   openTrace,
+  openSession,
   openIssue,
 }: {
   detail: IssueDetailModel;
@@ -95,6 +131,7 @@ function IssueBody({
   range: RangePreset;
   back: ReactNode;
   openTrace: (traceId: string, spanId?: string) => void;
+  openSession: OpenSession;
   openIssue: (id: string) => void;
 }) {
   const { issue } = detail;
@@ -132,7 +169,7 @@ function IssueBody({
           <Card padding="none" data-testid="obs-issue-latest">
             <Section title="Latest event" note={detail.latestEvent ? formatTimestamp(detail.latestEvent.timeMs, now) : undefined} />
             {detail.latestEvent ? (
-              <LatestEvent event={detail.latestEvent} onTrace={openTrace} />
+              <LatestEvent event={detail.latestEvent} onTrace={openTrace} onSession={openSession} />
             ) : (
               <p className="px-4 py-4 text-sm text-muted-foreground">The newest event has aged out of retention; the counts still stand.</p>
             )}
@@ -146,7 +183,7 @@ function IssueBody({
           </Card>
           <Card padding="none" data-testid="obs-issue-events">
             <Section title="Recent events" note="Newest first." />
-            <RecentEvents issueId={issue.id} onTrace={openTrace} />
+            <RecentEvents issueId={issue.id} onTrace={openTrace} onSession={openSession} />
           </Card>
         </div>
         <div className="min-w-0 space-y-4">
@@ -245,7 +282,7 @@ function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: s
   );
 }
 
-function LatestEvent({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void }) {
+function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void; onSession: OpenSession }) {
   return (
     <div className="space-y-3 px-4 py-3">
       <p className="whitespace-pre-wrap break-words font-mono text-xs text-foreground" data-testid="obs-issue-latest-message">
@@ -254,7 +291,7 @@ function LatestEvent({ event, onTrace }: { event: IssueEvent; onTrace: (traceId:
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
         {event.urlPath && <span className="font-mono">{event.urlPath}</span>}
-        {event.sessionId && <span>session <span className="font-mono">{event.sessionId.slice(0, 12)}</span></span>}
+        <SessionLink event={event} onSession={onSession} />
         <TraceLink event={event} onTrace={onTrace} />
       </p>
       <AttributeTable title="Attributes" attributes={event.attributes} />
@@ -306,7 +343,7 @@ function Versions({ detail }: { detail: IssueDetailModel }) {
   );
 }
 
-function RecentEvents({ issueId, onTrace }: { issueId: string; onTrace: (traceId: string, spanId?: string) => void }) {
+function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrace: (traceId: string, spanId?: string) => void; onSession: OpenSession }) {
   const events = useIssueEvents(issueId);
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
   if (events.isLoading) return <ObsLoadingRows rows={3} testId="obs-issue-events-loading" />;
@@ -322,6 +359,7 @@ function RecentEvents({ issueId, onTrace }: { issueId: string; onTrace: (traceId
               <span className="tabular-nums">{formatTimestamp(event.timeMs, now)}</span>
               {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
               <TraceLink event={event} onTrace={onTrace} />
+              <SessionLink event={event} onSession={onSession} />
             </p>
             {event.message && <p className="truncate font-mono text-foreground">{event.message}</p>}
           </li>

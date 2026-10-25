@@ -83,7 +83,13 @@ service ObservabilityService {
 
   // QueryMetric returns time series for one metric: an aggregation, optional
   // group-by attribute keys, and a step. Max range 30 days.
+  //
+  // Deprecated: it is a one-series line panel; call QueryPanel instead, which
+  // runs the same evaluator and also returns series_meta, series_total and
+  // warnings. Removed in a follow-up once the console and forge's cloud backend
+  // no longer call it.
   rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
+    option deprecated = true;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -1301,9 +1307,10 @@ message QueryPanelResponse {
   // sessions panels: browser sessions that started in the range, newest first.
   repeated PanelSession sessions = 11;
   // With QueryPanelRequest.explain: what the panel compiles to, one entry per
-  // statement (a metrics panel runs one per series). Empty otherwise, and for
-  // the console kinds (funnel, issues, sessions), whose statements are the
-  // control plane's own.
+  // statement. A metrics panel lists, for each series, its metric's lookup, its
+  // attribute-key lookup when a group-by or filter needs one, and the series'
+  // own statement. Empty otherwise, and for the console kinds (funnel, issues,
+  // sessions), whose statements are the control plane's own.
   repeated CompiledStatement compiled_sql = 12;
   // heatmap panels: the non-empty cells, by time then value.
   repeated HeatmapCell heatmap = 13;

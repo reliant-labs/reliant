@@ -9,7 +9,7 @@
  *   /forge/p/:project/releases                Releases
  *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases, D9)
  *   /forge/p/:project/observability           Observability overview
- *   /forge/p/:project/observability/:view     errors · logs · traces · metrics · profiles · dashboards · alerts
+ *   /forge/p/:project/observability/:view     errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *                                             one dashboard: a release one (`release/<id>`)
  *                                             or a workspace one (`workspace/<slug>`)
@@ -45,11 +45,12 @@ import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/
 export const FORGE_ROOT = "/forge";
 
 /** The Observability sub-pages that are nav entries (decision D9). */
-export const OBS_NAV_VIEWS = ["errors", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
+export const OBS_NAV_VIEWS = ["errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
 export type ObsNavView = (typeof OBS_NAV_VIEWS)[number];
 
 export const OBS_NAV_LABELS: Record<ObsNavView, string> = {
   errors: "Errors",
+  sessions: "Sessions",
   logs: "Logs",
   traces: "Traces",
   metrics: "Metrics",

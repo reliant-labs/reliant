@@ -21,6 +21,7 @@ import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
 import * as metrics from "./metricsApi";
+import * as rum from "./rumApi";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -64,6 +65,11 @@ export interface ObservabilityApi {
   updateIssueStatus: typeof issues.updateIssueStatus;
   // Activity (ActivityService): who changed what — an issue's history, the project feed.
   listActivity: typeof activity.listActivity;
+  // Sessions (RumService): real-user sessions, their timelines and masked replays.
+  listSessions: typeof rum.listSessions;
+  getSession: typeof rum.getSession;
+  getSessionTimeline: typeof rum.getSessionTimeline;
+  getSessionReplay: typeof rum.getSessionReplay;
   // Native dashboards (DashboardService, decision DB): reads need membership,
   // authoring the admin role.
   listDashboards: typeof dashboards.listDashboards;
@@ -115,6 +121,10 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   listIssueEvents: issues.listIssueEvents,
   updateIssueStatus: issues.updateIssueStatus,
   listActivity: activity.listActivity,
+  listSessions: rum.listSessions,
+  getSession: rum.getSession,
+  getSessionTimeline: rum.getSessionTimeline,
+  getSessionReplay: rum.getSessionReplay,
   listDashboards: dashboards.listDashboards,
   listDashboardTemplates: dashboards.listDashboardTemplates,
   getDashboard: dashboards.getDashboard,

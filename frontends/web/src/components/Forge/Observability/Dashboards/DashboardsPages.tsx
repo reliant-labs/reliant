@@ -74,6 +74,7 @@ function useObservabilityHrefs(): DashboardHrefs & ObservabilityHomeHrefs {
       releases: href({ kind: "releases" }),
       release: (version: string) => href({ kind: "release", version }),
       trace: (traceId: string) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
+      session: (sessionId: string) => href({ kind: "obs-view", view: "sessions" }, { session: sessionId }),
       // A workload is one per environment: with every environment in scope
       // and none named, the Overview filtered to it lets the reader pick one.
       workload: (name: string, envName?: string | null) => {

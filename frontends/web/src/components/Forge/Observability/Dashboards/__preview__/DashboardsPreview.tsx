@@ -170,6 +170,7 @@ export default function DashboardsPreview() {
     releases: "/forge-releases-preview",
     release: (version: string) => withSearch("/forge-releases-preview", { version }),
     trace: (traceId: string) => withSearch("/forge-observability-preview", { view: "traces", trace: traceId }),
+    session: (sessionId: string) => withSearch("/forge-observability-preview", { view: "sessions", session: sessionId }),
     workload: (name: string) => withSearch("/forge-workloads-preview", { workload: name }),
     dashboard: dashboardHref,
   };

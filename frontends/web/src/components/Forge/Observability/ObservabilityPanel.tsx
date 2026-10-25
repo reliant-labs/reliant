@@ -4,7 +4,9 @@
  * The Observability area: Overview · Errors · Logs · Traces · Profiles
  * over one time window for one SCOPE, Alerts (what fires, the rules
  * each environment declares, silences and receivers) and Usage (the org's
- * allowance). Errors is the issue inbox (IssuesService), browser and server.
+ * allowance). Errors is the issue inbox (IssuesService), browser and server;
+ * Sessions are real-user browser sessions with their masked replays
+ * (RumService).
  *
  * Every time-series chart carries the release markers of its scope (one
  * ListReleases per scope and window, through ObsChartMarkersProvider), and any
@@ -42,6 +44,7 @@ import { RefreshCw } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import { activityKeys, deliveryKeys, issueKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
+import { sessionKeys } from "@/hooks/observability-session-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
@@ -77,6 +80,7 @@ import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
 import { useReleaseMarkers } from "./releaseMarkers";
 import { ReleaseStrip } from "./ReleaseStrip";
+import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
 
@@ -153,6 +157,11 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       istatus: undefined,
       platform: undefined,
       isort: undefined,
+      session: undefined,
+      t: undefined,
+      replay: undefined,
+      user: undefined,
+      cursor: undefined,
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
@@ -226,6 +235,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
               void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
               void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
               void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+              void queryClient.invalidateQueries({ queryKey: sessionKeys.root() });
             }}
             leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
             data-testid="obs-refresh"
@@ -251,7 +261,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
           groupable={groupable}
-          filterable={view !== "alerts" && view !== "errors"}
+          filterable={view !== "alerts" && view !== "errors" && view !== "sessions"}
         />
       )}
 
@@ -316,6 +326,21 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             platform={issuePlatformOf(search.platform)}
             sort={issueSortOf(search.isort)}
             issueId={search.issue}
+            navigate={navigate}
+          />
+        ) : view === "sessions" ? (
+          <SessionsView
+            scope={scope}
+            subject={subject}
+            range={range}
+            service={search.service}
+            text={search.q ?? ""}
+            hasError={!!search.errors}
+            hasReplay={!!search.replay}
+            user={search.user ?? ""}
+            cursor={search.cursor ?? []}
+            sessionId={search.session}
+            atMs={search.t}
             navigate={navigate}
           />
         ) : view === "overview" ? (

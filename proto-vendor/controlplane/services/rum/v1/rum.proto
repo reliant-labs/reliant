@@ -1,0 +1,364 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/rum/v1;rumv1";
+
+// === RumService (controlplane.v1.RumService) ===
+//
+// Real-user sessions of an org's browser frontends: the session list, one
+// session's summary, its timeline (what the user did, what failed, which
+// errors it raised) and its session replay. It serves the console's Sessions
+// view and replay player, and `forge obs sessions|session`.
+//
+// TYPED REQUESTS ONLY. No RPC accepts SQL; every filter is a server-side
+// parameter of a compiled statement (forge/pkg/obsquery).
+//
+// ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
+// carries scope.org_id, and the handler passes the caller through the tenant
+// read gate before any data is read: a person must be a member of the org; a
+// machine credential must act for the org and carry obs:read, and its
+// environment binding, if any, must cover scope.env_ids. A caller outside the
+// org gets PermissionDenied and no connection to the org's data is opened.
+// Every query then runs as THAT org's own ClickHouse user, so the database, not
+// this code, is the tenant boundary.
+//
+// SESSION READS (GetSession, GetSessionTimeline, GetSessionReplay) name a
+// session id, which is a key, and look it up inside the scope: its environments
+// and services. scope.time_range is OPTIONAL for them. Unset, the handler finds
+// the session within the last 30 days and reads exactly the span it was
+// recorded over; set, it is used as given (it should cover the session). A
+// session that is not visible to the scope (no such session, or one of another
+// environment or service) is NotFound from all three.
+//
+// PRIVACY. Replay is masked at record time by the recorder (maskAllInputs,
+// maskTextSelector '*'). The server never unmasks, never opens an event beyond
+// checking it is a JSON object, and never alters a byte of it. A timeline
+// carries no raw URL query, fragment or element text.
+//
+// BOUNDED. Every list is paged; a replay page is bounded by bytes. Row limits
+// and ClickHouse execution caps apply on top.
+//
+// ERRORS: InvalidArgument (bad range, page size, session id or page token),
+// PermissionDenied (not a member / a credential without the scope or for
+// another org), NotFound (no such session in the scope), FailedPrecondition
+// (observability is not set up for the org), ResourceExhausted (the console's
+// concurrent-read cap, a machine credential's request budget, or a ClickHouse
+// quota), DeadlineExceeded (query timeout), Unavailable (sessions are not
+// configured on this server).
+service RumService {
+  option (forge.v1.service) = {
+    name: "RumService"
+    version: "1.0.0"
+    description: "Real-user browser sessions: list, summary, timeline and replay"
+  };
+
+  // ListSessions returns the sessions that STARTED in scope.time_range (default:
+  // the last 24 hours, max 30 days), newest first, a page at a time. The filters
+  // are ANDed.
+  //
+  // forge:custom — a session is not an entity of the generic CRUD kit: its rows
+  // are aggregated from the tenant's browser telemetry.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      errors: [
+        "InvalidArgument",
+        "PermissionDenied",
+        "FailedPrecondition",
+        "ResourceExhausted",
+        "Unavailable"
+      ]
+      activity: {none: "a read: lists sessions and changes nothing"}
+    };
+  }
+
+  // GetSession returns one session's summary. NotFound when the scope cannot see
+  // the session.
+  //
+  // forge:custom — see ListSessions.
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      errors: [
+        "InvalidArgument",
+        "PermissionDenied",
+        "NotFound",
+        "FailedPrecondition",
+        "ResourceExhausted",
+        "Unavailable"
+      ]
+      activity: {none: "a read: returns one session and changes nothing"}
+    };
+  }
+
+  // GetSessionTimeline returns one session's navigations, clicks, failed
+  // requests, errors and custom events in time order, a page at a time. Each
+  // entry carries the trace and span it came from, and an error entry carries
+  // the issue it belongs to once the issues worker has seen its stack.
+  rpc GetSessionTimeline(GetSessionTimelineRequest) returns (GetSessionTimelineResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      errors: [
+        "InvalidArgument",
+        "PermissionDenied",
+        "NotFound",
+        "FailedPrecondition",
+        "ResourceExhausted",
+        "Unavailable"
+      ]
+      activity: {none: "a read: returns one session's timeline and changes nothing"}
+    };
+  }
+
+  // GetSessionReplay returns one session's rrweb events, in recorded order, a
+  // page at a time. A page is bounded by BYTES (max_bytes) and holds only whole
+  // events: the recorder splits an event over 950 KiB into several stored
+  // chunks, and the server reassembles them, so a client never sees half of one.
+  // An event whose last chunk may still be in flight is withheld together with
+  // everything after it, and arrives on a later page.
+  //
+  // PAGING. next_page_token is set exactly when more complete events are
+  // available now: fetch the next page with it, starting playback after the
+  // first. resume_token is set whenever the page holds an event, even the last:
+  // a client watching a session that is still being recorded polls with it and
+  // receives the events recorded since. Both tokens are bound to this session
+  // and to the scope's filters; the time range and the byte budget may differ
+  // between pages.
+  //
+  // The event bytes are the stored rrweb JSON, masked at record time and passed
+  // through untouched.
+  rpc GetSessionReplay(GetSessionReplayRequest) returns (GetSessionReplayResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+      errors: [
+        "InvalidArgument",
+        "PermissionDenied",
+        "NotFound",
+        "FailedPrecondition",
+        "ResourceExhausted",
+        "Unavailable"
+      ]
+      activity: {none: "a read: returns one session's recording and changes nothing"}
+    };
+  }
+}
+
+// RumTimeRange is a half-open range [start, end). Both ends are required when
+// the range is present, and end must be after start.
+message RumTimeRange {
+  google.protobuf.Timestamp start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
+}
+
+// RumScope is console contract K1 as this service reads it. Field numbers match
+// ObservabilityService's QueryScope, so the console sends the one scope it
+// builds; the telemetry-only fields (env_id, filters) are reserved.
+message RumScope {
+  reserved 2, 7;
+  reserved "env_id", "filters";
+  // The org whose sessions are read. The caller MUST be a member; verified
+  // server-side, never assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Narrow to these services (service.name). Empty = every service.
+  repeated string services = 3 [(buf.validate.field).repeated.max_items = 50];
+  // The window the read covers; see each rpc for what unset means. Max 30
+  // days, except a timeline's, which is at most 7 days.
+  RumTimeRange time_range = 4;
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = every
+  // environment of the org (of the project, when project_id is set).
+  repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+}
+
+// SessionSummary is one browser session.
+message SessionSummary {
+  // The recorder's rum.sessionId.
+  string session_id = 1;
+  string service = 2;
+  // The build the session ran: service.version of its frontend.
+  string service_version = 3;
+  string env_id = 4;
+  string env_name = 5;
+  // The userId the app identified the session with. Empty when it never did.
+  string user_id = 6;
+  // The path of the first page, with no query or fragment.
+  string entry_path = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+  int64 page_views = 10;
+  int64 interactions = 11;
+  // Browser errors raised in the session.
+  int64 errors = 12;
+  // Whether a replay was recorded. GetSessionReplay serves it.
+  bool has_replay = 13;
+}
+
+message ListSessionsRequest {
+  RumScope scope = 1 [(buf.validate.field).required = true];
+  // Only sessions with at least one browser error.
+  bool has_error = 2;
+  // Only sessions with a recorded replay.
+  bool has_replay = 3;
+  // Only sessions of this user id.
+  string user_id = 4 [(buf.validate.field).string.max_len = 256];
+  // Only sessions whose entry path contains this, case-insensitive.
+  string path_contains = 5 [(buf.validate.field).string.max_len = 256];
+  // Rows per page. Default 25, max 100.
+  int32 page_size = 6 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  // next_page_token from the previous page; valid only with the same filters.
+  string page_token = 7 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListSessionsResponse {
+  // Newest first.
+  repeated SessionSummary sessions = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+message GetSessionRequest {
+  RumScope scope = 1 [(buf.validate.field).required = true];
+  string session_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+}
+
+message GetSessionResponse {
+  SessionSummary session = 1;
+}
+
+// SessionTimelineKind is what a timeline entry is.
+enum SessionTimelineKind {
+  SESSION_TIMELINE_KIND_UNSPECIFIED = 0;
+  // A document load or a route change.
+  SESSION_TIMELINE_KIND_NAVIGATION = 1;
+  // One physical click or tap.
+  SESSION_TIMELINE_KIND_CLICK = 2;
+  // A fetch or XHR that answered with an error status or failed.
+  SESSION_TIMELINE_KIND_REQUEST_FAILED = 3;
+  // A browser error.
+  SESSION_TIMELINE_KIND_ERROR = 4;
+  // A custom event the app recorded (track / addAction).
+  SESSION_TIMELINE_KIND_EVENT = 5;
+}
+
+// SessionTimelineEntry is one line of a session's timeline.
+//
+// Nothing in it is a raw URL or element text. Paths have their query and
+// fragment cut (they carry tokens); a click carries the element's tag and its
+// xpath, never its text; an error carries its message with the volatile parts
+// masked.
+message SessionTimelineEntry {
+  google.protobuf.Timestamp time = 1;
+  SessionTimelineKind kind = 2;
+  // A navigation's span name (documentLoad, routeChange), "click", a failed
+  // request's HTTP method, an error's span name (onerror, unhandledrejection),
+  // a custom event's name.
+  string name = 3;
+  // The page (navigation, click, error, event) or the request's path.
+  string path = 4;
+  string method = 5;
+  // A failed request's HTTP status; 0 for a network failure.
+  int32 status = 6;
+  // A click's element xpath.
+  string selector = 7;
+  // A click's element tag name.
+  string element = 8;
+  // An error's exception type, or a failed request's SDK error type.
+  string error_type = 9;
+  // An error's masked message, or a failed request's status text.
+  string message = 10;
+  // An error's fingerprint. Empty until the issues worker has seen its stack.
+  string fingerprint = 11;
+  // The issue an error belongs to, when the issues worker has folded it into
+  // one: the id a client links to in the Errors view. Empty otherwise.
+  string issue_id = 12;
+  string trace_id = 13;
+  string span_id = 14;
+  double duration_ms = 15;
+  // A custom event's properties (at most 32); a navigation's "from" (the
+  // previous path).
+  map<string, string> props = 16;
+  string service = 17;
+}
+
+message GetSessionTimelineRequest {
+  RumScope scope = 1 [(buf.validate.field).required = true];
+  string session_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+  // Entries per page. Default 200, max 2000.
+  int32 page_size = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 2000
+  ];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message GetSessionTimelineResponse {
+  // In time order, oldest first.
+  repeated SessionTimelineEntry entries = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+message GetSessionReplayRequest {
+  RumScope scope = 1 [(buf.validate.field).required = true];
+  string session_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+  // The page's byte budget over the events' data. A page holds whole events
+  // totalling at most this, or exactly one event when that event alone is
+  // larger. Default 4 MiB, max 16 MiB.
+  int32 max_bytes = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 16777216
+  ];
+  // next_page_token or resume_token from a previous page of this session.
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+// ReplayEvent is one whole rrweb event.
+message ReplayEvent {
+  // The event's own timestamp, to the millisecond.
+  google.protobuf.Timestamp time = 1;
+  // The recorder's event counter. It restarts on every page load, so it orders
+  // events only within one timestamp.
+  uint32 index = 2;
+  // How many stored records the event was reassembled from.
+  int32 chunks = 3;
+  // The event's JSON text exactly as recorded: opaque, masked at record time,
+  // never altered. A client parses it and hands it to the rrweb Replayer.
+  bytes data = 4;
+}
+
+message GetSessionReplayResponse {
+  // In recorded order, whole events only.
+  repeated ReplayEvent events = 1;
+  // Set exactly when more complete events are available now.
+  string next_page_token = 2;
+  // Set whenever events is not empty, including on the last page. Passing it
+  // later returns the events recorded since: how a session still being recorded
+  // is followed.
+  string resume_token = 3;
+}

@@ -20,6 +20,7 @@ import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAle
 import { createDashboardFixture, type DashboardFixtureOptions } from "./fixtureDashboards";
 import { createDeliveryFixture, versionAt, type DeliveryFixtureOptions } from "./fixtureDelivery";
 import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues";
+import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
@@ -822,7 +823,7 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false, workloads: rows };
 }
 
-export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions, IssuesFixtureOptions {
+export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions, IssuesFixtureOptions, SessionsFixtureOptions {
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
@@ -926,6 +927,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     listReleases: delivery.listReleases,
     getDoraMetrics: delivery.getDoraMetrics,
     ...createIssuesFixture(options, call, delivery.ledger),
+    ...createSessionsFixture(options, call),
     listMetricCatalog: (req) => call("ListMetrics", req, () => (options.empty ? { metrics: [], truncated: false } : fixtureMetricCatalog(req.window.endMs, req.name, req.limit))),
     getMetric: (req) =>
       call("GetMetric", req, () => {

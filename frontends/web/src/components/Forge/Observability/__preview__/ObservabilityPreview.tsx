@@ -68,6 +68,13 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "issues-empty", label: "errors: no issues", options: { issues: "empty" } },
   { id: "issues-not-configured", label: "errors: older control plane (Unimplemented)", options: { issues: "not-configured" } },
   { id: "issues-conflict", label: "errors: first triage loses a race (Aborted)", options: { issueConflict: true } },
+  // Sessions (view=sessions, &session=<id> for one; sess-1a8c2f1d91e is the failed checkout, sess-live01 is still recording).
+  { id: "sessions-empty", label: "sessions: none in range", options: { sessions: "empty" } },
+  { id: "sessions-not-configured", label: "sessions: older control plane (Unimplemented)", options: { sessions: "not-configured" } },
+  { id: "replay-partial", label: "replay: stops before the session did", options: { replay: "partial" } },
+  { id: "replay-no-snapshot", label: "replay: full snapshot lost (unplayable)", options: { replay: "no-snapshot" } },
+  { id: "replay-unreadable", label: "replay: two events unreadable", options: { replay: "unreadable" } },
+  { id: "replay-none", label: "replay: recorded, nothing left", options: { replay: "none" } },
   // Release health (a comparison open: &compare=<envId>~<ms>~<promotionId>, or Compare from the release strip).
   // The "data" case judges prod's v1.8.3 a FAIL; these force the other answers.
   { id: "health-pass", label: "release health: PASS", options: { health: "pass" } },
@@ -76,7 +83,7 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "health-unimplemented", label: "release health: older control plane (Unimplemented)", options: { health: "unimplemented" } },
 ];
 
-const LIST_KEYS = new Set(["envs", "f", "groupBy"]);
+const LIST_KEYS = new Set(["envs", "f", "groupBy", "cursor"]);
 
 /** The preview's query string as ObsSearch: list keys repeat (`?f=a&f=b`), `edit` is JSON. */
 function searchFromUrl(params: URLSearchParams): ObsSearch {
@@ -90,7 +97,8 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
       } catch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
-    } else if (key === "live" || key === "errors") out[key] = params.get(key) === "true";
+    } else if (key === "live" || key === "errors" || key === "replay") out[key] = params.get(key) === "true";
+    else if (key === "t") out[key] = Number(params.get(key)) || undefined;
     else out[key] = params.get(key);
   }
   return out as ObsSearch;

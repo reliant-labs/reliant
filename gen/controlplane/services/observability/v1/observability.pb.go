@@ -5771,9 +5771,10 @@ type QueryPanelResponse struct {
 	// sessions panels: browser sessions that started in the range, newest first.
 	Sessions []*PanelSession `protobuf:"bytes,11,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	// With QueryPanelRequest.explain: what the panel compiles to, one entry per
-	// statement (a metrics panel runs one per series). Empty otherwise, and for
-	// the console kinds (funnel, issues, sessions), whose statements are the
-	// control plane's own.
+	// statement. A metrics panel lists, for each series, its metric's lookup, its
+	// attribute-key lookup when a group-by or filter needs one, and the series'
+	// own statement. Empty otherwise, and for the console kinds (funnel, issues,
+	// sessions), whose statements are the control plane's own.
 	CompiledSql []*CompiledStatement `protobuf:"bytes,12,rep,name=compiled_sql,json=compiledSql,proto3" json:"compiled_sql,omitempty"`
 	// heatmap panels: the non-empty cells, by time then value.
 	Heatmap []*HeatmapCell `protobuf:"bytes,13,rep,name=heatmap,proto3" json:"heatmap,omitempty"`
@@ -9603,15 +9604,15 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x1eRELEASE_FINDING_CODE_NEW_ISSUE\x10\x03\x12(\n" +
 	"$RELEASE_FINDING_CODE_REGRESSED_ISSUE\x10\x04\x12%\n" +
 	"!RELEASE_FINDING_CODE_ALERT_FIRING\x10\x05\x12*\n" +
-	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x062\xa2\f\n" +
+	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x062\xa7\f\n" +
 	"\x14ObservabilityService\x12U\n" +
 	"\n" +
 	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\x12U\n" +
 	"\n" +
 	"ListTraces\x12\".controlplane.v1.ListTracesRequest\x1a#.controlplane.v1.ListTracesResponse\x12O\n" +
 	"\bGetTrace\x12 .controlplane.v1.GetTraceRequest\x1a!.controlplane.v1.GetTraceResponse\x12X\n" +
-	"\vListMetrics\x12#.controlplane.v1.ListMetricsRequest\x1a$.controlplane.v1.ListMetricsResponse\x12X\n" +
-	"\vQueryMetric\x12#.controlplane.v1.QueryMetricRequest\x1a$.controlplane.v1.QueryMetricResponse\x12R\n" +
+	"\vListMetrics\x12#.controlplane.v1.ListMetricsRequest\x1a$.controlplane.v1.ListMetricsResponse\x12]\n" +
+	"\vQueryMetric\x12#.controlplane.v1.QueryMetricRequest\x1a$.controlplane.v1.QueryMetricResponse\"\x03\x88\x02\x01\x12R\n" +
 	"\tGetMetric\x12!.controlplane.v1.GetMetricRequest\x1a\".controlplane.v1.GetMetricResponse\x12p\n" +
 	"\x13ListMetricExemplars\x12+.controlplane.v1.ListMetricExemplarsRequest\x1a,.controlplane.v1.ListMetricExemplarsResponse\x12m\n" +
 	"\x12GetServiceOverview\x12*.controlplane.v1.GetServiceOverviewRequest\x1a+.controlplane.v1.GetServiceOverviewResponse\x12^\n" +

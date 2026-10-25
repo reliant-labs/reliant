@@ -1020,6 +1020,32 @@ message DeployRelease {
   // release, not part of its identity: a re-cut with a different range is
   // still the same release.
   DeployCommitRange commits = 14;
+
+  // The migration directories the release's artifacts embed, as forge
+  // recorded them at the cut (forge's release.MigrationManifest), or recorded
+  // afterwards by RecordReleaseMigrations for a release cut before forge
+  // recorded one. Unset when none was recorded. forge's cut and deploy read
+  // it from every release an environment applied, to refuse a release whose
+  // migration that environment's schema has already passed. Evidence, not
+  // identity: a re-cut is still a retry whatever it carries here.
+  DeployMigrationManifest migrations = 15;
+}
+
+// DeployMigrationManifest is forge's release.MigrationManifest: one set per
+// migrations directory a release embeds. Its JSON is forge's JSON exactly
+// (sets[].source / commit / files), which is what forge sends and reads.
+message DeployMigrationManifest {
+  repeated DeployMigrationSet sets = 1;
+}
+
+// DeployMigrationSet is one migrations directory as a release carried it.
+message DeployMigrationSet {
+  // "<canonical repo>/<dir>", e.g. "github.com/reliant-labs/reliant/db/migrations".
+  string source = 1;
+  // The commit the files were read at; empty for a dirty checkout's bytes.
+  string commit = 2;
+  // Forward migration file names ("20261024035148_x.up.sql"), version order.
+  repeated string files = 3;
 }
 
 // DeployGate is one check's result, recorded against a promotion.
