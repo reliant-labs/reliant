@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ReactNode } from "react";
 
 import { CatalogEntryKind } from "@/gen/reliant/v1/catalog_pb";
+import { ApiKeyConnectionKind } from "@/gen/reliant/v1/connection_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { useCatalogSearch } from "@/components/workflow/palette/useCatalogSearch";
@@ -78,7 +79,7 @@ describe("CatalogService keys", () => {
     await waitFor(() => expect(entry.result.current.data?.summary.connected).toBe(false));
 
     const create = renderHook(() => useCreateApiKeyConnection(), { wrapper });
-    await create.result.current.mutateAsync({ integrationId: "github", name: "", kind: "api_key", fields: {}, params: {} });
+    await create.result.current.mutateAsync({ integrationId: "github", name: "", kind: ApiKeyConnectionKind.API_KEY, fields: {}, params: {} });
 
     await waitFor(() => expect(entry.result.current.data?.summary.connected).toBe(true));
     expect(calls("GetCatalogEntry")).toBe(2);

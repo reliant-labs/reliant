@@ -80,8 +80,8 @@ function StubOAuth() {
 }
 
 function StubWorkflowBuilder() {
-  const params = useParams({ from: '/workflow/$workflowName' })
-  const search = useSearch({ from: '/workflow/$workflowName' })
+  const params = useParams({ strict: false })
+  const search = useSearch({ strict: false })
   return (
     <div data-testid="workflow-builder">
       <span data-testid="workflow-name">{params.workflowName}</span>
@@ -287,7 +287,7 @@ describe('routes: /runs search params', () => {
   it('round-trips a filter set through navigate()', async () => {
     const rootRoute = createRootRoute({ component: () => <Outlet /> })
     function StubRuns() {
-      const search = useSearch({ from: '/runs' })
+      const search = useSearch({ strict: false })
       return <pre data-testid="runs-search">{JSON.stringify(search)}</pre>
     }
     const runsRoute = createRoute({
@@ -301,7 +301,8 @@ describe('routes: /runs search params', () => {
       history: createMemoryHistory({ initialEntries: ['/runs'] }),
     })
     render(<RouterProvider router={router} />)
-    await router.navigate({ to: '/runs', search: { state: ['live'], kind: ['agent.start_run'] } })
+    // A route tree local to this test, so the app's registered route types do not apply.
+    await router.navigate({ to: '/runs', search: { state: ['live'], kind: ['agent.start_run'] } } as never)
     await waitFor(() =>
       expect(JSON.parse(screen.getByTestId('runs-search').textContent || '{}')).toEqual({
         state: ['live'],

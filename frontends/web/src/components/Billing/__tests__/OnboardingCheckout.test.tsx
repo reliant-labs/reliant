@@ -113,7 +113,7 @@ const CREDIT_LINE: CheckoutLine = {
 
 let confirmCompute: () => Promise<boolean>;
 let confirmCredit: () => Promise<boolean>;
-let onDone: ReturnType<typeof vi.fn>;
+let onDone: ReturnType<typeof vi.fn<() => void>>;
 
 function renderCheckout(lines: CheckoutLine[], overrides: Partial<{
   computePlanId: string;
@@ -150,7 +150,7 @@ beforeEach(() => {
   confirmCalls.length = 0;
   confirmCompute = async () => true;
   confirmCredit = async () => true;
-  onDone = vi.fn();
+  onDone = vi.fn<() => void>();
 });
 
 // ── The summary ──────────────────────────────────────────────────────────

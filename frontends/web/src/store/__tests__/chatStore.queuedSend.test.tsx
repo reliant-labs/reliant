@@ -26,7 +26,7 @@ import {
   StreamingState,
 } from "../../gen/reliant/v1/chat_pb";
 import type { ChatUpdate } from "../../types/streaming";
-import type { QueuedAgentMessageView } from "../../api/chat-grpc";
+import type { QueuedAgentMessageView } from "../../hooks/chat-model";
 
 const CHAT = "chat-queued-send";
 const THREAD = "thread-main";
@@ -37,19 +37,6 @@ const { sendMessageMock, listQueuedMock } = vi.hoisted(() => ({
   sendMessageMock: vi.fn(),
   listQueuedMock: vi.fn(),
 }));
-
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, sendMessage: sendMessageMock },
-    },
-  };
-});
 
 import { useChatStore } from "../chatStore";
 import { useGlobalUpdatesStore } from "../globalUpdatesStore";
@@ -70,7 +57,16 @@ import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullRe
 
 // ChatService's pull reads are generated-key reads, so they are answered at
 // the transport.
-beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedMock) })));
+// So is the send: `sendMessageMock(request)` answers SendMessage.
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      ...emptyChatPullReads(),
+      ...queuedAgentMessagesAnswer(listQueuedMock),
+      "ChatService.SendMessage": (req: unknown) => sendMessageMock(req),
+    }),
+  ),
+);
 afterEach(() => setTransport(null));
 
 interface Deferred<T> {
@@ -177,7 +173,7 @@ async function startSend(): Promise<
     // The id the queued row is created with: the client's own, or — from a
     // client that sends none — one the server chose.
     clientMessageId: () =>
-      (sendMessageMock.mock.calls[0][3]?.client_message_id as string | undefined) ??
+      ((sendMessageMock.mock.calls[0][0]?.clientMessageId as string | undefined) || undefined) ??
       SERVER_CHOSEN_ID,
   };
 }

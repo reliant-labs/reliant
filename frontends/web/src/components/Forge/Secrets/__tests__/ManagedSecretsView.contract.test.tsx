@@ -153,9 +153,9 @@ describe("the declared-but-unset row", () => {
 
 describe("version history: delete versus destroy", () => {
   const versions: ManagedSecretVersion[] = [
-    { version: 3, createdAt: "2026-03-01T00:00:00Z", destroyed: false },
-    { version: 2, createdAt: "2026-02-01T00:00:00Z", deletedAt: "2026-02-15T00:00:00Z", destroyed: false },
-    { version: 1, createdAt: "2026-01-01T00:00:00Z", destroyed: true },
+    { version: 3, createdAt: "2026-03-01T00:00:00Z", destroyed: false, setBy: null },
+    { version: 2, createdAt: "2026-02-01T00:00:00Z", deletedAt: "2026-02-15T00:00:00Z", destroyed: false, setBy: null },
+    { version: 1, createdAt: "2026-01-01T00:00:00Z", destroyed: true, setBy: null },
   ];
 
   function detail(overrides: Partial<ManagedSecretsViewProps> = {}) {

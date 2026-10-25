@@ -46,7 +46,6 @@ const getChat = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    chat: () => ({ startChat, getChat }),
     daemonRegistry: () => ({ listDaemons }),
   },
 }));
@@ -56,6 +55,8 @@ vi.mock("@/api/grpc-client", () => ({
 beforeEach(() => {
   setTransport(
     mockTransport({
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
+      "ChatService.GetChat": (req: unknown) => getChat(req as never),
       ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       ...serviceHandlers("ProjectService", { listProjectDaemons }),

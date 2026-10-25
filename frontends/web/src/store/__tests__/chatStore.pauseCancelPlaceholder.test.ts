@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatUpdate } from "../../types/streaming";
 
 // A tool call whose input was still streaming when the user paused or cancelled
@@ -18,29 +18,25 @@ import type { ChatUpdate } from "../../types/streaming";
 //
 // Observed on chat 7fc640a6 (pause) and 995f36f5 (cancel).
 
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: {
-        ...actual.api.chatsV2,
-        pause: vi.fn().mockResolvedValue({}),
-        cancel: vi.fn().mockResolvedValue({}),
-        dismiss: vi.fn().mockResolvedValue({ changed: false }),
-      },
-    },
-  };
-});
-
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { useChatStore } from "../chatStore";
 import { useProjectStore } from "../projectStore";
 import { clearAllMessagesCache } from "../../hooks/message-queries";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
+
+// Pause, cancel and dismiss succeed, answered at the transport.
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      "ChatService.PauseChat": { response: {} },
+      "ChatService.TerminateChat": { response: {} },
+      "ChatService.DismissChat": { response: { changed: false } },
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 function seed(chatId: string) {
   clearAllMessagesCache();

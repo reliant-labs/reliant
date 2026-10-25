@@ -14,7 +14,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ConnectError } from "@connectrpc/connect";
 
-import { chatGrpc, MessageRole, type Chat } from "@/api/chat-grpc";
+import { MessageRole, type Chat } from "@/hooks/chat-model";
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import Modal from "../../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
@@ -23,6 +23,7 @@ import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
+import * as chatActions from "@/hooks/chat-actions";
 
 export interface RunWorkflowDialogProps {
   open: boolean;
@@ -107,14 +108,14 @@ function RunWorkflowDialogBody({
 
     setStarting(true);
     try {
-      const { chat } = await chatGrpc.start({
+      const chat = await chatActions.startChat({
         project_id: projectId,
         worktree_id: value.worktreeId,
         daemon_id: value.daemonId,
         workflow: workflowRef,
         messages: [{ role: MessageRole.USER, content: prompt.trim() }],
         workflow_params: value.params,
-        selected_presets: value.presets,
+        selectedPresets: value.presets,
       });
       onClose();
       await openChat(chat);

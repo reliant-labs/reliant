@@ -8,7 +8,7 @@ function makeLoopWorkflow(name: string, loopId: string): Workflow {
   return {
     name,
     nodes: [
-      { id: loopId, type: 'loop', inline: { name: `${loopId}-body`, nodes: [], edges: [], entry: [] } },
+      { id: loopId, type: 'loop' },
     ],
     edges: [],
     entry: [loopId],
@@ -25,7 +25,7 @@ describe('mergeExpandedLoops', () => {
           position: { x: 100, y: 100 },
           data: {
             label: 'outer',
-            step: { id: 'outer', type: 'loop', inline: { name: 'outer-body', nodes: [], edges: [], entry: [] } },
+            step: { id: 'outer', type: 'loop' },
           } as FlowNodeData,
         } as Node<FlowNodeData>,
       ],
@@ -38,7 +38,7 @@ describe('mergeExpandedLoops', () => {
         loopNodeId: 'outer:inner',
         subWorkflow: {
           name: 'inner-body',
-          nodes: [{ id: 'inner-run', type: 'run', command: 'echo inner' }],
+          nodes: [{ id: 'inner-run', type: 'run' }],
           edges: [],
           entry: ['inner-run'],
         },

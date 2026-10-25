@@ -82,7 +82,7 @@ function nodeCard(container: HTMLElement, nodeId: string): HTMLElement | null {
 
 describe("WorkflowViewer with int64 fields on a step", () => {
   it("applies a status update to a run whose step holds a bigint", async () => {
-    expect(typeof (workflow.nodes[0].args.value as { maxTokens: { value: { value: unknown } } }).maxTokens.value.value).toBe(
+    expect(typeof (workflow.nodes![0]!.args!.value as { maxTokens: { value: { value: unknown } } }).maxTokens.value.value).toBe(
       "bigint",
     );
     const errors: unknown[] = [];

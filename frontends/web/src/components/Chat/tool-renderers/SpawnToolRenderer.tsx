@@ -31,10 +31,10 @@ import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
-import { chatGrpc } from "../../../api/chat-grpc";
 import { invalidateQueuedAgentMessages } from "../../../hooks/queued-agent-messages";
 import { newClientMessageId } from "../../../lib/pendingSends";
 import { toast } from "../../../lib/toast-manager";
+import * as chatActions from "../../../hooks/chat-actions";
 
 const MAX_PREVIEW_MESSAGES = 10;
 // How much of the child thread the preview fetches. It renders the newest
@@ -400,7 +400,7 @@ function SendToAgentForm({
     if (!message || sending) return;
     setSending(true);
     try {
-      const response = await chatGrpc.sendAgentMessage(
+      const response = await chatActions.sendAgentMessage(
         chatId,
         threadId,
         message,

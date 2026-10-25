@@ -91,7 +91,7 @@ function lastLine(kind: string): StubLine | undefined {
   return mockPanelRequests.at(-1)?.lines.find((l) => l.kind === kind);
 }
 
-const mockRunCommit = vi.fn(async () => ({
+const mockRunCommit = vi.fn(async (_input: unknown) => ({
   commitKey: "k",
   status: "complete" as const,
   tasks: [],

@@ -21,7 +21,6 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-vi.mock("../../../api/chat-grpc", () => ({ chatGrpc: { sendAgentMessage: vi.fn() } }));
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
