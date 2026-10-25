@@ -1,127 +1,57 @@
-#!/bin/bash
-# Log search helper for Reliant development
+#!/usr/bin/env bash
+# Search the dev stack's logs: one file per workload under .forge/logs/dev/.
 #
-# Usage: ./.reliant/tools/log-search.sh "error"
-# Usage: ./.reliant/tools/log-search.sh "workflow" -A5 -B2
-# Usage: ./.reliant/tools/log-search.sh "panic" --all
-# Usage: ./.reliant/tools/log-search.sh --tail 50
-# Usage: ./.reliant/tools/log-search.sh --recent
+#   ./.reliant/tools/log-search.sh PATTERN [GREP_OPTIONS]   every log, last 30 hits each
+#   ./.reliant/tools/log-search.sh --cp PATTERN             control-plane's stack instead
+#   ./.reliant/tools/log-search.sh --errors                 error/panic/fatal lines + [browser:error]
+#   ./.reliant/tools/log-search.sh --tail [N] [WORKLOAD]    last N lines (default 50, every log)
+#   ./.reliant/tools/log-search.sh --where                  which logs exist, and when each was written
+#
+# This checkout's stack writes reliant-api-server.log, reliant-temporal-worker.log,
+# daemon-gateway.log, reliant-migrate.log and frontend_web.log (the browser
+# console, as [browser:<level>] lines). control-plane's adds admin-server.log,
+# frontend_reliant-web.log, reliant-electron-main.log and more. A zero-hit grep
+# proves nothing until the file is live: `--where` shows each file's mtime (the
+# dev-logs skill has the full check).
+#
+# The log directory is fixed by forge, so this needs no running stack.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$here/stack.sh"
+stack_args "$@"; set -- "${STACK_REST[@]+"${STACK_REST[@]}"}"
+case "$STACK_SELECT" in
+  cp|control-plane) STACK_DIR="$(cd "${CONTROL_PLANE_DIR:-$STACK_ROOT/../control-plane}" && pwd)" ;;
+  *) STACK_DIR=$STACK_ROOT ;;
+esac
+dir="$STACK_DIR/.forge/logs/dev"
 
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-LOG_FILE="$PROJECT_ROOT/data/logs.txt"
-BUILD_LOG="$PROJECT_ROOT/data/build-errors.log"
-RELIANT_LOG="$PROJECT_ROOT/data/logs/reliant.log"
-
-# Check which log files exist
-check_logs() {
-  local found=0
-  [ -f "$LOG_FILE" ] && found=1 && echo "  Main log:  $LOG_FILE ($(wc -l < "$LOG_FILE" | tr -d ' ') lines)"
-  [ -f "$RELIANT_LOG" ] && found=1 && echo "  App log:   $RELIANT_LOG ($(wc -l < "$RELIANT_LOG" | tr -d ' ') lines)"
-  [ -f "$BUILD_LOG" ] && found=1 && echo "  Build log: $BUILD_LOG ($(wc -l < "$BUILD_LOG" 2>/dev/null | tr -d ' ') lines)"
-  return $found
+logs() { ls "$dir"/*.log 2>/dev/null || true; }
+[ -n "$(logs)" ] || [ "${1:-}" = --help ] || [ "${1:-}" = -h ] || {
+  echo "log-search: no logs under $dir (start the stack: forge env up dev${STACK_SELECT:+ in $STACK_DIR})" >&2
+  exit 1
 }
 
-case "$1" in
-  --tail)
-    LINES="${2:-50}"
-    echo "=== Last $LINES lines of logs ==="
-    if [ -f "$LOG_FILE" ]; then
-      echo "--- $LOG_FILE ---"
-      tail -n "$LINES" "$LOG_FILE"
-    fi
-    ;;
-    
-  --recent)
-    echo "=== Last 5 minutes of activity ==="
-    if [ -f "$LOG_FILE" ]; then
-      # Show last 100 lines by default for recent
-      tail -n 100 "$LOG_FILE"
-    fi
-    ;;
-    
-  --errors)
-    echo "=== Errors and Panics ==="
-    if [ -f "$LOG_FILE" ]; then
-      grep -iE "(error|panic|fatal|fail)" "$LOG_FILE" | tail -50
-    fi
-    if [ -f "$BUILD_LOG" ] && [ -s "$BUILD_LOG" ]; then
-      echo ""
-      echo "--- Build Errors ---"
-      cat "$BUILD_LOG"
-    fi
-    ;;
-    
-  --build)
-    echo "=== Build Errors ==="
-    if [ -f "$BUILD_LOG" ] && [ -s "$BUILD_LOG" ]; then
-      cat "$BUILD_LOG"
-    else
-      echo "No build errors found."
-    fi
-    ;;
-    
-  --all)
-    shift
-    PATTERN="$1"
-    shift
-    echo "=== Searching all logs for: $PATTERN ==="
-    for log in "$LOG_FILE" "$RELIANT_LOG" "$BUILD_LOG"; do
-      if [ -f "$log" ]; then
-        echo "--- $log ---"
-        grep -n "$@" "$PATTERN" "$log" 2>/dev/null | tail -30 || echo "(no matches)"
-        echo ""
-      fi
-    done
-    ;;
-    
+case "${1:-}" in
   --where)
-    echo "=== Log File Locations ==="
-    check_logs || echo "  No log files found. Start dev server first."
-    ;;
-    
-  help|--help|-h)
-    echo "Log Search Helper"
-    echo ""
-    echo "Usage: $0 [OPTIONS] [PATTERN] [GREP_OPTIONS]"
-    echo ""
-    echo "Options:"
-    echo "  --tail [N]      Show last N lines (default: 50)"
-    echo "  --recent        Show last ~100 lines"
-    echo "  --errors        Search for errors/panics"
-    echo "  --build         Show build errors only"
-    echo "  --all PATTERN   Search all log files"
-    echo "  --where         Show log file locations"
-    echo ""
-    echo "Pattern Search:"
-    echo "  $0 \"error\"                Search main log"
-    echo "  $0 \"workflow\" -A5 -B2     With context lines"
-    echo "  $0 \"panic\" -i             Case insensitive"
-    echo ""
-    echo "Log Files:"
-    check_logs || echo "  (start dev server to create logs)"
-    ;;
-    
-  "")
-    echo "Usage: $0 PATTERN [OPTIONS]"
-    echo "Run '$0 --help' for more information."
-    exit 1
-    ;;
-    
+    echo "$dir"
+    for f in $(logs); do printf '  %-36s %8s lines  written %s\n' "$(basename "$f")" "$(wc -l <"$f" | tr -d ' ')" "$(date -r "$f" '+%F %T')"; done
+    echo "  now $(date '+%F %T')" ;;
+  --tail)
+    n=${2:-50}; w=${3:-}
+    for f in $(logs); do
+      [ -z "$w" ] || [ "$(basename "$f" .log)" = "$w" ] || continue
+      echo "--- $(basename "$f") ---"; tail -n "$n" "$f"
+    done ;;
+  --errors)
+    for f in $(logs); do
+      hits=$(grep -nE '\[browser:error\]|level=(ERROR|error)|"level":"(error|ERROR)"|panic:|fatal error|FATAL' "$f" | tail -30 || true)
+      [ -n "$hits" ] && { echo "--- $(basename "$f") ---"; echo "$hits"; }
+    done; true ;;
+  ""|--help|-h) sed -n '2,18p' "$0" ;;
   *)
-    PATTERN="$1"
-    shift
-    
-    if [ ! -f "$LOG_FILE" ]; then
-      echo "Error: Main log file not found at $LOG_FILE"
-      echo "Start dev server first: ./scripts/dev.sh"
-      exit 1
-    fi
-    
-    echo "=== Searching for: $PATTERN ==="
-    grep -n "$@" "$PATTERN" "$LOG_FILE" | tail -50
-    ;;
+    pattern=$1; shift
+    for f in $(logs); do
+      hits=$(grep -n "$@" -- "$pattern" "$f" | tail -30 || true)
+      [ -n "$hits" ] && { echo "--- $(basename "$f") ---"; echo "$hits"; }
+    done; true ;;
 esac

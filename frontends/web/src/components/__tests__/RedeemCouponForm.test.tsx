@@ -143,7 +143,7 @@ describe("RedeemCouponForm — account_required", () => {
     new ConnectError(
       "sign in with an email account to redeem a compute coupon",
       Code.FailedPrecondition,
-      new Headers({ "x-reliant-reason": "account_required" }),
+      new Headers({ "x-forge-error-reason": "account_required" }),
     );
 
   function failWith(err: unknown, call = 0) {

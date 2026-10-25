@@ -142,6 +142,31 @@ describe("createCoalescedInvalidator", () => {
     expect(refetched).toEqual([["inbox"], ["runs", "list"]]);
   });
 
+  it("a predicate narrows the refetch, and a collapsed burst covers the union", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const fns = ["a", "b", "c"].map((tag) => {
+      const queryFn = vi.fn(async () => tag);
+      new QueryObserver(client, { queryKey: [...KEY, tag], queryFn }).subscribe(() => {});
+      return queryFn;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const invalidator = createCoalescedInvalidator(client, INTERVAL);
+    const tagIs = (tag: string) => (query: { queryKey: readonly unknown[] }) => query.queryKey[1] === tag;
+
+    invalidator.invalidate(KEY, tagIs("a"));
+    invalidator.invalidate(KEY, tagIs("b"));
+    expect(client.getQueryState([...KEY, "c"])?.isInvalidated).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fns.map((fn) => fn.mock.calls.length)).toEqual([2, 2, 1]);
+
+    // A signal without a predicate joins as "everything under the key".
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    invalidator.invalidate(KEY, tagIs("a"));
+    invalidator.invalidate(KEY);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fns.map((fn) => fn.mock.calls.length)).toEqual([3, 3, 2]);
+  });
+
   it("reset drops a pending trailing refetch", async () => {
     const { queryFn, invalidator, settle } = setup();
     await settle();

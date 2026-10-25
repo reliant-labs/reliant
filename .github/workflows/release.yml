@@ -141,10 +141,11 @@ jobs:
         working-directory: frontends/web
         run: npm ci --legacy-peer-deps --prefer-offline
 
-      # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
-      # "Generated code is up to date" job runs `make generate-all` on every
-      # PR and every push to main and fails on any diff — so the tagged commit
-      # already holds exactly what the generators produce, and a release
+      # NO CODE GENERATION HERE. Generated code is committed, and the gates
+      # fail on any diff a regenerate makes: the merge gate whenever a change
+      # reaches a generator's input, and the release gate (`task generate:check`,
+      # `task generate:docs:check`) on the commit a release tags — so the tagged
+      # commit already holds exactly what the generators produce, and a release
       # builds what was reviewed.
       #
       # This job used to regenerate anyway, which could only ever ship
@@ -227,8 +228,9 @@ jobs:
       # Cost is a grep over dist/assets: sub-second, on a build already paid
       # for.
       #
-      # PR CI's `web` job runs this same build and this same check on every PR
-      # and every push to main (pinned by .github/scripts/verify-bundle.test.mjs),
+      # ci.yml's `web-bundle` job (`task build:web:verify`) runs this same build
+      # and this same check on every PR that can alter the bundle and every
+      # push to main (pinned by .github/scripts/verify-bundle.test.mjs),
       # so a failure that first shows up here means the two have diverged. If
       # this run fails anyway, release-health.yml opens a `release:failed`
       # issue for the tag.
@@ -1015,7 +1017,7 @@ jobs:
   #
   # The release notes themselves are still authored HERE, in
   # docs/data/releases/<version>.yaml — that directory renders docs/changelog.mdx
-  # via `make generate-changelog` for the Mintlify docs site. control-plane
+  # via `task generate:docs:changelog` for the Mintlify docs site. control-plane
   # fetches the file at send time; nothing about authoring changes.
   # ============================================================================
 

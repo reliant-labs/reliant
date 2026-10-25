@@ -3,7 +3,7 @@
 # WHY THIS EXISTS
 # ===============
 #
-# `pr-ci.yml`'s own comment records the incident: the Playwright job "was
+# The old PR CI workflow's own comment recorded the incident: the Playwright job "was
 # cancelled at 15m in every one of the last 50 runs that reached the test step,"
 # and "was never a slow-but-passing job; the Playwright suite itself was
 # genuinely failing." Fifty consecutive runs producing no signal at all, and
@@ -41,15 +41,15 @@
 # MAIN IS GREEN (the second job)
 # ==============================
 #
-# PR CI runs Go tests in two tiers: `-short` on pull requests and the full
-# suite on pushes to main and nightly (pr-ci.yml, the backend job). Every
-# short-gated test therefore runs ONLY on main, and a red main is the one place
-# those tests can fail at all. A red push run notifies only whoever merged; a
+# CI runs two tiers (ci.yml): the merge gate on pull requests and the release
+# gate on pushes to main and nightly. Every slow test, the race detector,
+# integration and e2e therefore run ONLY on main, and a red main is the one
+# place those can fail at all. A red push run notifies only whoever merged; a
 # red scheduled run, only whoever last edited its cron. So `main-health` runs
-# after every PR CI run on main and keeps ONE issue, labelled `ci:main-red`,
-# open for exactly as long as main's newest verdict is red. It also fails when
-# main's run has no "Backend (Go, full)" job: the full tier stopping on main is
-# the PR and full tiers silently merging into one, and must not read as green.
+# after every CI run on main and keeps ONE issue, labelled `ci:main-red`, open
+# for exactly as long as main's newest verdict is red. It also fails when
+# main's run has no green "Release gate" job: the release tier stopping on
+# main is the two tiers silently merging into one, and must not read as green.
 #
 # A failed RELEASE (a tag's "Release Electron App" run) is release-health.yml's
 # job, not this workflow's: its tag runs never pass this workflow's
@@ -63,12 +63,12 @@ on:
     # ~50 runs to go unnoticed, so a week is early, and a daily run for a
     # condition that changes this slowly is how an alert gets muted.
     - cron: "0 14 * * 1"
-  # Every PR CI run on main (push, nightly, dispatch) that finishes. The
+  # Every CI run on main (push, nightly, dispatch) that finishes. The
   # `branches` filter matches the triggering run's head branch, so PR runs do
   # not fire it; main-health's `if` re-checks the event anyway (a fork's branch
   # named `main`).
   workflow_run:
-    workflows: ["PR CI"]
+    workflows: ["CI"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -76,7 +76,7 @@ on:
       workflow:
         description: Workflow file to audit
         required: false
-        default: pr-ci.yml
+        default: ci.yml
       threshold:
         description: Consecutive bad runs that count as dark
         required: false
@@ -101,21 +101,21 @@ jobs:
       # and most runs are PR runs. The script treats "no runs found" as a
       # failure, because an audit that found nothing verified nothing.
       #
-      # Each job's history is keyed by its NAME. The Go tests report as
-      # "Backend (Go, short)" on PRs and "Backend (Go, full)" on main, so the
-      # two tiers have separate streaks and green PR runs cannot hide a full
-      # tier that is permanently red.
+      # Each job's history is keyed by its NAME. The two tiers are separate
+      # jobs ("Merge gate" on PRs, "Release gate" on main), so they have
+      # separate streaks and green PR runs cannot hide a release gate that is
+      # permanently red.
       - name: Audit recent runs for permanently-dark jobs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           node .github/scripts/check-gate-health.mjs \
-            --workflow "${{ github.event.inputs.workflow || 'pr-ci.yml' }}" \
+            --workflow "${{ github.event.inputs.workflow || 'ci.yml' }}" \
             --runs 20 \
             --threshold "${{ github.event.inputs.threshold || '5' }}"
 
   main-health:
-    name: Main's full test tier is green
+    name: Main's release gate is green
     # A run cancelled because a newer one superseded it carries no verdict;
     # the newer run's completion will fire this again.
     if: >-
@@ -138,7 +138,7 @@ jobs:
 
       # Exit 1 means red and still writes the verdict; anything else without a
       # verdict means the audit itself broke, which must not touch the issue.
-      - name: Audit main's newest PR CI verdict
+      - name: Audit main's newest CI verdict
         id: audit
         continue-on-error: true
         env:
@@ -156,13 +156,13 @@ jobs:
           set -euo pipefail
           label="ci:main-red"
           gh label create "${label}" --force --color B60205 \
-            --description "PR CI is red on main; opened and closed by gate-health.yml" >/dev/null
+            --description "CI is red on main; opened and closed by gate-health.yml" >/dev/null
           open="$(gh issue list --label "${label}" --state open --limit 1 --json number --jq '.[0].number // empty')"
           report="${RUNNER_TEMP}/main-health.md"
 
           if [ "${VERDICT}" = "red" ]; then
             if [ -z "${open}" ]; then
-              gh issue create --title "main is red: PR CI" --label "${label}" --body-file "${report}"
+              gh issue create --title "main is red: CI" --label "${label}" --body-file "${report}"
             # The weekly backstop re-audits a run already reported: say it once.
             elif ! gh issue view "${open}" --json comments,body --jq '[.body, .comments[].body] | join("\n")' | grep -qF "${RUN_URL}"; then
               gh issue comment "${open}" --body-file "${report}"

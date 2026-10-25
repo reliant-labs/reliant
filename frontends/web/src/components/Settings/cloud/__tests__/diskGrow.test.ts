@@ -102,13 +102,13 @@ describe('diskGrowStatus', () => {
 describe('isStorageDenied', () => {
   it('recognises the plan-limit refusal by its reason header', () => {
     const denied = new ConnectError('target exceeds plan', Code.PermissionDenied, {
-      'x-reliant-reason': DAEMON_STORAGE_DENIED_REASON,
+      'x-forge-error-reason': DAEMON_STORAGE_DENIED_REASON,
     })
     expect(isStorageDenied(denied)).toBe(true)
   })
 
   it('does not mistake another refusal, or a plain error, for it', () => {
-    const sizeDenied = new ConnectError('size', Code.PermissionDenied, { 'x-reliant-reason': 'daemon_size_denied' })
+    const sizeDenied = new ConnectError('size', Code.PermissionDenied, { 'x-forge-error-reason': 'daemon_size_denied' })
     expect(isStorageDenied(sizeDenied)).toBe(false)
     expect(isStorageDenied(new Error('daemon_storage_denied'))).toBe(false)
   })

@@ -1,8 +1,9 @@
 # buf.gen.yaml - Code generation configuration
 #
-# Run it through `make proto-generate`, not a bare `buf generate`. The Makefile
-# supplies what this file cannot declare: the pinned buf binary, GOWORK=off and
-# go.mod's own Go toolchain. CONTRIBUTING.md ("Code generation") has the why.
+# `forge generate` runs it (`task generate:forge`, or `task generate`), not a
+# bare `buf generate`. forge and the Taskfile supply what this file cannot
+# declare: go.mod's pinned buf, GOWORK=off and go.mod's own Go toolchain.
+# CONTRIBUTING.md ("Code generation") has the why.
 #
 # EVERY plugin is LOCAL and version-pinned by a lockfile in this repo:
 #
@@ -21,9 +22,10 @@
 # on two templates writing the same directory at different versions.
 #
 # To bump a plugin: bump it in go.mod or tools/protoc-gen-es (and every
-# template path naming it), run `make generate-all`, and commit the regenerated
-# code in the same change. CI's "Generated code is up to date" job fails on any
-# leftover diff.
+# template path naming it), run `task generate`, and commit the regenerated
+# code in the same change. `task generate:check` (run by the merge gate when a
+# change reaches a forge input, and by the release gate) fails on any leftover
+# diff.
 version: v2
 managed:
   enabled: false
