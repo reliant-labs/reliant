@@ -10,7 +10,7 @@
  * from this factory — is `connect.routing.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
@@ -44,6 +44,14 @@ vi.mock('@/services/controlPlane/config', () => ({
 // Stub localStorage for transport.ts (which reads it inside the auth
 // interceptor) and the auth-store dynamic import path (so the unauth
 // 401-fallback never reaches it during the smoke test).
+// Each test imports a FRESH transport (vi.resetModules), but the first import
+// in a worker also transforms its whole module graph: ~4s alone, past the
+// test timeout under a loaded full run. Transform it once here, on the
+// hook's own budget, so every test's import is only an evaluation.
+beforeAll(async () => {
+  await import('../transport')
+}, 60_000)
+
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()

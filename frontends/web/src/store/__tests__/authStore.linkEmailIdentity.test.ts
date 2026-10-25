@@ -20,7 +20,7 @@
  * whether the identity attached to the account the user is sitting in.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const updateUserMock = vi.fn()
 const signUpMock = vi.fn()
@@ -70,6 +70,14 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
 const ANON_USER_ID = 'anon-user-0001'
 
 const loadStore = async () => (await import('@/store/authStore')).useAuthStore
+
+// Each test imports a FRESH authStore (vi.resetModules), but the first import
+// in a worker also transforms its whole module graph: ~4s alone, past the
+// test timeout under a loaded full run. Transform it once here, on the
+// hook's own budget, so every test's import is only an evaluation.
+beforeAll(async () => {
+  await import('@/store/authStore')
+}, 60_000)
 
 beforeEach(() => {
   vi.resetModules()

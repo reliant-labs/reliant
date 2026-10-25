@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Starting a provider round-trip must not blank the page.
@@ -58,6 +58,14 @@ vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 const PROVIDER_URL = 'https://accounts.google.com/o/oauth2/auth?client_id=x'
+
+// Each test imports a FRESH authStore (vi.resetModules), but the first import
+// in a worker also transforms its whole module graph: ~4s alone, past the
+// test timeout under a loaded full run. Transform it once here, on the
+// hook's own budget, so every test's import is only an evaluation.
+beforeAll(async () => {
+  await import('../authStore')
+}, 60_000)
 
 beforeEach(() => {
   vi.resetModules()
