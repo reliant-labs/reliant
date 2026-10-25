@@ -6,11 +6,11 @@
 //     fast): it fails a bundle carrying the code that broke v1.8.1's release,
 //     and passes the same bundle without it.
 //
-//  2. PR CI's `web` job builds and verifies the bundle exactly as release.yml's
-//     prepare job does. Before that, verify-bundle ran only once a tag had been
-//     pushed, so the v1.8.1 false positive merged green and failed the release
-//     instead. If either workflow's build drifts, this fails on the PR that
-//     moved it.
+//  2. `task build:web:verify` (ci.yml's `web-bundle` job) builds and verifies
+//     the bundle exactly as release.yml's prepare job does. Before that,
+//     verify-bundle ran only once a tag had been pushed, so the v1.8.1 false
+//     positive merged green and failed the release instead. If either build
+//     drifts, this fails on the change that moved it.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -76,14 +76,14 @@ test("a bundle that loads config.js after the module bundle fails [3/4]", (t) =>
   assert.match(stderr, /before \/config\.js/);
 });
 
-// ── 2. PR CI builds what the release builds ─────────────────────────────────
+// ── 2. CI builds what the release builds ────────────────────────────────────
 
 /** One job's lines, with comments dropped and `\`-continued lines joined. */
 function jobBlock(yml, job) {
   const lines = yml.split("\n");
   const start = lines.indexOf(`  ${job}:`);
   assert.notEqual(start, -1, `no \`${job}:\` job`);
-  let end = lines.findIndex((line, i) => i > start && /^ {2}[A-Za-z0-9_-]+:\s*$/.test(line));
+  let end = lines.findIndex((line, i) => i > start && /^ {2}[A-Za-z0-9_:-]+:\s*$/.test(line));
   if (end === -1) end = lines.length;
   return lines
     .slice(start, end)
@@ -92,26 +92,39 @@ function jobBlock(yml, job) {
     .replace(/\\\n\s*/g, "");
 }
 
-const PR_WEB = jobBlock(read(".github", "workflows", "pr-ci.yml"), "web");
+// ci.yml's web-bundle job is `task build:web:verify`; the Taskfile task is
+// where its build and verify commands live, once.
 const RELEASE_PREPARE = jobBlock(read(".github", "workflows", "release.yml"), "prepare");
+const CI_WEB = jobBlock(read(".github", "workflows", "ci.yml"), "web-bundle");
+const TASK_WEB = jobBlock(read("Taskfile.yml"), "build:web:verify");
 
 // The bundle reads its config from config.js at runtime, so a build handed the
 // renderer's release config through the environment is a build reading it
 // again. (`.main` is the main process's, and is exported for its jobs.)
 const EXPORT_RE = /'\.(vite|renderer)\b[^\n]*release\.config\.json[^\n]*>> "\$GITHUB_ENV"/;
-const BUILD = /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/;
-const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n";
 
-for (const [name, block] of [
-  ["release.yml's prepare job", RELEASE_PREPARE],
-  ["pr-ci.yml's web job", PR_WEB],
+for (const [name, block, build, verify, buildLine] of [
+  [
+    "release.yml's prepare job",
+    RELEASE_PREPARE,
+    /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/,
+    "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n",
+    "run: NODE_ENV=production npm run build",
+  ],
+  [
+    "Taskfile.yml's build:web:verify",
+    TASK_WEB,
+    /- cd frontends\/web && NODE_ENV=production npm run build\n/,
+    "- node .github/scripts/verify-bundle.mjs --dist frontends/web/dist",
+    "- cd frontends/web && NODE_ENV=production npm run build",
+  ],
 ]) {
   test(`${name} builds with NODE_ENV=production in frontends/web/ from no release config, then verifies the bundle`, () => {
-    const built = block.search(BUILD);
-    const verified = block.indexOf(VERIFY_STEP);
+    const built = block.search(build);
+    const verified = block.indexOf(verify);
     assert.ok(!EXPORT_RE.test(block), `${name} still exports release.config.json into the build environment; the bundle reads config.js`);
     assert.notEqual(built, -1, `${name} no longer runs \`NODE_ENV=production npm run build\` in frontends/web/`);
-    assert.notEqual(verified, -1, `${name} no longer runs:\n  ${VERIFY_STEP}`);
+    assert.notEqual(verified, -1, `${name} no longer runs:\n  ${verify}`);
     assert.ok(built < verified, `${name} must build, then verify`);
   });
 
@@ -121,21 +134,23 @@ for (const [name, block] of [
     const uses = block.split("\n").filter((line) => line.includes("NODE_ENV"));
     assert.deepEqual(
       uses.map((line) => line.trim()),
-      ["run: NODE_ENV=production npm run build"],
+      [buildLine],
       `${name} sets NODE_ENV somewhere other than the build command`,
     );
   });
 }
 
-test("PR CI's web job runs on every change that can alter the bundle it verifies", () => {
-  assert.match(PR_WEB, /\n {4}if: needs\.changes\.outputs\.web == 'true'\n/);
+test("CI's web-bundle job runs the task, on every change that can alter the bundle it verifies", () => {
+  assert.match(CI_WEB, /\n {4}if: needs\.lanes\.outputs\.web == 'true'\n/);
+  assert.match(CI_WEB, /\n\s+run: task build:web:verify\n/);
+  assert.ok(!CI_WEB.includes("NODE_ENV"), "ci.yml's web-bundle job must not set NODE_ENV: the task does, on the build command only");
 
-  const changes = jobBlock(read(".github", "workflows", "pr-ci.yml"), "changes");
-  const m = /if grep -qE '([^']+)' <<< "\$\{changed\}"; then web=true; fi/.exec(changes);
-  assert.ok(m, "the `changes` job no longer classifies the web lane with `if grep -qE '<regex>' ...; then web=true; fi`; update this test");
+  const lanes = read("scripts", "ci-lanes.sh");
+  const m = /if grep -qE '([^']+)' <<< "\$changed"; then web=true; fi/.exec(lanes);
+  assert.ok(m, "scripts/ci-lanes.sh no longer classifies the web lane with `if grep -qE '<regex>' ...; then web=true; fi`; update this test");
   const webLane = new RegExp(m[1]);
   for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "frontends/web/src/App.tsx", "frontends/web/package-lock.json", "package.json"]) {
-    assert.ok(webLane.test(path), `a change to ${path} must run the web job`);
+    assert.ok(webLane.test(path), `a change to ${path} must run the web-bundle job`);
   }
   for (const path of ["go.mod", "internal/db/db.go", "docs/index.mdx"]) {
     assert.ok(!webLane.test(path), `a change to ${path} alone cannot alter the bundle`);
