@@ -30,6 +30,7 @@ import {
   ForgeDeployJobStatus,
   ForgeDeployRefusalReason,
   ForgeDeployRefusalSchema,
+  ForgeReportMetaSchema,
   ForgeService,
   GetForgeDeployStatusRequestSchema,
   GetForgeDeployStatusResponseSchema,
@@ -51,15 +52,11 @@ const APPROVAL = {
   acknowledgedFindings: [] as string[],
 };
 
-const okMeta = {
+const okMeta = create(ForgeReportMetaSchema, {
   isForgeProject: true,
   supported: true,
   forgeVersion: "v0.1.15",
-  unsupportedReason: "",
-  exitCode: 0,
-  reachability: 0,
-  unreachableReason: "",
-};
+});
 
 /** A plan document with the fields the token is derived from. */
 function planDoc(overrides: Record<string, unknown> = {}) {
