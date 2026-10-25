@@ -21,7 +21,6 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
-import React from "react";
 import {
   createRootRoute,
   createRoute,

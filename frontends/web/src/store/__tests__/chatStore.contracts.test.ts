@@ -6,7 +6,7 @@ describe('chatStore message update contract', () => {
   const selectProtoMessageUpdates = (updates: ChatUpdate[]) =>
     updates
       .filter(
-        (u): u is { update_type: 'message'; message: unknown } =>
+        (u): u is Extract<ChatUpdate, { update_type: 'message' }> =>
           u.update_type === 'message' && 'message' in u,
       )
       .map((u) => u.message);

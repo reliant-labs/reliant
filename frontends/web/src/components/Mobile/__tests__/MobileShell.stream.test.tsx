@@ -73,7 +73,7 @@ import { useChatStore } from "../../../store/chatStore";
 import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import { useProjectStore } from "../../../store/projectStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
-import type { Project } from "../../../types";
+import type { Project } from "../../../store/projectStore";
 
 const CHAT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 const project = { id: "proj-1", name: "shopfront", path: "/p" } as unknown as Project;

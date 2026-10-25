@@ -48,8 +48,12 @@ function renderWithPlanError(planError: Error) {
       isPlanning={false}
       planError={planError}
       isStarting={false}
-      onConfirm={noop}
       onReplan={noop}
+      onBuildAndPlan={noop}
+      acknowledged={new Set()}
+      onAcknowledge={noop}
+      onApprove={noop}
+      onReplanAfterStale={noop}
       onClose={noop}
     />
   );

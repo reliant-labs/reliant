@@ -46,7 +46,7 @@ afterEach(() => {
     delete (import.meta.env as Record<string, unknown>)[k];
   }
   Object.assign(import.meta.env, ORIGINAL_ENV);
-  // @ts-expect-error test cleanup of the Electron-injected global
+  // Test cleanup of the Electron-injected global.
   delete globalThis.window?.RELIANT_CONFIG;
 });
 

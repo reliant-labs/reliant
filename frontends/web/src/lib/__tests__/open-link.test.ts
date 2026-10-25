@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const createTab = vi.fn(async () => 'browser-tab-1');
 const openBrowserViewer = vi.fn(async () => {});
-const openExternal = vi.fn(async () => {});
+const openExternal = vi.fn(async (_url: string) => {});
 const getPreferences = vi.fn(async () => ({
   additional: {} as Record<string, string>,
 }));

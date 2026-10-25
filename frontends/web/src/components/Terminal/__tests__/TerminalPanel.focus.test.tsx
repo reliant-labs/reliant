@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import React from "react";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 
 // ---------------------------------------------------------------------------
@@ -36,7 +35,10 @@ class FakeWebSocket {
   onerror: ((error: unknown) => void) | null = null;
   onclose: ((event: { code: number; reason: string }) => void) | null = null;
 
-  constructor(public url: string) {
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 

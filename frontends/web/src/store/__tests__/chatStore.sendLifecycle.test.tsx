@@ -170,7 +170,7 @@ function realUserMessage(id: string, text: string) {
   } as unknown as ChatUpdate;
 }
 
-function homeChat(workflowState = WorkflowState.COMPLETED) {
+function homeChat(workflowState = WorkflowState.STOPPED) {
   queryClient.setQueryData(chatKeys.detail(CHAT), {
     id: CHAT,
     projectId: "p1",

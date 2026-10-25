@@ -97,9 +97,10 @@ const SHAPE_REPORT = {
   },
 };
 
-const getTopology = vi.fn(OFFLINE);
-const getEnvShape = vi.fn(OFFLINE);
-const getEnvStatus = vi.fn(OFFLINE);
+// Typed as answering anything: each test resolves them to the report it needs.
+const getTopology = vi.fn<() => Promise<unknown>>(OFFLINE);
+const getEnvShape = vi.fn<() => Promise<unknown>>(OFFLINE);
+const getEnvStatus = vi.fn<() => Promise<unknown>>(OFFLINE);
 
 vi.mock("@/api/forge-grpc", () => ({
   forgeGrpc: {
@@ -162,6 +163,9 @@ const ensureEnvironment = vi.fn((input: { spec: Record<string, unknown> }) => {
       promotedByActor: "",
       promotedByUserId: "",
       phase: "unspecified",
+      observed: { state: "not-reported" },
+      drift: { state: "not-reported" },
+      driftDetail: "",
       provenance: "feat-x@def5678, unmerged, dirty",
       holds: [],
     },
@@ -176,12 +180,12 @@ vi.mock("@/services/controlPlane/client", () => ({
   }),
 }));
 
-const listSecrets = vi.fn(() => Promise.resolve([] as unknown[]));
-const setSecret = vi.fn(() => Promise.resolve({ version: 1 }));
+const listSecrets = vi.fn<() => Promise<unknown>>(() => Promise.resolve({ secrets: [], protected: false }));
+const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 1 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
   listSecrets: () => listSecrets(),
-  setSecret: (...args: unknown[]) => setSecret(...(args as [])),
+  setSecret: (input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 

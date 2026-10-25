@@ -145,6 +145,11 @@ describe("issues requests", () => {
   });
 });
 
+/** The resolve half of a status update; only a resolve carries one. */
+function resolveInOf(update: ReturnType<typeof wireStatusUpdate>) {
+  return "resolveIn" in update ? update.resolveIn : undefined;
+}
+
 describe("triage", () => {
   const base = { issueId: "iss-1", envId: "env-prod", expectedVersion: 7 };
 
@@ -154,8 +159,8 @@ describe("triage", () => {
       status: IssueStatusChange.RESOLVED,
       resolveIn: { kind: IssueResolveKind.NOW },
     });
-    expect(wireStatusUpdate({ ...base, change: { status: "resolved", resolveIn: { kind: "next_release" } } }).resolveIn).toMatchObject({ kind: IssueResolveKind.NEXT_RELEASE });
-    expect(wireStatusUpdate({ ...base, change: { status: "resolved", resolveIn: { kind: "version", version: "v1.8.4" } } }).resolveIn).toEqual({
+    expect(resolveInOf(wireStatusUpdate({ ...base, change: { status: "resolved", resolveIn: { kind: "next_release" } } }))).toMatchObject({ kind: IssueResolveKind.NEXT_RELEASE });
+    expect(resolveInOf(wireStatusUpdate({ ...base, change: { status: "resolved", resolveIn: { kind: "version", version: "v1.8.4" } } }))).toEqual({
       kind: IssueResolveKind.VERSION,
       version: "v1.8.4",
     });

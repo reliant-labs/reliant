@@ -34,7 +34,10 @@ class FakeWebSocket {
   closeCalls = 0;
   sent: string[] = [];
 
-  constructor(public url: string) {
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 

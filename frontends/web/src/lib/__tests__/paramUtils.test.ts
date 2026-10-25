@@ -19,6 +19,13 @@ import {
 } from "../paramUtils";
 import { buildWorkflowInputsFromProto } from "../../components/Chat/ChatInput";
 
+// configValue is an input's active config oneof value, read loosely: each
+// assertion names fields of one specific case, which the union cannot.
+function configValue(input: { config?: { value?: unknown } } | undefined): any {
+  return input?.config?.value ?? {};
+}
+
+
 const GROUPS = new Set(["agent", "implementer"]);
 
 describe("flatToNestedParams", () => {
@@ -138,19 +145,19 @@ describe("buildWorkflowInputsFromProto", () => {
 
     // Raw proto Input objects are passed through directly
     expect(inputs.mode.type).toBe("enum");
-    expect(inputs.mode.config.case).toBe("enumInput");
-    expect(inputs.mode.config.value.base.ui).toBe("toolbar");
-    expect(inputs.mode.config.value.enumValues).toEqual(["manual", "auto", "plan"]);
-    expect(inputs.mode.config.value.default).toMatchObject({
+    expect(inputs.mode.config?.case).toBe("enumInput");
+    expect(configValue(inputs.mode).base.ui).toBe("toolbar");
+    expect(configValue(inputs.mode).enumValues).toEqual(["manual", "auto", "plan"]);
+    expect(configValue(inputs.mode).default).toMatchObject({
       kind: { case: "stringValue", value: "auto" },
     });
 
     expect(inputs.max_turns.type).toBe("integer");
-    expect(inputs.max_turns.config.case).toBe("integerInput");
-    expect(inputs.max_turns.config.value.base.ui).toBe("config");
-    expect(inputs.max_turns.config.value.default).toBe(BigInt(200));
-    expect(inputs.max_turns.config.value.min).toBe(BigInt(1));
-    expect(inputs.max_turns.config.value.max).toBe(BigInt(500));
+    expect(inputs.max_turns.config?.case).toBe("integerInput");
+    expect(configValue(inputs.max_turns).base.ui).toBe("config");
+    expect(configValue(inputs.max_turns).default).toBe(BigInt(200));
+    expect(configValue(inputs.max_turns).min).toBe(BigInt(1));
+    expect(configValue(inputs.max_turns).max).toBe(BigInt(500));
   });
 
   it("flattens V2 group input configs and preserves group preset tag", () => {
@@ -193,10 +200,10 @@ describe("buildWorkflowInputsFromProto", () => {
 
     // Raw proto Input object is passed through directly (not converted to flat schema)
     expect(inputs["agent.model"].type).toBe("model");
-    expect(inputs["agent.model"].config.case).toBe("modelInput");
-    expect(inputs["agent.model"].config.value.base.description).toBe("LLM model");
-    expect(inputs["agent.model"].config.value.base.ui).toBe("config");
-    expect(inputs["agent.model"].config.value.default).toMatchObject({
+    expect(inputs["agent.model"].config?.case).toBe("modelInput");
+    expect(configValue(inputs["agent.model"]).base.description).toBe("LLM model");
+    expect(configValue(inputs["agent.model"]).base.ui).toBe("config");
+    expect(configValue(inputs["agent.model"]).default).toMatchObject({
       tags: ["flagship"],
     });
   });

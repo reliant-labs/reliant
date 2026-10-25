@@ -200,7 +200,7 @@ describe("a workload", () => {
   });
 
   it("orders events warnings first, then newest first", () => {
-    const at = (timeMs: number, type: string, reason: string) => ({ timeMs, type, reason, envId: "e", message: "", count: 1, objectKind: "", objectName: "", container: "" });
+    const at = (timeMs: number, type: string, reason: string) => ({ timeMs, type, reason, envId: "e", message: "", count: 1, objectKind: "", objectName: "", container: "", plainReason: "" });
     expect(eventsInOrder([at(3, "Normal", "Pulled"), at(1, "Warning", "BackOff"), at(2, "Warning", "OOMKilling")]).map((e) => e.reason)).toEqual(["OOMKilling", "BackOff", "Pulled"]);
   });
 

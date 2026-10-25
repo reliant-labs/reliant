@@ -17,7 +17,6 @@ import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";
 import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
-import { serviceHandlers } from "@/test/serviceTransport";
 
 const setTriggerEnabled = vi.fn();
 const deleteTrigger = vi.fn();
@@ -71,6 +70,7 @@ function trigger(overrides: Partial<Trigger> & { id: string }): Trigger {
     createdAt: "",
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
     ...overrides,
   };
 }

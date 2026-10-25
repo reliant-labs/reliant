@@ -16,10 +16,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const daemonState = vi.hoisted(() => ({
   current: {
-    activeDaemon: undefined as { daemonId: string; hostname: string; status: number } | undefined,
-    daemons: [] as Array<{ daemonId: string; hostname: string; status: number }>,
+    activeDaemon: undefined,
+    daemons: [],
     loading: false,
-    answered: undefined as boolean | undefined,
+  } as {
+    activeDaemon: { daemonId: string; hostname: string; status: number } | undefined;
+    daemons: Array<{ daemonId: string; hostname: string; status: number }>;
+    loading: boolean;
+    /** Set to pin the answer; otherwise it follows `loading`. */
+    answered?: boolean;
   },
 }));
 const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
@@ -79,7 +84,11 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ answered: !daemonState.current.loading, ...daemonState.current, refresh: vi.fn() }),
+  useDaemonStatus: () => ({
+    ...daemonState.current,
+    answered: daemonState.current.answered ?? !daemonState.current.loading,
+    refresh: vi.fn(),
+  }),
 }));
 vi.mock("@/hooks/useDaemonWait", () => ({
   useDaemonWait: ({ waiting }: { waiting: boolean }) => ({
