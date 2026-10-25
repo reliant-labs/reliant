@@ -15,11 +15,17 @@ const store = vi.hoisted(() => ({
   worktrees: [] as Array<{ id: string; name: string; deleted_at?: string | null }>,
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ createWorktree }),
-    { getState: () => ({ worktrees: store.worktrees, refreshWorktrees }) },
-  ),
+// Creation goes through createWorktree; the workspaces the app already holds
+// and a fresh re-list (after a lost reply) through the worktree cache readers.
+vi.mock("../../../hooks/worktree-actions", () => ({
+  createWorktree: (...args: unknown[]) => createWorktree(...args),
+}));
+vi.mock("../../../hooks/worktree-queries", () => ({
+  getCachedWorktrees: () => store.worktrees,
+  fetchLiveWorktrees: async () => {
+    await refreshWorktrees();
+    return store.worktrees;
+  },
 }));
 
 const project = vi.hoisted(() => ({ isGitRepo: true }));

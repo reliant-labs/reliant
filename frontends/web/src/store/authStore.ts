@@ -404,6 +404,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { useChatStore } = await import('./chatStore')
       const { useProjectStore } = await import('./projectStore')
       const { useWorktreeStore } = await import('./worktreeStore')
+      const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
       const { useChatNavigationStore } = await import('./chatNavigationStore')
       const { useAttachmentStore } = await import('./attachmentStore')
 
@@ -412,6 +413,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useChatStore.getState().reset()
       useProjectStore.getState().reset()
       useWorktreeStore.getState().reset()
+      // Workspace rows are in the query cache (cleared below); forget which
+      // creates this session was waiting on.
+      resetWorktreeAnnouncements()
       useAttachmentStore.getState().reset()
 
       // Drop every cached answer about who the user is.

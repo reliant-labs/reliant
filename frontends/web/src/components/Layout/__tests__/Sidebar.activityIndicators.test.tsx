@@ -104,8 +104,8 @@ describe("Sidebar activity indicators", () => {
       ReturnType<typeof useChatStore.getState>
     >);
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
     useProjectStore.setState({

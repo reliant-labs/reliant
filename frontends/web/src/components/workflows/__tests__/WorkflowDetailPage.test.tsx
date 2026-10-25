@@ -46,7 +46,6 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
     trigger: () => ({ listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
-    worktree: () => ({ listWorktrees: mocks.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
   },
 }));
@@ -56,6 +55,8 @@ vi.mock("@/api/grpc-client", () => ({
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees: mocks.listWorktrees }),
       ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,

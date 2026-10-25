@@ -4,15 +4,15 @@ import Status from "../forge-ui/status";
 import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { formatAbsoluteTime, formatRelativeTime } from "../../lib/relativeTime";
-import type { Worktree } from "../../store/worktreeStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { hasCheckout, lifecycleOf, workingTreeState } from "./workspaceStatus";
-import { useWorkspaceGitStatus } from "./useWorkspaceGitStatus";
+import { useWorkspaceGitStatus } from "../../hooks/worktree-git-queries";
 import {
   workspaceColumn,
   workspaceIconButton,
   workspaceIconButtonDanger,
 } from "./workspaceStyles";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface IconActionProps {
   label: string;

@@ -21,6 +21,8 @@ import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { trackEvent } from "../lib/analytics";
+import { restoreLastWorktree } from "../hooks/worktree-actions";
+import { resolveWorktree } from "../hooks/worktree-queries";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
@@ -217,8 +219,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Restore last worktree for this project. Fetches only that workspace
       // (or main) — the sidebar groups from the chat list, so the project's
       // full worktree list is not loaded here.
-      await useWorktreeStore.getState().restoreLastWorktree(project.id);
-      const currentWorktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+      await restoreLastWorktree(project.id);
+      const currentWorktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
       
       // Restore viewer state (project context is now read from projectStore.currentProject)
       useViewerStore.getState().restoreFromWorkspaceState(project.id, currentWorktreeId);
@@ -238,7 +240,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             title: chat.title,
           });
           if (chat.worktreeId) {
-            const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
+            const targetWorktree = await resolveWorktree(chat.worktreeId);
             if (targetWorktree) {
               await useWorktreeStore.getState().switchWorktreeContext(project.id, targetWorktree);
             }

@@ -3,7 +3,8 @@
  */
 
 import { useMemo } from 'react';
-import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
+import { useWorktreeStore } from '../store/worktreeStore';
+import { ALL_PROJECTS, getCachedWorktrees, getCurrentWorktree, useCachedWorktrees, useCurrentWorktree, type Worktree } from '../hooks/worktree-queries';
 import { useViewerStore } from '../store/viewerStore';
 import { useProjectStore } from '../store/projectStore';
 import { isElectron } from './constants';
@@ -158,8 +159,8 @@ export function usePathClassification(
   parsedPath: ParsedFilePath | null,
   contextWorktreeId?: string
 ): PathClassificationResult {
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const allWorktrees = useCachedWorktrees(ALL_PROJECTS);
+  const currentWorktree = useCurrentWorktree();
   const projectPath = useProjectStore((state) => state.currentProject?.path);
 
   // Filter out archived worktrees - fixes latent bug where archived worktrees were matched
@@ -187,12 +188,11 @@ export function classifyPath(
   parsedPath: ParsedFilePath | null,
   contextWorktreeId?: string
 ): PathClassificationResult {
-  const worktreeState = useWorktreeStore.getState();
   const projectState = useProjectStore.getState();
 
   return classifyPathWithContext(parsedPath, contextWorktreeId, {
-    activeWorktrees: worktreeState.worktrees.filter(w => !w.deleted_at),
-    currentWorktreeId: worktreeState.currentWorktree?.id,
+    activeWorktrees: getCachedWorktrees().filter(w => !w.deleted_at),
+    currentWorktreeId: useWorktreeStore.getState().currentWorktreeId ?? undefined,
     projectPath: projectState.currentProject?.path,
   });
 }
@@ -210,7 +210,6 @@ export function openFile(
   worktreeId?: string
 ): void {
   try {
-    const worktreeState = useWorktreeStore.getState();
     const viewerState = useViewerStore.getState();
     const projectState = useProjectStore.getState();
     
@@ -223,14 +222,15 @@ export function openFile(
     }
     
     // Filter out archived worktrees
-    const activeWorktrees = worktreeState.worktrees.filter(w => !w.deleted_at);
+    const activeWorktrees = getCachedWorktrees().filter(w => !w.deleted_at);
+    const currentWorktree = getCurrentWorktree();
     
     // Get current worktree if not provided
     // Try multiple sources for worktree:
     // 1. Explicitly passed worktreeId
     // 2. Current worktree from store  
     // 3. First available active worktree (fallback for when user hasn't selected one)
-    let targetWorktreeId = worktreeId || worktreeState.currentWorktree?.id;
+    let targetWorktreeId = worktreeId || currentWorktree?.id;
     
     // Fallback: if no worktree is selected but active worktrees are available, use the first one
     if (!targetWorktreeId && activeWorktrees.length > 0) {
@@ -245,7 +245,7 @@ export function openFile(
       // Try to find worktree by ID, or use current worktree
       const worktree = targetWorktreeId 
         ? activeWorktrees.find(w => w.id === targetWorktreeId)
-        : worktreeState.currentWorktree;
+        : currentWorktree;
       
       const workingDir = worktree?.path;
       
@@ -296,8 +296,8 @@ export function openFile(
  * Resolves the correct worktree from context and opens the file
  */
 export function useFileOpener() {
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
+  const currentWorktree = useCurrentWorktree();
+  const allWorktrees = useCachedWorktrees(ALL_PROJECTS);
   
   // Filter out archived worktrees
   const activeWorktrees = useMemo(

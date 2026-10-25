@@ -8,9 +8,7 @@ const mocks = vi.hoisted(() => ({
   useProjectStore: {
     getState: vi.fn(),
   },
-  useWorktreeStore: {
-    getState: vi.fn(),
-  },
+  resolveWorktree: vi.fn(),
   useChatStore: {
     getState: vi.fn(),
   },
@@ -25,8 +23,8 @@ vi.mock("../../store/projectStore", () => ({
   useProjectStore: mocks.useProjectStore,
 }));
 
-vi.mock("../../store/worktreeStore", () => ({
-  useWorktreeStore: mocks.useWorktreeStore,
+vi.mock("../../hooks/worktree-queries", () => ({
+  resolveWorktree: mocks.resolveWorktree,
 }));
 
 vi.mock("../../store/chatStore", () => ({
@@ -47,10 +45,7 @@ describe("fileSystem preview transport", () => {
       currentProject: { id: "project-1" },
     });
     const worktrees = [{ id: "wt-1", path: "/workspace", name: "main" }];
-    mocks.useWorktreeStore.getState.mockReturnValue({
-      worktrees,
-      resolveWorktree: async (id: string) => worktrees.find((w) => w.id === id) ?? null,
-    });
+    mocks.resolveWorktree.mockImplementation(async (id: string) => worktrees.find((w) => w.id === id) ?? null);
     mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-1" });
     mocks.filesystemGrpc.getFilePreview.mockResolvedValue({
       content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),

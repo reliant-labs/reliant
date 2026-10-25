@@ -46,6 +46,7 @@ import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
+import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -95,13 +96,14 @@ export function NewChatView({
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const currentWorktree = useCurrentWorktree();
+  const currentProject = useProjectStore((state) => state.currentProject);
+  // The workspaces the app already holds (main, the selection, whatever a
+  // picker has paged in); opening the picker loads the list itself.
+  const worktrees = useCachedWorktrees(currentProject?.id);
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const currentProject = useProjectStore((state) => state.currentProject);
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
@@ -314,18 +316,14 @@ export function NewChatView({
     await handleWorkspaceSelect(worktreeId);
   };
 
-  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
-  };
+  // importWorktree refreshes the workspace lists itself.
+  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {};
 
   const handleWorkspaceSelect = async (worktreeId: string | null) => {
-    // Read from the store rather than the render closure: a workspace created
-    // moments ago is already in the store but not yet in this render's list.
-    const latestWorktrees = useWorktreeStore.getState().worktrees;
+    // Read from the cache rather than the render closure: a workspace created
+    // moments ago is already cached but not yet in this render's list.
     if (worktreeId && currentProject) {
-      const worktree = latestWorktrees.find((w) => w.id === worktreeId);
+      const worktree = getCachedWorktree(worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
         setSelectedWorkspaceId(worktreeId);

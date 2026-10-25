@@ -127,8 +127,8 @@ describe("Sidebar selected chat scroll", () => {
 
     // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext,
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
 

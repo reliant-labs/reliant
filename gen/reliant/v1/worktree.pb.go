@@ -4246,7 +4246,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x19WORKTREE_STATUS_ABANDONED\x10\x03\x12\x1b\n" +
 	"\x17WORKTREE_STATUS_MERGING\x10\x04\x12\x1c\n" +
 	"\x18WORKTREE_STATUS_CREATING\x10\x05\x12\x1a\n" +
-	"\x16WORKTREE_STATUS_FAILED\x10\x062\xe1\x11\n" +
+	"\x16WORKTREE_STATUS_FAILED\x10\x062\xe4\x11\n" +
 	"\x0fWorktreeService\x12Y\n" +
 	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"\x00\x12V\n" +
 	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12n\n" +
@@ -4256,8 +4256,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x0eDeleteWorktree\x12!.reliant.v1.DeleteWorktreeRequest\x1a\".reliant.v1.DeleteWorktreeResponse\"\x00\x12\\\n" +
 	"\x0fArchiveWorktree\x12\".reliant.v1.ArchiveWorktreeRequest\x1a#.reliant.v1.ArchiveWorktreeResponse\"\x00\x12b\n" +
 	"\x11UnarchiveWorktree\x12$.reliant.v1.UnarchiveWorktreeRequest\x1a%.reliant.v1.UnarchiveWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"\x00\x12b\n" +
-	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x00\x12Y\n" +
+	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"\x00\x12e\n" +
+	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\x0ePruneWorktrees\x12!.reliant.v1.PruneWorktreesRequest\x1a\".reliant.v1.PruneWorktreesResponse\"\x00\x12_\n" +
 	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\"\x00\x12e\n" +
 	"\x12GetWorktreeChanges\x12%.reliant.v1.GetWorktreeChangesRequest\x1a&.reliant.v1.GetWorktreeChangesResponse\"\x00\x12k\n" +

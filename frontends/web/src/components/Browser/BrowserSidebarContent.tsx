@@ -13,6 +13,8 @@ import {
   SidebarEmptyState,
 } from "../RightSidebar/shared";
 
+import { resolveWorktree } from "../../hooks/worktree-queries";
+
 interface BrowserSidebarContentProps {
   worktreeId?: string;
 }
@@ -39,7 +41,6 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
   const closeViewer = useViewerStore((state) => state.closeViewer);
   const currentProject = useProjectStore((state) => state.currentProject);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
 
   // Filter tabs by worktree
   const worktreeTabs = worktreeId 

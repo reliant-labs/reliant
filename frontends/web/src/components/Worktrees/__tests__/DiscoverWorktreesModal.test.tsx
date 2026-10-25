@@ -1,20 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DiscoveredWorktree, StaleWorktree } from "../../../api/worktree-grpc";
 
 const h = vi.hoisted(() => ({
-  state: {} as Record<string, unknown>,
+  discovery: {} as Record<string, unknown>,
   importWorktree: vi.fn(),
   pruneWorktrees: vi.fn(),
-  discoverWorktrees: vi.fn(),
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) => selector(h.state),
+// The modal reads DiscoverWorktrees through useDiscoveredWorktrees (a generated
+// query) and writes through the lifecycle actions; both are stood in here so
+// each case renders the discovery result it describes.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  useDiscoveredWorktrees: () => h.discovery,
+}));
+vi.mock("../../../hooks/worktree-actions", () => ({
+  importWorktree: h.importWorktree,
+  pruneWorktrees: h.pruneWorktrees,
 }));
 
 import { DiscoverWorktreesModal } from "../DiscoverWorktreesModal";
+import { type DiscoveredWorktree, type StaleWorktree } from "../../../hooks/worktree-queries";
 
 const wt = (o: Partial<DiscoveredWorktree>): DiscoveredWorktree => ({
   path: "/w/a",
@@ -29,15 +36,10 @@ const wt = (o: Partial<DiscoveredWorktree>): DiscoveredWorktree => ({
 });
 
 function setup(discovered: DiscoveredWorktree[], stale: StaleWorktree[] = []) {
-  h.state = {
-    discoveredWorktrees: discovered,
-    staleWorktrees: stale,
-    workspacesRoot: "/root/ws",
-    isDiscovering: false,
+  h.discovery = {
+    data: { discovered, stale, workspacesRoot: "/root/ws" },
+    isFetching: false,
     error: null,
-    discoverWorktrees: h.discoverWorktrees,
-    importWorktree: h.importWorktree,
-    pruneWorktrees: h.pruneWorktrees,
   };
   render(
     <DiscoverWorktreesModal isOpen onClose={vi.fn()} onWorktreesImported={vi.fn()} projectId="p1" />

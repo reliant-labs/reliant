@@ -21,6 +21,8 @@ import { useChatStore } from "../store/chatStore";
 import { resolveChat } from "../hooks/chat-queries";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
+import { restoreLastWorktree } from "./worktree-actions";
+import { resolveWorktree, getCurrentWorktree } from "./worktree-queries";
 
 export interface WorkspaceRestoreResult {
   /** Whether restoration is in progress */
@@ -136,7 +138,6 @@ export function useWorkspaceRestore(
       }
 
       const projectStore = useProjectStore.getState();
-      const worktreeStore = useWorktreeStore.getState();
       const viewerStore = useViewerStore.getState();
       const chatNavStore = useChatNavigationStore.getState();
       const workspaceState = useWorkspaceStateStore.getState();
@@ -194,18 +195,18 @@ export function useWorkspaceRestore(
 
       // Step 2: Restore last worktree. It is fetched by id (or main alone), so
       // the project's full worktree list is never needed to start.
-      const worktreeRestored = await worktreeStore.restoreLastWorktree(currentProject.id);
+      const worktreeRestored = await restoreLastWorktree(currentProject.id);
       // Get fresh worktree state after restoration
-      const freshWorktreeStore = useWorktreeStore.getState();
-      if (worktreeRestored && freshWorktreeStore.currentWorktree) {
+      const restored = getCurrentWorktree();
+      if (worktreeRestored && restored) {
         restoredWorktree = {
-          id: freshWorktreeStore.currentWorktree.id,
-          name: freshWorktreeStore.currentWorktree.name,
+          id: restored.id,
+          name: restored.name,
         };
         logger.info("[WorkspaceRestore] Restored worktree", restoredWorktree);
       }
 
-      const currentWorktreeId = freshWorktreeStore.currentWorktree?.id ?? null;
+      const currentWorktreeId = useWorktreeStore.getState().currentWorktreeId;
 
       // Step 4: Get workspace state for this project/worktree
       const worktreeState = workspaceState.getWorktreeState(currentProject.id, currentWorktreeId);
@@ -244,7 +245,7 @@ export function useWorkspaceRestore(
             title: chatToRestore.title,
           });
           if (chatToRestore.worktreeId) {
-            const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chatToRestore.worktreeId);
+            const targetWorktree = await resolveWorktree(chatToRestore.worktreeId);
             if (targetWorktree) {
               await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, targetWorktree);
             }
@@ -347,7 +348,7 @@ export function useSaveWorkspaceState() {
     const viewerStore = useViewerStore.getState();
 
     const projectId = projectStore.currentProject?.id;
-    const worktreeId = worktreeStore.currentWorktree?.id ?? null;
+    const worktreeId = worktreeStore.currentWorktreeId ?? null;
 
     if (!projectId) {
       logger.debug("[SaveWorkspaceState] No project to save");

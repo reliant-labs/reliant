@@ -20,8 +20,6 @@ import {
 } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
 import { useEditorStore } from "../../store/editorStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import { useWorktreeById } from "../../hooks/useWorktreeById";
 import {
   getMonacoLanguage,
   configureMonacoTheme,
@@ -40,6 +38,7 @@ import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
 import { toast } from "sonner";
+import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 
 interface FileViewerTabProps {
   file: FileNode;
@@ -69,7 +68,7 @@ function getPreviewKindLabel(viewerKind: FilePreviewInfo["viewerKind"]): string 
 
 export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded = false }: FileViewerTabProps) {
   const settings = useEditorStore((state) => state.settings);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
 
   const effectiveWorktreeId = worktreeId || currentWorktree?.id;
   const listedWorktree = useWorktreeById(effectiveWorktreeId);

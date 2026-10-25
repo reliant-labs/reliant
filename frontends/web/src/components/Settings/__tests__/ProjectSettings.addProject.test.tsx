@@ -52,6 +52,17 @@ vi.mock("@/store/worktreeStore", () => ({
       switchWorktreeContext: vi.fn(),
     }),
 }));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("@/hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/worktree-queries")>()),
+  ...(await import("@/test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
+      worktrees: [],
+      loadWorktrees: vi.fn(),
+      currentWorktree: null,
+      switchWorktreeContext: vi.fn(),
+    })),
+}));
 
 vi.mock("@/store/chatStore", () => ({
   useChatStore: (selector: (s: unknown) => unknown) => selector({ selectChat: vi.fn() }),

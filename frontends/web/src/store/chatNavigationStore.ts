@@ -38,6 +38,7 @@ import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
 import { getCachedChatList, getCachedMainWorktree, getChatFromCache } from "../hooks/chat-queries";
 import { sortChats, compareChatGroups } from "../lib/chatListOrder";
+import { resolveWorktree } from "../hooks/worktree-queries";
 
 /**
  * Whether a chat is blocked on the user.
@@ -70,7 +71,7 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
   if (projectId) {
     const worktreeStore = useWorktreeStore.getState();
     if (chat.worktreeId) {
-      const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
+      const targetWorktree = await resolveWorktree(chat.worktreeId);
       if (targetWorktree) {
         await worktreeStore.switchWorktreeContext(projectId, targetWorktree);
       }
@@ -255,7 +256,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
     
     // Also update workspace state for persistence
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (projectId) {
       useWorkspaceStateStore.getState().addToChatQueue(projectId, worktreeId, chatId);
     }
@@ -465,7 +466,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
     
     // Persist to workspace state
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (projectId) {
       useWorkspaceStateStore.getState().updateWorktreeState(projectId, worktreeId, (state) => ({
         showRecentChanges: { ...state.showRecentChanges, [chatId]: newValue },
@@ -483,7 +484,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
     
     // Persist to workspace state
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (projectId) {
       useWorkspaceStateStore.getState().updateWorktreeState(projectId, worktreeId, (state) => ({
         showRecentChanges: { ...state.showRecentChanges, [chatId]: open },
@@ -501,7 +502,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
     
     // Also save to workspace state for persistence
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (projectId) {
       useWorkspaceStateStore.getState().setScrollPosition(projectId, worktreeId, chatId, position);
     }

@@ -23,6 +23,7 @@ import { useChatNavigationStore } from "@/store/chatNavigationStore";
 import { useProjectStore } from "@/store/projectStore";
 import { fetchProjects } from "@/hooks/project-queries";
 import { useWorktreeStore } from "@/store/worktreeStore";
+import { resolveWorktree } from "../../hooks/worktree-queries";
 
 export class RunProjectUnavailableError extends Error {
   constructor() {
@@ -46,7 +47,7 @@ export async function loadRunContext(chatId: string): Promise<Chat> {
   }
 
   const worktreeStore = useWorktreeStore.getState();
-  const worktree = chat.worktreeId ? await worktreeStore.resolveWorktree(chat.worktreeId) : null;
+  const worktree = chat.worktreeId ? await resolveWorktree(chat.worktreeId) : null;
   await worktreeStore.switchWorktreeContext(chat.projectId, worktree);
 
   useChatStore.getState().selectChat(chat);

@@ -435,7 +435,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, newIsOpen);
         }
@@ -451,7 +451,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, true);
         }
@@ -467,7 +467,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, false);
         }

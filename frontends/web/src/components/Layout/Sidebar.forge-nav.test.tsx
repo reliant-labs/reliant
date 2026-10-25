@@ -137,8 +137,8 @@ describe("Sidebar forge nav entry", () => {
     } as Partial<ReturnType<typeof useActivityStore.getState>>);
 
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
 

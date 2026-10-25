@@ -7,12 +7,8 @@ import userEvent from "@testing-library/user-event";
 const createWorktreeMock = vi.hoisted(() => vi.fn());
 const listReposMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: Object.assign(
-    (selector: (s: unknown) => unknown) =>
-      selector({ createWorktree: createWorktreeMock }),
-    { getState: () => ({ createWorktree: createWorktreeMock }) }
-  ),
+vi.mock("../../../hooks/worktree-actions", () => ({
+  createWorktree: createWorktreeMock,
 }));
 
 vi.mock("../../../store/projectStore", () => ({
@@ -54,10 +50,10 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     createWorktreeMock.mockResolvedValue({ id: "wt-new", name: "feature-x" });
   });
 
-  // Regression: this path used to call worktreeGrpc.batchCreate directly,
-  // which left the Zustand store unaware of the new workspace — so it did not
-  // appear in any picker until a page reload.
-  it("creates through the worktree store so the store learns about it", async () => {
+  // Regression: this path used to call the create RPC directly, which left
+  // the app unaware of the new workspace — so it did not appear in any picker
+  // until a page reload. createWorktree caches the row and refreshes the lists.
+  it("creates through createWorktree so every reader learns about it", async () => {
     const onWorktreeCreated = vi.fn();
     const user = userEvent.setup();
 

@@ -4,7 +4,6 @@ import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { useUIStore } from "../../store/uiStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useTerminalStore } from "../../store/terminalStore";
@@ -27,6 +26,7 @@ import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
 import { useFileTreePushRefresh } from "./useFileTreePushRefresh";
 import type { FileNode } from "./index";
+import { useCurrentWorktree, useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface RightSidebarProps {
   /** When provided, clicking the active tab again will close the sidebar */
@@ -35,7 +35,7 @@ interface RightSidebarProps {
 
 export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
   
   // Get the persisted sidebar tab from workspace state store
   const worktreeState = useCurrentWorktreeState(

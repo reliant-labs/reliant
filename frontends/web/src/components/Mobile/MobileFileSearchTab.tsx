@@ -24,10 +24,10 @@ import {
 } from "lucide-react";
 import { searchFiles, type SearchResult } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { cn } from "../../lib/utils";
 import { MobileFilePreview } from "./MobileFilePreview";
 import { MobileEmptyState } from "./MobileChrome";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface FlatMatch {
   path: string;
