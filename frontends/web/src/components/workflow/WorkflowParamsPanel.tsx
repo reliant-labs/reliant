@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { ChevronDown, ChevronRight, Settings2, Save, Loader2, X, Info } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import {
   createPreset,
   setDefaultPreset,

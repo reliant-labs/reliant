@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { Copy, Check } from 'lucide-react';
 
 interface CodeBlockProps {
@@ -33,7 +33,7 @@ export function CodeBlock({ language, children, className }: CodeBlockProps) {
       <pre className="hljs relative w-full overflow-x-auto rounded-md border border-black/10 dark:border-white/10 bg-[var(--code-bg)] text-[var(--code-fg)] whitespace-pre-wrap break-words">
         {/* Header controls */}
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5">
-          <Tooltip content={copied ? 'Copied!' : 'Copy code'} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={copied ? 'Copied!' : 'Copy code'} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleCopy}
             className="flex h-6 w-6 items-center justify-center rounded bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-opacity opacity-0 group-hover/codeblock:opacity-100 focus:opacity-100"

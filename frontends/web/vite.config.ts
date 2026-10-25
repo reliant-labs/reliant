@@ -122,7 +122,14 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console logs in production
+        // Drop the chatty levels only. console.error and console.warn stay:
+        // they are what lib/clientDiagnostics.ts records for the in-app
+        // Diagnostics view and what the telemetry runtime reads errors from,
+        // and lib/logger.ts's always-enabled error/warn write through them.
+        // `drop_console: true` stripped every console.* call AND turned the
+        // `console.error.bind(console)` references those modules capture into
+        // no-ops, so a production build recorded no failed RPC or stream
+        // error anywhere.
         drop_debugger: true,
         pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace'],
       },

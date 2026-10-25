@@ -47,11 +47,6 @@ const getChat = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     chat: () => ({ getChat }),
-    daemonRegistry: () => ({
-      listDaemons: vi.fn(async () => ({
-        daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.IDLE })],
-      })),
-    }),
   },
 }));
 
@@ -59,6 +54,12 @@ vi.mock("@/api/grpc-client", () => ({
 // Integration events are named from the catalog's trigger types; none here.
 setTransport(
   mockTransport({
+    // The daemon list is read through connectClient(DaemonRegistryService).
+    ...serviceHandlers("DaemonRegistryService", {
+      listDaemons: vi.fn(async () => ({
+        daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.IDLE })],
+      })),
+    }),
     ...serviceHandlers("WorkflowService", { listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
     ...serviceHandlers("TriggerService", { getTrigger, listTriggerEvents, fireTrigger, deleteTrigger }),
     "CatalogService.SearchCatalog": { response: {} },

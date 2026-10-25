@@ -19,7 +19,7 @@ import { ContextMenu } from "../ui/ContextMenu";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 import type { FileNode } from "./index";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { createFile, createFolder, deleteFileOrFolder, copyFile, moveFile, copyDirectoryRecursive } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -530,7 +530,7 @@ export const FileTreeItem = memo(function FileTreeItem({
             aria-hidden
           />
         ))}
-      <Tooltip content={buildFullPath(effectiveWorktree?.path, node.path)} delay={300} placement="bottom">
+      <Tooltip content={buildFullPath(effectiveWorktree?.path, node.path)} delay={300} side="bottom" triggerClassName="block">
         <button
           ref={itemRef}
           data-path={node.path}
@@ -623,8 +623,7 @@ export const FileTreeItem = memo(function FileTreeItem({
                       content={`${errorCount} error${
                         errorCount > 1 ? "s" : ""
                       }${isDirectory ? " in this folder" : ""}`}
-                      placement="top"
-                    >
+                      side="top" triggerClassName="block">
                       <div className="flex items-center gap-0.5 text-destructive-ink">
                         <AlertCircle className="w-3 h-3" />
                         <span className="text-xs font-medium">
@@ -638,8 +637,7 @@ export const FileTreeItem = memo(function FileTreeItem({
                       content={`${warningCount} warning${
                         warningCount > 1 ? "s" : ""
                       }${isDirectory ? " in this folder" : ""}`}
-                      placement="top"
-                    >
+                      side="top" triggerClassName="block">
                       <div className="flex items-center gap-0.5 text-amber-500">
                         <AlertTriangle className="w-3 h-3" />
                         <span className="text-xs font-medium">

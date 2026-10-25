@@ -7,8 +7,8 @@
 // The web's copy is the closed union in frontends/web/src/lib/errorReasons.ts;
 // the spelling here is the source of truth, and a value is never reused for a
 // different meaning. A producer stamps a reason with svcerr.WithReason and
-// leaves its message alone: clients from before the reason still match on the
-// text until R3w2 (research/forge-migration/13-p9-frontend-plan.md §7).
+// leaves its message alone: desktop builds from before the reason still match
+// on the text (research/forge-migration/13-p9-frontend-plan.md §7).
 package errreason
 
 const (

@@ -7,7 +7,7 @@ import { useModels, useGlobalDataStore } from "../../store/globalDataStore";
 import { logger } from "../../lib/logger";
 import { hasDefaultValue, formatValueForDisplay } from "../../lib/paramUtils";
 import { ChevronDown, Check, Info, Loader2 } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { DynamicInput } from "./DynamicInput";
 import type { ParamSuggestion, NodeSuggestion } from "./DynamicInput";
 import { ObjectSchemaEditor } from "./ObjectSchemaEditor";
@@ -1292,7 +1292,7 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
             <span className="truncate">{displayName}</span>
             {!hasDefault && <span className="text-destructive-ink">*</span>}
             {description && (
-              <Tooltip content={description} placement="top" delay={200}>
+              <Tooltip content={description} side="top" delay={200}>
                 <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </Tooltip>
             )}
@@ -1311,7 +1311,7 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
           <span className="truncate">{displayName}</span>
           {!hasDefault && <span className="text-destructive-ink">*</span>}
           {description && (
-            <Tooltip content={description} placement="top" delay={200}>
+            <Tooltip content={description} side="top" delay={200}>
               <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             </Tooltip>
           )}

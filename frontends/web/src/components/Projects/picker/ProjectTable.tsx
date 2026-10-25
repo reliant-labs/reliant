@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, ChevronsUpDown, Cloud, GitBranch, Pencil, Trash2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/store/projectStore";
 
@@ -289,7 +289,7 @@ function ProjectRow({
                 "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100",
             )}
           >
-            <Tooltip content="Rename" placement="top" delay={300}>
+            <Tooltip content="Rename" side="top" delay={300}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -303,7 +303,7 @@ function ProjectRow({
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </Tooltip>
-            <Tooltip content="Remove from Reliant (files stay on disk)" placement="top" delay={300}>
+            <Tooltip content="Remove from Reliant (files stay on disk)" side="top" delay={300}>
               <button
                 type="button"
                 onClick={(e) => {

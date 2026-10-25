@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -23,7 +23,6 @@ const mocks = vi.hoisted(() => ({
     planName: 'Compute Small',
     allowedDaemonSizes: ['small'],
   })),
-  listDaemonTokens: vi.fn(async () => []),
   navigate: vi.fn(),
 }))
 
@@ -106,7 +105,6 @@ vi.mock('@/services/controlPlane/environments', () => ({
   portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: mocks.getDaemon,
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
@@ -115,23 +113,16 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
-}))
-
-// The machine LIST comes from reliant's daemon registry
-// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
-// the tests already drive, so their setup calls keep working unchanged.
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
 }))
 
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -168,7 +159,6 @@ describe('MachinesSection — suspended machine disk', () => {
       planName: 'Compute Large',
       allowedDaemonSizes: ['small', 'large'],
     })
-    mocks.listDaemonTokens.mockResolvedValue([])
   })
 
   it('shows the disk beside Delete for a suspended machine, and not for a running one', async () => {

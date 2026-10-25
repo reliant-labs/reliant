@@ -24,7 +24,7 @@
 import { CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   whereExplanation,

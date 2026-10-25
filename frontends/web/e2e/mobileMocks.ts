@@ -192,6 +192,12 @@ export const INBOX_ITEMS = [
 export interface MobileMockOptions {
   /** Inbox items ListInbox answers with. Default INBOX_ITEMS. */
   inbox?: unknown[];
+  /**
+   * How the update stream (StreamingService) answers: `ends` (default) ends
+   * it at once, cleanly; `unavailable` ends it with a Connect `unavailable`
+   * error, as a server that refuses or drops it does.
+   */
+  stream?: 'ends' | 'unavailable';
 }
 
 export interface MobileMock {
@@ -210,6 +216,22 @@ const emptyStream = (route: Route) =>
     body: Buffer.from([0x02, 0, 0, 0, 2, 0x7b, 0x7d]),
   });
 
+/** The message a failing stream's end-stream error carries. */
+export const STREAM_ERROR_MESSAGE = 'update stream unavailable (mocked)';
+
+/** A Connect server-stream that fails: an end-stream envelope carrying an `unavailable` error. */
+const failingStream = (route: Route) => {
+  const end = Buffer.from(JSON.stringify({ error: { code: 'unavailable', message: STREAM_ERROR_MESSAGE } }));
+  const envelope = Buffer.alloc(5);
+  envelope[0] = 0x02; // end-stream flag
+  envelope.writeUInt32BE(end.length, 1);
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/connect+proto',
+    body: Buffer.concat([envelope, end]),
+  });
+};
+
 export async function mockMobileBackend(page: Page, options: MobileMockOptions = {}): Promise<MobileMock> {
   const mock: MobileMock = { answered: [] };
   let inbox = [...(options.inbox ?? INBOX_ITEMS)];
@@ -218,7 +240,7 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
 
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
-  await page.route('**/reliant.v1.StreamingService/**', emptyStream);
+  await page.route('**/reliant.v1.StreamingService/**', options.stream === 'unavailable' ? failingStream : emptyStream);
   await page.route('**/health', (route) => json(route, { auth_mode: 'apikey' }));
 
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>

@@ -26,7 +26,7 @@ import { NoMachinePill } from "./NoMachine";
 import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
@@ -352,7 +352,7 @@ export function ChatHeader({
               {showBackButton && (
                 <Tooltip
                   content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
-                  placement="bottom"
+                  side="bottom"
                 >
                   <button
                     onClick={() => onSelectThread?.(backTargetThread ? backTargetThread.id : null)}
@@ -389,7 +389,7 @@ export function ChatHeader({
               {/* Menu button - right after title */}
               {!isNewChat && chatId && (
                 <div className="relative flex-shrink-0" ref={menuRef}>
-<Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<Tooltip content="Chat options" side="bottom" delay={300} triggerClassName="inline-flex">
                   <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
                     className="touch-target inline-flex items-center justify-center p-1 hover:bg-accent rounded transition-colors"

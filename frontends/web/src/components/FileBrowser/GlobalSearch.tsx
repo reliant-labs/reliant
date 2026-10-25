@@ -1,5 +1,5 @@
 // GlobalSearch - Search across all files in the workspace
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, Loader2, FileText, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
@@ -313,7 +313,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground"
           />
           {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          <Tooltip content="Search options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Search options" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={() => setShowOptions(!showOptions)}
             className={cn(

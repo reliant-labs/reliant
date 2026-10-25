@@ -9,7 +9,8 @@ import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { cn } from "../../lib/utils";
 import { basename } from "../../lib/pathUtils";
 import { toast } from "../../lib/toast-manager";
-import { invalidateDaemonList, useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { invalidateDaemonList } from "../../hooks/daemon-registry-queries";
 import { machineDisplayName } from "../../lib/machineName";
 import { markMachineGone, useGoneMachinesVersion, withoutGoneMachines } from "../../lib/goneMachines";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
@@ -20,7 +21,7 @@ import { projectServiceKeys } from "../../hooks/project-service-hooks_gen";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import Modal from "../forge-ui/modal";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 import { ProjectPickerModal } from "./ProjectPickerModal";
 import { RemoveProjectsModal } from "./RemoveProjectsModal";
@@ -648,9 +649,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                     {query && (
                       <Tooltip
                         content="Clear search"
-                        placement="top"
+                        side="top"
                         delay={300}
-                        wrapperClassName="absolute right-1 top-1/2 -translate-y-1/2"
+                        triggerClassName="absolute right-1 top-1/2 -translate-y-1/2"
                       >
                         <button
                           type="button"

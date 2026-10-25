@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -33,7 +33,6 @@ const mocks = vi.hoisted(() => ({
     planName: 'Compute Small',
     allowedDaemonSizes: ['small'],
   })),
-  listDaemonTokens: vi.fn(async () => []),
   navigate: vi.fn(),
   search: {} as Record<string, string>,
 }))
@@ -92,7 +91,6 @@ vi.mock('@/services/controlPlane/environments', () => ({
   portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: vi.fn(),
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
@@ -101,23 +99,16 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
-}))
-
-// The machine LIST comes from reliant's daemon registry
-// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
-// the tests already drive, so their setup calls keep working unchanged.
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
 }))
 
 import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -143,7 +134,6 @@ describe('MachinesSection', () => {
       planName: 'Compute Small',
       allowedDaemonSizes: ['small'],
     })
-    mocks.listDaemonTokens.mockResolvedValue([])
   })
 
   it('renders the header, then the empty machines state', async () => {

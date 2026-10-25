@@ -36,6 +36,8 @@
  *   s2-sites,      the R5 S2 primitives (Toggle, Input/Textarea, Dropdown,
  *   ?view=s2-menus Modal) as their call sites render them — S2Sandbox.tsx
  *   ?view=s2-modal
+ *   ?view=r5-tooltips  the R5 overlays (Tooltip) as their call sites render
+ *                      them — R5Sandbox.tsx
  *
  * A change to anything here moves those baselines, so it shows up in review
  * as a picture rather than as a diff nobody can read.
@@ -72,6 +74,7 @@ import Status from "./status";
 import Tabs from "./tabs";
 import Tag from "./tag";
 import { S2Menus, S2Modal, S2Sites } from "./S2Sandbox";
+import { R5Tooltips } from "./R5Sandbox";
 
 const SCHEMES = COLOR_SCHEMES;
 
@@ -527,7 +530,7 @@ export default function ForgeTokenSandbox() {
 
       {/* Everything forge renders lives under .forge-ui. */}
       <div className="forge-ui" data-testid="forge-scope">
-        {view === "overlays" ? <Overlays /> : view?.startsWith("s2-") ? null : <ForgeLibrary />}
+        {view === "overlays" ? <Overlays /> : view?.startsWith("s2-") || view?.startsWith("r5-") ? null : <ForgeLibrary />}
       </div>
 
       {/* The S1 and S2 sites sit OUTSIDE the scope, as they do in the app: a
@@ -550,6 +553,7 @@ export default function ForgeTokenSandbox() {
       )}
       {view === "s2-menus" && <S2Menus />}
       {view === "s2-modal" && <S2Modal />}
+      {view === "r5-tooltips" && <R5Tooltips />}
     </div>
   );
 }

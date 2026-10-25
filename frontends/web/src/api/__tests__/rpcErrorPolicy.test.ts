@@ -12,15 +12,15 @@ describe("classifyRpcFailure", () => {
     ).toBe("aborted");
   });
 
-  it("recognises the machine-wait signal only as Unavailable with the marker", () => {
-    const waiting = new ConnectError(
-      "your machine is waking up: no daemon connected yet",
-      Code.Unavailable,
-    );
+  it("recognises the machine-wait signal only as Unavailable with the reason", () => {
+    const waking = new Headers({ "x-forge-error-reason": "daemon_waking" });
+    const waiting = new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable, waking);
     expect(classifyRpcFailure(waiting, reliant)).toBe("machine-wait");
-    // The same text on a code the server should not have used stays visible.
+    // The same reason on a code the server should not have used stays visible.
+    expect(classifyRpcFailure(new ConnectError("x", Code.Internal, waking), reliant)).toBe("report");
+    // The old text without the reason is not a wait.
     expect(
-      classifyRpcFailure(new ConnectError("unavailable: no daemon connected for user", Code.Internal), reliant),
+      classifyRpcFailure(new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable), reliant),
     ).toBe("report");
     expect(classifyRpcFailure(new ConnectError("upstream reset", Code.Unavailable), reliant)).toBe("report");
   });
@@ -75,7 +75,7 @@ describe("forge_api_disabled", () => {
     const disabled = new ConnectError(
       "the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)",
       Code.FailedPrecondition,
-      new Headers({ "x-reliant-reason": "forge_api_disabled" }),
+      new Headers({ "x-forge-error-reason": "forge_api_disabled" }),
     );
     expect(
       classifyRpcFailure(disabled, { serviceTypeName: "reliant.v1.ForgeService", signalAborted: false }),
@@ -87,7 +87,7 @@ describe("account_required", () => {
   const accountRequired = new ConnectError(
     "sign in with an email account to start a cloud machine",
     Code.FailedPrecondition,
-    new Headers({ "x-reliant-reason": "account_required" }),
+    new Headers({ "x-forge-error-reason": "account_required" }),
   );
 
   it("is a state the UI renders, not a report", () => {
@@ -98,7 +98,7 @@ describe("account_required", () => {
   });
 
   it("is keyed on the reason, so a re-tuned status code still is not reported", () => {
-    const internal = new ConnectError("x", Code.Internal, new Headers({ "x-reliant-reason": "account_required" }));
+    const internal = new ConnectError("x", Code.Internal, new Headers({ "x-forge-error-reason": "account_required" }));
     expect(classifyRpcFailure(internal, reliant)).toBe("account-required");
   });
 });

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Code, ConnectError } from '@connectrpc/connect'
 
@@ -97,17 +97,17 @@ vi.mock('@/services/controlPlane/environments', () => ({
   removePortAccess: vi.fn(),
 }))
 
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: async () => mocks.listDaemons() }),
-  },
-}))
-
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { DaemonDiskState } from '@/gen/controlplane/controlplane/v1/shared_pb'
 import { DiskReportSchema } from '@/gen/reliant/v1/tools_daemon_pb'
 import { create } from '@bufbuild/protobuf'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 function machine(over: Record<string, unknown> = {}) {
   return {
@@ -265,7 +265,7 @@ describe('machine detail — grow disk', () => {
     const user = userEvent.setup()
     mocks.growDaemonDisk.mockRejectedValueOnce(
       new ConnectError('520 GB is more than your plan allows', Code.PermissionDenied, {
-        'x-reliant-reason': 'daemon_storage_denied',
+        'x-forge-error-reason': 'daemon_storage_denied',
       }),
     )
     showMachine(machine())

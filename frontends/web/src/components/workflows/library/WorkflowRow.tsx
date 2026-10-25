@@ -27,7 +27,7 @@ import type { RunSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../runs/RunStatusIndicator";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
 import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
@@ -160,7 +160,7 @@ function TurnedOnCell({ row }: { row: LibraryTableRow }) {
   if (!row.turnedOn) {
     return (
       <span data-testid="workflow-row-turned-on" className="text-xs text-muted-foreground">
-        <Tooltip content="It declares no triggers, and nothing runs it by itself" placement="top" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="It declares no triggers, and nothing runs it by itself" side="top" delay={300} triggerClassName="inline-flex">
           <span aria-hidden="true">—</span>
         </Tooltip>
         <span className="sr-only">Not applicable</span>

@@ -10,7 +10,7 @@ import { useListRepos } from "../../hooks/repo-service-hooks_gen";
 import { logger } from "../../lib/logger";
 import { repoPathToWorkspacePath } from "../../lib/worktreeCopyPaths";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { toast } from "../../lib/toast-manager";
 import { useWorktreeById, useMainWorktree, getCachedWorktree } from "../../hooks/worktree-queries";
 

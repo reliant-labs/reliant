@@ -35,7 +35,7 @@ import type { QueryKey } from "@tanstack/react-query";
 import { chatKeys } from "../hooks/chat-queries";
 import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
-import { DAEMON_LIST_QUERY_KEY } from "../hooks/daemonListQuery";
+import { daemonRegistryServiceKeys } from "../hooks/daemon-registry-service-hooks_gen";
 import { runServiceKeys } from "../hooks/run-service-hooks_gen";
 import { triggerServiceKeys } from "../hooks/trigger-service-hooks_gen";
 import { inboxKeys } from "../hooks/inbox-queries";
@@ -59,10 +59,9 @@ export const STREAM_INVALIDATED_SCOPES = {
   chatService: chatServiceKeys.all,
   // Pending approvals (a chat going idle).
   approvals: approvalServiceKeys.all,
-  // The daemon list and the onboarding gate's reads (`daemons`, heartbeats;
-  // invalidateDaemonList).
-  daemonList: DAEMON_LIST_QUERY_KEY,
-  onboardingDaemons: ["onboarding", "daemons"],
+  // The one daemon list, every reader of it (`daemons`, `daemon_local_models`,
+  // heartbeats; invalidateDaemonList).
+  daemonRegistry: daemonRegistryServiceKeys.all,
   runs: runServiceKeys.all,
   triggers: triggerServiceKeys.all,
   inbox: inboxKeys.all,

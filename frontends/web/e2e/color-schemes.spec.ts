@@ -20,6 +20,9 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 //             .forge-ui on a card and on the page background
 //   overlays  sidebar_layout, modal and confirmation_dialog, each pinned in
 //             a box
+//   r5        the R5 overlays (components/forge-ui/R5Sandbox.tsx), each
+//             opened: r5-tooltip-hover (a disabled button's reason, hovered),
+//             r5-tooltip-focus (a toolbar button focused)
 //   s2        the R5 S2 primitives as their call sites render them
 //             (components/forge-ui/S2Sandbox.tsx): s2-sites (switches, text
 //             fields), s2-menus (a row menu and a multi-select filter, each
@@ -140,6 +143,31 @@ test.describe('forge components across color schemes', () => {
         await page.keyboard.press('Enter');
         await expect(page.getByRole('dialog')).toBeVisible();
         await expect(page).toHaveScreenshot(`s2-modal-${scheme}-${mode}.png`, SHOT);
+
+        expect(errors).toEqual([]);
+      });
+
+      test(`${scheme} ${mode} r5`, async ({ page }) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => errors.push(error.message));
+
+        // Tooltips portal to <body>: each capture is a clip of the page
+        // that includes the bubble beside its trigger.
+        await openHarness(page, '?view=r5-tooltips', scheme, mode);
+        const tooltips = page.getByTestId('r5-tooltips');
+        await page.getByRole('button', { name: 'Add step' }).hover();
+        await expect(page.getByRole('tooltip')).toBeVisible();
+        await expect(tooltips).toHaveScreenshot(`r5-tooltip-hover-${scheme}-${mode}.png`, SHOT);
+        await page.mouse.move(0, 0);
+        await expect(page.getByRole('tooltip')).toHaveCount(0);
+        // From the keyboard: a hint shows for focus the user can see
+        // (:focus-visible), and a programmatic focus after the mode toggle's
+        // click is not that.
+        await page.getByTestId('toggle-dark').focus();
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('button', { name: 'Copy path' })).toBeFocused();
+        await expect(page.getByRole('tooltip')).toBeVisible();
+        await expect(tooltips).toHaveScreenshot(`r5-tooltip-focus-${scheme}-${mode}.png`, SHOT);
 
         expect(errors).toEqual([]);
       });

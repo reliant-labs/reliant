@@ -573,6 +573,31 @@ message DeployObservedStateDetail {
 
   // Why the deployment is suspended; UNSPECIFIED when it is not.
   DeploySuspendReason suspend_reason = 10;
+
+  // Which platform path url's hostname reaches, as the control plane
+  // resolves its DNS while answering: the static-sites CDN edge or the
+  // regional ingress. UNSPECIFIED when there is no url or it did not resolve.
+  DeployServingPath url_serving_path = 11;
+}
+
+// DeployServingPath is which platform path a hostname's DNS sends its traffic
+// to, as the control plane resolves it at read time.
+//
+// RESOLVED, NOT DECLARED. Which path a hostname takes is decided by DNS alone
+// (the ingress serves every static host too, and a tenant's custom domain
+// points wherever its owner's records say), so the only truthful answer is
+// the one the resolver gives now. A stored copy would be stale the moment a
+// record changed.
+enum DeployServingPath {
+  // Not resolved: the hostname does not resolve (yet), or the lookup failed.
+  DEPLOY_SERVING_PATH_UNSPECIFIED = 0;
+  // Every address is the static-sites CDN edge.
+  DEPLOY_SERVING_PATH_EDGE = 1;
+  // Every address is the regional ingress: served, with no CDN.
+  DEPLOY_SERVING_PATH_INGRESS = 2;
+  // Neither: the hostname does not point at the platform, or is split
+  // across several destinations.
+  DEPLOY_SERVING_PATH_ELSEWHERE = 3;
 }
 
 // DeployBackupStatus is what a hosted user needs to answer one question:
@@ -635,6 +660,9 @@ message DeployCustomDomainStatus {
   string last_error = 4;
   // When the domain first reached LIVE. Unset in every other state.
   google.protobuf.Timestamp live_since = 5;
+  // Which platform path the domain's DNS reaches right now (see
+  // DeployServingPath).
+  DeployServingPath serving_path = 6;
 }
 
 // DeployDnsRecord is one record a tenant publishes at their registrar.
@@ -748,6 +776,9 @@ message Domain {
   // The domain's binding, if it has one. At most one, always — a hostname
   // resolves to exactly one place.
   DomainBinding binding = 11;
+  // Which platform path the domain's DNS reaches right now (see
+  // DeployServingPath). Set on reads (Get, List, Verify).
+  DeployServingPath serving_path = 12;
 }
 
 // DomainSource is where a domain came from, which decides how verification

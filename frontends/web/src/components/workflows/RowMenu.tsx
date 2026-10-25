@@ -6,7 +6,7 @@
  * WORKFLOW_UI.md §2.2). Used by Library rows and preset rows.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { MoreHorizontal } from "lucide-react";
 
 import DropdownMenu from "../forge-ui/dropdown_menu";
@@ -25,7 +25,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowMenuAct
       label={label}
       menuClassName="min-w-44"
       trigger={(props) => (
-        <Tooltip content={label} placement="left" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content={label} side="left" delay={300} triggerClassName="inline-flex">
           <button
             type="button"
             {...props}
