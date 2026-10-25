@@ -1,5 +1,12 @@
 # Fast pre-merge tests (Reliant)
 
+> **Historical measurement.** The CI it describes (`pr-ci.yml`, sharded Go and
+> Vitest runners) has since been replaced: CI is a thin wrapper over the merge
+> gate (`task ci:merge`) and the release gate (`task release:gate`), in
+> `.github/workflows/ci.yml`. The current design is
+> [merge-and-release-gates.md](merge-and-release-gates.md); the numbers below
+> are kept as the measurement they were.
+
 Measured 2026-10-23 against fresh `origin/main` **2ddaace4bc0e**, in
 `~/src/rl-agent-worktrees/reliant-fast-test-gate`. Scope: **tests**, not the
 whole CI/check/build/release pipeline. Target: less than five minutes elapsed
