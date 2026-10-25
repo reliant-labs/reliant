@@ -14,7 +14,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { triggerSchedule } from "@/api/trigger-grpc";
 import { chatKeys } from "@/hooks/chat-queries";
 import { useLaunchEvent } from "@/hooks/run-queries";

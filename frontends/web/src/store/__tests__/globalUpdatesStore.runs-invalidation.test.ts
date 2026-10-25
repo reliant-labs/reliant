@@ -26,7 +26,7 @@ vi.mock("../../lib/notifications", async (importOriginal) => {
 });
 
 import { queryClient } from "../../lib/query-client";
-import { runKeys } from "../../hooks/run-queries";
+import { runServiceKeys } from "../../hooks/run-service-hooks_gen";
 import { resetStreamInvalidation, useGlobalUpdatesStore } from "../globalUpdatesStore";
 
 function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>): UserUpdate {
@@ -44,11 +44,19 @@ function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>)
   };
 }
 
-const listKey = runKeys.list({ kind: ["schedule"] });
+// One key per kind of run read: a filtered Runs page, the children strip's
+// page, and the Library's last-run column. The stream invalidates
+// runServiceKeys.all, which is a prefix of each.
+const listKey = runServiceKeys.listRunsInfinite({ launchKind: ["schedule"] });
+const childrenKey = runServiceKeys.listRuns({ parentChatId: "c-parent", limit: 6 });
+const lastRunKey = runServiceKeys.lastRunPerWorkflow({ projectId: "p1" });
+const runKeys = [listKey, childrenKey, lastRunKey];
 
 beforeEach(() => {
   queryClient.clear();
   queryClient.setQueryData(listKey, { pages: [], pageParams: [] });
+  queryClient.setQueryData(childrenKey, { runs: [] });
+  queryClient.setQueryData(lastRunKey, { runs: [] });
 });
 
 afterEach(() => {
@@ -61,10 +69,10 @@ describe("globalUpdatesStore → Runs list", () => {
     [UserUpdateType.CHAT_STATE_CHANGE, { state: 1, previous_state: 1, reason: "workflow_completed" }],
     [UserUpdateType.CHAT_ACTIVITY_CHANGED, { chat_id: "c-automation", activity: 1 }],
     [UserUpdateType.CHAT_CREATED, { chat_id: "c-automation", title: "Nightly" }],
-  ] as const)("update %s marks every runs list stale", (type, data) => {
-    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(false);
+  ] as const)("update %s marks every run read stale", (type, data) => {
+    for (const key of runKeys) expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
     useGlobalUpdatesStore.getState().handleUpdate([buildUpdate(type, data)]);
-    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+    for (const key of runKeys) expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
   });
 
   it("a title change does not refetch the runs list", () => {

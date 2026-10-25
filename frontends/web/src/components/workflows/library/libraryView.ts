@@ -21,7 +21,7 @@
  */
 
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import type { Trigger } from "@/api/trigger-grpc";
 import { automationHealth, worstHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import type { LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";

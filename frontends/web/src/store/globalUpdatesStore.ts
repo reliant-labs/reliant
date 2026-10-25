@@ -36,7 +36,8 @@ import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { invalidateMcpQueries } from "../hooks/mcp-queries";
 import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
-import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
+import { runServiceKeys } from "../hooks/run-service-hooks_gen";
+import { runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
@@ -420,7 +421,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // Coalesced: a busy run or a reconnect replay is one refetch, not one per
       // update (streamInvalidation).
       if (runsInvalidatingUpdate(update.update_type)) {
-        streamInvalidation.invalidate(runKeys.lists());
+        streamInvalidation.invalidate(runServiceKeys.all);
       }
       // The Inbox (and its nav badge) spans every chat, so it is marked stale
       // too. Only observed queries refetch, coalesced the same way.

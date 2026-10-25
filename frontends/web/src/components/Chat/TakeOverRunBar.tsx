@@ -77,7 +77,7 @@ export function useAdoptOnSend<Args extends unknown[]>(
       await send(...args);
       if (!shouldAdopt || !chatId) return;
       try {
-        await mutateAsync(chatId);
+        await mutateAsync({ chatId });
       } catch (error) {
         logger.error("[TakeOverRunBar] Adopting after reply failed", { chatId, error });
       }

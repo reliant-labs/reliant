@@ -41,7 +41,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow, deleteWorkflow: mocks.deleteWorkflow }),
-    run: () => ({ lastRunPerWorkflow: mocks.lastRunPerWorkflow }),
     trigger: () => ({ listTriggers: mocks.listTriggers }),
     worktree: () => ({ listWorktrees: mocks.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
@@ -49,8 +48,8 @@ vi.mock("@/api/grpc-client", () => ({
   },
 }));
 
-// PresetService is reached through connectClient (hooks/preset-queries), so
-// it is answered at the transport by the same fakes. Integration events are
+// PresetService and RunService are reached through connectClient (the
+// generated hooks), so they are answered at the transport by the same fakes. Integration events are
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
@@ -58,6 +57,7 @@ beforeEach(() => {
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
     }),
+      ...serviceHandlers("RunService", { lastRunPerWorkflow: mocks.lastRunPerWorkflow }),
       "CatalogService.SearchCatalog": { response: {} },
     }));
 });

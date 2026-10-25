@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { TriggerCard } from "../TriggerCard";
 import { answerGithubTriggerTypes, renderRunsAt } from "./runTestUtils";
 import { setTransport } from "@/lib/connect";

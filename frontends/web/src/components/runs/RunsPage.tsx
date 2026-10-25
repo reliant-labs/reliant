@@ -14,7 +14,7 @@ import { useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Activity, CalendarClock, Workflow } from "lucide-react";
 
-import { runErrorMessage } from "@/api/run-grpc";
+import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";

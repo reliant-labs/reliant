@@ -1227,12 +1227,12 @@ function SidebarComponent({
       // Released first: the chat may be the open one, and pinning it would
       // keep the row the user just asked to move.
       useSidebarPinStore.getState().release(chatId);
-      unadoptRunMutation.mutate(chatId, {
+      unadoptRunMutation.mutate({ chatId }, {
         onSuccess: () => {
           toast.notify("Moved back to Runs", {
             action: {
               label: "Undo",
-              onClick: () => adoptRunMutation.mutate(chatId),
+              onClick: () => adoptRunMutation.mutate({ chatId }),
             },
           });
         },

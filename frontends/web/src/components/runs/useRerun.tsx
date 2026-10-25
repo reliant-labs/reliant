@@ -20,7 +20,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import type { Chat } from "@/api/client";
-import { runErrorMessage, type LaunchEvent } from "@/api/run-grpc";
+import { runErrorMessage, type LaunchEvent } from "@/hooks/run-queries";
 import { useFirstPrompt } from "@/hooks/run-queries";
 import { useFireTrigger } from "@/hooks/trigger-queries";
 import { RunWorkflowDialog } from "../workflow/run/RunWorkflowDialog";
