@@ -85,16 +85,15 @@ const redirectTargetFrom = (mock: ReturnType<typeof vi.fn>): string => {
   return (call[0] as { options: { redirectTo: string } }).options.redirectTo
 }
 
-// The first import of the store transforms its whole module graph; each later
-// one (after vi.resetModules) only re-evaluates it. Pay the transform once
-// here, under the hook budget, instead of inside the first test's: on a
-// loaded machine it alone outran the 10s test timeout (merge gates of
-// reliant#1512 and the Trigger lane, 2026-10-25).
-beforeAll(async () => {
-  await import('@/store/authStore')
-})
-
 describe('OAuth redirect target in a packaged Electron build', () => {
+  // Each test imports a FRESH authStore (vi.resetModules), but the first import
+  // in a worker also transforms authStore's whole module graph: ~4s alone,
+  // past the 5s test timeout under a loaded full run. Transform it once here,
+  // on the hook's own budget, so every test's import is only an evaluation.
+  beforeAll(async () => {
+    await import('@/store/authStore')
+  }, 60_000)
+
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()

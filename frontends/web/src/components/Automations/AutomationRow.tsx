@@ -23,7 +23,7 @@ import Status from "../forge-ui/status";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { Tooltip } from "../ui/Tooltip";
 import { RunStatusBadge } from "../runs/RunStatusIndicator";
-import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/api/trigger-grpc";
+import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/hooks/trigger-model";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import { describeTriggerSource } from "@/lib/cronText";

@@ -23,7 +23,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, Power } from "lucide-react";
 import { toast } from "sonner";
 
-import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
+import { triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useDisableWorkflow, useSetTriggerEnabled, useTriggers } from "@/hooks/trigger-queries";
 import { workflowAutomationsFor, unitLastEvent, type WorkflowAutomation } from "@/lib/automationUnits";

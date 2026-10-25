@@ -23,7 +23,7 @@ import {
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
-import { definitionFromTrigger, definitionToProto, eventFromProto, triggerFromProto } from "../trigger-grpc";
+import { definitionFromTrigger, definitionToProto, eventFromProto, triggerFromProto } from "../trigger-model";
 
 function proto(overrides: Partial<Parameters<typeof create<typeof TriggerSchema>>[1]> = {}) {
   return create(TriggerSchema, {

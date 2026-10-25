@@ -41,7 +41,7 @@ import {
   type FlowNodeData,
 } from "../../lib/workflow-flow";
 import { AutomationFormDialog } from "../Automations/AutomationFormDialog";
-import type { Trigger } from "../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { workflowRefForTrigger } from "../../lib/triggerRail";
 import { TriggerRailProvider, type TriggerRailContextValue } from "./TriggerRailContext";
 import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";

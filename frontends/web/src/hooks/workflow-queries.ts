@@ -46,7 +46,7 @@ import { toWorkflowMessage } from "../lib/workflowProto";
 import { useProjectStore } from "../store/projectStore";
 import type { Edge, Step, Workflow } from "../types/workflow";
 import { presetServiceKeys } from "./preset-service-hooks_gen";
-import { triggerKeys } from "./trigger-queries";
+import { triggerServiceKeys } from "./trigger-service-hooks_gen";
 import { useGetWorkflow, useListWorkflows, workflowServiceKeys } from "./workflow-service-hooks_gen";
 
 export type {
@@ -608,7 +608,7 @@ export async function setWorkflowStatus(
 /** Delete a workflow. The server deletes the workflow's automations with it. */
 export async function deleteWorkflow(projectId: string, name: string): Promise<void> {
   await client.deleteWorkflow({ projectId, name });
-  await Promise.all([invalidateWorkflows(), queryClient.invalidateQueries({ queryKey: triggerKeys.all })]);
+  await Promise.all([invalidateWorkflows(), queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all })]);
 }
 
 /** Import a workflow from YAML content. */

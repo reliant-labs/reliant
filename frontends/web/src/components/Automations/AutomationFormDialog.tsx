@@ -37,7 +37,7 @@ import {
   type TriggerDefinitionInput,
   type TriggerSchedule,
   type TriggerSource,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import {
   useCreateTrigger,
   useProjectDaemonInstalls,
@@ -453,7 +453,7 @@ function AutomationFormBody({
       const definition = buildDefinition();
       const saved = trigger
         ? await updateMutation.mutateAsync({ id: trigger.id, input: definition })
-        : await createMutation.mutateAsync(definition);
+        : (await createMutation.mutateAsync(definition)).trigger;
       onSaved?.(saved);
       onClose();
     } catch (error) {

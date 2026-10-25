@@ -38,7 +38,7 @@ import { resetStreamInvalidation, useGlobalUpdatesStore } from "@/store/globalUp
 import { useProjectStore } from "@/store/projectStore";
 import { subscribeToDraftUpdates } from "@/store/workflowDraftUpdates";
 import { presetServiceKeys } from "../preset-service-hooks_gen";
-import { triggerKeys } from "../trigger-queries";
+import { triggerServiceKeys } from "../trigger-service-hooks_gen";
 import { useWorkflowLibrary } from "../workflow-library-queries";
 import {
   deleteWorkflow,
@@ -153,14 +153,15 @@ describe("WorkflowService keys", () => {
   });
 
   it("deleting a workflow refetches the mounted list and invalidates the automations", async () => {
-    queryClient.setQueryData(triggerKeys.list("p1"), []);
+    const triggersKey = triggerServiceKeys.listTriggers({ projectId: "p1" });
+    queryClient.setQueryData(triggersKey, { triggers: [] });
     const library = renderHook(() => useWorkflowLibrary("p1"), { wrapper });
     await waitFor(() => expect(names(library.result.current.data?.workflows)).toEqual(["builtin://agent", "helper"]));
 
     await act(() => deleteWorkflow("p1", "helper"));
 
     await waitFor(() => expect(names(library.result.current.data?.workflows)).toEqual(["builtin://agent"]));
-    expect(queryClient.getQueryState(triggerKeys.list("p1"))?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(triggersKey)?.isInvalidated).toBe(true);
   });
 
   it("the chat-safe list follows the current project", async () => {

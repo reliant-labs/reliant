@@ -9,7 +9,7 @@
 
 import { useId, type ReactNode } from "react";
 
-import type { ActingIdentityKey } from "@/api/trigger-grpc";
+import type { ActingIdentityKey } from "@/hooks/trigger-model";
 import { cn } from "@/lib/utils";
 
 export interface ActingIdentityFieldProps {

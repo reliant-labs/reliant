@@ -153,6 +153,9 @@ type TriggerServiceClient interface {
 	// back to the person's current name. It asks the provider with the
 	// CALLER's own credential for the integration. GitHub only; a caller with
 	// no usable GitHub credential is FailedPrecondition.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
 	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
 	// ListReplayEvents lists the recent events the caller's activations of a
 	// workflow's declared triggers received, newest first, so one can be run
@@ -162,6 +165,9 @@ type TriggerServiceClient interface {
 	// prompt, as a fire of that event would. Only the mapping applies: the
 	// trigger's filter and origin_filter are not evaluated, because the person
 	// replaying has decided the event is wanted.
+	//
+	// It only reads (nothing is fired or recorded), and says so with
+	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
 	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
 }
 
@@ -252,6 +258,7 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceResolveTriggerSendersProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listReplayEvents: connect.NewClient[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse](
@@ -264,6 +271,7 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServicePreviewReplayProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -434,6 +442,9 @@ type TriggerServiceHandler interface {
 	// back to the person's current name. It asks the provider with the
 	// CALLER's own credential for the integration. GitHub only; a caller with
 	// no usable GitHub credential is FailedPrecondition.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
 	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
 	// ListReplayEvents lists the recent events the caller's activations of a
 	// workflow's declared triggers received, newest first, so one can be run
@@ -443,6 +454,9 @@ type TriggerServiceHandler interface {
 	// prompt, as a fire of that event would. Only the mapping applies: the
 	// trigger's filter and origin_filter are not evaluated, because the person
 	// replaying has decided the event is wanted.
+	//
+	// It only reads (nothing is fired or recorded), and says so with
+	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
 	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
 }
 
@@ -529,6 +543,7 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceResolveTriggerSendersProcedure,
 		svc.ResolveTriggerSenders,
 		connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceListReplayEventsHandler := connect.NewUnaryHandler(
@@ -541,6 +556,7 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServicePreviewReplayProcedure,
 		svc.PreviewReplay,
 		connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

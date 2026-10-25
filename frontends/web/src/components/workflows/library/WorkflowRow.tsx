@@ -33,7 +33,7 @@ import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workfl
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WORKFLOW_SOURCE_LABEL, WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 import type { AutomationCtaSpec } from "@/lib/automationHealth";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { AutomationCta } from "../../Automations/AutomationCta";
 
 export type WorkflowRowAction = RowMenuAction;

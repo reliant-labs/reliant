@@ -25,11 +25,11 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
 import { chatGrpc } from "@/api/chat-grpc";
-import { triggerGrpc, type ReplayCandidate } from "@/api/trigger-grpc";
+import type { ReplayCandidate } from "@/hooks/trigger-model";
+import { previewReplay, useReplayCandidates } from "@/hooks/trigger-queries";
 import { NO_MACHINE, noMachineBlockerFor } from "@/components/Automations/daemonChoices";
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -113,12 +113,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
 
   const effectiveTrigger = triggerName || (triggerNames.length === 1 ? triggerNames[0]! : "");
 
-  const candidatesQuery = useQuery({
-    queryKey: ["run-now", "replay-events", projectId, workflowRef],
-    queryFn: () => triggerGrpc.listReplayEvents(projectId, workflowRef),
-    enabled: replaying,
-    staleTime: 15_000,
-  });
+  const candidatesQuery = useReplayCandidates(projectId, workflowRef, replaying);
   const candidates = useMemo(
     () =>
       (candidatesQuery.data ?? []).filter((c) => !effectiveTrigger || c.triggerName === effectiveTrigger),
@@ -142,19 +137,18 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
     if (!parsed.ok) return;
     let cancelled = false;
     setMapping_(true);
-    void triggerGrpc
-      .previewReplay(
-        projectId,
-        workflowRef,
-        {
-          triggerName: effectiveTrigger,
-          eventId: chosen?.event.id,
-          kind: chosen?.kind || kind,
-          occurredAt: chosen?.event.occurredAt,
-          payload: parsed.value,
-        },
-        chosen?.event.sender,
-      )
+    void previewReplay(
+      projectId,
+      workflowRef,
+      {
+        triggerName: effectiveTrigger,
+        eventId: chosen?.event.id,
+        kind: chosen?.kind || kind,
+        occurredAt: chosen?.event.occurredAt,
+        payload: parsed.value,
+      },
+      chosen?.event.sender,
+    )
       .then((result) => {
         if (cancelled) return;
         setMapping(result);

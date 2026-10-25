@@ -30,7 +30,7 @@
  */
 
 import { RunDisplayState } from "../gen/reliant/v1/run_pb";
-import { triggerSchedule, type Trigger, type TriggerEvent, type TriggerHealth } from "../api/trigger-grpc";
+import { triggerSchedule, type Trigger, type TriggerEvent, type TriggerHealth } from "@/hooks/trigger-model";
 import type { RunStatusBadgeVariant, RunStatusDotVariant } from "./runStatus";
 
 export type AutomationHealthKey =

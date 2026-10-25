@@ -13,7 +13,7 @@ import { useEffect, useId, useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import Card from "../forge-ui/card";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { formatZonedClock } from "@/lib/cronSchedule";
 import { timelineModel, type TimelineLane } from "./comingUp";
 

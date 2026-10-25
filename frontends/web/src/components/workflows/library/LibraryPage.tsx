@@ -56,7 +56,7 @@ import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
 import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "./libraryView";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 
 type SourceChoice = LibrarySourceKey | "all";
 

@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
-import type { Trigger, TriggerHealth } from "@/api/trigger-grpc";
+import type { Trigger, TriggerHealth } from "@/hooks/trigger-model";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { IntegrationSourceSchema } from "@/gen/reliant/v1/trigger_pb";
 import { automationCounts, automationOverview, groupSummary, unitTitle } from "../automationGrouping";
