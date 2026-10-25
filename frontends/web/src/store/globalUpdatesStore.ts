@@ -37,6 +37,8 @@ import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { invalidateMcpQueries } from "../hooks/mcp-queries";
 import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
 import { runServiceKeys } from "../hooks/run-service-hooks_gen";
+import { triggersInvalidatingUpdate } from "../hooks/trigger-queries";
+import { triggerServiceKeys } from "../hooks/trigger-service-hooks_gen";
 import { runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
@@ -422,6 +424,12 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // update (streamInvalidation).
       if (runsInvalidatingUpdate(update.update_type)) {
         streamInvalidation.invalidate(runServiceKeys.all);
+      }
+      // A fire that launched a run moves its automation's last event, health
+      // and next fire; the update names no trigger, so every mounted trigger
+      // read is marked stale, coalesced the same way.
+      if (triggersInvalidatingUpdate(update.update_type)) {
+        streamInvalidation.invalidate(triggerServiceKeys.all);
       }
       // The Inbox (and its nav badge) spans every chat, so it is marked stale
       // too. Only observed queries refetch, coalesced the same way.

@@ -15,7 +15,7 @@
  *     could not be switched back off is the one thing the user must act on.
  */
 
-import type { EnableWorkflowResult, WorkflowTriggerOutcomeKind, WorkflowTriggerResult } from "@/api/trigger-grpc";
+import type { EnableWorkflowResult, WorkflowTriggerOutcomeKind, WorkflowTriggerResult } from "@/hooks/trigger-model";
 import { integrationOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
 
 export interface EnablePlan {

@@ -34,17 +34,15 @@ import { CardInset } from "../forge-ui/card";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateTrigger, useProjectDaemonInstalls, useRotateWebhookToken } from "@/hooks/trigger-queries";
 import {
   inlineTriggerSource,
   triggerErrorMessage,
-  triggerGrpc,
   webhookUrlForDisplay,
   type ActingIdentityKey,
   type Trigger,
   type WebhookCredential,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import { getGRPCBaseURLPublic } from "@/api/grpc-client";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import type { RunWorkflowValue } from "../workflow/run/runWorkflowValues";
@@ -104,7 +102,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const [declared, setDeclared] = useState(initialDeclared);
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
-  const queryClient = useQueryClient();
+  const createTrigger = useCreateTrigger();
   const projects = useProjectStore((s) => s.projects);
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const kind = sourceCase(declared);
@@ -163,7 +161,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
     if (Object.keys(errors).length > 0) return;
     setSaving(true);
     try {
-      const result = await triggerGrpc.createWithCredential({
+      const result = await createTrigger.mutateAsync({
         name: name.trim(),
         projectId,
         worktreeId: inputs.worktreeId,
@@ -180,7 +178,6 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         source: personal ? inlineTriggerSource(declared.source) : { kind: "activation", workflowTrigger: declared.name ?? "" },
         filter: personal && kind !== "schedule" ? filter : undefined,
       });
-      void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
       onActivated?.(result.trigger);
       if (result.webhook || kind === "webhook") setCreated(result);
       else onClose();
@@ -398,7 +395,7 @@ function ActivatedView({ created, onClose }: { created: { trigger: Trigger; webh
  * old token at once.
  */
 export function WebhookCredentialPanel({ trigger, credential: initial }: { trigger: Trigger; credential?: WebhookCredential }) {
-  const queryClient = useQueryClient();
+  const rotateToken = useRotateWebhookToken();
   const [credential, setCredential] = useState(initial);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
@@ -421,10 +418,9 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
     setRotating(true);
     setError(null);
     try {
-      const result = await triggerGrpc.rotateWebhookToken(trigger.id);
+      const result = await rotateToken.mutateAsync(trigger.id);
       setCredential(result.webhook);
       setConfirmRotate(false);
-      void queryClient.invalidateQueries({ queryKey: triggerKeys.all });
     } catch (err) {
       setError(triggerErrorMessage(err));
     } finally {

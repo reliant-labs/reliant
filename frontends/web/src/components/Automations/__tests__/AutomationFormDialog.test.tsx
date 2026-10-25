@@ -32,7 +32,7 @@ import {
 import { jsToProtoValue } from "@/api/proto-utils";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
-import { triggerFromProto } from "@/api/trigger-grpc";
+import { triggerFromProto } from "@/hooks/trigger-model";
 import { GetWorkflowResponseSchema, WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
 import { WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import {
@@ -58,7 +58,6 @@ const listConnections = vi.fn(async () => ({ connections: [] }));
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows, getWorkflow }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
@@ -66,11 +65,12 @@ vi.mock("@/api/grpc-client", () => ({
   },
 }));
 
-// PresetService is reached through connectClient (hooks/preset-queries), so
+// PresetService and TriggerService are reached through connectClient (the generated hooks), so
 // it is answered at the transport by the same fakes. So is ConnectionService
 // (generated hooks).
 beforeEach(() => {
   setTransport(mockTransport({
+      ...serviceHandlers("TriggerService", { createTrigger, updateTrigger }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       "ConnectionService.ListConnections": (req) => listConnections(req),
     }));

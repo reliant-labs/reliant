@@ -17,7 +17,7 @@
  * reads the same on every machine and the tests are deterministic.
  */
 
-import { sourceKindLabel, type TriggerSource } from "@/api/trigger-grpc";
+import { sourceKindLabel, type TriggerSource } from "@/hooks/trigger-model";
 import { describeIntegrationEvents, RAW_EVENT_NAMING, type IntegrationEventNaming } from "./integrationEventNames";
 
 const WEEKDAY_NAMES = [

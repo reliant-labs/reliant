@@ -10,11 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { Trigger, TriggerHealth } from "@/api/trigger-grpc";
+import type { Trigger, TriggerHealth } from "@/hooks/trigger-model";
 import { renderAtRoute } from "./automationTestUtils";
 import { create } from "@bufbuild/protobuf";
 import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
 
 const setTriggerEnabled = vi.fn();
@@ -24,7 +25,6 @@ const listWorkflows = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    trigger: () => ({ setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
@@ -32,9 +32,10 @@ vi.mock("@/api/grpc-client", () => ({
   },
 }));
 
-// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+// TriggerService, CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
+    ...serviceHandlers("TriggerService", { setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
     "ConnectionService.ListConnections": { response: {} },
   }),

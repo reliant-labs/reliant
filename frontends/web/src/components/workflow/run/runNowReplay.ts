@@ -10,7 +10,7 @@
  */
 
 import type { JsonObject } from "@bufbuild/protobuf";
-import type { ReplayCandidate } from "@/api/trigger-grpc";
+import type { ReplayCandidate } from "@/hooks/trigger-model";
 import { formatRelativeTime } from "@/lib/relativeTime";
 
 export type PayloadParse = { ok: true; value: JsonObject } | { ok: false; error: string };

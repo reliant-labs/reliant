@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { RunDisplayState } from "../../gen/reliant/v1/run_pb";
-import type { TriggerEvent, TriggerHealth, TriggerHealthStatusKey } from "../../api/trigger-grpc";
+import type { TriggerEvent, TriggerHealth, TriggerHealthStatusKey } from "@/hooks/trigger-model";
 import { automationHealth, type AutomationHealthKey } from "../automationHealth";
 
 const EVENT: TriggerEvent = {

@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import type { Chat } from "@/api/client";
 import { runErrorMessage, type LaunchEvent } from "@/hooks/run-queries";
 import { useFirstPrompt } from "@/hooks/run-queries";
-import { useFireTrigger } from "@/hooks/trigger-queries";
+import { useFireTrigger } from "@/hooks/trigger-service-hooks_gen";
 import { RunWorkflowDialog } from "../workflow/run/RunWorkflowDialog";
 
 export interface Rerun {
@@ -53,7 +53,7 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
   const automationId = chat.triggerId || undefined;
   const onRunAutomationNow = automationId
     ? () =>
-        fire.mutate(automationId, {
+        fire.mutate({ id: automationId }, {
           onSuccess: () =>
             toast.success("Automation started", {
               description: `${triggerName ?? "It"} runs now, unattended. The new run appears in Runs.`,

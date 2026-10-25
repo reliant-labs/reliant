@@ -10,7 +10,7 @@
 
 import { AlertOctagon, AlertTriangle } from "lucide-react";
 
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { AutomationHealthDisplay } from "@/lib/automationHealth";
 import { cn } from "@/lib/utils";
 import { AutomationCta } from "./AutomationCta";

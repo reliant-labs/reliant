@@ -60,7 +60,7 @@ import {
   type DeclaredTrigger,
   type TriggerFinding,
 } from "../../../lib/declaredTriggers";
-import type { Trigger } from "../../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { JsonSchema } from "../../../lib/jsonSchema";
 import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/catalog-queries";
 import type { Workflow } from "../../../types/workflow";

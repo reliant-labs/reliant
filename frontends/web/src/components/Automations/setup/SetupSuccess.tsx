@@ -10,7 +10,7 @@
 
 import { CircleCheck, AlertTriangle } from "lucide-react";
 
-import type { EnableWorkflowResult } from "@/api/trigger-grpc";
+import type { EnableWorkflowResult } from "@/hooks/trigger-model";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, scheduleOf, type DeclaredTrigger } from "@/lib/declaredTriggers";

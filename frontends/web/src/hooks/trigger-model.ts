@@ -1,7 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Thin client over `reliant.v1.TriggerService` — automations.
+ * TriggerService's frontend model — automations. Pure: no React, no client.
+ * The reads and writes are the generated hooks, composed in
+ * `trigger-queries.ts`; this module is what they `select` through and what
+ * their requests are built from.
  *
  * Proto messages are converted to plain frontend types at this boundary so
  * components never touch `$typeName`, oneof envelopes or proto enums. The one
@@ -23,32 +26,23 @@
 import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { grpcClient } from "./grpc-client";
-import { jsToProtoValue, protoValueToJs } from "./proto-utils";
-import { replayEventToProto, type ReplayEventInput } from "./chat-grpc";
+import { jsToProtoValue, protoValueToJs } from "../api/proto-utils";
+import { replayEventToProto, type ReplayEventInput } from "../api/chat-grpc";
 import {
   ActingIdentity,
-  CreateTriggerRequestSchema,
-  DeleteTriggerRequestSchema,
-  DisableWorkflowRequestSchema,
-  EnableWorkflowRequestSchema,
-  FireTriggerRequestSchema,
-  GetTriggerRequestSchema,
-  ListTriggerEventsRequestSchema,
-  ListReplayEventsRequestSchema,
-  PreviewReplayRequestSchema,
-  ListTriggersRequestSchema,
-  ResolveTriggerSendersRequestSchema,
-  RotateWebhookTokenRequestSchema,
+  type EnableWorkflowRequestSchema,
+  type EnableWorkflowResponse,
+  type ListReplayEventsResponse,
+  type PreviewReplayRequestSchema,
+  type PreviewReplayResponse,
+  type ResolveTriggerSendersResponse,
   ScheduleSourceSchema,
-  SetTriggerEnabledRequestSchema,
   TriggerDefinitionSchema,
   TriggerEventKind,
   TriggerEventOutcome,
   TriggerHealthStatus,
   TriggerSenderSchema,
   TriggerOverlapPolicy,
-  UpdateTriggerRequestSchema,
   WorkflowTriggerOutcome,
   IntegrationSourceSchema,
   WebhookSourceSchema,
@@ -634,10 +628,6 @@ export function isTriggerNotFound(error: unknown): boolean {
 }
 
 // ============================================
-// Client
-// ============================================
-
-// ============================================
 // Workflow-level enable
 // ============================================
 
@@ -695,11 +685,6 @@ export interface EnableWorkflowInput {
   actingIdentity?: ActingIdentityKey;
 }
 
-export interface DisableWorkflowResult {
-  paused: Trigger[];
-  failed: Array<{ triggerId: string; name: string; message: string }>;
-}
-
 const OUTCOME_KIND: Partial<Record<WorkflowTriggerOutcome, WorkflowTriggerOutcomeKind>> = {
   [WorkflowTriggerOutcome.ENABLED]: "enabled",
   [WorkflowTriggerOutcome.RESUMED]: "resumed",
@@ -714,187 +699,96 @@ function paramsToProto(params: Record<string, unknown> | undefined) {
   return Object.fromEntries(Object.entries(params ?? {}).map(([key, value]) => [key, jsToProtoValue(value)]));
 }
 
-export const triggerGrpc = {
-  async list(projectId?: string): Promise<Trigger[]> {
-    const response = await grpcClient
-      .trigger()
-      .listTriggers(create(ListTriggersRequestSchema, { projectId }));
-    return response.triggers.map(triggerFromProto);
-  },
+/**
+ * The EnableWorkflow request for a setup: every declared trigger, all or
+ * none, with the user's choice of project, machine and accounts.
+ */
+export function enableWorkflowRequest(input: EnableWorkflowInput): MessageInitShape<typeof EnableWorkflowRequestSchema> {
+  return {
+    workflow: input.workflow,
+    projectId: input.projectId,
+    worktreeId: input.worktreeId,
+    daemonId: input.daemonId ?? "",
+    noMachine: input.noMachine ?? false,
+    connectionIds: input.connectionIds ?? {},
+    params: paramsToProto(input.params),
+    presets: input.presets ?? {},
+    notifyOnComplete: input.notifyOnComplete ?? false,
+    message: input.message ?? "",
+    namePrefix: input.namePrefix ?? "",
+    actingIdentity: actingIdentityToProto(input.actingIdentity),
+    overrides: (input.overrides ?? []).map((o) => ({
+      trigger: o.trigger,
+      name: o.name,
+      daemonId: o.daemonId,
+      noMachine: o.noMachine,
+      connectionId: o.connectionId,
+      message: o.message,
+      params: paramsToProto(o.params),
+    })),
+  };
+}
 
-  async get(id: string): Promise<Trigger> {
-    const response = await grpcClient.trigger().getTrigger(create(GetTriggerRequestSchema, { id }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return triggerFromProto(response.trigger);
-  },
+/**
+ * What EnableWorkflow did. A refusal is a normal response (`enabled: false`)
+ * whose `results` say which trigger failed and why; only a malformed request
+ * or an unreachable server throws.
+ */
+export function enableWorkflowResultFromProto(response: EnableWorkflowResponse): EnableWorkflowResult {
+  return {
+    enabled: response.enabled,
+    results: response.results.map((r) => ({
+      trigger: r.trigger,
+      outcome: OUTCOME_KIND[r.outcome] ?? "failed",
+      message: r.message,
+      activation: r.activation ? triggerFromProto(r.activation) : undefined,
+      webhook: credentialFromProto(r.webhook),
+    })),
+  };
+}
 
-  async create(input: TriggerDefinitionInput): Promise<Trigger> {
-    const response = await grpcClient
-      .trigger()
-      .createTrigger(create(CreateTriggerRequestSchema, { trigger: definitionToProto(input) }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return triggerFromProto(response.trigger);
-  },
+/** A created or rotated trigger, with its webhook token when it has one (shown once). */
+export function triggerWithCredentialFromProto(response: {
+  trigger?: ProtoTrigger;
+  webhook?: ProtoWebhookCredential;
+}): { trigger: Trigger; webhook?: WebhookCredential } {
+  if (!response.trigger) throw new Error("No trigger in response");
+  return { trigger: triggerFromProto(response.trigger), webhook: credentialFromProto(response.webhook) };
+}
 
-  /** Create, and return the webhook token when the trigger is a webhook (shown once). */
-  async createWithCredential(input: TriggerDefinitionInput): Promise<{ trigger: Trigger; webhook?: WebhookCredential }> {
-    const response = await grpcClient
-      .trigger()
-      .createTrigger(create(CreateTriggerRequestSchema, { trigger: definitionToProto(input) }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return { trigger: triggerFromProto(response.trigger), webhook: credentialFromProto(response.webhook) };
-  },
+/** The recent events a workflow's declared triggers received, to run it against again. */
+export function replayCandidatesFromProto(response: ListReplayEventsResponse): ReplayCandidate[] {
+  return response.events.map((candidate) => ({
+    triggerName: candidate.triggerName,
+    event: eventFromProto(candidate.event!),
+    kind: eventKindToWire(candidate.event?.kind ?? TriggerEventKind.UNSPECIFIED),
+    payload: candidate.event?.payload ?? {},
+  }));
+}
 
-  /** Replace a webhook trigger's token; the old one stops working at once. */
-  async rotateWebhookToken(id: string): Promise<{ trigger: Trigger; webhook?: WebhookCredential }> {
-    const response = await grpcClient.trigger().rotateWebhookToken(create(RotateWebhookTokenRequestSchema, { id }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return { trigger: triggerFromProto(response.trigger), webhook: credentialFromProto(response.webhook) };
-  },
+/** The PreviewReplay request: a past (or hand-written) event, mapped as a fire of it would be. */
+export function previewReplayRequest(
+  projectId: string,
+  workflow: string,
+  replay: ReplayEventInput,
+  sender?: TriggerSender,
+): MessageInitShape<typeof PreviewReplayRequestSchema> {
+  return {
+    projectId,
+    workflow,
+    replay: replayEventToProto(replay),
+    sender: sender
+      ? create(TriggerSenderSchema, { kind: sender.kind, id: sender.id, displayName: sender.displayName, verified: sender.verified })
+      : undefined,
+  };
+}
 
-  async update(id: string, input: TriggerDefinitionInput): Promise<Trigger> {
-    const response = await grpcClient
-      .trigger()
-      .updateTrigger(create(UpdateTriggerRequestSchema, { id, trigger: definitionToProto(input) }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return triggerFromProto(response.trigger);
-  },
+export function previewFromProto(response: PreviewReplayResponse): { inputs: Record<string, unknown>; prompt: string } {
+  const inputs: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(response.inputs)) inputs[name] = protoValueToJs(value);
+  return { inputs, prompt: response.prompt };
+}
 
-  async delete(id: string): Promise<void> {
-    await grpcClient.trigger().deleteTrigger(create(DeleteTriggerRequestSchema, { id }));
-  },
-
-  async setEnabled(id: string, enabled: boolean): Promise<Trigger> {
-    const response = await grpcClient
-      .trigger()
-      .setTriggerEnabled(create(SetTriggerEnabledRequestSchema, { id, enabled }));
-    if (!response.trigger) throw new Error("No trigger in response");
-    return triggerFromProto(response.trigger);
-  },
-
-  /**
-   * Turn on every trigger a workflow declares, all or none. A refusal is a
-   * normal response (`enabled: false`) whose `results` say which trigger
-   * failed and why; only a malformed request or an unreachable server throws.
-   */
-  async enableWorkflow(input: EnableWorkflowInput): Promise<EnableWorkflowResult> {
-    const response = await grpcClient.trigger().enableWorkflow(
-      create(EnableWorkflowRequestSchema, {
-        workflow: input.workflow,
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
-        daemonId: input.daemonId ?? "",
-        noMachine: input.noMachine ?? false,
-        connectionIds: input.connectionIds ?? {},
-        params: paramsToProto(input.params),
-        presets: input.presets ?? {},
-        notifyOnComplete: input.notifyOnComplete ?? false,
-        message: input.message ?? "",
-        namePrefix: input.namePrefix ?? "",
-        actingIdentity: actingIdentityToProto(input.actingIdentity),
-        overrides: (input.overrides ?? []).map((o) => ({
-          trigger: o.trigger,
-          name: o.name,
-          daemonId: o.daemonId,
-          noMachine: o.noMachine,
-          connectionId: o.connectionId,
-          message: o.message,
-          params: paramsToProto(o.params),
-        })),
-      }),
-    );
-    return {
-      enabled: response.enabled,
-      results: response.results.map((r) => ({
-        trigger: r.trigger,
-        outcome: OUTCOME_KIND[r.outcome] ?? "failed",
-        message: r.message,
-        activation: r.activation ? triggerFromProto(r.activation) : undefined,
-        webhook: credentialFromProto(r.webhook),
-      })),
-    };
-  },
-
-  /** Pause every activation of a workflow, in one project or all. Partial failure is reported, not thrown. */
-  async disableWorkflow(workflow: string, projectId?: string): Promise<DisableWorkflowResult> {
-    const response = await grpcClient.trigger().disableWorkflow(create(DisableWorkflowRequestSchema, { workflow, projectId }));
-    return {
-      paused: response.paused.map(triggerFromProto),
-      failed: response.failed.map((f) => ({ triggerId: f.triggerId, name: f.name, message: f.message })),
-    };
-  },
-
-  /** Starts a fire and returns its workflow id. The outcome lands in the event list. */
-  async fire(id: string): Promise<string> {
-    const response = await grpcClient.trigger().fireTrigger(create(FireTriggerRequestSchema, { id }));
-    return response.fireWorkflowId;
-  },
-
-  /**
-   * The recent events the caller's activations of a workflow's declared
-   * triggers received, newest first, to run the workflow against again.
-   */
-  async listReplayEvents(projectId: string, workflow: string, limit = 20): Promise<ReplayCandidate[]> {
-    const response = await grpcClient
-      .trigger()
-      .listReplayEvents(create(ListReplayEventsRequestSchema, { projectId, workflow, limit }));
-    return response.events.map((candidate) => ({
-      triggerName: candidate.triggerName,
-      event: eventFromProto(candidate.event!),
-      kind: eventKindToWire(candidate.event?.kind ?? TriggerEventKind.UNSPECIFIED),
-      payload: candidate.event?.payload ?? {},
-    }));
-  },
-
-  /**
-   * Maps a past event through a declared trigger's inputs and prompt, as a fire
-   * would. The filter is not applied: the person replaying has decided the
-   * event is wanted.
-   */
-  async previewReplay(
-    projectId: string,
-    workflow: string,
-    replay: ReplayEventInput,
-    sender?: TriggerSender,
-  ): Promise<{ inputs: Record<string, unknown>; prompt: string }> {
-    const response = await grpcClient.trigger().previewReplay(
-      create(PreviewReplayRequestSchema, {
-        projectId,
-        workflow,
-        replay: replayEventToProto(replay),
-        sender: sender
-          ? create(TriggerSenderSchema, { kind: sender.kind, id: sender.id, displayName: sender.displayName, verified: sender.verified })
-          : undefined,
-      }),
-    );
-    const inputs: Record<string, unknown> = {};
-    for (const [name, value] of Object.entries(response.inputs)) inputs[name] = protoValueToJs(value);
-    return { inputs, prompt: response.prompt };
-  },
-
-  async listEvents(triggerId: string, limit = 50): Promise<TriggerEvent[]> {
-    const response = await grpcClient
-      .trigger()
-      .listTriggerEvents(create(ListTriggerEventsRequestSchema, { triggerId, limit }));
-    return response.events.map(eventFromProto);
-  },
-
-  /**
-   * Looks people up for "Only from", as the caller: handles (GitHub logins)
-   * to the ids an allowlist stores, and ids to the names it shows. Someone
-   * the provider does not know is absent from the result.
-   */
-  async resolveSenders(
-    integration: string,
-    query: { handles?: readonly string[]; senderIds?: readonly string[] },
-  ): Promise<ResolvedSender[]> {
-    const response = await grpcClient.trigger().resolveTriggerSenders(
-      create(ResolveTriggerSendersRequestSchema, {
-        integration,
-        handles: [...(query.handles ?? [])],
-        senderIds: [...(query.senderIds ?? [])],
-      }),
-    );
-    return response.senders.map((s) => ({ query: s.query, senderId: s.senderId, displayName: s.displayName }));
-  },
-};
+export function resolvedSendersFromProto(response: ResolveTriggerSendersResponse): ResolvedSender[] {
+  return response.senders.map((s) => ({ query: s.query, senderId: s.senderId, displayName: s.displayName }));
+}
