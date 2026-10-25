@@ -490,15 +490,17 @@ tasks:
   ci:repo-checks:
     # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
     # pre-commit hook is opt-in, and --no-verify skips it), the committed
-    # electron/release.config.json values are shippable, and the unit tests of
-    # the scripts the release and health workflows run.
-    desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts tests"
+    # electron/release.config.json values are shippable, the unit tests of the
+    # scripts the release and health workflows run, and the pre-commit hook's
+    # staged-file formatter.
+    desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
     cmds:
       - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
+      - ./scripts/test-fmt-staged.sh
 
   test:flake:
     desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"
@@ -607,8 +609,8 @@ tasks:
       - '{{.BUF}} lint'
 
   fmt:
-    # go fmt only: .githooks/pre-commit runs `task fmt` on every commit, so it
-    # must stay fast and must not rewrite go.mod.
+    # The whole repo. The pre-commit hook formats only the staged files
+    # (.githooks/fmt-staged.sh, tested in `task ci:repo-checks`).
     desc: Format Go code (go fmt)
     cmds:
       - go fmt ./...
