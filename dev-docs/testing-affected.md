@@ -213,9 +213,11 @@ so it cannot disagree with a local run:
   changes that are not unit tests; the electron package (`task
   build:electron:smoke`) on `electron/` or the web build config; and the
   vendored control-plane contract (`task contract:controlplane:check`) on
-  `proto-vendor/controlplane/`. Off a pull request every lane runs. A change to
-  CI itself (`ci.yml`, `.github/actions/`, `ci-lanes.sh`, `Taskfile.yml`) runs
-  every lane.
+  `proto-vendor/controlplane/`. Off a pull request every lane runs, except the
+  control-plane contract, which judges only a push that changed what it checks
+  (a nightly would only report that control-plane moved, control-plane's own
+  gate to catch). A change to CI itself (`ci.yml`, `.github/actions/`,
+  `ci-lanes.sh`, `Taskfile.yml`) runs every lane.
 - **New and changed tests run three times.** `tools/test-affected
   changed-tests` names every Test function the diff adds or edits (by
   function, in files that build without tags); `task test:flake`
@@ -223,7 +225,7 @@ so it cannot disagree with a local run:
   on a repeat is a flake: fix it at the root, never by re-running.
 - **`CI result`** is the run's single verdict: green when every job that ran
   passed, and the tier's gate ran. On a PR a lane the change does not reach is
-  skipped, which is fine; off a PR every lane must have run.
+  skipped, which is fine; off a PR every lane but the contract must have run.
 - **DB-backed tests run in every tier**, `-short` included, and never skip.
   Each test gets its own copy of a template database on forge pgtest's server
   (`internal/db/testutil.go`): an embedded Postgres of the major `forge.yaml`

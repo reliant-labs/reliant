@@ -261,7 +261,7 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 
 Beside them run the lanes neither gate covers, selected by path
 (`scripts/ci-lanes.sh`, `task ci:lanes`) on a pull request and all of them off
-one: the renderer's release build (`task build:web:verify`), Playwright
+one (the contract only when a push changed what it checks): the renderer's release build (`task build:web:verify`), Playwright
 (`task test:web:e2e`), the electron package (`task build:electron:smoke`) and
 the vendored control-plane contract (`task contract:controlplane:check`, which
 reads private control-plane with a deploy key). `CI result` is the one verdict.
