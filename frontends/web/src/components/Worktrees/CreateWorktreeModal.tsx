@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { FileText, Cloud, FolderGit2, AlertCircle, GitCommitHorizontal, ChevronDown, ChevronRight } from "lucide-react";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
-import { SearchableDropdown, type DropdownOption } from "../ui/SearchableDropdown";
+import Combobox, { type ComboboxOption } from "../forge-ui/combobox";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches } from "../../hooks/useBranches";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
@@ -132,7 +132,7 @@ export function CreateWorktreeModal({
   const normalizeName = normalizeWorkspaceName;
 
   // Transform branches into dropdown options with main/current at top
-  const branchOptions = useMemo<DropdownOption[]>(() => {
+  const branchOptions = useMemo<ComboboxOption[]>(() => {
     const localBranches = branches
       .filter((b) => !b.is_remote)
       .map((b) => {
@@ -474,20 +474,21 @@ export function CreateWorktreeModal({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-foreground">
+                    <label htmlFor="create-worktree-base-branch" className="block text-sm font-semibold text-foreground">
                       Base Branch
                     </label>
-                    <SearchableDropdown
+                    <Combobox
+                      id="create-worktree-base-branch"
                       options={branchOptions}
-                      value={formData.base_branch}
+                      value={formData.base_branch || null}
                       placeholder={isBranchesLoading ? "Loading branches..." : "Select base branch"}
+                      searchPlaceholder="Search branches"
                       emptyMessage={branchesError ? "Failed to load branches" : "No branches found"}
-                      onSelect={(value) =>
+                      onChange={(value) =>
                         setFormData((prev) => ({ ...prev, base_branch: value || "" }))
                       }
+                      loading={isBranchesLoading}
                       disabled={isBranchesLoading || lockBaseBranch}
-                      groupBy={true}
-                      variant="form"
                       className="w-full"
                     />
                     {branchesError ? (

@@ -197,10 +197,10 @@ func Error(doing string, err error) error {
 		return serr
 	}
 
-	// The daemon answered, but the requested working directory is absent on its
+	// The daemon answered, but the path the request named is absent on its
 	// filesystem. That's a missing resource / precondition on the request, not
 	// an infrastructure outage, so it must not read as a retryable "unavailable".
-	if strings.Contains(err.Error(), dirNotExistMarker) {
+	if pathMissing(err) {
 		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, prefixed(doing, daemonText(err))), err)
 	}
 
@@ -223,6 +223,17 @@ func daemonText(err error) string {
 		return text
 	}
 	return err.Error()
+}
+
+// pathMissing reports whether a daemon command failed because the path it
+// named does not exist on the daemon's machine: the pkg working-dir marker in
+// whatever text carried it, or any missing-path report in the daemon's own
+// words (toolexec.DaemonReportedMissingPath) — a forge project dir, an ENOENT.
+// It used to match the pkg marker alone, so a forge.* command for a project
+// folder the machine does not have came back Unavailable and was logged as a
+// server fault.
+func pathMissing(err error) bool {
+	return strings.Contains(err.Error(), dirNotExistMarker) || toolexec.DaemonReportedMissingPath(err)
 }
 
 func prefixed(doing, msg string) string {
@@ -276,7 +287,7 @@ func DispatchConnectError(commandType string, err error) *connect.Error {
 	if cerr, ok := MachineStateConnectError(fmt.Sprintf("daemon command %s failed", commandType), err); ok {
 		return cerr
 	}
-	if strings.Contains(err.Error(), dirNotExistMarker) {
+	if pathMissing(err) {
 		return connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("daemon command %s: %w", commandType, err))
 	}

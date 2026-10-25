@@ -232,9 +232,9 @@ importers.
 | `Modal` | 56 + 2 | `forge-ui/modal` (8 already) | **S2**, after an a11y parity check (focus trap, Escape, nested modals in `ImagePreviewModal`) |
 | `Dropdown` | 6 | `dropdown_menu` | **S2** |
 | `Button` | 100 + 12 | `button` (`primary/secondary/outline/ghost/danger`, sizes, loading) | **S3**. Variant map: `destructive→danger`. `default`/`accent`/`gradient` have no forge twin (D6). |
-| `Tooltip` | 116 | none | keep. Upstream a `tooltip` to forge (the most-used primitive has no catalog entry). |
-| `SearchableDropdown`, `MultiSelectDropdown` | 2, 3 | `select` (no search/multi) | keep. Upstream `combobox`. |
-| `ContextMenu`, `HelpPopover` | 8, 6 | none | keep. Upstream `context_menu`/`popover`. |
+| `Tooltip` | 116 | `tooltip` (forge#1319, #1324) | **R5 done** (#1523): upstreamed, 226 sites migrated, deleted. |
+| `SearchableDropdown`, `MultiSelectDropdown` | 2, 3 | `combobox` (forge#1323) | **R5 done** (#1532): upstreamed, migrated, deleted; `components/ui/` is gone. |
+| `ContextMenu`, `HelpPopover` | 8, 6 | `context_menu`, `popover` point anchor (forge#1322) | **R5 done** (#1531): upstreamed, migrated; HelpPopover is a `workflow/` composition over `popover`. |
 | `FileIcon`, `ImagePreviewModal`, `RunStatusIndicator`, `ConfigScopeSelector` | 8, 6, 11, 2 | domain | move out of `ui/` into their feature directories (`ui/` is for primitives) |
 
 Installs keep going to `src/components/forge-ui/`, not `ui/` (C4). Every replaced site is wrapped in `.forge-ui` (or

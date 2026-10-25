@@ -1214,6 +1214,61 @@ type daemonReportedFailure string
 func (e daemonReportedFailure) Error() string        { return string(e) }
 func (e daemonReportedFailure) Is(target error) bool { return target == errDaemonReportedFailure }
 
+// ErrorClass implements svcerr.Classed. A path the daemon reports missing on
+// its own disk — a project folder the user moved, a worktree removed, a
+// checkout that lives on another machine — is the state of the user's
+// machine, not a fault of ours: every layer that logs this error (the
+// daemoncmd and machinewake component chains, the RPC edge) writes it at the
+// user-error level instead of ERROR. In prod one user's UI polling
+// forge.topology and fs.get_tree for a path only their laptop had produced 70
+// ERROR issue events in two days (2026-10-23..25). Any other daemon failure
+// keeps no opinion (svcerr.ClassNone), so its code decides.
+func (e daemonReportedFailure) ErrorClass() svcerr.Class {
+	if IsMissingPathText(string(e)) {
+		return svcerr.ClassUser
+	}
+	return svcerr.ClassNone
+}
+
+// missingPathMarkers are how a daemon's error text says "that path does not
+// exist" — the daemon reports failures as text across the wire, so the text
+// is what there is to match: Go's ENOENT on Unix, the two Win32 messages for a
+// missing file and directory, and the prefixes daemonruntime writes for a
+// missing pkg working dir (pkgDirNotExistPrefix) and forge project dir
+// (forgeProjectDirNotExistPrefix).
+var missingPathMarkers = []string{
+	"no such file or directory",
+	"cannot find the file specified",
+	"cannot find the path specified",
+	"working dir does not exist",
+	"forge project dir does not exist",
+}
+
+// IsMissingPathText reports whether a daemon's failure text says the path it
+// was asked about does not exist on its machine. A program the daemon could
+// not start fails with ENOENT too ("fork/exec /usr/bin/rg: no such file or
+// directory"); that is the daemon's install, not the user's files, so it does
+// not count.
+func IsMissingPathText(text string) bool {
+	msg := strings.ToLower(text)
+	if strings.Contains(msg, "fork/exec") {
+		return false
+	}
+	for _, marker := range missingPathMarkers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// DaemonReportedMissingPath reports whether err carries a daemon's own report
+// that the path it was asked about does not exist on its machine.
+func DaemonReportedMissingPath(err error) bool {
+	text, ok := DaemonReportedText(err)
+	return ok && IsMissingPathText(text)
+}
+
 // DaemonReportedFailure is the error the router returns for a daemon command
 // its daemon answered with failure text, for a stand-in router (a test fake)
 // that must fail the way the real one does.

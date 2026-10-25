@@ -2427,17 +2427,17 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	")FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED\x10\x03\x12/\n" +
 	"+FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING\x10\x04\x12*\n" +
 	"&FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE\x10\x05\x123\n" +
-	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x8f\b\n" +
+	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x95\b\n" +
 	"\fForgeService\x12Z\n" +
 	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12T\n" +
 	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x00\x12Z\n" +
 	"\vListSecrets\x12#.reliant.v1.ListForgeSecretsRequest\x1a$.reliant.v1.ListForgeSecretsResponse\"\x00\x12]\n" +
 	"\fGetEnvStatus\x12$.reliant.v1.GetForgeEnvStatusRequest\x1a%.reliant.v1.GetForgeEnvStatusResponse\"\x00\x12Z\n" +
-	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12Z\n" +
-	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x00\x12Y\n" +
-	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"\x00\x12W\n" +
+	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12]\n" +
+	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"\x00\x12Z\n" +
 	"\n" +
-	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x00\x12b\n" +
+	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x03\x90\x02\x01\x12b\n" +
 	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12Z\n" +
 	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12f\n" +
 	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"

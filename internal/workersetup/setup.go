@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
+	"github.com/reliant-labs/reliant/internal/version"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
@@ -363,7 +364,14 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		// backstop that converts whatever still slips through into a retry
 		// rather than a user-visible cancellation.
 		MaxHeartbeatThrottleInterval: maxHeartbeatThrottleInterval,
-		BuildID:                      v2workflow.WorkerBuildID,
+		// The binary's release version, so a workflow task's history event and
+		// the SDK's "Workflow panic" log name the build that ran it. A constant
+		// here ("reliant-worker") made every build look identical: on
+		// 2026-10-23 a mid-rollout TMPRL1100 non-determinism panic — an old
+		// replica replaying history the new one had written — could not be
+		// told apart from a corrupt history. Versioning-based dispatch stays
+		// off (UseBuildIDForVersioning unset): this only labels.
+		BuildID: version.TemporalBuildID(),
 		// Set explicitly rather than inherited from the client, so the identity
 		// is stable no matter how the client was constructed (tests and the
 		// replay harness build their own). This is the value that surfaces as

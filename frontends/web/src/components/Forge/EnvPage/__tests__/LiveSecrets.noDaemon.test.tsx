@@ -33,11 +33,14 @@
  * guard on the property that an offline daemon never degrades a secrets form.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { connectClient, setTransport } from "@/lib/connect";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import type { LiveEnv } from "@/services/forge/live";
 
 // ── The daemon is not merely offline: TOUCHING IT IS A TEST FAILURE. ────────
@@ -54,25 +57,17 @@ function daemonTripwire(method: string) {
   };
 }
 
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: daemonTripwire("getTopology"),
-    verifyEnv: daemonTripwire("verifyEnv"),
-    listSecrets: daemonTripwire("listSecrets"),
-    getEnvStatus: daemonTripwire("getEnvStatus"),
-    getEnvShape: daemonTripwire("getEnvShape"),
-    planPromote: daemonTripwire("planPromote"),
-    applyPromote: daemonTripwire("applyPromote"),
-    planDeploy: daemonTripwire("planDeploy"),
-    startDeploy: daemonTripwire("startDeploy"),
-    getDeployStatus: daemonTripwire("getDeployStatus"),
-  },
-}));
-
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  createForgeClient: daemonTripwire("createForgeClient"),
-}));
+/**
+ * EVERY ForgeService rpc, answered at the transport by a tripwire — the
+ * generated hooks and the generated client both read it there, so nothing can
+ * bypass this. Built from the service descriptor, so an rpc added later is
+ * wired too.
+ */
+function forgeServiceTripwires(): MockHandlers {
+  return Object.fromEntries(
+    ForgeService.methods.map((method) => [`ForgeService.${method.name}`, daemonTripwire(method.localName)])
+  );
+}
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
@@ -144,8 +139,11 @@ function renderSection(props: Partial<React.ComponentProps<typeof LiveSecretsSec
   );
 }
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
   daemonCalls.length = 0;
+  setTransport(mockTransport(forgeServiceTripwires()));
   vi.clearAllMocks();
   listSecrets.mockResolvedValue({
     secrets: [
@@ -275,9 +273,9 @@ describe("§10 state 3: no row, no render", () => {
  */
 describe("the tripwire is armed", () => {
   it("records and throws when state 1 is routed through the daemon", async () => {
-    const { forgeGrpc } = await import("@/api/forge-grpc");
-
-    expect(() => forgeGrpc.listSecrets("proj-1", "prod")).toThrow(/CALLED THE DAEMON/);
+    await expect(connectClient(ForgeService).listSecrets({ projectId: "proj-1", env: "prod" })).rejects.toThrow(
+      /CALLED THE DAEMON/
+    );
     expect(daemonCalls).toEqual(["listSecrets"]);
     // The assertion every test above makes would now fail, which is the
     // whole point: an "enrichment" added to a Live path cannot pass silently.

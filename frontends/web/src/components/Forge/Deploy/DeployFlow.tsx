@@ -29,7 +29,7 @@
  */
 
 import Button from "@/components/forge-ui/button";
-import type { DeployStatus, StartDeployResult } from "@/api/forge-grpc";
+import type { DeployStatus, StartDeployResult } from "@/hooks/forge-model";
 import {
   deployBlockers,
   deployTokenFor,

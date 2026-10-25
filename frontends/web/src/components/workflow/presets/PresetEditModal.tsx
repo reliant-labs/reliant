@@ -13,7 +13,7 @@ import Button from '@/components/forge-ui/button';
 import { ModelSelector } from '../../Chat/ModelSelector'
 import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'
-import { MultiSelectDropdown } from '../../ui/MultiSelectDropdown'
+import Combobox from '../../forge-ui/combobox'
 import { createPreset, updatePreset, type Preset } from '../../../hooks/preset-queries'
 import { fetchWorkflowList, fetchWorkflow, type WorkflowResponse } from '../../../hooks/workflow-queries'
 import { formatValueForDisplay } from '../../../lib/paramUtils'
@@ -136,7 +136,9 @@ function ParamField({
             )}
           </div>
         ) : (
-          <MultiSelectDropdown
+          <Combobox
+            multiple
+            aria-label={label}
             options={options}
             value={Array.isArray(value) ? value : []}
             onChange={onChange}

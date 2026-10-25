@@ -22,25 +22,9 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
-import type { ContextMenuItem } from "../ui/ContextMenu";
 
 vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-// The menu renders its items as plain buttons so a test can pick one.
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: ({ items }: { items: ContextMenuItem[] }) => (
-    <div data-testid="context-menu">
-      {items
-        .filter((item) => !item.separator)
-        .map((item) => (
-          <button key={item.label} type="button" onClick={item.onClick}>
-            {item.label}
-          </button>
-        ))}
-    </div>
-  ),
 }));
 
 vi.mock("../../hooks/useDebounce", () => ({
@@ -268,7 +252,7 @@ describe("Move back to Runs", () => {
     act(() => {
       row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
     });
-    return screen.getByTestId("context-menu");
+    return screen.getByRole("menu", { name: "Chat actions" });
   }
 
   it("is offered on an adopted run and not on an interactive chat", () => {

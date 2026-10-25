@@ -108,11 +108,14 @@ func (r *fakeWorkflowRun) GetRunID() string { return r.runID }
 // the run ids back onto the chat.
 type recordingRunRecorder struct {
 	repo  ChatWriter
+	mu    sync.Mutex // concurrent launches record through one recorder
 	calls []string
 }
 
 func (r *recordingRunRecorder) RecordRun(ctx context.Context, chatID, workflowID, runID string) {
+	r.mu.Lock()
 	r.calls = append(r.calls, chatID+"/"+workflowID+"/"+runID)
+	r.mu.Unlock()
 	chat, err := r.repo.GetChat(ctx, chatID)
 	if err != nil {
 		return

@@ -22,7 +22,9 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 //             a box
 //   r5        the R5 overlays (components/forge-ui/R5Sandbox.tsx), each
 //             opened: r5-tooltip-hover (a disabled button's reason, hovered),
-//             r5-tooltip-focus (a toolbar button focused)
+//             r5-tooltip-focus (a toolbar button focused), r5-contextmenu (a
+//             file row right-clicked), r5-helppopover (a field's help open),
+//             r5-picker-single / r5-picker-multi (each picker opened)
 //   s2        the R5 S2 primitives as their call sites render them
 //             (components/forge-ui/S2Sandbox.tsx): s2-sites (switches, text
 //             fields), s2-menus (a row menu and a multi-select filter, each
@@ -168,6 +170,38 @@ test.describe('forge components across color schemes', () => {
         await expect(page.getByRole('button', { name: 'Copy path' })).toBeFocused();
         await expect(page.getByRole('tooltip')).toBeVisible();
         await expect(tooltips).toHaveScreenshot(`r5-tooltip-focus-${scheme}-${mode}.png`, SHOT);
+
+        // The context menu opens at the pointer; the help popover below its
+        // icon. Both portal to <body>, inside the region's box.
+        await openHarness(page, '?view=r5-menus', scheme, mode);
+        const menus = page.getByTestId('r5-menus');
+        const row = page.getByRole('button', { name: 'main.go' });
+        const box = (await row.boundingBox())!;
+        await page.mouse.click(box.x + 40, box.y + box.height / 2, { button: 'right' });
+        await expect(page.getByText('Copy path')).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(menus).toHaveScreenshot(`r5-contextmenu-${scheme}-${mode}.png`, SHOT);
+        await page.keyboard.press('Escape');
+        await expect(page.getByText('Copy path')).toHaveCount(0);
+        await page.getByRole('button', { name: /^Help/ }).click();
+        await expect(page.getByText(/BEFORE the step runs/)).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(menus).toHaveScreenshot(`r5-helppopover-${scheme}-${mode}.png`, SHOT);
+
+        // The pickers' panels sit below their triggers, inside the region.
+        await openHarness(page, '?view=r5-pickers', scheme, mode);
+        const pickers = page.getByTestId('r5-pickers');
+        await page.getByTestId('pick-branch').getByRole('button').first().click();
+        await expect(page.getByText('Remote Branches')).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(pickers).toHaveScreenshot(`r5-picker-single-${scheme}-${mode}.png`, SHOT);
+        await page.keyboard.press('Escape');
+        await expect(page.getByText('Remote Branches')).toHaveCount(0);
+        await page.getByTestId('pick-presets').getByRole('button').first().click();
+        await expect(page.getByText('Breaks the work into steps')).toBeVisible();
+        await page.mouse.move(0, 0);
+        await expect(pickers).toHaveScreenshot(`r5-picker-multi-${scheme}-${mode}.png`, SHOT);
+
 
         expect(errors).toEqual([]);
       });
