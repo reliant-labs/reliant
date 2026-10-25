@@ -16,20 +16,18 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { FileChangeStatus } from "../gen/reliant/v1/common_pb";
-import {
-  WorktreeService,
-  type GetWorktreeChangesResponse,
-  type GetWorktreeCommitsResponse,
-  type GetWorktreeGitStatusResponse,
-  type ListWorktreeRepoStatusesResponse,
+import type {
+  GetWorktreeChangesResponse,
+  GetWorktreeCommitsResponse,
+  GetWorktreeGitStatusResponse,
+  ListWorktreeRepoStatusesResponse,
 } from "../gen/reliant/v1/worktree_pb";
-import { connectClient } from "../lib/connect";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import {
   useGetWorktreeCommits,
   useGetWorktreeGitStatus,
   useListWorktreeRepoStatuses,
-  worktreeServiceKeys,
+  worktreeServiceQueries,
 } from "./worktree-service-hooks_gen";
 
 // ── Frontend types ──────────────────────────────────────────────────────────
@@ -157,7 +155,6 @@ function repoStatusesFromProto(response: ListWorktreeRepoStatusesResponse): Work
 // behaviour (the server answers InvalidArgument when the project has 2+).
 const changesRequest = (worktreeId: string, repoId?: string) => ({ worktreeId, repoId: repoId ?? "" });
 
-const client = connectClient(WorktreeService);
 
 /**
  * A workspace's changed files, always fresh, through the GetWorktreeChanges
@@ -172,14 +169,13 @@ export async function fetchWorktreeChanges(
   repoId?: string,
   qc: QueryClient = appQueryClient,
 ): Promise<WorktreeChanges> {
-  const request = changesRequest(worktreeId, repoId);
-  const response = await qc.fetchQuery({
-    queryKey: worktreeServiceKeys.getWorktreeChanges(request),
-    queryFn: ({ signal }) => client.getWorktreeChanges(request, { signal }),
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-  });
+  const response = await qc.fetchQuery(
+    worktreeServiceQueries.getWorktreeChanges(changesRequest(worktreeId, repoId), {
+      staleTime: 0,
+      gcTime: 0,
+      retry: false,
+    }),
+  );
   return changesFromProto(response);
 }
 
@@ -189,12 +185,9 @@ export async function fetchWorktreeGitStatus(
   repoId?: string,
   qc: QueryClient = appQueryClient,
 ): Promise<WorktreeGitStatus> {
-  const request = changesRequest(worktreeId, repoId);
-  const response = await qc.fetchQuery({
-    queryKey: worktreeServiceKeys.getWorktreeGitStatus(request),
-    queryFn: ({ signal }) => client.getWorktreeGitStatus(request, { signal }),
-    retry: false,
-  });
+  const response = await qc.fetchQuery(
+    worktreeServiceQueries.getWorktreeGitStatus(changesRequest(worktreeId, repoId), { retry: false }),
+  );
   return gitStatusFromProto(response);
 }
 

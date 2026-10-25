@@ -38,7 +38,6 @@ import {
 import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 import {
   GetWorktreeResponseSchema,
-  WorktreeService,
   WorktreeStatus,
   type CleanupMetadata as ProtoCleanupMetadata,
   type DiscoveredWorktree as ProtoDiscoveredWorktree,
@@ -49,7 +48,6 @@ import {
   type StaleWorktree as ProtoStaleWorktree,
   type Worktree as ProtoWorktree,
 } from "../gen/reliant/v1/worktree_pb";
-import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
@@ -63,6 +61,7 @@ import {
   useListWorktrees,
   useListWorktreesInfinite,
   worktreeServiceKeys,
+  worktreeServiceQueries,
 } from "./worktree-service-hooks_gen";
 
 export { WorktreeStatus, FileChangeStatus };
@@ -229,7 +228,6 @@ export const archivedWorktreesRequest = (projectId: string) => ({ projectId, lim
 
 export const getWorktreeRequest = (worktreeId: string) => ({ worktreeId });
 
-const client = connectClient(WorktreeService);
 
 // ── Reading the cache ───────────────────────────────────────────────────────
 
@@ -368,15 +366,14 @@ export async function fetchWorktree(
   options?: { fresh?: boolean; qc?: QueryClient },
 ): Promise<Worktree> {
   const qc = options?.qc ?? appQueryClient;
-  const request = getWorktreeRequest(worktreeId);
-  const response = await qc.fetchQuery({
-    queryKey: worktreeServiceKeys.getWorktree(request),
-    queryFn: ({ signal }) => client.getWorktree(request, { signal }),
-    staleTime: options?.fresh ? 0 : undefined,
-    // The caller decides what a failure means (resolveWorktree: "unknown");
-    // a retry ladder would only hold up app start and workspace switches.
-    retry: false,
-  });
+  const response = await qc.fetchQuery(
+    worktreeServiceQueries.getWorktree(getWorktreeRequest(worktreeId), {
+      staleTime: options?.fresh ? 0 : undefined,
+      // The caller decides what a failure means (resolveWorktree: "unknown");
+      // a retry ladder would only hold up app start and workspace switches.
+      retry: false,
+    }),
+  );
   if (!response.worktree) throw new Error("No worktree in response");
   return worktreeFromProto(response.worktree);
 }
@@ -403,13 +400,10 @@ export async function resolveWorktree(worktreeId: string, qc: QueryClient = appQ
 export async function resolveMainWorktree(projectId: string, qc: QueryClient = appQueryClient): Promise<Worktree | null> {
   const held = getCachedMainWorktree(projectId, qc);
   if (held) return held;
-  const request = mainWorktreeRequest(projectId);
   try {
-    const response = await qc.fetchQuery({
-      queryKey: worktreeServiceKeys.listWorktrees(request),
-      queryFn: ({ signal }) => client.listWorktrees(request, { signal }),
-      retry: false,
-    });
+    const response = await qc.fetchQuery(
+      worktreeServiceQueries.listWorktrees(mainWorktreeRequest(projectId), { retry: false }),
+    );
     const main = response.worktrees.find((w) => w.isMain);
     return main ? worktreeFromProto(main) : null;
   } catch (error) {
@@ -423,18 +417,10 @@ export async function resolveMainWorktree(projectId: string, qc: QueryClient = a
  * the entry useWorktreeList reads, and return its rows.
  */
 export async function fetchLiveWorktrees(projectId: string, qc: QueryClient = appQueryClient): Promise<Worktree[]> {
-  const request = liveWorktreesRequest(projectId);
-  const queryKey = worktreeServiceKeys.listWorktreesInfinite(request);
+  const query = worktreeServiceQueries.listWorktreesInfinite(liveWorktreesRequest(projectId), { retry: false });
   // A fresh first page replaces the listing: later pages' tokens belong to the old one.
-  qc.removeQueries({ queryKey, exact: true });
-  const data = await qc.fetchInfiniteQuery({
-    queryKey,
-    queryFn: ({ pageParam, signal }) =>
-      client.listWorktrees(pageParam ? { ...request, pageToken: pageParam } : request, { signal }),
-    initialPageParam: "",
-    getNextPageParam: (last: ListWorktreesResponse) => last.nextPageToken || undefined,
-    retry: false,
-  });
+  qc.removeQueries({ queryKey: query.queryKey, exact: true });
+  const data = await qc.fetchInfiniteQuery(query);
   return data.pages.flatMap((page) => page.worktrees.map(worktreeFromProto));
 }
 
