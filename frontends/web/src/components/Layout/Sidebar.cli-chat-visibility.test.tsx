@@ -30,9 +30,7 @@ vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,

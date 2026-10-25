@@ -5,7 +5,7 @@ import { ConfigurationPanel } from './ConfigurationPanel'
 import { WorkflowParamsEditorContent } from './WorkflowParamsEditor'
 import { CELExpressionInput } from './CELInput'
 import { MultiSelectDropdown, type MultiSelectOption } from '../ui/MultiSelectDropdown'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import { ConfigPanelTabBar, type ConfigTab } from './config/ConfigPanelTabBar'
 
 interface WorkflowSettingsEditorProps {

@@ -59,8 +59,10 @@ import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import Tooltip from "../forge-ui/tooltip";
 import Button from "@/components/forge-ui/button";
-import { ContextMenu } from "../ui/ContextMenu";
-import type { ContextMenuItem } from "../ui/ContextMenu";
+import ContextMenu from "../forge-ui/context_menu";
+import type { MenuGroup } from "../forge-ui/dropdown_menu";
+import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
+import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import type { Chat } from "../../api/client";
 import {
   useChatListPreferencesStore,
@@ -393,8 +395,10 @@ const ChatItem = memo(function ChatItem({
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <Tooltip content="More options" side="left" delay={300}>
+        <Tooltip content="More options" side="left" delay={300} type="label">
           <button
+            type="button"
+            aria-haspopup="menu"
             onClick={(e) => onContextMenu(e, chat)}
             className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
           >
@@ -793,18 +797,8 @@ function SidebarComponent({
     Record<string, boolean>
   >({});
   const [contextMenu, setContextMenu] = useState<
-    | {
-        x: number;
-        y: number;
-        type: "chat";
-        chatId: string;
-      }
-    | {
-        x: number;
-        y: number;
-        type: "worktree";
-        worktreeId: string;
-      }
+    | ({ type: "chat"; chatId: string } & ContextMenuOpening)
+    | ({ type: "worktree"; worktreeId: string } & ContextMenuOpening)
     | null
   >(null);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -1087,7 +1081,7 @@ function SidebarComponent({
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, type: "chat", chatId: chat.id });
+    setContextMenu({ ...contextMenuOpening(e), type: "chat", chatId: chat.id });
   }, []);
 
   const handleWorktreeContextMenu = useCallback((e: React.MouseEvent, worktreeId: string) => {
@@ -1096,12 +1090,7 @@ function SidebarComponent({
 
     if (!workspacesById.get(worktreeId)?.path) return;
 
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      type: "worktree",
-      worktreeId,
-    });
+    setContextMenu({ ...contextMenuOpening(e), type: "worktree", worktreeId });
   }, [workspacesById]);
 
   const copyToClipboard = (text: string) => {
@@ -1152,11 +1141,11 @@ function SidebarComponent({
     setEditingTitle("");
   }, []);
 
-  const getChatContextMenuItems = (chatId: string): ContextMenuItem[] => {
+  const getChatContextMenuItems = (chatId: string): MenuGroup[] => {
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return [];
 
-    const menuItems: ContextMenuItem[] = [
+    const menuItems: MenuGroup["items"] = [
       {
         label: "Rename",
         icon: <Edit className="w-4 h-4" />,
@@ -1199,28 +1188,34 @@ function SidebarComponent({
       });
     }
 
-    menuItems.push(
-      { label: "", onClick: () => {}, separator: true },
+    return [
+      { items: menuItems },
       {
-        label: "Delete",
-        icon: <Trash2 className="w-4 h-4" />,
-        onClick: () => deleteChatMutation.mutate(chatId),
-        danger: true,
-      }
-    );
-
-    return menuItems;
+        items: [
+          {
+            label: "Delete",
+            icon: <Trash2 className="w-4 h-4" />,
+            onClick: () => deleteChatMutation.mutate(chatId),
+            variant: "danger",
+          },
+        ],
+      },
+    ];
   };
 
-  const getWorktreeContextMenuItems = (worktreeId: string): ContextMenuItem[] => {
+  const getWorktreeContextMenuItems = (worktreeId: string): MenuGroup[] => {
     const worktree = workspacesById.get(worktreeId);
     if (!worktree?.path) return [];
 
     return [
       {
-        label: "Copy Workspace Path",
-        icon: <Copy className="w-4 h-4" />,
-        onClick: () => copyToClipboard(worktree.path),
+        items: [
+          {
+            label: "Copy Workspace Path",
+            icon: <Copy className="w-4 h-4" />,
+            onClick: () => copyToClipboard(worktree.path),
+          },
+        ],
       },
     ];
   };
@@ -1825,16 +1820,27 @@ function SidebarComponent({
         />
       </div>
 
-      {/* Context Menu */}
+      {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (
         <ContextMenu
-          items={
+          label={contextMenu.type === "chat" ? "Chat actions" : "Workspace actions"}
+          groups={
             contextMenu.type === "chat"
               ? getChatContextMenuItems(contextMenu.chatId)
               : getWorktreeContextMenuItems(contextMenu.worktreeId)
           }
+          open
           position={{ x: contextMenu.x, y: contextMenu.y }}
-          onClose={() => setContextMenu(null)}
+          openVia={contextMenu.via}
+          onOpenChange={(open) => {
+            if (open) return;
+            setContextMenu(null);
+            // Back to the composer, unless the chosen item focused an input
+            // of its own (an inline rename): after the item's state commits.
+            requestAnimationFrame(() => {
+              if (!isInputFocused()) focusChatInput();
+            });
+          }}
         />
       )}
       {/* Render complete */}
