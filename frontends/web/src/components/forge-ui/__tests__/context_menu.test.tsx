@@ -21,7 +21,7 @@ function press(key: string, init: KeyboardEventInit = {}) {
   });
 }
 
-const groups = (onRename = vi.fn(), onDelete = vi.fn()): MenuGroup[] => [
+const groups = (onRename: () => void = vi.fn(), onDelete: () => void = vi.fn()): MenuGroup[] => [
   {
     items: [
       { label: "Rename", onClick: onRename },
