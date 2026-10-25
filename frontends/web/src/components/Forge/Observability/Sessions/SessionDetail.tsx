@@ -24,7 +24,7 @@ import type { ObsNavigate } from "../obsSearch";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
-import { isLive, LEAVE_SESSIONS } from "./sessionModel";
+import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionDetailProps {
@@ -117,11 +117,10 @@ function SessionBody({
       {back}
       <header className="space-y-1.5" data-testid="session-header">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold text-foreground">
-            {session.userId ? <span>{session.userId}</span> : <span className="text-muted-foreground">Anonymous user</span>}
-            <span className="text-muted-foreground"> on </span>
-            <span className="font-mono">{session.entryPath || "/"}</span>
+          <h3 className="text-base font-semibold text-foreground" data-testid="session-title">
+            {sessionTitle(session.service, session.startedMs, { now })}
           </h3>
+          <Mono value={session.sessionId} length={8} />
           {session.errors > 0 ? (
             <Status tone="danger" label={`${formatCount(session.errors)} error${session.errors === 1 ? "" : "s"}`} />
           ) : (
@@ -130,8 +129,10 @@ function SessionBody({
           {live && <Status tone="neutral" pulse label="active now" />}
         </div>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <Mono value={session.sessionId} length={12} />
-          <span className="font-mono text-foreground">{session.service || "(unnamed)"}</span>
+          {session.userId ? <span className="text-foreground">{session.userId}</span> : <span>anonymous user</span>}
+          <span>
+            entered on <span className="font-mono text-foreground">{session.entryPath || "/"}</span>
+          </span>
           {session.serviceVersion && <span className="font-mono">{session.serviceVersion}</span>}
           {session.envName && <span>in {session.envName}</span>}
           {session.startedMs > 0 && <span title={formatWhen(session.startedMs, now)}>started {formatAgo(session.startedMs, now)}</span>}

@@ -44,6 +44,18 @@ describe("the session list", () => {
     expect(within(screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`)).getByText("replay")).toBeInTheDocument();
   });
 
+  it("names each session by its frontend and start time, with the id as copyable metadata", async () => {
+    renderPanel(createFixtureApi(), { view: "sessions", range: "24h" }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+    const open = screen.getByTestId(`obs-session-open-${FIXTURE_STORY_SESSION}`);
+    expect(open.textContent).toMatch(/^shop-web · (Today|Yesterday) \d{2}:\d{2}$/);
+    expect(open).not.toHaveTextContent(FIXTURE_STORY_SESSION);
+    const row = screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`);
+    expect(within(row).getByText("u_8812")).toBeInTheDocument();
+    expect(within(row).getByTitle(FIXTURE_STORY_SESSION)).toHaveTextContent(`${FIXTURE_STORY_SESSION.slice(0, 8)}…`);
+    expect(within(row).getByRole("button", { name: `Copy ${FIXTURE_STORY_SESSION}` })).toBeInTheDocument();
+  });
+
   it("pages Older and Newer through the URL's token trail", async () => {
     const onCall = vi.fn();
     const harness = renderPanel(createFixtureApi({ onCall }), { view: "sessions", range: "24h" }, PROJECT_PLACE);
@@ -104,6 +116,8 @@ describe("one session", () => {
     expect(harness.current().session).toBe(FIXTURE_STORY_SESSION);
 
     const header = await screen.findByTestId("session-header");
+    expect(screen.getByTestId("session-title").textContent).toMatch(/^shop-web · (Today|Yesterday) \d{2}:\d{2}$/);
+    expect(within(header).getByRole("button", { name: `Copy ${FIXTURE_STORY_SESSION}` })).toBeInTheDocument();
     expect(header).toHaveTextContent("u_8812");
     expect(header).toHaveTextContent("/checkout/payment");
     expect(header).toHaveTextContent("1 error");
@@ -163,6 +177,9 @@ describe("links into a session", () => {
     const harness = renderPanel(createFixtureApi(), { view: "errors", issue: "iss-checkout-total" }, ENV_PLACE);
     const link = (await screen.findAllByTestId(/^obs-issue-session-sess-/))[0];
     const sessionId = link.getAttribute("data-testid")!.replace("obs-issue-session-", "");
+    // Named by the session it opens, once its summary is read — not by the id.
+    await waitFor(() => expect(within(link).getByTestId("session-name")).toHaveAttribute("data-state", "ready"));
+    expect(link.textContent).toMatch(/^shop-web · /);
     await userEvent.setup().click(link);
     const next = harness.current();
     expect(next).toMatchObject({ view: "sessions", session: sessionId });
@@ -181,7 +198,9 @@ describe("links into a session", () => {
       },
     };
     const harness = renderPanel(api, { view: "traces", trace: "4bf92f3577b34da6a3ce929d0e0e4736" }, ENV_PLACE);
-    await userEvent.setup().click(await screen.findByTestId("trace-session"));
+    const button = await screen.findByTestId("trace-session");
+    await waitFor(() => expect(button.textContent).toMatch(/^shop-web · (Today|Yesterday) \d{2}:\d{2}$/));
+    await userEvent.setup().click(button);
     expect(harness.current()).toMatchObject({ view: "sessions", session: FIXTURE_STORY_SESSION });
     expect(harness.current().trace).toBeUndefined();
   });
@@ -192,9 +211,13 @@ describe("links into a session", () => {
     expect(screen.queryByTestId("trace-session")).not.toBeInTheDocument();
   });
 
-  it("from a dashboard's sessions panel row", () => {
+  it("from a dashboard's sessions panel row, named like the list names it", () => {
+    const startMs = new Date(2024, 2, 9, 14, 32).getTime();
     const data = {
-      sessions: [{ sessionId: FIXTURE_STORY_SESSION, userId: "u_8812", entryPath: "/checkout", startMs: 1, endMs: 2, pageViews: 2, errors: 1, hasReplay: true }],
+      sessions: [
+        { sessionId: FIXTURE_STORY_SESSION, serviceName: "shop-web", userId: "u_8812", entryPath: "/checkout", startMs, endMs: startMs + 1, pageViews: 2, errors: 1, hasReplay: true },
+        { sessionId: "sess-nameless", serviceName: "", userId: "", entryPath: "", startMs, endMs: startMs + 1, pageViews: 1, errors: 0, hasReplay: false },
+      ],
     } as unknown as PanelResult;
     render(
       <PanelBody
@@ -203,7 +226,11 @@ describe("links into a session", () => {
         links={{ sessionHref: (id) => `/forge/p/shop/observability/sessions?session=${id}` }}
       />
     );
-    expect(screen.getByTestId(`obs-panel-session-${FIXTURE_STORY_SESSION}`)).toHaveAttribute("href", `/forge/p/shop/observability/sessions?session=${FIXTURE_STORY_SESSION}`);
+    const link = screen.getByTestId(`obs-panel-session-${FIXTURE_STORY_SESSION}`);
+    expect(link).toHaveAttribute("href", `/forge/p/shop/observability/sessions?session=${FIXTURE_STORY_SESSION}`);
+    expect(link.textContent).toMatch(/^shop-web · Mar 9, 2024, 14:32$/);
+    // A frontend that did not say its name is an unknown app — never its bare id.
+    expect(screen.getByTestId("obs-panel-session-sess-nameless").textContent).toMatch(/^Unknown app · Mar 9, 2024, 14:32$/);
   });
 });
 
