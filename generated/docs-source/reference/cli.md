@@ -9617,7 +9617,8 @@ Example:
   forge package new cache
   forge package new notifications
   forge package new events --kind eventbus
-  forge package new stripe-adapter --type adapter
+  forge package new stripe-adapter --type adapter --base-url
+  forge package new pubsub --type adapter --dry-run
 
 ```
 reliant forge package new <name> [flags]
@@ -9628,6 +9629,9 @@ reliant forge package new <name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base-url` | `bool` | - | adapter only: compose a config block with a base_url leaf, bound to <NAME>_BASE_URL; omit for an adapter with no single base URL |
+| `--base-url-env` | `string` | - | adapter only: the `ENV_VAR` the base_url leaf binds instead of <NAME>_BASE_URL (implies --base-url) |
+| `--dry-run` | `bool` | - | print the files and config edits the scaffold would make, and write nothing |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
 | `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help for details) |
@@ -11040,14 +11044,22 @@ with a mocked downstream.
 This scaffolds internal/<name>/ with:
   contract.go        // forge:outbound-io Service interface
   adapter.go         Deps + service struct + New(Deps) (Service, error)
-  adapter_test.go    httptest-stub round-trip tests
+  adapter_test.go    tests (httptest-stub round trips with --base-url)
   cache.go           empty stub — fill in TTL + per-host rate budget,
                      or delete the file if the adapter is fully local
 
-It ends with a 'forge generate' run, which compiles the adapter's config
-block (config.<Name>Config) and wires the adapter into
-internal/app/compose.go, so the next 'forge lint' is green. --no-generate
-skips it.
+No configuration is assumed: an adapter's downstream may be a queue, a
+vendor SDK or a storage gateway rather than one HTTP API, so the scaffold
+takes a logger and the traced HTTP client, and its HealthCheck fails until you
+write a probe. --base-url scaffolds the HTTP-API shape instead: a config
+block config.<Name>Config with one base_url leaf, bound to <NAME>_BASE_URL (or
+to the env var --base-url-env=STRIPE_API_URL names), and a HealthCheck against
+<base_url>/health with httptest-stub tests.
+
+It ends with a 'forge generate' run, which compiles the config block (when
+there is one) and wires the adapter into internal/app/compose.go, so the next
+'forge lint' is green. --no-generate skips it; --dry-run prints the files and
+config edits it would make and writes nothing.
 
 This is equivalent to 'forge scaffold package --type adapter <name>'; that
 form stays wired for existing scripts. Use whichever is shorter for you.
@@ -11055,8 +11067,10 @@ form stays wired for existing scripts. Use whichever is shorter for you.
 Skill: forge skill load adapter
 
 Example:
-  forge scaffold adapter stripe
-  forge scaffold adapter pricing_feed
+  forge scaffold adapter stripe --base-url
+  forge scaffold adapter stripe --base-url-env STRIPE_API_URL
+  forge scaffold adapter pubsubpull
+  forge scaffold adapter pricing_feed --dry-run
 
 ```
 reliant forge scaffold adapter <name> [flags]
@@ -11067,6 +11081,9 @@ reliant forge scaffold adapter <name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base-url` | `bool` | - | adapter only: compose a config block with a base_url leaf, bound to <NAME>_BASE_URL; omit for an adapter with no single base URL |
+| `--base-url-env` | `string` | - | adapter only: the `ENV_VAR` the base_url leaf binds instead of <NAME>_BASE_URL (implies --base-url) |
+| `--dry-run` | `bool` | - | print the files and config edits the scaffold would make, and write nothing |
 | `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 
 ---
@@ -11418,14 +11435,20 @@ The --type flag picks the scaffold shape:
               third-party system. Marker: '// forge:outbound-io'.
               Skill: forge skill load adapter
 
+An adapter has no configuration until you ask for it: --base-url composes a
+config block with one base_url leaf (bound to <NAME>_BASE_URL, or to the env
+var --base-url-env names) for an HTTP API with one base URL.
+
 It ends with a 'forge generate' run, which writes the package's mock and
 middleware_gen.go and wires it into internal/app/compose.go, so the next
-'forge lint' is green. --no-generate skips it.
+'forge lint' is green. --no-generate skips it; --dry-run prints the plan and
+writes nothing.
 
 Example:
   forge scaffold package cache
   forge scaffold package events --kind eventbus
-  forge scaffold package stripe-adapter --type adapter
+  forge scaffold package stripe-adapter --type adapter --base-url
+  forge scaffold package pubsub --type adapter --dry-run
 
 ```
 reliant forge scaffold package <name> [flags]
@@ -11436,6 +11459,9 @@ reliant forge scaffold package <name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--base-url` | `bool` | - | adapter only: compose a config block with a base_url leaf, bound to <NAME>_BASE_URL; omit for an adapter with no single base URL |
+| `--base-url-env` | `string` | - | adapter only: the `ENV_VAR` the base_url leaf binds instead of <NAME>_BASE_URL (implies --base-url) |
+| `--dry-run` | `bool` | - | print the files and config edits the scaffold would make, and write nothing |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
 | `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help) |
