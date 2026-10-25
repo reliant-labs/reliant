@@ -3881,8 +3881,14 @@ List your organization's domains and what they serve
 List every domain your organization holds, with its state and binding.
 
 Every domain, not just this env's: a domain is org-scoped and has no
-environment. The BINDING column names the environment each one serves, so
+environment. The SERVING column names the environment each one serves, so
 scoping by eye is possible without a second call.
+
+PATH is where the domain's DNS sends its traffic, as the control plane
+resolves it: edge (the CDN in front of hosted static sites), ingress (the
+regional ingress, no CDN) or elsewhere (not pointed at the platform). A
+static-site domain moves to the edge when you set the records
+`forge domain show` prints.
 
 ```
 reliant forge domain ls [flags]
@@ -7271,11 +7277,12 @@ Examples:
   forge lint --contract          # Run contract interface enforcement linter
   forge lint --db                # Run DB entity lint rules
   forge lint --migration-safety  # Run SQL migration safety checks
-  forge lint --conventions       # Run forge convention rules on proto files
+  forge lint --conventions       # Run forge convention rules (proto, Go tree,
+                                 # frontend env, hook-test rows vs their hooks)
   forge lint --generated-drift   # Fail if a forge-generated ("DO NOT EDIT")
                                  # file was hand-edited
-  forge lint --tests             # Run test-convention rules across backend
-                                 # handlers and frontend hooks (warnings only)
+  forge lint --tests             # Warn on handlers and generated hooks with
+                                 # no test (warnings only)
   forge lint --config-deps       # Flag scalar Deps fields — a scalar is
                                  # configuration, not a collaborator; prints the
                                  # exact proto block + AppConfig line to write
@@ -7384,7 +7391,7 @@ reliant forge lint [paths...] [flags]
 | `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/<project>/config/v1 and take it as a typed field (warnings by default, lint.rules forge-config-deps: error gates them) |
 | `--config-reach` | `bool` | - | Flag config fields that no binary and no frontend loads — with per-binary configs, an unbound config message generates but is never loaded (warnings only) |
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
-| `--conventions` | `bool` | - | Run forge convention rules on proto files |
+| `--conventions` | `bool` | - | Run forge convention rules (proto, Go tree, frontend env, and hook-test rows that contradict their regenerated hook) |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create<Entity>Request — the flattened request drops write presence silently |
 | `--db-grants` | `bool` | - | Fail on a credential-shaped column (token, password, key, ciphertext, hash…) that carries neither forge:secret nor forge:readable <reason>: the read-only forge_ro role is refused it until someone decides |
 | `--fix` | `bool` | - | Apply the mechanical fixes in place (Go formatting, the tracing log rewrite, frontend prettier, eslint --fix), each Go rewrite type-checked and taken back if it breaks its package. Never golangci-lint fixes. Off by default: lint is a gate and reports |
@@ -7411,7 +7418,7 @@ reliant forge lint [paths...] [flags]
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash) |
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, contract refusals in a tree with no forge.yaml, and an advisory lane's own could-not-run report (the typed-config guardrail when golangci-lint never reported). Not needed for a gating lane that could NOT run: that always fails, unless --allow-skip accepts it |
-| `--tests` | `bool` | - | Run test-convention rules (handler-tests-use-tdd + frontend-hook-tests; warnings only) |
+| `--tests` | `bool` | - | Run test-presence rules (handler-tests-use-tdd + frontend-hook-tests; warnings only — the gating hook-test-shape rule runs in --conventions) |
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
 | `--tracing` | `bool` | - | Report where a request's trace is cut: a log call made with a context in scope but not passed it (no trace_id), an *http.Client or database pool opened without forge's traced constructors, a contract package constructed without its generated decorator. With --fix, rewrites every log call to its ...Context form and every undecorated contract construction to NewInstrumented; forge.yaml lint.tracing.log_wrappers adds the project's own logging helpers |
 | `--vendored-protos` | `bool` | - | Fail when a vendored proto (proto/forge/v1/forge.proto) differs from the copy embedded in this forge binary — forge's upgrade path does not track these copies, so drift is otherwise invisible |
