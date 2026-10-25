@@ -13,6 +13,8 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
+import type { ServiceSignals } from "@/services/controlPlane/observability/types";
+
 import { createRepoMetaFixture, createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
 import { eventsInOrder } from "../WorkloadDetail";
 import { renderWorkload } from "./workloadsTestUtils";
@@ -209,6 +211,37 @@ describe("a workload", () => {
     await ready();
     await userEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(harness.current()).toEqual({ tab: "events", range: "6h" });
+  });
+});
+
+describe("its signal tabs", () => {
+  const withSignals = (signals: ServiceSignals) => ({ ...createWorkloadsFixtureApi(), getServiceSignals: async () => ({ truncated: false, services: [signals] }) });
+
+  it("offers no Profiles to a workload that sends only logs and traces", async () => {
+    renderWorkload("admin-server", { obs: withSignals({ service: "admin-server", emitting: ["logs", "traces"], declared: [], declarationKnown: false }) });
+    await ready();
+    await waitFor(() => expect(screen.queryByRole("tab", { name: /Profiles/ })).toBeNull());
+    expect(screen.getByRole("tab", { name: "Traces" })).toBeEnabled();
+    const jump = screen.getByTestId("workload-jump");
+    expect(within(jump).getByText("Traces for admin-server")).toBeInTheDocument();
+    expect(within(jump).queryByText("Profiles")).toBeNull();
+  });
+
+  it("mutes Profiles, with why, for a workload that declares them and sent none", async () => {
+    renderWorkload("admin-server", {
+      obs: withSignals({ service: "admin-server", emitting: ["logs", "traces"], declared: ["logs", "profiles", "traces"], declarationKnown: true }),
+    });
+    await ready();
+    const tab = await screen.findByRole("tab", { name: /Profiles/ });
+    await waitFor(() => expect(tab).toBeDisabled());
+    expect(tab).toHaveTextContent("none in 24h");
+    expect(within(screen.getByTestId("workload-jump")).queryByText("Profiles")).toBeNull();
+  });
+
+  it("offers every tab while nothing is known of the workload's signals", async () => {
+    renderWorkload("admin-server");
+    await ready();
+    for (const name of ["Logs", "Traces", "Profiles"]) expect(screen.getByRole("tab", { name })).toBeEnabled();
   });
 });
 

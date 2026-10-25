@@ -32,6 +32,7 @@ export interface ObservabilityApi {
   queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
   getFlamegraph: typeof rpc.getFlamegraph;
+  getServiceSignals: typeof rpc.getServiceSignals;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
   listAttributeValues: typeof rpc.listAttributeValues;
   // Metrics explorer: the catalog, one metric's detail, and its exemplars.
@@ -94,6 +95,7 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
   getFlamegraph: rpc.getFlamegraph,
+  getServiceSignals: rpc.getServiceSignals,
   getObservabilityUsage: rpc.getObservabilityUsage,
   listAttributeValues: rpc.listAttributeValues,
   listMetricCatalog: metrics.listMetricCatalog,

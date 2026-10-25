@@ -41,7 +41,7 @@ import { useEnvPromotions, useProjectRelease, useProjectReleases } from "@/hooks
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import type { ObsScope, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
+import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
 import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
@@ -57,6 +57,7 @@ import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeM
 import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
+import { signalState, useSignalsIndex, type SignalState } from "../Observability/serviceSignals";
 import { Ago, BUTTON_PRIMARY, BUTTON_SECONDARY, Facts, INK_LINK, Note, Panel, RowMenu, type MenuItem } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { usePromoterNames } from "../Releases/useReleaseData";
@@ -104,6 +105,8 @@ const TAB_LABELS: Record<WorkloadTab, string> = {
 };
 /** The tabs that host an existing explorer, and the panel view each one is. */
 const EXPLORER_TABS: Partial<Record<WorkloadTab, ObsView>> = { logs: "logs", traces: "traces", profiles: "profiles" };
+/** The explorer tabs read one signal of the workload's service (`service.name` = the workload name). */
+const SIGNAL_TABS: Partial<Record<WorkloadTab, ServiceSignal>> = { logs: "logs", traces: "traces", profiles: "profiles" };
 
 /** The URL's state: the tab, the window, and the explorer tabs' own keys (obsSearch.ts). */
 export type WorkloadDetailSearch = Omit<ObsSearch, "view" | "envs" | "service" | "workload"> & { tab?: WorkloadTab };
@@ -171,6 +174,15 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
   const releaseQuery = useProjectRelease(project, summary?.releaseVersion || null);
   const release = releaseQuery.data?.release ?? null;
   const history = useDeployHistory(project, env.id, name);
+  // What the workload sends and declares in this environment: a signal tab it
+  // neither sends nor declares is not offered, an idle one is muted.
+  const signals = useSignalsIndex(scope, range);
+  const tabSignal = (id: WorkloadTab): SignalState => {
+    const signal = SIGNAL_TABS[id];
+    return signal ? signalState(signals, name, signal) : { kind: "available" };
+  };
+  /** The shortcuts to a signal tab (the header's Logs, the rail's jumps) only where it has data. */
+  const canOpen = (id: WorkloadTab) => tabSignal(id).kind === "available";
 
   const crumbs = [{ label: "Overview", href: hrefs.overview }, { label: name }];
   const rangeControl = (
@@ -240,7 +252,8 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
     );
   }
 
-  const tabs = isJob ? WORKLOAD_TABS.filter((id) => id !== "profiles") : WORKLOAD_TABS;
+  // The tab in the URL is always offered, so a link never lands on a missing tab.
+  const tabs = (isJob ? WORKLOAD_TABS.filter((id) => id !== "profiles") : WORKLOAD_TABS).filter((id) => id === tab || tabSignal(id).kind !== "absent");
   const explorer = EXPLORER_TABS[tab];
 
   return (
@@ -259,10 +272,14 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
         // An explorer tab carries its own window control (the same `range` key): one on screen, not two.
         rangeControl={explorer ? null : rangeControl}
         onTab={(next) => onSearch({ tab: next === "overview" ? undefined : next, range: search.range })}
+        canOpen={canOpen}
       />
 
       <Tabs
-        tabs={tabs.map((id) => ({ id, label: TAB_LABELS[id] }))}
+        tabs={tabs.map((id) => {
+          const state = tabSignal(id);
+          return state.kind === "idle" && id !== tab ? { id, label: TAB_LABELS[id], badge: state.badge, disabled: true } : { id, label: TAB_LABELS[id] };
+        })}
         activeTab={tab}
         // Leaving an explorer drops its keys (a log query means nothing on Events); the window stays.
         onChange={(id) => onSearch({ tab: id === "overview" ? undefined : (id as WorkloadTab), range: search.range })}
@@ -297,6 +314,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
             hosted={hosted?.workload ?? null}
             hrefs={hrefs}
             onTab={(next) => onSearch({ tab: next, range: search.range })}
+            canOpen={canOpen}
           />
         </div>
       )}
@@ -340,6 +358,7 @@ function WorkloadHeader({
   actions,
   rangeControl,
   onTab,
+  canOpen,
 }: {
   crumbs: { label: string; href?: string }[];
   name: string;
@@ -353,6 +372,7 @@ function WorkloadHeader({
   actions: WorkloadActions;
   rangeControl: ReactNode;
   onTab: (tab: WorkloadTab) => void;
+  canOpen: (tab: WorkloadTab) => boolean;
 }) {
   const [confirming, setConfirming] = useState<null | "restart" | RunStateRequest>(null);
   const [pending, setPending] = useState<null | "restart" | RunStateRequest>(null);
@@ -435,10 +455,12 @@ function WorkloadHeader({
         />
         <div className="flex shrink-0 flex-wrap items-center gap-2 pt-1" data-testid="workload-actions">
           {rangeControl}
-          <button type="button" className={BUTTON_SECONDARY} onClick={() => onTab("logs")}>
-            <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-            Logs
-          </button>
+          {canOpen("logs") && (
+            <button type="button" className={BUTTON_SECONDARY} onClick={() => onTab("logs")}>
+              <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+              Logs
+            </button>
+          )}
           {!isJob && (
             <>
               <button
@@ -1257,6 +1279,7 @@ function Rail({
   hosted,
   hrefs,
   onTab,
+  canOpen,
 }: {
   name: string;
   env: { id: string; name: string };
@@ -1269,6 +1292,7 @@ function Rail({
   hosted: ForgeHostedWorkload | null;
   hrefs: WorkloadDetailHrefs;
   onTab: (tab: WorkloadTab) => void;
+  canOpen: (tab: WorkloadTab) => boolean;
 }) {
   const declared = summary?.declared ?? null;
   const exit = summary ? lastExitOf(summary) : null;
@@ -1388,8 +1412,8 @@ function Rail({
         <nav className="-mx-2 flex flex-col" aria-label="Jump to">
           {(
             [
-              [`Traces for ${name}`, () => onTab("traces")],
-              ...(latestRun ? [] : ([["Profiles", () => onTab("profiles")]] as const)),
+              ...(canOpen("traces") ? ([[`Traces for ${name}`, () => onTab("traces")]] as const) : []),
+              ...(latestRun || !canOpen("profiles") ? [] : ([["Profiles", () => onTab("profiles")]] as const)),
             ] as const
           ).map(([label, go]) => (
             <button key={label} type="button" onClick={go} className="flex h-8 items-center justify-between rounded-md px-2 text-left text-sm text-ink hover:bg-ink/5">

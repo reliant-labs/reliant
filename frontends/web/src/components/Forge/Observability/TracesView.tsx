@@ -330,6 +330,7 @@ function TraceToolbar({
         range={range}
         value={service}
         onChange={(next) => navigate({ service: next }, { replace: true })}
+        signal="traces"
       />
       <label htmlFor="obs-min-duration" className="sr-only">
         Minimum duration

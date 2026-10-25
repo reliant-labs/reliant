@@ -5145,9 +5145,16 @@ type DeclaredWorkload struct {
 	SourcePath string `protobuf:"bytes,12,opt,name=source_path,json=sourcePath,proto3" json:"source_path,omitempty"`
 	// The repository and commit the bundle was rendered from, so a client can
 	// open a pull request against the declaration. Empty when not recorded.
-	SourceRepo    string `protobuf:"bytes,13,opt,name=source_repo,json=sourceRepo,proto3" json:"source_repo,omitempty"`
-	SourceCommit  string `protobuf:"bytes,14,opt,name=source_commit,json=sourceCommit,proto3" json:"source_commit,omitempty"`
-	BundleId      string `protobuf:"bytes,15,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
+	SourceRepo   string `protobuf:"bytes,13,opt,name=source_repo,json=sourceRepo,proto3" json:"source_repo,omitempty"`
+	SourceCommit string `protobuf:"bytes,14,opt,name=source_commit,json=sourceCommit,proto3" json:"source_commit,omitempty"`
+	BundleId     string `protobuf:"bytes,15,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
+	// The telemetry signals the declaration switches OFF, sorted: "traces",
+	// "logs", "metrics", "profiles". Read from the OpenTelemetry switches forge
+	// renders into the workload's environment (OTEL_<SIGNAL>_EXPORTER=none, every
+	// signal for OTEL_SDK_DISABLED=true); a signal not listed is declared on.
+	// Only those switches are read, and only this verdict leaves: never a value.
+	// Meaningless when spec_recorded is false.
+	TelemetryOff  []string `protobuf:"bytes,16,rep,name=telemetry_off,json=telemetryOff,proto3" json:"telemetry_off,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5285,6 +5292,13 @@ func (x *DeclaredWorkload) GetBundleId() string {
 		return x.BundleId
 	}
 	return ""
+}
+
+func (x *DeclaredWorkload) GetTelemetryOff() []string {
+	if x != nil {
+		return x.TelemetryOff
+	}
+	return nil
 }
 
 type DeclaredPort struct {
@@ -7115,7 +7129,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12'\n" +
 	"\x0fsnapshot_digest\x18\r \x01(\tR\x0esnapshotDigest\x123\n" +
 	"\bsnapshot\x18\x0e \x01(\v2\x17.google.protobuf.StructR\bsnapshotJ\x04\b\t\x10\n" +
-	"\"\xe0\x04\n" +
+	"\"\x85\x05\n" +
 	"\x10DeclaredWorkload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.controlplane.v1.WorkloadKindR\x04kind\x12#\n" +
@@ -7134,7 +7148,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\vsource_repo\x18\r \x01(\tR\n" +
 	"sourceRepo\x12#\n" +
 	"\rsource_commit\x18\x0e \x01(\tR\fsourceCommit\x12\x1b\n" +
-	"\tbundle_id\x18\x0f \x01(\tR\bbundleIdB\v\n" +
+	"\tbundle_id\x18\x0f \x01(\tR\bbundleId\x12#\n" +
+	"\rtelemetry_off\x18\x10 \x03(\tR\ftelemetryOffB\v\n" +
 	"\t_replicas\"R\n" +
 	"\fDeclaredPort\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +

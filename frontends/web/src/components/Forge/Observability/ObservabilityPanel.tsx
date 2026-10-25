@@ -46,7 +46,7 @@ import Button from "@/components/forge-ui/button";
 import { activityKeys, deliveryKeys, issueKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
 import { sessionKeys } from "@/hooks/observability-session-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
-import type { ObsScope } from "@/services/controlPlane/observability/types";
+import type { ObsScope, ServiceSignal } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,7 @@ import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
 import { useReleaseMarkers } from "./releaseMarkers";
 import { ReleaseStrip } from "./ReleaseStrip";
+import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
@@ -88,6 +89,9 @@ export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview"];
+
+/** The views that read one signal of one service, and the signal. */
+const SIGNAL_VIEWS: Partial<Record<ObsView, ServiceSignal>> = { logs: "logs", traces: "traces", profiles: "profiles" };
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -166,6 +170,18 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
 
+  // Narrowed to one service, the signal views it neither sends nor declares
+  // are not offered and the idle ones are muted (serviceSignals.ts). The view
+  // in the URL is always offered: a link never lands on a missing tab. The
+  // console draws no tabs (its nav is the project's, every view kept).
+  const signals = useSignalsIndex(!consoleChrome && search.service && !notSetUp ? scope : null, range);
+  const viewState = (id: ObsView): SignalState => {
+    const signal = SIGNAL_VIEWS[id];
+    return signal ? signalState(signals, search.service, signal) : { kind: "available" };
+  };
+  const tabViews = OBS_VIEWS.filter((id) => id === view || viewState(id).kind !== "absent");
+  const selectableViews = tabViews.filter((id) => id === view || viewState(id).kind === "available");
+
   return (
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
       <div className={cn("flex flex-wrap items-center gap-3", consoleChrome ? "justify-end" : "justify-between")}>
@@ -176,32 +192,44 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5"
             onKeyDown={(event) => {
               if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-              const index = OBS_VIEWS.indexOf(view);
-              const next = OBS_VIEWS[(index + (event.key === "ArrowRight" ? 1 : -1) + OBS_VIEWS.length) % OBS_VIEWS.length];
+              const index = selectableViews.indexOf(view);
+              const next = selectableViews[(index + (event.key === "ArrowRight" ? 1 : -1) + selectableViews.length) % selectableViews.length];
               event.preventDefault();
               selectView(next);
               document.getElementById(`obs-view-${next}`)?.focus();
             }}
           >
-            {OBS_VIEWS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`obs-view-${id}`}
-                aria-selected={id === view}
-                aria-controls="obs-view-panel"
-                tabIndex={id === view ? 0 : -1}
-                onClick={() => selectView(id)}
-                data-testid={`obs-view-${id}`}
-                className={cn(
-                  "rounded-md px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  id === view ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {OBS_VIEW_LABELS[id]}
-              </button>
-            ))}
+            {tabViews.map((id) => {
+              const state = viewState(id);
+              const idle = state.kind === "idle" && id !== view ? state : null;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`obs-view-${id}`}
+                  aria-selected={id === view}
+                  aria-controls="obs-view-panel"
+                  tabIndex={id === view ? 0 : -1}
+                  disabled={!!idle}
+                  title={idle?.hint}
+                  onClick={() => selectView(id)}
+                  data-testid={`obs-view-${id}`}
+                  data-signal-state={SIGNAL_VIEWS[id] && search.service ? state.kind : undefined}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    idle
+                      ? "cursor-not-allowed text-muted-foreground/60"
+                      : id === view
+                        ? "bg-card font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {OBS_VIEW_LABELS[id]}
+                  {idle && <span className="ml-1.5 text-2xs">{idle.badge}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
         <div className="flex items-center gap-2">

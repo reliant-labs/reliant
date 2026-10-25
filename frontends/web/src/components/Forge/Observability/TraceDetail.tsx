@@ -28,6 +28,7 @@ import { formatDuration, formatTimestamp } from "./format";
 import { shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
+import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionName } from "./Sessions/SessionName";
 import { rumScopeOf, rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
 import { TraceWaterfall } from "./waterfall/TraceWaterfall";
@@ -54,6 +55,12 @@ export function TraceDetail({
   const exploreHref = useExploreHref();
   const metricsHref = (span: Span | undefined) => (span ? (exploreHref?.(tracePivot(span), { range: "1h" }) ?? null) : null);
   const sessionId = rumSessionIdOf(spans);
+  // A flamegraph only for a service that sends (or declares) profiles. Judged
+  // over a week: trace-linked samples are kept 72 hours, and a trace opened
+  // from the 7-day list must not lose its flamegraph to a one-day probe.
+  const signals = useSignalsIndex(scope, "7d");
+  const profilesOf = (service: string | undefined): SignalState => signalState(signals, service, "profiles");
+  const rootProfiles = profilesOf(root?.service);
 
   const back = (
     <Button
@@ -132,15 +139,19 @@ export function TraceDetail({
               Metrics for {(selected ?? root)!.service}
             </ExploreLink>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "profiles", trace: traceId, span: undefined, service: root?.service })}
-            leftIcon={<Flame className="h-3.5 w-3.5" />}
-            data-testid="trace-flamegraph"
-          >
-            Flamegraph
-          </Button>
+          {rootProfiles.kind !== "absent" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={rootProfiles.kind === "idle"}
+              title={rootProfiles.kind === "idle" ? rootProfiles.hint : undefined}
+              onClick={() => navigate({ view: "profiles", trace: traceId, span: undefined, service: root?.service })}
+              leftIcon={<Flame className="h-3.5 w-3.5" />}
+              data-testid="trace-flamegraph"
+            >
+              Flamegraph
+            </Button>
+          )}
           {sessionId && (
             <Button
               variant="outline"
@@ -170,6 +181,7 @@ export function TraceDetail({
             span={selected}
             originMs={extent?.startMs ?? selected.startMs}
             onLogs={() => navigate({ view: "logs", trace: traceId, span: selected.spanId, q: undefined, service: undefined })}
+            profiles={profilesOf(selected.service)}
             onFlamegraph={() => navigate({ view: "profiles", trace: traceId, span: undefined, service: selected.service })}
             onClose={() => navigate({ span: undefined }, { replace: true })}
           />
@@ -190,12 +202,15 @@ function SpanDetails({
   span,
   originMs,
   onLogs,
+  profiles,
   onFlamegraph,
   onClose,
 }: {
   span: Span;
   originMs: number;
   onLogs: () => void;
+  /** Whether the span's service has profiles to open (serviceSignals.ts). */
+  profiles: SignalState;
   onFlamegraph: () => void;
   onClose: () => void;
 }) {
@@ -229,9 +244,19 @@ function SpanDetails({
         <Button variant="outline" size="xs" onClick={onLogs} leftIcon={<FileText className="h-3 w-3" />} data-testid="span-logs">
           Logs for this span
         </Button>
-        <Button variant="outline" size="xs" onClick={onFlamegraph} leftIcon={<Flame className="h-3 w-3" />} data-testid="span-flamegraph">
-          {span.service} CPU in this trace
-        </Button>
+        {profiles.kind !== "absent" && (
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={profiles.kind === "idle"}
+            title={profiles.kind === "idle" ? profiles.hint : undefined}
+            onClick={onFlamegraph}
+            leftIcon={<Flame className="h-3 w-3" />}
+            data-testid="span-flamegraph"
+          >
+            {span.service} CPU in this trace
+          </Button>
+        )}
       </div>
       <div className="space-y-3">
         <AttributeTable title="Attributes" attributes={span.attributes} />

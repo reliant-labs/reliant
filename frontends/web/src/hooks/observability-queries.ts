@@ -60,6 +60,7 @@ export const obsKeys = {
     [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
+  serviceSignals: (scope: ObsScope | null, range: RangePreset) => [...obsKeys.all(scope), "service-signals", range] as const,
   attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
     [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
   workloads: (scope: ObsScope | null, range: RangePreset, services: string[]) =>
@@ -275,6 +276,28 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
         traceId: filters.traceId,
       }),
     enabled: !!scope && !!filters.service && !!filters.profileType,
+    staleTime: 60_000,
+    retry: obsRetry,
+  });
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+/**
+ * Which signals each service in the scope sends and declares, over `range`
+ * (pass serviceSignalsRange of the view's window). One request per scope and
+ * range, shared by every picker, tab and link that asks, and keyed without
+ * the attribute filters: the server ignores them, so a filter change must not
+ * re-ask. Never retried on Unimplemented (a control plane that predates the
+ * RPC): the caller treats an error as "unknown" and offers every view.
+ */
+export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
+  const api = useObservabilityApi();
+  const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
+  return useQuery({
+    queryKey: obsKeys.serviceSignals(unfiltered, range),
+    queryFn: () => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(range) }),
+    enabled: !!unfiltered,
     staleTime: 60_000,
     retry: obsRetry,
   });
