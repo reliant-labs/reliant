@@ -91,14 +91,12 @@ describe('buildInterceptors factory', () => {
     expect(buildInterceptors({})).toHaveLength(10)
   })
 
-  it('omits exactly one stage (daemon-last-seen) from the control-plane chain', async () => {
+  it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length - 1)
-    for (const entry of controlPlane) {
-      expect(reliantApi).toContain(entry)
-    }
+    expect(controlPlane).toHaveLength(reliantApi.length)
+    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(1)
   })
 })
 
@@ -152,6 +150,13 @@ describe('x-daemon-last-seen scoping', () => {
     const sent = await headersSent('control-plane')
     expect(sent.has('x-daemon-last-seen')).toBe(false)
     expect(sent.get('authorization')).toBe('Bearer test-token')
+  })
+
+  // The control plane's activity stream records how a change arrived; the
+  // console names itself so a promote from here reads "via Console".
+  it('names the console to the control plane in Forge-Via, and only there', async () => {
+    expect((await headersSent('control-plane')).get('Forge-Via')).toBe('console')
+    expect((await headersSent('reliant-api')).has('Forge-Via')).toBe(false)
   })
 })
 

@@ -105,6 +105,19 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   return await next(req);
 };
 
+// Forge-Via names this client to the control plane's activity stream
+// (forge/pkg/activity): a change made here reads "sean promoted v1.7.44 via
+// Console", where the same change from `reliant forge` reads "via CLI". The
+// control-plane admin-server admits it cross-origin (forge's default CORS
+// allow list, forge >= #966); the reliant api-server does not read it, so it
+// is never sent there.
+export const FORGE_VIA_HEADER = "Forge-Via";
+
+const forgeViaInterceptor: Interceptor = (next) => async (req) => {
+  req.header.set(FORGE_VIA_HEADER, "console");
+  return await next(req);
+};
+
 // Bearer token: the runtime's auth interceptor, fed by reliant's token source.
 //
 // The token source is pluggable — see `api/authProvider.ts`. The default
@@ -637,8 +650,9 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
 /**
  * Which server a transport dials.
  *
- * It decides the one backend-specific header: x-daemon-last-seen, a hint only
- * the reliant api-server reads. In a production build the web app calls both
+ * It decides the backend-specific headers: x-daemon-last-seen, a hint only
+ * the reliant api-server reads, and Forge-Via, which only the control plane's
+ * activity stream reads. In a production build the web app calls both
  * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
  * header it sends must be in that server's CORS preflight allow-list or the
  * browser refuses to send the RPC at all. The control-plane admin-server does
@@ -658,8 +672,9 @@ export type TransportBackend = "reliant-api" | "control-plane";
  * the upgrade-modal interceptor so a quota-exhausted DevAuth call still
  * pops the modal.
  *
- * `backend` (default `"reliant-api"`) names the server the transport dials;
- * `"control-plane"` omits the daemon-last-seen header. See TransportBackend.
+ * `backend` (default `"reliant-api"`) names the server the transport dials:
+ * `"reliant-api"` sends the daemon-last-seen header, `"control-plane"` sends
+ * Forge-Via instead. See TransportBackend.
  *
  * Order is intentional — see the module-level comment. Do NOT reorder
  * without thinking through the timeout/upgrade/unauth interaction.
@@ -673,7 +688,7 @@ export function buildInterceptors(
     normalizeInterceptor,
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
-    ...(backend === "reliant-api" ? [daemonLastSeenInterceptor] : []),
+    backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,
     traceStage,
     errorInterceptor,
     upgradeInterceptor,

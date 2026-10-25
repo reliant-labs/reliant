@@ -48,6 +48,12 @@ var connectWebProtocolHeaders = []string{"Content-Type", "Connect-Protocol-Versi
 // requireDefaultPropagator keeps that assumption honest.
 var traceHeaders = []string{"traceparent", "tracestate", "baggage"}
 
+// controlPlaneOnlyRequestHeaders are sent only on control-plane transports
+// (TransportBackend "control-plane" in api/transport.ts), whose CORS allow-list
+// is forge's default, not corsAllowedHeaders. This server never receives them,
+// so allowing them here would widen the policy for nothing.
+var controlPlaneOnlyRequestHeaders = []string{"Forge-Via"}
+
 var (
 	// req.header.set("x-foo", …) / header.append(NAME, …) — the Connect
 	// interceptor API. Captures the first argument.
@@ -68,6 +74,9 @@ func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
 	// make this test pass vacuously.
 	if _, ok := sent["authorization"]; !ok {
 		t.Fatalf("scanner found no Authorization header in frontends/web/src (found %v); the extraction regex is broken", sortedKeys(sent))
+	}
+	for _, h := range controlPlaneOnlyRequestHeaders {
+		delete(sent, strings.ToLower(h))
 	}
 	for _, h := range connectWebProtocolHeaders {
 		sent[strings.ToLower(h)] = append(sent[strings.ToLower(h)], "@connectrpc/connect-web")
