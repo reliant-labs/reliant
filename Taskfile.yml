@@ -147,8 +147,22 @@ tasks:
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
-      - cd frontends/web && npm ci
-      - cd electron && npm ci
+      - task: deps:web
+      - task: deps:electron
+
+  deps:web:
+    desc: Install the web app's npm packages (frontends/web, npm ci)
+    dir: frontends/web
+    cmds:
+      - npm ci --no-audit --no-fund
+
+  deps:electron:
+    # Not --ignore-scripts: electron's postinstall fetches the Electron binary
+    # its tests and the package build load.
+    desc: Install the electron app's npm packages (electron, npm ci)
+    dir: electron
+    cmds:
+      - npm ci --no-audit --no-fund
 
   deps:protoc-gen-es:
     # npm ci rewrites node_modules/.package-lock.json, so it doubles as the
@@ -211,6 +225,15 @@ tasks:
         {{if .GOOS}}GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{end}}go {{.GO_ARGS}} -buildvcs=false
         -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}} -X {{.PKG}}.CommitTime={{.COMMIT_TIME}}"
         ./cmd/reliant/
+
+  build:packages:
+    # Every package compiled, nothing linked, no test variants: the build
+    # cache CI saves on main for every job to restore (-trimpath, so it is a
+    # hit in any checkout). The e2e stories' imports are compiled too.
+    desc: Compile every package (and what the e2e stories import) into the Go build cache
+    cmds:
+      - go build ./...
+      - go test -tags e2e -c -o /dev/null ./e2e/stories
 
   build:dev-cli:
     desc: Build dist/reliant-dev, the internal forensics CLI (reads the DB directly)
@@ -467,6 +490,102 @@ tasks:
     cmds:
       - ./scripts/release-gate.sh check {{.CLI_ARGS}}
 
+  # ── What CI adds to the two gates ─────────────────────────────────────
+  # .github/workflows/ci.yml is a thin wrapper: a pull request runs
+  # `task ci:merge`, main and the nightly run `task release:gate`, and the
+  # lanes below are the rest, each one task. Every one runs on a laptop too.
+
+  ci:lanes:
+    desc: "Which path-selected CI lanes a change reaches (web, playwright, electron, cp_contract): -- --base <rev> | --full"
+    cmds:
+      - ./scripts/ci-lanes.sh {{.CLI_ARGS}}
+
+  ci:repo-checks:
+    # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
+    # pre-commit hook is opt-in, and --no-verify skips it), the committed
+    # electron/release.config.json values are shippable, and the unit tests of
+    # the scripts the release and health workflows run.
+    desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts tests"
+    vars:
+      BASE: '{{.BASE | default "origin/main"}}'
+    cmds:
+      - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
+      - node .github/scripts/sync-release-config.mjs --check
+      - node --test .github/scripts/*.test.mjs
+
+  test:flake:
+    desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"
+    cmds:
+      - ./scripts/test-flake.sh {{.CLI_ARGS}}
+
+  build:web:verify:
+    # The release's renderer build and artifact gate, exactly as release.yml's
+    # prepare job runs them (.github/scripts/verify-bundle.test.mjs pins the
+    # two together). `npm run build` is `tsc -b && vite build`, so a type
+    # error fails it. NODE_ENV=production is on the build command only: npm
+    # reads it too, and on an install it would skip devDependencies.
+    desc: Lint, then build the renderer exactly as a release does (production, no config) and verify the bundle
+    cmds:
+      - cd frontends/web && npm run lint
+      - cd frontends/web && NODE_ENV=production npm run build
+      - node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
+
+  test:web:e2e:
+    # Playwright against the built renderer, no Go backend, one worker (the
+    # tests share one preview server). The runtime config document is the
+    # public KCL-sourced renderer config committed in
+    # electron/release.config.json; `vite preview` serves it as config.js.
+    # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
+    # packages (CI does; it needs sudo).
+    desc: Run the Playwright suite against the built renderer (chromium)
+    cmds:
+      - |
+        set -euo pipefail
+        doc="$(mktemp -d)/config.js"
+        printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
+        cd frontends/web
+        npm run build:alpha
+        npx playwright install chromium {{.PLAYWRIGHT_DEPS}}
+        FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- --project=chromium {{.CLI_ARGS}}
+
+  build:electron:smoke:
+    # dist:pr runs with-release-config -> build:config -> build:web:alpha ->
+    # electron-builder --dir: the same config path a release takes (the class
+    # of defect that shipped v1.7.5). It compiles no Go and signs nothing.
+    desc: Package the electron app without publishing (npm run dist:pr)
+    dir: electron
+    env:
+      CI: 'true'
+    cmds:
+      - npm run dist:pr
+
+  contract:controlplane:check:
+    # proto-vendor/controlplane/ is a generated `buf export` of control-plane's
+    # public protos. CONTROL_PLANE_DIR is a control-plane checkout at main
+    # (default ../control-plane); control-plane is private, so CI reads it
+    # with a deploy key. --require: a missing sibling or buf fails rather than
+    # reporting a pass that checked nothing.
+    desc: "Fail unless proto-vendor/controlplane/ is exactly what control-plane main exports (CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs --check --require
+
+  licenses:
+    desc: "Every Go and npm dependency is on the license allowlist (.license-allowlist, .license-allowlist-npm)"
+    cmds:
+      - task: licenses:go
+      - task: licenses:npm
+
+  licenses:go:
+    desc: Every Go dependency's license is allowlisted (scripts/check-licenses.sh)
+    cmds:
+      - go mod download
+      - ./scripts/check-licenses.sh {{.CLI_ARGS}}
+
+  licenses:npm:
+    desc: Every npm dependency of frontends/web is allowlisted (scripts/check-npm-licenses.sh)
+    cmds:
+      - ./scripts/check-npm-licenses.sh {{.CLI_ARGS}} frontends/web
+
   # ── Lint and format ───────────────────────────────────────────────────
 
   lint:
@@ -703,14 +822,17 @@ tasks:
       - ./scripts/pin-forge.sh {{.CLI_ARGS}}
 
   pin:drift:
-    desc: Report how many commits behind forge's main the pin has fallen
+    desc: "Report how many commits behind forge's main the pin has fallen (-- --github for CI annotations)"
     cmds:
-      - ./scripts/pin-drift.sh
+      - ./scripts/pin-drift.sh {{.CLI_ARGS}}
 
   pin:ancestry:
-    desc: Fail if the forge pin is not a commit on forge's main
+    # The self-test first: a detector that can pass vacuously is worse than
+    # none, so prove it still FAILS on an off-main pin before trusting it.
+    desc: "Fail if the forge pin is not a commit on forge's main (-- --github for CI annotations)"
     cmds:
-      - ./scripts/check-pin-ancestry.sh
+      - ./scripts/test-pin-ancestry.sh
+      - ./scripts/check-pin-ancestry.sh {{.CLI_ARGS}}
 
   # A release is TWO steps. `release:<bump>` opens the version-bump PR;
   # `release:tag` tags the commit once that PR has MERGED. They are separate

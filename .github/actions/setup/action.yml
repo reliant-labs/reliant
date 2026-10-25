@@ -1,0 +1,153 @@
+# The one setup every ci.yml job shares: Task, and Go / Node / ripgrep when the
+# job needs them. After this step a job runs `task <name>`; what it runs lives
+# in Taskfile.yml, not in a workflow.
+#
+# CACHES ARE RESTORED HERE AND SAVED ON MAIN ONLY. A cache saved by a
+# pull_request run is visible to that PR alone, and saving one was pure cost
+# that also pushed main's caches out of the repository's 10 GB budget. ci.yml's
+# `go-cache` and `release-gate` jobs save on main; everything else restores.
+name: Set up the CI toolchain
+description: Task, plus Go (go.mod's version), Node and ripgrep on request, with main's caches restored
+
+inputs:
+  go:
+    description: Install Go and restore the module, build and embedded-Postgres caches
+    default: "true"
+  node:
+    description: Install Node
+    default: "false"
+  ripgrep:
+    description: Install ripgrep (internal/llm/tools shells out to rg and skips its tests without it)
+    default: "false"
+  free-disk:
+    description: Delete the runner's preinstalled toolchains this repo never uses, for the gates' compiles
+    default: "false"
+  buf:
+    description: Put go.mod's buf on PATH (forge lint's buf-lint lane refuses to run without it)
+    default: "false"
+
+outputs:
+  go-version:
+    description: The installed Go version (cache keys)
+    value: ${{ steps.go.outputs.go-version }}
+  embedded-pg:
+    description: go.mod's embedded-postgres module version (the pgtest binaries' cache key)
+    value: ${{ steps.pins.outputs.embedded_pg }}
+
+runs:
+  using: composite
+  steps:
+    # The gates compile the whole module several times at once (generate and
+    # docs in scratch checkouts beside build, test and lint), which overruns
+    # the ~14 GB a hosted runner has free: the first merge-gate run on CI
+    # failed every phase with "disk quota exceeded". The runner image ships
+    # .NET, Android, GHC, Boost and CodeQL, none of which this repo uses;
+    # removing them frees ~30 GB in seconds. First, so nothing installed
+    # below can be in the way.
+    - name: Free runner disk
+      if: inputs.free-disk == 'true'
+      shell: bash
+      run: |
+        df -h / | tail -1
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+          /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
+        df -h / | tail -1
+
+    # Taskfile.yml needs Task 3.38+ (`if:` on a task call).
+    - name: Install Task
+      uses: arduino/setup-task@v2
+      with:
+        version: 3.x
+        repo-token: ${{ github.token }}
+
+    # setup-go's own cache always saves in its post step, which cannot be
+    # limited to main, so it is off and the caches are restored explicitly.
+    - name: Set up Go
+      id: go
+      if: inputs.go == 'true'
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Read cache pins
+      id: pins
+      if: inputs.go == 'true'
+      shell: bash
+      run: echo "embedded_pg=$(sed -n 's|^[[:space:]]*github.com/fergusstrange/embedded-postgres \(v[^[:space:]]*\).*|\1|p' go.mod)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Go module cache
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/go/pkg/mod
+        key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          go-mod-nozip-${{ runner.os }}-
+
+    # Every compile here is -trimpath (the Taskfile and both gates add it), so
+    # a package compiled on main's runner is a cache hit on a PR's.
+    - name: Restore Go build cache
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/go-build
+        key: go-build-trimpath-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          go-build-trimpath-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}-
+          go-build-trimpath-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+
+    # pgtest boots an embedded Postgres for every DB-backed test (no service
+    # container, no DATABASE_URL); its binaries come from Maven Central unless
+    # this cache holds them, and Maven answers a burst of runs with HTTP 429.
+    # The archive is fixed by go.mod's embedded-postgres version, and its file
+    # name carries the Postgres version, so the prefix fallback is safe.
+    - name: Restore embedded Postgres binaries
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/forge/embedded-postgres
+        key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.embedded_pg }}
+        restore-keys: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-
+
+    # forge lint's buf-lint lane runs `buf` from PATH and fails the lint as
+    # "could NOT run" without it (the first CI release gate, d681008c). The
+    # version is go.mod's buf pin, the one the Taskfile's BUF and forge
+    # generate use.
+    - name: Read the buf pin
+      id: buf
+      if: inputs.buf == 'true'
+      shell: bash
+      run: echo "version=$(awk '$1 == "github.com/bufbuild/buf" { sub(/^v/, "", $2); print $2; exit }' go.mod)" >> "$GITHUB_OUTPUT"
+
+    - name: Install buf
+      if: inputs.buf == 'true'
+      uses: bufbuild/buf-action@v1
+      with:
+        setup_only: true
+        version: ${{ steps.buf.outputs.version }}
+        github_token: ${{ github.token }}
+
+    - name: Set up Node
+      if: inputs.node == 'true'
+      uses: actions/setup-node@v6
+      with:
+        node-version: "24"
+        cache: npm
+        cache-dependency-path: |
+          package-lock.json
+          frontends/web/package-lock.json
+          electron/package-lock.json
+          tools/protoc-gen-es/package-lock.json
+
+    # A pinned, checksum-verified static build: apt-get cost ~15s a job.
+    - name: Install ripgrep
+      if: inputs.ripgrep == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"
+        curl -fsSL -o "${RUNNER_TEMP}/rg.tgz" "https://github.com/BurntSushi/ripgrep/releases/download/${v}/${f}.tar.gz"
+        echo "4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e  ${RUNNER_TEMP}/rg.tgz" | sha256sum -c -
+        tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
+        sudo install -m 0755 "${RUNNER_TEMP}/${f}/rg" /usr/local/bin/rg

@@ -1,0 +1,386 @@
+name: CI
+
+# A thin wrapper over the two local gates (dev-docs/merge-and-release-gates.md).
+# Every job is setup, then `task <name>`: what a check does lives once, in
+# Taskfile.yml and the scripts it runs, so CI and a laptop cannot disagree.
+#
+#   pull_request                      task ci:merge   the merge tier: what the
+#                                                     diff can affect, ~5 min
+#   push to main, schedule, dispatch  task release:gate  the whole suite,
+#                                                     recorded per sha
+#
+# The merge gate is the merge path: the merge queue (.fm-tools/merge_queue3.sh)
+# runs `scripts/merge-gate.sh` on the squash it lands and posts the required
+# `merge-gate` commit status. This workflow is a second signal on the same
+# commands, never a different opinion. The release gate here records its
+# verdict as a git note (refs/notes/release-gate), the same record a local
+# `task release:gate` writes, so `task release:tag` accepts a green from
+# either.
+#
+# Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
+# renderer's release build, Playwright, the electron package, and the vendored
+# control-plane contract. A pull request runs those its paths reach; main runs
+# all of them.
+#
+# DB-backed tests need no service container and no DATABASE_URL: forge pgtest
+# boots an embedded Postgres per runner (internal/db/testutil.go).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # 06:17 UTC daily: off the top of the hour, where GitHub's scheduler
+    # queues are longest, and before the Americas workday.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+# A PR: a new push obsoletes the run in progress. Main: every push shares ONE
+# group and nothing in it is cancelled, so the run in progress always ends in a
+# verdict, and GitHub keeps at most one pending run (the newest main, which
+# contains every superseded commit). A dispatch groups by its ref.
+concurrency:
+  group: ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # `|`, not `,`: fall back to the module's origin on ANY proxy error, not only
+  # a 404 (one transient stream reset failed five test binaries, run 39676414820).
+  GOPROXY: https://proxy.golang.org|direct
+
+jobs:
+  # ── What this run reaches ─────────────────────────────────────────────────
+  # The diff base, and the path lanes neither gate decides. On a PR,
+  # actions/checkout is GitHub's merge commit, whose first parent is the base it
+  # merged onto, so HEAD^1..HEAD is exactly what merging brings in.
+  lanes:
+    name: Lanes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+      web: ${{ steps.lanes.outputs.web }}
+      playwright: ${{ steps.lanes.outputs.playwright }}
+      electron: ${{ steps.lanes.outputs.electron }}
+      cp_contract: ${{ steps.lanes.outputs.cp_contract }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+      - name: Diff base
+        id: base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = pull_request ]; then
+            if [ "$(git rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]; then base=$(git rev-parse HEAD^1)
+            else base=$(git merge-base "origin/${BASE_REF}" HEAD); fi
+          elif [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+            base=${PUSH_BEFORE}
+          else
+            base=$(git rev-parse HEAD^)
+          fi
+          echo "base=${base}" | tee -a "$GITHUB_OUTPUT"
+      - name: Path lanes
+        id: lanes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE: ${{ steps.base.outputs.base }}
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            pull_request) task ci:lanes -- --base "${BASE}" ;;
+            # The control-plane contract judges what a push changed here.
+            push) task ci:lanes -- --full --base "${BASE}" ;;
+            *) task ci:lanes -- --full ;;
+          esac | tee -a "$GITHUB_OUTPUT"
+
+  # ── The merge tier (pull requests) ────────────────────────────────────────
+  merge-gate:
+    name: Merge gate
+    needs: lanes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BASE: ${{ needs.lanes.outputs.base }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          ripgrep: "true"
+          free-disk: "true"
+          buf: "true"
+      # MG_LOGDIR keeps the phase logs where the upload below finds them.
+      - name: task ci:merge
+        run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}"
+      - name: task test:flake (each new or changed test, three times)
+        if: ${{ !cancelled() }}
+        run: task test:flake -- --base "${BASE}"
+      - name: task ci:repo-checks
+        if: ${{ !cancelled() }}
+        run: task ci:repo-checks BASE="${BASE}"
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      - name: Upload the gate's phase logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-gate-logs
+          path: ${{ runner.temp }}/merge-gate
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── The release tier (main, nightly, dispatch) ────────────────────────────
+  # The whole suite on this commit, in a private checkout, recorded as a git
+  # note pushed to origin, so `task release:tag` can cut a release from it. A
+  # sha that already has a green record (a local run) passes at once. A
+  # dispatch on a branch other than main runs it without publishing a record.
+  release-gate:
+    name: Release gate
+    needs: lanes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      # refs/notes/release-gate: the record of this run.
+      contents: write
+    env:
+      RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        id: setup
+        with:
+          node: "true"
+          ripgrep: "true"
+          free-disk: "true"
+          buf: "true"
+      - name: Identify the record's author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: task release:gate
+        run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- "${GITHUB_SHA}"
+      - name: task ci:repo-checks
+        if: ${{ !cancelled() }}
+        run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      - name: Upload the gate's step logs
+        if: failure()
+        run: echo "logs=$(git rev-parse --git-common-dir)/release-gate" >> "$GITHUB_ENV"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-logs
+          path: ${{ env.logs }}
+          retention-days: 7
+          if-no-files-found: ignore
+      # Saves: main only, after the run, whatever it found.
+      - name: Save embedded Postgres binaries (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/forge/embedded-postgres
+          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.embedded-pg }}
+        continue-on-error: true
+
+  # ── The compile cache every Go job restores (main only) ───────────────────
+  # Plain -trimpath package compiles only: what a PR can reuse is the compile of
+  # everything its change does not reach. Test binaries, -race variants and
+  # linked tools would be dead weight that evicts this from the 10 GB budget.
+  go-cache:
+    name: Go package cache (main only)
+    needs: lanes
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        id: setup
+      - name: task build:packages
+        run: task build:packages
+      - name: Save Go build cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-trimpath-${{ runner.os }}-${{ steps.setup.outputs.go-version }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+      - name: Save Go module cache
+        uses: actions/cache/save@v4
+        continue-on-error: true # the exact key exists unless go.sum changed
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
+
+  # ── The lanes no gate covers ──────────────────────────────────────────────
+
+  # proto-vendor/controlplane/ must be exactly what control-plane main exports.
+  # control-plane is private, so this reads it with CONTROL_PLANE_DEPLOY_KEY (a
+  # read-only deploy key) and FAILS without one: a drift gate that skips cannot
+  # be told from one that passes. Fork PRs get no secrets; control-plane's own
+  # gate judges the tree once it reaches main.
+  cp-contract:
+    name: Vendored control-plane contract matches control-plane main
+    needs: lanes
+    if: needs.lanes.outputs.cp_contract == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out control-plane main (private, read-only)
+        uses: actions/checkout@v6
+        with:
+          repository: reliant-labs/control-plane
+          ref: main
+          path: control-plane-sibling
+          ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+          node: "true"
+      # The vendored tree is a byte-for-byte `buf export`: the same buf as
+      # control-plane's .github/actions/setup-buf pin.
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: "1.57.0"
+          github_token: ${{ github.token }}
+      - name: task contract:controlplane:check
+        env:
+          CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
+        run: task contract:controlplane:check
+
+  web-bundle:
+    name: Web (lint, typecheck, release build, verify-bundle)
+    needs: lanes
+    if: needs.lanes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+          node: "true"
+      - name: task deps:web
+        run: task deps:web
+      - name: task build:web:verify
+        run: task build:web:verify
+      # Also uploaded when verification fails, so the offending asset can be
+      # downloaded and grepped.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: frontends/web/dist
+          retention-days: 1
+          if-no-files-found: ignore
+
+  playwright:
+    name: E2E Frontend (Playwright)
+    needs: lanes
+    if: needs.lanes.outputs.playwright == 'true'
+    # Not ubuntu-latest: it resolves to ubuntu 26.04, which Playwright 1.58
+    # refuses at `playwright install --with-deps`.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+          node: "true"
+      - name: Restore Playwright browsers
+        id: browsers
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/package-lock.json') }}
+      - name: task deps:web
+        run: task deps:web
+      - name: task test:web:e2e
+        run: task test:web:e2e PLAYWRIGHT_DEPS=--with-deps
+      - name: Save Playwright browsers (main only)
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.browsers.outputs.cache-primary-key }}
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontends/web/playwright-report
+            frontends/web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  electron-package:
+    name: Electron (package smoke)
+    needs: lanes
+    if: needs.lanes.outputs.electron == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+          node: "true"
+      - name: task deps:web deps:electron
+        run: task deps:web deps:electron
+      - name: task build:electron:smoke
+        run: task build:electron:smoke
+
+  # ── One verdict ───────────────────────────────────────────────────────────
+  # Green only when every job that ran passed. On a PR a lane the change does
+  # not reach is skipped, which is fine, but the merge gate must have run. Off
+  # a PR every lane runs (scripts/ci-lanes.sh --full), so a skip there is a
+  # broken `if:`, never a pass: everything but the merge gate, go-cache (only a
+  # push runs it) and cp-contract (only a change to the vendored contract
+  # does) must have succeeded.
+  ci-result:
+    name: CI result
+    needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job that ran passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          bad=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
+          gate=$([ "${EVENT_NAME}" = pull_request ] && echo merge-gate || echo release-gate)
+          [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
+          [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
+          if [ "${EVENT_NAME}" != pull_request ]; then
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            bad="${bad}"$'\n'"${skipped}"
+          fi
+          bad=$(grep . <<< "${bad}" | sort -u || true)
+          if [ -n "${bad}" ]; then echo "::error::jobs that did not pass:"; echo "${bad}"; exit 1; fi
+          echo "every job that ran passed"
