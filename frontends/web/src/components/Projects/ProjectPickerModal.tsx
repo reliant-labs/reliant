@@ -4,6 +4,7 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import Modal from "../forge-ui/modal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { useProjectStore } from "../../store/projectStore";
+import { fetchProjects, getCachedProjects } from "../../hooks/project-queries";
 import { toast } from "../../lib/toast-manager";
 import { basename, examplePathForPlatform, isAbsolutePath } from "../../lib/pathUtils";
 import { useDetectedOS } from "../ReliantDownloadOptions";
@@ -118,11 +119,9 @@ export function ProjectPickerModal({
       // the signal, not the message.
       const isAlreadyExists = err instanceof ConnectError && err.code === Code.AlreadyExists;
       if (isAlreadyExists) {
-        const { projects, loadProjects } = useProjectStore.getState();
-        let existing = projects.find((p) => p.path === formData.path);
+        let existing = getCachedProjects().find((p) => p.path === formData.path);
         if (!existing) {
-          await loadProjects();
-          existing = useProjectStore.getState().projects.find((p) => p.path === formData.path);
+          existing = (await fetchProjects({ fresh: true })).find((p) => p.path === formData.path);
         }
         if (existing) {
           toast.success(`Opening existing project "${existing.name}"`);

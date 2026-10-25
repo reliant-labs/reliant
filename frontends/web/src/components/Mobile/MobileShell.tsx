@@ -69,6 +69,7 @@ import { MobileInboxBadgeSync } from "./MobileInboxBadgeSync";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
+import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 
@@ -77,9 +78,8 @@ export function MobileShell() {
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
 
   const currentProject = useProjectStore((s) => s.currentProject);
-  const projects = useProjectStore((s) => s.projects);
+  const { projects } = useProjects();
   const selectProject = useProjectStore((s) => s.selectProject);
-  const loadProjects = useProjectStore((s) => s.loadProjects);
 
   const needsOnboarding =
     !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
@@ -94,11 +94,6 @@ export function MobileShell() {
     if (!needsOnboarding) return;
     navigate({ to: "/onboarding", search: (prev) => prev, replace: true });
   }, [isUserLoading, needsOnboarding, navigate]);
-
-  useEffect(() => {
-    if (needsOnboarding) return;
-    if (projects.length === 0) void loadProjects();
-  }, [needsOnboarding, projects.length, loadProjects]);
 
   // Pick the project the way the desktop shell does: restore the last one the
   // user had open, and only then fall back to the first. Phone browsers discard

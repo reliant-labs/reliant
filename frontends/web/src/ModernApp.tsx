@@ -20,6 +20,7 @@ import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
 import { useProjectStore } from "./store/projectStore";
+import { fetchProjects, getCachedProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
@@ -88,7 +89,6 @@ function App() {
   // the tray-status effect below.
   const { data: chats = EMPTY_CHAT_LIST } = useChatList(currentProject?.id);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   // Onboarding state (`plan`, `reset-onboarding`) now lives on /onboarding —
   // see OnboardingRoute. We still read the github_* params here because non-
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
@@ -218,15 +218,14 @@ function App() {
     }
 
     (async () => {
-      let projects = useProjectStore.getState().projects;
+      let projects = getCachedProjects();
       if (projects.length === 0) {
         try {
-          await useProjectStore.getState().loadProjects();
+          projects = await fetchProjects();
         } catch (err) {
           logger.warn("[ModernApp] Failed to load projects for deep-link", err);
           return;
         }
-        projects = useProjectStore.getState().projects;
       }
       const match = projects.find((p) => p.id === routeProjectId);
       if (!match) {
@@ -462,9 +461,9 @@ function App() {
    */
   const cycleProject = useCallback(
     async (direction: 1 | -1) => {
-      const { projects, currentProject: active, selectProject } =
-        useProjectStore.getState();
-      if (!projects || projects.length < 2) return;
+      const projects = getCachedProjects();
+      const { currentProject: active, selectProject } = useProjectStore.getState();
+      if (projects.length < 2) return;
 
       const index = projects.findIndex((p) => p.id === active?.id);
       if (index === -1) return;
@@ -1051,11 +1050,10 @@ function App() {
 
         // Projects are loaded in parallel by Root.tsx's Promise.all.
         // Safety net: if they haven't loaded yet (e.g. Root.tsx load failed), retry here.
-        const projectStore = useProjectStore.getState();
-        if (projectStore.projects.length === 0 && !projectStore.isLoading) {
+        if (getCachedProjects().length === 0) {
           // Timeout prevents hanging when no daemon/backend is available (browser-only users)
           await Promise.race([
-            loadProjects(),
+            fetchProjects(),
             new Promise((resolve) => setTimeout(resolve, 3000)),
           ]);
         }
@@ -1080,7 +1078,7 @@ function App() {
     return () => {
       mounted = false;
     };
-  }, [loadProjects]); // Run once on mount — workspace restore handles project selection
+  }, []); // Run once on mount — workspace restore handles project selection
 
   // Connect the live update stream once the backend is ready. Chats are
   // already loaded by workspace restore / selectProject before isBackendReady
@@ -1175,7 +1173,6 @@ function App() {
             name: projectInfo.name || "",
             path: projectInfo.path || "",
             is_git_repo: true,
-            worktree_count: 0, // Temporary, will be updated when projects load
             last_active: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -1582,7 +1579,7 @@ function App() {
   // We deliberately do NOT gate on `isBackendReady` or `isWorkspaceRestoring`:
   // a mid-onboarding user has no projects to list and no workspace to restore,
   // and waiting for ListProjects to complete (which can run several hundred
-  // ms to a couple seconds before the singleflight inside loadProjects
+  // ms to a couple seconds before the shared fetch inside fetchProjects
   // resolves) just delays the redirect — leaving the user staring at a
   // LoadingSpinner before the OnboardingPage / ComputeStep mounts and fires
   // its own queries (ListDaemons, etc.). Gate only on `isUserLoading` so we
@@ -1671,7 +1668,6 @@ function App() {
               const fullProject = {
                 ...project,
                 is_git_repo: project.is_git_repo ?? true,
-                worktree_count: project.worktree_count ?? 0,
                 last_active: new Date().toISOString(),
                 created_at: project.created_at ?? new Date().toISOString(),
                 updated_at: project.updated_at ?? new Date().toISOString(),

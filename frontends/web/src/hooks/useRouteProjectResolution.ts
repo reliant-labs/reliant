@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { useProjectStore } from "@/store/projectStore";
+import { fetchProjects } from "./project-queries";
 
 export function useRouteProjectResolution({ reflectInUrl }: { reflectInUrl: boolean }): { resolved: boolean } {
   const navigate = useNavigate();
@@ -28,7 +29,6 @@ export function useRouteProjectResolution({ reflectInUrl }: { reflectInUrl: bool
   const projectParam = search.project;
 
   const currentProject = useProjectStore((state) => state.currentProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   const selectProject = useProjectStore((state) => state.selectProject);
   const restoreLastProject = useProjectStore((state) => state.restoreLastProject);
   const attempted = useRef(false);
@@ -55,9 +55,8 @@ export function useRouteProjectResolution({ reflectInUrl }: { reflectInUrl: bool
           if (projectParam !== currentProject.id) syncProjectParam(currentProject.id);
           return;
         }
-        await loadProjects();
         if (projectParam) {
-          const match = useProjectStore.getState().projects.find((p) => p.id === projectParam);
+          const match = (await fetchProjects()).find((p) => p.id === projectParam);
           if (match) {
             await selectProject(match);
             return;
@@ -73,7 +72,7 @@ export function useRouteProjectResolution({ reflectInUrl }: { reflectInUrl: bool
         setResolved(true);
       }
     })();
-  }, [currentProject, projectParam, loadProjects, selectProject, restoreLastProject, syncProjectParam]);
+  }, [currentProject, projectParam, selectProject, restoreLastProject, syncProjectParam]);
 
   // Keep the URL honest after the first resolution: a project selected later
   // must follow into the param, or a refresh would resolve back to the old one.

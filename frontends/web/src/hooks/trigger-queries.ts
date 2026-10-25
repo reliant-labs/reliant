@@ -6,9 +6,10 @@ import {
   type TriggerDefinitionInput,
 } from "../api/trigger-grpc";
 import { workflowGrpc } from "../api/workflow-grpc";
-import { projectGrpc } from "../api/project-grpc";
 
 export type { Trigger, TriggerEvent, TriggerDefinitionInput } from "../api/trigger-grpc";
+// The project_daemons rows a trigger's daemon is checked against are ProjectService's.
+export { useProjectDaemonInstalls } from "./project-queries";
 
 // ── Key factory ─────────────────────────────────────────────────────────────
 
@@ -21,7 +22,6 @@ export const triggerKeys = {
   detail: (id: string) => [...triggerKeys.details(), id] as const,
   events: (id: string) => [...triggerKeys.all, "events", id] as const,
   workflows: (projectId: string) => [...triggerKeys.all, "workflows", projectId] as const,
-  projectDaemons: () => [...triggerKeys.all, "projectDaemons"] as const,
 };
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
@@ -97,19 +97,6 @@ export function useProjectWorkflowList(projectId?: string) {
     queryFn: () => workflowGrpc.listWorkflows(projectId!),
     enabled: !!projectId,
     staleTime: 60_000,
-  });
-}
-
-/**
- * Every project_daemons row the caller owns — which daemon has which project
- * installed. The same rows the server checks a trigger's daemon against.
- */
-export function useProjectDaemonInstalls(enabled = true) {
-  return useQuery({
-    queryKey: triggerKeys.projectDaemons(),
-    queryFn: () => projectGrpc.listProjectDaemons(),
-    enabled,
-    staleTime: 30_000,
   });
 }
 

@@ -21,6 +21,7 @@ import { seedChatDetail } from "@/hooks/chat-queries";
 import { useChatStore } from "@/store/chatStore";
 import { useChatNavigationStore } from "@/store/chatNavigationStore";
 import { useProjectStore } from "@/store/projectStore";
+import { fetchProjects } from "@/hooks/project-queries";
 import { useWorktreeStore } from "@/store/worktreeStore";
 
 export class RunProjectUnavailableError extends Error {
@@ -39,8 +40,7 @@ export async function loadRunContext(chatId: string): Promise<Chat> {
 
   const projectStore = useProjectStore.getState();
   if (projectStore.currentProject?.id !== chat.projectId) {
-    await projectStore.loadProjects();
-    const project = useProjectStore.getState().projects.find((p) => p.id === chat.projectId);
+    const project = (await fetchProjects()).find((p) => p.id === chat.projectId);
     if (!project) throw new RunProjectUnavailableError();
     await useProjectStore.getState().selectProject(project);
   }

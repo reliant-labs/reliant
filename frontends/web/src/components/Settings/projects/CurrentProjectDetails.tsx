@@ -1,5 +1,4 @@
 import { useEffect, useMemo, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
@@ -7,7 +6,7 @@ import Card from "@/components/forge-ui/card";
 import Status from "@/components/forge-ui/status";
 import Button from "@/components/forge-ui/button";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { projectGrpc } from "@/api/project-grpc";
+import { useProjectGitInfo, type ProjectGitInfo } from "@/hooks/project-queries";
 import { useChatList } from "@/hooks/chat-queries";
 import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
@@ -47,10 +46,6 @@ export interface CurrentProjectDetailsProps {
 const RECENT_CHAT_LIMIT = 5;
 const SECTION_LABEL = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
-export function gitInfoQueryKey(projectId: string) {
-  return ["projects", projectId, "git-info"] as const;
-}
-
 export function CurrentProjectDetails({
   project,
   onChatOpened,
@@ -74,13 +69,7 @@ export function CurrentProjectDetails({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh once per project, not per store identity
   }, [project.id]);
 
-  const gitInfo = useQuery({
-    queryKey: gitInfoQueryKey(project.id),
-    queryFn: () => projectGrpc.getGitInfo(project.id),
-    enabled: project.is_git_repo,
-    staleTime: 10_000,
-    retry: false,
-  });
+  const gitInfo = useProjectGitInfo(project);
 
   const activeWorkspaceCount = useMemo(
     () => worktrees.filter((w) => !w.is_main && !w.deleted_at && (!w.project_id || w.project_id === project.id)).length,
@@ -249,16 +238,16 @@ interface GitFactsProps {
   project: Project;
   loading: boolean;
   failed: boolean;
-  info: Awaited<ReturnType<typeof projectGrpc.getGitInfo>> | undefined;
+  info: ProjectGitInfo | undefined;
 }
 
 function GitFacts({ project, loading, failed, info }: GitFactsProps) {
-  const remoteUrl = info?.remote_url || project.remote_url;
+  const remoteUrl = info?.remoteUrl || project.remote_url;
   const remote = remoteUrl ? describeRemote(remoteUrl) : null;
 
-  const branch = info?.current_branch || (loading || failed ? project.default_branch : undefined);
+  const branch = info?.currentBranch || (loading || failed ? project.default_branch : undefined);
   const changeCount = info
-    ? (info.staged_files?.length ?? 0) + (info.unstaged_files?.length ?? 0) + (info.untracked_files?.length ?? 0)
+    ? info.stagedFiles.length + info.unstagedFiles.length + info.untrackedFiles.length
     : 0;
 
   return (

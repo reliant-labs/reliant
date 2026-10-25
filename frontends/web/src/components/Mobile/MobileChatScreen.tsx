@@ -19,6 +19,7 @@ import { ChevronLeft, FolderGit2 } from "lucide-react";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { useChat } from "../../store/chatStoreHooks";
 import { useProjectStore } from "../../store/projectStore";
+import { fetchProjects, getCachedProjects } from "../../hooks/project-queries";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
 import { MobileWorkflowExecutionEntry } from "./MobileWorkflowExecutionEntry";
@@ -48,10 +49,10 @@ export function MobileChatScreen() {
     alignedFor.current = chatId;
     if (useProjectStore.getState().currentProject?.id === chatProjectId) return;
     void (async () => {
-      if (!useProjectStore.getState().projects.some((p) => p.id === chatProjectId)) {
-        await useProjectStore.getState().loadProjects();
+      let project = getCachedProjects().find((p) => p.id === chatProjectId);
+      if (!project) {
+        project = (await fetchProjects()).find((p) => p.id === chatProjectId);
       }
-      const project = useProjectStore.getState().projects.find((p) => p.id === chatProjectId);
       if (!project) return;
       await useProjectStore.getState().selectProject(project);
     })();
