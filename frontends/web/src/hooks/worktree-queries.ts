@@ -450,29 +450,40 @@ function requestOf(query: Query): Record<string, unknown> | undefined {
 // path or archive state is in them.
 const LIST_METHODS = new Set(["listWorktrees", "listArchivedWorktrees"]);
 
+const isListQuery = (query: Query) =>
+  query.queryKey.some((part) => typeof part === "string" && LIST_METHODS.has(part));
+
 /**
  * Invalidate what one workspace's change can make stale: the reads that name
  * it and every workspace list. Other workspaces' reads — diffs, git status —
  * and discovery are left alone: each is a round trip to a machine. Without an
  * id, the whole service.
+ *
+ * `lists: "stale"` marks the lists stale without refetching the mounted ones
+ * (they refetch on their next mount or window focus) — for an event that
+ * names a workspace the lists already hold and is most likely file churn.
  */
-export function invalidateWorktreeQueries(qc: QueryClient, worktreeId?: string): Promise<void> {
+export async function invalidateWorktreeQueries(
+  qc: QueryClient,
+  worktreeId?: string,
+  options?: { lists?: "refetch" | "stale" },
+): Promise<void> {
   if (!worktreeId) return qc.invalidateQueries({ queryKey: worktreeServiceKeys.all });
-  return qc.invalidateQueries({
-    queryKey: worktreeServiceKeys.all,
-    predicate: (query) => {
-      if (query.queryKey.some((part) => typeof part === "string" && LIST_METHODS.has(part))) return true;
-      return requestOf(query)?.worktreeId === worktreeId;
-    },
-  });
+  const listsRefetch = (options?.lists ?? "refetch") === "refetch";
+  await Promise.all([
+    qc.invalidateQueries({
+      queryKey: worktreeServiceKeys.all,
+      predicate: (query) => (listsRefetch && isListQuery(query)) || requestOf(query)?.worktreeId === worktreeId,
+    }),
+    listsRefetch
+      ? Promise.resolve()
+      : qc.invalidateQueries({ queryKey: worktreeServiceKeys.all, predicate: isListQuery, refetchType: "none" }),
+  ]);
 }
 
 /** Refetch every workspace list (live, main, archived) — after a change made outside this app's writes. */
 export function invalidateWorktreeLists(qc: QueryClient): Promise<void> {
-  return qc.invalidateQueries({
-    queryKey: worktreeServiceKeys.all,
-    predicate: (query) => query.queryKey.some((part) => typeof part === "string" && LIST_METHODS.has(part)),
-  });
+  return qc.invalidateQueries({ queryKey: worktreeServiceKeys.all, predicate: isListQuery });
 }
 
 /** Re-run discovery (both the foreground and the background hint's reads) for a project. */
@@ -589,9 +600,14 @@ export function resetWorktreeAnnouncements(): void {
  */
 export async function handleWorktreeChanges(event: RefetchEvent, qc: QueryClient = appQueryClient): Promise<void> {
   const id = event.entityId;
-  const pending =
-    !!id && (pendingCreates.has(id) || getCachedWorktree(id, qc)?.status === WorktreeStatus.CREATING);
-  await invalidateWorktreeQueries(qc, id);
+  const known = id ? getCachedWorktree(id, qc) : undefined;
+  const pending = !!id && (pendingCreates.has(id) || known?.status === WorktreeStatus.CREATING);
+  // The event fires on every file-mutating tool call, so for a workspace the
+  // lists already hold it is almost always file churn: refresh that
+  // workspace's own reads (its row included) and only mark the lists stale.
+  // A workspace no list holds yet (one an agent just made) or a create
+  // settling moves the lists themselves.
+  await invalidateWorktreeQueries(qc, id, { lists: known && !pending ? "stale" : "refetch" });
   if (!id || !pending) return;
   logger.info("[Worktrees] Pending worktree changed, refreshing", { worktreeId: id });
   try {
@@ -655,18 +671,26 @@ export const ALL_PROJECTS = Symbol("all-projects");
  */
 export function useCachedWorktrees(projectId: string | null | undefined | typeof ALL_PROJECTS): Worktree[] {
   const qc = useQueryClient();
-  const snapshot = useRef<{ key: string; rows: Worktree[] }>({ key: "", rows: [] });
+  // Bumped on every WorktreeService cache event; a render with no event since
+  // the last read reuses it without scanning the cache.
+  const version = useRef(0);
+  const snapshot = useRef<{ version: number; scope: unknown; key: string; rows: Worktree[] } | null>(null);
   const read = useCallback(() => {
+    const held = snapshot.current;
+    if (held && held.version === version.current && held.scope === projectId) return held.rows;
     const rows =
       projectId === ALL_PROJECTS ? getCachedWorktrees(undefined, qc) : projectId ? getCachedWorktrees(projectId, qc) : [];
     const key = JSON.stringify(rows);
-    if (key !== snapshot.current.key) snapshot.current = { key, rows };
+    const same = held && held.key === key;
+    snapshot.current = { version: version.current, scope: projectId, key, rows: same ? held.rows : rows };
     return snapshot.current.rows;
   }, [projectId, qc]);
   const subscribe = useCallback(
     (onChange: () => void) =>
       qc.getQueryCache().subscribe((event) => {
-        if (event.query.queryKey[0] === worktreeServiceKeys.all[0]) onChange();
+        if (!isWorktreeQueryKey(event.query.queryKey)) return;
+        version.current++;
+        onChange();
       }),
     [qc],
   );

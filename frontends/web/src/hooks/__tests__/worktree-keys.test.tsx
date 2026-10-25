@@ -79,7 +79,7 @@ describe("WorktreeService keys", () => {
     expect(current.result.current?.status).toBe(WorktreeStatus.CREATING);
   });
 
-  it("a worktree_changes event refetches every list and that workspace's reads, never another's", async () => {
+  it("a worktree_changes event for a known workspace refetches its reads, marks the lists stale, and leaves other workspaces alone", async () => {
     const server = worktreeServer([
       { id: "wt-main", project_id: projectId, is_main: true },
       { id: "wt-a", project_id: projectId },
@@ -89,24 +89,46 @@ describe("WorktreeService keys", () => {
     setTransport(mockTransport({ ...server.handlers, ...gitStatusHandlers(gitStatusCalls) }));
 
     const list = renderHook(() => useWorktreeList(projectId), { wrapper });
-    const main = renderHook(() => useMainWorktree(projectId), { wrapper });
     const a = renderHook(() => useWorkspaceGitStatus("wt-a"), { wrapper });
     const b = renderHook(() => useWorkspaceGitStatus("wt-b"), { wrapper });
+    const row = renderHook(() => useWorktreeById("wt-a"), { wrapper });
     await waitFor(() => {
       expect(list.result.current.worktrees).toHaveLength(3);
-      expect(main.result.current?.id).toBe("wt-main");
       expect(a.result.current.isSuccess && b.result.current.isSuccess).toBe(true);
+      expect(row.result.current?.id).toBe("wt-a");
     });
     const listCalls = server.calls("ListWorktrees");
+    const rowCalls = server.calls("GetWorktree");
 
+    // The event fires on every file-mutating tool call: churn, for a
+    // workspace the lists already hold.
     act(() => triggerRefetch("worktree_changes", "wt-a"));
 
     await waitFor(() => {
       expect(gitStatusCalls["wt-a"]).toBe(2);
-      // The live list and the main-workspace read are both ListWorktrees.
-      expect(server.calls("ListWorktrees")).toBe(listCalls + 2);
+      expect(server.calls("GetWorktree")).toBe(rowCalls + 1);
     });
     expect(gitStatusCalls["wt-b"]).toBe(1);
+    expect(server.calls("ListWorktrees")).toBe(listCalls);
+    const listKey = worktreeServiceKeys.listWorktreesInfinite({ projectId, limit: 100 });
+    expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+  });
+
+  it("a worktree_changes event for a workspace no list holds yet refetches the mounted lists", async () => {
+    const server = worktreeServer([{ id: "wt-main", project_id: projectId, is_main: true }]);
+    setTransport(mockTransport(server.handlers));
+    const list = renderHook(() => useWorktreeList(projectId), { wrapper });
+    const main = renderHook(() => useMainWorktree(projectId), { wrapper });
+    await waitFor(() => {
+      expect(list.result.current.worktrees).toHaveLength(1);
+      expect(main.result.current?.id).toBe("wt-main");
+    });
+
+    // An agent made a workspace (the worktree tool emits for the new id).
+    server.rows.push({ ...server.rows[0], id: "wt-agent", is_main: false, name: "agent" });
+    act(() => triggerRefetch("worktree_changes", "wt-agent"));
+
+    await waitFor(() => expect(list.result.current.worktrees.map((w) => w.id)).toEqual(["wt-main", "wt-agent"]));
   });
 
   it("service-wide invalidation reaches every read under worktreeServiceKeys.all", async () => {
