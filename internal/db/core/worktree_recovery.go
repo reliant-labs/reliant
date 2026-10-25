@@ -1,8 +1,9 @@
 package core
 
 import (
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // These errors reveal neither another owner's catalog nor source identity.
