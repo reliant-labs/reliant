@@ -444,14 +444,13 @@ func recoveryInventoryAt(ctx context.Context, path, tmp string) (recoveryInvento
 	if err != nil {
 		return out, err
 	}
-	ignoredPaths := map[string]bool{}
-	for _, p := range bytes.Split(ignored, []byte{0}) {
-		if len(p) > 0 {
-			ignoredPaths[string(p)] = true
-		}
+	// A build/package declaration does not prove that ignored leaves are
+	// reproducible: dist/notes.txt may be the user's only copy. Until a positive
+	// immutable provenance mechanism exists, even ordinary dependency/build
+	// directories hold instead of omitting their bytes from recovery.
+	if len(ignored) > 0 {
+		return out, fmt.Errorf("recovery: ignored content has no proven regeneration source")
 	}
-	omitted := []RecoveryEntry{}
-	omittedBytes := int64(0)
 	walkCount := 0
 	untracked, err := recoveryCaptureGit(ctx, path, nil, nil, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
@@ -512,43 +511,12 @@ func recoveryInventoryAt(ctx context.Context, path, tmp string) (recoveryInvento
 				return fmt.Errorf("recovery: unreadable directory")
 			}
 			if len(entries) == 0 {
-				if recoveryRebuildableDirectory(path, rel+"/placeholder") {
-					return nil
-				}
 				return fmt.Errorf("recovery: empty directory not representable")
 			}
 			return nil
 		}
 		if !paths[rel] {
-			if !ignoredPaths[rel] || !recoveryRebuildableDirectory(path, rel) {
-				return fmt.Errorf("recovery: unknown ignored/filesystem content")
-			}
-			if err := recoveryScanPath([]byte(rel)); err != nil {
-				return err
-			}
-			if !d.Type().IsRegular() {
-				return fmt.Errorf("recovery: ignored symlink/special content")
-			}
-			st, e := d.Info()
-			if e != nil || st.Size() > recoveryMaxObject {
-				return fmt.Errorf("recovery: ignored content budget")
-			}
-			omittedBytes += st.Size()
-			if omittedBytes > recoveryMaxBytes {
-				return fmt.Errorf("recovery: ignored content total budget")
-			}
-			b, e := os.ReadFile(p)
-			if e != nil {
-				return fmt.Errorf("recovery: unreadable ignored content")
-			}
-			if e = recoveryScanContent(b); e != nil {
-				return e
-			}
-			if len(omitted) >= recoveryMaxFiles {
-				return fmt.Errorf("recovery: ignored inventory budget")
-			}
-			omitted = append(omitted, RecoveryEntry{base64.StdEncoding.EncodeToString([]byte(rel)), fmt.Sprint(st.Mode().Perm()), recoveryDigest(b)})
-			return nil
+			return fmt.Errorf("recovery: unknown ignored/filesystem content")
 		}
 		if !d.Type().IsRegular() && d.Type()&os.ModeSymlink == 0 {
 			return fmt.Errorf("recovery: special filesystem content")
@@ -558,8 +526,8 @@ func recoveryInventoryAt(ctx context.Context, path, tmp string) (recoveryInvento
 	if err != nil {
 		return out, err
 	}
-	sort.Slice(omitted, func(i, j int) bool { return omitted[i].Path < omitted[j].Path })
-	out.OmittedDigest = recoveryDigest(omitted)
+	// V1 has no supported omission provenance: this is always the empty set.
+	out.OmittedDigest = recoveryDigest([]RecoveryEntry{})
 	list := make([]string, 0, len(paths))
 	for p := range paths {
 		list = append(list, p)
@@ -663,36 +631,6 @@ func recoveryBuildTree(ctx context.Context, path, index string, entries []Recove
 		return "", err
 	}
 	return recoveryGitText(ctx, path, env, nil, "write-tree")
-}
-
-// Tighter than legacy defaultRebuildable: only owned, reproducible directory
-// conventions with a package/build declaration in the same parent. Every leaf
-// is still inspected for sensitive names/content, and symlinks always hold.
-// Generated markers, matching source bytes, tmp/logs/data are never exemptions.
-func recoveryRebuildableDirectory(root, rel string) bool {
-	parts := strings.Split(rel, "/")
-	for i, p := range parts[:len(parts)-1] {
-		parent := filepath.Join(append([]string{root}, parts[:i]...)...)
-		exists := func(name string) bool {
-			st, e := os.Lstat(filepath.Join(parent, name))
-			return e == nil && st.Mode().IsRegular()
-		}
-		switch p {
-		case "node_modules", ".next", ".turbo":
-			if exists("package.json") {
-				return true
-			}
-		case "dist":
-			if exists("package.json") || exists("tsconfig.json") {
-				return true
-			}
-		case ".tools":
-			if i == 0 && (exists("Taskfile.yml") || exists("Makefile")) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func recoveryDigest(v any) string {

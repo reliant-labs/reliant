@@ -16,7 +16,7 @@ import (
 // RecoverySecretPolicy identifies a deliberately conservative, pinned local
 // publication policy, NOT a guarantee that arbitrary credentials are detectable.
 // Binary, encrypted/encoded, high-entropy and unknown content classes hold.
-const RecoverySecretPolicy = "reliant-text-only-v1"
+const RecoverySecretPolicy = "reliant-text-only-v2"
 
 var recoverySecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----`),
@@ -28,6 +28,20 @@ var recoverySecretPatterns = []*regexp.Regexp{
 }
 
 func recoveryScanPath(path []byte) error {
+	// Paths are uploaded as raw tree names and base64 manifest entries. Assess
+	// the decoded bytes with the same pinned credential detectors as file text;
+	// base64 encoding is representation, not a secret-detection exemption.
+	for _, detector := range recoverySecretPatterns {
+		if detector.Match(path) {
+			return fmt.Errorf("recovery: sensitive filename content detected")
+		}
+	}
+	// Git supports non-UTF8 filenames. Preserve their bytes, while separating
+	// invalid UTF8 when applying the text entropy policy; token detectors above
+	// always see the original bytes, including tokens adjacent to invalid bytes.
+	if err := recoveryScanContent(bytes.ToValidUTF8(path, []byte("-"))); err != nil {
+		return err
+	}
 	// Name checks intentionally over-hold: a generated marker, ignore rule or
 	// equality to another checkout is not evidence that data is safe to publish.
 	p := strings.ToLower(string(path))

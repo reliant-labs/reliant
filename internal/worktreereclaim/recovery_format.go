@@ -185,6 +185,11 @@ func CaptureRecovery(ctx context.Context, checkoutPath string, c RecoveryCapture
 }
 
 func recoveryManifestCheck(m RecoveryManifest) error {
+	// No omission provenance is supported. Reject previously minted manifests
+	// that promised only a digest for omitted leaves rather than their bytes.
+	if m.OmittedDigest != recoveryDigest([]RecoveryEntry{}) {
+		return fmt.Errorf("recovery: unsupported omitted content")
+	}
 	if m.Version != RecoveryFormatVersion || m.SecretPolicy != RecoverySecretPolicy {
 		return fmt.Errorf("recovery: unsupported manifest/policy version")
 	}

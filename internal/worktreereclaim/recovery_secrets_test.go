@@ -41,6 +41,26 @@ func TestRecoverySecretPolicy(t *testing.T) {
 	}
 }
 
+// These synthetic tokens are deliberately caught even with harmless file
+// contents. Encoding a path into manifest JSON must not bypass the detector.
+func TestRecoveryCredentialFilenameGate(t *testing.T) {
+	token := "ghp_" + strings.Repeat("x", 36)
+	for _, name := range []string{token, "src/" + token + ".txt", token + "/safe.txt", "prefix-\xff" + token} {
+		if err := recoveryScanPath([]byte(name)); err == nil {
+			t.Fatal("credential-bearing decoded filename accepted")
+		}
+	}
+	oid := strings.Repeat("a", 40)
+	m := RecoveryManifest{Version: RecoveryFormatVersion, SecretPolicy: RecoverySecretPolicy, CaptureID: "capture", WorktreeID: "worktree", RepoID: "repo", Rel: ".", HeadOID: oid, IndexTreeOID: oid, DiskTreeOID: oid, ObjectFormat: "sha1", HistoryTips: []string{oid}, OmittedDigest: recoveryDigest([]RecoveryEntry{})}
+	encoded := base64.StdEncoding.EncodeToString([]byte(token))
+	m.DiskEntries = []RecoveryEntry{{Path: encoded, Mode: "100644", OID: oid}}
+	m.UntrackedPaths = []string{encoded}
+	m.InventoryDigest = recoveryDigest(recoveryManifestInventory(m))
+	if err := recoveryManifestCheck(m); err == nil {
+		t.Fatal("base64 manifest filename bypassed credential detector")
+	}
+}
+
 func TestRecoveryRawPathParsing(t *testing.T) {
 	oid := strings.Repeat("a", 40)
 	names := []string{"new\nline", "not-utf8-\xff", "tab\tname"}

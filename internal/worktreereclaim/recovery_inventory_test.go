@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -35,19 +34,47 @@ func TestRecoveryIndexEnvelope(t *testing.T) {
 	}
 }
 
-func TestRecoveryRebuildableOwnership(t *testing.T) {
-	root := t.TempDir()
-	if recoveryRebuildableDirectory(root, "node_modules/package/index.js") {
-		t.Fatal("unowned node_modules allowed")
+// Regression: a package/build declaration cannot establish immutable
+// provenance for arbitrary manually authored leaves in an ignored directory.
+// Before the fix, dist/notes.txt passed inventory and its bytes were omitted.
+func TestRecoveryIgnoredAuthoredTextHeld(t *testing.T) {
+	heavyUnderShort(t, "ignored authored-data regression uses local Git subprocesses")
+	for _, dir := range []string{"dist", "node_modules", ".tools", ".next", ".turbo"} {
+		t.Run(dir, func(t *testing.T) {
+			root := recoveryTestRepo(t)
+			for _, name := range []string{"package.json", "tsconfig.json"} {
+				recoveryTestWrite(t, root, name, []byte("{}\n"), 0644)
+			}
+			recoveryTestWrite(t, root, "Taskfile.yml", []byte("version: '3'\n"), 0644)
+			recoveryTestWrite(t, root, ".gitignore", []byte(dir+"/\n"), 0644)
+			recoveryTestWrite(t, root, dir+"/notes.txt", []byte("my only copy of these research notes\n"), 0644)
+			ctx := withGitObserver(context.Background(), func(args []string) {
+				for _, arg := range args {
+					if arg == "push" || arg == "fetch" || arg == "ls-remote" {
+						t.Fatal("egress during ignored-content hold")
+					}
+				}
+			})
+			if _, e := RecoveryInventoryDigest(ctx, root); e == nil {
+				t.Fatal("ignored manually authored bytes omitted from inventory")
+			}
+			if _, e := CaptureRecovery(ctx, root, recoveryTestDescriptor()); e == nil {
+				t.Fatal("ignored manually authored bytes not preserved or held")
+			}
+			got, e := os.ReadFile(filepath.Join(root, dir, "notes.txt"))
+			if e != nil || string(got) != "my only copy of these research notes\n" {
+				t.Fatal("original ignored file changed")
+			}
+		})
 	}
-	recoveryTestWrite(t, root, "package.json", []byte("{}"), 0644)
-	if !recoveryRebuildableDirectory(root, "node_modules/package/index.js") || !recoveryRebuildableDirectory(root, "dist/app.js") {
-		t.Fatal("owned build conventions rejected")
-	}
-	for _, p := range []string{"data/cache.json", "tmp/file.txt", "logs/run.log", ".forge/state/file.json", "unknown/index.js"} {
-		if recoveryRebuildableDirectory(root, p) {
-			t.Errorf("unsupported ignored path allowed: %s", p)
-		}
+}
+
+func TestRecoveryManifestRejectsOmittedBytes(t *testing.T) {
+	oid := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	m := RecoveryManifest{Version: RecoveryFormatVersion, SecretPolicy: RecoverySecretPolicy, CaptureID: "capture", WorktreeID: "worktree", RepoID: "repo", Rel: ".", HeadOID: oid, IndexTreeOID: oid, DiskTreeOID: oid, ObjectFormat: "sha1", HistoryTips: []string{oid}, OmittedDigest: recoveryDigest([]RecoveryEntry{{Path: "ZGlzdC9ub3Rlcy50eHQ=", Mode: "420", OID: oid}})}
+	m.InventoryDigest = recoveryDigest(recoveryManifestInventory(m))
+	if e := recoveryManifestCheck(m); e == nil {
+		t.Fatal("manifest digest substituted for omitted original bytes")
 	}
 }
 
@@ -76,29 +103,13 @@ func TestRecoveryInventoryStableAfterMoveAndRecoveryFetch(t *testing.T) {
 
 func TestRecoveryIgnoredInventory(t *testing.T) {
 	heavyUnderShort(t, "ignored inventory uses local Git subprocesses")
-	t.Run("owned-generated-text", func(t *testing.T) {
+	t.Run("generated-marker-is-not-provenance", func(t *testing.T) {
 		root := recoveryTestRepo(t)
 		recoveryTestWrite(t, root, "package.json", []byte("{}\n"), 0644)
 		recoveryTestWrite(t, root, ".gitignore", []byte("dist/\n"), 0644)
-		recoveryTestWrite(t, root, "dist/app.js", []byte("console.log('compiled');\n"), 0644)
-		c, e := CaptureRecovery(context.Background(), root, recoveryTestDescriptor())
-		if e != nil {
-			t.Fatal(e)
-		}
-		m, e := ReadRecoveryManifest(context.Background(), root, c)
-		if e != nil {
-			t.Fatal(e)
-		}
-		for _, entry := range m.DiskEntries {
-			if strings.Contains(entry.Path, "dist/") {
-				t.Fatal("omitted build leaf uploaded")
-			}
-		}
-		before := c.InventoryDigest
-		recoveryTestWrite(t, root, "dist/app.js", []byte("console.log('changed');\n"), 0644)
-		after, e := RecoveryInventoryDigest(context.Background(), root)
-		if e != nil || after == before {
-			t.Fatal("ignored mutation missed by full inventory")
+		recoveryTestWrite(t, root, "dist/app.js", []byte("// Code generated DO NOT EDIT\nconsole.log('compiled');\n"), 0644)
+		if _, e := CaptureRecovery(context.Background(), root, recoveryTestDescriptor()); e == nil {
+			t.Fatal("generated marker incorrectly authorized omission")
 		}
 	})
 	for _, tt := range []struct {

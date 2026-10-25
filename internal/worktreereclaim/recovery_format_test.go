@@ -138,6 +138,54 @@ func TestRecoveryCaptureRawIndexDiskHistory(t *testing.T) {
 	}
 }
 
+// Regression: safe blob bytes do not make credential-bearing tree names
+// safe. The historical case deletes the name before capture, requiring the
+// complete reachable tree closure (not just current disk/index) to be scanned.
+func TestRecoveryCredentialFilenameSourceAndHistory(t *testing.T) {
+	heavyUnderShort(t, "credential filename regression uses real local Git plumbing")
+	token := "ghp_" + strings.Repeat("x", 36)
+	for _, where := range []string{"untracked", "index-only", "deleted-history", "history-directory"} {
+		t.Run(where, func(t *testing.T) {
+			root := recoveryTestRepo(t)
+			name := token + ".txt"
+			if where == "history-directory" {
+				name = token + "/safe.txt"
+			}
+			recoveryTestWrite(t, root, name, []byte("ordinary source text\n"), 0644)
+			if where != "untracked" {
+				recoveryTestGit(t, root, "add", "--", name)
+			}
+			if where == "index-only" {
+				if e := os.Remove(filepath.Join(root, name)); e != nil {
+					t.Fatal(e)
+				}
+			}
+			if where == "deleted-history" || where == "history-directory" {
+				recoveryTestGit(t, root, "commit", "-qm", "safe message")
+				tip := strings.TrimSpace(string(recoveryTestGit(t, root, "rev-parse", "HEAD")))
+				if e := recoveryScanClosure(context.Background(), root, []string{tip}, ""); e == nil {
+					t.Fatal("historical credential-bearing tree name passed publication gate")
+				}
+				recoveryTestGit(t, root, "rm", "--", name)
+				recoveryTestGit(t, root, "commit", "-qm", "remove old file")
+			}
+			ctx := withGitObserver(context.Background(), func(args []string) {
+				for _, arg := range args {
+					if arg == "push" || arg == "fetch" || arg == "ls-remote" {
+						t.Fatal("credential filename reached remote operation")
+					}
+				}
+			})
+			if _, e := CaptureRecovery(ctx, root, recoveryTestDescriptor()); e == nil {
+				t.Fatal("credential-bearing filename capture accepted")
+			}
+			if len(recoveryTestGit(t, root, "for-each-ref", "refs/reliant/recovery-pins")) != 0 {
+				t.Fatal("unsafe filename capture pinned")
+			}
+		})
+	}
+}
+
 func TestRecoveryCaptureStagedDeletionRecreation(t *testing.T) {
 	heavyUnderShort(t, "recovery capture uses real local Git plumbing")
 	dir := recoveryTestRepo(t)
