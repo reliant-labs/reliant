@@ -197,7 +197,7 @@ export function authServeCommand(): string {
 
   // The web app's own origin, so the helper's CORS allowlist accepts it. Read
   // from the live location rather than a build constant: the dev port is
-  // allocated per worktree (.dev-ports.sh) and is not knowable at build time.
+  // allocated per worktree (by the dev stack) and is not knowable at build time.
   if (typeof window !== "undefined" && window.location?.origin) {
     parts.push(`RELIANT_WEB_ORIGIN=${window.location.origin}`);
   }

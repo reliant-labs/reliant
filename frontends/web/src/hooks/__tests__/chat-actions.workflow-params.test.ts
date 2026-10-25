@@ -1,26 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRole } from '../../gen/reliant/v1/chat_pb';
-import { buildWorkflowParamsPayload, chatGrpc } from '../chat-grpc';
+import { setTransport } from '../../lib/connect';
+import { mockTransport } from '../../lib/test-utils';
+import { startChat, sendMessage } from '../chat-actions';
+import { buildWorkflowParamsPayload } from '../chat-model';
 
-const mocks = vi.hoisted(() => ({
+// The server, at the transport: each fake receives the request on the wire.
+const mocks = {
   startChat: vi.fn(),
   sendMessage: vi.fn(),
   updateWorkflowParams: vi.fn(),
-}));
+};
 
-vi.mock('../grpc-client', () => ({
-  grpcClient: {
-    chat: () => ({
-      startChat: mocks.startChat,
-      sendMessage: mocks.sendMessage,
-      updateWorkflowParams: mocks.updateWorkflowParams,
-    }),
-  },
-}));
+describe('chat workflow_params payload contracts', () => {
+  afterEach(() => setTransport(null));
 
-describe('chat-grpc workflow_params payload contracts', () => {
   beforeEach(() => {
+    setTransport(
+      mockTransport({
+        'ChatService.StartChat': (req: unknown) => mocks.startChat(req),
+        'ChatService.SendMessage': (req: unknown) => mocks.sendMessage(req),
+        'ChatService.UpdateWorkflowParams': (req: unknown) => mocks.updateWorkflowParams(req),
+      }),
+    );
     mocks.startChat.mockReset();
     mocks.sendMessage.mockReset();
     mocks.updateWorkflowParams.mockReset();
@@ -84,7 +87,7 @@ describe('chat-grpc workflow_params payload contracts', () => {
   });
 
   it('start sends nested workflow_params and preserves selected presets mapping', async () => {
-    await chatGrpc.start({
+    await startChat({
       project_id: 'project-1',
       messages: [{ role: MessageRole.USER, content: 'hello' }],
       workflow_params: {
@@ -92,7 +95,7 @@ describe('chat-grpc workflow_params payload contracts', () => {
           model: { id: 'claude-3-7-sonnet' },
         },
       },
-      selected_presets: {
+      selectedPresets: {
         '': 'workflow-default',
         Agent: 'agent-preset',
       },
@@ -109,8 +112,7 @@ describe('chat-grpc workflow_params payload contracts', () => {
 
   it('sendMessage rejects dotted workflow_params and does not call the gRPC client', async () => {
     await expect(
-      chatGrpc.sendMessage('chat-1', {
-        messages: [{ role: MessageRole.USER, content: 'hello' }],
+      sendMessage('chat-1', 'hello', undefined, {
         workflow_params: {
           'agent.model': 'claude-3-7-sonnet',
         },
@@ -121,8 +123,7 @@ describe('chat-grpc workflow_params payload contracts', () => {
   });
 
   it('sendMessage sends nested workflow_params and preserves selected presets mapping', async () => {
-    await chatGrpc.sendMessage('chat-1', {
-      messages: [{ role: MessageRole.USER, content: 'hello' }],
+    await sendMessage('chat-1', 'hello', undefined, {
       workflow_params: {
         agent: {
           model: { id: 'claude-3-7-sonnet' },

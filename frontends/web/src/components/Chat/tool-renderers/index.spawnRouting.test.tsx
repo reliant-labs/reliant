@@ -57,7 +57,7 @@ describe("ToolContentArea spawn routing", () => {
         ctx={createContext({
           toolName: "spawn_status",
           input: { agent_id: "wf-child-1" },
-          result: { content: "status: running" },
+          result: { name: "spawn_status", content: "status: running" },
           isCompleted: true,
           isExecuting: false,
         })}
@@ -72,7 +72,7 @@ describe("ToolContentArea spawn routing", () => {
         ctx={createContext({
           toolName: "spawn_send",
           input: { agent_id: "wf-child-1", message: "keep going" },
-          result: { content: "queued" },
+          result: { name: "spawn_send", content: "queued" },
           isCompleted: true,
           isExecuting: false,
         })}

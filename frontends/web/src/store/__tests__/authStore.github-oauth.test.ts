@@ -58,7 +58,7 @@ vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 const LOOPBACK_URI = 'http://127.0.0.1:52111/auth/callback'
 
 const asDesktop = () => {
-  ;(window as Window & { electronAPI?: unknown }).electronAPI = {
+  ;(window as unknown as { electronAPI?: unknown }).electronAPI = {
     startOAuthRedirect: startOAuthRedirectMock,
   }
 }
@@ -74,7 +74,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
-  delete (window as Window & { electronAPI?: unknown }).electronAPI
+  delete (window as unknown as { electronAPI?: unknown }).electronAPI
   startOAuthRedirectMock.mockResolvedValue({ redirectUri: LOOPBACK_URI })
   signInWithOAuthMock.mockResolvedValue({
     data: { url: 'https://accounts.google.com/o/oauth2/v2/auth?example=1' },
@@ -169,7 +169,7 @@ describe.each(['google', 'github', 'apple'] as const)('%s sign-in', (provider) =
   it('falls back to the hosted callback in builds with no desktop bridge', async () => {
     // Every build shipped before the loopback receiver existed: electronAPI is
     // present but startOAuthRedirect is undefined.
-    ;(window as Window & { electronAPI?: unknown }).electronAPI = {}
+    ;(window as unknown as { electronAPI?: unknown }).electronAPI = {}
 
     await call(provider)
 

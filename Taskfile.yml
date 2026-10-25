@@ -4,8 +4,8 @@ version: '3'
 # │ reliant's tasks. Born from `forge project rescaffold          │
 # │ Taskfile.yml`, then edited for this repo (P8 lane L1,         │
 # │ research/forge-migration/12-p8-devtooling-plan.md §2/§3).     │
-# │ The Makefile is a set of one-line `make → task` forwarders    │
-# │ for one merge; this file is where the behaviour lives.        │
+# │ This file is where every build, test, generate, lint, pin     │
+# │ and release command lives; there is no Makefile.              │
 # │                                                              │
 # │   task test:affected     Only what your diff reaches (start)  │
 # │   task test:short        Inner loop: Go, -short, cached       │
@@ -331,10 +331,9 @@ tasks:
     # says nothing about them. Integration and e2e tests are guarded by the
     # `integration` and `e2e` build tags, so they are excluded here.
     #
-    # -timeout 300s per package is what the Makefile's `make test` used; P8
-    # moves it toward forge's 120s once the overruns are measured and gated.
-    # Unlike `make test` this never runs `make stop`, which stopped other
-    # agents' environments.
+    # -timeout 300s per package (the retired Makefile's budget); P8 moves it
+    # toward forge's 120s once the overruns are measured and gated. It stops
+    # nothing: other agents' environments are not this task's to touch.
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
@@ -427,18 +426,6 @@ tasks:
     dir: electron
     cmds:
       - npm test --silent
-
-  postgres:up:
-    # The docker-compose dev Postgres (scripts/dev.sh's stack). No test uses
-    # it; it goes with docker-compose.yml (P8 L5).
-    desc: Start this repo's compose dev Postgres on localhost:5433 (scripts/dev.sh's stack; tests do not use it)
-    cmds:
-      - docker compose up -d postgres
-
-  postgres:down:
-    desc: Stop this repo's compose dev Postgres
-    cmds:
-      - docker compose stop postgres
 
   # ── The gate ──────────────────────────────────────────────────────────
 
@@ -569,6 +556,15 @@ tasks:
     cmds:
       - node .github/scripts/sync-controlplane-proto.mjs --check --require
 
+  contract:controlplane:sync:
+    # Pull control-plane main's public contract into proto-vendor/controlplane/
+    # (a `buf export` over its proto/public-api.txt), then regenerate the
+    # clients from it. contract:controlplane:check is the drift gate.
+    desc: "Re-vendor control-plane's public protos into proto-vendor/controlplane/ and regenerate the clients (CONTROL_PLANE_DIR, buf on PATH)"
+    cmds:
+      - node .github/scripts/sync-controlplane-proto.mjs
+      - task: generate:controlplane
+
   licenses:
     desc: "Every Go and npm dependency is on the license allowlist (.license-allowlist, .license-allowlist-npm)"
     cmds:
@@ -611,7 +607,7 @@ tasks:
       - '{{.BUF}} lint'
 
   fmt:
-    # go fmt only: .githooks/pre-commit runs `make fmt` on every commit, so it
+    # go fmt only: .githooks/pre-commit runs `task fmt` on every commit, so it
     # must stay fast and must not rewrite go.mod.
     desc: Format Go code (go fmt)
     cmds:
@@ -667,7 +663,7 @@ tasks:
     # The `controlplane-client` generate hook, alone: the control-plane clients
     # (Go + TS) from proto-vendor/controlplane/, a generated export of
     # control-plane's public contract. To pull a new contract first:
-    # node .github/scripts/sync-controlplane-proto.mjs. Both output dirs are
+    # task contract:controlplane:sync (which also runs this). Both output dirs are
     # replaced wholesale, but only after buf succeeds.
     desc: Regenerate the control-plane clients (gen/controlplane, frontends/web/src/gen/controlplane) from proto-vendor/
     deps: [deps:protoc-gen-es]

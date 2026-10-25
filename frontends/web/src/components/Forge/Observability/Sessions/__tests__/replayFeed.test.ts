@@ -88,7 +88,7 @@ describe("following a live session", () => {
       { events: [], unreadable: 0, nextPageToken: "", resumeToken: "" },
       { events: [], unreadable: 0, nextPageToken: "", resumeToken: "" },
     ];
-    const fetchPage = vi.fn(async () => replies.shift()!);
+    const fetchPage = vi.fn(async (_token: string | undefined) => replies.shift()!);
     const delivered: RrwebEvent[] = [];
     const feed = new ReplayFeed({ fetchPage, onEvents: (e) => delivered.push(...e), onChange: () => {}, live: true, pollMs: 5000, idlePolls: 2, timers });
     feed.start();

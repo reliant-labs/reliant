@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SpawnToolRenderer } from "./SpawnToolRenderer";
 import type { ToolRenderContext } from "./types";
 import { WorkflowState, WorkflowStopReason, MessageRole, ContentBlockType } from "../../../types/chat";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 // Regression guard for spawn: the tool call's own result arrives the moment
 // the child is dispatched — a handle, not the agent's output — while the
@@ -18,9 +20,11 @@ const { sendAgentMessageMock, toastInfoMock, toastErrorMock } = vi.hoisted(() =>
   toastErrorMock: vi.fn(),
 }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-}));
+// The send is ChatService.SendAgentMessage, answered at the transport.
+beforeEach(() =>
+  setTransport(mockTransport({ "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })),
+);
+afterEach(() => setTransport(null));
 
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { info: toastInfoMock, error: toastErrorMock },
@@ -74,7 +78,7 @@ describe("SpawnToolRenderer", () => {
     mockThreadMessages = [];
     mockIsPending = false;
     vi.clearAllMocks();
-    sendAgentMessageMock.mockResolvedValue(undefined);
+    sendAgentMessageMock.mockResolvedValue({ success: true, message: "" });
   });
 
   it("child RUNNING: shows live content, offers the message form, does not pop the last message", () => {
@@ -102,13 +106,7 @@ describe("SpawnToolRenderer", () => {
     fireEvent.click(screen.getByLabelText("Send message to agent"));
 
     await waitFor(() => {
-      expect(sendAgentMessageMock).toHaveBeenCalledWith(
-        "chat-1",
-        "wf-child-1",
-        "please check logs",
-        undefined,
-        expect.any(String),
-      );
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(expect.objectContaining({ chatId: "chat-1", threadId: "wf-child-1", message: "please check logs", clientMessageId: expect.any(String) }));
     });
     expect(input).toHaveValue("");
     expect(toastInfoMock).not.toHaveBeenCalled();

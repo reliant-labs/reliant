@@ -34,7 +34,8 @@
 //   node .github/scripts/sync-controlplane-proto.mjs --check           # verify, fork-safe
 //   node .github/scripts/sync-controlplane-proto.mjs --check --require # verify, authoritative
 //
-// After writing, regenerate the clients: `npm run proto:generate:controlplane`.
+// After writing, regenerate the clients: `task generate:controlplane`
+// (`task contract:controlplane:sync` runs both steps).
 //
 // `--check` re-exports and diffs the whole tree without writing. Without
 // `--require` it SKIPS (exit 0) when there is no control-plane checkout or no
@@ -82,8 +83,8 @@ public is decided by control-plane's \`proto/public-api.txt\`; no operator-only
 (\`*Admin\`) or internal-service API is included.
 
 Nothing here is authored in this repo. To change the contract, change the
-proto in control-plane, then re-run the sync script and
-\`npm run proto:generate:controlplane\`. control-plane's CI fails if this tree
+proto in control-plane, then run \`task contract:controlplane:sync\` (the sync
+script, then the client regeneration). control-plane's CI fails if this tree
 differs from what its protos export.
 
 Generated clients:
@@ -199,7 +200,7 @@ try {
         `proto-vendor/controlplane/ has DRIFTED from control-plane's public contract:\n  ` +
           problems.join("\n  ") +
           `\nThis tree is generated — do not hand-edit it. Regenerate with:\n` +
-          `  node .github/scripts/sync-controlplane-proto.mjs && npm run proto:generate:controlplane`,
+          `  task contract:controlplane:sync`,
       );
     }
     console.log(

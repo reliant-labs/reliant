@@ -25,7 +25,7 @@ import {
 import type { Message } from "../../../types/chat";
 
 const getAttachmentAsBlob = vi.fn(
-  async () => new Blob(["png-bytes"], { type: "image/png" }),
+  async (_id: string) => new Blob(["png-bytes"], { type: "image/png" }),
 );
 
 vi.mock("../../../hooks/attachment-queries", () => ({
@@ -54,7 +54,7 @@ vi.mock("../../../store/chatStore", () => ({
 }));
 
 vi.mock("../../../api/client", () => ({
-  api: { toolCalls: { cancel: vi.fn(), convertToBackground: vi.fn() } },
+  api: {},
 }));
 
 vi.mock("../../../lib/logger", () => ({

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Breadcrumb, ErrorEvent, TransactionEvent } from "@sentry/react";
+import type { Breadcrumb, BrowserOptions, ErrorEvent } from "@sentry/react";
+
+type TransactionEvent = Parameters<NonNullable<BrowserOptions["beforeSendTransaction"]>>[0];
 
 // What the browser hands Sentry is pinned here through the real initSentry():
 // the options it passes to Sentry.init are the privacy boundary, so the test

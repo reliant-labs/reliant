@@ -172,9 +172,9 @@ fi
 print_step "Generating protobuf code..."
 cd "$PROJECT_ROOT"
 if [[ "$VERBOSE" == "true" ]]; then
-    make proto-generate
+    task generate:forge
 else
-    make proto-generate > /dev/null 2>&1
+    task generate:forge > /dev/null 2>&1
 fi
 print_success "Protobuf code generated"
 

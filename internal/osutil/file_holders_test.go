@@ -56,7 +56,7 @@ func TestFileHolders(t *testing.T) {
 // this runs on, which is exactly what made recovery silently inert before.
 func TestFileHolders_RealLsof(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs real lsof, which can take up to holderProbeTimeout (10s) on a loaded host; runs in make test")
+		t.Skip("runs real lsof, which can take up to holderProbeTimeout (10s) on a loaded host; runs in task test")
 	}
 	if runtime.GOOS == "windows" {
 		t.Skip("no holder probe on Windows; fileHolders always reports Unknown by design")

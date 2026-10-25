@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { useProjectStore } from "../../../store/projectStore";
-import { buildWorkflowParamsPayload } from "../../../api/chat-grpc";
+import { buildWorkflowParamsPayload } from "../../../hooks/chat-model";
 
 const CHAT_ID = "chat-picker";
 

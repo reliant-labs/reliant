@@ -29,9 +29,9 @@ const (
 type DaemonInstanceConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unset: the instance's own directory under ~/.reliant/instances, derived
-	// from the instance key. Containers set it to the mounted volume
-	// (docker-compose.yml, the workspace operator), where derivation would put
-	// the daemon's state on the ephemeral filesystem.
+	// from the instance key. Containers set it to the mounted volume (the
+	// workspace operator's pods), where derivation would put the daemon's state
+	// on the ephemeral filesystem.
 	DataDir string `protobuf:"bytes,1,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
 	// Unset: the account of the stored credential, else the default instance.
 	Account string `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
@@ -104,8 +104,9 @@ type DaemonConfig struct {
 	GatewayUrl string `protobuf:"bytes,2,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	// The local daemon gateway's daemon port: the port `reliant server gateway`
 	// listens for daemons on, under the same TOOLS_DAEMON_PORT the gateway
-	// reads (GatewayConfig). Electron and scripts/dev.sh export it to both. It
-	// is dialled only when no gateway URL is known. Not the port THIS daemon
+	// reads (GatewayConfig). Electron and the dev stack (control-plane's
+	// `forge env up dev`) export it to both. It is dialled only when no gateway
+	// URL is known. Not the port THIS daemon
 	// listens on: that is listen_port.
 	GatewayPort int32 `protobuf:"varint,3,opt,name=gateway_port,json=gatewayPort,proto3" json:"gateway_port,omitempty"`
 	// Unset: TLS when a cert and key are given or the URL is https, else h2c.

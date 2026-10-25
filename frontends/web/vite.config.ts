@@ -159,9 +159,9 @@ export default defineConfig({
     host: "127.0.0.1",
     // PORT wins over FRONTEND_PORT.
     //
-    // FRONTEND_PORT is this repo's own dev-script convention (scripts/
-    // find-ports.js exports it, and a dev shell usually still has it set from
-    // whichever stack it started). PORT is what forge FORCE-injects from the
+    // FRONTEND_PORT is the older dev-script convention, and a dev shell often
+    // still has it set from whichever stack it started. PORT is what forge
+    // FORCE-injects from the
     // KCL `port` binding, above the parent shell, precisely so the launcher's
     // allocation is authoritative.
     //
@@ -202,7 +202,7 @@ export default defineConfig({
       //
       // The two backends are HTTP/h2c Connect; ws:false avoids Vite
       // upgrading the connection unnecessarily. Targets come from the
-      // env vars cloud-dev.sh exports (VITE_CONTROL_PLANE_API_URL,
+      // env vars the dev stack exports (VITE_CONTROL_PLANE_API_URL,
       // VITE_API_URL), with sensible standalone-dev defaults.
       // NOTE: /auth/github/callback is intentionally NOT proxied — the app owns
       // it as an SPA route (GitHubOAuthCallback) so dev behaves exactly like

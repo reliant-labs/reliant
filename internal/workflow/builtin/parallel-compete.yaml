@@ -361,7 +361,7 @@ nodes:
         # Staged in the candidate's own throwaway worktree; gitignored files,
         # the files create_worktree copied in, and nested checkouts (which get
         # their own patch) stay out.
-        pathspec=(. ':(exclude).env' ':(exclude).env.local' ':(exclude).dev-ports.sh')
+        pathspec=(. ':(exclude).env' ':(exclude).env.local')
         for other in "${repos[@]}"; do
           case "$other" in "$rel"/*) pathspec+=(":(exclude)${other#"$rel"/}") ;; esac
         done

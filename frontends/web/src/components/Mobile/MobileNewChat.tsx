@@ -17,7 +17,7 @@
  * React Query detail and list caches, initializes per-chat store state, plants
  * the optimistic first user message, and marks the chat RUNNING so the
  * thinking indicator shows before the first stream frame. A "simpler" direct
- * `api.chatsV2.start` here would land on `/m/chats/$chatId` with an empty
+ * `startChat` (hooks/chat-actions) here would land on `/m/chats/$chatId` with an empty
  * transcript and no spinner until the stream caught up.
  *
  * Workspace: defaults to the project's main worktree, the same default the

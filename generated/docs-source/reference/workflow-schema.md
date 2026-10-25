@@ -4,7 +4,7 @@ GENERATED FILE - DO NOT EDIT DIRECTLY
 
 Source: proto messages V2Workflow, V2Edge, V2EdgeCase in workflow_v2.proto
 Generator: tools/docgen/schema
-Regenerate: make generate-schema
+Regenerate: task generate:docs:schema
 =============================================================================
 -->
 

@@ -367,8 +367,8 @@ export function ComputeStep({
   //      may also have one from a prior session).
   //   2. User clicked "I'll connect my own", followed the instructions,
   //      and their newly-started daemon just connected.
-  //   3. The cloud-dev `make dev-electron` pairing: the Electron-spawned
-  //      local daemon registers with the control-plane right after sign-in.
+  //   3. The dev stack's Electron pairing (control-plane's `forge env up
+  //      dev`): the Electron-spawned local daemon registers with the control-plane right after sign-in.
   //      Its lifecycle status flips ACTIVE the moment the NATS connect
   //      event lands; in the gap between registration and that flip it
   //      sits at IDLE — we still treat it as "user has a daemon" so the

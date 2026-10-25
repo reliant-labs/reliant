@@ -20,7 +20,6 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import Status from "../forge-ui/status";
-import { api } from "@/api/client";
 import { useChatModelFallback } from "@/hooks/useChatAccountUsage";
 import { useProviderAccounts } from "@/hooks/provider-account-queries";
 import { earliestResettingAccount } from "@/lib/usageLimitFallback";
@@ -30,6 +29,7 @@ import {
   usageLimitResumeLine,
   type UsageLimitWait,
 } from "@/lib/usageLimitWait";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface UsageLimitWaitNoteProps {
   chatId: string;
@@ -52,7 +52,7 @@ export function UsageLimitWaitNote({ chatId, wait, onStop }: UsageLimitWaitNoteP
   const now = useNow();
   const retry = useMutation({
     mutationFn: (useModel?: string) =>
-      useModel ? api.chatsV2.retryUsageLimitWait(chatId, useModel) : api.chatsV2.retryUsageLimitWait(chatId),
+      useModel ? chatActions.retryUsageLimitWait(chatId, useModel) : chatActions.retryUsageLimitWait(chatId),
   });
   const fallback = useChatModelFallback(chatId);
   const accounts = useProviderAccounts();

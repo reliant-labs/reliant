@@ -480,7 +480,7 @@ func (s *Server) setCORS(w http.ResponseWriter, r *http.Request) {
 // origins of the dev web server's FRONTEND_PORT (CLIConfig's web block).
 //
 // They are load-bearing rather than a convenience: the web dev server's port
-// is allocated per worktree (see .dev-ports.sh FRONTEND_PORT), so a worktree's
+// is allocated per worktree (the dev stack's FRONTEND_PORT), so a worktree's
 // Vite origin is never one of the static defaults. Both hosts — `auth serve`
 // and the daemon-hosted helper — pass them, so neither 403s a request the
 // other allows with an error that names the origin and not the reason.
@@ -505,7 +505,7 @@ func buildAllowedOrigins(extra []string) map[string]bool {
 	origins := []string{
 		hostedWebOrigin,
 		"http://localhost:5173", // vite dev default (frontends/web/README.md)
-		"http://localhost:3000", // common dev port (frontends/web/src/routes.tsx, scripts/dev.sh)
+		"http://localhost:3000", // common dev port (frontends/web/src/routes.tsx)
 	}
 	origins = append(origins, extra...)
 

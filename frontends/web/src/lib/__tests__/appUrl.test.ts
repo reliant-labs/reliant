@@ -10,7 +10,7 @@ import { getAppURL } from '@/lib/constants'
  * identity provider can redirect back to.
  */
 
-type TestWindow = Window & { electronAPI?: unknown }
+type TestWindow = Omit<Window, 'electronAPI'> & { electronAPI?: unknown }
 
 const setOrigin = (origin: string) => {
   Object.defineProperty(window, 'location', {

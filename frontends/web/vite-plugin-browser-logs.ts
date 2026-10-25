@@ -12,7 +12,7 @@ import type { Plugin } from "vite";
  * admin-server, reliant-api-server and the temporal worker, in one directory,
  * with one grep.
  *
- * An earlier version of this plugin wrote its own file under `data/logs/`.
+ * An earlier version of this plugin wrote its own file under `data/`.
  * That was a mistake worth naming: it created a FOURTH log location in a
  * project that already had too many, and it was invisible to anyone following
  * the forge logs — which is where everything else already is.

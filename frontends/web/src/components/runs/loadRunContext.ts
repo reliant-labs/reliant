@@ -16,7 +16,7 @@
  * later lands on this chat rather than whatever was open before.
  */
 
-import { api, type Chat } from "@/api/client";
+import type { Chat } from "@/api/client";
 import { seedChatDetail } from "@/hooks/chat-queries";
 import { useChatStore } from "@/store/chatStore";
 import { useChatNavigationStore } from "@/store/chatNavigationStore";
@@ -24,6 +24,7 @@ import { useProjectStore } from "@/store/projectStore";
 import { fetchProjects } from "@/hooks/project-queries";
 import { useWorktreeStore } from "@/store/worktreeStore";
 import { resolveWorktree } from "../../hooks/worktree-queries";
+import * as chatActions from "../../hooks/chat-actions";
 
 export class RunProjectUnavailableError extends Error {
   constructor() {
@@ -34,7 +35,7 @@ export class RunProjectUnavailableError extends Error {
 
 /** Load a chat and make it the active chat in its project. Returns the chat. */
 export async function loadRunContext(chatId: string): Promise<Chat> {
-  const chat = await api.chatsV2.get(chatId);
+  const chat = await chatActions.getChat(chatId);
   // Seed the detail cache so the transcript does not flash "new chat" while
   // it would otherwise be fetching the chat we already have.
   seedChatDetail(chat);

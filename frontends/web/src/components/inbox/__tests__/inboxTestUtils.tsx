@@ -55,7 +55,10 @@ const base = {
   waitingSince: new Date(Date.now() - 20 * 60_000).toISOString(),
 };
 
-export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"): InboxItem {
+/** A fixture's overrides: any fields but the message's own type tag. */
+type Overrides<T> = Partial<Omit<T, "$typeName">>;
+
+export function approvalItem(overrides: Overrides<InboxItem> = {}, id = "appr-1"): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.APPROVAL,
@@ -72,7 +75,7 @@ export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"):
   });
 }
 
-export function questionItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function questionItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.QUESTION,
@@ -93,7 +96,7 @@ export function questionItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function waitingItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.WAITING_FOR_MACHINE,
@@ -103,7 +106,7 @@ export function waitingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function failingItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_FAILING,
     itemId: "automation_failing:evt-9",
@@ -128,7 +131,7 @@ export function failingItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function launchFailedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_LAUNCH_FAILED,
     itemId: "automation_launch_failed:evt-5",
@@ -146,7 +149,7 @@ export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem 
   });
 }
 
-export function needsSetupItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function needsSetupItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.AUTOMATION_NEEDS_SETUP,
     itemId: "automation_needs_setup:trg-4:repos",
@@ -164,7 +167,7 @@ export function needsSetupItem(overrides: Partial<InboxItem> = {}): InboxItem {
   });
 }
 
-export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
+export function runFinishedItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,
     kind: InboxItemKind.RUN_FINISHED,
@@ -177,8 +180,8 @@ export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
 }
 
 export function storageItem(
-  overrides: Partial<InboxItem> = {},
-  storage: Partial<InboxStorage> = {},
+  overrides: Overrides<InboxItem> = {},
+  storage: Overrides<InboxStorage> = {},
 ): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.STORAGE,
