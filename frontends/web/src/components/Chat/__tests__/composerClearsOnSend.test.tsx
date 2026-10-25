@@ -26,10 +26,6 @@ const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn(),
 }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-}));
-
 vi.mock("../../../lib/toast-manager", () => ({
   toast: {
     error: toastErrorMock,
@@ -107,7 +103,7 @@ import { emptyChatPullReads } from "@/test/chatPullReads";
 
 // ChatService's pull reads are generated-key reads, so they are answered at
 // the transport.
-beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads() })));
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
 afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {

@@ -29,7 +29,6 @@ import { ChatActionButtons } from "./ChatActionButtons";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
 import { DragDropOverlay } from "./DragDropOverlay";
-import { api } from "../../api/client";
 import type { ConnectionStatus } from "../../types/streaming";
 import { cn } from "../../lib/utils";
 import Tooltip from "../forge-ui/tooltip";
@@ -40,7 +39,7 @@ import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
-import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
+import { QUEUED_SENDER_KIND_HUMAN } from "../../hooks/chat-model";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
@@ -97,6 +96,7 @@ import {
   type QueuedRow,
 } from "../../lib/pendingSends";
 import { initEventBus } from "../../lib/events";
+import * as chatActions from "../../hooks/chat-actions";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -1056,7 +1056,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           threadId: selectedThreadId,
           changedParams,
         });
-        await api.chatsV2.updateWorkflowParams(chatId, changedParams, selectedThreadId);
+        await chatActions.updateWorkflowParams(chatId, changedParams, selectedThreadId);
         // Update the baseline to include synced values so the sync button clears.
         // Also clear threadParamValues so UI falls back to the updated baseline.
         if (threadParamsOverride) {
@@ -1427,7 +1427,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           message: row,
         });
         handleClearInput();
-        const response = await chatGrpc.sendAgentMessage(
+        const response = await chatActions.sendAgentMessage(
           chatId,
           targetThreadId,
           message,
@@ -1560,7 +1560,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           try {
             // Empty threadId targets the main thread, which is what "compact
             // this conversation" means from the composer.
-            await api.chatsV2.compact(chatId, selectedThreadId ?? "");
+            await chatActions.compactChat(chatId, selectedThreadId ?? "");
             toast.success("Compacting conversation…");
           } catch (error) {
             logger.error("[ChatInput] Compaction failed", error);

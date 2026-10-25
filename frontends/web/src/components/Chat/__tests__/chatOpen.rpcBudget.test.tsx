@@ -72,6 +72,8 @@ function spyRpcs() {
   const getWorkflow = vi.fn(() => ({}));
   const getWorkflowExecutions = vi.fn(() => ({}));
   const listQueuedAgentMessages = vi.fn(() => ({ messages: [] }));
+  const getChat = vi.fn((req: { chatId: string }) => ({ chat: chat(req.chatId) }));
+  const listMessages = vi.fn(() => ({ messages: [], total: 0, hasMore: false }));
   setTransport(
     mockTransport({
       "QuestionService.ListPendingQuestions": listPendingQuestions,
@@ -81,19 +83,13 @@ function spyRpcs() {
       "WorkflowService.GetWorkflow": getWorkflow,
       "ChatService.GetWorkflowExecutions": getWorkflowExecutions,
       "ChatService.ListQueuedAgentMessages": listQueuedAgentMessages,
+      "ChatService.GetChat": (req: unknown) => getChat(req as { chatId: string }),
+      "ChatService.ListMessages": listMessages,
     }),
   );
   counters = [
-    { name: "GetChat", spy: vi.spyOn(api.chatsV2, "get").mockImplementation(async (id: string) => chat(id) as never) },
-    {
-      name: "ListMessages",
-      spy: vi.spyOn(api.chatsV2, "listMessages").mockResolvedValue({
-        messages: [],
-        total: 0,
-        hasMore: false,
-        oldestSeq: 0,
-      } as never),
-    },
+    { name: "GetChat", spy: getChat },
+    { name: "ListMessages", spy: listMessages },
     { name: "ListApprovalsByChat", spy: listApprovalsByChat },
     { name: "ListPendingQuestions", spy: listPendingQuestions },
     { name: "GetWorkflowExecutions", spy: getWorkflowExecutions },

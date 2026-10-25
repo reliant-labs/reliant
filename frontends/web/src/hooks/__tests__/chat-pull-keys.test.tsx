@@ -21,7 +21,6 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-li
 import { QueryClientProvider, type QueryKey } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from "@/api/client";
 import {
   ChatState,
   WorkflowExecutionView,
@@ -60,6 +59,7 @@ const server = {
   searchChats: vi.fn(),
   updateChatState: vi.fn(),
   adoptChat: vi.fn(),
+  sendMessage: vi.fn(),
 };
 
 function calls(fake: ReturnType<typeof vi.fn>): number {
@@ -120,6 +120,7 @@ beforeEach(() => {
       "ChatService.SearchChats": (req) => server.searchChats(req),
       "ChatService.UpdateChatState": (req) => server.updateChatState(req),
       "ChatService.AdoptChat": (req) => server.adoptChat(req),
+      "ChatService.SendMessage": (req) => server.sendMessage(req),
       // The chat list a chat search falls back on.
       "ChatService.ListChats": { response: { chats: [] } },
     }),
@@ -269,21 +270,14 @@ describe("the two key families stay apart", () => {
   it("a SendMessage refetches none of the moved reads", async () => {
     await mountEveryRead();
     queryClient.setQueryData(chatKeys.detail(CHAT), { id: CHAT, projectId: PROJECT, title: "t", workflowId: THREAD });
-    vi.spyOn(api.chatsV2, "sendMessage").mockResolvedValue({
-      chat_id: CHAT,
-      workflow_id: THREAD,
-      run_id: "run-1",
-      status: "running",
-      message_id: "m-1",
-      queued: false,
-    } as never);
+    server.sendMessage.mockReturnValue({ chatId: CHAT, workflowId: THREAD, runId: "run-1", messageId: "m-1" });
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const before = movedReadCalls();
 
     await act(() => useChatStore.getState().sendMessage(CHAT, "ship it", undefined, {}));
     await settle();
 
-    expect(api.chatsV2.sendMessage).toHaveBeenCalled();
+    expect(server.sendMessage).toHaveBeenCalled();
     expect(movedReadCalls()).toEqual(before);
     const invalidated = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
     expect(invalidated.filter((key) => isUnder(key, chatServiceKeys.all))).toEqual([]);

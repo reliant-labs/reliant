@@ -44,7 +44,7 @@ import { workflowExecutionsAnswer } from "@/test/chatPullReads";
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
 import { WorkflowExecutionView, WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import { triggerRefetch } from "../../store/refetchStore";
-import type { WorkflowExecutionData } from "../../api/chat-grpc";
+import type { WorkflowExecutionData } from "../chat-model";
 
 // Build a minimal execution node — only `status` matters for the derived
 // hasRunningWorkflow flag; the rest is cast away.

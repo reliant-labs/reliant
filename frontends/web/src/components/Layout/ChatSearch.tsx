@@ -10,10 +10,11 @@ import { useChat, useChatList } from "../../hooks/chat-queries";
 import { useChatSearch } from "../../hooks/chat-pull-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { api, type Message } from "../../api/client";
+import type { Message } from "../../api/client";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { requestScrollToMessage } from "../../lib/scrollToMessage";
 import { resolveWorktree } from "../../hooks/worktree-queries";
+import * as chatActions from "../../hooks/chat-actions";
 
 type SearchMode = "history" | "current";
 
@@ -144,7 +145,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
     setIsLoading(true);
     try {
       // Fetch messages for current chat
-      const result = await api.chatsV2.listMessages(activeChatId);
+      const result = await chatActions.listMessages(activeChatId);
       const messages = result.messages;
       const query = searchQuery.toLowerCase();
       

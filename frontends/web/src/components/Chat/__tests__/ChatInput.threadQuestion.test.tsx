@@ -37,10 +37,6 @@ const { sendAgentMessageMock, answerQuestionMock, pending } = vi.hoisted(() => (
   pending: { questions: [] as QuestionInfo[] },
 }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
@@ -94,7 +90,7 @@ import { emptyChatPullReads } from "@/test/chatPullReads";
 
 // ChatService's pull reads are generated-key reads, so they are answered at
 // the transport.
-beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads() })));
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
 afterEach(() => setTransport(null));
 
 function askUser(id: string, threadId: string, prompt: string): QuestionInfo {
@@ -158,7 +154,7 @@ describe("the composer answers the question of the thread in view", () => {
     expect(screen.queryByText("Spawn A: which schema?")).toBeNull();
   });
 
-  it("leaves the main thread's composer alone when only spawns are waiting", () => {
+  it("leaves the main thread's composer alone when only spawns are waiting", async () => {
     renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={true} />);
 
     expect(screen.queryByText("Spawn A: which schema?")).toBeNull();
@@ -170,12 +166,10 @@ describe("the composer answers the question of the thread in view", () => {
     fireEvent.input(editor);
     fireEvent.keyDown(editor, { key: "Enter", shiftKey: false, metaKey: false, ctrlKey: false });
 
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(
-      CHAT_ID,
-      CHAT_ID,
-      "keep going",
-      [],
-      expect.any(String),
+    await waitFor(() =>
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: CHAT_ID, threadId: CHAT_ID, message: "keep going", attachments: [], clientMessageId: expect.any(String) }),
+      ),
     );
     expect(answerQuestionMock).not.toHaveBeenCalled();
   });

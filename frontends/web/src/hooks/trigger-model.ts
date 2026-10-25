@@ -27,7 +27,7 @@ import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protob
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { jsToProtoValue, protoValueToJs } from "../api/proto-utils";
-import { replayEventToProto, type ReplayEventInput } from "../api/chat-grpc";
+import { replayEventToProto, type ReplayEventInput } from "./chat-model";
 import {
   ActingIdentity,
   type EnableWorkflowRequestSchema,

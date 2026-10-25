@@ -5,7 +5,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { DEFAULT_WORKFLOW, usePreferencesStore } from "../../store/preferencesStore";
-import { chatGrpc } from "../../api/chat-grpc";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface UseChatInputStateProps {
   chatId?: string;
@@ -231,7 +231,7 @@ export function useChatInputState({
     if (chatId && isPendingChat) {
       try {
         const workflowName = workflow ?? effectiveDefaultWorkflow;
-        const updatedChat = await chatGrpc.update(chatId, { workflow_name: workflowName });
+        const updatedChat = await chatActions.updateChat(chatId, { workflow_name: workflowName });
         // Home the updated chat into the React Query caches (the single source
         // of truth): replace the detail entry and patch workflowName in the
         // list so the sidebar stays in sync.

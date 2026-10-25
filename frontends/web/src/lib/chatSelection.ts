@@ -8,9 +8,9 @@ import {
   type ChatSelection,
 } from "../gen/reliant/v1/chat_pb";
 import type { JsonObject } from "@bufbuild/protobuf";
-import { api } from "../api/client";
 import { getChatSelection, setChatSelection } from "../hooks/chat-queries";
 import { nestChangedParams, unsyncedParams } from "./paramUtils";
+import * as chatActions from "../hooks/chat-actions";
 
 /**
  * A chat's selection as the update stream carries it (a CHAT_CONFIG_CHANGED
@@ -85,7 +85,7 @@ export async function pushChatParams(
 
   const patch = nestChangedParams(changed, params, groups);
   const cached = getChatSelection(chatId);
-  const response = await api.chatsV2.updateWorkflowParams(
+  const response = await chatActions.updateWorkflowParams(
     chatId,
     patch,
     undefined,
