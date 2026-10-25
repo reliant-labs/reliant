@@ -1,10 +1,10 @@
 // GlobalSearch - Search across all files in the workspace
 import Tooltip from "../forge-ui/tooltip";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, Loader2, FileText, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { searchFiles, type SearchResult, type SearchMatch } from "../../api/fileSystem";
+import { useFileSearch, type SearchMatch } from "../../hooks/file-system-queries";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { isNoMachineError } from "../../lib/daemon-errors";
 import { NoMachineState } from "../NoMachineState";
@@ -19,12 +19,6 @@ interface GlobalSearchProps {
 
 export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [totalMatches, setTotalMatches] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // The account has no machine at all (lib/daemon-errors isNoMachineError): offer to connect one.
-  const [noMachine, setNoMachine] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -38,12 +32,43 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const currentProject = useProjectStore((state) => state.currentProject);
   
   // Use the global active worktree (from worktreeStore) as the single source of truth
   const effectiveWorktreeId = useActiveWorktreeId();
+
+  // Debounced; the term and every option are the key, so changing an option
+  // searches again.
+  const search = useFileSearch(query, {
+    worktreeId: effectiveWorktreeId,
+    caseSensitive,
+    filePattern,
+    maxResults: 100,
+    contextLines: 2,
+    enabled: isOpen,
+  });
+  const { results, totalMatches } = search;
+  const isLoading = search.isSearching;
+  // Search runs on the machine, so with none connected the raw error is
+  // `[internal] unavailable: no daemon connected` — meaningless in a search
+  // box. Say what's actually true instead. With no machine at all
+  // (lib/daemon-errors isNoMachineError), offer to connect one.
+  const noMachine = !!search.error && isNoMachineError(search.error);
+  const error = !search.error || noMachine
+    ? null
+    : isDaemonConnectingError(search.error)
+      ? "Your machine is starting — search will work once it's online."
+      : search.error.message || "Search failed";
+
+  // Each new answer: expand every file for better visibility, and highlight
+  // the first item.
+  useEffect(() => {
+    if (results.length > 0) {
+      setExpandedFiles(new Set(results.map((r) => r.path)));
+    }
+    setHighlightedIndex(0);
+  }, [results]);
   
   // Focus input when opened
   useEffect(() => {
@@ -52,86 +77,11 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     } else {
       // Clear state when closed
       setQuery("");
-      setResults([]);
-      setTotalMatches(0);
-      setError(null);
       setExpandedFiles(new Set());
       setHighlightedIndex(0);
       setHoveredIndex(null);
     }
   }, [isOpen]);
-  
-  // Debounced search
-  const performSearch = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim() || !currentProject) {
-      setResults([]);
-      setTotalMatches(0);
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
-    setNoMachine(false);
-    
-    try {
-      const response = await searchFiles(searchQuery, {
-        worktreeId: effectiveWorktreeId,
-        caseSensitive,
-        filePattern: filePattern || undefined,
-        maxResults: 100,
-        contextLines: 2,
-      });
-      
-      setResults(response.results);
-      setTotalMatches(response.totalMatches);
-      
-      // Auto-expand all results for better visibility
-      if (response.results.length > 0) {
-        setExpandedFiles(new Set(response.results.map(r => r.path)));
-      }
-      
-      // Reset highlighted index to first item
-      setHighlightedIndex(0);
-    } catch (err) {
-      // Search runs on the machine, so with none connected the raw error is
-      // `[internal] unavailable: no daemon connected` — meaningless in a
-      // search box. Say what's actually true instead.
-      if (isDaemonConnectingError(err)) {
-        setError("Your machine is starting — search will work once it's online.");
-        return;
-      }
-      if (isNoMachineError(err)) {
-        setNoMachine(true);
-        return;
-      }
-      console.error("Search failed:", err);
-      setError(err instanceof Error ? err.message : "Search failed");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentProject, effectiveWorktreeId, caseSensitive, filePattern]);
-  
-  // Handle search input change with debounce
-  const handleQueryChange = (value: string) => {
-    setQuery(value);
-    
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    
-    searchTimeoutRef.current = setTimeout(() => {
-      performSearch(value);
-    }, 300);
-  };
-  
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
   
   // Handle keyboard navigation - works from input or modal
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -307,7 +257,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search in files..."
             className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground"
@@ -375,7 +325,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
           {noMachine ? (
             <NoMachineState
               purpose="search this project"
-              onMachineConnected={() => void performSearch(query)}
+              onMachineConnected={search.refetch}
               className="h-auto"
             />
           ) : error ? (

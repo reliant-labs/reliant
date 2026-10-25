@@ -24,7 +24,6 @@ import { SettingsService } from "../gen/reliant/v1/settings_pb";
 import { MCPService } from "../gen/reliant/v1/mcp_pb";
 import { WorkflowService } from "../gen/reliant/v1/workflow_pb";
 import { ScenarioService } from "../gen/reliant/v1/scenario_pb";
-import { FileSystemService } from "../gen/reliant/v1/filesystem_pb";
 import { BackgroundService } from "../gen/reliant/v1/background_pb";
 import { PackageCommandsService } from "../gen/reliant/v1/package_commands_pb";
 import { StreamingService } from "../gen/reliant/v1/streaming_pb";
@@ -65,9 +64,6 @@ export const createMessageClient = (): Client<typeof MessageService> => connectC
 export const createSettingsClient = (): Client<typeof SettingsService> => connectClient(SettingsService);
 export const createMCPClient = (): Client<typeof MCPService> => connectClient(MCPService);
 export const createWorkflowClient = (): Client<typeof WorkflowService> => connectClient(WorkflowService);
-export const createFileSystemClient = (): Client<typeof FileSystemService> =>
-  connectClient(FileSystemService);
-export const createDaemonFileSystemClient = createFileSystemClient;
 export const createBackgroundClient = (): Client<typeof BackgroundService> =>
   connectClient(BackgroundService);
 export const createPackageCommandsClient = (): Client<typeof PackageCommandsService> =>
@@ -96,8 +92,6 @@ export const getMessageClient = createMessageClient;
 export const getSettingsClient = createSettingsClient;
 export const getMCPClient = createMCPClient;
 export const getWorkflowClient = createWorkflowClient;
-export const getFileSystemClient = createFileSystemClient;
-export const getDaemonFileSystemClient = createDaemonFileSystemClient;
 export const getBackgroundClient = createBackgroundClient;
 export const getPackageCommandsClient = createPackageCommandsClient;
 export const getStreamingClient = createStreamingClient;
@@ -117,8 +111,6 @@ export const grpcClient = {
   settings: getSettingsClient,
   mcp: getMCPClient,
   workflow: getWorkflowClient,
-  filesystem: getFileSystemClient,
-  daemonFilesystem: getDaemonFileSystemClient,
   background: getBackgroundClient,
   packageCommands: getPackageCommandsClient,
   streaming: getStreamingClient,
