@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
-const getWorkflowByDraftId = vi.fn();
-vi.mock("../../../api/workflow-grpc", () => ({
-  getWorkflowByDraftId: (...args: unknown[]) => getWorkflowByDraftId(...args),
+const fetchWorkflow = vi.fn();
+vi.mock("../../../hooks/workflow-queries", () => ({
+  fetchWorkflow: (...args: unknown[]) => fetchWorkflow(...args),
 }));
 
 import { useWorkflowDraftSync } from "./useWorkflowDraftSync";
@@ -35,17 +35,18 @@ function setup(overrides: Partial<Parameters<typeof useWorkflowDraftSync>[0]> = 
 
 describe("useWorkflowDraftSync", () => {
   beforeEach(() => {
-    getWorkflowByDraftId.mockReset();
+    fetchWorkflow.mockReset();
   });
 
   it("refetches and applies a newer version", async () => {
-    getWorkflowByDraftId.mockResolvedValue(remote(4));
+    fetchWorkflow.mockResolvedValue(remote(4));
     const { onRemoteUpdate } = setup();
 
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 4 }));
 
     await waitFor(() => expect(onRemoteUpdate).toHaveBeenCalledTimes(1));
-    expect(getWorkflowByDraftId).toHaveBeenCalledWith("p1", "d1");
+    // An editor load bypasses the cache: its version gates the next save.
+    expect(fetchWorkflow).toHaveBeenCalledWith("p1", { draftId: "d1" }, { fresh: true });
     expect(onRemoteUpdate.mock.calls[0][0].version).toBe(4);
   });
 
@@ -57,25 +58,25 @@ describe("useWorkflowDraftSync", () => {
       publishDraftUpdate({ draftId: "d1", slug: "wf", version: 2 });
     });
 
-    expect(getWorkflowByDraftId).not.toHaveBeenCalled();
+    expect(fetchWorkflow).not.toHaveBeenCalled();
     expect(onRemoteUpdate).not.toHaveBeenCalled();
   });
 
   it("ignores updates for other drafts", () => {
     const { onRemoteUpdate } = setup();
     act(() => publishDraftUpdate({ draftId: "other", slug: "x", version: 9 }));
-    expect(getWorkflowByDraftId).not.toHaveBeenCalled();
+    expect(fetchWorkflow).not.toHaveBeenCalled();
     expect(onRemoteUpdate).not.toHaveBeenCalled();
   });
 
   it("shows the notice instead of applying when the canvas has unsaved edits", async () => {
-    getWorkflowByDraftId.mockResolvedValue(remote(4));
+    fetchWorkflow.mockResolvedValue(remote(4));
     const { onRemoteUpdate, onModifiedElsewhere } = setup({ hasModifications: true });
 
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 4 }));
 
     expect(onModifiedElsewhere).toHaveBeenCalledTimes(1);
-    expect(getWorkflowByDraftId).not.toHaveBeenCalled();
+    expect(fetchWorkflow).not.toHaveBeenCalled();
     expect(onRemoteUpdate).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -91,12 +92,12 @@ describe("useWorkflowDraftSync", () => {
     hook.rerender({ ...props, isSaving: false, version: 4 });
 
     await Promise.resolve();
-    expect(getWorkflowByDraftId).not.toHaveBeenCalled();
+    expect(fetchWorkflow).not.toHaveBeenCalled();
     expect(onRemoteUpdate).not.toHaveBeenCalled();
   });
 
   it("applies a push from elsewhere that arrives mid-save with a version above the saved one", async () => {
-    getWorkflowByDraftId.mockResolvedValue(remote(5));
+    fetchWorkflow.mockResolvedValue(remote(5));
     const { hook, props, onRemoteUpdate } = setup({ isSaving: true });
 
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 5 }));
@@ -120,18 +121,18 @@ describe("useWorkflowDraftSync", () => {
 
   it("never applies an older fetch that resolves after a newer one (out of order)", async () => {
     const resolvers: Array<(v: unknown) => void> = [];
-    getWorkflowByDraftId.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
+    fetchWorkflow.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
     const { onRemoteUpdate } = setup();
 
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 4 }));
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 5 }));
     // Single-flight: the second push did not start a second concurrent fetch.
-    expect(getWorkflowByDraftId).toHaveBeenCalledTimes(1);
+    expect(fetchWorkflow).toHaveBeenCalledTimes(1);
 
     await act(async () => resolvers[0](remote(5)));
     await waitFor(() => expect(onRemoteUpdate).toHaveBeenCalledTimes(1));
     // The queued refetch returns a stale version and is discarded.
-    await waitFor(() => expect(getWorkflowByDraftId).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchWorkflow).toHaveBeenCalledTimes(2));
     await act(async () => resolvers[1](remote(4)));
     expect(onRemoteUpdate).toHaveBeenCalledTimes(1);
     expect(onRemoteUpdate.mock.calls[0][0].version).toBe(5);
@@ -144,7 +145,7 @@ describe("useWorkflowDraftSync", () => {
     act(() => publishDraftUpdate({ draftId: "d1", slug: "wf", version: 3, deleted: true }));
 
     expect(onDeleted).toHaveBeenCalledTimes(1);
-    expect(getWorkflowByDraftId).not.toHaveBeenCalled();
+    expect(fetchWorkflow).not.toHaveBeenCalled();
     expect(onRemoteUpdate).not.toHaveBeenCalled();
     expect(onModifiedElsewhere).not.toHaveBeenCalled();
   });

@@ -41,9 +41,9 @@ import {
 import {
   useCreateTrigger,
   useProjectDaemonInstalls,
-  useProjectWorkflowList,
   useUpdateTrigger,
 } from "@/hooks/trigger-queries";
+import { useProjectWorkflowList } from "@/hooks/workflow-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { describeSchedule } from "@/lib/cronText";
 import { cn } from "@/lib/utils";

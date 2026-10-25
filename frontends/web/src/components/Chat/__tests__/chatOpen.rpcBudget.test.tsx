@@ -40,7 +40,6 @@ vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { api } from "../../../api/client";
 import { chatGrpc } from "../../../api/chat-grpc";
-import { workflowGrpc } from "../../../api/workflow-grpc";
 import { invalidatePresets } from "../../../hooks/preset-queries";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
@@ -71,12 +70,14 @@ function spyRpcs() {
   const listApprovalsByChat = vi.fn(() => ({ approvals: [] }));
   const listPresetsForWorkflow = vi.fn(() => ({ presets: [], invalidPresets: [] }));
   const getDefaultPresetsBatch = vi.fn(() => ({ presetsByWorkflow: {} }));
+  const getWorkflow = vi.fn(() => ({}));
   setTransport(
     mockTransport({
       "QuestionService.ListPendingQuestions": listPendingQuestions,
       "ApprovalService.ListApprovalsByChat": listApprovalsByChat,
       "PresetService.ListPresetsForWorkflow": listPresetsForWorkflow,
       "PresetService.GetDefaultPresetsBatch": getDefaultPresetsBatch,
+      "WorkflowService.GetWorkflow": getWorkflow,
     }),
   );
   counters = [
@@ -100,10 +101,7 @@ function spyRpcs() {
       name: "ListQueuedAgentMessages",
       spy: vi.spyOn(chatGrpc, "listQueuedAgentMessages").mockResolvedValue({ messages: [] } as never),
     },
-    {
-      name: "GetWorkflow",
-      spy: vi.spyOn(workflowGrpc, "getWorkflow").mockResolvedValue({ workflow: undefined } as never),
-    },
+    { name: "GetWorkflow", spy: getWorkflow },
     { name: "ListPresetsForWorkflow", spy: listPresetsForWorkflow },
     { name: "GetDefaultPresets", spy: getDefaultPresetsBatch },
   ];

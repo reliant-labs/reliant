@@ -17,7 +17,7 @@ import { useEffect, useMemo } from "react";
 import { useParams } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { MobileWorkflowScreen } from "./MobileWorkflowScreen";
-import { useWorkflows } from "../../store/globalDataStore";
+import { useWorkflows } from "../../hooks/workflow-queries";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";

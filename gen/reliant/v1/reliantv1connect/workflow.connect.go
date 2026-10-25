@@ -85,11 +85,14 @@ type WorkflowServiceClient interface {
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
 	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
-	// ValidateWorkflow validates a workflow without saving it
+	// ValidateWorkflow validates a workflow without saving it. It only reads,
+	// and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
+	// it rather than a mutation that invalidates every workflow read.
 	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)
 	// ImportWorkflow imports a workflow from YAML into the database
 	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
-	// ExportWorkflow exports a workflow from the database as YAML
+	// ExportWorkflow exports a workflow from the database as YAML. A read
+	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
 	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
 	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)
@@ -144,6 +147,7 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorkflowServiceValidateWorkflowProcedure,
 			connect.WithSchema(workflowServiceMethods.ByName("ValidateWorkflow")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		importWorkflow: connect.NewClient[v1.ImportWorkflowRequest, v1.ImportWorkflowResponse](
@@ -156,6 +160,7 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorkflowServiceExportWorkflowProcedure,
 			connect.WithSchema(workflowServiceMethods.ByName("ExportWorkflow")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setWorkflowVisibility: connect.NewClient[v1.SetWorkflowVisibilityRequest, v1.SetWorkflowVisibilityResponse](
@@ -270,11 +275,14 @@ type WorkflowServiceHandler interface {
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
 	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
-	// ValidateWorkflow validates a workflow without saving it
+	// ValidateWorkflow validates a workflow without saving it. It only reads,
+	// and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
+	// it rather than a mutation that invalidates every workflow read.
 	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)
 	// ImportWorkflow imports a workflow from YAML into the database
 	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
-	// ExportWorkflow exports a workflow from the database as YAML
+	// ExportWorkflow exports a workflow from the database as YAML. A read
+	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
 	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
 	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)
@@ -325,6 +333,7 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		WorkflowServiceValidateWorkflowProcedure,
 		svc.ValidateWorkflow,
 		connect.WithSchema(workflowServiceMethods.ByName("ValidateWorkflow")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowServiceImportWorkflowHandler := connect.NewUnaryHandler(
@@ -337,6 +346,7 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		WorkflowServiceExportWorkflowProcedure,
 		svc.ExportWorkflow,
 		connect.WithSchema(workflowServiceMethods.ByName("ExportWorkflow")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowServiceSetWorkflowVisibilityHandler := connect.NewUnaryHandler(

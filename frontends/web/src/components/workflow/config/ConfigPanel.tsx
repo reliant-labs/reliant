@@ -27,7 +27,7 @@ import {
   getStepThread,
 } from "../../../types/workflow";
 import { ConfigurationPanel } from "../ConfigurationPanel";
-import { workflowGrpc } from "../../../api/workflow-grpc";
+import { fetchWorkflow } from "../../../hooks/workflow-queries";
 import { useProjectStore } from "../../../store/projectStore";
 import { directCel, projectConfigLiteral } from "../../../lib/celAdapter";
 import { SaveMessageConfigEditor } from "../SaveMessageConfigEditor";
@@ -304,7 +304,7 @@ export function ConfigPanel({
     if (!projectId || !stepRef) { setRefWorkflowOutputs(undefined); return; }
 
     let cancelled = false;
-    workflowGrpc.getWorkflow(projectId, { name: stepRef }).then((res) => {
+    fetchWorkflow(projectId, { name: stepRef }).then((res) => {
       if (!cancelled) {
         setRefWorkflowOutputs(res.workflow?.outputs ?? undefined);
       }

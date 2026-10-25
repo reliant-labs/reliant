@@ -21,7 +21,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AlertTriangle, BookOpen, FolderOpen, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
+import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
@@ -40,7 +40,7 @@ import {
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
-import { workflowGrpc } from "@/api/workflow-grpc";
+import { downloadWorkflow } from "@/hooks/workflow-queries";
 import Card from "../../forge-ui/card";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
@@ -413,8 +413,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
       actions.push({
         label: "Export",
         onSelect: () =>
-          void workflowGrpc
-            .downloadWorkflow(projectId, workflow.filename)
+          void downloadWorkflow(projectId, workflow.filename)
             .then(() => toast.success("Exported successfully"))
             .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Failed to export")),
       });

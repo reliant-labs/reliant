@@ -2,9 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import { Users, ChevronDown, Check, Workflow } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import { useWorkflows } from "../../store/globalDataStore";
+import { useWorkflows } from "../../hooks/workflow-queries";
 import { isRunnable } from "../workflow/workflowDraftStatus";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)

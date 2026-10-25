@@ -2439,15 +2439,15 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x13WorkflowDraftStatus\x12%\n" +
 	"!WORKFLOW_DRAFT_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_DRAFT_STATUS_DRAFT\x10\x01\x12\"\n" +
-	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\x95\b\n" +
+	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\x9b\b\n" +
 	"\x0fWorkflowService\x12V\n" +
 	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12S\n" +
 	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"\x00\x12P\n" +
 	"\vGetWorkflow\x12\x1e.reliant.v1.GetWorkflowRequest\x1a\x1f.reliant.v1.GetWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eDeleteWorkflow\x12!.reliant.v1.DeleteWorkflowRequest\x1a\".reliant.v1.DeleteWorkflowResponse\"\x00\x12_\n" +
-	"\x10ValidateWorkflow\x12#.reliant.v1.ValidateWorkflowRequest\x1a$.reliant.v1.ValidateWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eImportWorkflow\x12!.reliant.v1.ImportWorkflowRequest\x1a\".reliant.v1.ImportWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eExportWorkflow\x12!.reliant.v1.ExportWorkflowRequest\x1a\".reliant.v1.ExportWorkflowResponse\"\x00\x12n\n" +
+	"\x0eDeleteWorkflow\x12!.reliant.v1.DeleteWorkflowRequest\x1a\".reliant.v1.DeleteWorkflowResponse\"\x00\x12b\n" +
+	"\x10ValidateWorkflow\x12#.reliant.v1.ValidateWorkflowRequest\x1a$.reliant.v1.ValidateWorkflowResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\x0eImportWorkflow\x12!.reliant.v1.ImportWorkflowRequest\x1a\".reliant.v1.ImportWorkflowResponse\"\x00\x12\\\n" +
+	"\x0eExportWorkflow\x12!.reliant.v1.ExportWorkflowRequest\x1a\".reliant.v1.ExportWorkflowResponse\"\x03\x90\x02\x01\x12n\n" +
 	"\x15SetWorkflowVisibility\x12(.reliant.v1.SetWorkflowVisibilityRequest\x1a).reliant.v1.SetWorkflowVisibilityResponse\"\x00\x12S\n" +
 	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12h\n" +
 	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12b\n" +

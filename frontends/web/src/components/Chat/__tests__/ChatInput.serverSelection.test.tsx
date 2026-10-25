@@ -100,9 +100,9 @@ vi.mock("../../../store/globalDataStore", () => ({
   useModels: () => MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
-vi.mock("../../../hooks/workflow-config-queries", async () => {
-  const actual = await vi.importActual<typeof import("../../../hooks/workflow-config-queries")>(
-    "../../../hooks/workflow-config-queries",
+vi.mock("../../../hooks/workflow-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../../hooks/workflow-queries")>(
+    "../../../hooks/workflow-queries",
   );
   return { ...actual, useWorkflowDefinitionQuery: () => DEFINITION };
 });

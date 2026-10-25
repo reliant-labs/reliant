@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { fromJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
-import type { Workflow } from "../../api/workflow-grpc";
+import type { Workflow } from "../../hooks/workflow-queries";
 import { fetchDefaultPresets, useWorkflowPresets, type Preset } from "../../hooks/preset-queries";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import type { InputGroupDef } from "./WorkflowInputGroup";

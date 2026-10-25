@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { getParentRouteNavigateOptions } from "../../lib/routeParent";
 import {
@@ -15,22 +15,15 @@ import { WorkflowParseErrorView } from "./WorkflowParseErrorView";
 import { WorkflowHeader } from "./WorkflowHeader";
 import { LoadingSpinner } from "../Layout/LoadingSpinner";
 import type { Workflow } from "../../types/workflow";
-import type {
-  Step as ResponseStep,
-  Edge as ResponseEdge,
-} from "../../api/workflow-grpc";
 import {
-  workflowGrpc,
-  getWorkflowWithDraftId,
-  type WorkflowResponse,
-} from "../../api/workflow-grpc";
+  deleteWorkflow,
+  fetchWorkflow,
+  saveWorkflow,
+  setWorkflowStatus,
+  useWorkflowList,
+} from "../../hooks/workflow-queries";
 import { NewWorkflowDialog } from "./NewWorkflowDialog";
 import { toast } from "sonner";
-import {
-  useGlobalDataStore,
-  useWorkflows,
-  type WorkflowDef,
-} from "../../store/globalDataStore";
 import { useProjectStore } from "../../store/projectStore";
 import { trackEvent } from "../../lib/analytics";
 import { hasErrorReason } from "../../lib/errorReasons";
@@ -65,24 +58,6 @@ interface WorkflowBuilderPageProps {
   onClose?: () => void;
   /** Navigate to /settings. */
   onNavigateToSettings?: () => void;
-}
-
-// Helper to convert WorkflowDef (from global store) to WorkflowResponse format
-function workflowDefToResponse(def: WorkflowDef): WorkflowResponse {
-  return {
-    name: def.name,
-    filename: def.filename,
-    description: def.description,
-    stepCount: def.step_count,
-    source: def.source,
-    nodes: [], // Hub only needs metadata, not full nodes
-    edges: [],
-    isHidden: def.is_hidden || false,
-    // The cached (chat-safe) list only holds runnable workflows; drafts and
-    // their findings arrive with the detailed (include_hidden) listing.
-    status: def.status ?? "complete",
-    validationErrors: [],
-  };
 }
 
 export function WorkflowBuilderPage({
@@ -143,88 +118,12 @@ export function WorkflowBuilderPage({
   // Set by WorkflowBuilder to "save the current canvas as a draft" — the
   // action a rejected save of a complete workflow offers from its toast.
   const saveAsDraftRef = useRef<(() => Promise<void>) | null>(null);
-  // Track last workflow that failed to save due to OCC conflict (for force save retry)
-  // (Variable removed - was unused)
-  // Local workflow state for detailed data (updated_at, full steps, etc.)
-  const [detailedWorkflows, setDetailedWorkflows] = useState<
-    Map<string, WorkflowResponse>
-  >(new Map());
-  // Track invalid workflows that failed to load
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
 
-  // Use cached workflows from global store for immediate display
-  const { workflows: cachedWorkflows } = useWorkflows();
-
-  // Merge cached workflows with any detailed data we've fetched
-  const existingWorkflows = useMemo(() => {
-    const workflowMap = new Map<string, WorkflowResponse>();
-
-    // First, add all cached workflows
-    cachedWorkflows.forEach((def) => {
-      const detailed = detailedWorkflows.get(def.name);
-      if (detailed) {
-        workflowMap.set(def.name, { ...detailed, source: def.source });
-      } else {
-        workflowMap.set(def.name, workflowDefToResponse(def));
-      }
-    });
-
-    // Then, add any detailed workflows that aren't in cache yet (newly saved workflows)
-    detailedWorkflows.forEach((detailed, name) => {
-      if (!workflowMap.has(name)) {
-        workflowMap.set(name, detailed);
-      }
-    });
-
-    return Array.from(workflowMap.values());
-  }, [cachedWorkflows, detailedWorkflows]);
-
-  // Helper to load detailed workflow data (includeHidden for management UI)
-  const loadDetailedWorkflows = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      const result = await workflowGrpc.listWorkflowsWithErrors(
-        projectId,
-        true,
-      ); // includeHidden: the builder resolves hidden workflows too
-      const detailed = new Map<string, WorkflowResponse>();
-      result.workflows.forEach((w) => detailed.set(w.name, w));
-      setDetailedWorkflows(detailed);
-    } catch (err) {
-      console.error("Failed to load detailed workflows:", err);
-    }
-  }, [projectId]);
-
-  // Centralized refresh — always fetch global store + detailed data together so
-  // sites can't accidentally update only one. Best-effort: errors are logged
-  // rather than thrown to preserve callsite behavior.
-  const refreshWorkflowList = useCallback(async () => {
-    if (!projectId) return;
-    await Promise.all([
-      useGlobalDataStore
-        .getState()
-        .refetchWorkflows(projectId)
-        .catch((error) => {
-          console.warn("Failed to refetch workflows:", error);
-        }),
-      loadDetailedWorkflows(),
-    ]);
-  }, [projectId, loadDetailedWorkflows]);
-
-  // Background fetch for detailed workflow data (updated_at, etc.)
-  useEffect(() => {
-    if (!projectId) return;
-    loadDetailedWorkflows();
-
-    // Listen for workflow saves to refresh the detailed data
-    const handleWorkflowSaved = () => {
-      refreshWorkflowList();
-    };
-    window.addEventListener("workflow-saved", handleWorkflowSaved);
-    return () =>
-      window.removeEventListener("workflow-saved", handleWorkflowSaved);
-  }, [projectId, loadDetailedWorkflows, refreshWorkflowList]);
+  // Every workflow in the project, hidden ones included (the builder resolves
+  // hidden workflows too). Each write below refetches it before it resolves.
+  const workflowList = useWorkflowList(projectId, { includeHidden: true });
 
   // Keep editingWorkflow in sync if a parent passes a different selectedWorkflow
   // after mount. (Embedded usage path; the route-driven path sets editingWorkflow
@@ -291,7 +190,7 @@ export function WorkflowBuilderPage({
           yamlDefinition: loadedYamlDef,
           status: loadedStatus,
           source: loadedSource,
-        } = await getWorkflowWithDraftId(projectId, workflowName);
+        } = await fetchWorkflow(projectId, { name: workflowName }, { fresh: true });
         // A response for a route we already left (a rename navigated away)
         // must not touch the page — least of all with a 404 for the old name.
         if (cancelled) return;
@@ -378,7 +277,7 @@ export function WorkflowBuilderPage({
       // break it rather than silently taking it out of service.
       // A copy (Duplicate) is a NEW workflow: no draft id, no version, or the
       // save would rename this one instead.
-      const response = await workflowGrpc.saveWorkflow(
+      const response = await saveWorkflow(
         projectId,
         workflow,
         opts?.asCopy ? undefined : workflowVersion || undefined,
@@ -466,23 +365,6 @@ export function WorkflowBuilderPage({
       // Saved workflows are always user-owned
       setWorkflowSource("user");
 
-      // Update detailed workflows map immediately for optimistic UI
-      setDetailedWorkflows((prev) => {
-        const updated = new Map(prev);
-        const name = workflow.name || "Unnamed";
-        updated.set(name, {
-          name,
-          filename: response.slug,
-          description: workflow.description,
-          stepCount: (workflow.nodes || []).length,
-          source: "user" as const,
-          nodes: (workflow.nodes || []) as unknown as ResponseStep[],
-          edges: (workflow.edges || []) as unknown as ResponseEdge[],
-          status: response.status,
-          validationErrors: response.validationErrors,
-        });
-        return updated;
-      });
 
       // A save that renamed the workflow (or stored a copy of a built-in)
       // lives at a new slug. Move the URL there BEFORE anything refreshes, in
@@ -499,9 +381,8 @@ export function WorkflowBuilderPage({
         } as never);
       }
 
-      // Refresh global store + detailed data so cached list and all
-      // subscribers (AgentSelector, the Library, etc.) see the save.
-      await refreshWorkflowList();
+      // saveWorkflow refetched every mounted workflow read (the composer's
+      // picker, the Library) before it resolved.
 
       // Return save result for WorkflowBuilder to show appropriate toasts
       return {
@@ -538,9 +419,10 @@ export function WorkflowBuilderPage({
                     version: freshVersion,
                     parseError: reloadParseError,
                     yamlDefinition: freshYaml,
-                  } = await getWorkflowWithDraftId(
+                  } = await fetchWorkflow(
                     projectId,
-                    editingWorkflow.name,
+                    { name: editingWorkflow.name },
+                    { fresh: true },
                   );
                   if (reloadParseError) {
                     toast.error("Workflow has a parse error after reload");
@@ -586,7 +468,7 @@ export function WorkflowBuilderPage({
       return { success: false, validationErrors: [] };
     }
     try {
-      const response = await workflowGrpc.setWorkflowStatus(
+      const response = await setWorkflowStatus(
         projectId,
         draftId,
         status,
@@ -601,7 +483,6 @@ export function WorkflowBuilderPage({
             : "Unpublished — it won't run until you publish it again",
           { duration: 4000 },
         );
-        await refreshWorkflowList();
       } else {
         const problems = splitFindings(response.validationErrors).errors.length;
         toast.error(
@@ -678,13 +559,10 @@ export function WorkflowBuilderPage({
     );
   }
 
-  const handleBack = async () => {
+  const handleBack = () => {
     // Navigate to the logical parent of the current route (lib/routeParent).
     // From /workflow/$name that's the Library (/workflows/library).
     navigate(getParentRouteNavigateOptions(pathname));
-
-    // Refresh workflow list to show any changes made.
-    await refreshWorkflowList();
   };
 
   // Handle clearing a corrupted workflow
@@ -693,11 +571,11 @@ export function WorkflowBuilderPage({
 
     try {
       // Find the workflow to get its slug/filename
-      const workflow = existingWorkflows.find(
+      const workflow = workflowList.data?.workflows.find(
         (w) => w.name === errorWorkflowName,
       );
       if (workflow) {
-        await workflowGrpc.deleteWorkflow(projectId, workflow.filename);
+        await deleteWorkflow(projectId, workflow.filename);
       }
 
       toast.success("Workflow cleared");
@@ -708,9 +586,6 @@ export function WorkflowBuilderPage({
       setErrorWorkflowName(undefined);
       setDraftId(undefined);
       navigate({ to: "/workflows/library" });
-
-      // Refresh workflows.
-      refreshWorkflowList();
     } catch (err) {
       console.error("Failed to clear workflow:", err);
       toast.error("Failed to clear workflow");
@@ -728,7 +603,7 @@ export function WorkflowBuilderPage({
         draftId: loadedDraftId,
         parseError: loadedParseError,
         yamlDefinition: fixedYaml,
-      } = await getWorkflowWithDraftId(projectId, errorWorkflowName);
+      } = await fetchWorkflow(projectId, { name: errorWorkflowName }, { fresh: true });
 
       if (loadedParseError) {
         // Still has error

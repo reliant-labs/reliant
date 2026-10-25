@@ -62,9 +62,16 @@ vi.mock("../../../store/globalDataStore", () => ({
 }));
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => NO_SLASH_COMMANDS }));
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
-}));
+// The selected workflow has no inputs. One stable result, as React Query
+// returns one: a fresh object per render re-derives the params every render.
+vi.mock("../../../hooks/workflow-queries", async (importActual) => {
+  const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
+    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+  };
+});
 vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
   usePresetsForWorkflow: () => NO_PRESETS,

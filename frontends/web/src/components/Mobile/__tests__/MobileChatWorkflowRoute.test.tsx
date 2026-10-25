@@ -41,8 +41,8 @@ const workflow = {
   ],
 } as Workflow;
 
-vi.mock("../../../store/globalDataStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../store/globalDataStore")>()),
+vi.mock("../../../hooks/workflow-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/workflow-queries")>()),
   useWorkflows: () => ({ workflows: [workflow], loading: false }),
 }));
 

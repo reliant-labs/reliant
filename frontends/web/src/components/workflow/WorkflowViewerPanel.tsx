@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { WorkflowViewer } from './WorkflowViewer'
 import { WorkflowBreadcrumb, type BreadcrumbLevel } from './WorkflowBreadcrumb'
-import { getWorkflow } from '../../api/workflow-grpc'
+import { getWorkflow } from '../../hooks/workflow-queries'
 import type { Workflow } from '../../types/workflow'
 import type { WorkflowExecution, StepExecution } from '../Chat/ExecutionSidebar/types'
 import { useFullStepExecution } from './hooks/useFullStepExecution'

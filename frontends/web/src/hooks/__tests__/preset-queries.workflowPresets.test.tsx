@@ -24,13 +24,6 @@ import { mockTransport } from "@/lib/test-utils";
 
 const listPresetsForWorkflow = vi.fn();
 
-vi.mock("@/api/workflow-grpc", () => ({
-  workflowGrpc: {
-    listWorkflows: vi.fn(async () => []),
-    getWorkflow: vi.fn(async () => ({ workflow: null })),
-  },
-}));
-
 vi.mock("@/lib/configReady", () => ({ waitForConfig: async () => undefined }));
 
 vi.mock("@/store/projectStore", () => {

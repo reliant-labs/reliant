@@ -49,6 +49,8 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/grpc-client";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
+import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
+import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import { resolveWorktree } from "../hooks/worktree-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
@@ -488,6 +490,12 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
               ...(data?.deleted === true ? { deleted: true } : {}),
             });
           }
+          // Every draft write announces itself here, whoever made it (an
+          // agent's tool call, another tab): the workflow reads (and the
+          // preset lists matched against a workflow's inputs) go stale.
+          // Coalesced, since an agent editing a draft writes it in bursts.
+          streamInvalidation.invalidate(workflowServiceKeys.all);
+          streamInvalidation.invalidate(presetServiceKeys.all);
           break;
         }
         case UserUpdateType.DAEMON_HEARTBEAT: {

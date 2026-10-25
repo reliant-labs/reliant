@@ -51,7 +51,6 @@ const listProjectDaemons = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ listWorkflows, getWorkflow }),
     chat: () => ({ startChat }),
     daemonRegistry: () => ({ listDaemons }),
   },
@@ -62,6 +61,7 @@ vi.mock("@/api/grpc-client", () => ({
 beforeEach(() => {
   setTransport(
     mockTransport({
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       ...serviceHandlers("ProjectService", { listProjectDaemons }),
       // The run form lists workspaces through the generated WorktreeService hooks.

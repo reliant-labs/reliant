@@ -25,8 +25,8 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { Pencil, Play } from "lucide-react";
 
-import type { WorkflowResponse } from "@/api/workflow-grpc";
-import { isChatLaunchable } from "@/api/workflow-grpc";
+import type { WorkflowResponse } from "@/hooks/workflow-queries";
+import { isChatLaunchable } from "@/hooks/workflow-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";

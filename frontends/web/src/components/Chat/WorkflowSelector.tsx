@@ -4,11 +4,11 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import { useWorkflows } from "../../store/globalDataStore";
+import { useWorkflows } from "../../hooks/workflow-queries";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
 
 // Workflow refs appear in two formats: bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every ref comparison in this

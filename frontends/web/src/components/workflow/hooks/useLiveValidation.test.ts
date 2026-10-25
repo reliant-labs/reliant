@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 
 const validateWorkflow = vi.hoisted(() => vi.fn());
-vi.mock("../../../api/workflow-grpc", () => ({ workflowGrpc: { validateWorkflow } }));
+vi.mock("../../../hooks/workflow-queries", () => ({ validateWorkflow }));
 
 import { fromJson } from "@bufbuild/protobuf";
 

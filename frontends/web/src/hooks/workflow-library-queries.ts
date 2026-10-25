@@ -5,104 +5,57 @@
  * project — hidden ones included, since this is the management view — plus
  * the ones that failed to parse, and the management actions on them.
  *
- * React Query rather than the global workflow store: that store holds the
- * chat-safe list (runnable, visible), which is the wrong list to manage, and
- * it follows the current project implicitly.
+ * The list is the generated ListWorkflows entry with includeHidden (the chat
+ * pickers read the one without it). Each action is a workflow-queries write,
+ * which refetches every mounted workflow read before it resolves, so this
+ * list and the composer's picker never disagree.
  */
 
-import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
-import { workflowGrpc } from "../api/workflow-grpc";
-import { useGlobalDataStore } from "../store/globalDataStore";
-import { triggerServiceKeys } from "./trigger-service-hooks_gen";
+import {
+  copyWorkflow,
+  createWorkflowDraft,
+  deleteWorkflow,
+  importWorkflow,
+  setWorkflowVisibility,
+  useWorkflowList,
+} from "./workflow-queries";
 
-export const workflowLibraryKeys = {
-  all: ["workflow-library"] as const,
-  list: (projectId: string) => [...workflowLibraryKeys.all, "list", projectId] as const,
-};
-
-/**
- * Every workflow in the project and every one that failed to load. Refetched
- * whenever anything saves a workflow (the builder dispatches `workflow-saved`).
- */
+/** Every workflow in the project and every one that failed to load. */
 export function useWorkflowLibrary(projectId: string | undefined) {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const onSaved = () => void queryClient.invalidateQueries({ queryKey: workflowLibraryKeys.all });
-    window.addEventListener("workflow-saved", onSaved);
-    return () => window.removeEventListener("workflow-saved", onSaved);
-  }, [queryClient]);
-
-  return useQuery({
-    queryKey: workflowLibraryKeys.list(projectId ?? ""),
-    queryFn: () => workflowGrpc.listWorkflowsWithErrors(projectId!, true),
-    enabled: !!projectId,
-  });
-}
-
-/**
- * After any change to the set of workflows: refresh this list AND the global
- * store the composer's workflow picker reads, so the two never disagree.
- */
-function useRefreshWorkflows(projectId: string) {
-  const queryClient = useQueryClient();
-  return async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: workflowLibraryKeys.list(projectId) }),
-      useGlobalDataStore
-        .getState()
-        .refetchWorkflows(projectId)
-        .catch(() => undefined),
-    ]);
-  };
+  return useWorkflowList(projectId, { includeHidden: true });
 }
 
 export function useDeleteWorkflow(projectId: string) {
-  const refresh = useRefreshWorkflows(projectId);
-  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (filename: string) => workflowGrpc.deleteWorkflow(projectId, filename),
-    // The server deletes the workflow's automations with it.
-    onSuccess: async () => {
-      await Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: triggerServiceKeys.all })]);
-    },
+    mutationFn: (filename: string) => deleteWorkflow(projectId, filename),
   });
 }
 
 export function useCopyWorkflow(projectId: string) {
-  const refresh = useRefreshWorkflows(projectId);
   return useMutation({
-    mutationFn: (sourceName: string) => workflowGrpc.copyWorkflow(projectId, sourceName),
-    onSuccess: refresh,
+    mutationFn: (sourceName: string) => copyWorkflow(projectId, sourceName),
   });
 }
 
 export function useSetWorkflowVisibility(projectId: string) {
-  const refresh = useRefreshWorkflows(projectId);
   return useMutation({
     mutationFn: ({ filename, hidden }: { filename: string; hidden: boolean }) =>
-      workflowGrpc.setWorkflowVisibility(projectId, filename, hidden),
-    onSuccess: refresh,
+      setWorkflowVisibility(projectId, filename, hidden),
   });
 }
 
 /** "New workflow": one draft per call, so callers run it only on a user action. */
 export function useCreateWorkflowDraft(projectId: string) {
-  const refresh = useRefreshWorkflows(projectId);
   return useMutation({
-    mutationFn: (opts: { title: string; template?: string }) => workflowGrpc.createWorkflowDraft(projectId, opts),
-    onSuccess: refresh,
+    mutationFn: (opts: { title: string; template?: string }) => createWorkflowDraft(projectId, opts),
   });
 }
 
 export function useImportWorkflow(projectId: string) {
-  const refresh = useRefreshWorkflows(projectId);
   return useMutation({
     mutationFn: ({ yaml, overwrite }: { yaml: string; overwrite: boolean }) =>
-      workflowGrpc.importWorkflow(projectId, yaml, overwrite),
-    onSuccess: async (response) => {
-      if (response.success) await refresh();
-    },
+      importWorkflow(projectId, yaml, overwrite),
   });
 }

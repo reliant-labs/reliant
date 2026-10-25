@@ -17,6 +17,7 @@ import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";
 import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 const setTriggerEnabled = vi.fn();
 const deleteTrigger = vi.fn();
@@ -25,7 +26,6 @@ const listWorkflows = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
   },
 }));
@@ -36,6 +36,7 @@ setTransport(
     ...serviceHandlers("TriggerService", { setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
     // The run form lists workspaces through the generated WorktreeService hooks.
     "WorktreeService.ListWorktrees": { response: { worktrees: [] } },
+    ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
     "ConnectionService.ListConnections": { response: {} },
     "ProjectService.ListProjectDaemons": { response: {} },
