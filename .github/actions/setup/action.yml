@@ -22,6 +22,9 @@ inputs:
   free-disk:
     description: Delete the runner's preinstalled toolchains this repo never uses, for the gates' compiles
     default: "false"
+  buf:
+    description: Put go.mod's buf on PATH (forge lint's buf-lint lane refuses to run without it)
+    default: "false"
 
 outputs:
   go-version:
@@ -106,6 +109,24 @@ runs:
         path: ~/.cache/forge/embedded-postgres
         key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.embedded_pg }}
         restore-keys: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-
+
+    # forge lint's buf-lint lane runs `buf` from PATH and fails the lint as
+    # "could NOT run" without it (the first CI release gate, d681008c). The
+    # version is go.mod's buf pin, the one the Taskfile's BUF and forge
+    # generate use.
+    - name: Read the buf pin
+      id: buf
+      if: inputs.buf == 'true'
+      shell: bash
+      run: echo "version=$(awk '$1 == "github.com/bufbuild/buf" { sub(/^v/, "", $2); print $2; exit }' go.mod)" >> "$GITHUB_OUTPUT"
+
+    - name: Install buf
+      if: inputs.buf == 'true'
+      uses: bufbuild/buf-action@v1
+      with:
+        setup_only: true
+        version: ${{ steps.buf.outputs.version }}
+        github_token: ${{ github.token }}
 
     - name: Set up Node
       if: inputs.node == 'true'
