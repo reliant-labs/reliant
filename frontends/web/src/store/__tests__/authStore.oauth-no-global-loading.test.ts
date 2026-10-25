@@ -70,7 +70,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
-  delete (window as Window & { electronAPI?: unknown }).electronAPI
+  delete (window as unknown as { electronAPI?: unknown }).electronAPI
   signInWithOAuthMock.mockResolvedValue({ data: { url: PROVIDER_URL }, error: null })
   linkIdentityMock.mockResolvedValue({ data: { url: PROVIDER_URL }, error: null })
 })

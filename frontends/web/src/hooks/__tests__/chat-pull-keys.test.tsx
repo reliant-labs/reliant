@@ -26,6 +26,7 @@ import {
   WorkflowExecutionView,
   type GetWorkflowExecutionsRequest,
   type ListQueuedAgentMessagesRequest,
+  type ListQueuedAgentMessagesResponse,
 } from "@/gen/reliant/v1/chat_pb";
 import { EntityType, UserUpdateType } from "@/gen/reliant/v1/streaming_pb";
 import { setTransport } from "@/lib/connect";
@@ -197,7 +198,9 @@ describe("a thread's mailbox (chatServiceKeys.queuedAgentMessage)", () => {
     // The server still lists the row for the re-read; the tombstone keeps it out.
     const key = chatServiceKeys.listQueuedAgentMessages({ chatId: CHAT, threadId: THREAD });
     server.listQueuedAgentMessages.mockImplementation(() => {
-      rereadBeforeDrop = !!queryClient.getQueryData(key)?.messages.some((m) => m.id === "q-1");
+      rereadBeforeDrop = !!queryClient
+        .getQueryData<ListQueuedAgentMessagesResponse>(key)
+        ?.messages.some((m) => m.id === "q-1");
       return { messages: [row] };
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel queued message" }));

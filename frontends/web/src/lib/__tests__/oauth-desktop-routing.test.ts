@@ -55,7 +55,7 @@ const setCryptoMock = () => {
 
 /** An Electron build whose main process has the local receiver. */
 const withLocalReceiver = () => {
-  const startProviderOAuth = vi.fn(async () => ({
+  const startProviderOAuth = vi.fn(async (_template: string) => ({
     flowId: 'flow-1',
     redirectUri: 'http://localhost:51000/callback',
   }))
@@ -158,7 +158,7 @@ describe.each([
     // resolved the redirect URI instead, the advertised address and the
     // listening socket could disagree — which is what the reported
     // ERR_CONNECTION_REFUSED looked like.
-    const template = startProviderOAuth.mock.calls[0][0] as string
+    const template = startProviderOAuth.mock.calls[0]![0]
     expect(template).toContain('{redirect_uri}')
   })
 

@@ -48,7 +48,7 @@ let serverUser = {
   createdAtMs: USER_CREATED_MS,
 };
 
-const mockCompleteOnboarding = vi.fn(async () => {
+const mockCompleteOnboarding = vi.fn(async (_data?: unknown) => {
   serverUser = { ...serverUser, onboardingCompleted: true };
 });
 

@@ -56,7 +56,7 @@ const chats: Array<Record<string, unknown>> = ["chat-1", "chat-2", "chat-3"].map
   updatedAt: "2024-01-01T00:00:00.000Z",
   lastMessageAt: "2024-01-01T00:00:00.000Z",
   unread: false,
-  state: ChatState.ACTIVE,
+  state: ChatState.IDLE,
   worktreeId: "worktree-1",
   projectId: "project-1",
 }));
@@ -107,7 +107,7 @@ describe("Sidebar and child runs", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",
@@ -161,7 +161,7 @@ describe("Sidebar and child runs", () => {
         <Sidebar />
       </QueryClientProvider>,
     );
-    for (const chat of chats) expect(await screen.findByText(chat.title)).toBeInTheDocument();
+    for (const chat of chats) expect(await screen.findByText(chat.title as string)).toBeInTheDocument();
     // Let any mounted queries fire.
     await new Promise((resolve) => setTimeout(resolve, 50));
 

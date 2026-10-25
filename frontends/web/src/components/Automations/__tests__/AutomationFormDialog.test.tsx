@@ -41,8 +41,6 @@ import {
   worktreesResponse,
 } from "@/components/workflow/run/__tests__/runFormFixtures";
 import { renderAtRoute } from "./automationTestUtils";
-import { setTransport } from "@/lib/connect";
-import { mockTransport } from "@/lib/test-utils";
 
 const createTrigger = vi.fn();
 const updateTrigger = vi.fn();
@@ -54,7 +52,7 @@ const listWorktrees = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-const listConnections = vi.fn(async () => ({ connections: [] }));
+const listConnections = vi.fn(async (_req: unknown) => ({ connections: [] }));
 
 
 // PresetService and TriggerService are reached through connectClient (the generated hooks), so

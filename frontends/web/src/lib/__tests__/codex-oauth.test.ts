@@ -180,6 +180,7 @@ describe("runCodexOAuthFlow", () => {
     completeCodexOAuthMock.mockResolvedValue({
       success: false,
       message: "Token exchange failed",
+      created: false,
     });
 
     const result = await runCodexOAuthFlow();

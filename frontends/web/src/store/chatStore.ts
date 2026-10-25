@@ -790,6 +790,7 @@ export interface ToolCallState {
     | "executing" // Currently executing
     | "cancelling" // Cancellation requested
     | "cancelled" // Cancelled by user
+    | "backgrounded" // Detached; its real outcome streams in later
     | "completed" // Successfully completed
     | "denied" // Denied approval
     | "failed"; // Execution failed

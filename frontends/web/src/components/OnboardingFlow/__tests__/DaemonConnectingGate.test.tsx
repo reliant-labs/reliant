@@ -333,7 +333,7 @@ describe("DaemonConnectingGate", () => {
     mockListDaemons.mockResolvedValue({
       daemons: [
         makeDaemon({
-          id: "daemon-failed-1",
+          daemonId: "daemon-failed-1",
           status: FAILED,
           lifecyclePhase: CLONING,
           lastStatusMessage: "clone failed: repository not found",

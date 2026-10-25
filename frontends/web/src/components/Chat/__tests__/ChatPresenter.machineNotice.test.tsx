@@ -95,7 +95,7 @@ function message(id: string, role: MessageRole, sentAgoMs = 0): Message {
   } as unknown as Message;
 }
 
-function machine(status: DaemonStatus, extra: Partial<DaemonInfo> = {}): DaemonInfo {
+function machine(status: DaemonStatus, extra: Partial<Omit<DaemonInfo, "$typeName">> = {}): DaemonInfo {
   return create(DaemonInfoSchema, { daemonId: "d-1", hostname: "Cloud box", status, ...extra });
 }
 

@@ -116,7 +116,7 @@ describe("Workflow Serializer Round-Trip", () => {
     const workflow: Workflow = {
       name: "test-with-apiVersion",
       apiVersion: "0.0.5",
-      nodes: [{ id: "step1", type: "run", command: "echo hello" }],
+      nodes: [{ id: "step1", type: "run" }],
       edges: [],
     };
 
@@ -131,7 +131,7 @@ describe("Workflow Serializer Round-Trip", () => {
     const workflow: Workflow = {
       name: "test-with-tag",
       presets: { tag: "agent" },
-      nodes: [{ id: "step1", type: "run", command: "echo hello" }],
+      nodes: [{ id: "step1", type: "run" }],
       edges: [],
     };
 
@@ -159,7 +159,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 mode: "new",
               },
             },
-          } as Step["args"],
+          } as unknown as Step["args"],
         } as Step,
       ],
       edges: [],
@@ -170,7 +170,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("mode: new");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(getStepThread(deserialized.nodes[0])).toMatchObject({ mode: "new" });
+    expect(getStepThread(deserialized.nodes![0])).toMatchObject({ mode: "new" });
   });
 
   it("should preserve groups with tag on round-trip", () => {
@@ -193,7 +193,7 @@ describe("Workflow Serializer Round-Trip", () => {
           },
         }),
       },
-      nodes: [{ id: "step1", type: "run", command: "echo hello" }],
+      nodes: [{ id: "step1", type: "run" }],
       edges: [],
     };
 
@@ -207,8 +207,8 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(deserialized.inputs).toBeDefined();
     expect(deserialized.inputs?.implementer).toBeDefined();
     expect(deserialized.inputs?.implementer.type).toBe("group");
-    expect(getInputPresetConfig(deserialized.inputs?.implementer)?.tag).toBe("agent");
-    expect(getInputNestedInputs(deserialized.inputs?.implementer)?.model.type).toBe("model");
+    expect(getInputPresetConfig(deserialized.inputs!.implementer!)?.tag).toBe("agent");
+    expect(getInputNestedInputs(deserialized.inputs!.implementer!)?.model.type).toBe("model");
   });
 
   it("should preserve node condition on round-trip", () => {
@@ -218,7 +218,6 @@ describe("Workflow Serializer Round-Trip", () => {
         {
           id: "step1",
           type: "run",
-          command: "echo hello",
           condition: directCel('inputs.phases.contains("research")'),
         },
       ],
@@ -229,7 +228,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("condition:");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(deserialized.nodes[0].condition).toEqual(
+    expect(deserialized.nodes![0].condition).toEqual(
       directCel('inputs.phases.contains("research")'),
     );
   });
@@ -251,7 +250,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 implementer: "fast",
               },
             },
-          } as Step["args"],
+          } as unknown as Step["args"],
         },
       ],
       edges: [],
@@ -263,7 +262,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("implementer: fast");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    const presets = (deserialized.nodes[0].args as { value: { presets: Record<string, string> } })?.value?.presets;
+    const presets = (deserialized.nodes![0].args as { value: { presets: Record<string, string> } })?.value?.presets;
     expect(presets).toEqual({
       default: "tester",
       implementer: "fast",
@@ -275,10 +274,7 @@ describe("Workflow Serializer Round-Trip", () => {
       name: "inline-loop",
       entry: ["call_llm"],
       inputs: {
-        model: {
-          type: "model",
-          default: "claude-4.5-sonnet",
-        },
+        model: createInput("model", { default: "claude-4.5-sonnet" }),
       },
       outputs: {
         done: "{{nodes.call_llm.done}}",
@@ -310,7 +306,7 @@ describe("Workflow Serializer Round-Trip", () => {
               presets: {},
 
             },
-          } as Step["args"],
+          } as unknown as Step["args"],
         },
       ],
       edges: [],
@@ -322,13 +318,13 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("inline:");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    const loopNode = deserialized.nodes[0];
+    const loopNode = deserialized.nodes![0];
     expect(loopNode.type).toBe("loop");
     const loopArgs = (loopNode.args as { value: { while: unknown; inline: Workflow } })?.value;
     expect(loopArgs.while).toEqual(directCel("outputs.done == true || iter.iteration >= 10"));
     expect(loopArgs.inline).toBeDefined();
     expect(loopArgs.inline?.nodes).toHaveLength(1);
-    expect(loopArgs.inline?.nodes[0].id).toBe("call_llm");
+    expect(loopArgs.inline?.nodes?.[0].id).toBe("call_llm");
   });
 
   it("should preserve node-level thread config on round-trip", () => {
@@ -353,7 +349,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 },
               },
             },
-          } as Step["args"],
+          } as unknown as Step["args"],
         } as Step,
       ],
       edges: [],
@@ -366,7 +362,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("display_style: info");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(getStepThread(deserialized.nodes[0])).toMatchObject({
+    expect(getStepThread(deserialized.nodes![0])).toMatchObject({
       mode: "inherit",
       inject: {
         role: celLiteral("user"),
@@ -400,7 +396,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 mode: "new",
               },
             },
-          } as Step["args"],
+          } as unknown as Step["args"],
         } as Step,
       ],
       edges: [],
@@ -414,18 +410,18 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("thread:");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(getStepParallel(deserialized.nodes[0])).toBe(true);
-    expect(getStepItems(deserialized.nodes[0])).toBe("{{nodes.decompose.output.components}}");
-    expect(getStepKey(deserialized.nodes[0])).toBe("{{iter.item.name}}");
-    expect(getStepOnFailure(deserialized.nodes[0])).toBe("continue");
-    expect(getStepThread(deserialized.nodes[0])).toMatchObject({ mode: "new" });
+    expect(getStepParallel(deserialized.nodes![0])).toBe(true);
+    expect(getStepItems(deserialized.nodes![0])).toBe("{{nodes.decompose.output.components}}");
+    expect(getStepKey(deserialized.nodes![0])).toBe("{{iter.item.name}}");
+    expect(getStepOnFailure(deserialized.nodes![0])).toBe("continue");
+    expect(getStepThread(deserialized.nodes![0])).toMatchObject({ mode: "new" });
   });
 
   it("should preserve entry field on round-trip", () => {
     const workflow: Workflow = {
       name: "test-with-entry",
       entry: ["start_node"],
-      nodes: [{ id: "start_node", type: "run", command: "echo hello" }],
+      nodes: [{ id: "start_node", type: "run" }],
       edges: [],
     };
 
@@ -460,7 +456,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("content:");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(deserialized.nodes[0].saveMessage).toMatchObject({
+    expect(deserialized.nodes![0].saveMessage).toMatchObject({
       role: celExpr("{{output.message.role}}"),
       content: celExpr("{{output.message.text}}"),
       toolCalls: celExpr("{{output.tool_calls}}"),
@@ -485,7 +481,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("timeout:");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
-    expect(deserialized.nodes[0].timeout).toEqual(celLiteral("10m"));
+    expect(deserialized.nodes![0].timeout).toEqual(celLiteral("10m"));
   });
 
   it("should preserve workflow-level outputs on round-trip", () => {
@@ -495,7 +491,7 @@ describe("Workflow Serializer Round-Trip", () => {
         message: "{{nodes.agent_loop.message}}",
         response_text: "{{nodes.agent_loop.response_text}}",
       },
-      nodes: [{ id: "agent_loop", type: "run", command: "echo hello" }],
+      nodes: [{ id: "agent_loop", type: "run" }],
       edges: [],
     };
 
@@ -529,7 +525,7 @@ describe("Workflow Serializer Round-Trip", () => {
           max: 500,
         }),
       },
-      nodes: [{ id: "step1", type: "run", command: "echo hello" }],
+      nodes: [{ id: "step1", type: "run" }],
       edges: [],
     };
 
@@ -541,7 +537,7 @@ describe("Workflow Serializer Round-Trip", () => {
     const deserialized = deserializeWorkflowFromYAML(yaml);
     expect(deserialized.inputs).toBeDefined();
     expect(deserialized.inputs?.model.type).toBe("model");
-    expect(getInputEnumValues(deserialized.inputs?.mode)).toEqual(["manual", "auto"]);
+    expect(getInputEnumValues(deserialized.inputs!.mode!)).toEqual(["manual", "auto"]);
   });
 
   describe("Real Workflow YAML Round-Trip", () => {
@@ -587,7 +583,7 @@ describe("Workflow Serializer Round-Trip", () => {
       expect(roundTripped.presets?.tag).toBe(workflow.presets?.tag);
       expect(roundTripped.entry).toEqual(workflow.entry);
       expect(roundTripped.description).toBe(workflow.description);
-      expect(roundTripped.nodes.length).toBe(workflow.nodes.length);
+      expect(roundTripped.nodes!.length).toBe(workflow.nodes!.length);
 
       // Inputs (including groups with type: "group")
       if (workflow.inputs) {
@@ -598,14 +594,17 @@ describe("Workflow Serializer Round-Trip", () => {
       }
 
       // Check each node
-      workflow.nodes.forEach((node, i) => {
-        const rtNode = roundTripped.nodes[i];
+      workflow.nodes!.forEach((node, i) => {
+        const rtNode = roundTripped.nodes![i];
         expect(rtNode.id).toBe(node.id);
         expect(rtNode.type).toBe(node.type);
 
-        // Check presets
-        if (node.presets) {
-          expect(rtNode.presets).toEqual(node.presets);
+        // Check presets and the inline workflow, which live on the step's
+        // args oneof value (workflow and loop steps).
+        const args = (node.args?.value ?? {}) as { presets?: unknown; inline?: Workflow };
+        const rtArgs = (rtNode.args?.value ?? {}) as { presets?: unknown; inline?: Workflow };
+        if (args.presets) {
+          expect(rtArgs.presets).toEqual(args.presets);
         }
 
         // Check thread (only on workflow steps)
@@ -614,9 +613,9 @@ describe("Workflow Serializer Round-Trip", () => {
         }
 
         // Check inline workflow
-        if (node.inline) {
-          expect(rtNode.inline).toBeDefined();
-          expect(rtNode.inline?.nodes.length).toBe(node.inline.nodes.length);
+        if (args.inline) {
+          expect(rtArgs.inline).toBeDefined();
+          expect(rtArgs.inline?.nodes?.length).toBe(args.inline.nodes?.length);
         }
 
         // Check condition

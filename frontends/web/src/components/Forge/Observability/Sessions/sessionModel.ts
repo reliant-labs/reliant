@@ -7,7 +7,13 @@
  */
 
 import type { ObsSearch } from "../obsSearch";
-import type { SessionSummary, TimelineEntry, TimelineKind } from "@/services/controlPlane/observability/rumTypes";
+import type { RumScope, SessionSummary, TimelineEntry, TimelineKind } from "@/services/controlPlane/observability/rumTypes";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
+
+/** The scope a RumService call carries: no attribute filters (RumScope has none). */
+export function rumScopeOf(scope: ObsScope, service?: string): RumScope {
+  return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds, services: service ? [service] : [] };
+}
 
 /**
  * A session whose last activity is this recent may still be recording. The
@@ -76,6 +82,50 @@ export function navigationLabel(name: string): string {
   if (name === "documentLoad") return "Page load";
   if (name === "routeChange") return "Route change";
   return name || "Navigation";
+}
+
+/** What a session is called when it does not say which frontend recorded it. */
+export const UNKNOWN_APP = "Unknown app";
+
+export interface SessionWhenOptions {
+  now?: number;
+  /** IANA zone the day words are judged in. Default: the viewer's. */
+  timeZone?: string;
+  /** Default: the viewer's. */
+  locale?: string;
+}
+
+/** A calendar day in `timeZone` as a day number, so two days subtract without DST arithmetic. */
+function dayNumber(ms: number, timeZone: string | undefined): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(ms);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / 86_400_000;
+}
+
+/**
+ * When a session started, as a person says it in their own timezone:
+ * `Today 14:32`, `Yesterday 09:10`, `Oct 25, 14:32`, and the year only when it
+ * is not this one (`Oct 25, 2024, 14:32`).
+ */
+export function formatSessionWhen(startedMs: number, { now = Date.now(), timeZone, locale }: SessionWhenOptions = {}): string {
+  if (!(startedMs > 0)) return "unknown time";
+  const time = new Intl.DateTimeFormat(locale, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(startedMs);
+  const days = dayNumber(now, timeZone) - dayNumber(startedMs, timeZone);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  const sameYear =
+    new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(startedMs) === new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(now);
+  const date = new Intl.DateTimeFormat(locale, { timeZone, month: "short", day: "numeric", year: sameYear ? undefined : "numeric" }).format(startedMs);
+  return `${date}, ${time}`;
+}
+
+/**
+ * A session's name everywhere it is shown or linked: which frontend, and when
+ * it started — `shop-web · Today 14:32`. Never the session id: that is opaque
+ * to a reader, and stays beside the name as copyable metadata.
+ */
+export function sessionTitle(app: string | undefined, startedMs: number, options?: SessionWhenOptions): string {
+  return `${app?.trim() || UNKNOWN_APP} · ${formatSessionWhen(startedMs, options)}`;
 }
 
 /** The attribute every browser span and replay record carries (forge-web-runtime / the OTel web SDK). */

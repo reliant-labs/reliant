@@ -30,7 +30,10 @@ class FakeWebSocket {
   onclose: ((event: { code: number; reason: string }) => void) | null = null;
   sent: string[] = [];
 
-  constructor(public url: string) {
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 

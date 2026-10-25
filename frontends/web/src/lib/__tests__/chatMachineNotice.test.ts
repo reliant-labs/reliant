@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { DaemonInfoSchema, DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { chatMachineNotice, formatWaitElapsed, resolveChatMachine } from "../chatMachineNotice";
 
-function machine(status: DaemonStatus, extra: Partial<DaemonInfo> = {}): DaemonInfo {
+function machine(status: DaemonStatus, extra: Partial<Omit<DaemonInfo, "$typeName">> = {}): DaemonInfo {
   return create(DaemonInfoSchema, { daemonId: "d-1", hostname: "box", status, ...extra });
 }
 

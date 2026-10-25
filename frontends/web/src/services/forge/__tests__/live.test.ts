@@ -340,7 +340,7 @@ describe("toLiveShape", () => {
       domains: ["a.example.com", 7],
       clusters: "not-an-array",
       future_field: { anything: true },
-    } as Record<string, unknown>);
+    });
     // The nameless workload and the bare string are dropped; the named one survives.
     expect(shape?.workloads).toEqual([{ name: "api", runtime: "", cluster: "" }]);
     expect(shape?.secrets).toEqual([{ name: "OK", provider: "", declaredBy: [] }]);
@@ -363,7 +363,7 @@ describe("toLiveShape", () => {
       ],
       alert_routes: [{ match: { severity: "critical" }, receiver: "pager", continue: true }, { receiver: "reliant-inapp" }, { match: {} }],
       observability_policy: { enabled: false, disabled: ["traces", "logs"] },
-    } as Record<string, unknown>);
+    });
     expect(shape?.alerts).toEqual([
       { alert: "CheckoutSlow", expr: "SELECT 1 AS value", for: "10m", interval: "", keepFiringFor: "", labels: { severity: "critical" }, annotations: { summary: "slow" }, source: "user", defaultId: "" },
       { alert: "ServiceSilent", expr: "SELECT 0 AS value", for: "", interval: "1m", keepFiringFor: "10m", labels: {}, annotations: {}, source: "default", defaultId: "service-silent" },

@@ -5,7 +5,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatMessage } from "../ChatMessage";
 import {
@@ -24,7 +24,7 @@ beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads() })));
 afterEach(() => setTransport(null));
 
 const getAttachmentAsBlob = vi.fn(
-  async () => new Blob(["png-bytes"], { type: "image/png" }),
+  async (_id: string) => new Blob(["png-bytes"], { type: "image/png" }),
 );
 
 vi.mock("../../../api/authProvider", () => ({
