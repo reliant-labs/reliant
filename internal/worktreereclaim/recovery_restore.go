@@ -51,23 +51,18 @@ func restoreRecoveryCheckout(ctx context.Context, bare, parent, destination, bra
 	}
 	success := false
 	linked := false
-	created := false
 	defer func() {
-		if !success {
-			if linked {
-				_, _ = recoveryGit(context.WithoutCancel(ctx), parent, nil, "worktree", "remove", "--force", "--", destination)
-				_, _ = recoveryGit(context.WithoutCancel(ctx), parent, nil, "update-ref", "-d", "refs/heads/"+branch, capture.HeadOID)
-			} else if parent == "" && created {
-				_ = os.RemoveAll(destination)
-			}
+		if !success && linked {
+			_ = RollbackInterruptedRecovery(context.WithoutCancel(ctx), parent, destination, branch, capture)
 		}
+		// Incomplete independent repository administration has no journal
+		// proving ownership of every byte. Preserve it on failure.
 	}()
 	objectRepo := parent
 	if parent == "" {
 		if err = os.Mkdir(destination, 0700); err != nil {
 			return err
 		}
-		created = true
 		if _, err = recoveryGit(ctx, destination, nil, "init", "--template=", "--object-format="+capture.ObjectFormat, "."); err != nil {
 			return err
 		}
@@ -198,7 +193,26 @@ func RepairRecoveryRegistration(ctx context.Context, parent, destination string)
 // RollbackInterruptedRecovery removes only an exact unpublished registration
 // recorded in the restore journal. A moved branch or mismatched registration
 // holds rather than deleting another actor's workspace.
-func RollbackInterruptedRecovery(ctx context.Context, parent, destination, branch, head string) error {
+func RollbackInterruptedRecovery(ctx context.Context, parent, destination, branch string, capture RecoveryCapture) error {
+	if err := ValidateInterruptedRecovery(ctx, parent, destination, branch, capture); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(destination); os.IsNotExist(err) {
+		return nil
+	}
+	if _, err := recoveryGit(ctx, parent, nil, "worktree", "remove", "--force", "--", destination); err != nil {
+		return err
+	}
+	_, err := recoveryGit(ctx, parent, nil, "update-ref", "-d", "refs/heads/"+branch, capture.HeadOID)
+	return err
+}
+
+// ValidateInterruptedRecovery accepts only a subset of exact captured disk
+// entries and either no index yet or the complete captured index. Missing files
+// are ordinary interrupted materialization; unknown/changed bytes always hold.
+// Callers preflight every repository and its containing staging inventory before
+// starting any rollback, not one destructive checkout at a time.
+func ValidateInterruptedRecovery(ctx context.Context, parent, destination, branch string, capture RecoveryCapture) error {
 	if err := validateRecoveryDestinationRepo(ctx, parent); err != nil {
 		return err
 	}
@@ -224,28 +238,162 @@ func RollbackInterruptedRecovery(ctx context.Context, parent, destination, branc
 		}
 		if filepath.Clean(p) == filepath.Clean(destination) {
 			found = true
-			matches = h == head && b == "refs/heads/"+branch
+			matches = h == capture.HeadOID && b == "refs/heads/"+branch
 		}
 	}
 	if !found {
+		if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+			return fmt.Errorf("unregistered interrupted recovery content")
+		}
 		return nil
 	}
 	if !matches {
 		return fmt.Errorf("interrupted recovery registration changed")
 	}
-	if _, err := recoveryGit(ctx, parent, nil, "worktree", "remove", "--force", "--", destination); err != nil {
+	if _, err := os.Lstat(destination); err != nil {
+		return fmt.Errorf("interrupted recovery directory missing or unreadable")
+	}
+	if err := ValidateRecoveryCapture(ctx, parent, capture); err != nil {
 		return err
 	}
-	_, err = recoveryGit(ctx, parent, nil, "update-ref", "-d", "refs/heads/"+branch, head)
-	return err
+	// Bind the on-disk .git pointer back to this exact registered clone. A
+	// replacement administration file is user/unknown data, not our artifact.
+	adminRaw, err := recoveryGit(ctx, destination, nil, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		return err
+	}
+	admin := strings.TrimSpace(string(adminRaw))
+	if filepath.Dir(admin) != filepath.Join(parent, ".git", "worktrees") {
+		return fmt.Errorf("interrupted recovery administration redirected")
+	}
+	for p, want := range map[string]string{
+		filepath.Join(destination, ".git"): "gitdir: " + admin + "\n",
+		filepath.Join(admin, "gitdir"):     filepath.Join(destination, ".git") + "\n",
+		filepath.Join(admin, "commondir"):  "../..\n",
+	} {
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		data, err := recoveryReadRegular(p, info)
+		if err != nil || string(data) != want {
+			return fmt.Errorf("interrupted recovery administration changed")
+		}
+	}
+	if err := filepath.WalkDir(admin, func(p string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(admin, p)
+		if err != nil {
+			return err
+		}
+		if rel == "." || rel == "logs" {
+			if d.IsDir() {
+				return nil
+			}
+		} else if rel == "HEAD" || rel == "index" || rel == "gitdir" || rel == "commondir" || rel == filepath.Join("logs", "HEAD") {
+			if d.Type().IsRegular() {
+				return nil
+			}
+		}
+		return fmt.Errorf("interrupted recovery administration has unknown state")
+	}); err != nil {
+		return err
+	}
+	index, err := recoveryGit(ctx, destination, nil, "rev-parse", "--path-format=absolute", "--git-path", "index")
+	if err != nil {
+		return err
+	}
+	indexPath := strings.TrimSpace(string(index))
+	if info, err := os.Lstat(indexPath); err == nil {
+		raw, err := recoveryReadRegular(indexPath, info)
+		hashBytes := 20
+		if capture.ObjectFormat == "sha256" {
+			hashBytes = 32
+		}
+		if err != nil || recoveryCheckIndex(raw, hashBytes) != nil {
+			return fmt.Errorf("interrupted recovery index has unknown state")
+		}
+		tree, err := recoveryGit(ctx, destination, nil, "write-tree")
+		if err != nil || strings.TrimSpace(string(tree)) != capture.IndexTreeOID {
+			return fmt.Errorf("interrupted recovery index changed")
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("interrupted recovery index unreadable")
+	}
+	return validateRecoveryPartialDisk(ctx, parent, destination, capture)
 }
 
-// RollbackRecoveryRegistration removes only this operation's separate linked
-// checkout; expected-head CAS prevents deleting a branch another actor moved.
-func RollbackRecoveryRegistration(ctx context.Context, parent, destination, branch, head string) {
-	if _, err := recoveryGit(ctx, parent, nil, "worktree", "remove", "--force", "--", destination); err == nil {
-		_, _ = recoveryGit(ctx, parent, nil, "update-ref", "-d", "refs/heads/"+branch, head)
+func validateRecoveryPartialDisk(ctx context.Context, objects, checkout string, c RecoveryCapture) error {
+	entries, err := recoveryDiskEntries(ctx, objects, c.DiskTreeOID)
+	if err != nil {
+		return err
 	}
+	expected := map[string]recoveryDiskEntry{}
+	dirs := map[string]bool{}
+	for _, e := range entries {
+		expected[e.name] = e
+		for p := path.Dir(e.name); p != "."; p = path.Dir(p) {
+			dirs[p] = true
+		}
+	}
+	return filepath.WalkDir(checkout, func(p string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(checkout, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			if !d.IsDir() {
+				return fmt.Errorf("interrupted recovery root changed")
+			}
+			return nil
+		}
+		if rel == ".git" {
+			if !d.Type().IsRegular() {
+				return fmt.Errorf("interrupted recovery administration changed")
+			}
+			return nil
+		}
+		if d.IsDir() {
+			if !dirs[rel] {
+				return fmt.Errorf("unknown interrupted recovery directory")
+			}
+			return nil
+		}
+		e, ok := expected[rel]
+		if !ok {
+			return fmt.Errorf("unknown interrupted recovery file")
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		var data []byte
+		if e.mode == "120000" && info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(p)
+			if err != nil {
+				return err
+			}
+			data = []byte(target)
+		} else if e.mode != "120000" && info.Mode().IsRegular() && ((info.Mode()&0111) != 0) == (e.mode == "100755") {
+			data, err = recoveryReadRegular(p, info)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("interrupted recovery file mode changed")
+		}
+		want, err := recoveryGit(ctx, objects, nil, "cat-file", "blob", e.oid)
+		if err != nil || !bytes.Equal(data, want) {
+			return fmt.Errorf("interrupted recovery bytes changed")
+		}
+		return nil
+	})
 }
 
 // ValidateRestoredRecovery checks actual HEAD, index and raw filesystem, not
@@ -318,7 +466,7 @@ func ValidateRestoredRecovery(ctx context.Context, checkout, branch string, c Re
 			if !info.Mode().IsRegular() || ((info.Mode()&0111) != 0) != (entry.mode == "100755") {
 				return fmt.Errorf("restored file mode changed")
 			}
-			data, e = os.ReadFile(p)
+			data, e = recoveryReadRegular(p, info)
 			if e != nil {
 				return e
 			}

@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -575,9 +576,9 @@ func recoveryInventoryAt(ctx context.Context, path, tmp string) (recoveryInvento
 			if st.Size() > recoveryMaxObject {
 				return out, fmt.Errorf("recovery: file budget exceeded")
 			}
-			b, e = os.ReadFile(full)
+			b, e = recoveryReadRegular(full, st)
 			if e != nil {
-				return out, fmt.Errorf("recovery: unreadable file")
+				return out, e
 			}
 			if st.Mode().Perm()&0111 != 0 {
 				mode = "100755"
@@ -610,6 +611,27 @@ func recoveryInventoryAt(ctx context.Context, path, tmp string) (recoveryInvento
 		return out, err
 	}
 	return out, nil
+}
+
+// recoveryReadRegular binds the bytes to the enumerated inode. The kernel
+// rejects symlinks in EVERY component and opens nonblocking before fstat, so a
+// replaced FIFO cannot hang capture. Never fall back on unsupported platforms.
+func recoveryReadRegular(path string, expected os.FileInfo) ([]byte, error) {
+	f, err := activityOpenRegular(path)
+	if err != nil {
+		return nil, fmt.Errorf("recovery: unsafe or unreadable regular file")
+	}
+	defer f.Close()
+	before, err := f.Stat()
+	if err != nil || !os.SameFile(expected, before) || before.Size() != expected.Size() || before.Mode() != expected.Mode() || before.Size() > recoveryMaxObject {
+		return nil, fmt.Errorf("recovery: file changed before read or exceeds budget")
+	}
+	b, err := io.ReadAll(io.LimitReader(f, recoveryMaxObject+1))
+	after, statErr := f.Stat()
+	if err != nil || statErr != nil || len(b) > recoveryMaxObject || int64(len(b)) != before.Size() || after.Size() != before.Size() || after.Mode() != before.Mode() || after.ModTime() != before.ModTime() || activityFileMetadata(after) != activityFileMetadata(before) {
+		return nil, fmt.Errorf("recovery: file changed during read or exceeds budget")
+	}
+	return b, nil
 }
 
 func recoveryBuildTree(ctx context.Context, path, index string, entries []RecoveryEntry) (string, error) {

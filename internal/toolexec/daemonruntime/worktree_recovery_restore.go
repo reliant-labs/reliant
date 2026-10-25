@@ -49,6 +49,77 @@ func handleWorktreeRecoveryRestore(ctx context.Context, payload []byte) ([]byte,
 	return json.Marshal(result)
 }
 
+// validateRecoveryStage proves the whole container belongs to this operation,
+// including files outside registered checkouts. Validate all repos before any
+// destructive step, so a changed second repo does not discard the first one.
+func validateRecoveryStage(ctx context.Context, req RecoveryRestoreCommand, workspace string) error {
+	roots := map[string]bool{}
+	dirs := map[string]bool{".": true, "workspace": true}
+	for _, c := range req.Captures {
+		root := filepath.Join(workspace, c.Rel)
+		rel, err := filepath.Rel(filepath.Dir(workspace), root)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("invalid recovery stage mapping")
+		}
+		roots[rel] = true
+		for p := filepath.Dir(rel); p != "."; p = filepath.Dir(p) {
+			dirs[p] = true
+		}
+		if err := worktreereclaim.ValidateInterruptedRecovery(ctx, req.Repositories[c.RepoID], root, req.Branch, c); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Lstat(filepath.Dir(workspace)); os.IsNotExist(err) {
+		return nil // cleanup completed before the previous process lost its reply
+	}
+	return filepath.WalkDir(filepath.Dir(workspace), func(p string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(filepath.Dir(workspace), p)
+		if err != nil {
+			return err
+		}
+		if roots[rel] {
+			if !d.IsDir() {
+				return fmt.Errorf("changed recovery stage root")
+			}
+			return filepath.SkipDir
+		}
+		if !d.IsDir() || !dirs[rel] {
+			return fmt.Errorf("unknown recovery stage content")
+		}
+		return nil
+	})
+}
+
+// Remove only empty directories after checkouts were validated and removed.
+// A late writer makes Remove fail; it is never swallowed by RemoveAll.
+func removeRecoveryStageDirectories(stage string) error {
+	if _, err := os.Lstat(stage); os.IsNotExist(err) {
+		return nil
+	}
+	var dirs []string
+	if err := filepath.WalkDir(stage, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return fmt.Errorf("recovery stage changed during rollback")
+		}
+		dirs = append(dirs, p)
+		return nil
+	}); err != nil {
+		return err
+	}
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if err := os.Remove(dirs[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) worktreereclaim.RecoveryRestoreResponse {
 	held := func(detail string) worktreereclaim.RecoveryRestoreResponse {
 		return worktreereclaim.RecoveryRestoreResponse{Outcome: worktreereclaim.OutcomeHeld, Reason: worktreereclaim.ReasonUnsupportedRecovery, Detail: detail}
@@ -94,12 +165,15 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 				return held("Invalid restore staging journal; retained for review.")
 			}
 			if !marker.Prepared {
+				if err := validateRecoveryStage(ctx, req, marker.StagePath); err != nil {
+					return held("Interrupted staging contains changed or unknown data; preserved for review.")
+				}
 				for _, c := range req.Captures {
-					if err := worktreereclaim.RollbackInterruptedRecovery(ctx, req.Repositories[c.RepoID], filepath.Join(marker.StagePath, c.Rel), req.Branch, c.HeadOID); err != nil {
+					if err := worktreereclaim.RollbackInterruptedRecovery(ctx, req.Repositories[c.RepoID], filepath.Join(marker.StagePath, c.Rel), req.Branch, c); err != nil {
 						return held("Interrupted owned registration changed; retained for review.")
 					}
 				}
-				if err := os.RemoveAll(filepath.Dir(marker.StagePath)); err != nil {
+				if err := removeRecoveryStageDirectories(filepath.Dir(marker.StagePath)); err != nil {
 					return held("Cannot reconcile owned staging directory.")
 				}
 				if err := os.Remove(markerPath); err != nil {
@@ -109,7 +183,7 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 			}
 			if _, err := os.Lstat(marker.StagePath); os.IsNotExist(err) {
 				for _, c := range req.Captures {
-					if err := worktreereclaim.RollbackInterruptedRecovery(ctx, req.Repositories[c.RepoID], filepath.Join(marker.StagePath, c.Rel), req.Branch, c.HeadOID); err != nil {
+					if err := worktreereclaim.RollbackInterruptedRecovery(ctx, req.Repositories[c.RepoID], filepath.Join(marker.StagePath, c.Rel), req.Branch, c); err != nil {
 						return held("Missing staging registration requires review.")
 					}
 				}
@@ -117,6 +191,9 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 					return held("Cannot reconcile interrupted restore journal.")
 				}
 				return restoreRecoveryWorkspace(ctx, req)
+			}
+			if err := validateRecoveryStage(ctx, req, marker.StagePath); err != nil {
+				return held("Prepared staging contains changed or unknown data; preserved for review.")
 			}
 			for _, c := range req.Captures {
 				if err := worktreereclaim.ValidateRestoredRecovery(ctx, filepath.Join(marker.StagePath, c.Rel), req.Branch, c); err != nil {
@@ -173,7 +250,7 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 	if err != nil {
 		return held("Cannot reserve recovery staging directory.")
 	}
-	defer os.RemoveAll(stage)
+	// Never recursively delete staging without a complete inventory proof.
 	// Journal exact owned staging before any registration. A killed process can
 	// reconcile only these registered paths/expected new branches on retry.
 	initial, _ := json.Marshal(recoveryRestoreMarker{Digest: digest, StagePath: filepath.Join(stage, "workspace")})
@@ -197,15 +274,10 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 		path, parent string
 	}
 	var registeredRepos []registered
-	published := false
-	defer func() {
-		if !published {
-			for i := len(registeredRepos) - 1; i >= 0; i-- {
-				r := registeredRepos[i]
-				worktreereclaim.RollbackRecoveryRegistration(context.WithoutCancel(ctx), r.parent, r.path, req.Branch, r.capture.HeadOID)
-			}
-		}
-	}()
+	// On errors retain the journal and staging. Retry preflights ALL checkout
+	// and container bytes before any rollback; a defer must not erase a user's
+	// write just because a later repository failed.
+	defer func() { _ = os.Remove(stage) }() // only removes an empty container
 	// Fetches are independently verified by C; restore verifies raw tree/index
 	// before this checkout joins the all-or-held workspace.
 	for _, c := range req.Captures {
@@ -258,7 +330,6 @@ func restoreRecoveryWorkspace(ctx context.Context, req RecoveryRestoreCommand) w
 	if err := publishRecoveryDirectory(filepath.Join(stage, "workspace"), req.DestinationPath); err != nil {
 		return held("Recovery destination collision or atomic publication unavailable; nothing overwritten.")
 	}
-	published = true
 	for _, r := range registeredRepos {
 		if err := worktreereclaim.RepairRecoveryRegistration(ctx, r.parent, filepath.Join(req.DestinationPath, r.capture.Rel)); err != nil {
 			return held("Published recovery registration repair held; retry resumes exact operation.")
