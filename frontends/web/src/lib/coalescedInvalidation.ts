@@ -25,13 +25,22 @@
  *     signal.
  *   - Only observed queries refetch (React Query's default `refetchType:
  *     "active"`); an unmounted list is merely stale.
+ *   - A signal may narrow itself with a `predicate` (the reconnect sweep
+ *     names only the reads made before the outage). Signals that collapse
+ *     into one refetch cover the union of what they named; one without a
+ *     predicate covers everything under the key.
  */
 
-import { hashKey, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
+
+export type QueryPredicate = (query: Query) => boolean;
 
 export interface CoalescedInvalidator {
-  /** Mark `queryKey` (a prefix) stale now and refetch it soon. */
-  invalidate(queryKey: QueryKey): void;
+  /**
+   * Mark `queryKey` (a prefix) stale now and refetch it soon — only the
+   * queries under it that `predicate` accepts, when one is given.
+   */
+  invalidate(queryKey: QueryKey, predicate?: QueryPredicate): void;
   /** Drop every pending refetch. For tests and teardown. */
   reset(): void;
 }
@@ -40,10 +49,21 @@ interface KeyState {
   queryKey: QueryKey;
   /** A signal arrived that no started refetch has seen yet. */
   dirty: boolean;
+  /**
+   * What the unseen signals named: "all" once any signal carried no
+   * predicate, otherwise every predicate they carried.
+   */
+  pending: QueryPredicate[] | "all";
   timer: ReturnType<typeof setTimeout> | null;
   inFlight: boolean;
   /** When the last refetch started; -Infinity before the first. */
   lastStartedAt: number;
+}
+
+function unionOf(pending: QueryPredicate[] | "all"): QueryPredicate | undefined {
+  if (pending === "all") return undefined;
+  if (pending.length === 1) return pending[0];
+  return (query) => pending.some((predicate) => predicate(query));
 }
 
 export function createCoalescedInvalidator(
@@ -62,12 +82,14 @@ export function createCoalescedInvalidator(
     state.timer = null;
     if (!state.dirty) return;
     state.dirty = false;
+    const predicate = unionOf(state.pending);
+    state.pending = [];
     state.inFlight = true;
     state.lastStartedAt = now();
     try {
       // Marks stale again (a fetch that STARTED before the latest signal may
       // have cleared the flag on success) and refetches the observed queries.
-      await client.invalidateQueries({ queryKey: state.queryKey });
+      await client.invalidateQueries({ queryKey: state.queryKey, predicate });
     } catch {
       // A failed refetch is the query's own error state; nothing to do here.
     } finally {
@@ -77,15 +99,17 @@ export function createCoalescedInvalidator(
   };
 
   return {
-    invalidate(queryKey) {
-      void client.invalidateQueries({ queryKey, refetchType: "none" });
+    invalidate(queryKey, predicate) {
+      void client.invalidateQueries({ queryKey, predicate, refetchType: "none" });
       const hash = hashKey(queryKey);
       let state = states.get(hash);
       if (!state) {
-        state = { queryKey, dirty: false, timer: null, inFlight: false, lastStartedAt: -Infinity };
+        state = { queryKey, dirty: false, pending: [], timer: null, inFlight: false, lastStartedAt: -Infinity };
         states.set(hash, state);
       }
       state.dirty = true;
+      if (!predicate) state.pending = "all";
+      else if (state.pending !== "all") state.pending.push(predicate);
       if (state.timer !== null || state.inFlight) return;
       schedule(state);
     },

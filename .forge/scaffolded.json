@@ -1274,7 +1274,6 @@
   },
   "absent_reported": [
     ".github/dependabot.yml",
-    ".github/workflows/ci.yml",
     ".github/workflows/deploy.yml",
     ".github/workflows/e2e.yml",
     ".github/workflows/proto-breaking.yml",

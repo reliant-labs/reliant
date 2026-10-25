@@ -20,10 +20,12 @@
 # WHERE IT RUNS, AND WHY THERE
 # ============================
 #
-# Separate from pr-ci.yml deliberately. pr-ci is a GATE — every job in it can
-# fail the PR — and this check must never do that (see below). Folding a
-# never-failing job into the gate blurs what a red PR-CI means, and it would
-# inherit that workflow's change-detection plumbing for no benefit.
+# Separate from ci.yml deliberately. ci.yml is a GATE — every job in it can
+# fail the PR — and the drift report must never do that (see below). Folding a
+# never-failing job into the gate blurs what a red CI means.
+#
+# Both jobs are thin wrappers over `task pin:drift` / `task pin:ancestry`, the
+# commands a laptop runs; the logic is in scripts/.
 #
 # It runs on `pull_request` (the annotation lands where somebody is holding the
 # context) and on a weekly `schedule`. The schedule is the one that matters
@@ -79,6 +81,7 @@ on:
       - "scripts/pin-forge.sh"
       - "scripts/check-pin-ancestry.sh"
       - "scripts/test-pin-ancestry.sh"
+      - "Taskfile.yml"
       - ".github/workflows/pin-drift.yml"
   # The same filter on push: a merge that touches none of these files cannot
   # move the pin, so its ancestry is unchanged from the previous push's
@@ -95,6 +98,7 @@ on:
       - "scripts/pin-forge.sh"
       - "scripts/check-pin-ancestry.sh"
       - "scripts/test-pin-ancestry.sh"
+      - "Taskfile.yml"
       - ".github/workflows/pin-drift.yml"
   schedule:
     - cron: "0 6 * * 1" # weekly: drift + ancestry
@@ -117,9 +121,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
 
-      - name: Report drift
+      - name: task pin:drift
         env:
           # The compare API reads reliant-labs/forge, which is private. The
           # default GITHUB_TOKEN is scoped to THIS repository only and cannot
@@ -128,20 +135,19 @@ jobs:
           # SIBLING_READ_TOKEN yields a useless-but-not-misleading report
           # instead of a false green.
           GH_TOKEN: ${{ secrets.SIBLING_READ_TOKEN || secrets.GITHUB_TOKEN }}
-        run: ./scripts/pin-drift.sh --github
+        run: task pin:drift -- --github
 
   ancestry:
     name: Forge pin is on forge main
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
 
-      # Hermetic, about 1s. A detector that can pass vacuously is worse than
-      # none, so prove it still FAILS on an off-main pin before trusting its
-      # verdict on the real one.
-      - name: Self-test the ancestry check
-        run: ./scripts/test-pin-ancestry.sh
-
-      - name: Check the forge pin is on forge main
-        run: ./scripts/check-pin-ancestry.sh --github
+      # Self-tests the check first (hermetic, about 1s: a detector that can
+      # pass vacuously is worse than none), then judges the real pin.
+      - name: task pin:ancestry
+        run: task pin:ancestry -- --github
