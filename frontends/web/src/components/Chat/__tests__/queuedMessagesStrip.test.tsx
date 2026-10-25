@@ -44,14 +44,6 @@ const {
   toastInfoMock: vi.fn(),
 }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: {
-    sendAgentMessage: sendAgentMessageMock,
-    cancelQueuedAgentMessage: cancelQueuedAgentMessageMock,
-  },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
-
 vi.mock("../../../lib/toast-manager", () => ({
   toast: {
     error: toastErrorMock,
@@ -131,7 +123,7 @@ import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullRe
 
 // ChatService's pull reads are generated-key reads, so they are answered at
 // the transport.
-beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req), "ChatService.CancelQueuedAgentMessage": (req: unknown) => cancelQueuedAgentMessageMock(req) })));
 afterEach(() => setTransport(null));
 
 const HUMAN = 5;

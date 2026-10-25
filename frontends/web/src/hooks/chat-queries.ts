@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Chat } from "../api/client";
+import type { Chat } from "../api/client";
 import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { queryClient } from "../lib/query-client";
 import { chatServiceKeys, useListArchivedChats } from "./chat-service-hooks_gen";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
+import * as chatActions from "./chat-actions";
 
 // ── Query key factory ───────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ export const chatKeys = {
 };
 
 // ── Cache patch helpers ─────────────────────────────────────────────────────
-// GOTCHA: the list cache stores the RAW envelope from api.chatsV2.list
+// GOTCHA: the list cache stores the RAW envelope from chatActions.listChats
 // ({ chats, lastUserUpdateSequence }) — the `select: (data) => data.chats`
 // transform in useChatList runs on READ, not at cache time. Updaters here must
 // patch `.chats` inside the envelope, not a bare array.
@@ -166,7 +167,7 @@ export async function resolveChat(chatId: string): Promise<Chat | undefined> {
   const cached = getChatFromCache(chatId);
   if (cached) return cached;
   try {
-    const chat = await api.chatsV2.get(chatId);
+    const chat = await chatActions.getChat(chatId);
     seedChatDetail(chat);
     return chat;
   } catch {
@@ -230,7 +231,7 @@ export function removeChatFromListCache(
 export function useChatList(projectId?: string) {
   return useQuery({
     queryKey: chatKeys.list(projectId),
-    queryFn: () => api.chatsV2.list(projectId),
+    queryFn: () => chatActions.listChats(projectId),
     enabled: !!projectId,
     select: (data) => data.chats,
   });
@@ -244,7 +245,7 @@ export function useChatList(projectId?: string) {
 export function useChatListWithWorkspaces(projectId?: string) {
   return useQuery({
     queryKey: chatKeys.list(projectId),
-    queryFn: () => api.chatsV2.list(projectId),
+    queryFn: () => chatActions.listChats(projectId),
     enabled: !!projectId,
   });
 }
@@ -252,7 +253,7 @@ export function useChatListWithWorkspaces(projectId?: string) {
 export function useChat(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.detail(chatId),
-    queryFn: () => api.chatsV2.get(chatId!),
+    queryFn: () => chatActions.getChat(chatId!),
     enabled: !!chatId,
   });
 }
@@ -276,7 +277,7 @@ export function useChat(chatId?: string) {
 export function useChatSelection(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
-    queryFn: async () => (await api.chatsV2.get(chatId!)).selection ?? null,
+    queryFn: async () => (await chatActions.getChat(chatId!)).selection ?? null,
     enabled: !!chatId,
     staleTime: Infinity,
   });
@@ -324,7 +325,7 @@ export function useArchivedChats() {
 export function useStartChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: StartChatRequest) => api.chatsV2.start(request),
+    mutationFn: (request: StartChatRequest) => chatActions.startChat(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
     },
@@ -334,7 +335,7 @@ export function useStartChat() {
 export function useDeleteChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.delete(chatId),
+    mutationFn: (chatId: string) => chatActions.deleteChat(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
       // Deletes can come from the archived list too.
@@ -347,7 +348,7 @@ export function useRenameChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chatId, title }: { chatId: string; title: string }) =>
-      api.chatsV2.update(chatId, { title } as UpdateChatRequest),
+      chatActions.updateChat(chatId, { title } as UpdateChatRequest),
     onSuccess: (_data, { chatId }) => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
@@ -358,7 +359,7 @@ export function useRenameChat() {
 export function useArchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.archive(chatId),
+    mutationFn: (chatId: string) => chatActions.archiveChat(chatId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatServiceKeys.archivedChat });
@@ -369,7 +370,7 @@ export function useArchiveChat() {
 export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.unarchive(chatId),
+    mutationFn: (chatId: string) => chatActions.unarchiveChat(chatId),
     onSuccess: () => {
       // The chat list carries each chat's workspace, so the restored chat shows
       // with the right group as soon as the list refetches.

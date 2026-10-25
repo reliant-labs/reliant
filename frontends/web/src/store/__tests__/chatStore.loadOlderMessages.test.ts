@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ContentBlockType,
   MessageRole,
@@ -12,7 +12,8 @@ import {
   getMessagesMetaFromCache,
   setMessagesInCache,
 } from "../../hooks/message-queries";
-import { api } from "../../api/client";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 // Scroll-back paging. The initial chat snapshot is BOUNDED to the newest N
 // messages, so loadOlderMessages is what makes the rest of a long chat
@@ -23,23 +24,10 @@ import { api } from "../../api/client";
 
 const CHAT = "c-older";
 
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: {
-        ...actual.api.chatsV2,
-        listMessages: vi.fn(),
-      },
-    },
-  };
-});
-
-const listMessages = vi.mocked(api.chatsV2.listMessages);
+/** The fake ListMessages, answered at the transport. */
+const listMessages = vi.fn();
+beforeEach(() => setTransport(mockTransport({ "ChatService.ListMessages": (req: unknown) => listMessages(req) })));
+afterEach(() => setTransport(null));
 
 function msg(id: string, seq: number, overrides: Partial<Message> = {}) {
   return {
@@ -105,10 +93,9 @@ describe("loadOlderMessages", () => {
 
     await useChatStore.getState().loadOlderMessages(CHAT);
 
-    expect(listMessages).toHaveBeenCalledWith(CHAT, {
-      recent: 100,
-      beforeSeq: 300,
-    });
+    expect(listMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: CHAT, recent: 100, beforeSeq: 300n }),
+    );
     expect(getMessagesFromCache(CHAT).map((m) => m.id)).toEqual([
       "m200",
       "m299",

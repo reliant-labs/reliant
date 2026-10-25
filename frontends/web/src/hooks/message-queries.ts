@@ -4,10 +4,11 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { api, type Message } from "../api/client";
+import type { Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
 import { isLocalOnlyMessageId } from "../lib/pendingSends";
 import { chatKeys, seedChatDetail } from "./chat-queries";
+import * as chatActions from "./chat-actions";
 
 // ── Query key factory ───────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export const messageKeys = {
 // ── Message-list cache (the single source of truth for a chat's messages) ────
 //
 // messageKeys.list(chatId) stores the ENVELOPE returned by
-// api.chatsV2.listMessages — { messages, total, hasMore, oldestSeq } — NOT
+// chatActions.listMessages — { messages, total, hasMore, oldestSeq } — NOT
 // a bare array (mirrors the chat-list cache pattern in chat-queries.ts).
 // Readers select `.messages`; the chat stream patches `.messages` live via the
 // helpers below (setQueryData, never invalidate/refetch) so the render path
@@ -362,7 +363,7 @@ async function fetchThreadMessages(
   const owner = !pendingThreadMessages.has(pendingKey);
   if (owner) pendingThreadMessages.set(pendingKey, []);
   try {
-    const result = await api.chatsV2.listMessages(chatId, { threadId, recent });
+    const result = await chatActions.listMessages(chatId, { threadId, recent });
     return upsertMessagesById(
       result.messages,
       pendingThreadMessages.get(pendingKey) ?? EMPTY_MESSAGES
@@ -406,7 +407,7 @@ async function seedChatMessages(
   // snapshot hasn't seeded) fetch the ENTIRE history — the exact payload the
   // bounded snapshot was introduced to avoid. Older messages are reachable via
   // chatStore.loadOlderMessages.
-  const fetched = await api.chatsV2.listMessages(chatId, { recent });
+  const fetched = await chatActions.listMessages(chatId, { recent });
   const current = client.getQueryData<MessageListResult>(
     messageKeys.list(chatId)
   );
@@ -531,7 +532,7 @@ export function useBranchChat() {
       messageId: string;
       title?: string;
       worktreeId?: string;
-    }) => api.chatsV2.branch(chatId, { messageId, title, worktreeId }),
+    }) => chatActions.branchChat(chatId, { messageId, title, worktreeId }),
     onSuccess: ({ chat }) => {
       // The branch response carries the selection the server copied from the
       // source chat; seeding it lets the branch's composer open on the same
@@ -544,6 +545,6 @@ export function useBranchChat() {
 
 export function useMarkUnread() {
   return useMutation({
-    mutationFn: (chatId: string) => api.chatsV2.markUnread(chatId),
+    mutationFn: (chatId: string) => chatActions.markChatUnread(chatId),
   });
 }

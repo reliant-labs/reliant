@@ -27,7 +27,6 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "rea
 import { useNavigate } from "@tanstack/react-router";
 import { ConnectError } from "@connectrpc/connect";
 
-import { chatGrpc } from "@/api/chat-grpc";
 import type { ReplayCandidate } from "@/hooks/trigger-model";
 import { previewReplay, useReplayCandidates } from "@/hooks/trigger-queries";
 import { NO_MACHINE, noMachineBlockerFor } from "@/components/Automations/daemonChoices";
@@ -44,6 +43,7 @@ import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { candidateLabel, formatPayload, parsePayload, REPLAY_KINDS } from "./runNowReplay";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
+import * as chatActions from "@/hooks/chat-actions";
 
 export interface RunNowDialogProps {
   open: boolean;
@@ -207,7 +207,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
     const noMachine = value.daemonId === NO_MACHINE;
     setStarting(true);
     try {
-      const { chat } = await chatGrpc.runNow({
+      const { chat } = await chatActions.runNow({
         projectId,
         workflow: workflowRef,
         message: message.trim() || undefined,

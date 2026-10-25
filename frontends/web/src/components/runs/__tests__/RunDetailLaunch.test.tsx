@@ -78,7 +78,6 @@ const rpc = vi.hoisted(() => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    chat: () => ({ getChat: rpc.getChat, startChat: rpc.startChat }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
   },
   setDaemonLastSeen: vi.fn(),
@@ -90,6 +89,8 @@ vi.mock("@/api/grpc-client", () => ({
 // catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
+      "ChatService.GetChat": (req: unknown) => rpc.getChat(req as never),
+      "ChatService.StartChat": (req: unknown) => rpc.startChat(req as never),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees: rpc.listWorktrees }),
       ...serviceHandlers("WorkflowService", { listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
