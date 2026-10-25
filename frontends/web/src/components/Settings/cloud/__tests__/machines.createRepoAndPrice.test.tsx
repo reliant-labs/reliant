@@ -50,7 +50,7 @@ const mocks = vi.hoisted(() => ({
     planName: "Compute Medium",
     allowedDaemonSizes: ["small", "medium"],
   })),
-  createEnvironment: vi.fn(async () => ({ id: "d-new", name: "box" }) as unknown),
+  createEnvironment: vi.fn(async (_input: unknown) => ({ id: "d-new", name: "box" }) as unknown),
   createProjectFromRepo: vi.fn(async () => ({
     project: { id: "p-1" },
     projectDaemon: undefined,

@@ -47,7 +47,7 @@ func TestShellTool_RefusesDeletingCommandsAimedAtRoots(t *testing.T) {
 	t.Parallel()
 	refused := []string{
 		// The command that ran on 2026-10-06, verbatim in shape.
-		"rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.dev-ports.sh' --exclude='data' --exclude='.env.local' \\\n" +
+		"rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='.env.local' \\\n" +
 			"  \"/Users/u/.reliant/worktrees/p/compete-impl-2-abc/\" \\\n  \"/\"",
 		`rsync -a --delete src/ /`,
 		`rsync -a --delete-after src/ //`,

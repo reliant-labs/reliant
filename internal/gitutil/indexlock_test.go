@@ -157,7 +157,7 @@ func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
 // the lock exactly as Held does.
 func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs real git plus the real lsof holder probe (up to its 10s timeout on a loaded host); runs in make test")
+		t.Skip("runs real git plus the real lsof holder probe (up to its 10s timeout on a loaded host); runs in task test")
 	}
 	repo := initRepo(t)
 

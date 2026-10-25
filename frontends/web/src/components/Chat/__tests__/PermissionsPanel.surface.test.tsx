@@ -2,21 +2,21 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { PermissionsPanel } from "../PermissionsPanel";
-import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
+import { create } from "@bufbuild/protobuf";
+import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 
 // The batch "N Pending / Approve All / Deny All" bar ChatPresenter mounts
 // above the composer. On a 390px viewport its desktop `inline-flex` row does
 // not fit, and the keyboard-shortcut badge is meaningless without a keyboard.
 const pending: Approval[] = [
-  {
-    $typeName: "reliant.v1.Approval",
+  create(ApprovalSchema, {
     id: "approval-1",
     chatId: "chat-1",
     entityId: "block-1",
     status: ApprovalStatus.PENDING,
     createdAt: new Date().toISOString(),
-  },
+  }),
 ];
 
 vi.mock("../../../store/chatStoreHooks", () => ({

@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { create } from '@bufbuild/protobuf'
 
-import { NodeInfoSchema, NodeInputFieldSchema, CELFieldInfoSchema } from '../../gen/reliant/v1/catalog_pb'
+import { NodeInfoSchema, NodeInputFieldSchema, CELFieldInfoSchema, type NodeInputField } from '../../gen/reliant/v1/catalog_pb'
 
 const nodes = vi.hoisted(() => ({ list: [] as unknown[] }))
 vi.mock('../node-metadata', () => ({ getCachedNodes: () => nodes.list }))
@@ -35,7 +35,7 @@ import { parseCELContext, resolveCompletions, type CELCompletionContext } from '
 import { insertableData } from '../insertableData'
 import { outputFieldsForNodeType } from '../nodeOutputFields'
 
-const field = (name: string, type: string, extra: { children?: ReturnType<typeof field>[]; advanced?: boolean } = {}) =>
+const field = (name: string, type: string, extra: { children?: NodeInputField[]; advanced?: boolean } = {}): NodeInputField =>
   create(NodeInputFieldSchema, {
     name,
     type,

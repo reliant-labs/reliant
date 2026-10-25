@@ -8,7 +8,7 @@
  */
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 
@@ -24,10 +24,6 @@ globalThis.ResizeObserver ??= class {
 const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
   sendAgentMessageMock: vi.fn(),
   toastErrorMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -101,6 +97,14 @@ vi.mock("../WorkflowSelector", () => ({
 }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req) })));
+afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
   const editor = screen.getByTestId("chat-input");

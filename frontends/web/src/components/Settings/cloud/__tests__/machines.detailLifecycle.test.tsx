@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
-  listDaemons: vi.fn(async () => ({ daemons: [] })),
+  listDaemons: vi.fn(async () => ({ daemons: [] as unknown[] })),
   getDaemon: vi.fn(),
   getComputeSubscription: vi.fn(async () => ({})),
   getComputeEligibility: vi.fn(async () => ({

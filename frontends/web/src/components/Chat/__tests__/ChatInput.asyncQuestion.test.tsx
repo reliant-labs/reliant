@@ -25,16 +25,13 @@ globalThis.ResizeObserver ??= class {
 
 const { sendAgentMessageMock } = vi.hoisted(() => ({ sendAgentMessageMock: vi.fn() }));
 
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
 setTransport(
   mockTransport({
     // The server leaves async questions out of the pending list.
     "QuestionService.ListPendingQuestions": { response: { questions: [] } },
     "QuestionService.ListAsyncQuestions": { response: { questions: [] } },
     "QuestionService.ResolveQuestion": { response: {} },
+    "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req),
   }),
 );
 vi.mock("../../../lib/toast-manager", () => ({
@@ -131,7 +128,11 @@ describe("an async question does not take over the composer", () => {
     editor.textContent = "keep going";
     fireEvent.input(editor);
     fireEvent.keyDown(editor, { key: "Enter", shiftKey: false, metaKey: false, ctrlKey: false });
-    expect(sendAgentMessageMock).toHaveBeenCalledWith(CHAT_ID, CHAT_ID, "keep going", [], expect.any(String));
+    await waitFor(() =>
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: CHAT_ID, threadId: CHAT_ID, message: "keep going", attachments: [], clientMessageId: expect.any(String) }),
+      ),
+    );
   });
 
   it("while a blocking question from the same stream still does (control)", async () => {

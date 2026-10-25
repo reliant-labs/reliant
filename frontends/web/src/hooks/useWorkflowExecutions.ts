@@ -1,10 +1,13 @@
 /**
  * Hook to fetch the workflow execution tree for a chat.
  *
- * The execution tree is homed in React Query, keyed by chatId. Multiple
- * components calling useWorkflowExecutions(chatId) for the same chatId share a
- * single query cache entry (and therefore a single in-flight fetch) instead of
- * issuing duplicate API calls.
+ * The execution tree is homed in React Query under the generated
+ * GetWorkflowExecutions key (chatServiceKeys). Multiple components calling
+ * useWorkflowExecutions(chatId) for the same chatId share a single query cache
+ * entry (and therefore a single in-flight fetch) instead of issuing duplicate
+ * API calls. It is a pull read — the stream only says it changed — so the
+ * entry is always some request's answer, and a generated ChatService
+ * mutation's `chatServiceKeys.all` invalidation refetching it is correct.
  *
  * Instead of polling, this hook subscribes to "workflow_executions" refetch
  * events from the chat stream and invalidates the query when one arrives. The
@@ -13,11 +16,15 @@
  */
 
 import { useEffect } from "react";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { chatGrpc, type WorkflowExecutionData } from "../api/chat-grpc";
-import { WorkflowExecutionView, WorkflowState } from "../gen/reliant/v1/chat_pb";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { WorkflowExecutionData } from "../types/chat";
+import {
+  WorkflowExecutionView,
+  WorkflowState,
+  type GetWorkflowExecutionsResponse,
+} from "../gen/reliant/v1/chat_pb";
 import { subscribeToRefetch } from "../store/refetchStore";
-import { chatDetailKeys } from "./chat-detail-keys";
+import { chatServiceKeys, useGetWorkflowExecutions } from "./chat-service-hooks_gen";
 
 interface UseWorkflowExecutionsResult {
   /** The most recent/active workflow (for backwards compat) */
@@ -32,6 +39,32 @@ interface UseWorkflowExecutionsResult {
 }
 
 const EMPTY_ALL: WorkflowExecutionData[] = [];
+
+/**
+ * Every cached view (BASIC, FULL) of one chat's execution tree. A generated
+ * key ends in the request's protojson, and React Query matches an object in a
+ * key partially, so a request naming only the chat matches the entry of every
+ * view of it. `chatId` must be non-empty: an empty one serializes to `{}`,
+ * which would match every chat's tree.
+ */
+export function workflowExecutionsOfChat(chatId: string) {
+  return chatServiceKeys.getWorkflowExecutions({ chatId });
+}
+
+interface WorkflowExecutionTree {
+  latest: WorkflowExecutionData | null;
+  all: WorkflowExecutionData[];
+}
+
+/**
+ * The response as the hook's readers use it. No copy: a proto
+ * WorkflowExecution is a WorkflowExecutionData (the frontend type only makes
+ * `$typeName` optional), and a FULL tree can be tens of megabytes, read by
+ * every mounted observer's `select`.
+ */
+function toTree(response: GetWorkflowExecutionsResponse): WorkflowExecutionTree {
+  return { latest: response.rootWorkflow ?? null, all: response.allRootWorkflows };
+}
 
 /**
  * One refetch subscription per (client, chat), shared by every mounted reader.
@@ -74,7 +107,7 @@ function acquireRefetchSubscription(
           // The chat's key PREFIX, so one pulse refreshes every view of the
           // tree that is cached (BASIC for the timeline, FULL while the viewer
           // is open) — and React Query refetches only the ones still mounted.
-          { queryKey: chatDetailKeys.workflowExecutions(chatId) },
+          { queryKey: workflowExecutionsOfChat(chatId) },
           // SECOND argument. invalidateQueries is
           // (filters, options) — cancelRefetch is an InvalidateOptions field,
           // not a filter, so passing it in the first object was silently
@@ -122,10 +155,9 @@ export function useWorkflowExecutions(
 ): UseWorkflowExecutionsResult {
   const queryClient = useQueryClient();
 
-  const query = useQuery({
-    queryKey: chatDetailKeys.workflowExecutionsView(chatId ?? "", view),
-    queryFn: () => chatGrpc.getWorkflowExecutions(chatId!, view),
+  const query = useGetWorkflowExecutions({ chatId: chatId ?? "", view }, {
     enabled: !!chatId,
+    select: toTree,
     // The tree must outlive an unmount exactly as long as the messages it
     // classifies. The messages cache is gcTime: Infinity (message-queries.ts),
     // so a chat switched back to renders its transcript on the first frame —
@@ -171,7 +203,7 @@ export function useWorkflowExecutions(
     allWorkflows: all,
     hasRunningWorkflow,
     isLoading: query.isLoading,
-    error: query.error as Error | null,
+    error: query.error,
     refetch: async () => {
       await query.refetch();
     },

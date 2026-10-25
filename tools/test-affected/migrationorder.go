@@ -34,7 +34,7 @@ import (
 // review. A check that cannot reach main therefore fails closed instead of
 // judging a stale ref.
 
-// defaultLanes is every lane `make test-affected` considers.
+// defaultLanes is every lane `task test:affected` considers.
 const defaultLanes = "go,web,electron,forge-generate,docs-generate,migration-order"
 
 // migrationVersionRe matches a migration filename: <digits>_<stem>.up.sql.
@@ -190,7 +190,7 @@ func formatOrderViolations(w io.Writer, vs []orderViolation) {
 		fmt.Fprintf(w, "  It has not been applied anywhere, so re-create it above main's head:\n")
 		fmt.Fprintf(w, "    git fetch origin main && git merge origin/main\n")
 		fmt.Fprintf(w, "    git rm %s        # keep a copy of its SQL\n", v.File)
-		fmt.Fprintf(w, "    make migration NAME=%s   # then paste the SQL back into the new file\n", v.Stem)
+		fmt.Fprintf(w, "    task db:migration NAME=%s   # then paste the SQL back into the new file\n", v.Stem)
 		fmt.Fprintf(w, "  (or re-version it in place: forge db migration rebase %s)\n", v.File)
 	}
 }

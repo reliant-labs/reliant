@@ -84,6 +84,21 @@ describe("states", () => {
     expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("heatmap");
   });
 
+  it("draws a metric with no data in the scope as empty, naming the metric and where", () => {
+    const metrics: Panel = { id: "m", title: "Routes", kind: "line", signal: "metrics", series: [{ label: "routes", agg: "max", field: "gnatsd_routez_num_routes", metricType: "gauge" }] };
+    const none: PanelResult = {
+      ...answer(line),
+      series: [],
+      rows: [],
+      warnings: ["step_raised: 30s requested, 60s used", "metric_absent: gnatsd_routez_num_routes has no data in the selected environments in this time range"],
+    };
+    render(<PanelBody panel={metrics} query={ready(none)} />);
+    expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
+    expect(screen.getByTestId("obs-panel-empty")).toHaveTextContent("No data in this window");
+    expect(screen.getByTestId("obs-panel-absent")).toHaveTextContent("gnatsd_routez_num_routes has no data in the selected environments in this time range");
+    expect(screen.getByTestId("obs-panel-absent")).not.toHaveTextContent("step_raised");
+  });
+
   it("opens the drill-down from a line's legend and a table's row", async () => {
     const user = userEvent.setup();
     const onDrill = vi.fn();

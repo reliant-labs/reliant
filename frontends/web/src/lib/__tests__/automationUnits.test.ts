@@ -33,6 +33,7 @@ function trigger(overrides: Partial<Trigger> & { id: string }): Trigger {
     createdAt: "",
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
     ...overrides,
   };
 }

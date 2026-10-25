@@ -46,7 +46,6 @@ import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-import { api } from "../../api/client";
 import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
@@ -54,6 +53,7 @@ import {
   type ToolResultData as ProcessedToolResultData,
   type MessageSegment,
 } from "../../lib/messageProcessor";
+import * as chatActions from "../../hooks/chat-actions";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -519,7 +519,7 @@ function ChatMessageComponent({
           },
           onConvertToBackground: async (toolCallId: string) => {
             if (chatId) {
-              await api.toolCalls.convertToBackground(toolCallId);
+              await chatActions.convertToolCallToBackground(toolCallId);
             }
           },
         };

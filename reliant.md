@@ -88,9 +88,8 @@ lane. A migration also runs the DB-backed packages it reaches. Rule table and
 blind spots: `dev-docs/testing-affected.md`.
 Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under load.
 
-- **Use `task`, not `make`.** The Makefile is one-line `task` forwarders kept
-  for one merge (P8 L5 deletes it). Nothing here stops another agent's
-  environment any more. For the full lane of one package run
+- **Use `task`; there is no Makefile.** Nothing here stops another agent's
+  environment. For the full lane of one package run
   `task test -- ./internal/<pkg>/...` (no `-short`, `-race`) once at the end;
   never the unscoped `task test` as a quick check (the whole module, web and
   electron).

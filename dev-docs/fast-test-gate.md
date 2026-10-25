@@ -14,7 +14,7 @@ for the selected pre-merge tests, retaining the full suite on main.
 
 ## Current entrypoints and coverage
 
-The former Makefile / `web/` layout is obsolete on current main. Use:
+There is no Makefile and no top-level `web/`. Use:
 
 - `task test:affected`: Go package/reverse-dependency/file-reader selection,
   importing Vitest files, Electron, and applicable generation checks.

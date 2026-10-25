@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 
 import {
   ScheduleSourceSchema,
@@ -28,7 +28,6 @@ import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 import { setTransport } from "@/lib/connect";
 import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
-import { serviceHandlers } from "@/test/serviceTransport";
 
 const listTriggers = vi.fn();
 const setTriggerEnabled = vi.fn();
@@ -82,7 +81,8 @@ vi.mock("@/store/projectStore", () => {
 
 import { AutomationsListPage } from "../AutomationsListPage";
 
-type TriggerInit = Parameters<typeof create<typeof TriggerSchema>>[1];
+/** A fixture's overrides: any init fields but the message's own type tag. */
+type TriggerInit = Omit<MessageInitShape<typeof TriggerSchema>, "$typeName">;
 
 function protoTrigger(overrides: Partial<TriggerInit> = {}) {
   return create(TriggerSchema, {

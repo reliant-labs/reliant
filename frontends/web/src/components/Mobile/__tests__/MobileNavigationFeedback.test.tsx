@@ -13,7 +13,7 @@ import { act, render, screen } from "@testing-library/react";
 
 const router = vi.hoisted(() => ({
   isLoading: false,
-  loadRouteChunk: vi.fn(() => Promise.resolve()),
+  loadRouteChunk: vi.fn((_route: unknown) => Promise.resolve()),
   routesById: {} as Record<string, unknown>,
 }));
 
@@ -30,7 +30,7 @@ const { MobileNavigationFeedback, PROGRESS_DELAY_MS, descendantRoutes } = await 
 );
 
 const chat = { id: "chat", children: [{ id: "chat-workflow" }] };
-const list = { id: "list" };
+const list: { id: string; children?: unknown } = { id: "list" };
 const shell = { id: "/_authenticated/_mobile", children: [list, chat] };
 const unrelated = { id: "/settings" };
 

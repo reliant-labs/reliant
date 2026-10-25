@@ -47,7 +47,7 @@ export GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 cd "$(git rev-parse --show-toplevel)"
 
 # The GOFLAGS go would use here — the environment's, `go env -w`, or
-# $GOROOT/go.env — with -trimpath merged in, as the Makefile's GOFLAGS block
+# $GOROOT/go.env — with -trimpath merged in, as the Taskfile's GOFLAGS env block
 # does. An exported GOFLAGS replaces every lower layer, so appending to
 # "${GOFLAGS:-}" alone dropped the workspace's go.env -trimpath and every
 # build below compiled into worktree-private cache entries.

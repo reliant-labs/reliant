@@ -77,7 +77,7 @@ describe("navigateToNextAttention", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         last_active: TIMESTAMP,
         created_at: TIMESTAMP,
         updated_at: TIMESTAMP,

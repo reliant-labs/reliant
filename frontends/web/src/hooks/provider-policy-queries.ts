@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "../api/client";
 import { readSetting, upsertStringSetting } from "../lib/settingsPersistence";
 import { chatKeys, setChatSelection, useChatSelection } from "./chat-queries";
 import {
@@ -15,6 +14,7 @@ import {
   type OnLimitChoice,
   type PolicyDefaults,
 } from "../lib/providerPolicy";
+import * as chatActions from "./chat-actions";
 
 const defaultsKey = ["provider-policy-defaults"] as const;
 
@@ -58,7 +58,7 @@ export function useChatOnLimit(chatId: string | undefined) {
     mutationFn: async (choice: OnLimitChoice) => {
       if (!chatId) return undefined;
       const version = selection.data?.version;
-      return api.chatsV2.updateProviderPolicy(chatId, policyFromChoice(choice), version);
+      return chatActions.updateChatProviderPolicy(chatId, policyFromChoice(choice), version);
     },
     onSuccess: (next) => {
       if (chatId && next) setChatSelection(chatId, next);

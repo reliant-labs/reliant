@@ -17,10 +17,10 @@
 
 import type { ReactNode } from "react";
 import { renderHook, waitFor, act } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createTestQueryClient } from "../../test/renderWithQuery";
-import type { QueuedAgentMessageView } from "../../api/chat-grpc";
+import type { QueuedAgentMessageView } from "../chat-model";
 
 const CHAT_ID = "chat-abc";
 const THREAD_ID = "thread-xyz";
@@ -29,13 +29,16 @@ const { listQueuedAgentMessagesMock } = vi.hoisted(() => ({
   listQueuedAgentMessagesMock: vi.fn(),
 }));
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: { listQueuedAgentMessages: listQueuedAgentMessagesMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
-}));
-
 import { useQueuedAgentMessages } from "../queued-agent-messages";
 import { initEventBus } from "../../lib/events";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
 
 // The hook subscribes through the same singleton, which is idempotent — this
 // is the bus the hook will use, not a second one.

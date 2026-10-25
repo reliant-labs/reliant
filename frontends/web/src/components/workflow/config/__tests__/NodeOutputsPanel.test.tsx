@@ -5,7 +5,7 @@
  * upstream_proxyman_id behind an "Advanced" disclosure.
  */
 import { describe, expect, it } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -13,7 +13,7 @@ import { NodeInputFieldSchema } from "../../../../gen/reliant/v1/catalog_pb";
 import type { Step } from "../../../../types/workflow";
 import { NodeOutputsPanel } from "../NodeOutputsPanel";
 
-const field = (name: string, type: string, extra: Partial<Parameters<typeof create<typeof NodeInputFieldSchema>>[1]> = {}) =>
+const field = (name: string, type: string, extra: Omit<MessageInitShape<typeof NodeInputFieldSchema>, "$typeName" | "name" | "type"> = {}) =>
   create(NodeInputFieldSchema, { name, type, description: "", ...extra });
 
 // call_llm's output fields as CatalogService.ListNodes returns them.
