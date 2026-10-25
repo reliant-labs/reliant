@@ -33,15 +33,10 @@ import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection, markChatSelectionsUnmaintained } from "../hooks/chat-queries";
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
-import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
-import { invalidateMcpQueries } from "../hooks/mcp-queries";
-import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
-import { projectServiceKeys } from "../hooks/project-service-hooks_gen";
-import { runServiceKeys } from "../hooks/run-service-hooks_gen";
 import { triggersInvalidatingUpdate } from "../hooks/trigger-queries";
-import { triggerServiceKeys } from "../hooks/trigger-service-hooks_gen";
 import { runsInvalidatingUpdate } from "../hooks/run-queries";
-import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
+import { inboxInvalidatingUpdate } from "../hooks/inbox-queries";
+import { STREAM_INVALIDATED_SCOPES } from "./streamInvalidatedScopes";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
@@ -49,8 +44,6 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/grpc-client";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
-import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
-import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import { resolveWorktree } from "../hooks/worktree-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
@@ -158,6 +151,22 @@ export function readBeforeDisruption(disruptedAt: number) {
   // against it, so it is refreshed.
   return (query: { state: { dataUpdatedAt: number } }): boolean =>
     query.state.dataUpdatedAt <= disruptedAt;
+}
+
+/**
+ * The reconnect sweep: every root the stream invalidates
+ * (STREAM_INVALIDATED_SCOPES) is re-read once, because any signal for it sent
+ * while the stream was down is gone. Only reads made before the disruption
+ * (readBeforeDisruption), and only observed ones; an unmounted read is marked
+ * stale. Through the stream's own coalesced invalidator, so the sweep is one
+ * pass and the catch-up replay's own invalidations of the same roots join it
+ * instead of refetching each root again.
+ */
+function sweepStreamInvalidatedScopes(disruptedAt: number): void {
+  const stale = readBeforeDisruption(disruptedAt);
+  for (const root of Object.values(STREAM_INVALIDATED_SCOPES)) {
+    streamInvalidation.invalidate(root, stale);
+  }
 }
 
 /**
@@ -427,18 +436,18 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // Coalesced: a busy run or a reconnect replay is one refetch, not one per
       // update (streamInvalidation).
       if (runsInvalidatingUpdate(update.update_type)) {
-        streamInvalidation.invalidate(runServiceKeys.all);
+        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
       }
       // A fire that launched a run moves its automation's last event, health
       // and next fire; the update names no trigger, so every mounted trigger
       // read is marked stale, coalesced the same way.
       if (triggersInvalidatingUpdate(update.update_type)) {
-        streamInvalidation.invalidate(triggerServiceKeys.all);
+        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
       }
       // The Inbox (and its nav badge) spans every chat, so it is marked stale
       // too. Only observed queries refetch, coalesced the same way.
       if (inboxInvalidatingUpdate(update.update_type, update.data)) {
-        streamInvalidation.invalidate(inboxKeys.all);
+        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
       }
 
       // Route updates to appropriate stores
@@ -494,8 +503,8 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
           // agent's tool call, another tab): the workflow reads (and the
           // preset lists matched against a workflow's inputs) go stale.
           // Coalesced, since an agent editing a draft writes it in bursts.
-          streamInvalidation.invalidate(workflowServiceKeys.all);
-          streamInvalidation.invalidate(presetServiceKeys.all);
+          streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.workflows);
+          streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.presets);
           break;
         }
         case UserUpdateType.DAEMON_HEARTBEAT: {
@@ -556,24 +565,20 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       streamDisruptedAt = Date.now();
     }
 
-    // After a disruption, refresh chat state once reconnected. The stream's
-    // own DB replay (since_seq catch-up) restores update-driven state; this
-    // covers ephemeral signals (REFETCH events are deliberately not replayed).
+    // After a disruption, refresh once reconnected. The stream's own DB
+    // replay (since_seq catch-up) restores update-driven state; the sweep
+    // covers ephemeral signals (REFETCH events and daemon announcements are
+    // deliberately not replayed).
     // NOTE: the old condition (`prevStatus !== "connecting"`) could never
     // fire — every path to "connected" goes through "connecting".
     if (status === "connected" && streamDisruptedAt !== null) {
-      const stale = readBeforeDisruption(streamDisruptedAt);
+      const disruptedAt = streamDisruptedAt;
       streamDisruptedAt = null;
-      logger.info(`${LOG_PREFIX} Reconnected after disruption - refreshing chat state`);
+      logger.info(`${LOG_PREFIX} Reconnected after disruption - refreshing stream-invalidated caches`);
       useChatStore.getState().loadChats().catch((err) => {
         logger.warn(`${LOG_PREFIX} Failed to refresh chats on reconnect`, { error: err });
       });
-      try {
-        void queryClient.invalidateQueries({ queryKey: chatKeys.all, predicate: stale });
-      } catch { /* bus not ready */ }
-      // Daemon-list announcements are ephemeral, so any sent while the stream
-      // was down are gone; read the list once instead.
-      invalidateDaemonList(queryClient, { predicate: stale });
+      sweepStreamInvalidatedScopes(disruptedAt);
     }
   },
 
@@ -1125,7 +1130,7 @@ function handleChatActivityChanged(update: UserUpdate) {
     // Approvals are server data in the React Query cache. On IDLE we don't hold
     // the resolved approval objects, so reconcile from the server (a genuine
     // "something changed, refetch" nudge — the one case invalidate is correct).
-    queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
+    queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.approvals });
 
     // IDLE is the authoritative "nothing is streaming" signal. Streaming
     // deltas race message finalization on a separate server channel, so a
@@ -1353,13 +1358,13 @@ function handleRefetch(update: UserUpdate) {
     // A queued clone landed on a daemon: its project_daemons row is settled
     // (and the project's forge name is read next), so every project read is
     // stale. Coalesced, like the other stream-driven list refetches.
-    streamInvalidation.invalidate(projectServiceKeys.all);
+    streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.projects);
   }
   if (refetchType === "config_health") {
     // ConfigHealthIndicator reads GetConfigHealth through the generated hook,
     // and MCP server health is part of config health.
-    void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.all });
-    invalidateMcpQueries(queryClient);
+    void queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.settings });
+    void queryClient.invalidateQueries({ queryKey: STREAM_INVALIDATED_SCOPES.mcp });
   }
   // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);
