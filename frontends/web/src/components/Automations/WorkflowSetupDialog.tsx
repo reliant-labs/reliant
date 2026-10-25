@@ -63,6 +63,7 @@ import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { workflowPageHref } from "@/lib/workflowsArea";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { useWorkflowPresets } from "@/hooks/preset-queries";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
@@ -212,7 +213,7 @@ function SetupBody({
   const fid = (key: string) => `${ids}-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const projects = useProjectStore((s) => s.projects);
+  const { projects } = useProjects();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const naming = useIntegrationEventNaming();
   const title = workflowTitle || workflowRef;

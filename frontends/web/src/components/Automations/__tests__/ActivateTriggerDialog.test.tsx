@@ -50,7 +50,6 @@ vi.mock("@/api/grpc-client", () => ({
     trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
   },
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
@@ -97,6 +96,7 @@ beforeEach(() => {
       "CatalogService.SearchCatalog": (req) => searchCatalog(req),
       "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
       "ConnectionService.ListConnections": (req) => listConnections(req),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
     }),
   );
   createTrigger.mockReset();

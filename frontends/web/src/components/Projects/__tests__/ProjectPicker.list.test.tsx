@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import type { Project } from "@/store/projectStore";
+import { seedProjects } from "@/test/projectList";
 
 // The picker reads the OS colour-scheme preference on mount; jsdom has no
 // matchMedia. Report "light" so the effect is a no-op.
@@ -79,14 +80,11 @@ const mockDeleteProject = vi.fn(async () => {});
 vi.mock("@/store/projectStore", () => {
   const useProjectStore = (selector: (s: unknown) => unknown) =>
     selector({
-      projects: mockProjects(),
-      loadProjects: vi.fn(),
       createProject: vi.fn(),
       selectProject: vi.fn(),
       updateProject: mockUpdateProject,
       deleteProject: mockDeleteProject,
     });
-  useProjectStore.getState = () => ({ projects: mockProjects() });
   return { useProjectStore };
 });
 
@@ -103,7 +101,6 @@ function makeProject(name: string, path: string, lastActiveISO: string): Project
     name,
     path,
     is_git_repo: true,
-    worktree_count: 0,
     last_active: lastActiveISO,
     created_at: lastActiveISO,
     updated_at: lastActiveISO,
@@ -127,6 +124,7 @@ function renderPicker() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
+  seedProjects(client, mockProjects());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
@@ -329,6 +327,7 @@ describe("ProjectPicker row management", () => {
     const onSelected = vi.fn();
     const user = userEvent.setup();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    seedProjects(client, mockProjects());
     render(<ProjectPicker onProjectSelected={onSelected} />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -349,6 +348,7 @@ describe("ProjectPicker row management", () => {
     const onSelected = vi.fn();
     const user = userEvent.setup();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    seedProjects(client, mockProjects());
     render(<ProjectPicker onProjectSelected={onSelected} />, {
       wrapper: ({ children }) => (
         <QueryClientProvider client={client}>{children}</QueryClientProvider>

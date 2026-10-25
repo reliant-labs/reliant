@@ -15,14 +15,20 @@
  *     its own;
  *   - Escape and the close button leave.
  *
- * The project store is mocked as a real, mutating store rather than a frozen
- * snapshot: resolution is async and reads back through getState() after
- * awaiting, so a mock that could not change would pass while the real thing
- * deadlocked.
+ * The project selection is mocked as a real, mutating store rather than a
+ * frozen snapshot: resolution is async and reads back through getState()
+ * after awaiting, so a mock that could not change would pass while the real
+ * thing deadlocked. The project LIST is the real one: ListProjects answered
+ * at the transport, read through the app's query client.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { setTransport } from "@/lib/connect";
+import { queryClient } from "@/lib/query-client";
+import { mockTransport } from "@/lib/test-utils";
+import { listProjectsResponse } from "@/test/projectList";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryHistory,
@@ -47,20 +53,16 @@ const PROJECTS: TestProject[] = [
   { id: "project-c", name: "Gamma", path: "/src/gamma" },
 ];
 
-const state: { projects: TestProject[]; currentProject: TestProject | null; lastProjectId: string | null } = {
-  projects: [],
+const state: { currentProject: TestProject | null; lastProjectId: string | null } = {
   currentProject: null,
   lastProjectId: null,
 };
 
-const loadProjects = vi.fn(async () => {
-  state.projects = PROJECTS;
-});
 const selectProject = vi.fn(async (project: TestProject) => {
   state.currentProject = project;
 });
 const restoreLastProject = vi.fn(async () => {
-  const match = state.projects.find((p) => p.id === state.lastProjectId);
+  const match = PROJECTS.find((p) => p.id === state.lastProjectId);
   if (!match) return false;
   state.currentProject = match;
   return true;
@@ -68,9 +70,7 @@ const restoreLastProject = vi.fn(async () => {
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({
-    projects: state.projects,
     currentProject: state.currentProject,
-    loadProjects,
     selectProject,
     restoreLastProject,
   });
@@ -82,7 +82,7 @@ vi.mock("@/store/projectStore", () => {
 });
 
 vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} } }),
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} }, session: { access_token: "t" } }),
 }));
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
@@ -208,7 +208,11 @@ function renderAt(initialEntry: string) {
     routeTree: root.addChildren([authenticated.addChildren([forge]), home]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   return router;
 }
 
@@ -218,13 +222,18 @@ async function landsOn(router: ReturnType<typeof renderAt>, pathname: string, se
 }
 
 beforeEach(() => {
-  state.projects = [];
+  setTransport(mockTransport({ "ProjectService.ListProjects": () => listProjectsResponse(PROJECTS) }));
   state.currentProject = null;
   state.lastProjectId = null;
   roster.calls.length = 0;
   roster.prodHolds = [];
   window.localStorage.clear();
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  queryClient.clear();
+  setTransport(null);
 });
 
 describe("the way in: /forge", () => {

@@ -15,7 +15,8 @@ import { markMachineGone, useGoneMachinesVersion, withoutGoneMachines } from "..
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import type { GitRepo } from "../../services/controlPlane/git";
-import { projectGrpc } from "../../api/project-grpc";
+import { createProjectFromRepo, fetchProjects, useProjects } from "../../hooks/project-queries";
+import { projectServiceKeys } from "../../hooks/project-service-hooks_gen";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import Modal from "../forge-ui/modal";
@@ -70,8 +71,6 @@ import {
  * scrolls when the list is long, so the header and toolbar never leave view.
  */
 
-// Use the store's Project type so refs from useProjectStore.getState().projects
-// flow through without lossy widening.
 type Project = StoreProject;
 
 type CloneTarget = {
@@ -96,8 +95,8 @@ function isAlreadyExistsError(error: unknown): boolean {
 }
 
 function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
+  const queryClient = useQueryClient();
   const createProject = useProjectStore((state) => state.createProject);
   const selectProject = useProjectStore((state) => state.selectProject);
   const updateProject = useProjectStore((state) => state.updateProject);
@@ -193,12 +192,12 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         await updateProject(project.id, { name });
       } catch (err) {
         console.error("Rename failed:", err);
-        // updateProject surfaces its own error toast; reloading keeps the
+        // updateProject surfaces its own error toast; refetching keeps the
         // list honest if the write partially applied.
-        await loadProjects();
+        void queryClient.invalidateQueries({ queryKey: projectServiceKeys.all });
       }
     },
-    [renameDraft, updateProject, loadProjects],
+    [renameDraft, updateProject, queryClient],
   );
 
   // Remove projects from Reliant. This deletes the project *record* only —
@@ -225,19 +224,17 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     if (failures.length > 0) {
       toast.error(`Could not remove: ${failures.join(", ")}`);
     }
-    await loadProjects();
-  }, [pendingRemoval, deleteProject, loadProjects]);
+    // Each delete already refetched the list.
+  }, [pendingRemoval, deleteProject]);
 
   // ProjectPickerModal's onProjectCreated callback emits a narrow Project
-  // shape; we hydrate via the store after reload to get the full StoreProject
-  // (including last_active, remote_url) before forwarding to onProjectSelected.
+  // shape; take the full row from the (refetched) project list before
+  // forwarding to onProjectSelected.
   const handleProjectCreated = async (createdProject?: { id: string }) => {
-    await loadProjects();
+    const listed = await fetchProjects();
     setIsCreateModalOpen(false);
     if (createdProject) {
-      const full = useProjectStore
-        .getState()
-        .projects.find((p) => p.id === createdProject.id);
+      const full = listed.find((p) => p.id === createdProject.id);
       if (full) handleProjectClick(full);
     }
   };
@@ -248,7 +245,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
-  const queryClient = useQueryClient();
   // Cloud machines are the only valid clone targets — cloning requires a
   // managed machine the control plane can reach. Machines the control plane
   // has already said are gone this session are never offered again, even
@@ -338,7 +334,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       const targetHost = machineNameFor(targetDaemonId);
       setCloneStatus(`Queueing ${projectName} for ${targetHost}...`);
 
-      const result = await projectGrpc.createProjectFromRepo({
+      const result = await createProjectFromRepo({
         cloneUrl: repo.cloneUrl,
         daemonId: targetDaemonId,
         name: projectName,
@@ -352,13 +348,10 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       }
 
       setCloneStatus(`Opening ${projectName}...`);
-      await loadProjects();
       if (result.project) {
-        // Re-read from the store so the opened project is the full
-        // StoreProject shape (last_active, remote_url), not the narrower
-        // one the RPC returns.
-        const opened =
-          useProjectStore.getState().projects.find((p) => p.id === result.project!.id);
+        // The opened project is the row the refetched list holds.
+        const openedId = result.project.id;
+        const opened = (await fetchProjects()).find((p) => p.id === openedId);
         if (opened) {
           await selectProject(opened);
           onProjectSelected(opened);
@@ -366,7 +359,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       }
       setCloneStatus(null);
     },
-    [machineNameFor, loadProjects, onProjectSelected, selectProject],
+    [machineNameFor, onProjectSelected, selectProject],
   );
 
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
@@ -418,8 +411,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     try {
       const createdProject = await createProject(projectData);
       toast.dismiss(loadingToast);
-      // Reload to pick up initialization status
-      await loadProjects();
       if (createdProject) {
         handleProjectClick(createdProject);
       }
@@ -433,9 +424,8 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
           handleProjectClick(existing);
           return;
         }
-        // Might not be in our loaded list yet; reload and try again
-        await loadProjects();
-        const found = useProjectStore.getState().projects.find((p) => p.path === selectedPath);
+        // Might not be in our loaded list yet; refetch and try again
+        const found = (await fetchProjects({ fresh: true })).find((p) => p.path === selectedPath);
         if (found) {
           toast.success(`Opening existing project "${found.name}"`);
           handleProjectClick(found);

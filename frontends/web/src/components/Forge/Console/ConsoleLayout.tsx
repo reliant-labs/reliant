@@ -37,6 +37,7 @@ import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
 import { useAuthStore } from "@/store/authStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
@@ -90,21 +91,12 @@ export function ConsoleLayout() {
   const pinnedEnv = pinnedEnvOf(page);
 
   // ── 1. The Reliant project. ──
-  const projects = useProjectStore((state) => state.projects);
+  // `listed` once the project list has answered (or failed): until then a
+  // forge name matches nothing only because nothing is loaded yet.
+  const { projects, isLoading: listing } = useProjects();
+  const listed = projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const [listed, setListed] = useState(projects.length > 0);
-  useEffect(() => {
-    if (listed) return;
-    let live = true;
-    void loadProjects().finally(() => {
-      if (live) setListed(true);
-    });
-    return () => {
-      live = false;
-    };
-  }, [listed, loadProjects]);
 
   const match = listed ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {

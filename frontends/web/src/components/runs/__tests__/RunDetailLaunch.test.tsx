@@ -85,7 +85,6 @@ vi.mock("@/api/grpc-client", () => ({
     }),
     workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
-    project: () => ({ listProjectDaemons: rpc.listProjectDaemons }),
   },
   setDaemonLastSeen: vi.fn(),
 }));
@@ -106,6 +105,7 @@ beforeEach(() => {
       ...serviceHandlers("TriggerService", { getLaunchEvent: rpc.getLaunchEvent }),
       ...serviceHandlers("ChatService", { listMessages: rpc.listMessages }),
       "CatalogService.SearchCatalog": { response: {} },
+      ...serviceHandlers("ProjectService", { listProjectDaemons: rpc.listProjectDaemons }),
     }));
 });
 afterEach(() => {

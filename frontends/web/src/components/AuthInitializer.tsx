@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { usePrivacyStore } from "@/store/privacyStore";
-import { useProjectStore } from "@/store/projectStore";
+import { fetchProjects } from "@/hooks/project-queries";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
@@ -149,12 +149,9 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         await Promise.all([
           initializePrivacy(),
           settingsSync.initialize(),
-          useProjectStore
-            .getState()
-            .loadProjects()
-            .catch((err) => {
-              logger.warn("[AuthInitializer] loadProjects failed (will retry in ModernApp):", err);
-            }),
+          fetchProjects().catch((err: unknown) => {
+            logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
+          }),
         ]);
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");

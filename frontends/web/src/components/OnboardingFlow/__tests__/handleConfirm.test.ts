@@ -20,7 +20,6 @@ const mockListDaemons = vi.fn<() => Promise<{ daemons: Daemon[] }>>();
 const mockCreateDaemon = vi.fn();
 const mockCreateProjectFromRepo = vi.fn();
 const mockCloneRepo = vi.fn();
-const mockMarkProjectInstalled = vi.fn();
 
 // The LIST comes from the daemon registry — the one daemon list
 // (docs/design/one-daemon-list.md) — while CreateDaemon stays a control-plane
@@ -41,11 +40,9 @@ vi.mock("@/services/controlPlane/daemon", async (importOriginal) => {
   };
 });
 
-vi.mock("@/api/project-grpc", () => ({
-  projectGrpc: {
-    createProjectFromRepo: (...args: unknown[]) => mockCreateProjectFromRepo(...args),
-    markProjectInstalled: (...args: unknown[]) => mockMarkProjectInstalled(...args),
-  },
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  createProjectFromRepo: (...args: unknown[]) => mockCreateProjectFromRepo(...args),
 }));
 
 vi.mock("@/services/controlPlane/git", async (importOriginal) => {
@@ -119,7 +116,6 @@ describe("addRepoProject", () => {
     await addRepoProject(cloneArgs());
 
     expect(mockCloneRepo).not.toHaveBeenCalled();
-    expect(mockMarkProjectInstalled).not.toHaveBeenCalled();
   });
 
   it("reports a queued clone as queued, not as a finished checkout", async () => {
