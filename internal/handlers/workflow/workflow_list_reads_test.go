@@ -2,6 +2,7 @@
 package workflow
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -50,6 +51,11 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 
 // The read count is what made the latency: with a realistic round trip per
 // read, a listing must cost a handful of round trips, not one per ref.
+//
+// What is measured is the time the round trips ADD: the same listing with and
+// without the 20ms latency, each the best of three. The listing's own CPU
+// (validating every workflow, under -race) is in both and cancels out; on a
+// loaded host it alone took 6s, and an absolute bound measured the host.
 func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
@@ -59,14 +65,23 @@ func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	_, err := svc.ListWorkflows(ctx, req)
 	require.NoError(t, err)
 
+	fastest := func(latency time.Duration) time.Duration {
+		repo.Latency = latency
+		best := time.Duration(math.MaxInt64)
+		for range 3 {
+			start := time.Now()
+			_, err := svc.ListWorkflows(ctx, req)
+			require.NoError(t, err)
+			best = min(best, time.Since(start))
+		}
+		return best
+	}
+	cpu := fastest(0)
 	repo.ResetCounts()
-	repo.Latency = 20 * time.Millisecond
-	start := time.Now()
-	_, err = svc.ListWorkflows(ctx, req)
-	elapsed := time.Since(start)
-	require.NoError(t, err)
-	// Before: 522 reads in a row, ~10s at 20ms each. Now a handful, the
-	// independent ones concurrent.
-	assert.Less(t, elapsed, time.Second,
-		"ListWorkflows made %d reads at 20ms each", repo.TotalReads())
+	withRoundTrips := fastest(20 * time.Millisecond)
+	// Before: 522 reads in a row, ~10s of round trips at 20ms each. Now a
+	// handful, the independent ones concurrent.
+	assert.Less(t, withRoundTrips-cpu, time.Second,
+		"ListWorkflows's round trips added %v (%v with 20ms reads, %v without; %d reads over 3 listings)",
+		withRoundTrips-cpu, withRoundTrips, cpu, repo.TotalReads())
 }

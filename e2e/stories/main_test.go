@@ -34,6 +34,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,6 +57,12 @@ const temporalNamespace = "reliant"
 
 // setupQuietLogging suppresses the (very chatty) server logging during tests.
 // Set E2E_VERBOSE=1 to keep full logging for debugging.
+//
+// The server's ERROR records are kept, in serverErrors, and printed when the
+// run fails: a story whose handler failed sees only the redacted wire error
+// ("internal: failed to create chat"), and the cause is in the ERROR the
+// handler logged. Discarding those left a release-gate failure with no
+// evidence to find its cause by.
 func setupQuietLogging() {
 	if os.Getenv("E2E_VERBOSE") == "1" {
 		return
@@ -64,8 +72,44 @@ func setupQuietLogging() {
 		Level: slog.LevelError + 10, // effectively silent
 	}))
 	slog.SetDefault(silent)
-	logging.DefaultOutput = io.Discard
-	logging.Setup(logging.Settings{}, slog.LevelError+10)
+	logging.DefaultOutput = serverErrors
+	logging.Setup(logging.Settings{}, slog.LevelError)
+}
+
+// serverErrors keeps the last serverErrorLines lines the server logged at
+// ERROR and above.
+var serverErrors = &lineTail{max: serverErrorLines}
+
+const serverErrorLines = 300
+
+type lineTail struct {
+	mu    sync.Mutex
+	max   int
+	lines []string
+}
+
+func (l *lineTail) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
+		l.lines = append(l.lines, line)
+	}
+	if over := len(l.lines) - l.max; over > 0 {
+		l.lines = append([]string(nil), l.lines[over:]...)
+	}
+	return len(p), nil
+}
+
+func (l *lineTail) dump(w io.Writer) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.lines) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "e2e/stories: the last %d server ERROR lines of this run:\n", len(l.lines))
+	for _, line := range l.lines {
+		fmt.Fprintln(w, "  "+line)
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -86,6 +130,9 @@ func TestMain(m *testing.M) {
 	restoreGrace := v2.SetDaemonOfflinePauseGraceForTest(storyDaemonOfflinePauseGrace)
 	code := m.Run()
 	restoreGrace()
+	if code != 0 {
+		serverErrors.dump(os.Stderr)
+	}
 
 	if temporalDev.server != nil {
 		_ = temporalDev.server.Stop()

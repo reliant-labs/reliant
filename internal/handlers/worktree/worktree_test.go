@@ -128,23 +128,37 @@ func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir str
 	return repoDir, remoteDir
 }
 
-// awaitWorktreeStatus blocks until a worktree reaches the expected status.
+// awaitWorktreeStatus waits for a worktree's creation to settle, then requires
+// the status it settled at.
 //
 // CreateWorktree returns as soon as the CREATING row is written and finishes
 // the daemon work on a detached goroutine, so every assertion about the
 // finished state has to wait for that goroutine rather than read immediately.
+// The wait is for the row to leave CREATING, bounded by settleBound as a hang
+// detector: a fixed 5s for a status was a measure of how loaded the host was
+// (the release gate saw a three-repo create miss it), and a create that
+// settles at the wrong status now says which.
 func awaitWorktreeStatus(t *testing.T, repo Repository, worktreeID string, want reliantv1.WorktreeStatus) *db.Worktree {
 	t.Helper()
+	const settleBound = 2 * time.Minute
 	var last *db.Worktree
-	require.Eventually(t, func() bool {
+	deadline := time.Now().Add(settleBound)
+	for {
 		wt, err := repo.GetWorktree(context.Background(), worktreeID)
-		if err != nil {
-			return false
+		if err == nil {
+			last = wt
+			if wt.Status != int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING) {
+				break
+			}
 		}
-		last = wt
-		return wt.Status == int32(want)
-	}, 5*time.Second, 10*time.Millisecond,
-		"worktree %s never reached %s (last status %v)", worktreeID, want, last)
+		if time.Now().After(deadline) {
+			require.FailNowf(t, "worktree creation never settled",
+				"worktree %s is still CREATING after %s (last read error %v)", worktreeID, settleBound, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	require.Equal(t, want.String(), reliantv1.WorktreeStatus(last.Status).String(),
+		"worktree %s settled at the wrong status", worktreeID)
 	return last
 }
 
