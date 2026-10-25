@@ -201,7 +201,7 @@ func TestAPIMountOptions(t *testing.T) {
 	var connectErr *connect.Error
 	require.True(t, errors.As(err, &connectErr), "want a Connect error, got %v", err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code(), "got %v", err)
-	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get("X-Reliant-Reason"))
+	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader))
 
 	_, err = client.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
 	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "an anonymous caller is refused for its credential first")

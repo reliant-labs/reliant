@@ -15,24 +15,14 @@
  * `.reason` is that header; a plain ConnectError carries it in `metadata`.
  * Both are read here, so a caller never cares which transport it was on.
  *
- * ── EXPAND / CONTRACT (13-p9-frontend-plan.md §7.2, owner decision D3) ────
- *
- * The servers do not all stamp reasons yet. Until they do (R3s-rel, R3s-cp),
- * two older signals are still read:
- *
- *   - control-plane's `x-reliant-reason` header, read as if it were the new one;
- *   - the message markers each surface used to match, kept in
- *     LEGACY_MARKERS below, keyed by the reason that replaces them. They are
- *     consulted only when the error carries no reason from ERROR_REASONS.
- *
- * So a server that has switched is judged by its reason alone, and a reason
- * this web has no branch for (forge's CRUD vocabulary) cannot hide a marker
- * the surface still depends on. R3w2 deletes LEGACY_REASON_HEADER,
- * LEGACY_MARKERS, legacyView and the two lines marked EXPAND that read them —
- * nothing outside this file changes.
+ * Branch on the reason or the Connect code, never on the message: an error
+ * that carries no reason this web knows is not claimed by any reader, and the
+ * surface shows it as the plain error it is. (Old servers were matched by
+ * their prose until P9 R3w2 removed that fallback; 13-p9-frontend-plan.md
+ * §7.2, owner decision D3.)
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
+import { ConnectError } from "@connectrpc/connect";
 import { ConnectClientError } from "@reliantlabs/forge-web-runtime";
 
 /**
@@ -98,8 +88,6 @@ export const ERROR_REASONS = [
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];
 
-const KNOWN_REASONS: ReadonlySet<string> = new Set(ERROR_REASONS);
-
 /**
  * The machine is on its way: starting, asleep, waking, or reconnecting. A
  * surface waits and retries on any of these (daemon-wait.ts, daemon-retry.ts).
@@ -113,8 +101,8 @@ export const DAEMON_CONNECTING_REASONS = [
 
 /**
  * The account is not entitled to what it asked for, and a billing or identity
- * action fixes it (control-plane's daemon gate, billing and LLM billing gate):
- * every value control-plane has sent as `x-reliant-reason`. These are the
+ * action fixes it (control-plane's daemon gate, billing and LLM billing gate).
+ * These are the
  * reasons the upgrade / identity / billing-email modals render — never "any
  * reason at all", which once the servers stamp reasons everywhere would also
  * catch a coupon's `coupon_exhausted`.
@@ -138,21 +126,16 @@ const REASON_HEADER = "x-forge-error-reason";
  */
 const ERROR_SCOPES_HEADER = "x-forge-error-scopes";
 
-/** EXPAND (R3w2 deletes): control-plane's pre-svcerr reason header. */
-const LEGACY_REASON_HEADER = "x-reliant-reason";
-
 function asConnectError(err: unknown): ConnectError | null {
   return err instanceof ConnectError ? err : null;
 }
 
-/** forge's reason first, then (EXPAND) the legacy header's. */
+/** The runtime chain's reason first, then the header's. */
 function reasonsOf(err: unknown): string[] {
   const ce = asConnectError(err);
   if (!ce) return [];
   const runtime = ce instanceof ConnectClientError ? ce.reason : null;
-  return [runtime, ce.metadata.get(REASON_HEADER), ce.metadata.get(LEGACY_REASON_HEADER)].filter(
-    (r): r is string => !!r,
-  );
+  return [runtime, ce.metadata.get(REASON_HEADER)].filter((r): r is string => !!r);
 }
 
 /**
@@ -165,21 +148,10 @@ export function errorReason(err: unknown): string | null {
   return reasonsOf(err)[0] ?? null;
 }
 
-/**
- * True when the error carries one of `reasons`.
- *
- * A reason from this vocabulary is the whole answer. Only an error with no
- * reason this web knows — none at all, or one it has no branch for (forge's
- * generated CRUD stamps its own) — falls back to the legacy marker of each
- * asked-for reason; see the module comment.
- */
+/** True when the error carries one of `reasons`. */
 export function hasErrorReason(err: unknown, reasons: ErrorReason | readonly ErrorReason[]): boolean {
   const wanted: readonly string[] = typeof reasons === "string" ? [reasons] : reasons;
-  const carried = reasonsOf(err);
-  if (carried.some((r) => wanted.includes(r))) return true;
-  if (carried.some((r) => KNOWN_REASONS.has(r))) return false;
-  // EXPAND (R3w2 deletes this line): no reason yet, so the old marker answers.
-  return wanted.some((r) => LEGACY_MARKERS[r as ErrorReason]?.(legacyView(err)) ?? false);
+  return reasonsOf(err).some((r) => wanted.includes(r));
 }
 
 /**
@@ -189,83 +161,8 @@ export function hasErrorReason(err: unknown, reasons: ErrorReason | readonly Err
 export function errorScopes(err: unknown): string[] {
   const ce = asConnectError(err);
   const header = ce?.metadata.get(ERROR_SCOPES_HEADER) ?? "";
-  const scopes = header
+  return header
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (scopes.length > 0) return scopes;
-  // EXPAND (R3w2 deletes): the scope named in the refusal's prose.
-  const match = legacyView(err).text.match(
-    /\b(deploy|secret|domain|cluster|token|llm|proxy|mcp|daemon|reliant):[a-z]+\b/,
-  );
-  return match ? [match[0]] : [];
 }
-
-// ── EXPAND: everything below is deleted by R3w2 ─────────────────────────────
-
-/** What a legacy marker sees: the Connect code when there is one, and the text. */
-interface LegacyView {
-  code: Code | null;
-  /** The server's message, lower-cased; `[code] ` framing included when present. */
-  text: string;
-}
-
-function legacyView(err: unknown): LegacyView {
-  if (err instanceof ConnectError) {
-    // `message` carries connect's "[code] " framing and `rawMessage` the
-    // server's text; markers have matched both, so both are searched.
-    return { code: err.code, text: `${err.message} ${err.rawMessage}`.toLowerCase() };
-  }
-  if (err instanceof Error) return { code: null, text: err.message.toLowerCase() };
-  if (typeof err === "string") return { code: null, text: err.toLowerCase() };
-  return { code: null, text: "" };
-}
-
-/** daemonoffline.ErrorSubstring: in every "the machine is not serving" message. */
-const NO_DAEMON_CONNECTED = "no daemon connected";
-
-function daemonStarting({ text }: LegacyView): boolean {
-  return text.includes(NO_DAEMON_CONNECTED) && text.includes("still starting");
-}
-function daemonSuspended({ text }: LegacyView): boolean {
-  return text.includes(NO_DAEMON_CONNECTED) && text.includes("suspended");
-}
-function daemonWaking({ text }: LegacyView): boolean {
-  return text.includes(NO_DAEMON_CONNECTED) && text.includes("waking");
-}
-
-/**
- * The message (and code) each surface matched before its reason existed,
- * keyed by that reason. A reason with no entry was only ever signalled by
- * LEGACY_REASON_HEADER, which reasonsOf already reads — including the resume
- * quota's old "resource_exhausted"/"compute limit" text arm, which existed only
- * because callers kept the message and dropped the error; they keep the error
- * now, and control-plane has always sent its reason.
- */
-const LEGACY_MARKERS: Partial<Record<ErrorReason, (view: LegacyView) => boolean>> = {
-  daemon_starting: daemonStarting,
-  daemon_suspended: daemonSuspended,
-  daemon_waking: daemonWaking,
-  // The rest of "no daemon connected": the generic "…for user" a closed or
-  // restarting machine answers with. Together the four cover the marker.
-  daemon_not_connected: (v) =>
-    v.text.includes(NO_DAEMON_CONNECTED) && !daemonStarting(v) && !daemonSuspended(v) && !daemonWaking(v),
-  no_daemon: ({ text }) => text.includes("no daemon available"),
-  chat_not_started: ({ code, text }) => code === Code.FailedPrecondition && text.includes("chat has not started"),
-  stale_revision: ({ text }) => text.includes("workflow was modified since"),
-  process_not_running: ({ text }) => text.includes("not running") || text.includes("already stopped"),
-  daemon_not_suspended: ({ code, text }) => code === Code.FailedPrecondition && text.includes("not suspended"),
-  // The deploy panel's refusals reach it as a plain Error from the plan call,
-  // so they match on text alone (services/forge/deployAuthz.ts).
-  scope_missing: ({ text }) =>
-    text.includes("permission_denied") ||
-    text.includes("permission denied") ||
-    text.includes("permissions do not include"),
-  no_control_plane_credential: ({ text }) =>
-    text.includes("no control-plane credential") ||
-    text.includes("forge login") ||
-    text.includes("unauthenticated"),
-  observability_not_configured: ({ code, text }) => code === Code.Unavailable && text.includes("not configured"),
-  not_org_member: ({ code, text }) => code === Code.PermissionDenied && text.includes("not a member"),
-  git_credential_not_connected: ({ text }) => text.includes("no git credential found"),
-};

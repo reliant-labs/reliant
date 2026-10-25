@@ -18,8 +18,8 @@ The schema is published at `internal/integrations/manifest/schema/`:
 - `action.schema.json`: one file of `actions/`.
 - `event.schema.json`: one file of `events/`.
 
-Regenerate with `make generate-manifest-schema` (`go generate
-./internal/integrations/manifest/schema`) after changing the proto or a rule in the
+Regenerate with `go generate ./internal/integrations/manifest/schema` (`forge.yaml`'s
+`manifest-schema` generate hook, so `task generate:forge` runs it too) after changing the proto or a rule in the
 `manifest` package. `TestPublishedSchemasAreCurrent` fails when the checked-in files
 are stale, and `TestCatalogManifestsSatisfyTheSchema` checks every catalog manifest
 against them. Never edit the JSON by hand.
@@ -136,7 +136,8 @@ internal/integrations/webhook/github/projection/
 tools/integrationgen/upstream/octokit-webhooks-schemas/schema.json   the vendored upstream schema
 ```
 
-`make generate-integrations` (part of `make generate`) turns that into
+`go run ./tools/integrationgen` (`forge.yaml`'s `integrations` generate hook, so
+`task generate:forge` runs it too) turns that into
 
 | Output | Replaces |
 |---|---|
@@ -208,7 +209,7 @@ loses the `drop` keys of each element, then elements from the end, and `flag` is
    (the file name starts with the `X-GitHub-Event` header).
 2. Add `projection/<trigger id>.yaml` as above. Reuse `objects/` and the attribute
    groups; a new shared shape is a new `objects/<name>.yaml`.
-3. `make generate-integrations`. It fails, naming the file and the path, if a kept path
+3. `go run ./tools/integrationgen`. It fails, naming the file and the path, if a kept path
    does not exist in the event's upstream definition (`issues$opened`, `push$event`) or
    upstream types it differently than the kind can read.
 4. `go test ./internal/integrations/...`: conformance requires the fixture to produce
@@ -225,7 +226,7 @@ projection keeps that moved.
 1. Download the new `schema.json` over the vendored one (`npm pack @octokit/webhooks-schemas@<v>`)
    and update `upstream.version` and `upstream.sha256` in `provider.yaml` (the generator
    refuses a file whose hash is not the pinned one). Update the notice in `LICENSES.txt`.
-2. `make generate-integrations`. A renamed, removed or retyped field fails with the event,
+2. `go run ./tools/integrationgen`. A renamed, removed or retyped field fails with the event,
    the spec and the path. Fix the spec (a rename is `from:`; a field GitHub dropped leaves
    the payload, which is a manifest `version` bump) and rerun. A new upstream event or field
    changes nothing until a spec asks for it.
@@ -238,6 +239,6 @@ when a generated file differs from what the specs produce.
 ## Checking a change
 
 ```
-make generate-manifest-schema generate-integrations
-go test ./internal/integrations/... ./tools/integrationgen/...
+go generate ./internal/integrations/manifest/schema && go run ./tools/integrationgen
+task test:short -- ./internal/integrations/... ./tools/integrationgen/...
 ```

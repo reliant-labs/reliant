@@ -13,17 +13,20 @@ export const BAD_CONCLUSIONS = new Set(["failure", "cancelled", "timed_out", "sk
  * A single success anywhere clears the streak: one green run proves the gate
  * can still pass, which is the property being monitored.
  *
- * A SKIP ON A PULL REQUEST IS NO EVIDENCE EITHER WAY. pr-ci.yml path-filters
- * its PR jobs (a web-only PR skips the Go lanes, a Go-only PR skips the web
- * lanes), so a run of skipped PR results is the gate working as designed, not
- * going dark. Those results neither extend nor clear the streak. Runs on main
- * and the nightly never path-filter, so a skip THERE still counts as bad: that
- * is how a job whose `if:` broke and stopped running everywhere is caught.
+ * A SKIP IS NO EVIDENCE EITHER WAY. ci.yml selects its jobs by event and by
+ * path: the merge gate runs only on pull requests, the release gate only off
+ * them, and a web-only PR skips the electron lane. So a run of skips is the
+ * selection working as designed, not a gate going dark, and skips neither
+ * extend nor clear the streak. A job that should have run and did not is
+ * caught elsewhere: ci.yml's `CI result` fails a run whose tier gate did not
+ * run, or (off a pull request) any lane that was skipped, and
+ * check-main-health.mjs fails main when its newest run has no green release
+ * gate.
  */
 export function badStreak(results) {
   let streak = 0;
   for (const r of results) {
-    if (r.conclusion === "skipped" && r.event === "pull_request") continue;
+    if (r.conclusion === "skipped") continue;
     if (!BAD_CONCLUSIONS.has(r.conclusion)) break;
     streak++;
   }
@@ -31,37 +34,21 @@ export function badStreak(results) {
 }
 
 /**
- * Why a run's sharded test tier did not pass, or [] when it did.
+ * Why a run's required job did not pass, or [] when it did.
  *
- * pr-ci.yml runs the Go tests as "<prefix> N/M" shard jobs ("Backend (Go,
- * full) 1/4" ... "4/4" on main) and M follows the selection. The tier passed
- * only when every shard 1..M is present and succeeded: a missing shard is a
- * slice of the module that never ran, and NO shard at all is the full tier
- * not running (the PR and full tiers silently merging).
+ * ci.yml runs the whole suite on main as ONE job, "Release gate" (`task
+ * release:gate`). Main is green only when that job is present and succeeded:
+ * a run without it is the release tier not running, which must not read as
+ * green because every other job passed.
  *
  * jobs: [{ name, conclusion }] of one run.
  */
-export function shardedTierProblems(jobs, prefix) {
-  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const shardName = new RegExp(`^${escaped} (\\d+)/(\\d+)$`);
-  const shards = [];
-  for (const job of jobs) {
-    const m = shardName.exec(job.name);
-    if (m) shards.push({ index: Number(m[1]), total: Number(m[2]), conclusion: job.conclusion });
+export function requiredJobProblems(jobs, name) {
+  const matching = jobs.filter((job) => job.name === name);
+  if (matching.length === 0) {
+    return [`it has no \`${name}\` job: the tier did not run`];
   }
-  if (shards.length === 0) {
-    return [`it has no \`${prefix} N/M\` job: the tier did not run`];
-  }
-  const totals = [...new Set(shards.map((s) => s.total))];
-  if (totals.length !== 1) {
-    return [`its \`${prefix}\` shards disagree on the shard count (${totals.join(", ")})`];
-  }
-  const total = totals[0];
-  const problems = [];
-  for (let i = 1; i <= total; i++) {
-    const shard = shards.find((s) => s.index === i);
-    if (!shard) problems.push(`\`${prefix} ${i}/${total}\` is missing`);
-    else if (shard.conclusion !== "success") problems.push(`\`${prefix} ${i}/${total}\` concluded \`${shard.conclusion}\``);
-  }
-  return problems;
+  return matching
+    .filter((job) => job.conclusion !== "success")
+    .map((job) => `\`${name}\` concluded \`${job.conclusion ?? "nothing"}\``);
 }

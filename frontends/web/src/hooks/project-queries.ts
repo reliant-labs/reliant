@@ -336,10 +336,9 @@ export function subscribeToProjectRows(listener: (rows: Project[]) => void): () 
   return queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "success") return;
     const key = event.query.queryKey;
-    if (!partialMatchKey(key, projectServiceKeys.all)) return;
-    if (key[1] === "listProjects") {
+    if (partialMatchKey(key, projectServiceKeys.listProjects.all)) {
       listener(projectsOf(event.query.state.data as ListProjectsResponse | undefined));
-    } else if (key[1] === "getProject") {
+    } else if (partialMatchKey(key, projectServiceKeys.getProject.all)) {
       const row = (event.query.state.data as GetProjectResponse | undefined)?.project;
       if (row) listener([projectFromProto(row)]);
     }

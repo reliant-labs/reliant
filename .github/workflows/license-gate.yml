@@ -9,6 +9,9 @@
 #
 # The gate is an allowlist: unrecognized licenses FAIL and need an explicit,
 # reasoned entry in .license-allowlist.
+#
+# Each job is a thin wrapper over `task licenses:go` / `task licenses:npm`, the
+# commands a laptop runs (`task licenses` runs both).
 name: license-gate
 
 #
@@ -32,6 +35,7 @@ on:
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
       - "scripts/check-npm-licenses.sh"
+      - "Taskfile.yml"
       - ".github/workflows/license-gate.yml"
   pull_request:
     branches: [main]
@@ -44,6 +48,7 @@ on:
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
       - "scripts/check-npm-licenses.sh"
+      - "Taskfile.yml"
       - ".github/workflows/license-gate.yml"
 
 permissions:
@@ -57,66 +62,43 @@ jobs:
   licenses:
     name: permissive-licenses-only
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
 
-      # `cache: false`: setup-go's own cache saved a second 1.3 GB copy of the
-      # module cache from every main push, a seventh of the repo's 10 GB cache
-      # budget. pr-ci.yml's backend shard 1 saves the module cache on main;
-      # this restores it.
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Restore Go module cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            go-mod-${{ runner.os }}-
-
-      # The checker reads each dependency's LICENSE out of the module cache, so
-      # the modules must actually be downloaded first. `go mod download` is
-      # enough — no build required (and a no-op on a cache hit).
-      - name: Download modules
-        run: go mod download
-
-      - name: Check dependency licenses
-        run: ./scripts/check-licenses.sh
+      # The checker reads each dependency's LICENSE out of the module cache;
+      # the task downloads the modules first (a no-op on a cache hit).
+      - name: task licenses:go
+        run: task licenses:go
 
       # On failure, print the full inventory so the PR author can see every
       # dependency and its detected license without re-running locally.
       - name: Full license inventory (on failure)
         if: failure()
-        run: ./scripts/check-licenses.sh --list
+        run: task licenses:go -- --list
 
-  # The npm half. Separate job, not a step: it needs Node rather than Go, and
-  # a frontend dependency problem should be reported on its own rather than
-  # hidden behind a Go failure.
+  # The npm half. Separate job: it needs Node rather than Go, and a frontend
+  # dependency problem should be reported on its own.
   npm-licenses:
     name: permissive-licenses-only (npm)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontends/web/package-lock.json
+          go: "false"
+          node: "true"
 
-      # `npm ci` installs from the lockfile, which is what the gate inspects —
-      # and it is the same command the build and test jobs run, so the tree
-      # checked here is the tree that ships.
-      - name: Install
-        working-directory: frontends/web
-        run: npm ci --no-audit --no-fund
+      # `npm ci` installs from the lockfile, which is what the gate inspects,
+      # so the tree checked here is the tree that ships.
+      - name: task deps:web
+        run: task deps:web
 
-      - name: Check npm dependency licenses
-        run: ./scripts/check-npm-licenses.sh frontends/web
+      - name: task licenses:npm
+        run: task licenses:npm
 
       - name: Full license inventory (on failure)
         if: failure()
-        run: ./scripts/check-npm-licenses.sh --list frontends/web
+        run: task licenses:npm -- --list

@@ -24,13 +24,10 @@
  *
  * The plan call's error names which with a reason (lib/errorReasons.ts):
  * `scope_missing`, with the scopes in `x-forge-error-scopes`, or
- * `no_control_plane_credential`. Until the servers send them (R3s-rel /
- * R3s-cp) the old message markers answer instead — forge's
- * internal/cloud.ErrNoCredential text, and control-plane's permission refusal
- * flattened into the message — and that fallback lives in errorReasons, not
- * here. Either way it FAILS OPEN: anything unrecognised stays a transport
- * error, so a real unreachable daemon is never relabelled as a permissions
- * problem.
+ * `no_control_plane_credential` (reliant's ForgeService carries forge's
+ * reason onto the rpc error). It FAILS OPEN: anything without one of those
+ * reasons stays a transport error, so a real unreachable daemon is never
+ * relabelled as a permissions problem.
  */
 
 import { errorScopes, hasErrorReason } from "@/lib/errorReasons";

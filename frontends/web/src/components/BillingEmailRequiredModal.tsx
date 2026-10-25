@@ -16,7 +16,7 @@ export interface BillingEmailRequiredModalProps {
 
 /**
  * BillingEmailRequiredModal prompts the user for a billing email when the
- * backend responds with x-reliant-reason=billing_email_missing (raised by
+ * backend refuses with reason billing_email_missing (raised by
  * control-plane resolveBillingEmail when no usable email exists). Mounted by
  * ModalLayer; opened by the connect interceptor (api/upgradeInterceptor.ts).
  *

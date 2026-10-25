@@ -9,12 +9,8 @@
 //	go run ./tools/test-affected run -lanes go,web
 //	go run ./tools/test-affected -base origin/main~3 -json
 //
-// CI's sharded Go lane uses two more commands (shard.go):
-//
-//	go list ./... | go run ./tools/test-affected shard   # the backend matrix, as JSON
-//	gh run view <id> --log | go run ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv
-//
-// and its new-flake gate one (changedtests.go):
+// The new-flake check (scripts/test-flake.sh, `task test:flake`) uses one
+// more (changedtests.go):
 //
 //	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
 //
@@ -47,19 +43,10 @@ func main() {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
 	}
-	// shard and weights serve CI's sharded Go lane (shard.go), not the
-	// affected-tests plan.
 	switch cmd {
-	case "shard", "weights", "changed-tests":
-		run := func() error { return runShard(args, os.Stdin, os.Stdout) }
-		switch cmd {
-		case "weights":
-			run = func() error { return runWeights(os.Stdin, os.Stdout) }
-		case "changed-tests":
-			// CI's new-flake gate (changedtests.go).
-			run = func() error { return runChangedTests(args, os.Stdout) }
-		}
-		if err := run(); err != nil {
+	case "changed-tests":
+		// The new-flake check (changedtests.go).
+		if err := runChangedTests(args, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected "+cmd+":", err)
 			os.Exit(1)
 		}
@@ -68,7 +55,7 @@ func main() {
 		os.Exit(runMigrationOrder(args, os.Stdout, os.Stderr))
 	case "plan", "run":
 	default:
-		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order, shard, weights or changed-tests)\n", cmd)
+		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order or changed-tests)\n", cmd)
 		os.Exit(2)
 	}
 	fs := newFlagSet(cmd)

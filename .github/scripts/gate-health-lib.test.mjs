@@ -1,11 +1,12 @@
 // node --test .github/scripts/*.test.mjs
 //
-// The streak rule check-gate-health.mjs applies to each pr-ci.yml job.
+// The streak rule check-gate-health.mjs applies to each ci.yml job, and the
+// required-job rule check-main-health.mjs applies to main's newest run.
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { badStreak, shardedTierProblems } from "./gate-health-lib.mjs";
+import { badStreak, requiredJobProblems } from "./gate-health-lib.mjs";
 
 const pr = (conclusion) => ({ conclusion, event: "pull_request" });
 const push = (conclusion) => ({ conclusion, event: "push" });
@@ -19,43 +20,35 @@ test("one success clears everything older", () => {
   assert.equal(badStreak([pr("success"), push("failure"), push("failure")]), 0);
 });
 
-test("a path-filtered skip on a PR neither extends nor clears the streak", () => {
-  // Five web-only PRs skipped the Go lanes: that is the filter working.
+test("a skip neither extends nor clears the streak, on any event", () => {
+  // Five web-only PRs skipped the electron lane: that is the selection working.
   assert.equal(badStreak([pr("skipped"), pr("skipped"), pr("skipped"), pr("skipped"), pr("skipped")]), 0);
-  // ...and they do not hide a red main underneath them.
+  // The merge gate is skipped on every main run by design.
+  assert.equal(badStreak([push("skipped"), nightly("skipped"), push("skipped")]), 0);
+  // ...and skips do not hide a red streak underneath them.
   assert.equal(badStreak([pr("skipped"), push("failure"), pr("skipped"), nightly("failure"), push("success")]), 2);
-});
-
-test("a skip on main or the nightly is still bad: main never path-filters", () => {
-  assert.equal(badStreak([push("skipped"), nightly("skipped"), push("skipped")]), 3);
 });
 
 test("cancelled and timed_out stay bad on PRs", () => {
   assert.equal(badStreak([pr("cancelled"), pr("timed_out"), pr("success")]), 2);
 });
 
-// check-main-health.mjs: main's full Go tier is green only when every shard is.
+// check-main-health.mjs: main is green only when its release gate ran and passed.
 const job = (name, conclusion = "success") => ({ name, conclusion });
-const FULL = "Backend (Go, full)";
+const GATE = "Release gate";
 
-test("every shard present and green is a pass", () => {
-  assert.deepEqual(shardedTierProblems([job(`${FULL} 2/2`), job("Lint (forge)"), job(`${FULL} 1/2`)], FULL), []);
-  assert.deepEqual(shardedTierProblems([job(`${FULL} 1/1`)], FULL), []);
+test("the required job present and green is a pass", () => {
+  assert.deepEqual(requiredJobProblems([job("Lanes"), job(GATE), job("CI result")], GATE), []);
 });
 
-test("no shard at all is the full tier not running", () => {
-  const problems = shardedTierProblems([job("Lint (forge)"), job("Backend (Go, short) 1/1")], FULL);
+test("no required job at all is the tier not running", () => {
+  const problems = requiredJobProblems([job("Lanes"), job("Merge gate")], GATE);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /did not run/);
 });
 
-test("a missing or red shard fails, naming it", () => {
-  assert.deepEqual(shardedTierProblems([job(`${FULL} 1/3`), job(`${FULL} 3/3`)], FULL), [`\`${FULL} 2/3\` is missing`]);
-  assert.deepEqual(shardedTierProblems([job(`${FULL} 1/2`), job(`${FULL} 2/2`, "cancelled")], FULL), [
-    `\`${FULL} 2/2\` concluded \`cancelled\``,
-  ]);
-});
-
-test("shards that disagree on the count fail", () => {
-  assert.equal(shardedTierProblems([job(`${FULL} 1/2`), job(`${FULL} 2/4`)], FULL).length, 1);
+test("a red, cancelled or skipped required job fails, naming its conclusion", () => {
+  assert.deepEqual(requiredJobProblems([job(GATE, "failure")], GATE), [`\`${GATE}\` concluded \`failure\``]);
+  assert.deepEqual(requiredJobProblems([job(GATE, "cancelled")], GATE), [`\`${GATE}\` concluded \`cancelled\``]);
+  assert.deepEqual(requiredJobProblems([job(GATE, "skipped")], GATE), [`\`${GATE}\` concluded \`skipped\``]);
 });

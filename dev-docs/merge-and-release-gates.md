@@ -101,7 +101,7 @@ deeper dependent is listed in the plan as `deferred` and runs in the release
 gate. `go build ./...` still compiles every package, so a deferred package can
 only fail at test time, never at compile time, before the merge.
 
-`task test:affected` and `make test-affected` keep the full closure (`-reach all`,
+`task test:affected` keeps the full closure (`-reach all`,
 the default), so a local run stays thorough. `MG_REACH=all task ci:merge` runs
 the merge gate with it.
 
@@ -216,9 +216,55 @@ its own pool checkout, it:
 3. squashes onto main;
 4. runs `scripts/merge-gate.sh --base <main> --amend` in one heavy slot.
 
-Only the land step is serialized under one lock: fetch, push and
-squash-merge. If main moved, the queue carries the verified commit onto the new
+Only the land step is serialized under one lock: fetch, push, post the
+`merge-gate` commit status on the verified commit, and squash-merge. If main moved, the queue carries the verified commit onto the new
 main and re-checks only that it builds, as long as main's new commits are
 disjoint from the branch's files and from the project-wide inputs. Otherwise it
 runs the gate again. The queue's summary, posted into each merge PR's body,
 separates the time queued for a heavy slot from the time spent running.
+
+### The required status, and the audited waiver
+
+`main` accepts a merge only when the commit carries a SUCCESS `merge-gate`
+commit status: the ruleset "main: merge-gate required" requires it, requires the
+head to be up to date with `main`, and has **no bypass actors**, so `gh pr merge
+--admin` is refused too. The queue posts that status on the exact squashed
+commit its gate verified:
+
+```sh
+.fm-tools/merge_queue3.sh <remote-branch>
+```
+
+The only other way in is an audited waiver, for a hotfix that cannot wait or a
+gate failure that reproduces identically on `main`. It posts
+`WAIVED: <reason>` as the status, comments on the PR and appends to the
+waiver log:
+
+```sh
+.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
+gh pr merge <pr> --squash
+```
+
+There is no waiver for the release gate: a red release-gate run is fixed, not
+waived (`scripts/release-tag.sh --skip-release-gate` is the hotfix escape for
+tagging, said in the release notes).
+
+## CI
+
+`.github/workflows/ci.yml` is a thin wrapper over these same commands: every
+job is setup, then `task <name>`, so CI cannot disagree with a local run.
+
+| Event | Job | Runs |
+|---|---|---|
+| `pull_request` | `Merge gate` | `task ci:merge -- --base <the PR's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks` |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate` | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag` |
+
+Beside them run the lanes neither gate covers, selected by path
+(`scripts/ci-lanes.sh`, `task ci:lanes`) on a pull request and all of them off
+one (the contract only when a push changed what it checks): the renderer's release build (`task build:web:verify`), Playwright
+(`task test:web:e2e`), the electron package (`task build:electron:smoke`) and
+the vendored control-plane contract (`task contract:controlplane:check`, which
+reads private control-plane with a deploy key). `CI result` is the one verdict.
+DB-backed tests boot forge pgtest's embedded Postgres on the runner: there is
+no Postgres service container and no `DATABASE_URL`.
+

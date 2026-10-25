@@ -14,38 +14,44 @@ Packages the web app + Go backend into a native desktop application.
 
 ### Prerequisites
 
-- Node.js 18+
-- Go 1.25+
-- npm
+- Node.js 20.19+
+- Go (the version in `../go.mod`)
+- [Task](https://taskfile.dev)
 
 ### Setup
 
 ```bash
-npm install
-npm run dev
+task deps:web deps:electron   # from the repo root: npm ci in frontends/web and electron
 ```
 
-This starts the Go backend (dynamic port via `.dev-ports.sh`), Vite dev server on port 3000, and Electron with hot reloading.
+### Running it against a dev stack
 
-### From project root
+Electron loads the renderer from a running dev stack's Vite server and spawns
+the `reliant` sidecar from `../dist/reliant`. The stack that wires it is
+control-plane's full-platform one (a `../control-plane` checkout beside this
+repo; it needs k3d):
 
 ```bash
-npm run start:electron
+cd ../control-plane && forge env up dev -D electron=1
 ```
+
+That builds `../reliant/dist/reliant`, serves the renderer, and runs `npm run
+dev:electron` (`scripts/wait-and-start.js`) here. The main process logs to
+`../control-plane/.forge/logs/dev/reliant-electron-main.log`, the renderer's
+console to `frontend_reliant-web.log` beside it (`RELIANT_LOG_DIR`; the
+`dev-logs` skill has the map). reliant's own `forge env up dev` serves the same
+web app to a browser and runs no Electron.
 
 ## Building
 
 ```bash
-# Development build
-npm run build
-
-# Production package (outputs to ../dist/)
-npm run package
-
-# From project root (full build including backend + web)
-npm run build:electron
-npm run package:electron
+npm run build          # production package for macOS (with-release-config -> pack)
+npm run dist:mac       # or dist:win, dist:linux: one platform
+npm run dist:pr        # unsigned --dir package, no publish: what CI builds (`task build:electron:smoke`)
 ```
+
+Every build target goes through `scripts/with-release-config.mjs`, so a local
+build reads the same release config a release does.
 
 ## Configuration
 
@@ -178,7 +184,11 @@ electron/
 ## Troubleshooting
 
 ### Backend fails to start
-Check that a port was allocated in `.dev-ports.sh` and that Go is in PATH. Check console logs in DevTools.
+Check that `../dist/reliant` exists and is current (`task build` from the repo
+root), then read the main process's log
+(`../control-plane/.forge/logs/dev/reliant-electron-main.log` under the dev
+stack) and the renderer's console in DevTools.
 
 ### Build fails
-Ensure web app builds successfully first (`npm run build` in `frontends/web/`), then verify Go backend compiles.
+Ensure the web app builds first (`task build:web:verify` from the repo root runs
+the release's renderer build), then that the Go backend compiles (`task build`).
