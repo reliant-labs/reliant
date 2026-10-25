@@ -19,8 +19,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ─── Persistence layer (the unit under test talks to this) ───────────────────
 
 const readSetting = vi.fn();
-const upsertStringSetting = vi.fn(async () => undefined);
-const deleteSettingIfExists = vi.fn(async () => undefined);
+const upsertStringSetting = vi.fn(async (_key: string, _value: string) => undefined);
+const deleteSettingIfExists = vi.fn(async (_key: string) => undefined);
 
 vi.mock("../../lib/settingsPersistence", () => ({
   readSetting: (key: string) => readSetting(key),

@@ -219,7 +219,7 @@ describe("planInsert: into an edge", () => {
 });
 
 describe("what an insert saves as", () => {
-  const meta = { name: "w", description: "", inputs: {}, outputs: {} };
+  const meta = { name: "w", description: "", inputs: {}, outputs: {}, entry: undefined, tag: undefined, presetDefault: undefined, apiVersion: undefined, isLocked: false };
 
   it("a first step after the start is the workflow's entry", () => {
     const plan = planInsert({ nodes: [start()], edges: [], node: fresh("run"), anchor: { kind: "after", nodeId: "workflow" }, fallbackPosition: { x: 0, y: 0 } });

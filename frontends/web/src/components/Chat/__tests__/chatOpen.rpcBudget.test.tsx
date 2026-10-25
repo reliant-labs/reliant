@@ -39,7 +39,6 @@ vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { api } from "../../../api/client";
-import { chatGrpc } from "../../../api/chat-grpc";
 import { invalidatePresets } from "../../../hooks/preset-queries";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
@@ -71,6 +70,10 @@ function spyRpcs() {
   const listPresetsForWorkflow = vi.fn(() => ({ presets: [], invalidPresets: [] }));
   const getDefaultPresetsBatch = vi.fn(() => ({ presetsByWorkflow: {} }));
   const getWorkflow = vi.fn(() => ({}));
+  const getWorkflowExecutions = vi.fn(() => ({}));
+  const listQueuedAgentMessages = vi.fn(() => ({ messages: [] }));
+  const getChat = vi.fn((req: { chatId: string }) => ({ chat: chat(req.chatId) }));
+  const listMessages = vi.fn(() => ({ messages: [], total: 0, hasMore: false }));
   setTransport(
     mockTransport({
       "QuestionService.ListPendingQuestions": listPendingQuestions,
@@ -78,29 +81,19 @@ function spyRpcs() {
       "PresetService.ListPresetsForWorkflow": listPresetsForWorkflow,
       "PresetService.GetDefaultPresetsBatch": getDefaultPresetsBatch,
       "WorkflowService.GetWorkflow": getWorkflow,
+      "ChatService.GetWorkflowExecutions": getWorkflowExecutions,
+      "ChatService.ListQueuedAgentMessages": listQueuedAgentMessages,
+      "ChatService.GetChat": (req: unknown) => getChat(req as { chatId: string }),
+      "ChatService.ListMessages": listMessages,
     }),
   );
   counters = [
-    { name: "GetChat", spy: vi.spyOn(api.chatsV2, "get").mockImplementation(async (id: string) => chat(id) as never) },
-    {
-      name: "ListMessages",
-      spy: vi.spyOn(api.chatsV2, "listMessages").mockResolvedValue({
-        messages: [],
-        total: 0,
-        hasMore: false,
-        oldestSeq: 0,
-      } as never),
-    },
+    { name: "GetChat", spy: getChat },
+    { name: "ListMessages", spy: listMessages },
     { name: "ListApprovalsByChat", spy: listApprovalsByChat },
     { name: "ListPendingQuestions", spy: listPendingQuestions },
-    {
-      name: "GetWorkflowExecutions",
-      spy: vi.spyOn(chatGrpc, "getWorkflowExecutions").mockResolvedValue({ all: [], latest: null } as never),
-    },
-    {
-      name: "ListQueuedAgentMessages",
-      spy: vi.spyOn(chatGrpc, "listQueuedAgentMessages").mockResolvedValue({ messages: [] } as never),
-    },
+    { name: "GetWorkflowExecutions", spy: getWorkflowExecutions },
+    { name: "ListQueuedAgentMessages", spy: listQueuedAgentMessages },
     { name: "GetWorkflow", spy: getWorkflow },
     { name: "ListPresetsForWorkflow", spy: listPresetsForWorkflow },
     { name: "GetDefaultPresets", spy: getDefaultPresetsBatch },

@@ -57,7 +57,7 @@ bytes (each set's `SHA256SUMS`). Each set has a README naming the shape it
 pins and the `workflow.GetVersion` gate that keeps it replaying.
 
 They exist because the current set cannot catch a break on its own: it is
-rewritten by `make replay-fixtures`, so it only proves the code replays
+rewritten by `task replay-fixtures`, so it only proves the code replays
 histories the same code just recorded. #641 reordered the run's startup
 (preflight after "started"), regenerated every fixture, passed this suite, and
 on the 2026-10-09 deploy wedged every run in flight with the old order —
@@ -121,11 +121,11 @@ with the old code, freeze it, and replay it against the new.
    in-flight runs have:
 
    ```
-   make freeze-replay-fixtures NAME=<yyyy-mm-dd>-<what-changed>
+   task replay-fixtures:freeze NAME=<yyyy-mm-dd>-<what-changed>
    ```
 
    and add a README to the new set (shape, gate, incident if any).
-3. Regenerate the current set: `make replay-fixtures`. The new fixtures carry
+3. Regenerate the current set: `task replay-fixtures`. The new fixtures carry
    your marker; the frozen set still replays without it.
 
 ### Marker-less histories of two different shapes
@@ -146,7 +146,7 @@ interruption, which is why the gate comes first.
 
 ## Regenerating
 
-`make replay-fixtures` — runs the build-tagged generator
+`task replay-fixtures` — runs the build-tagged generator
 (`go test -tags replayfixtures ./internal/workflow/runtime/replaytest/`, which
 boots an ephemeral Temporal dev server per run and drives every scenario with
 the scripted LLM — no model is ever called), rewrites every `fixtures/*.json`,

@@ -39,12 +39,18 @@ import {
   isInternalInput,
 } from "../inputHelpers";
 
+// configValue is the active config oneof's value, read loosely: a test asserts
+// on fields of one specific case, which the union type cannot name.
+function configValue(input: InputDef): Record<string, unknown> {
+  return (input.config?.value ?? {}) as Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------------------
 // Getters
 // ---------------------------------------------------------------------------
 
 describe("getters — proto Input with config oneof", () => {
-  const enumInput = {
+  const enumInput: InputDef = {
     type: "enum",
     config: {
       case: "enumInput",
@@ -79,7 +85,7 @@ describe("getters — proto Input with config oneof", () => {
 });
 
 describe("getters — integer input with bigint", () => {
-  const intInput = {
+  const intInput: InputDef = {
     type: "integer",
     config: {
       case: "integerInput",
@@ -106,7 +112,7 @@ describe("getters — integer input with bigint", () => {
 });
 
 describe("getters — string input", () => {
-  const strInput = {
+  const strInput: InputDef = {
     type: "string",
     config: {
       case: "stringInput",
@@ -142,7 +148,7 @@ describe("getters — string input", () => {
 });
 
 describe("getters — object input", () => {
-  const objInput = {
+  const objInput: InputDef = {
     type: "object",
     config: {
       case: "objectInput",
@@ -171,7 +177,7 @@ describe("getters — object input", () => {
 });
 
 describe("getters — group input", () => {
-  const groupInput = {
+  const groupInput: InputDef = {
     type: "group",
     config: {
       case: "groupInput",
@@ -197,7 +203,7 @@ describe("getters — group input", () => {
 });
 
 describe("getters — preset input", () => {
-  const presetInput = {
+  const presetInput: InputDef = {
     type: "preset",
     config: {
       case: "presetInput",
@@ -245,7 +251,7 @@ describe("isConfigurableInput", () => {
 // ---------------------------------------------------------------------------
 
 describe("setters — immutable updates", () => {
-  const input = {
+  const input: InputDef = {
     type: "enum",
     config: {
       case: "enumInput",
@@ -289,25 +295,25 @@ describe("setters — min/max maps to correct field", () => {
   it("setInputMin on string → minLength", () => {
     const str = createInput("string");
     const updated = setInputMin(str, 5);
-    expect(updated.config.value.minLength).toBe(5);
+    expect(configValue(updated).minLength).toBe(5);
   });
 
   it("setInputMax on string → maxLength", () => {
     const str = createInput("string");
     const updated = setInputMax(str, 100);
-    expect(updated.config.value.maxLength).toBe(100);
+    expect(configValue(updated).maxLength).toBe(100);
   });
 
   it("setInputMin on integer → min", () => {
     const int = createInput("integer");
     const updated = setInputMin(int, 0);
-    expect(updated.config.value.min).toBe(0);
+    expect(configValue(updated).min).toBe(0);
   });
 
   it("setInputMin on array → minItems", () => {
     const arr = createInput("array");
     const updated = setInputMin(arr, 1);
-    expect(updated.config.value.minItems).toBe(1);
+    expect(configValue(updated).minItems).toBe(1);
   });
 });
 
@@ -319,21 +325,21 @@ describe("createInput", () => {
   it("creates string input with correct config case", () => {
     const input = createInput("string");
     expect(input.type).toBe("string");
-    expect(input.config.case).toBe("stringInput");
-    expect(input.config.value.base).toBeDefined();
+    expect(input.config?.case).toBe("stringInput");
+    expect(configValue(input).base).toBeDefined();
   });
 
   it("creates enum input with empty enumValues", () => {
     const input = createInput("enum");
-    expect(input.config.case).toBe("enumInput");
-    expect(input.config.value.enumValues).toEqual([]);
-    expect(input.config.value.multi).toBe(false);
+    expect(input.config?.case).toBe("enumInput");
+    expect(configValue(input).enumValues).toEqual([]);
+    expect(configValue(input).multi).toBe(false);
   });
 
   it("creates group input with empty inputs map", () => {
     const input = createInput("group");
-    expect(input.config.case).toBe("groupInput");
-    expect(input.config.value.inputs).toEqual({});
+    expect(input.config?.case).toBe("groupInput");
+    expect(configValue(input).inputs).toEqual({});
   });
 
   it("applies init values", () => {
@@ -374,7 +380,7 @@ describe("example", () => {
 
   it("survives a change of type, as the description does", () => {
     const changed = changeInputType(createInput("string", { description: "Count", example: "3" }), "integer");
-    expect(changed.config.case).toBe("integerInput");
+    expect(changed.config?.case).toBe("integerInput");
     expect(getInputExample(changed)).toBe("3");
     expect(getInputDescription(changed)).toBe("Count");
   });
@@ -387,7 +393,7 @@ describe("changeInputType keeps what lives outside the config", () => {
     expect(changed._name).toBe("max_attempts");
     expect(changed._id).toBe("param-1");
     expect(changed.type).toBe("integer");
-    expect(changed.config.case).toBe("integerInput");
+    expect(changed.config?.case).toBe("integerInput");
     expect(getInputDescription(changed)).toBe("Retries");
   });
 
@@ -396,7 +402,7 @@ describe("changeInputType keeps what lives outside the config", () => {
     const changed = applyInputUpdates(named, { type: "enum", default: undefined }) as typeof named;
     expect(changed._name).toBe("max_attempts");
     expect(changed._id).toBe("param-1");
-    expect(changed.config.case).toBe("enumInput");
+    expect(changed.config?.case).toBe("enumInput");
   });
 });
 

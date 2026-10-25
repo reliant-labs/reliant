@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type { Message } from "../../../../api/client";
 import {
@@ -10,7 +10,9 @@ import {
   WorkflowState,
   WorkflowStopReason,
 } from "../../../../gen/reliant/v1/chat_pb";
+import { setTransport } from "../../../../lib/connect";
 import { queryClient } from "../../../../lib/query-client";
+import { mockTransport } from "../../../../lib/test-utils";
 import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
@@ -27,18 +29,6 @@ import type { ToolRenderContext } from "../types";
 
 const { listMessagesMock } = vi.hoisted(() => ({ listMessagesMock: vi.fn() }));
 
-vi.mock("../../../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../../../api/client")>(
-    "../../../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, listMessages: listMessagesMock },
-    },
-  };
-});
 
 vi.mock("../../../../hooks/useWorkflowExecutions", () => ({
   useWorkflowExecutions: () => ({
@@ -112,7 +102,11 @@ function wrap(ui: ReactNode) {
 beforeEach(() => {
   clearAllMessagesCache();
   listMessagesMock.mockReset();
+  // The page is ListMessages, answered at the transport by `listMessagesMock(request)`.
+  setTransport(mockTransport({ "ChatService.ListMessages": (req: unknown) => listMessagesMock(req) }));
 });
+
+afterEach(() => setTransport(null));
 
 describe("SpawnPreview lazily loads its child thread", () => {
   it("fetches the child thread when a card with no cached messages is opened, shows loading, then renders it", async () => {
@@ -121,13 +115,13 @@ describe("SpawnPreview lazily loads its child thread", () => {
 
     render(wrap(<SpawnToolRenderer ctx={ctx()} />));
 
-    expect(listMessagesMock).toHaveBeenCalledTimes(1);
-    const [chatId, options] = listMessagesMock.mock.calls[0];
-    expect(chatId).toBe(CHAT);
-    expect(options.threadId).toBe(CHILD);
+    await waitFor(() => expect(listMessagesMock).toHaveBeenCalledTimes(1));
+    const [request] = listMessagesMock.mock.calls[0];
+    expect(request.chatId).toBe(CHAT);
+    expect(request.threadId).toBe(CHILD);
     // Bounded: the preview shows the last few messages, not a whole spawn
     // transcript (real ones run to ~2,000 messages).
-    expect(options.recent).toBeGreaterThan(0);
+    expect(request.recent).toBeGreaterThan(0);
 
     expect(screen.getByText("Loading agent activity…")).toBeInTheDocument();
     expect(screen.queryByText("Starting…")).not.toBeInTheDocument();
@@ -145,7 +139,7 @@ describe("SpawnPreview lazily loads its child thread", () => {
     listMessagesMock.mockReturnValueOnce(response.promise);
 
     render(wrap(<SpawnToolRenderer ctx={ctx()} />));
-    expect(listMessagesMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(listMessagesMock).toHaveBeenCalledTimes(1));
 
     // A live spawn keeps writing. Its newest message reaches the stream
     // before the page — read from a snapshot taken a moment earlier — comes

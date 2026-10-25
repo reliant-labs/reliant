@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * actually has, so a future scheme change fails here instead of in the field.
  */
 
-type TestWindow = Window & {
+type TestWindow = Omit<Window, 'electronAPI' | 'RELIANT_CONFIG'> & {
   electronAPI?: unknown
   RELIANT_CONFIG?: Record<string, unknown>
 }

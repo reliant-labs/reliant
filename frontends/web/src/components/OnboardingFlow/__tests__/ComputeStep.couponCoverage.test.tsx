@@ -33,7 +33,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
-import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
+import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import type { LaunchPlan } from "../types";
 
 const mockUseDaemonStatus = vi.fn(() => ({
@@ -124,7 +124,7 @@ function wrapper() {
   );
 }
 
-function renderStep(updatePlan = vi.fn(async () => {})) {
+function renderStep(updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {})) {
   return render(
     <ComputeStep
       plan={{} as Partial<LaunchPlan>}
@@ -214,7 +214,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
   // commit fall back to SMALL regardless of the tile.
   it("records the chosen size for an entitled user", async () => {
     asEntitled();
-    const updatePlan = vi.fn(async () => {});
+    const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
     renderStep(updatePlan);
 
     screen.getByRole("button", { name: /^continue with /i }).click();
@@ -304,7 +304,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
   // computePlanId — that field drives the checkout summary and the provisioned
   // machine size.
   it("does not record a compute plan when the local option is picked", async () => {
-    const updatePlan = vi.fn(async () => {});
+    const updatePlan = vi.fn(async (_updates: Partial<LaunchPlan>) => {});
     renderStep(updatePlan);
 
     screen.getByRole("button", { name: /use your own computer/i }).click();

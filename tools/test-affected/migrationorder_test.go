@@ -122,7 +122,7 @@ func TestMigrationBelowMainsHeadFails(t *testing.T) {
 		"20261024024221",             // this migration's version
 		"20261024035148",             // main's head
 		"hosted_http_action_tickets", // main's head, by name
-		"make migration NAME=chats_worktree_binding_index",
+		"task db:migration NAME=chats_worktree_binding_index",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message does not contain %q:\n%s", want, msg)
@@ -327,7 +327,7 @@ func TestRunnerRunsMigrationOrderFirstAndOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-// The default lane list is what `make test-affected` runs: it must include the
+// The default lane list is what `task test:affected` runs: it must include the
 // migration-order lane, or the gate silently stops covering migrations.
 func TestDefaultLanesIncludeMigrationOrder(t *testing.T) {
 	if !strings.Contains(defaultLanes, string(laneMigOrder)) {

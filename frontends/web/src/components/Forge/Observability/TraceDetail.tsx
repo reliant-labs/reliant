@@ -28,7 +28,8 @@ import { formatDuration, formatTimestamp } from "./format";
 import { shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
-import { rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
+import { SessionName } from "./Sessions/SessionName";
+import { rumScopeOf, rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
 import { TraceWaterfall } from "./waterfall/TraceWaterfall";
 import { traceExtent } from "./waterfall/traceTree";
 
@@ -149,7 +150,7 @@ export function TraceDetail({
               data-testid="trace-session"
               title={`Browser session ${sessionId}`}
             >
-              Session
+              <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} />
             </Button>
           )}
         </div>

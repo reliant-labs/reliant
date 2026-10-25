@@ -63,7 +63,7 @@ func setOAuthHelperOrigins(origins []string) {
 type openOAuthHelperRequest struct {
 	// WebOrigin is the browser origin that will call the helper. Passed from
 	// the UI because the daemon cannot know it: a worktree's web dev server
-	// gets a per-worktree port (.dev-ports.sh FRONTEND_PORT), so the origin is
+	// gets a per-worktree port (the dev stack's FRONTEND_PORT), so the origin is
 	// not one of the static defaults and is not in the daemon's environment
 	// either. Without it the CORS allowlist would 403 the very caller that
 	// asked for the port.

@@ -2,7 +2,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ToolExecution } from "../ToolExecution";
-import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
+import { create } from "@bufbuild/protobuf";
+import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 import { withAppQueryClient } from "../../../test/withAppQueryClient";
 import { queryClient } from "../../../lib/query-client";
@@ -32,15 +33,14 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
   useWorkflowExecutions: () => ({ allWorkflows: [] }),
 }));
 
-const pendingApproval: Approval = {
-  $typeName: "reliant.v1.Approval",
+const pendingApproval: Approval = create(ApprovalSchema, {
   id: "approval-1",
   chatId: "chat-1",
   entityId: "block-1",
   description: "Edit src/index.ts",
   status: ApprovalStatus.PENDING,
   createdAt: new Date().toISOString(),
-};
+});
 
 function renderApproval(surface: "desktop" | "mobile" | "embed") {
   return render(

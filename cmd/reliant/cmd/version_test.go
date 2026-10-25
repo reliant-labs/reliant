@@ -11,7 +11,7 @@ import (
 )
 
 // The release build stamps the binary with
-// `-X github.com/reliant-labs/reliant/internal/version.Version=...` (Makefile
+// `-X github.com/reliant-labs/reliant/internal/version.Version=...` (task build
 // LDFLAGS and .github/workflows/release.yml). These tests pin `reliant version`
 // to THAT package.
 //

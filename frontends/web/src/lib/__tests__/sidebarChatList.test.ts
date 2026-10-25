@@ -8,8 +8,8 @@ import {
   withOpenChatPinned,
 } from "../sidebarChatList";
 
-const listed = { id: "listed", projectId: "p1", state: ChatState.ACTIVE };
-const run = { id: "run", projectId: "p1", state: ChatState.ACTIVE, launchKind: "schedule" };
+const listed = { id: "listed", projectId: "p1", state: ChatState.IDLE };
+const run = { id: "run", projectId: "p1", state: ChatState.IDLE, launchKind: "schedule" };
 
 describe("withOpenChatPinned", () => {
   it("appends the open chat when the server list omits it", () => {

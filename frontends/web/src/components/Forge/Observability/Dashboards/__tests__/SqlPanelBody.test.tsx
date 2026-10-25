@@ -126,7 +126,7 @@ describe("SQL aggregate figures", () => {
 });
 
 describe("SQL time series", () => {
-  it.each([
+  it.each<{ id: string; labels: string[]; group: Record<string, string> }>([
     { id: "dau-wau-mau", labels: ["dau", "wau", "mau"], group: {} },
     { id: "landing-daily", labels: ["visitors", "clicked_download_or_app", "signed_in"], group: {} },
     { id: "coupons", labels: ["redemptions", "credit_usd", "compute_minutes"], group: { kind: "credit" } },
@@ -143,7 +143,7 @@ describe("SQL time series", () => {
   });
 
   it("aligns sparse groups without losing zero, null gaps or a ratio alias", () => {
-    const series = [
+    const series: Array<{ label: string; group: Record<string, string>; timestamps: number[]; values: (number | null)[]; value: null }> = [
       { label: "ratio", group: { client: "web" }, timestamps: [1000, 1120], values: [0, null], value: null },
       { label: "users", group: { client: "web", version: "v2" }, timestamps: [1060], values: [2], value: null },
     ];

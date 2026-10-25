@@ -40,6 +40,7 @@ import { attributeLabel } from "../attributes";
 import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
+import { sessionTitle } from "../Sessions/sessionModel";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 /** The way out of a panel into the explorers: what a series or row is, as a filter. */
@@ -114,12 +115,21 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   }
   const data = query.data;
   if (!data || !hasData(panel, data)) {
-    return compact ? (
-      <p className="text-xs text-ink-muted">No data</p>
-    ) : (
-      <p className="py-4 text-center text-xs text-ink-muted" data-testid="obs-panel-empty">
-        {EMPTY_COPY[panel.kind] ?? "No data in this window"}
-      </p>
+    if (compact) return <p className="text-xs text-ink-muted">No data</p>;
+    const absent = absentMetrics(data);
+    return (
+      <div className="py-4 text-center text-xs text-ink-muted" data-testid="obs-panel-empty">
+        <p>{EMPTY_COPY[panel.kind] ?? "No data in this window"}</p>
+        {absent.length > 0 && (
+          <p className="mt-1" data-testid="obs-panel-absent">
+            {absent.map((detail) => (
+              <span key={detail} className="block font-mono">
+                {detail}
+              </span>
+            ))}
+          </p>
+        )}
+      </div>
     );
   }
   const unit = unitOf(panel, data);
@@ -227,6 +237,16 @@ function PanelNote({ children, testId }: { children: ReactNode; testId: string }
       <span>{children}</span>
     </p>
   );
+}
+
+/** The details of a result's metric_absent warnings: which metric has no data, and where. */
+export function absentMetrics(result: PanelResult | undefined): string[] {
+  const out: string[] = [];
+  for (const warning of result?.warnings ?? []) {
+    const [code, ...detail] = warning.split(": ");
+    if (code === "metric_absent" && detail.length > 0) out.push(detail.join(": "));
+  }
+  return out;
 }
 
 export function hasData(panel: Pick<Panel, "kind">, result: PanelResult): boolean {
@@ -662,6 +682,7 @@ function IssuesList({ data, traceHref, compact }: { data: PanelResult; traceHref
 /** Sessions: who, where they came in, how long, what they did, and whether it went wrong. */
 function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessionHref?: (sessionId: string) => string; compact: boolean }) {
   const sessions = compact ? data.sessions.slice(0, 3) : data.sessions;
+  const now = Date.now();
   return (
     <div className={cn(!compact && "max-h-96 overflow-auto")}>
       <StackedTable className="w-full text-xs" data-testid="obs-panel-sessions">
@@ -689,11 +710,6 @@ function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessi
             <th scope="col" className="h-8 pr-3 font-medium">
               Errors
             </th>
-            {!compact && (
-              <th scope="col" className="h-8 font-medium">
-                Started
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
@@ -704,15 +720,16 @@ function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessi
                   {sessionHref ? (
                     <Link
                       href={sessionHref(session.sessionId)}
-                      className="no-color font-mono text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
+                      className="no-color text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
                       title={session.hasReplay ? "Open this session and watch its replay" : "Open this session's timeline"}
                       data-testid={`obs-panel-session-${session.sessionId}`}
                     >
-                      {session.sessionId.length > 8 ? `${session.sessionId.slice(0, 8)}…` : session.sessionId}
+                      {sessionTitle(session.serviceName, session.startMs, { now })}
                     </Link>
                   ) : (
-                    <Mono value={session.sessionId} length={8} copy={!compact} />
+                    <span className="text-ink">{sessionTitle(session.serviceName, session.startMs, { now })}</span>
                   )}
+                  {!compact && <Mono value={session.sessionId} length={8} />}
                   {session.hasReplay && !compact && <Tag title="This session's replay was recorded">replay</Tag>}
                 </span>
               </td>
@@ -731,13 +748,6 @@ function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessi
                   <Status tone="neutral" label="none" />
                 )}
               </td>
-              {!compact && (
-                <td className="h-9 whitespace-nowrap text-ink-muted">
-                  <time dateTime={new Date(session.startMs).toISOString()} title={new Date(session.startMs).toLocaleString()}>
-                    {formatAgo(session.startMs)}
-                  </time>
-                </td>
-              )}
             </tr>
           ))}
         </tbody>

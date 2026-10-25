@@ -14,9 +14,9 @@ import (
 
 // isolateCLI points HOME and the shared credentials file at a temp dir and
 // clears the RELIANT_* variables the resolver reads, so no test can read or
-// write a developer's real login. A shell that has sourced .dev-ports.sh
-// exports RELIANT_SERVER_URL, which outranks the compiled defaults tests
-// assert on; an empty value reads as unset. Returns the credentials path.
+// write a developer's real login. A dev shell often exports
+// RELIANT_SERVER_URL, which outranks the compiled defaults tests assert on; an
+// empty value reads as unset. Returns the credentials path.
 func isolateCLI(t *testing.T) string {
 	t.Helper()
 	// In memory: every login these tests store is an fsync (internal/memtemp).

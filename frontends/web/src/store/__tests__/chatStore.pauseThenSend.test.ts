@@ -1,25 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, pause: vi.fn(), sendMessage: vi.fn() },
-    },
-  };
-});
-
-import { api } from "../../api/client";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { useChatStore } from "../chatStore";
 import { seedChatDetail } from "../../hooks/chat-queries";
 import { clearAllMessagesCache } from "../../hooks/message-queries";
 
-const pause = vi.mocked(api.chatsV2.pause);
-const sendMessage = vi.mocked(api.chatsV2.sendMessage);
+// The fake server: PauseChat and SendMessage, answered at the transport.
+const pause = vi.fn();
+const sendMessage = vi.fn();
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      "ChatService.PauseChat": (req: unknown) => pause(req),
+      "ChatService.SendMessage": (req: unknown) => sendMessage(req),
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 const CHAT = "c-pause-send";
 
@@ -38,13 +36,13 @@ describe("sendMessage after a pause", () => {
 
   it("does not send until the in-flight pause has resolved", async () => {
     let finishPause!: () => void;
-    pause.mockReturnValue(new Promise<void>((resolve) => (finishPause = resolve)) as never);
+    pause.mockReturnValue(new Promise<object>((resolve) => (finishPause = () => resolve({}))));
 
     const paused = useChatStore.getState().pauseChat(CHAT);
     const sent = useChatStore.getState().sendMessage(CHAT, "after esc");
 
-    await Promise.resolve();
-    await Promise.resolve();
+    // Long enough for a send that did not wait to reach the server.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(sendMessage).not.toHaveBeenCalled();
 
     finishPause();

@@ -32,7 +32,7 @@ import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
-import { chatGrpc } from "../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { useChatStore } from "../../store/chatStore";
 import {
   useBackgroundWork,
@@ -42,6 +42,7 @@ import {
   type FailedSpawn,
   type WaitingQuestion,
 } from "./useBackgroundWork";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -240,7 +241,7 @@ function FailedSpawnRow({
     try {
       // To the PARENT, not the agent: the parent was told this agent failed
       // and owns the plan it belongs to, so it is the one that resumes it.
-      const response = await chatGrpc.sendAgentMessage(
+      const response = await chatActions.sendAgentMessage(
         chatId,
         spawn.parentThreadId,
         failedAgentRetryMessage(spawn),
@@ -251,6 +252,7 @@ function FailedSpawnRow({
         return;
       }
       setRetry("requested");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[BackgroundWorkPill] Failed to ask the parent to retry a failed agent", {
         chatId,

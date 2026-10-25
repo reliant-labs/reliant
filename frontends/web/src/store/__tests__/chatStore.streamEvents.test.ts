@@ -10,7 +10,7 @@ import { useThreadActivityStore } from "../threadActivityStore";
 // dedup / snapshot / sort behavior here lets us extract each into a pure
 // reducer without changing what the UI sees.
 
-function seedChat(chatId: string) {
+function seedChat(_chatId: string) {
   useChatStore.setState({
     activeChatId: null,
     messages: {},
@@ -58,7 +58,7 @@ function runOutput(
     unique_activity_id: uniqueActivityId,
     sequence_number: seq,
     timestamp: "2026-01-01T00:00:00.000Z",
-    content,
+    output: content,
   } as unknown as ChatUpdate;
 }
 
@@ -172,7 +172,7 @@ describe("runOutputs reducer", () => {
 
     const outputs = useChatStore.getState().runOutputs[CHAT] || [];
     expect(outputs.map((r) => r.unique_activity_id)).toEqual(["b", "a"]);
-    expect(outputs.find((r) => r.unique_activity_id === "a")?.content).toBe(
+    expect(outputs.find((r) => r.unique_activity_id === "a")?.output).toBe(
       "second-updated",
     );
   });
@@ -185,7 +185,7 @@ describe("runOutputs reducer", () => {
     ]);
 
     const outputs = useChatStore.getState().runOutputs[CHAT] || [];
-    expect(outputs.map((r) => r.content)).toEqual(["first", "second"]);
+    expect(outputs.map((r) => r.output)).toEqual(["first", "second"]);
   });
 });
 

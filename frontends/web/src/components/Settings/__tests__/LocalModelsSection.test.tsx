@@ -68,7 +68,7 @@ const inventory = (probedAt = new Date().toISOString()) =>
     ],
   });
 
-const daemon = (over: Partial<DaemonInfo> = {}) =>
+const daemon = (over: Partial<Omit<DaemonInfo, "$typeName">> = {}) =>
   create(DaemonInfoSchema, {
     daemonId: "d1",
     hostname: "Sean's MacBook",

@@ -62,7 +62,7 @@ vi.mock('@/lib/sentry', () => ({
 }))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
-type TestWindow = Window & { electronAPI?: unknown }
+type TestWindow = Omit<Window, 'electronAPI'> & { electronAPI?: unknown }
 
 /**
  * Repoint the jsdom document at `origin`. The packaged renderer is served from

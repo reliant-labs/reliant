@@ -1,7 +1,8 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { useChatStore } from "../chatStore";
 import { useChatParamsStore } from "../chatParamsStore";
 import { clearAllMessagesCache } from "../../hooks/message-queries";
+import type { Chat } from "../../api/client";
 
 // tempNewChat* is the scratch space for a chat that has not been created yet.
 // Its only exit used to be transferTempToChat() on SEND, so a compose the user
@@ -17,8 +18,9 @@ import { clearAllMessagesCache } from "../../hooks/message-queries";
 // between chat-creation attempts, so its lifecycle cannot express "abandoned").
 
 
-const EXISTING_CHAT = { id: "c-existing" } as never;
-const CREATED_CHAT = { id: "c-created" } as never;
+// Only the id is read on this path.
+const EXISTING_CHAT = { id: "c-existing" } as Chat;
+const CREATED_CHAT = { id: "c-created" } as Chat;
 
 function reset() {
   clearAllMessagesCache();
