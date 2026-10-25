@@ -58,9 +58,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const chatId = tabId;
 
   // Get worktree and project IDs
-  const currentWorktreeId = useWorktreeStore(
-    (state) => state.currentWorktree?.id || null,
-  );
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const currentProjectId = useProjectStore(
     (state) => state.currentProject?.id || null,
   );

@@ -22,7 +22,6 @@ import type { SettingsSection } from "../../routeSchemas";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
 import { parseBinding } from "../../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { LowCreditSurface } from "../Billing/LowCreditSurface";
 import { DaemonStatusDot } from "./DaemonStatusDot";
@@ -30,6 +29,7 @@ import { DetectedPortsChip } from "./DetectedPortsChip";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
+import { useCurrentWorktree, useMainWorktree } from "../../hooks/worktree-queries";
 
 interface HeaderProps {
   // Controls logo size in the app bar for tasteful variations
@@ -86,13 +86,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       showWindowControls,
     } = useTitleBarChrome({ alignedToWindowEdge: windowAligned });
     const currentProject = useProjectStore((state) => state.currentProject);
-    const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-    const worktrees = useWorktreeStore((state) => state.worktrees);
+    const currentWorktree = useCurrentWorktree();
     const shortcuts = useShortcutsStore((state) => state.shortcuts);
 
-    const activeWorktrees = worktrees.filter((worktree) => !worktree.deleted_at);
-    const mainWorktree =
-      activeWorktrees.find((worktree) => worktree.is_main) ?? null;
+    const main = useMainWorktree(currentProject?.id);
+    const mainWorktree = main && !main.deleted_at ? main : null;
 
 
 

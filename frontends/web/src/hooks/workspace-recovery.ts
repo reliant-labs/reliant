@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { worktreeGrpc } from "../api/worktree-grpc";
+import { recreateWorktree } from "./worktree-actions";
 import { chatKeys } from "./chat-queries";
 
 /**
@@ -10,7 +10,7 @@ import { chatKeys } from "./chat-queries";
  */
 export function useRecreateWorkspace() {
   return useMutation({
-    mutationFn: (worktreeId: string) => worktreeGrpc.recreate(worktreeId),
+    mutationFn: (worktreeId: string) => recreateWorktree(worktreeId),
   });
 }
 

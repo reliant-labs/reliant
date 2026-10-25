@@ -20,6 +20,7 @@ import { useWorktreeStore } from "@/store/worktreeStore";
 import type { Chat } from "@/types/chat";
 
 import { describeRemote } from "./projectSource";
+import { resolveWorktree, useWorktreeList } from "../../../hooks/worktree-queries";
 
 /**
  * The current project at a glance: its repository state, how many workspaces
@@ -54,10 +55,7 @@ export function CurrentProjectDetails({
   className,
 }: CurrentProjectDetailsProps) {
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const hasMoreWorkspaces = useWorktreeStore((state) => state.nextPageToken !== "");
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
+  const { worktrees, hasMore: hasMoreWorkspaces } = useWorktreeList(project.id);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
@@ -65,7 +63,6 @@ export function CurrentProjectDetails({
 
   useEffect(() => {
     void refreshCurrentProject();
-    void loadWorktrees(project.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh once per project, not per store identity
   }, [project.id]);
 

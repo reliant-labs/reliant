@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { ArrowDown, ArrowUp, GitBranch, RefreshCw } from 'lucide-react';
-import { worktreeGrpc } from '../../api/worktree-grpc';
+import { useWorkspaceGitStatus } from '../../hooks/worktree-git-queries';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/Tooltip';
 
@@ -29,39 +29,23 @@ const GROUPS = [
 /** Read-only git status for a workspace: branch, sync counts, and the changed
  *  files grouped by state. */
 export function GitStatus({ worktreeId, className = "" }: GitStatusProps) {
-  const [status, setStatus] = useState<GitStatusData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const requestIdRef = useRef(0);
-
-  const fetchStatus = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const grpcStatus = await worktreeGrpc.getGitStatus(worktreeId);
-      if (requestIdRef.current !== requestId) return;
-      setStatus({
-        branch: grpcStatus.current_branch,
-        clean: grpcStatus.is_clean,
-        modified: grpcStatus.modified_files,
-        untracked: grpcStatus.untracked_files,
-        staged: grpcStatus.staged_files,
-        ahead: grpcStatus.ahead,
-        behind: grpcStatus.behind,
-      });
-    } catch (err) {
-      if (requestIdRef.current === requestId) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch git status');
-      }
-    } finally {
-      if (requestIdRef.current === requestId) setIsLoading(false);
-    }
-  }, [worktreeId]);
-
-  useEffect(() => {
-    if (worktreeId) void fetchStatus();
-  }, [worktreeId, fetchStatus]);
+  const query = useWorkspaceGitStatus(worktreeId);
+  const isLoading = query.isFetching;
+  const error = query.error ? query.error.message || 'Failed to fetch git status' : null;
+  const fetchStatus = () => query.refetch();
+  const status = useMemo<GitStatusData | null>(() => {
+    const data = query.data;
+    if (!data) return null;
+    return {
+      branch: data.current_branch,
+      clean: data.is_clean,
+      modified: data.modified_files,
+      untracked: data.untracked_files,
+      staged: data.staged_files,
+      ahead: data.ahead,
+      behind: data.behind,
+    };
+  }, [query.data]);
 
   if (isLoading && !status) {
     return (

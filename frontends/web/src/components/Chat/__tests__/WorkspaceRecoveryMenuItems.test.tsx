@@ -2,10 +2,10 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Worktree } from "../../../store/worktreeStore";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { WorkspaceRecoveryMenuItems } from "../WorkspaceRecoveryMenuItems";
+import { type Worktree } from "../../../hooks/worktree-queries";
 
 const state = vi.hoisted(() => ({
   recreate: vi.fn(),
@@ -14,12 +14,11 @@ const state = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
-vi.mock("@/api/worktree-grpc", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  worktreeGrpc: { recreate: (id: string) => state.recreate(id) },
-}));
 vi.mock("@/api/client", () => ({
   api: { chatsV2: { update: (chatId: string, updates: unknown) => state.update(chatId, updates) } },
+}));
+vi.mock("@/hooks/worktree-actions", () => ({
+  recreateWorktree: (id: string) => state.recreate(id),
 }));
 vi.mock("@/lib/toast-manager", () => ({
   toast: { success: state.success, error: state.error },

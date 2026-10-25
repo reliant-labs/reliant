@@ -34,7 +34,6 @@ import type {
   ChecklistItemId,
   ChecklistPanelState,
 } from "../components/Onboarding/types";
-import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
 import { getEventBus } from "../lib/events";
 import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
@@ -53,6 +52,7 @@ import type { ListWorkflowsResponse } from "../gen/reliant/v1/workflow_pb";
 import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
+import { getCachedWorktrees, isWorktreeQueryKey } from "../hooks/worktree-queries";
 
 /**
  * Whether an outbound RPC from this store can carry a credential.
@@ -431,7 +431,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       // 6. Create a workspace
       if (!newItems.has("create-workspace")) {
-        const worktrees = useWorktreeStore.getState().worktrees;
+        const worktrees = getCachedWorktrees();
         const hasUserWorktree = worktrees.some(
           (w) => !w.is_main && !w.deleted_at,
         );
@@ -521,9 +521,10 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       );
 
       unsubscribers.push(
-        useWorktreeStore.subscribe((state) => {
+        queryClient.getQueryCache().subscribe((event) => {
           if (get().completedItems.has("create-workspace")) return;
-          const hasUserWorktree = state.worktrees.some(
+          if (!isWorktreeQueryKey(event.query.queryKey)) return;
+          const hasUserWorktree = getCachedWorktrees().some(
             (w) => !w.is_main && !w.deleted_at,
           );
           if (hasUserWorktree) {

@@ -4,9 +4,9 @@ import { Globe, Plus, X, ChevronLeft, ChevronRight, RotateCw, Search, Lock, Code
 import { cn } from "../../lib/utils";
 import { useBrowserStore } from "../../store/browserStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { logger } from "../../lib/logger";
+import { useMainWorktree } from "../../hooks/worktree-queries";
 
 interface SimpleBrowserViewProps {
   worktreeId?: string; // Optional - will use main worktree if not provided
@@ -41,8 +41,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   
   // Get worktrees to find main worktree as fallback
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const mainWorktree = worktrees.find(w => w.is_main && w.project_id === currentProject?.id);
+  const mainWorktree = useMainWorktree(currentProject?.id);
   const effectiveWorktreeId = worktreeId || mainWorktree?.id || '';
   
   // Subscribe to global resize state to disable pointer events during resize

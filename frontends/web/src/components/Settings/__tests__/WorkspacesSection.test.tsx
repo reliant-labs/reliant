@@ -1,27 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 
 const mocks = vi.hoisted(() => ({
-  worktrees: [] as Worktree[],
-  archivedWorktrees: [] as Worktree[],
-  nextPageToken: "",
-  archivedNextPageToken: "",
-  loadWorktrees: vi.fn(async () => {}),
-  refreshWorktrees: vi.fn(async () => {}),
-  loadMoreWorktrees: vi.fn(async () => {}),
-  loadArchivedWorktrees: vi.fn(async () => {}),
-  loadMoreArchivedWorktrees: vi.fn(async () => {}),
   deleteWorktree: vi.fn(async () => {}),
   unarchiveWorktree: vi.fn(async () => {}),
   updateWorktreeStatus: vi.fn(async () => {}),
   switchWorktreeContext: vi.fn(async () => {}),
   closeSettings: vi.fn(),
   navigate: vi.fn(),
-  getGitStatus: vi.fn(),
   preferences: {
     worktree: {
       archiveMode: "ask_me",
@@ -32,35 +21,13 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../../../store/worktreeStore", () => {
-  const state = () => ({
-    worktrees: mocks.worktrees,
-    archivedWorktrees: mocks.archivedWorktrees,
-    nextPageToken: mocks.nextPageToken,
-    archivedNextPageToken: mocks.archivedNextPageToken,
-    hasLoadedArchived: mocks.archivedWorktrees.length > 0,
-    isLoadingMore: false,
-    isLoadingArchived: false,
-    currentWorktree: mocks.worktrees.find((w) => w.is_main) ?? null,
-    isLoading: false,
-    deletingId: null,
-    error: null,
-    loadWorktrees: mocks.loadWorktrees,
-    refreshWorktrees: mocks.refreshWorktrees,
-    loadMoreWorktrees: mocks.loadMoreWorktrees,
-    loadArchivedWorktrees: mocks.loadArchivedWorktrees,
-    loadMoreArchivedWorktrees: mocks.loadMoreArchivedWorktrees,
-    deleteWorktree: mocks.deleteWorktree,
-    unarchiveWorktree: mocks.unarchiveWorktree,
-    updateWorktreeStatus: mocks.updateWorktreeStatus,
-    switchWorktreeContext: mocks.switchWorktreeContext,
-  });
-  return {
-    useWorktreeStore: Object.assign((selector: (s: unknown) => unknown) => selector(state()), {
-      getState: state,
-    }),
-  };
-});
+// Reads go through the generated hooks to an in-memory WorktreeService
+// (test/worktreeServer.ts); the lifecycle writes are asserted as calls.
+vi.mock("../../../hooks/worktree-actions", () => ({
+  deleteWorktree: mocks.deleteWorktree,
+  unarchiveWorktree: mocks.unarchiveWorktree,
+  updateWorktreeStatus: mocks.updateWorktreeStatus,
+}));
 
 vi.mock("../../../store/projectStore", () => {
   const state = () => ({
@@ -112,9 +79,6 @@ vi.mock("../../../hooks/useWindowContext", () => ({
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 
-vi.mock("../../../api/worktree-grpc", () => ({
-  worktreeGrpc: { getGitStatus: mocks.getGitStatus },
-}));
 
 // Owned by other surfaces and covered by their own tests; stubbed so this
 // test is about the workspaces page, not about git or the create flow.
@@ -128,9 +92,17 @@ vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModa
 vi.mock("../../Worktrees/AddRepoModal", () => ({ AddRepoModal: () => null }));
 
 import { WorkspacesSection } from "../WorkspacesSection";
+import { WORKTREE_PAGE_SIZE, type Worktree } from "../../../hooks/worktree-queries";
+import { setTransport } from "../../../lib/connect";
+import { queryClient } from "../../../lib/query-client";
+import { mockTransport } from "../../../lib/test-utils";
+import { useWorktreeStore } from "../../../store/worktreeStore";
+import { selectWorktreeForTest } from "../../../test/worktreeCache";
+import { worktreeServer, type WorktreeServer } from "../../../test/worktreeServer";
 
 function worktree(overrides: Partial<Worktree>): Worktree {
   return {
+    project_id: "project-1",
     id: "wt",
     name: "wt",
     path: "/Users/me/.reliant/worktrees/wt",
@@ -160,37 +132,62 @@ const ARCHIVED = worktree({
   deleted_at: "2025-05-01T00:00:00Z",
 });
 
+let server: WorktreeServer;
+
+/** Serve these workspaces, and answer git status for the feature workspace. */
+function serve(rows: Worktree[]) {
+  server = worktreeServer(rows);
+  setTransport(
+    mockTransport({
+      ...server.handlers,
+      "WorktreeService.GetWorktreeGitStatus": {
+        response: { clean: false, branch: "fix/flaky-test", modifiedFiles: ["a.ts", "b.ts"] },
+      },
+    }),
+  );
+}
+
+/** Live agent workspaces enough to need a second page. */
+const manyFeatures = () =>
+  Array.from({ length: WORKTREE_PAGE_SIZE }, (_, i) => worktree({ id: `wt-agent-${i}`, name: `agent-${i}` }));
+
 function renderSection() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <WorkspacesSection />
     </QueryClientProvider>,
   );
 }
 
+/** Render and wait for the first page of live workspaces. */
+async function renderLoaded() {
+  const view = renderSection();
+  await waitFor(() => {
+    expect(server.calls("ListWorktrees")).toBeGreaterThan(0);
+    expect(queryClient.isFetching()).toBe(0);
+  });
+  return view;
+}
+
 describe("Settings → Workspaces", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.worktrees = [MAIN, FEATURE];
-    mocks.archivedWorktrees = [ARCHIVED];
-    mocks.nextPageToken = "";
-    mocks.archivedNextPageToken = "";
     mocks.preferences.worktree.archiveMode = "ask_me";
-    mocks.getGitStatus.mockResolvedValue({
-      is_clean: false,
-      current_branch: "fix/flaky-test",
-      ahead: 0,
-      behind: 0,
-      staged_files: [],
-      modified_files: ["a.ts", "b.ts"],
-      untracked_files: [],
-      has_remote: false,
-    });
+    serve([MAIN, FEATURE, ARCHIVED]);
+    selectWorktreeForTest(MAIN);
+    useWorktreeStore.setState({ switchWorktreeContext: mocks.switchWorktreeContext });
   });
 
-  it("explains the page and scopes it to the open project and machine", () => {
-    renderSection();
+  afterEach(() => {
+    // Unmount first: a mounted query refetches when its cache is cleared.
+    cleanup();
+    queryClient.clear();
+    setTransport(null);
+    useWorktreeStore.getState().reset();
+  });
+
+  it("explains the page and scopes it to the open project and machine", async () => {
+    await renderLoaded();
     expect(screen.getByRole("heading", { level: 1, name: "Workspaces" })).toBeInTheDocument();
     expect(screen.getByText(/each branched chat gets its own git worktree/i)).toBeInTheDocument();
     expect(screen.getByText("reliant", { selector: "span" })).toBeInTheDocument();
@@ -198,7 +195,7 @@ describe("Settings → Workspaces", () => {
   });
 
   it("lists active workspaces with branch, git state and linked chat, main first", async () => {
-    renderSection();
+    await renderLoaded();
     const tab = screen.getByRole("tab", { name: /active/i });
     expect(tab).toHaveAttribute("aria-selected", "true");
 
@@ -223,7 +220,7 @@ describe("Settings → Workspaces", () => {
 
   it("opens a workspace's detail in the page without switching the app into it", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByRole("button", { name: "View details for flaky-test-fix" }));
 
@@ -240,24 +237,24 @@ describe("Settings → Workspaces", () => {
 
   it("Open switches into the workspace and then leaves Settings", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByTestId("open-workspace-wt-feature"));
 
     await waitFor(() =>
-      expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("project-1", FEATURE),
+      expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("project-1", expect.objectContaining({ id: FEATURE.id })),
     );
     expect(mocks.closeSettings).toHaveBeenCalled();
   });
 
-  it("does not offer to archive the main checkout", () => {
-    renderSection();
+  it("does not offer to archive the main checkout", async () => {
+    await renderLoaded();
     expect(screen.getByTestId("archive-workspace-wt-main")).toBeDisabled();
   });
 
   it("asks before archiving when the cleanup setting is Ask every time", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByTestId("archive-workspace-wt-feature"));
     expect(mocks.deleteWorktree).not.toHaveBeenCalled();
@@ -277,7 +274,7 @@ describe("Settings → Workspaces", () => {
   it("archives at once, keeping files, when the setting is Keep everything", async () => {
     mocks.preferences.worktree.archiveMode = "always_keep";
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByTestId("archive-workspace-wt-feature"));
 
@@ -289,10 +286,10 @@ describe("Settings → Workspaces", () => {
 
   it("restores and permanently deletes from the Archived tab", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByRole("tab", { name: /archived/i }));
-    expect(screen.getByTestId("archived-row-wt-old")).toBeInTheDocument();
+    expect(await screen.findByTestId("archived-row-wt-old")).toBeInTheDocument();
     expect(screen.queryByTestId("archived-row-wt-feature")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("restore-workspace-wt-old"));
@@ -316,7 +313,7 @@ describe("Settings → Workspaces", () => {
 
   it("explains each cleanup setting", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByRole("tab", { name: /cleanup settings/i }));
 
@@ -328,50 +325,62 @@ describe("Settings → Workspaces", () => {
     ).toBeInTheDocument();
   });
 
-  it("loads only the live workspaces on open, never the archived ones", () => {
-    renderSection();
-    expect(mocks.loadWorktrees).toHaveBeenCalledWith("project-1");
-    expect(mocks.loadArchivedWorktrees).not.toHaveBeenCalled();
+  it("loads only the live workspaces on open, never the archived ones", async () => {
+    await renderLoaded();
+    expect(server.requests("ListWorktrees")).toContainEqual(expect.objectContaining({ projectId: "project-1" }));
+    expect(server.calls("ListArchivedWorktrees")).toBe(0);
   });
 
   it("loads the archived workspaces when the Archived tab is opened", async () => {
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByRole("tab", { name: /archived/i }));
 
-    expect(mocks.loadArchivedWorktrees).toHaveBeenCalledWith("project-1");
+    await waitFor(() =>
+      expect(server.requests("ListArchivedWorktrees")).toContainEqual(expect.objectContaining({ projectId: "project-1" })),
+    );
   });
 
   it("offers the next page of live workspaces and fetches it on request", async () => {
-    mocks.nextPageToken = "t2";
+    serve([MAIN, FEATURE, ...manyFeatures()]);
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByTestId("load-more-workspaces"));
 
-    expect(mocks.loadMoreWorktrees).toHaveBeenCalledWith("project-1");
+    await waitFor(() => expect(server.requests("ListWorktrees").at(-1)?.pageToken).toBe(String(WORKTREE_PAGE_SIZE)));
+    await waitFor(() => expect(screen.queryByTestId("load-more-workspaces")).not.toBeInTheDocument());
   });
 
-  it("offers no load-more on the last page", () => {
-    renderSection();
+  it("offers no load-more on the last page", async () => {
+    await renderLoaded();
     expect(screen.queryByTestId("load-more-workspaces")).not.toBeInTheDocument();
   });
 
   it("pages the archived workspaces on their own token", async () => {
-    mocks.archivedNextPageToken = "a2";
+    serve([
+      MAIN,
+      ...Array.from({ length: WORKTREE_PAGE_SIZE + 1 }, (_, i) =>
+        worktree({ id: `wt-old-${i}`, name: `old-${i}`, deleted_at: "2025-05-01T00:00:00Z" }),
+      ),
+    ]);
     const user = userEvent.setup();
-    renderSection();
+    await renderLoaded();
 
     await user.click(screen.getByRole("tab", { name: /archived/i }));
-    await user.click(screen.getByTestId("load-more-archived"));
+    await user.click(await screen.findByTestId("load-more-archived"));
 
-    expect(mocks.loadMoreArchivedWorktrees).toHaveBeenCalledWith("project-1");
+    await waitFor(() =>
+      expect(server.requests("ListArchivedWorktrees").at(-1)?.pageToken).toBe(String(WORKTREE_PAGE_SIZE)),
+    );
+    expect(server.requests("ListWorktrees").every((r) => !r.pageToken)).toBe(true);
   });
 
-  it("explains what a workspace is when there are none", () => {
-    mocks.worktrees = [];
-    renderSection();
+  it("explains what a workspace is when there are none", async () => {
+    serve([]);
+    selectWorktreeForTest(null);
+    await renderLoaded();
     expect(screen.getByText("No workspaces yet")).toBeInTheDocument();
     expect(screen.getByText(/when you branch a chat/i)).toBeInTheDocument();
   });

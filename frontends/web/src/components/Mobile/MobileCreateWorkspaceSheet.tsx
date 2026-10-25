@@ -7,7 +7,7 @@
  * recovery move a phone user can make later on desktop, and each would be one
  * more field a thumb has to scroll past to reach Create.
  *
- * Creation goes through `worktreeStore.createWorktree`, the same action the
+ * Creation goes through `createWorktree` (hooks/worktree-actions), the same action the
  * desktop modal calls. That action wakes an asleep machine and retries
  * (`retryAcrossWake`) and toasts the outcome, so none of that is repeated here.
  *
@@ -27,7 +27,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { GitBranchPlus, Loader2, X } from "lucide-react";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches, type GitBranch } from "../../hooks/useBranches";
 import { useListRepos } from "../../hooks/repo-service-hooks_gen";
@@ -38,6 +37,8 @@ import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { MOBILE_PRIMARY_ACTION } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
+import { createWorktree } from "../../hooks/worktree-actions";
+import { type Worktree, fetchLiveWorktrees, getCachedWorktrees } from "../../hooks/worktree-queries";
 
 const MOBILE_FIELD =
   "w-full min-h-[44px] rounded-lg border border-border bg-background px-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20";
@@ -80,13 +81,11 @@ export async function reconcileAfterError(
   knownIds: ReadonlySet<string>,
 ): Promise<Worktree | undefined> {
   try {
-    await useWorktreeStore.getState().refreshWorktrees(projectId);
+    const listed = await fetchLiveWorktrees(projectId);
+    return listed.find((w) => !knownIds.has(w.id) && w.name === name && !w.deleted_at);
   } catch {
     return undefined;
   }
-  return useWorktreeStore
-    .getState()
-    .worktrees.find((w) => !knownIds.has(w.id) && w.name === name && !w.deleted_at);
 }
 
 /** A label/value row that isn't tappable, for states with nothing to pick. */
@@ -108,7 +107,6 @@ export function MobileCreateWorkspaceSheet({
   onClose: () => void;
   onCreated: (worktree: Worktree) => void;
 }) {
-  const createWorktree = useWorktreeStore((s) => s.createWorktree);
   const isGitRepo = useProjectStore((s) => s.currentProject?.is_git_repo ?? true);
 
   const [name, setName] = useState("");
@@ -149,7 +147,7 @@ export function MobileCreateWorkspaceSheet({
     if (!canSubmit) return;
     setIsCreating(true);
     setError("");
-    const knownIds = new Set(useWorktreeStore.getState().worktrees.map((w) => w.id));
+    const knownIds = new Set(getCachedWorktrees(projectId).map((w) => w.id));
     try {
       const worktree = await createWorktree({
         project_id: projectId,

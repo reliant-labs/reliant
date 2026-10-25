@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 import type { Chat } from "../../../types/chat";
 import {
   chatsForWorkspace,
@@ -10,6 +9,7 @@ import {
   sortActiveWorkspaces,
   workingTreeState,
 } from "../workspaceStatus";
+import { type Worktree } from "../../../hooks/worktree-queries";
 
 const cleanStatus = {
   is_clean: true,
@@ -19,7 +19,6 @@ const cleanStatus = {
   staged_files: [],
   modified_files: [],
   untracked_files: [],
-  has_remote: false,
 };
 
 function worktree(overrides: Partial<Worktree>): Worktree {

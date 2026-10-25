@@ -1,4 +1,4 @@
-import { worktreeGrpc } from "../../../api/worktree-grpc";
+import { fetchWorktreeChanges } from "../../../hooks/worktree-git-queries";
 import { fetchProjectChanges, type FileChange as ProjectFileChange } from "../../../hooks/project-queries";
 import { useProjectStore } from "../../../store/projectStore";
 import { logger } from "../../../lib/logger";
@@ -57,7 +57,7 @@ export async function fetchChanges(
   projectDefaultBranch: string,
 ): Promise<RecentChangesData> {
   if (worktreeId) {
-    const grpcData = await worktreeGrpc.getChanges(worktreeId, repoId);
+    const grpcData = await fetchWorktreeChanges(worktreeId, repoId);
     return {
       branch: grpcData.branch,
       files: grpcData.files.map(

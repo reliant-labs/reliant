@@ -49,6 +49,7 @@ import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
 import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
 import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
+import { resolveWorktree } from "../hooks/worktree-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -885,7 +886,7 @@ function handleChatStateChange(update: UserUpdate) {
           // Switch worktree context if needed
           const currentProject = projectStore.currentProject;
           if (chat.worktreeId && currentProject?.id) {
-            const worktree = await worktreeStore.resolveWorktree(chat.worktreeId);
+            const worktree = await resolveWorktree(chat.worktreeId);
             if (worktree) {
               logger.warn(`${LOG_PREFIX} 🔄 Switching worktree context: ${worktree.name}`);
               await worktreeStore.switchWorktreeContext(currentProject.id, worktree);

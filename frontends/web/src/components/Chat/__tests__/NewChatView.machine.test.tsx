@@ -49,6 +49,20 @@ vi.mock("../../../store/worktreeStore", () => ({
     loadWorktrees: vi.fn(),
   })),
 }));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
+    currentWorktree: { id: "w-feature", branch: "feature", name: "feature" },
+    worktrees: [
+      { id: "w-main", branch: "main", name: "main", is_main: true },
+      { id: "w-feature", branch: "feature", name: "feature" },
+    ],
+    switchWorktreeContext: vi.fn(),
+    loadWorktrees: vi.fn(),
+  })),
+}));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: storeMock(() => ({ currentProject: { id: "p1", name: "proj", default_branch: "main" } })),
 }));

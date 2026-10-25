@@ -10,9 +10,9 @@
  */
 
 import { FolderGit2, RotateCcw } from "lucide-react";
-import type { Worktree } from "../../store/worktreeStore";
 import { useMoveChatToMainCheckout, useRecreateWorkspace } from "../../hooks/workspace-recovery";
 import { toast } from "../../lib/toast-manager";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface WorkspaceRecoveryMenuItemsProps {
   chatId: string;

@@ -14,7 +14,6 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({
     return null;
   },
 }));
-vi.mock("../../../api/worktree-grpc", () => ({ worktreeGrpc: { getGitStatus: getGitStatusMock } }));
 
 // RepoService answers through the real transport seam, so the component's
 // generated useListRepos hook is what is under test.
@@ -23,11 +22,18 @@ const render = (ui: ReactElement) =>
     transport: mockTransport({ "RepoService.ListRepos": (req) => listReposMock(req) }),
   });
 vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      switchWorktreeContext: vi.fn(),
-      worktrees: [{ id: "wt-src", name: "src", is_main: false, project_id: "p1" }],
-    }),
+  useWorktreeStore: (selector: (s: unknown) => unknown) => selector({ switchWorktreeContext: vi.fn() }),
+}));
+// The source workspace is read by id; its git status per repo through the
+// GetWorktreeGitStatus entry.
+vi.mock("../../../hooks/worktree-queries", () => ({
+  useWorktreeById: (id?: string) =>
+    id === "wt-src" ? { id: "wt-src", name: "src", is_main: false, project_id: "p1" } : undefined,
+  useMainWorktree: () => undefined,
+  getCachedWorktree: () => undefined,
+}));
+vi.mock("../../../hooks/worktree-git-queries", () => ({
+  fetchWorktreeGitStatus: (...args: unknown[]) => getGitStatusMock(...args),
 }));
 vi.mock("../../../store/chatStore", () => ({ useChatStore: { getState: () => ({ selectChat: vi.fn() }) } }));
 vi.mock("../../../hooks/message-queries", () => ({ useBranchChat: () => ({ mutateAsync: vi.fn() }) }));

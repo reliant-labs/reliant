@@ -3,7 +3,6 @@ import { FileText, Cloud, FolderGit2, AlertCircle, GitCommitHorizontal, ChevronD
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
 import { SearchableDropdown, type DropdownOption } from "../ui/SearchableDropdown";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches } from "../../hooks/useBranches";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
@@ -17,6 +16,8 @@ import {
   defaultBaseBranch as currentBranchAsBase,
   normalizeWorkspaceName,
 } from "../../lib/workspaceNaming";
+
+import { createWorktree } from "../../hooks/worktree-actions";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -45,7 +46,6 @@ export function CreateWorktreeModal({
   lockBaseBranch = false,
   extraContent,
 }: CreateWorktreeModalProps) {
-  const createWorktree = useWorktreeStore((state) => state.createWorktree);
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const [showInitGitModal, setShowInitGitModal] = useState(false);

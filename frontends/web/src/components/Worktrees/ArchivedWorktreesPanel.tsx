@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Archive, Loader2, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
 import EmptyState from "../forge-ui/empty_state";
@@ -10,6 +10,8 @@ import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { cleanupSummary, sortArchivedWorkspaces } from "./workspaceStatus";
 import { workspaceColumn, workspaceTable } from "./workspaceStyles";
 import { BranchCell, IconAction, TimeCell, WorkspaceNameCell } from "./WorkspaceTableParts";
+import { deleteWorktree, unarchiveWorktree } from "../../hooks/worktree-actions";
+import { useArchivedWorktreeList, type Worktree } from "../../hooks/worktree-queries";
 
 interface ArchivedWorktreesPanelProps {
   /** Padding around the panel. The viewer tab relies on the default. */
@@ -22,16 +24,12 @@ interface ArchivedWorktreesPanelProps {
  * so the "Cleanup" column says what is actually left on disk.
  */
 export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktreesPanelProps) {
-  const worktrees = useWorktreeStore((state) => state.archivedWorktrees);
-  const loadArchived = useWorktreeStore((state) => state.loadArchivedWorktrees);
-  const loadMoreArchived = useWorktreeStore((state) => state.loadMoreArchivedWorktrees);
-  const hasMore = useWorktreeStore((state) => state.archivedNextPageToken !== "");
-  const deleteWorktree = useWorktreeStore((state) => state.deleteWorktree);
-  const unarchiveWorktree = useWorktreeStore((state) => state.unarchiveWorktree);
-  const isLoading = useWorktreeStore((state) => state.isLoadingArchived);
   const deletingId = useWorktreeStore((state) => state.deletingId);
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
+  const archived = useArchivedWorktreeList(currentProject?.id);
+  const { worktrees, hasMore, loadMore: loadMoreArchived } = archived;
+  const isLoading = archived.isFetching;
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);
 
@@ -40,18 +38,12 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
     [worktrees],
   );
 
-  useEffect(() => {
-    if (currentProject) {
-      void loadArchived(currentProject.id);
-    }
-  }, [currentProject, loadArchived]);
-
   const handleRestore = async (id: string) => {
     setRestoringId(id);
     try {
       await unarchiveWorktree(id);
     } catch (error) {
-      // The store has already toasted the failure.
+      // unarchiveWorktree has already toasted the failure.
       console.error("Failed to restore workspace:", error);
     } finally {
       setRestoringId(null);
@@ -92,7 +84,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
         <IconAction
           label="Refresh archived workspaces"
           icon={<RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />}
-          onClick={() => void loadArchived(currentProject.id)}
+          onClick={() => void archived.refetch()}
           disabled={isLoading}
         />
       </div>
@@ -201,7 +193,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
                 type="button"
                 className="text-xs text-primary hover:underline disabled:opacity-60"
                 disabled={isLoading}
-                onClick={() => void loadMoreArchived(currentProject.id)}
+                onClick={loadMoreArchived}
                 data-testid="load-more-archived"
               >
                 {isLoading ? "Loading…" : "Load more archived workspaces"}

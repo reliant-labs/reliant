@@ -4,7 +4,6 @@ import { cn } from "../../lib/utils";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useSettingsClose } from "../../hooks/useSettingsClose";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { WorktreesPanel } from "../Worktrees/WorktreesPanel";
 import { ArchivedWorktreesPanel } from "../Worktrees/ArchivedWorktreesPanel";
 import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
@@ -12,6 +11,7 @@ import { workspaceChip } from "../Worktrees/workspaceStyles";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { WorktreeSettings } from "./WorktreeSettings";
 import { machineDisplayName } from "@/lib/machineName";
+import { useWorktreeList, useArchivedWorktreeList } from "../../hooks/worktree-queries";
 
 type WorkspacesTab = "active" | "archived" | "settings";
 
@@ -29,11 +29,12 @@ export function WorkspacesSection() {
   const { activeDaemon } = useDaemonStatus();
   const closeSettings = useSettingsClose();
   const currentProject = useProjectStore((state) => state.currentProject);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const hasMoreActive = useWorktreeStore((state) => state.nextPageToken !== "");
-  const archivedLoaded = useWorktreeStore((state) => state.hasLoadedArchived);
-  const archivedCount = useWorktreeStore((state) => state.archivedWorktrees.length);
-  const hasMoreArchived = useWorktreeStore((state) => state.archivedNextPageToken !== "");
+  const { worktrees, hasMore: hasMoreActive } = useWorktreeList(currentProject?.id);
+  // Read only: the Archived tab loads the archived list when it is opened.
+  const archived = useArchivedWorktreeList(currentProject?.id, { enabled: false });
+  const archivedLoaded = archived.hasLoaded;
+  const archivedCount = archived.worktrees.length;
+  const hasMoreArchived = archived.hasMore;
 
   // A selection belongs to a project, and to a workspace that still exists.
   // Archiving the open workspace from its own detail view lands back on the

@@ -6,13 +6,13 @@ import {
   FolderGit2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
 import { AgentSelector } from "./AgentSelector";
 import { Tooltip } from "../ui/Tooltip";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import { useCurrentWorktree, useWorktreeList } from "../../hooks/worktree-queries";
 
 interface UnifiedPillSelectorProps {
   // Agent props (single selection - orchestrators have sub_agents)
@@ -48,19 +48,11 @@ export function UnifiedPillSelector({
   const worktreeDropdownRef = useRef<HTMLDivElement>(null);
   const worktreeContainerRef = useRef<HTMLDivElement>(null);
 
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const { worktrees: allWorktrees } = useWorktreeList(currentProject?.id);
   // Filter out archived worktrees (only show active ones)
   const worktrees = allWorktrees.filter(w => !w.deleted_at);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const currentProject = useProjectStore((state) => state.currentProject);
-
-  // Load worktrees
-  useEffect(() => {
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
-  }, [currentProject, loadWorktrees]);
+  const currentWorktree = useCurrentWorktree();
 
   const selectedWorktree = selectedWorktreeId
     ? worktrees.find((w) => w.id === selectedWorktreeId)
@@ -97,9 +89,6 @@ export function UnifiedPillSelector({
     setShowCreateModal(false);
     // Select the newly created worktree
     handleWorktreeSelect(worktreeId);
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
   };
 
   // Close dropdown when clicking outside

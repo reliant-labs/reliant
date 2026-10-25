@@ -31,7 +31,7 @@ export function TabbedViewerPanel({
   // Project context is now owned by projectStore (single source of truth).
   const currentProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
   // Get current worktree from worktreeStore (single source of truth)
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
   const closeViewer = useViewerStore((state) => state.closeViewer);

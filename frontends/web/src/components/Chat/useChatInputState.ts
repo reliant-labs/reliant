@@ -18,7 +18,7 @@ export function useChatInputState({
 }: UseChatInputStateProps) {
   // Get project/worktree context for draft persistence
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   
   // For new chats (no chatId), use project-level draft storage
   // This ensures drafts persist when switching workspaces within NewChatView
@@ -81,7 +81,7 @@ export function useChatInputState({
 
   const saveDraft = useCallback((value: string) => {
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
 
     if (projectId) {
       // For new chats, use project-level draft (persists across worktree switches)
@@ -195,7 +195,7 @@ export function useChatInputState({
     
     // Immediately clear the draft from persistence
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     
     if (projectId) {
       // Clear any pending debounced save
