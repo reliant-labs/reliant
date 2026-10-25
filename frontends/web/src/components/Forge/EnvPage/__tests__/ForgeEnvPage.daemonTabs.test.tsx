@@ -24,17 +24,12 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import type { LiveEnv } from "@/services/forge/live";
 
 // ── The machine: topology is decided per test; the tabs' own reads answer. ──
+// ForgeService is answered at the transport (below), as the generated hooks
+// read it.
 
+const FORGE_META = { isForgeProject: true, supported: true };
 const getTopology = vi.fn();
-const getEnvStatus = vi.fn(() => Promise.resolve({ kind: "report", report: {}, meta: {} }));
-
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: (...args: unknown[]) => getTopology(...args),
-    getEnvStatus: () => getEnvStatus(),
-    verifyEnv: vi.fn(),
-  },
-}));
+const getEnvStatus = vi.fn(() => Promise.resolve({ meta: FORGE_META, reportJson: "{}" }));
 
 // ── The registry's daemon list (answered at the transport, below). ──
 const fetchDaemonList = vi.fn();
@@ -103,9 +98,20 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 import { ForgeEnvPage } from "../ForgeEnvPage";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { serviceHandlers } from "@/test/serviceTransport";
 
-// The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: async () => ({ daemons: await fetchDaemonList() }) })));
+// The daemon list and ForgeService are both read through connectClient.
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport(
+      { listDaemons: async () => ({ daemons: await fetchDaemonList() }) },
+      serviceHandlers("ForgeService", {
+        getTopology: (request) => getTopology(request),
+        getEnvStatus: () => getEnvStatus(),
+      })
+    )
+  )
+);
 afterEach(() => setTransport(null));
 
 function renderPage() {

@@ -15,7 +15,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import type { ReleasePromotion, ReleaseRollout } from "@/services/forge/releases";
 import { useReleasesApi } from "@/services/forge/ReleasesApiContext";
 
-import { forgeRetry } from "./forge-queries";
+import { forgeRetry } from "./forge-model";
 
 export const releaseKeys = {
   root: ["forge", "releases"] as const,
