@@ -8466,12 +8466,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.LastRunPerWorkflowRequest",
           "OutputTypeFQ": "reliant.v1.LastRunPerWorkflowResponse",
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -40347,7 +40348,7 @@
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
     "reliant/v1/question.proto": "b7bed3249ce684a4191444c9bb404bcee80fc346093493b91a4430173205c87c",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
-    "reliant/v1/run.proto": "b0304388de799c989705f8ce41e8ec8ed725f2ecdae83c8be02ae284e461ca37",
+    "reliant/v1/run.proto": "715924a2fc954fed3959c79a632c7c621ff043db27f5ed6a1dbff7b85ab47e10",
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",
     "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
     "reliant/v1/streaming.proto": "d2cd468dc58d6482db006c4c49c80c11302cc79f02f375461fd3c850d60cd3fa",

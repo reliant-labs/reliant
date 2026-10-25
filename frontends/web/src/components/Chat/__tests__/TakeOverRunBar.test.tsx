@@ -55,7 +55,7 @@ describe("useAdoptOnSend", () => {
     await act(() => result.current("hello"));
 
     expect(send).toHaveBeenCalledWith("hello");
-    expect(adopt).toHaveBeenCalledWith("chat-1");
+    expect(adopt).toHaveBeenCalledWith({ chatId: "chat-1" });
     expect(order).toEqual(["send", "adopt"]);
   });
 
@@ -89,7 +89,7 @@ describe("useAdoptOnSend", () => {
     const { result } = renderHook(() => useAdoptOnSend(scheduled, send));
 
     await act(() => result.current("hello"));
-    expect(adopt).toHaveBeenCalledWith("chat-1");
+    expect(adopt).toHaveBeenCalledWith({ chatId: "chat-1" });
     expect(send).toHaveBeenCalled();
   });
 });

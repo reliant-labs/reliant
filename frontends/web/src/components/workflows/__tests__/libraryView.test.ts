@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import type { Trigger, TriggerHealthStatusKey } from "@/api/trigger-grpc";
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
 import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "../library/libraryView";

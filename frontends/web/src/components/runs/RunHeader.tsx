@@ -20,7 +20,7 @@ import { Link } from "@tanstack/react-router";
 import { CalendarClock, MessageSquarePlus, Pause, Play, RotateCcw, Square, Workflow } from "lucide-react";
 
 import type { Chat } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";

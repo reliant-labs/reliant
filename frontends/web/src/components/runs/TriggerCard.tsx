@@ -20,7 +20,7 @@ import { useId, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";

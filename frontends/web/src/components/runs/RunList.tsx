@@ -13,7 +13,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import Card from "../forge-ui/card";
