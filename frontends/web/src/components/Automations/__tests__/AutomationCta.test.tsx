@@ -27,7 +27,6 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
-    project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
     worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),
   },
 }));
@@ -38,6 +37,7 @@ setTransport(
     ...serviceHandlers("TriggerService", { setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
     "ConnectionService.ListConnections": { response: {} },
+    "ProjectService.ListProjectDaemons": { response: {} },
   }),
 );
 

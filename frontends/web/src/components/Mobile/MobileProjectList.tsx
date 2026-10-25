@@ -11,17 +11,16 @@
  * for the new project and persists the choice, so returning to the chat list
  * is enough to see it re-scoped.
  *
- * Each row's second line is `worktree_count` + `last_active` — both already
- * on `projectStore`'s `Project` (see `ProjectPicker.tsx`'s desktop
- * equivalent), so this needed no new data, just surfacing what the row was
- * silently dropping. `relativeTime` is the same compact-age formatter the
- * chat list uses, for the same "now / 4m / 3h / 2d" shape across the surface.
+ * Each row's second line is the project's `last_active`. `relativeTime` is
+ * the same compact-age formatter the chat list uses, for the same
+ * "now / 4m / 3h / 2d" shape across the surface.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Check, FolderGit2, Loader2 } from "lucide-react";
 import { useProjectStore, type Project } from "../../store/projectStore";
+import { useProjects } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import { relativeTime } from "./relativeTime";
 import {
@@ -36,17 +35,11 @@ import {
 
 export function MobileProjectList() {
   const navigate = useNavigate();
-  const projects = useProjectStore((s) => s.projects);
+  const { projects, isLoading } = useProjects();
   const currentProject = useProjectStore((s) => s.currentProject);
-  const isLoading = useProjectStore((s) => s.isLoading);
-  const loadProjects = useProjectStore((s) => s.loadProjects);
   const selectProject = useProjectStore((s) => s.selectProject);
 
   const [switchingId, setSwitchingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (projects.length === 0) void loadProjects();
-  }, [projects.length, loadProjects]);
 
   const handleSelect = async (project: Project) => {
     if (project.id === currentProject?.id) {
@@ -109,14 +102,6 @@ export function MobileProjectList() {
                       {project.path}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground/80">
-                      {typeof project.worktree_count === "number" && (
-                        <span>
-                          {project.worktree_count} workspace
-                          {project.worktree_count === 1 ? "" : "s"}
-                        </span>
-                      )}
-                      {typeof project.worktree_count === "number" &&
-                        project.last_active && <span aria-hidden>·</span>}
                       {project.last_active && (
                         <span>Active {relativeTime(project.last_active)} ago</span>
                       )}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
 import { useProjectStore } from '../store/projectStore';
+import { fetchProjects, useProjects } from "./project-queries";
 
 interface WindowContext {
   worktreeId: string | null;
@@ -25,8 +26,7 @@ export function useWindowContext() {
   const selectWorktree = useWorktreeStore((state) => state.selectWorktree);
   const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
 
   useEffect(() => {
     // Check if running in Electron
@@ -47,13 +47,11 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
         if (cancelled) return;
 
         // Set the project in store based on window context
         if (context.projectId) {
-          // Get fresh projects from store
-          const currentProjects = useProjectStore.getState().projects;
           const project = currentProjects.find(p => p.id === context.projectId);
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
@@ -83,11 +81,10 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
 
         // Update stores
         if (data.projectId) {
-          const currentProjects = useProjectStore.getState().projects;
           const project = currentProjects.find(p => p.id === data.projectId);
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
@@ -115,11 +112,10 @@ export function useWindowContext() {
         setWindowContext(windowCtx);
 
         // Load projects first
-        await loadProjects();
+        const currentProjects = await fetchProjects();
 
         // Update stores
         if (data.projectId) {
-          const currentProjects = useProjectStore.getState().projects;
           const project = currentProjects.find(p => p.id === data.projectId);
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
@@ -143,7 +139,7 @@ export function useWindowContext() {
         unsubSetContext();
       };
     }
-  }, [selectWorktree, selectProject, resolveWorktree, loadProjects]); // Note: intentionally not including worktrees/projects to avoid infinite loops
+  }, [selectWorktree, selectProject, resolveWorktree]); // Note: intentionally not including worktrees/projects to avoid infinite loops
 
   const openInNewWindow = useCallback(async (worktreeData: Partial<Worktree>) => {
     if (!window.electronAPI) {

@@ -69,7 +69,8 @@ import {
 } from "../services/forge/environments";
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
 import type { PlanApproval } from "../services/forge/deployPlan";
-import { useProjectStore, type Project } from "../store/projectStore";
+import { useProjectStore } from "../store/projectStore";
+import { useProject } from "./project-queries";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import {
   availabilityFromError,
@@ -480,16 +481,17 @@ export interface ForgeEnvironmentsState {
 }
 
 /** The forge project name persisted on `projectId`'s row, from whichever store slot holds it. */
-function persistedForgeProjectName(
-  state: { projects: Project[]; currentProject: Project | null },
-  projectId: string | null | undefined
-): string | null {
+/**
+ * The forge name Reliant persisted on a project row: the selected project's
+ * when it is the one asked about, else the project list's row.
+ */
+function usePersistedForgeProjectName(projectId: string | null | undefined): string | null {
+  const current = useProjectStore((state) =>
+    projectId && state.currentProject?.id === projectId ? (state.currentProject.forge_project_name ?? null) : undefined,
+  );
+  const listed = useProject(projectId);
   if (!projectId) return null;
-  const row =
-    state.currentProject?.id === projectId
-      ? state.currentProject
-      : state.projects.find((project) => project.id === projectId);
-  return row?.forge_project_name ?? null;
+  return current !== undefined ? current : (listed?.forge_project_name ?? null);
 }
 
 /**
@@ -505,7 +507,7 @@ function persistedForgeProjectName(
  */
 export function useForgeEnvironments(projectId: string | null | undefined): ForgeEnvironmentsState {
   const topology = useForgeTopology(projectId);
-  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
+  const persistedName = usePersistedForgeProjectName(projectId);
   const projectName = resolveForgeProjectName(persistedName, topology.data);
 
   const cloud = useCloudEnvironments(projectName.name);
@@ -544,7 +546,7 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
  * load already labels envs correctly without either.
  */
 export function useForgeRoster(projectId: string | null | undefined, forgeProject?: string | null) {
-  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
+  const persistedName = usePersistedForgeProjectName(projectId);
   const topology = useForgeTopology(projectId);
   // A forge project the URL names directly (see components/Forge/Console/consoleContext)
   // is the control plane's own key: nothing to resolve, and no daemon to ask

@@ -19,7 +19,6 @@
 import { create, isMessage } from "@bufbuild/protobuf";
 import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
-import { projectGrpc } from "../api/project-grpc";
 import { workflowGrpc } from "../api/workflow-grpc";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import {
@@ -66,6 +65,9 @@ import {
 } from "./trigger-service-hooks_gen";
 
 const client = connectClient(TriggerService);
+// The project_daemons rows a trigger's daemon is checked against are ProjectService's.
+export { useProjectDaemonInstalls } from "./project-queries";
+
 
 // ── Stream invalidation ─────────────────────────────────────────────────────
 
@@ -200,7 +202,6 @@ export async function previewReplay(
 
 const automationFormKeys = {
   workflows: (projectId: string) => ["automationForm", "workflows", projectId] as const,
-  projectDaemons: () => ["automationForm", "projectDaemons"] as const,
 };
 
 /**
@@ -216,19 +217,6 @@ export function useProjectWorkflowList(projectId?: string) {
     queryFn: () => workflowGrpc.listWorkflows(projectId!),
     enabled: !!projectId,
     staleTime: 60_000,
-  });
-}
-
-/**
- * Every project_daemons row the caller owns — which daemon has which project
- * installed. The same rows the server checks a trigger's daemon against.
- */
-export function useProjectDaemonInstalls(enabled = true) {
-  return useQuery({
-    queryKey: automationFormKeys.projectDaemons(),
-    queryFn: () => projectGrpc.listProjectDaemons(),
-    enabled,
-    staleTime: 30_000,
   });
 }
 

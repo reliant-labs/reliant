@@ -63,7 +63,6 @@ vi.mock("@/api/grpc-client", () => ({
     worktree: () => ({ listWorktrees }),
     chat: () => ({ runNow, startChat }),
     daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
   },
 }));
 
@@ -74,6 +73,7 @@ beforeEach(() => {
     mockTransport({
       ...serviceHandlers("TriggerService", { listReplayEvents, previewReplay }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
     }),
   );
 });

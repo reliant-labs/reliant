@@ -7,6 +7,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import { seedProjects, type ProjectFixture } from "@/test/projectList";
 
 const navigate = vi.fn();
 
@@ -14,24 +17,26 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-const loadProjects = vi.fn();
 const selectProject = vi.fn(() => Promise.resolve());
 
 interface StoreState {
-  projects: Array<{
-    id: string;
-    name: string;
-    path: string;
-    worktree_count?: number;
-    last_active?: string;
-  }>;
   currentProject: { id: string; name: string; path: string } | null;
-  isLoading: boolean;
-  loadProjects: typeof loadProjects;
   selectProject: typeof selectProject;
 }
 
 let storeState: StoreState;
+// The project list (ListProjects, read through useProjects).
+let projects: ProjectFixture[];
+
+function renderList() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  seedProjects(client, projects);
+  return render(
+    <QueryClientProvider client={client}>
+      <MobileProjectList />
+    </QueryClientProvider>,
+  );
+}
 
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector: (s: unknown) => unknown) => selector(storeState),
@@ -41,29 +46,25 @@ const { MobileProjectList } = await import("../MobileProjectList");
 
 beforeEach(() => {
   navigate.mockReset();
-  loadProjects.mockReset();
   selectProject.mockClear();
+  projects = [
+    {
+      id: "p1",
+      name: "reliant",
+      path: "/home/user/reliant",
+      last_active: new Date(Date.now() - 3600_000).toISOString(),
+    },
+    { id: "p2", name: "forge", path: "/home/user/forge" },
+  ];
   storeState = {
-    projects: [
-      {
-        id: "p1",
-        name: "reliant",
-        path: "/home/user/reliant",
-        worktree_count: 3,
-        last_active: new Date(Date.now() - 3600_000).toISOString(),
-      },
-      { id: "p2", name: "forge", path: "/home/user/forge" },
-    ],
     currentProject: { id: "p1", name: "reliant", path: "/home/user/reliant" },
-    isLoading: false,
-    loadProjects,
     selectProject,
   };
 });
 
 describe("MobileProjectList", () => {
   it("marks the current project with a check mark, not the other one", () => {
-    render(<MobileProjectList />);
+    renderList();
     const reliantRow = screen.getByText("reliant").closest("button")!;
     const forgeRow = screen.getByText("forge").closest("button")!;
     expect(reliantRow.querySelector("svg.lucide-check")).not.toBeNull();
@@ -71,14 +72,14 @@ describe("MobileProjectList", () => {
   });
 
   it("lists every project", () => {
-    render(<MobileProjectList />);
+    renderList();
     expect(screen.getByText("reliant")).toBeInTheDocument();
     expect(screen.getByText("forge")).toBeInTheDocument();
   });
 
   it("selects a different project and navigates back to the chat list", async () => {
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
     await user.click(screen.getByText("forge"));
 
@@ -90,7 +91,7 @@ describe("MobileProjectList", () => {
 
   it("navigating back without selecting doesn't call selectProject", async () => {
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
     await user.click(screen.getByRole("button", { name: "Back to chats" }));
 
@@ -100,7 +101,7 @@ describe("MobileProjectList", () => {
 
   it("tapping the already-current project just navigates back", async () => {
     const user = userEvent.setup();
-    render(<MobileProjectList />);
+    renderList();
 
     await user.click(screen.getByText("reliant"));
 
@@ -108,16 +109,14 @@ describe("MobileProjectList", () => {
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("shows workspace count and last-active for a project that has them", () => {
-    render(<MobileProjectList />);
-    expect(screen.getByText(/3 workspaces/)).toBeInTheDocument();
+  it("shows last-active for a project that has it", () => {
+    renderList();
     expect(screen.getByText(/active 1h ago/i)).toBeInTheDocument();
   });
 
   it("omits the metadata line entirely for a project with none of it", () => {
-    render(<MobileProjectList />);
+    renderList();
     const forgeRow = screen.getByText("forge").closest("button")!;
-    expect(forgeRow.textContent).not.toMatch(/workspace/);
     expect(forgeRow.textContent).not.toMatch(/active/i);
   });
 });

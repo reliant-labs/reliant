@@ -11,8 +11,10 @@
  */
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
 vi.mock("@/hooks/chat-queries", () => ({
@@ -25,7 +27,6 @@ const currentProject = {
   path: "/home/workspace/projects/my-app",
   is_git_repo: true,
   default_branch: "main",
-  worktree_count: 0,
   last_active: "2025-01-01T00:00:00Z",
   created_at: "2025-01-01T00:00:00Z",
   updated_at: "2025-01-01T00:00:00Z",
@@ -61,12 +62,13 @@ vi.mock("@/store/chatNavigationStore", () => ({
     selector({ navigateToChat: vi.fn() }),
 }));
 
-vi.mock("@/api/project-grpc", () => ({
-  projectGrpc: {
-    getGitInfo: vi.fn(async () => null),
-    getGitStatus: vi.fn(async () => null),
-  },
-}));
+beforeEach(() => {
+  setTransport(mockTransport({ "ProjectService.GetProjectGitInfo": { response: {} } }));
+});
+
+afterEach(() => {
+  setTransport(null);
+});
 
 import { ProjectPanel } from "@/components/Projects/ProjectPanel";
 

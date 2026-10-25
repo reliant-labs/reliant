@@ -18,7 +18,7 @@
  */
 
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
-import { ProjectInstallState, type ProjectDaemonInfo } from "@/api/project-grpc";
+import { ProjectInstallState, type ProjectDaemonInfo } from "@/hooks/project-queries";
 import { machineDisplayName } from "@/lib/machineName";
 
 export interface DaemonChoice {

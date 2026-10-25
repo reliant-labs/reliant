@@ -35,15 +35,12 @@ import { indexSearchSchema } from "../../routeSchemas";
 // it is exercised here (syncProjectUrl only touches the router), so the heavy
 // leaves are stubbed to keep this a focused unit test.
 //
-// `touch` resolves rather than being absent: selectProject calls it
-// fire-and-forget, so a missing method surfaces as an unhandled rejection
-// that fails the run even though every assertion passed.
-vi.mock("../../api/project-grpc", () => ({
-  projectGrpc: {
-    touch: vi.fn(async () => undefined),
-    get: vi.fn(async () => undefined),
-    list: vi.fn(async () => []),
-  },
+// `touchProject` is stubbed: selectProject sends it fire-and-forget, and the
+// unit-test transport refusing it would surface as a logged rejection that
+// has nothing to do with the URL.
+vi.mock("../../hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/project-queries")>()),
+  touchProject: vi.fn(),
 }));
 
 // Selecting a project also loads its chats, presets and workflows in the
@@ -146,7 +143,6 @@ const project = (id: string) => ({
   name: `project-${id}`,
   path: `/tmp/${id}`,
   is_git_repo: false,
-  worktree_count: 0,
   last_active: "",
   created_at: "",
   updated_at: "",

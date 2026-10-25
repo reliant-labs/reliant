@@ -34,7 +34,7 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { automationAnchorId } from "@/lib/workflowsArea";
 import { cn } from "@/lib/utils";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import Card, { CardInset } from "../../forge-ui/card";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 import Button from "@/components/forge-ui/button";
@@ -79,7 +79,7 @@ export function unitSummary(unit: WorkflowAutomation, declared: readonly Declare
 export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, setupBlockedReason, onAddCustom }: TurnedOnCardProps) {
   // Every project: the card says where this workflow is on, not only here.
   const triggers = useTriggers();
-  const projects = useProjectStore((s) => s.projects);
+  const { projects } = useProjects();
   const naming = useIntegrationEventNaming();
   const units = useMemo(() => workflowAutomationsFor(triggers.data ?? [], workflowRef), [triggers.data, workflowRef]);
   const custom = useMemo(

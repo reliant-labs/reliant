@@ -39,6 +39,7 @@ import {
 } from "@/hooks/workflow-library-queries";
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { workflowGrpc } from "@/api/workflow-grpc";
 import Card from "../../forge-ui/card";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
@@ -91,7 +92,7 @@ function useLibrarySearch(): [LibrarySearch, (next: LibrarySearch) => void] {
 export function LibraryPage() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
-  const projectsLoading = useProjectStore((state) => state.isLoading);
+  const projectsLoading = useProjects().isLoading;
 
   return (
     <div className="space-y-4">

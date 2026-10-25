@@ -23,6 +23,7 @@ import { ChevronRight } from "lucide-react";
 import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import { countRunInputs, type RunWorkflowValue } from "../workflow/run/runWorkflowValues";
@@ -176,13 +177,8 @@ function AutomationFormBody({
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
 
-  const projects = useProjectStore((state) => state.projects);
+  const { projects } = useProjects();
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
-
-  useEffect(() => {
-    void loadProjects().catch(() => undefined);
-  }, [loadProjects]);
 
   // An edit starts from the trigger; a new automation from the prefill.
   const initialSchedule = trigger ? triggerSchedule(trigger) : prefill?.schedule;
