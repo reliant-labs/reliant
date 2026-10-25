@@ -64,9 +64,12 @@ WHERE tool_calls.chat_id = EXCLUDED.chat_id
 // the same chat's. A row recorded for another chat is never replaced: the
 // write fails with core.ErrToolCallIDInAnotherChat.
 func UpsertToolCall(ctx context.Context, db orm.Context, call *core.ToolCall) error {
+	// ErrorMessage is a failed call's output (the same text its result
+	// carries), so it gets the result's protection against bytes PostgreSQL
+	// text cannot store (validUTF8).
 	res, err := db.Exec(ctx, upsertToolCallSQL,
 		call.ID, call.ChatID, call.ThreadID, call.MessageID, call.ToolName, jsonbArg(call.Input), int32(call.Status),
-		call.ErrorMessage, call.ChildWorkflowID, call.BackgroundProcessID,
+		validUTF8Ptr(call.ErrorMessage), call.ChildWorkflowID, call.BackgroundProcessID,
 		call.RequestedAt, call.StartedAt, call.CompletedAt, call.CreatedAt, call.UpdatedAt,
 		call.DaemonID,
 	)

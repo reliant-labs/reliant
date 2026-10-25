@@ -4,6 +4,8 @@ package workersetup
 import (
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // This one value sets two things that pull in opposite directions, which is why
@@ -101,4 +103,18 @@ func TestWorkerOptionsWorkflowTaskLimits(t *testing.T) {
 			t.Error("Tuner is set; it is mutually exclusive with the fixed workflow-task cap")
 		}
 	})
+}
+
+// The worker's BuildID is the binary's version, never a constant shared by
+// every build: it is what a workflow task's history and the SDK's panic log
+// name, and a mid-rollout non-determinism panic (TMPRL1100, prod 2026-10-23)
+// is only diagnosable when the two builds involved have different names.
+func TestWorkerOptionsBuildIDIsTheBinaryVersion(t *testing.T) {
+	opts := workerOptions(&Config{}, nil, 3)
+	if opts.BuildID != version.TemporalBuildID() || opts.BuildID == "reliant-worker" {
+		t.Errorf("BuildID = %q, want version.TemporalBuildID() = %q", opts.BuildID, version.TemporalBuildID())
+	}
+	if opts.UseBuildIDForVersioning {
+		t.Error("UseBuildIDForVersioning is set; the BuildID only labels the build")
+	}
 }

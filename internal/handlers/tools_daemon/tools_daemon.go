@@ -384,9 +384,16 @@ func (s *Service) sweepStaleConnections() {
 }
 
 // errDaemonStreamSilent ends a stream the stale-connection sweeper reaped.
-var errDaemonStreamSilent = svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf(
+//
+// Unavailable is the code the daemon needs (it puts it on the redial path),
+// but the fault is not ours: the other end went quiet — a laptop that slept,
+// a network that dropped — which is the canceled class ("one end went away").
+// Unclassified, every reaped stream was an ERROR "stream failed" issue. It is
+// a svcerr kind, not a *connect.Error, so the class stays on the chain every
+// logging layer classifies; the svcerr interceptor puts the code on the wire.
+var errDaemonStreamSilent = svcerr.WithClass(svcerr.Unavailable(fmt.Sprintf(
 	"daemon-gateway has read nothing from this stream for over %s; closing it so the daemon redials",
-	staleConnectionThreshold)))
+	staleConnectionThreshold)), svcerr.ClassCanceled)
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
