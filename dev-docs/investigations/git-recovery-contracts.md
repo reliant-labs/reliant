@@ -21,6 +21,7 @@ All structs use snake_case JSON. `RecoveryCapture` contains `Version int`, `Capt
 Methods on Repo:
 - `CreateWorktreeRecovery(ctx, *WorktreeRecovery) error` records immutable per-checkout capture/upload intent idempotently (owner + key); validates owner via source project.
 - `GetWorktreeRecovery(ctx, ownerID, recoveryID) (*WorktreeRecovery,error)`; `ListWorktreeRecoveries(ctx, ownerID, projectID string) ([]*WorktreeRecovery,error)` (empty project = all).
+- `ArchiveWorktreeForRecovery(ctx, ownerID, worktreeID string, generation int64) error` atomically archives an active recovery candidate under parent lock with owner/generation/nonmain/no-live-chat/no-pending-active-paused-workflow checks. E consumes this for dirty/unpushed automatic enrollment; ordinary manual archive is unchanged. Daemon seven-day evidence still required before invoking.
 - `ClaimWorktreeRecovery(ctx, ownerID, recoveryID string, generation int64) error` locks source worktree, verifies archive/fence/generation/no live chat, claims finalization. No network in transaction.
 - `RecordWorktreeRecoveryReceipt(ctx, ownerID, recoveryID, repoID, receiptJSON string) error` records only exact descriptor matches; JSON is the above concrete receipt.
 - `AuthorizeWorktreeRecovery(ctx, ownerID, recoveryID string, expiresAt time.Time) error` requires all receipts, current claim/fence/generation; journals authorization deadline. E forms the concrete authorization from persisted row.

@@ -25,7 +25,9 @@ func recoveryFixture(t *testing.T) (*Repo, *WorktreeRecovery, worktreereclaim.Re
 	require.NoError(t, repo.ArchiveWorktree(ctx, "recover-source"))
 	w, err := repo.GetWorktree(ctx, "recover-source")
 	require.NoError(t, err)
-	d := worktreereclaim.RecoveryCapture{Version: 1, CaptureID: "capture", WorktreeID: w.ID, RepoID: "repo", RemoteURL: "https://github.com/test/test.git", RecoveryRef: "refs/heads/reliant-recovery/worktree/capture/repo", CommitOID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "manifest", HeadOID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", SecretPolicy: "policy-v1", CapturedAt: time.Now().UTC()}
+	d := worktreereclaim.RecoveryCapture{Version: 1, CaptureID: "capture", WorktreeID: w.ID, RepoID: "repo", RemoteURL: "https://github.com/test/test.git", RecoveryRef: "refs/heads/reliant-recovery/recover-source/capture/repo", CommitOID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "manifest", HeadOID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", SecretPolicy: "policy-v1", CapturedAt: time.Now().UTC()}
+	_, err = repo.ORM().Bun().NewRaw(`INSERT INTO repos (id,project_id,name,relative_path,remote_url,created_at,updated_at) VALUES (?,?,?,'',?,now(),now())`, d.RepoID, p.ID, d.RepoID, d.RemoteURL).Exec(ctx)
+	require.NoError(t, err)
 	encoded, err := json.Marshal(d)
 	require.NoError(t, err)
 	r := &WorktreeRecovery{ID: "recovery", OwnerUserID: p.UserID, SourceWorktreeID: w.ID, ProjectID: p.ID, DaemonID: "daemon", CaptureID: d.CaptureID, Fence: strconv.FormatInt(w.DeletedAt.UnixNano(), 10), ActivityGeneration: w.ActivityGeneration, ObservationID: "epoch", ManifestDigest: worktreereclaim.RecoveryWorkspaceDigest([]worktreereclaim.RecoveryCapture{d}), IdempotencyKey: "request", Checkouts: []RecoveryCheckout{{RepoID: d.RepoID, RemoteURL: d.RemoteURL, RecoveryRef: d.RecoveryRef, CommitOID: d.CommitOID, ManifestDigest: d.ManifestDigest, DescriptorJSON: string(encoded)}}}

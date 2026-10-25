@@ -40,3 +40,6 @@ func (r *Repo) BeginWorktreeRecoveryOperation(ctx context.Context, owner, id, op
 func (r *Repo) RecordWorktreeActivity(ctx context.Context, id string) error {
 	return store.RecordWorktreeActivity(ctx, r.ORM(), id)
 }
+func (r *Repo) ArchiveWorktreeForRecovery(ctx context.Context, owner, id string, generation int64) error {
+	return store.ArchiveWorktreeForRecovery(ctx, r.ORM(), owner, id, generation)
+}

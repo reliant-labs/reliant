@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,6 +17,26 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
+
+// recoveryRepositoryIdentity accepts only the supported explicit GitHub HTTPS
+// identity. Case/.git normalization is comparison only, never a remote rewrite.
+func recoveryRepositoryIdentity(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawPath != "" || u.Opaque != "" {
+		return "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	if len(parts) != 2 {
+		return "", false
+	}
+	parts[1] = strings.TrimSuffix(parts[1], ".git")
+	for _, p := range parts {
+		if !regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$`).MatchString(p) || strings.HasSuffix(p, ".") {
+			return "", false
+		}
+	}
+	return strings.ToLower(strings.Join(parts, "/")), true
+}
 
 // recoveryAdmissionError maps the database's fail-closed writer fence. The
 // trigger is intentional: generated CRUD and future binding writers obey it too.
@@ -110,6 +133,24 @@ func InsertWorktreeRecovery(ctx context.Context, db orm.Context, r *core.Worktre
 			if json.Unmarshal([]byte(c.DescriptorJSON), &d) != nil || d.Version != 1 || d.CaptureID != r.CaptureID || d.WorktreeID != r.SourceWorktreeID || d.RepoID != c.RepoID || d.Rel != c.Rel || d.RemoteURL != c.RemoteURL || d.RecoveryRef != c.RecoveryRef || d.CommitOID != c.CommitOID || d.ManifestDigest != c.ManifestDigest || d.SecretPolicy == "" {
 				return core.ErrRecoveryConflict
 			}
+			var registered struct {
+				RelativePath string
+				RemoteURL    *string
+			}
+			if err := db.Bun().NewRaw(`SELECT relative_path,remote_url FROM repos WHERE id=? AND project_id=?`, c.RepoID, r.ProjectID).Scan(ctx, &registered); err != nil {
+				return core.ErrRecoveryConflict
+			}
+			if registered.RelativePath != c.Rel || registered.RemoteURL == nil {
+				return core.ErrRecoveryConflict
+			}
+			registeredURL, ok := recoveryRepositoryIdentity(*registered.RemoteURL)
+			captureURL, captureOK := recoveryRepositoryIdentity(c.RemoteURL)
+			if !ok || !captureOK || registeredURL != captureURL {
+				return core.ErrRecoveryConflict
+			}
+			if c.RecoveryRef != "refs/heads/reliant-recovery/"+r.SourceWorktreeID+"/"+r.CaptureID+"/"+c.RepoID {
+				return core.ErrRecoveryConflict
+			}
 			captures = append(captures, d)
 			_, err = db.Bun().NewRaw(`INSERT INTO worktree_recovery_checkouts (recovery_id,repo_id,rel,remote_url,recovery_ref,commit_oid,manifest_digest,descriptor_json) VALUES (?,?,?,?,?,?,?,?)`, r.ID, c.RepoID, c.Rel, c.RemoteURL, c.RecoveryRef, c.CommitOID, c.ManifestDigest, c.DescriptorJSON).Exec(ctx)
 			if err != nil {
@@ -183,6 +224,49 @@ func checkRecoveryClaim(ctx context.Context, db orm.Context, r *core.WorktreeRec
 		return core.ErrRecoveryConflict
 	}
 	return nil
+}
+
+// ArchiveWorktreeForRecovery atomically enrolls an active candidate only after
+// parent-locked owner, generation, live-chat and active-workflow checks. Ordinary
+// manual archive behavior remains unchanged.
+func ArchiveWorktreeForRecovery(ctx context.Context, db orm.Context, owner, id string, generation int64) error {
+	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		var row struct {
+			UserID               string
+			ActivityGeneration   int64
+			IsMain               bool
+			RecoveryFinalizingID *string
+		}
+		err := db.Bun().NewRaw(`SELECT p.user_id,w.activity_generation,w.is_main,w.recovery_finalizing_id FROM worktrees w JOIN projects p ON p.id=w.project_id WHERE w.id=? FOR UPDATE OF w`, id).Scan(ctx, &row)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && row.UserID != owner) {
+			return core.ErrRecoveryNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if row.IsMain || row.ActivityGeneration != generation {
+			return core.ErrRecoveryConflict
+		}
+		if row.RecoveryFinalizingID != nil {
+			return core.ErrWorktreeFinalizing
+		}
+		live, err := GetLiveChatIDForWorktree(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		if live != "" {
+			return core.ErrRecoveryConflict
+		}
+		var running bool
+		if err = db.Bun().NewRaw(`SELECT EXISTS(SELECT 1 FROM workflows f JOIN chats c ON c.id=f.chat_id WHERE c.worktree_id=? AND (f.state IN (1,2) OR (f.state=3 AND f.stop_reason=3)))`, id).Scan(ctx, &running); err != nil {
+			return err
+		}
+		if running {
+			return core.ErrRecoveryConflict
+		}
+		_, err = db.Bun().NewRaw(`UPDATE worktrees SET deleted_at=COALESCE(deleted_at,now()),updated_at=now() WHERE id=?`, id).Exec(ctx)
+		return err
+	})
 }
 
 func ClaimWorktreeRecovery(ctx context.Context, db orm.Context, owner, id string, generation int64) error {
@@ -335,7 +419,13 @@ func BeginWorktreeRecoveryOperation(ctx context.Context, db orm.Context, owner, 
 			return nil
 		}
 		resume := same && r.Phase == "held"
-		if !resume && r.Phase != "verified" && r.Phase != "removed" && r.Phase != "restored" {
+		rescue := r.Phase == "held" && r.Operation == "" && len(r.Checkouts) > 0
+		for _, c := range r.Checkouts {
+			if c.ReceiptJSON == "" {
+				rescue = false
+			}
+		}
+		if !resume && !rescue && r.Phase != "verified" && r.Phase != "removed" && r.Phase != "restored" {
 			return core.ErrRecoveryConflict
 		}
 		_, err = db.Bun().NewRaw(`UPDATE worktree_recoveries SET phase=?,operation=?,operation_key=?,target_daemon_id=?,authorized_until=NULL,updated_at=now() WHERE id=?`, op, op, key, target, id).Exec(ctx)
