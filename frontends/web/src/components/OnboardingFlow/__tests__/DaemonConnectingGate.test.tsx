@@ -22,23 +22,19 @@ import type { ReactNode } from "react";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { DaemonLifecyclePhase, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { DAEMON_WAIT_SLOW_MS } from "@/lib/daemon-wait";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
 
-// ── Mock the daemon registry client ──────────────────────────
+// ── Answer the daemon registry at the transport ──────────────
 //
 // The gate polls reliant.v1.DaemonRegistryService/ListDaemons — the one daemon
-// list (docs/design/one-daemon-list.md) — so the grpc client is what gets
-// stubbed, rather than the control-plane service wrapper it used to call.
+// list (docs/design/one-daemon-list.md), read through connectClient — so the
+// transport is what gets stubbed.
 
 const mockListDaemons = vi.fn<() => Promise<{ daemons: Daemon[] }>>();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: (...args: Parameters<typeof mockListDaemons>) =>
-        mockListDaemons(...args),
-    }),
-  },
-}));
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
+afterEach(() => setTransport(null));
 
 function makeDaemon(partial: Partial<Daemon>): Daemon {
   return partial as unknown as Daemon;

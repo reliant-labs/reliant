@@ -18,14 +18,13 @@ import React from "react";
 
 const listDaemonsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: listDaemonsMock }) },
-}));
-
 import { useDaemonStatus } from "../useDaemonStatus";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport, seedDaemonList } from "@/test/daemonRegistry";
 
-/** Must match the key inside useDaemonStatus. */
-const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemonsMock() })));
+afterEach(() => setTransport(null));
 
 function Reader() {
   const { daemons } = useDaemonStatus();
@@ -80,7 +79,7 @@ describe("useDaemonStatus mount probe", () => {
     // fetches from a fresh render.
     const { isDaemonConnected } = installElectronAPI({ connected: true });
     const { Wrapper, client } = makeWrapper();
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, []);
+    seedDaemonList(client);
 
     render(React.createElement(Wrapper, null, React.createElement(Reader)));
 
@@ -91,7 +90,7 @@ describe("useDaemonStatus mount probe", () => {
   it("does not refetch a cached list when the daemon is not yet connected", async () => {
     const { isDaemonConnected } = installElectronAPI({ connected: false });
     const { Wrapper, client } = makeWrapper();
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, []);
+    seedDaemonList(client);
 
     render(React.createElement(Wrapper, null, React.createElement(Reader)));
 

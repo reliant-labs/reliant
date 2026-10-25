@@ -1,19 +1,17 @@
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { ResumeDaemonPill } from "../ResumeDaemonPill";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
 
-const state = vi.hoisted(() => ({
-  status: 0 as number,
-  resume: vi.fn(),
-}));
-
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport({
       listDaemons: async () => ({
         daemons: [
           {
@@ -24,8 +22,15 @@ vi.mock("@/api/grpc-client", () => ({
         ],
       }),
     }),
-  },
+  ),
+);
+afterEach(() => setTransport(null));
+
+const state = vi.hoisted(() => ({
+  status: 0 as number,
+  resume: vi.fn(),
 }));
+
 vi.mock("@/services/controlPlane/daemon", () => ({
   resumeDaemon: (id: string) => state.resume(id),
   createDaemon: vi.fn(),

@@ -59,7 +59,6 @@ vi.mock("@/api/grpc-client", () => ({
       dismissInboxItem: mocks.dismissInboxItem,
       restoreInboxItem: mocks.restoreInboxItem,
     }),
-    daemonRegistry: () => ({ clearMachineCaches: mocks.clearMachineCaches }),
   },
 }));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
@@ -118,6 +117,8 @@ beforeEach(() => {
         const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
         return mocks.deny(requestId, denialReason, actionTaken);
       },
+      // Free-up-space goes through the generated DaemonRegistryService write.
+      "DaemonRegistryService.ClearMachineCaches": (req) => mocks.clearMachineCaches(req),
       "QuestionService.ResolveQuestion": (req) => {
         const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
         return mocks.resolveQuestion(questionId, action, responseData);

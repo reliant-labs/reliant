@@ -18,14 +18,13 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   getComputeSubscription: vi.fn(async () => ({}) as unknown),
   getComputeEligibility: vi.fn(async () => ({}) as unknown),
-  listDaemonTokens: vi.fn(async () => []),
   createEnvironment: vi.fn(async () => ({})),
   navigate: vi.fn(),
 }));
@@ -80,7 +79,6 @@ vi.mock("@/services/controlPlane/environments", () => ({
   portAccessRulesQueryKey: (id: string) => ["cp", "ports", id],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: vi.fn(),
   createEnvironment: mocks.createEnvironment,
   deleteDaemon: vi.fn(),
@@ -89,22 +87,15 @@ vi.mock("@/services/controlPlane/environments", () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
 }));
 
-// The machine LIST comes from reliant's daemon registry
-// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
-// the tests already drive, so their setup calls keep working unchanged.
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
-}))
-
 import { MachinesSection } from "@/components/Settings/cloud/machines";
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 /**
  * Server eligibility for a SUBSCRIBED caller whose plan allows these sizes.
@@ -202,7 +193,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.caps.cloudDaemons = true;
   mocks.listDaemons.mockResolvedValue({ daemons: [] });
-  mocks.listDaemonTokens.mockResolvedValue([]);
   // The subscription is no longer the gate, so it defaults to "none" and each
   // test that wants one opts in explicitly.
   mocks.getComputeSubscription.mockResolvedValue(null);

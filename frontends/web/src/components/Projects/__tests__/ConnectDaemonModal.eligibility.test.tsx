@@ -21,7 +21,7 @@
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCreateDaemon = vi.fn();
 const mockUseCloudEligibility = vi.fn();
@@ -56,12 +56,6 @@ vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: () => vi.fn() }));
 // control-plane COMMANDS, so the two are stubbed separately. An empty list is
 // the brand-new-user case, which is the one that reaches CreateDaemon.
 const mockListDaemons = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: () => mockListDaemons() }),
-  },
-}));
-
 vi.mock("../../../services/controlPlane/daemon", () => ({
   resumeDaemon: vi.fn(),
 }));
@@ -72,6 +66,12 @@ vi.mock("../../forge-ui/modal", () => ({
 }));
 
 import { ConnectDaemonModal } from "../ConnectDaemonModal";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
+afterEach(() => setTransport(null));
 
 beforeEach(() => {
   vi.clearAllMocks();

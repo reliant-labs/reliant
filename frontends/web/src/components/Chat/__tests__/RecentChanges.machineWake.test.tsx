@@ -9,6 +9,20 @@ import { DaemonStatus, DaemonWakingSchema } from "../../../gen/reliant/v1/daemon
 import { machineWakeInterceptor } from "../../../api/machineWakeInterceptor";
 import { clearWaking } from "../../../lib/machineWake";
 import { useProjectStore } from "../../../store/projectStore";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport({
+      listDaemons: async () => ({
+        daemons: [{ daemonId: "daemon-b", hostname: "cloud-b", status: DaemonStatus.SUSPENDED }],
+      }),
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 // The Changes panel of a workspace whose machine is asleep. The server wakes
 // the machine for the panel's own request and says so (a DaemonWaking detail);
@@ -64,15 +78,6 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
   capabilities: { cloudDaemons: true },
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => ({
-        daemons: [{ daemonId: "daemon-b", hostname: "cloud-b", status: DaemonStatus.SUSPENDED }],
-      }),
-    }),
-  },
-}));
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),

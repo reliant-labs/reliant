@@ -10,7 +10,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import type { Project } from "@/store/projectStore";
@@ -40,14 +40,6 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
     },
     managedCredits: false,
     gitConnections: false,
-  },
-}));
-
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: vi.fn(async () => ({ daemons: env.daemons })),
-    }),
   },
 }));
 
@@ -101,6 +93,12 @@ vi.mock("@/store/apiKeySetupStore", () => ({
 
 import { ProjectPicker } from "../ProjectPicker";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => ({ daemons: env.daemons }) })));
+afterEach(() => setTransport(null));
 
 function makeProject(name: string, path: string): Project {
   const now = new Date().toISOString();

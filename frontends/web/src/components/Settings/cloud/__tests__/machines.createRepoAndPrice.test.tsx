@@ -25,7 +25,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GitRepo } from "@/services/controlPlane/git";
 
 const WIDGETS: GitRepo = {
@@ -50,7 +50,6 @@ const mocks = vi.hoisted(() => ({
     planName: "Compute Medium",
     allowedDaemonSizes: ["small", "medium"],
   })),
-  listDaemonTokens: vi.fn(async () => []),
   createEnvironment: vi.fn(async () => ({ id: "d-new", name: "box" }) as unknown),
   createProjectFromRepo: vi.fn(async () => ({
     project: { id: "p-1" },
@@ -123,7 +122,6 @@ vi.mock("@/services/controlPlane/environments", () => ({
     e instanceof Error && e.message ? e.message : fallback,
   portAccessRulesQueryKey: (id: string) => ["cp", "ports", id],
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: vi.fn(),
   createEnvironment: mocks.createEnvironment,
   deleteDaemon: vi.fn(),
@@ -132,14 +130,6 @@ vi.mock("@/services/controlPlane/environments", () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-}));
-
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
 }));
 
 // The one add-a-repo RPC, shared with onboarding and the project picker.
@@ -184,6 +174,12 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import { MachinesSection } from "@/components/Settings/cloud/machines";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })));
+afterEach(() => setTransport(null));
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

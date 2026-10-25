@@ -1,10 +1,7 @@
 import { createProjectFromRepo, type CreateProjectFromRepoResult } from "@/hooks/project-queries";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  ListDaemonsRequestSchema,
-  type DaemonInfo as CloudDaemon,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import type { DaemonInfo as CloudDaemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
+import { queryClient } from "@/lib/query-client";
 import { createDaemon } from "@/services/controlPlane/daemon";
 import {
   cloneAvailability,
@@ -91,16 +88,14 @@ export async function addRepoProject({
   // machine has actually attached (docs/design/one-daemon-list.md). CreateDaemon
   // below stays on the control-plane transport — that is a genuine
   // control-plane COMMAND about the machine, not a read of the list.
-  const resp = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema));
-  const daemon = pickOnboardingDaemon(resp.daemons);
+  const daemons = await fetchDaemonList(queryClient);
+  const daemon = pickOnboardingDaemon(daemons);
   if (!daemon) {
     // Say WHY there is no target — still starting, failed, or gone — rather
     // than assuming the first.
-    const availability = cloneAvailability(withoutGoneMachines(resp.daemons));
+    const availability = cloneAvailability(withoutGoneMachines(daemons));
     throw new Error(
-      availability.kind === "blocked" && resp.daemons.length > 0
+      availability.kind === "blocked" && daemons.length > 0
         ? availability.reason
         : "Your machine is still starting. Try again in a moment.",
     );
