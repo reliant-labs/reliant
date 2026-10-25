@@ -59,7 +59,7 @@ To keep a dashboard in your repository, put its JSON in `deploy/observability/da
 
 - **Promote to code** on a workspace dashboard you built in the console.
 - Copy a generated file to change it: `cp <project>-overview_gen.json <project>-overview.json`, edit the copy, and forge stops generating the original while yours exists. Never edit a `*_gen.json` directly; the next `forge generate` refuses the drift.
-Metrics you declare in `internal/metrics/metrics.go` get a generated custom-metrics dashboard in every release without a file of your own. `forge observe dashboards check` validates the files and lists what the next release would carry. Agents can load the `observability/dashboards` skill for the full spec.
+Metrics you declare in `internal/metrics/metrics.go` get a generated custom-metrics dashboard in every release without a file of your own. `forge obs dashboards check` validates the files and lists what the next release would carry. Agents can load the `observability/dashboards` skill for the full spec.
 
 ## Alerts
 
@@ -94,7 +94,7 @@ observability = forge.Observability {
 }
 ```
 
-`forge env render` refuses a malformed rule before anything ships, and `forge observe alerts check` evaluates your rules against the local stack. Agents can load the `observability/alerts` skill for the rule format and every default's parameters.
+`forge env render` refuses a malformed rule before anything ships, and `forge obs alerts check` evaluates your rules against the local stack. Agents can load the `observability/alerts` skill for the rule format and every default's parameters.
 
 A route sends alerts to a **receiver**, and a receiver is only a name in your code. What the name points at, a Slack channel, an email list, a webhook or a PagerDuty service, is set in **Observability → Alerts → Receivers**, because a webhook URL or a routing key does not belong in a repository. The built-in **In-app** receiver needs no setup. With no routes declared, alerts go to in-app notifications and then to a receiver named `slack`, and never to a pager until you route them there. The Receivers tab calls out a route that names a receiver you have not set up. Creating or changing receivers needs the organization admin role; their secrets are write-only.
 

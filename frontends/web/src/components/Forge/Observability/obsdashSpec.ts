@@ -139,7 +139,7 @@ function checkPredicates(where: Predicate[] | undefined, at: string, problems: s
 /**
  * What is wrong with a panel, in words for the editor — the rules forge
  * applies to a dashboard file (internal/obsdash/validate.go), so a file that
- * passes here passes `forge observe dashboards check`. Whether the server can
+ * passes here passes `forge obs dashboards check`. Whether the server can
  * compile a field it does not know is its own answer, shown on the panel.
  */
 export function panelProblems(panel: Panel): string[] {
