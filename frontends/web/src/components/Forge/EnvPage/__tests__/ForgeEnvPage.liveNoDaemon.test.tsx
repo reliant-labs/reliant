@@ -43,11 +43,14 @@
  * Plus the write: setting a secret from Live makes zero daemon calls either.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
@@ -69,26 +72,17 @@ function daemonTripwire(method: string) {
   };
 }
 
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: daemonTripwire("getTopology"),
-    verifyEnv: daemonTripwire("verifyEnv"),
-    listSecrets: daemonTripwire("listSecrets"),
-    getEnvStatus: daemonTripwire("getEnvStatus"),
-    getEnvShape: daemonTripwire("getEnvShape"),
-    planPromote: daemonTripwire("planPromote"),
-    applyPromote: daemonTripwire("applyPromote"),
-    planDeploy: daemonTripwire("planDeploy"),
-    startDeploy: daemonTripwire("startDeploy"),
-    getDeployStatus: daemonTripwire("getDeployStatus"),
-  },
-}));
-
-// The generated daemon client itself, in case anything bypasses forge-grpc.
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  createForgeClient: daemonTripwire("createForgeClient"),
-}));
+/**
+ * EVERY ForgeService rpc, answered at the transport by a tripwire — the
+ * generated hooks and the generated client both read it there, so nothing can
+ * bypass this. Built from the service descriptor, so an rpc added later is
+ * wired too.
+ */
+function forgeServiceTripwires(): MockHandlers {
+  return Object.fromEntries(
+    ForgeService.methods.map((method) => [`ForgeService.${method.name}`, daemonTripwire(method.localName)])
+  );
+}
 
 const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
@@ -335,8 +329,11 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
   daemonCalls.length = 0;
+  setTransport(mockTransport(forgeServiceTripwires()));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";

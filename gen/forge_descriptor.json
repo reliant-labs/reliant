@@ -17680,12 +17680,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.PlanForgePromoteRequest",
           "OutputTypeFQ": "reliant.v1.PlanForgePromoteResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -17712,12 +17713,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.PlanForgeDeployRequest",
           "OutputTypeFQ": "reliant.v1.PlanForgeDeployResponse",
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -40340,7 +40342,7 @@
     "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
     "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
-    "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
+    "reliant/v1/forge.proto": "d975074ed16882b06823391fa8e1ab82c54e7b8624a1465cb45d11e3eb0c0138",
     "reliant/v1/inbox.proto": "3674d17a4999e2cbdece60fcf227f1a52068616f22a28efff18b9c34f70608d3",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",

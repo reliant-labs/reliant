@@ -100,6 +100,10 @@ type ForgeServiceClient interface {
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
 	// needs no confirmation. This is what a UI calls to render the diff.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
+	// TestForgeService_NoSideEffectsRPCsOnlyRead holds the handler to that.
 	PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error)
 	// ApplyPromote WRITES the binding.
 	//
@@ -121,6 +125,8 @@ type ForgeServiceClient interface {
 	// then returns BEFORE the first kubectl apply. Safe, needs no confirmation.
 	// This is what a UI calls to show a human which cluster, which namespace,
 	// which images and which resources before asking them to approve it.
+	//
+	// NO_SIDE_EFFECTS, for the same reason as PlanPromote.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
 	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
 	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
@@ -212,6 +218,7 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServicePlanPromoteProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("PlanPromote")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		applyPromote: connect.NewClient[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse](
@@ -224,6 +231,7 @@ func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+ForgeServicePlanDeployProcedure,
 			connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		startDeployPlan: connect.NewClient[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse](
@@ -349,6 +357,10 @@ type ForgeServiceHandler interface {
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
 	// needs no confirmation. This is what a UI calls to render the diff.
+	//
+	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+	// verb, so without it forge generates a mutation hook for it.
+	// TestForgeService_NoSideEffectsRPCsOnlyRead holds the handler to that.
 	PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error)
 	// ApplyPromote WRITES the binding.
 	//
@@ -370,6 +382,8 @@ type ForgeServiceHandler interface {
 	// then returns BEFORE the first kubectl apply. Safe, needs no confirmation.
 	// This is what a UI calls to show a human which cluster, which namespace,
 	// which images and which resources before asking them to approve it.
+	//
+	// NO_SIDE_EFFECTS, for the same reason as PlanPromote.
 	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
 	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
 	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
@@ -457,6 +471,7 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServicePlanPromoteProcedure,
 		svc.PlanPromote,
 		connect.WithSchema(forgeServiceMethods.ByName("PlanPromote")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceApplyPromoteHandler := connect.NewUnaryHandler(
@@ -469,6 +484,7 @@ func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOpti
 		ForgeServicePlanDeployProcedure,
 		svc.PlanDeploy,
 		connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	forgeServiceStartDeployPlanHandler := connect.NewUnaryHandler(

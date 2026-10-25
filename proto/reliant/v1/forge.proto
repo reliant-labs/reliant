@@ -59,7 +59,13 @@ service ForgeService {
   // runs `forge env promote <release> --to <env> --plan`, which computes the
   // entire change set and stops before forge's only write. Safe, idempotent,
   // needs no confirmation. This is what a UI calls to render the diff.
-  rpc PlanPromote(PlanForgePromoteRequest) returns (PlanForgePromoteResponse) {}
+  //
+  // It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+  // verb, so without it forge generates a mutation hook for it.
+  // TestForgeService_NoSideEffectsRPCsOnlyRead holds the handler to that.
+  rpc PlanPromote(PlanForgePromoteRequest) returns (PlanForgePromoteResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ApplyPromote WRITES the binding.
   //
@@ -82,7 +88,11 @@ service ForgeService {
   // then returns BEFORE the first kubectl apply. Safe, needs no confirmation.
   // This is what a UI calls to show a human which cluster, which namespace,
   // which images and which resources before asking them to approve it.
-  rpc PlanDeploy(PlanForgeDeployRequest) returns (PlanForgeDeployResponse) {}
+  //
+  // NO_SIDE_EFFECTS, for the same reason as PlanPromote.
+  rpc PlanDeploy(PlanForgeDeployRequest) returns (PlanForgeDeployResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // StartDeployPlan begins the APPROVABLE plan as a background job, and returns
   // a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
