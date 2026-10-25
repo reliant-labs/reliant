@@ -13,7 +13,10 @@
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
 import { ChatState } from "../../../gen/reliant/v1/chat_pb";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
@@ -27,19 +30,13 @@ vi.mock("../../ui/Tooltip", () => ({
 vi.mock("../../ui/ContextMenu", () => ({ ContextMenu: () => null }));
 vi.mock("../../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
-const listRuns = vi.fn(async () => ({ runs: [], nextPageToken: "" }));
-vi.mock("../../../api/grpc-client", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/grpc-client")>("../../../api/grpc-client");
-  return {
-    ...actual,
-    grpcClient: new Proxy(actual.grpcClient, {
-      get(target, prop) {
-        if (prop === "run") return () => ({ listRuns });
-        return Reflect.get(target, prop);
-      },
-    }),
-  };
-});
+// RunService is reached through the generated hooks, so it is answered at
+// the transport.
+const listRuns = vi.fn(async (_request: { parentChatId?: string }) => ({ runs: [], nextPageToken: "" }));
+beforeEach(() =>
+  setTransport(mockTransport({ "RunService.ListRuns": (request) => listRuns(request as { parentChatId?: string }) })),
+);
+afterEach(() => setTransport(null));
 
 // What the server sends: each chat carries its workspace.
 const workspace = {

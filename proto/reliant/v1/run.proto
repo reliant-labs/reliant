@@ -65,7 +65,12 @@ service RunService {
   // the response's meaning (one row per workflow, no paging, no total), and a
   // flag that changes what a response means is how a caller ends up paging a
   // result that cannot be paged.
-  rpc LastRunPerWorkflow(LastRunPerWorkflowRequest) returns (LastRunPerWorkflowResponse) {}
+  //
+  // It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
+  // verb, so without it forge generates a mutation hook for it.
+  rpc LastRunPerWorkflow(LastRunPerWorkflowRequest) returns (LastRunPerWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // PauseRun parks a run. It stays live and resumable — see
   // WORKFLOW_STOP_REASON_PAUSED.

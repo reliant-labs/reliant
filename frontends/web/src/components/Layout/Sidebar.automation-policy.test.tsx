@@ -288,7 +288,7 @@ describe("Move back to Runs", () => {
 
     const moveBack = within(openMenuFor(adoptedRun.id)).getByText("Move back to Runs");
     act(() => moveBack.click());
-    expect(fixtures.unadopt).toHaveBeenCalledWith(adoptedRun.id, expect.anything());
+    expect(fixtures.unadopt).toHaveBeenCalledWith({ chatId: adoptedRun.id }, expect.anything());
 
     // The server no longer lists it, and it is still the open chat: without
     // the release it would stay pinned and the action would look broken.

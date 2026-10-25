@@ -78,13 +78,11 @@ const rpc = vi.hoisted(() => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    chat: () => ({ getChat: rpc.getChat, startChat: rpc.startChat, listMessages: rpc.listMessages }),
+    chat: () => ({ getChat: rpc.getChat, startChat: rpc.startChat }),
     trigger: () => ({
-      getLaunchEvent: rpc.getLaunchEvent,
       listTriggers: rpc.listTriggers,
       fireTrigger: rpc.fireTrigger,
     }),
-    run: () => ({ listRuns: rpc.listRuns }),
     workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
     worktree: () => ({ listWorktrees: rpc.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
@@ -93,15 +91,19 @@ vi.mock("@/api/grpc-client", () => ({
   setDaemonLastSeen: vi.fn(),
 }));
 
-// PresetService is reached through connectClient (hooks/preset-queries), so
-// it is answered at the transport by the same fakes. Integration events are
-// named from the catalog's trigger types; none here.
+// PresetService, RunService, the launch event and the seed-prompt read are
+// reached through connectClient (the generated hooks), so they are answered
+// at the transport by the same fakes. Integration events are named from the
+// catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
       ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: rpc.listPresetsForWorkflow,
       getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
     }),
+      ...serviceHandlers("RunService", { listRuns: rpc.listRuns }),
+      ...serviceHandlers("TriggerService", { getLaunchEvent: rpc.getLaunchEvent }),
+      ...serviceHandlers("ChatService", { listMessages: rpc.listMessages }),
       "CatalogService.SearchCatalog": { response: {} },
     }));
 });
