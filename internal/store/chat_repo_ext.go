@@ -67,10 +67,26 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 // last_active (the generated Create keeps a caller-set timestamp). An unset
 // State is IDLE (the column DEFAULT).
 func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	if err := CreateChat(ctx, db, chatToRow(chat)); err != nil {
-		return fmt.Errorf("failed to create chat: %w", err)
-	}
-	return nil
+	return withChatWorktreeAdmission(ctx, db, chat.ID, chat.WorktreeID, func(ctx context.Context) error {
+		if err := CreateChat(ctx, db, chatToRow(chat)); err != nil {
+			return fmt.Errorf("failed to create chat: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
+}
+
+// Parent before child is the common lock order for chat admission and reclaim.
+// The SQL trigger is a backstop for other writers, not a handler-only guard.
+func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID string, worktreeID *string, fn func(context.Context) error) error {
+	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		// A rebind locks old and new parents in the same stable order as the
+		// trigger. The trigger still protects against a concurrently moved row.
+		var ids []string
+		if err := db.Bun().NewRaw(`SELECT id FROM worktrees WHERE id=? OR id=(SELECT worktree_id FROM chats WHERE id=?) ORDER BY id FOR UPDATE`, worktreeID, chatID).Scan(ctx, &ids); err != nil {
+			return err
+		}
+		return fn(ctx)
+	})
 }
 
 // chatUpdateColumns are the columns SaveChat writes; updated_at is stamped
@@ -85,11 +101,13 @@ var chatUpdateColumns = []string{
 // that does not exist is left alone, as the statement it replaced did. The
 // caller holds the row it wrote, so nothing is read back.
 func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	err := UpdateChatMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to update chat: %w", err)
-	}
-	return nil
+	return withChatWorktreeAdmission(ctx, db, chat.ID, chat.WorktreeID, func(ctx context.Context) error {
+		err := UpdateChatMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to update chat: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
 }
 
 // UpdateChatState moves a chat to state, capturing archivedWorktreeName onto
@@ -97,17 +115,23 @@ func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
 // worktree after the worktree row is gone), and stamps updated_at and
 // last_active with now.
 func UpdateChatState(ctx context.Context, db orm.Context, chatID string, state core.ChatState, archivedWorktreeName *string, now time.Time) error {
-	_, err := db.Bun().NewRaw(`
+	var worktreeID *string
+	if err := db.Bun().NewRaw(`SELECT worktree_id FROM chats WHERE id=?`, chatID).Scan(ctx, &worktreeID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return withChatWorktreeAdmission(ctx, db, chatID, worktreeID, func(ctx context.Context) error {
+		_, err := db.Bun().NewRaw(`
 UPDATE chats
 SET state = ?0,
     archived_worktree_name = COALESCE(archived_worktree_name, ?1),
     updated_at = ?2,
     last_active = ?2
 WHERE id = ?3`, state, archivedWorktreeName, now, chatID).Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to update chat state: %w", err)
-	}
-	return nil
+		if err != nil {
+			return fmt.Errorf("failed to update chat state: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
 }
 
 // UpdateChatUnread sets the chat's unread flag and stamps updated_at. A chat

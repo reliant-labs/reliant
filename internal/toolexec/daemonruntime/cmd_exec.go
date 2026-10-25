@@ -64,6 +64,11 @@ func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.C
 }
 
 func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
+	releaseRecovery, err := beginRecoveryWork()
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -219,6 +224,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 // =============================================================================
 
 func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
+	releaseRecovery, err := beginRecoveryWork()
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)

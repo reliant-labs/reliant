@@ -15,6 +15,109 @@ package worktreereclaim
 import (
 	"strconv"
 	"strings"
+	"time"
+)
+
+// RecoveryCapture identifies one immutable, locally pinned, publication-safe
+// capture. It contains neither credentials nor filesystem contents.
+type RecoveryCapture struct {
+	Version         int       `json:"version"`
+	CaptureID       string    `json:"capture_id"`
+	WorktreeID      string    `json:"worktree_id"`
+	RepoID          string    `json:"repo_id"`
+	Rel             string    `json:"rel"`
+	RemoteURL       string    `json:"remote_url"`
+	RecoveryRef     string    `json:"recovery_ref"`
+	CommitOID       string    `json:"commit_oid"`
+	ManifestDigest  string    `json:"manifest_digest"`
+	HeadOID         string    `json:"head_oid"`
+	IndexTreeOID    string    `json:"index_tree_oid"`
+	DiskTreeOID     string    `json:"disk_tree_oid"`
+	ObjectFormat    string    `json:"object_format"`
+	InventoryDigest string    `json:"inventory_digest"`
+	SecretPolicy    string    `json:"secret_policy"`
+	HistoryTips     []string  `json:"history_tips"`
+	UntrackedPaths  []string  `json:"untracked_paths"`
+	CapturedAt      time.Time `json:"captured_at"`
+}
+
+// RecoveryReceipt is issued only after an independent exact remote fetch,
+// complete object-closure validation, and manifest verification.
+type RecoveryReceipt struct {
+	Capture         RecoveryCapture `json:"capture"`
+	VerifiedAt      time.Time       `json:"verified_at"`
+	VerifierVersion string          `json:"verifier_version"`
+}
+
+// RecoveryActivity is complete daemon observation, not directory mtime.
+type RecoveryActivity struct {
+	Generation      int64     `json:"generation"`
+	ObservationID   string    `json:"observation_id"`
+	ObservedSince   time.Time `json:"observed_since"`
+	LastActivity    time.Time `json:"last_activity"`
+	ObservedThrough time.Time `json:"observed_through"`
+	Complete        bool      `json:"complete"`
+}
+
+// RecoveryAuthorization fences one short-lived finalization attempt.
+type RecoveryAuthorization struct {
+	RecoveryID         string    `json:"recovery_id"`
+	CaptureID          string    `json:"capture_id"`
+	WorktreeID         string    `json:"worktree_id"`
+	Fence              string    `json:"fence"`
+	ManifestDigest     string    `json:"manifest_digest"`
+	ObservationID      string    `json:"observation_id"`
+	ActivityGeneration int64     `json:"activity_generation"`
+	ExpiresAt          time.Time `json:"expires_at"`
+}
+
+// RecoveryRequest is the additive Git-only recovery protocol. Legacy Remove
+// and local Trees are not authorization for this protocol.
+type RecoveryRequest struct {
+	Worktree      Worktree               `json:"worktree"`
+	RecoveryID    string                 `json:"recovery_id"`
+	Captures      []RecoveryCapture      `json:"captures"`
+	Receipts      []RecoveryReceipt      `json:"receipts"`
+	Activity      RecoveryActivity       `json:"activity"`
+	Authorization *RecoveryAuthorization `json:"authorization,omitempty"`
+}
+
+type RecoveryResponse struct {
+	Outcome        Outcome           `json:"outcome"`
+	Reason         HeldReason        `json:"reason,omitempty"`
+	Detail         string            `json:"detail,omitempty"`
+	Captures       []RecoveryCapture `json:"captures,omitempty"`
+	Receipts       []RecoveryReceipt `json:"receipts,omitempty"`
+	Activity       RecoveryActivity  `json:"activity"`
+	RemovedRepoIDs []string          `json:"removed_repo_ids,omitempty"`
+}
+
+// RecoveryRestoreRequest always names a separate destination and branch.
+type RecoveryRestoreRequest struct {
+	RecoveryID      string            `json:"recovery_id"`
+	IdempotencyKey  string            `json:"idempotency_key"`
+	DestinationPath string            `json:"destination_path"`
+	Branch          string            `json:"branch"`
+	Captures        []RecoveryCapture `json:"captures"`
+}
+
+type RecoveryRestoreResponse struct {
+	Outcome         Outcome    `json:"outcome"`
+	Reason          HeldReason `json:"reason,omitempty"`
+	Detail          string     `json:"detail,omitempty"`
+	Path            string     `json:"path,omitempty"`
+	Branch          string     `json:"branch,omitempty"`
+	RestoredRepoIDs []string   `json:"restored_repo_ids,omitempty"`
+}
+
+const (
+	ReasonUnsupportedRecovery HeldReason = "unsupported_recovery"
+	ReasonSensitiveRecovery   HeldReason = "sensitive_recovery"
+	ReasonRemoteProof         HeldReason = "remote_proof_required"
+	ReasonObservationGap      HeldReason = "observation_gap"
+	OutcomeCaptured           Outcome    = "captured"
+	OutcomeVerified           Outcome    = "verified"
+	OutcomeRestored           Outcome    = "restored"
 )
 
 // HeldReason says why a worktree was not removed.
