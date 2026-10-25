@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import type { Project } from "@/store/projectStore";
+import { seedProjects } from "@/test/projectList";
 
 vi.stubGlobal(
   "matchMedia",
@@ -85,14 +86,11 @@ vi.mock("@/services/settingsSync", () => ({
 vi.mock("@/store/projectStore", () => {
   const useProjectStore = (selector: (s: unknown) => unknown) =>
     selector({
-      projects: env.projects,
-      loadProjects: vi.fn(),
       createProject: vi.fn(),
       selectProject: vi.fn(),
       updateProject: vi.fn(),
       deleteProject: vi.fn(),
     });
-  useProjectStore.getState = () => ({ projects: env.projects });
   return { useProjectStore };
 });
 
@@ -111,7 +109,6 @@ function makeProject(name: string, path: string): Project {
     name,
     path,
     is_git_repo: true,
-    worktree_count: 0,
     last_active: now,
     created_at: now,
     updated_at: now,
@@ -121,6 +118,7 @@ function makeProject(name: string, path: string): Project {
 
 function renderPicker() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  seedProjects(client, env.projects as Project[]);
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle, FolderPlus, Search } from "lucide-react";
 
@@ -8,6 +8,7 @@ import Button from "@/components/forge-ui/button";
 import { useNavigateToProjectPicker } from "@/hooks/useNavigateToProjectPicker";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";
+import { useProjects } from "@/hooks/project-queries";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { RemoveProjectModal } from "../Projects/RemoveProjectModal";
@@ -34,34 +35,16 @@ export function ProjectsSection() {
   const navigate = useNavigate();
   const navigateToProjectPicker = useNavigateToProjectPicker();
 
-  const projects = useProjectStore((state) => state.projects);
+  const { projects, isLoading, error: listError, refetch: load } = useProjects();
   const currentProject = useProjectStore((state) => state.currentProject);
-  const isLoading = useProjectStore((state) => state.isLoading);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   const selectProject = useProjectStore((state) => state.selectProject);
   const deleteProject = useProjectStore((state) => state.deleteProject);
 
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(projects.length > 0);
+  const loadError = listError ? listError.message || "Could not load projects" : null;
   const [query, setQuery] = useState("");
   const [pendingRemoval, setPendingRemoval] = useState<Project | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
   const [openingProjectId, setOpeningProjectId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      await loadProjects();
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not load projects");
-    } finally {
-      setHasLoaded(true);
-    }
-  }, [loadProjects]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),
@@ -110,9 +93,9 @@ export function ProjectsSection() {
     }
   };
 
-  const showSkeleton = projects.length === 0 && (!hasLoaded || isLoading) && !loadError;
+  const showSkeleton = projects.length === 0 && isLoading && !loadError;
   const showError = projects.length === 0 && !!loadError;
-  const showEmpty = projects.length === 0 && hasLoaded && !isLoading && !loadError;
+  const showEmpty = projects.length === 0 && !isLoading && !loadError;
   const showFilter = projects.length > FILTER_THRESHOLD;
 
   return (
@@ -155,7 +138,7 @@ export function ProjectsSection() {
             </div>
             {/* secondary, not outline: inside .forge-ui `accent` is the primary
                 colour, so outline's hover:bg-accent would flood on hover. */}
-            <Button variant="secondary" size="sm" onClick={() => void load()}>
+            <Button variant="secondary" size="sm" onClick={load}>
               Try again
             </Button>
           </div>

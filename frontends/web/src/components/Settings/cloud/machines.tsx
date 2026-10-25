@@ -123,7 +123,6 @@ import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
-import { useProjectStore } from "@/store/projectStore";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { createMachine, type CreateMachineResult } from "./createMachine";
 import { useAccountGate } from "@/hooks/useAccountGate";
@@ -1004,7 +1003,6 @@ function RemoveMachineModal({
  */
 function reportRepoOutcome({ machineName, repo }: CreateMachineResult) {
   if (repo.kind === "added") {
-    void useProjectStore.getState().loadProjects();
     if (repo.queued) {
       toast.info(`Queued — ${repo.projectName} will clone when ${machineName} is ready`);
     } else {

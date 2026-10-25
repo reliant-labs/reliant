@@ -5,6 +5,7 @@ import { hasErrorReason } from "@/lib/errorReasons";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
+import { fetchProjects } from "@/hooks/project-queries";
 import type { Project } from "@/store/projectStore";
 import { supabase } from "@/lib/supabase";
 import { useEventBus } from "@/lib/event-context";
@@ -42,7 +43,6 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
 
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const navigate = useNavigate();
-  const loadProjects = useProjectStore((state) => state.loadProjects);
 
   const eventBus = useEventBus();
   const completeOnboardingMutation = useCompleteOnboarding();
@@ -133,12 +133,12 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         variant: "info",
       });
 
-      // Select the new project so the app opens on it. The store is the
-      // source of the full Project shape; the RPC returns a narrower one.
-      await loadProjects();
+      // Select the new project so the app opens on it, as the (refetched)
+      // project list holds it.
+      const listed = await fetchProjects();
       const opened = added.projectId
-        ? useProjectStore.getState().projects.find((p) => p.id === added.projectId)
-        : findProjectByPath(useProjectStore.getState().projects, clonedPath);
+        ? listed.find((p) => p.id === added.projectId)
+        : findProjectByPath(listed, clonedPath);
       if (opened) {
         await useProjectStore.getState().selectProject(opened);
       }

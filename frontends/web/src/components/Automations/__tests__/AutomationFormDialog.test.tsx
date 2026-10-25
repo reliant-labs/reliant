@@ -62,7 +62,6 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ listWorkflows, getWorkflow }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
   },
 }));
 
@@ -72,6 +71,7 @@ vi.mock("@/api/grpc-client", () => ({
 beforeEach(() => {
   setTransport(mockTransport({
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
       "ConnectionService.ListConnections": (req) => listConnections(req),
     }));
 });
@@ -90,14 +90,23 @@ function install(projectId: string, daemonId: string, installState = ProjectInst
   return create(ProjectDaemonSchema, { projectId, daemonId, installState });
 }
 
-vi.mock("@/store/projectStore", () => {
-  const snapshot = () => ({
+// The project list the form offers (ListProjects, through useProjects).
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({
     projects: [
       { id: "proj-1", name: "Reliant" },
       { id: "proj-2", name: "Forge" },
     ],
+    isLoading: false,
+    error: null,
+    refetch: () => undefined,
+  }),
+}));
+
+vi.mock("@/store/projectStore", () => {
+  const snapshot = () => ({
     currentProject: { id: "proj-2", name: "Forge" },
-    loadProjects: vi.fn(async () => undefined),
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => (selector ? selector(snapshot()) : snapshot()),

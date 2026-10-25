@@ -13,8 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Loader2, Search } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { logger } from "../../lib/logger";
-import { projectGrpc, type Prompt } from "../../api/project-grpc";
+import { useProjectPrompts, type Prompt } from "../../hooks/project-queries";
 
 interface PromptPickerProps {
   isOpen: boolean;
@@ -30,37 +29,23 @@ export function PromptPicker({
   onClose,
   onSelect,
 }: PromptPickerProps) {
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  // Read while open: opening the picker refetches, so a prompt saved in
+  // Settings a moment ago is there. A failed read lists nothing.
+  const { prompts, isPending } = useProjectPrompts(projectId, { enabled: isOpen });
+  const isLoading = isOpen && !!projectId && isPending;
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen || !projectId) return;
 
-    let cancelled = false;
-    setIsLoading(true);
     setQuery("");
     setHighlighted(0);
-
-    projectGrpc
-      .getPrompts(projectId)
-      .then((loaded) => {
-        if (!cancelled) setPrompts(loaded);
-      })
-      .catch((error) => {
-        logger.error("[PromptPicker] Failed to load prompts", error);
-        if (!cancelled) setPrompts([]);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
 
     // Focus after the portal has painted, or the input is not yet in the DOM.
     const timer = setTimeout(() => inputRef.current?.focus(), 30);
     return () => {
-      cancelled = true;
       clearTimeout(timer);
     };
   }, [isOpen, projectId]);

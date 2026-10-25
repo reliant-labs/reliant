@@ -2,7 +2,7 @@ import { useState } from "react";
 import { GitBranch, CheckCircle2, Loader2 } from "lucide-react";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
-import { api } from "../../api/client";
+import { initializeGitRepo } from "../../hooks/project-queries";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 
@@ -75,7 +75,7 @@ export function InitializeGitModal({
       // invalid git branch name and would fail server-side validation.
       const branch = initialBranch.trim() || "main";
 
-      await api.git.initGitRepository(projectId, {
+      await initializeGitRepo(projectId, {
         initial_branch: branch,
         gitignore_patterns: gitignorePatterns,
         initial_commit: createInitialCommit,
@@ -89,25 +89,14 @@ export function InitializeGitModal({
 
       await onSuccess();
       onClose();
-    } catch (err: any) {
-      let errorMessage = "Failed to initialize git repository";
-      
-      // Try to extract error message from ky HTTPError
-      if (err.response) {
-        try {
-          const errorData = await err.response.json();
-          // Backend returns { "error": "message" }
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch (e) {
-          // If JSON parsing fails, use the error message if available
-          errorMessage = err.message || errorMessage;
-        }
-      } else if (err.message) {
-        errorMessage = err.message;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      }
-      
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error && err.message
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Failed to initialize git repository";
+
       logger.error("[InitializeGitModal] Failed to initialize git", {
         error: err,
         errorMessage,

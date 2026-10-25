@@ -51,6 +51,7 @@ import {
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
 import DropdownMenu from "../forge-ui/dropdown_menu";
@@ -243,14 +244,12 @@ function WorkflowsHeader({ onClose, showProject }: { onClose: () => void; showPr
 /** Which project the Library and Runs read. Selecting one updates `?project=` (the layout's sync effect). */
 function ProjectSwitcher() {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
   const selectProject = useProjectStore((state) => state.selectProject);
   const [open, setOpen] = useState(false);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next && projects.length === 0) void loadProjects().catch(() => undefined);
   };
 
   return (

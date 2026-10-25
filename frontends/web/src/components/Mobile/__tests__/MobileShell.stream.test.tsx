@@ -65,7 +65,10 @@ vi.mock("../MobileNavDrawer", () => ({ MobileNavDrawer: () => null }));
 vi.mock("../MobileNavigationFeedback", () => ({ MobileNavigationFeedback: () => null }));
 vi.mock("../MobileInboxBadgeSync", () => ({ MobileInboxBadgeSync: () => null }));
 
+import { QueryClientProvider } from "@tanstack/react-query";
 import { MobileShell } from "../MobileShell";
+import { queryClient } from "../../../lib/query-client";
+import { seedProjects } from "../../../test/projectList";
 import { useChatStore } from "../../../store/chatStore";
 import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import { useProjectStore } from "../../../store/projectStore";
@@ -96,12 +99,23 @@ beforeEach(() => {
   useChatStore.setState({ hasLoaded: false });
   // A project is already selected, so the shell's first-project fallback
   // (selectProject → loadChats) does not run; the tests load chats by hand.
-  useProjectStore.setState({ projects: [project], currentProject: project });
+  seedProjects(queryClient, [project]);
+  useProjectStore.setState({ currentProject: project });
 });
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
+
+/** The shell as the app mounts it: under the app's query client. */
+function renderShell() {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MobileShell />
+    </QueryClientProvider>,
+  );
+}
 
 /** What loadChats leaves behind: the list is loaded, the resume point known. */
 function chatsLoad() {
@@ -114,7 +128,7 @@ describe("MobileShell update stream", () => {
     screen = () => <div>chat list</div>;
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
     // Nothing to resume from yet: connecting now would replay from zero.
     expect(services).toHaveLength(0);
@@ -133,7 +147,7 @@ describe("MobileShell update stream", () => {
     screen = () => <ChatScreen />;
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
     expect(services).toHaveLength(0);
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_ID);
@@ -150,7 +164,7 @@ describe("MobileShell update stream", () => {
     chatsLoad();
     let unmount = () => {};
     await act(async () => {
-      ({ unmount } = render(<MobileShell />));
+      ({ unmount } = renderShell());
     });
     expect(services).toHaveLength(1);
 
@@ -167,7 +181,8 @@ describe("MobileShell initial project", () => {
   const other = { id: "proj-2", name: "backoffice", path: "/q" } as unknown as Project;
 
   beforeEach(() => {
-    useProjectStore.setState({ projects: [project, other], currentProject: null });
+    seedProjects(queryClient, [project, other]);
+    useProjectStore.setState({ currentProject: null });
     useWorkspaceStateStore.setState({ lastProjectId: null });
   });
 
@@ -177,12 +192,12 @@ describe("MobileShell initial project", () => {
     useProjectStore.setState({ selectProject });
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-2"));
     expect(selectProject).toHaveBeenCalledTimes(1);
-    expect(selectProject).toHaveBeenCalledWith(other, { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-2" }), { skipWorkspaceStateSave: true });
   });
 
   it("falls back to the first project without remembering it as the user's choice", async () => {
@@ -190,10 +205,10 @@ describe("MobileShell initial project", () => {
     useProjectStore.setState({ selectProject });
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-1"));
-    expect(selectProject).toHaveBeenCalledWith(project, { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-1" }), { skipWorkspaceStateSave: true });
   });
 });

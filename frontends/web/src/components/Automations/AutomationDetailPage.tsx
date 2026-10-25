@@ -27,7 +27,7 @@ import Card, { CardHeader, CardInset } from "../forge-ui/card";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import Button from "@/components/forge-ui/button";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import {
@@ -96,12 +96,8 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const eventCountAtFire = useRef<number | null>(null);
 
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
   const { daemons } = useDaemonStatus();
-  useEffect(() => {
-    void loadProjects().catch(() => undefined);
-  }, [loadProjects]);
 
   // Stop polling once the fire's event has arrived, or the window has passed.
   const eventCount = eventsQuery.data?.length ?? 0;

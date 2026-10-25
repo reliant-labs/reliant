@@ -231,7 +231,13 @@ describe("states", () => {
   it("falls back to the live view when promotion history is unreadable, and says so", async () => {
     renderList(createReleasesFixtureApi({ promotionsFail: true }));
     await ready();
-    expect(await screen.findByTestId("releases-ledger-failed", undefined, { timeout: 5000 })).toHaveTextContent("prod, e2e, dev");
+    // Each env's promotion read fails on its own (after forgeRetry's retry),
+    // so the note appears with the first and names the rest as they fail:
+    // wait for the whole list, not just the note.
+    await waitFor(
+      () => expect(screen.getByTestId("releases-ledger-failed")).toHaveTextContent("prod, e2e, dev"),
+      { timeout: 5000 },
+    );
     expect(within(row(V[0]!)).getByText("live in prod")).toBeInTheDocument();
   });
 });

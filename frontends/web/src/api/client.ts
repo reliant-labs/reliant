@@ -1,5 +1,4 @@
 import { getCatalogClient } from "./grpc-client";
-import { projectGrpc } from "./project-grpc";
 import { chatGrpc } from "./chat-grpc";
 import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
@@ -588,35 +587,6 @@ export const api = {
 
     deleteSetting: async (key: string, projectId?: string) => {
       return settingsGrpc.deleteSetting(key, projectId);
-    },
-  },
-
-  git: {
-    getBranches: async (projectId: string, repoId?: string) => {
-      const branches = await projectGrpc.getGitBranches(projectId, repoId);
-      return { branches };
-    },
-
-    initGitRepository: async (
-      projectId: string,
-      options: {
-        initial_branch?: string;
-        gitignore_patterns?: string[];
-        initial_commit?: boolean;
-      }
-    ) => {
-      const result = await projectGrpc.initializeGitRepo(
-        projectId,
-        options.initial_branch,
-        options.gitignore_patterns,
-        options.initial_commit
-      );
-      return {
-        message: result.message,
-        project_id: result.project_id,
-        is_git_repo: result.is_git_repo,
-        default_branch: result.default_branch,
-      };
     },
   },
 };

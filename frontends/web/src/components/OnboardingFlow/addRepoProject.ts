@@ -1,4 +1,4 @@
-import { projectGrpc } from "@/api/project-grpc";
+import { createProjectFromRepo, type CreateProjectFromRepoResult } from "@/hooks/project-queries";
 import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "@/api/grpc-client";
 import {
@@ -125,9 +125,9 @@ export async function addRepoProject({
   // checkout will live. Errors propagate — the step shows them inline, and a
   // silent failure here is what left onboarding pointing at a project that
   // did not exist.
-  let result: Awaited<ReturnType<typeof projectGrpc.createProjectFromRepo>>;
+  let result: CreateProjectFromRepoResult;
   try {
-    result = await projectGrpc.createProjectFromRepo({
+    result = await createProjectFromRepo({
       cloneUrl,
       daemonId: daemon.daemonId,
       name,

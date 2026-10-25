@@ -64,7 +64,6 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ getWorkflow, listWorkflows }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
   },
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
@@ -80,14 +79,24 @@ setTransport(
     "CatalogService.ListInputOptions": (req) => listInputOptions(req),
     "ConnectionService.ListConnections": (req) => listConnections(req),
     ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+    ...serviceHandlers("ProjectService", { listProjectDaemons }),
   }),
 );
 
+// The project list the dialog names projects from (ListProjects, through useProjects).
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({
+    projects: [{ id: "proj-1", name: "Reliant" }],
+    isLoading: false,
+    error: null,
+    refetch: () => undefined,
+  }),
+}));
+
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({
-    projects: [{ id: "proj-1", name: "Reliant" }],
     currentProject: { id: "proj-1", name: "Reliant" },
-    loadProjects: vi.fn(async () => undefined),
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => (selector ? selector(snapshot()) : snapshot()),

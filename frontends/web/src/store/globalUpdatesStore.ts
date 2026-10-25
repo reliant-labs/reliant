@@ -36,6 +36,7 @@ import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { invalidateMcpQueries } from "../hooks/mcp-queries";
 import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
+import { projectServiceKeys } from "../hooks/project-service-hooks_gen";
 import { runServiceKeys } from "../hooks/run-service-hooks_gen";
 import { runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
@@ -1330,6 +1331,12 @@ function handleRefetch(update: UserUpdate) {
   if (!refetchType) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });
     return;
+  }
+  if (refetchType === "file_tree") {
+    // A queued clone landed on a daemon: its project_daemons row is settled
+    // (and the project's forge name is read next), so every project read is
+    // stale. Coalesced, like the other stream-driven list refetches.
+    streamInvalidation.invalidate(projectServiceKeys.all);
   }
   if (refetchType === "config_health") {
     // ConfigHealthIndicator reads GetConfigHealth through the generated hook,

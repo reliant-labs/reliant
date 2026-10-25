@@ -30,17 +30,17 @@ async function defaultProjectPath(isCloud: boolean): Promise<string> {
  */
 export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> {
   const { useProjectStore } = await import("@/store/projectStore");
+  const { fetchProjects } = await import("@/hooks/project-queries");
   const store = useProjectStore.getState();
 
   if (store.currentProject) {
     return store.currentProject.id;
   }
 
-  await store.loadProjects();
-  const refreshed = useProjectStore.getState();
-  if (refreshed.projects.length > 0) {
-    const first = refreshed.projects[0];
-    await refreshed.selectProject(first);
+  const projects = await fetchProjects();
+  if (projects.length > 0) {
+    const first = projects[0];
+    await useProjectStore.getState().selectProject(first);
     return first.id;
   }
 
@@ -62,14 +62,12 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
     // The default folder is already registered (an earlier attempt got as far
     // as creating it, or another client did). Open that one rather than fail.
     if (!(err instanceof ConnectError && err.code === Code.AlreadyExists)) throw err;
-    await store.loadProjects();
-    const existing = useProjectStore.getState().projects.find((p) => p.path === projectPath);
+    const existing = (await fetchProjects({ fresh: true })).find((p) => p.path === projectPath);
     if (!existing) throw err;
     created = existing;
   }
 
   await useProjectStore.getState().selectProject(created);
-  await store.loadProjects();
 
   return created.id;
 }

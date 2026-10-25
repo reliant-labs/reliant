@@ -21,7 +21,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
-import { useProjectStore } from "@/store/projectStore";
+import { useProject } from "@/hooks/project-queries";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { consolePath, withSearch } from "../Console/paths";
@@ -62,7 +62,7 @@ function useReleaseEnvs(): { envs: ReleaseEnv[]; loading: boolean } {
 /** The promote flow: the request the reader made, and the plan dialog that carries it out. */
 function usePromote(): { control: PromoteControl; dialog: React.ReactNode } {
   const { projectId } = useForgeConsole();
-  const projectName = useProjectStore((state) => state.projects.find((project) => project.id === projectId)?.name);
+  const projectName = useProject(projectId)?.name;
   const [request, setRequest] = useState<PromoteRequest | null>(null);
   const control = useMemo<PromoteControl>(
     () => ({
