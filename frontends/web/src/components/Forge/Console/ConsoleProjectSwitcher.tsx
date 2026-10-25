@@ -20,6 +20,7 @@ import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 
 /** The project's monogram — the brand row on the collapsed rail. */
 export function ProjectMonogram({ name }: { name: string }) {
@@ -39,7 +40,7 @@ export interface ConsoleProjectSwitcherProps {
 }
 
 export function ConsoleProjectSwitcher({ forgeProject, onSelect }: ConsoleProjectSwitcherProps) {
-  const projects = useProjectStore((state) => state.projects);
+  const { projects } = useProjects();
   const currentProject = useProjectStore((state) => state.currentProject);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);

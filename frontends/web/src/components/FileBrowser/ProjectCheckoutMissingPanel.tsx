@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertCircle, FolderX, GitFork, Loader2 } from "lucide-react";
 
-import { projectGrpc } from "../../api/project-grpc";
+import { createProjectFromRepo } from "../../hooks/project-queries";
 import {
   ProjectCheckoutState,
   type ProjectCheckoutMissing,
@@ -63,7 +63,7 @@ export function ProjectCheckoutMissingPanel({
     setCloning(true);
     setCloneError(null);
     try {
-      await projectGrpc.createProjectFromRepo({
+      await createProjectFromRepo({
         cloneUrl: missing.remoteUrl,
         daemonId: missing.daemonId,
         name: projectName,

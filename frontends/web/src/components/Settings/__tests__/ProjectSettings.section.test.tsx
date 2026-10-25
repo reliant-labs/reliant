@@ -10,16 +10,19 @@
  */
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { useAuthStore } from "@/store/authStore";
 import type { Project } from "@/store/projectStore";
+import { listProjectsResponse } from "@/test/projectList";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
 function makeProject(overrides: Partial<Project> & Pick<Project, "id" | "name" | "path">): Project {
   return {
     is_git_repo: true,
     default_branch: "main",
-    worktree_count: 0,
     last_active: "2025-01-01T00:00:00Z",
     created_at: "2025-01-01T00:00:00Z",
     updated_at: "2025-01-01T00:00:00Z",
@@ -63,10 +66,6 @@ vi.mock("@/store/chatNavigationStore", () => ({
   useChatNavigationStore: (selector: (s: unknown) => unknown) => selector({ navigateToChat: vi.fn() }),
 }));
 
-vi.mock("@/api/project-grpc", () => ({
-  projectGrpc: { getGitInfo: vi.fn(async () => { throw new Error("offline"); }) },
-}));
-
 vi.mock("@/lib/toast-manager", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { ProjectsSection } from "@/components/Settings/ProjectsSection";
@@ -86,12 +85,14 @@ const beta = makeProject({
   last_active: "2025-04-01T00:00:00Z",
 });
 
-function setStore(overrides: Record<string, unknown>) {
+// The project list is ListProjects' answer (the page reads it through
+// useProjects); `listProjects` answers each call in turn.
+let listProjects: () => unknown;
+
+function setStore({ projects = [], ...overrides }: { projects?: Project[] } & Record<string, unknown>) {
+  listProjects = () => listProjectsResponse(projects);
   state.store = {
-    projects: [],
     currentProject: null,
-    isLoading: false,
-    loadProjects: vi.fn(async () => {}),
     selectProject: vi.fn(async () => {}),
     deleteProject: vi.fn(async () => {}),
     refreshCurrentProject: vi.fn(async () => {}),
@@ -102,6 +103,18 @@ function setStore(overrides: Record<string, unknown>) {
 beforeEach(() => {
   state.navigate.mockReset();
   state.navigateToPicker.mockReset();
+  useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(
+    mockTransport({
+      "ProjectService.ListProjects": () => listProjects(),
+      "ProjectService.GetProjectGitInfo": { error: "offline" },
+    }),
+  );
+});
+
+afterEach(() => {
+  setTransport(null);
+  useAuthStore.setState({ session: null });
 });
 
 describe("Settings → Projects", () => {
@@ -127,7 +140,7 @@ describe("Settings → Projects", () => {
     setStore({ projects: [alpha], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByTestId("settings-projects-add"));
+    await userEvent.click(await screen.findByTestId("settings-projects-add"));
     expect(state.navigateToPicker).toHaveBeenCalledTimes(1);
   });
 
@@ -135,7 +148,7 @@ describe("Settings → Projects", () => {
     setStore({ projects: [alpha, beta], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Open beta" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open beta" }));
     await waitFor(() => expect(state.store.selectProject).toHaveBeenCalledWith(beta));
     expect(state.navigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: "/project/$projectId", params: { projectId: "p-beta" } }),
@@ -146,7 +159,7 @@ describe("Settings → Projects", () => {
     setStore({ projects: [alpha, beta], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove beta from Reliant" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove beta from Reliant" }));
     // Nothing is removed until the user confirms.
     expect(state.store.deleteProject).not.toHaveBeenCalled();
     expect(screen.getByText(/nothing on disk is deleted/i)).toBeInTheDocument();
@@ -166,11 +179,13 @@ describe("Settings → Projects", () => {
   });
 
   it("shows an error with a retry when projects fail to load", async () => {
-    const loadProjects = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("daemon unreachable"))
-      .mockResolvedValueOnce(undefined);
-    setStore({ projects: [], loadProjects });
+    setStore({ projects: [] });
+    let calls = 0;
+    listProjects = () => {
+      calls += 1;
+      if (calls === 1) throw new Error("daemon unreachable");
+      return listProjectsResponse([]);
+    };
     renderWithQuery(<ProjectsSection />);
 
     const alert = await screen.findByRole("alert");
@@ -178,6 +193,6 @@ describe("Settings → Projects", () => {
     expect(screen.queryByText("No projects yet")).toBeNull();
 
     await userEvent.click(within(alert).getByRole("button", { name: /try again/i }));
-    await waitFor(() => expect(loadProjects).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(calls).toBe(2));
   });
 });

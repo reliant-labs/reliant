@@ -143,13 +143,7 @@ export function useWorkspaceRestore(
 
       // Step 1: Restore project (if not skipped)
       if (!skipProjectRestore) {
-        // Check if projects are loaded, if not wait a bit
-        if (projectStore.projects.length === 0 && !projectStore.isLoading) {
-          logger.info("[WorkspaceRestore] Waiting for projects to load...");
-          await projectStore.loadProjects();
-        }
-
-        // Attempt to restore last project
+        // Attempt to restore last project (it loads the project list itself)
         const restored = await projectStore.restoreLastProject();
         // Get fresh state after restoration (the original projectStore reference is stale)
         const freshProjectStore = useProjectStore.getState();

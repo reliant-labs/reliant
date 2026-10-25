@@ -32,8 +32,9 @@ vi.mock("../../../../src/api/worktree-grpc", () => ({
   },
 }));
 
-vi.mock("../../../../src/api/project-grpc", () => ({
-  projectGrpc: { getChanges: vi.fn() },
+vi.mock("../../../../src/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/project-queries")>()),
+  fetchProjectChanges: vi.fn(),
 }));
 
 vi.mock("../../../../src/api/git", () => ({

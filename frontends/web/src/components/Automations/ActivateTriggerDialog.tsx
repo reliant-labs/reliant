@@ -33,6 +33,7 @@ import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -105,7 +106,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
   const queryClient = useQueryClient();
-  const projects = useProjectStore((s) => s.projects);
+  const { projects } = useProjects();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const kind = sourceCase(declared);
   const integration = integrationOf(declared);

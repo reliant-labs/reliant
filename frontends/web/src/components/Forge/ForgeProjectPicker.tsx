@@ -17,9 +17,9 @@
  * updates the app's current project and is persisted for the next restore.
  */
 
-import { useEffect } from "react";
 
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 
 export interface ForgeProjectPickerProps {
   /** Called after the store selection settles, so the layout can sync the URL. */
@@ -27,18 +27,11 @@ export interface ForgeProjectPickerProps {
 }
 
 export function ForgeProjectPicker({ onSelected }: ForgeProjectPickerProps) {
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  // The list read fetches on mount when the layout never did (a cold load
+  // straight onto a /forge URL), so the picker never shows its empty state
+  // to a user who does have projects.
+  const { projects } = useProjects();
   const selectProject = useProjectStore((state) => state.selectProject);
-
-  // The layout only renders this once resolution has failed, which can mean the
-  // list was never fetched (a cold load straight onto a /forge URL). Asking
-  // again is cheap — loadProjects dedupes concurrent calls behind a shared
-  // promise — and without it the picker could render its own empty state while
-  // the user does have projects.
-  useEffect(() => {
-    if (projects.length === 0) void loadProjects();
-  }, [projects.length, loadProjects]);
 
   return (
     <div

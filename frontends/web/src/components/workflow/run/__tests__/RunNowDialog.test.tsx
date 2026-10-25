@@ -63,14 +63,19 @@ vi.mock("@/api/grpc-client", () => ({
     chat: () => ({ runNow, startChat }),
     trigger: () => ({ listReplayEvents, previewReplay }),
     daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
   },
 }));
 
 // PresetService is reached through connectClient (hooks/preset-queries), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {
-  setTransport(mockTransport({ ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }), ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }) }));
+  setTransport(
+    mockTransport({
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+    }),
+  );
 });
 afterEach(() => {
   setTransport(null);

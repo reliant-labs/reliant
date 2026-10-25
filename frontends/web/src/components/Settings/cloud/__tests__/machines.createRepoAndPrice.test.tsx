@@ -58,7 +58,6 @@ const mocks = vi.hoisted(() => ({
     queued: true,
     daemonName: "box",
   }) as unknown),
-  loadProjects: vi.fn(async () => {}),
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() },
   navigate: vi.fn(),
   repos: [] as GitRepo[],
@@ -144,12 +143,9 @@ vi.mock("@/api/grpc-client", () => ({
 }));
 
 // The one add-a-repo RPC, shared with onboarding and the project picker.
-vi.mock("@/api/project-grpc", () => ({
-  projectGrpc: { createProjectFromRepo: mocks.createProjectFromRepo },
-}));
-
-vi.mock("@/store/projectStore", () => ({
-  useProjectStore: { getState: () => ({ loadProjects: mocks.loadProjects }) },
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  createProjectFromRepo: mocks.createProjectFromRepo,
 }));
 
 vi.mock("@/lib/toast-manager", () => ({ toast: mocks.toast }));
@@ -263,7 +259,6 @@ describe("create-machine repository", () => {
     });
     // Queued, because the machine is still booting — said, not hidden.
     expect(mocks.toast.info).toHaveBeenCalledWith(expect.stringMatching(/widgets will clone when box is ready/i));
-    expect(mocks.loadProjects).toHaveBeenCalled();
   });
 
   it("keeps 'no repository' a valid choice that clones nothing", async () => {

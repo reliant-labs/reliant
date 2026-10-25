@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { projectGrpc, type Prompt as GrpcPrompt } from "../../api/project-grpc";
+import {
+  useProjectPrompts,
+  useSaveProjectPrompts,
+  type Prompt as ProjectPrompt,
+} from "../../hooks/project-queries";
 import { useProjectStore } from "../../store/projectStore";
 
 interface Prompt {
@@ -13,118 +17,98 @@ interface Prompt {
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
+// The server's prompt as this page edits it.
+function promptToView(p: ProjectPrompt): Prompt {
+  return {
+    id: p.id,
+    title: p.name, // the server calls it 'name', this page 'title'
+    content: p.content,
+    category: "", // the server has no category
+    default: false, // the server does not track a default flag
+  };
+}
+
+function promptToProto(p: Prompt) {
+  return {
+    id: p.id,
+    name: p.title,
+    content: p.content,
+    description: p.category || "", // category is saved as the description
+  };
+}
+
 interface PromptsSettingsProps {
   projectId?: string;
 }
 
 export function PromptsSettings({ projectId }: PromptsSettingsProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
   const effectiveProjectId = projectId || currentProject?.id;
 
-  // Helper function to convert gRPC prompts to frontend format
-  const grpcToFrontend = (p: GrpcPrompt): Prompt => ({
-    id: p.id,
-    title: p.name, // gRPC uses 'name', frontend uses 'title'
-    content: p.content,
-    category: "", // gRPC doesn't have category, default to empty
-    default: false, // gRPC doesn't track default flag
-  });
+  const serverPrompts = useProjectPrompts(effectiveProjectId);
+  const savePrompts = useSaveProjectPrompts();
 
-  // Helper function to convert frontend prompts to gRPC format
-  const frontendToGrpc = (p: Prompt): GrpcPrompt => ({
-    id: p.id,
-    name: p.title, // frontend uses 'title', gRPC uses 'name'
-    content: p.content,
-    description: p.category || "", // Map category to description
-    created_at: "",
-    updated_at: "",
-  });
-
+  // The unsaved edit. Null while the page shows the server's prompts, so a
+  // refetch can never overwrite an edit in progress and an untouched page
+  // always shows the latest saved set.
+  const [draft, setDraft] = useState<Prompt[] | null>(null);
   useEffect(() => {
-    if (!effectiveProjectId) {
-      setPrompts([]);
-      setIsDirty(false);
-      return;
-    }
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const grpcPrompts = await projectGrpc.getPrompts(effectiveProjectId);
-        setPrompts(grpcPrompts.map(grpcToFrontend));
-        setIsDirty(false);
-      } catch (e) {
-        console.error(e);
-        setError("Failed to load prompts");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    setDraft(null);
+    setSaveError(null);
   }, [effectiveProjectId]);
 
+  const saved = useMemo(() => serverPrompts.prompts.map(promptToView), [serverPrompts.prompts]);
+  const prompts = draft ?? saved;
+  const isDirty = draft !== null;
+  const loading = !!effectiveProjectId && serverPrompts.isPending;
+  const saving = savePrompts.isPending;
+  const error = saveError ?? (serverPrompts.error ? "Failed to load prompts" : null);
+
+  const edit = (change: (prev: Prompt[]) => Prompt[]) => setDraft((prev) => change(prev ?? saved));
 
   const handleAdd = () => {
     const idBase = `prompt_${Date.now()}`;
-    setPrompts((prev) => [
+    edit((prev) => [
       ...prev,
       { id: idBase, title: "New Prompt", content: "", category: "General" },
     ]);
-    setIsDirty(true);
   };
 
   const handleDelete = (id: string) => {
-    setPrompts((prev) => prev.filter((p) => p.id !== id));
-    setIsDirty(true);
+    edit((prev) => prev.filter((p) => p.id !== id));
   };
 
   const handleChange = (id: string, field: keyof Prompt, value: string | boolean) => {
-    setPrompts((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
-    setIsDirty(true);
+    edit((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
   };
 
   const handleSave = async () => {
     if (!effectiveProjectId) return;
-    setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
       const cleaned = prompts
         .map((p) => ({ ...p, id: p.id.trim(), title: p.title.trim() }))
         .filter((p) => p.id && p.title);
 
-      const grpcPrompts = cleaned.map(frontendToGrpc);
-      const result = await projectGrpc.savePrompts(effectiveProjectId, grpcPrompts);
-      setPrompts(result.prompts.map(grpcToFrontend));
-      setIsDirty(false);
+      await savePrompts.mutateAsync({
+        projectId: effectiveProjectId,
+        prompts: cleaned.map(promptToProto),
+      });
+      setDraft(null);
     } catch (e) {
       console.error(e);
-      setError("Failed to save prompts");
-    } finally {
-      setSaving(false);
+      setSaveError("Failed to save prompts");
     }
   };
 
   const handleDiscard = async () => {
-    // Reload from server
-    if (!effectiveProjectId) return;
-    setLoading(true);
-    try {
-      const grpcPrompts = await projectGrpc.getPrompts(effectiveProjectId);
-      setPrompts(grpcPrompts.map(grpcToFrontend));
-      setIsDirty(false);
-    } catch (e) {
-      console.error(e);
-      setError("Failed to reload prompts");
-    } finally {
-      setLoading(false);
-    }
+    // Drop the edit and re-read the server's set.
+    setDraft(null);
+    setSaveError(null);
+    await serverPrompts.refetch();
   };
 
   const filtered = useMemo(() => {

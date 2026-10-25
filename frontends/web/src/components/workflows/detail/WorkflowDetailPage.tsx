@@ -35,6 +35,7 @@ import { getInputDefault, getInputDescription } from "@/lib/inputHelpers";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
 import PageHeader from "../../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
@@ -62,7 +63,7 @@ export function WorkflowDetailPage() {
   const { workflowRef: rawRef } = useParams({ strict: false }) as { workflowRef?: string };
   const workflowRef = rawRef ? decodeURIComponent(rawRef) : "";
   const projectId = useProjectStore((state) => state.currentProject?.id);
-  const projectsLoading = useProjectStore((state) => state.isLoading);
+  const projectsLoading = useProjects().isLoading;
 
   if (!workflowRef) return <WorkflowNotFound />;
   if (!projectId) return projectsLoading ? <DetailSkeleton /> : <WorkflowNotFound />;
