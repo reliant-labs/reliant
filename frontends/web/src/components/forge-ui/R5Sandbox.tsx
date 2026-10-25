@@ -18,8 +18,8 @@
 import { useState } from "react";
 import { Copy, Download, FilePlus, FileText, HelpCircle, Pencil, RefreshCw, Trash2 } from "lucide-react";
 
-import { ContextMenu } from "../ui/ContextMenu";
-import { HelpPopover } from "../ui/HelpPopover";
+import ContextMenu from "./context_menu";
+import { HelpPopover } from "../workflow/HelpPopover";
 
 import Tooltip from "./tooltip";
 
@@ -113,16 +113,24 @@ export function R5Menus() {
       </div>
       {menu && (
         <ContextMenu
+          label={`${menu.file} actions`}
+          open
           position={{ x: menu.x, y: menu.y }}
-          onClose={() => setMenu(null)}
-          items={[
-            { label: "Open", icon: <FileText className="h-4 w-4" />, onClick: () => undefined },
-            { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => undefined },
-            { label: "", onClick: () => undefined, separator: true },
-            { label: "New File", icon: <FilePlus className="h-4 w-4" />, onClick: () => undefined, disabled: true },
-            { label: "Copy path", icon: <Copy className="h-4 w-4" />, onClick: () => undefined },
-            { label: "", onClick: () => undefined, separator: true },
-            { label: "Delete", icon: <Trash2 className="h-4 w-4" />, onClick: () => undefined, danger: true },
+          onOpenChange={(open) => !open && setMenu(null)}
+          groups={[
+            {
+              items: [
+                { label: "Open", icon: <FileText className="h-4 w-4" />, onClick: () => undefined },
+                { label: "Rename", icon: <Pencil className="h-4 w-4" />, onClick: () => undefined },
+              ],
+            },
+            {
+              items: [
+                { label: "New File", icon: <FilePlus className="h-4 w-4" />, onClick: () => undefined, disabled: true },
+                { label: "Copy path", icon: <Copy className="h-4 w-4" />, onClick: () => undefined },
+              ],
+            },
+            { items: [{ label: "Delete", icon: <Trash2 className="h-4 w-4" />, onClick: () => undefined, variant: "danger" }] },
           ]}
         />
       )}

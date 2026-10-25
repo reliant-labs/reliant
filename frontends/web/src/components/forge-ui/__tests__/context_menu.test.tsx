@@ -148,6 +148,24 @@ describe("ContextMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus();
   });
 
+  it("opens only the innermost of nested regions (a folder inside a folder)", () => {
+    render(
+      <ContextMenu label="Folder actions" groups={groups()}>
+        <div>
+          src
+          <ContextMenu label="File actions" groups={groups()}>
+            <div>main.go</div>
+          </ContextMenu>
+        </div>
+      </ContextMenu>,
+    );
+    act(() => {
+      screen.getByText("main.go").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    });
+    expect(screen.getAllByRole("menu")).toHaveLength(1);
+    expect(screen.getByRole("menu", { name: "File actions" })).toBeInTheDocument();
+  });
+
   it("leaves the browser's menu alone when disabled", () => {
     render(
       <ContextMenu label="File actions" groups={groups()} disabled>
