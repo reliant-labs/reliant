@@ -35,6 +35,7 @@ import {
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 const getTrigger = vi.fn();
 const listTriggerEvents = vi.fn();
@@ -51,12 +52,12 @@ vi.mock("@/api/grpc-client", () => ({
         daemons: [create(DaemonInfoSchema, { daemonId: "daemon-1", hostname: "laptop", status: DaemonStatus.IDLE })],
       })),
     }),
-    workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
 
 // Integration events are named from the catalog's trigger types; none here.
-setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
+setTransport(mockTransport({
+    ...serviceHandlers("WorkflowService", { listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }), "CatalogService.SearchCatalog": { response: {} } }));
 
 const toastSuccess = vi.fn();
 const toastError = vi.fn();

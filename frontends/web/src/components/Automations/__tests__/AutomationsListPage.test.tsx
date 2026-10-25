@@ -27,6 +27,7 @@ import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 const listTriggers = vi.fn();
 const setTriggerEnabled = vi.fn();
@@ -36,12 +37,12 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ listTriggers, setTriggerEnabled }),
     daemonRegistry: () => ({ listDaemons }),
-    workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
 
 // Integration events are named from the catalog's trigger types; none here.
-setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
+setTransport(mockTransport({
+    ...serviceHandlers("WorkflowService", { listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }), "CatalogService.SearchCatalog": { response: {} } }));
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({

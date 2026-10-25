@@ -85,7 +85,6 @@ vi.mock("@/api/grpc-client", () => ({
       fireTrigger: rpc.fireTrigger,
     }),
     run: () => ({ listRuns: rpc.listRuns }),
-    workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
     worktree: () => ({ listWorktrees: rpc.listWorktrees }),
     daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
     project: () => ({ listProjectDaemons: rpc.listProjectDaemons }),
@@ -98,6 +97,7 @@ vi.mock("@/api/grpc-client", () => ({
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
+    ...serviceHandlers("WorkflowService", { listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
       ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: rpc.listPresetsForWorkflow,
       getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,

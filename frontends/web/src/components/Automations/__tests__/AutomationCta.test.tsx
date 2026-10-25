@@ -16,6 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 
 const setTriggerEnabled = vi.fn();
 const deleteTrigger = vi.fn();
@@ -25,7 +26,6 @@ const listWorkflows = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
-    workflow: () => ({ getWorkflow, listWorkflows }),
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
     worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),
@@ -35,6 +35,7 @@ vi.mock("@/api/grpc-client", () => ({
 // CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
+    ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
     "ConnectionService.ListConnections": { response: {} },
   }),

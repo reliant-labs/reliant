@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
     run: () => ({ listRuns: mocks.listRuns }),
     trigger: () => ({ listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
     worktree: () => ({ listWorktrees: mocks.listWorktrees }),
@@ -58,6 +57,7 @@ vi.mock("@/api/grpc-client", () => ({
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
+    ...serviceHandlers("WorkflowService", { listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
       ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
