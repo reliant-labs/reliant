@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { getMonacoLanguage, configureMonacoTheme, getCurrentMonacoTheme, MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useEditorStore } from "../../store/editorStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { getFilePreviewInfo, type FilePreviewInfo } from "../../api/fileSystem";
 import type { FileChange } from "../Chat/RecentChanges";
 import { monacoManager } from "../../lib/monacoManager";
@@ -10,6 +9,7 @@ import { getRelativePath } from "../../lib/fileUtils";
 import { FileChangeStatus } from "../../gen/reliant/v1/common_pb";
 import { FileViewerTab } from "./FileViewerTab";
 import type { FileNode } from "./index";
+import { useCurrentWorktree } from "../../hooks/worktree-queries";
 
 interface MonacoDiffViewerProps {
   file: FileChange;
@@ -17,7 +17,7 @@ interface MonacoDiffViewerProps {
 
 export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
   const settings = useEditorStore((state) => state.settings);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
   const currentWorktreeId = currentWorktree?.id;
   // Display path relative to workspace
   const displayPath = getRelativePath(file.path, currentWorktree?.path);

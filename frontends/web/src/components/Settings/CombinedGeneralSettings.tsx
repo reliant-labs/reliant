@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -387,6 +387,20 @@ export function CombinedGeneralSettings({
     valid: boolean;
     message: string;
   } | null>(null);
+  // A success message clears itself after 3s. The timer is cleared on
+  // unmount: left running, it set state on an unmounted component (and, in
+  // a test, after the DOM was torn down).
+  const clearMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearValidationMessageLater = () => {
+    if (clearMessageTimer.current) clearTimeout(clearMessageTimer.current);
+    clearMessageTimer.current = setTimeout(() => setValidationMessage(null), 3000);
+  };
+  useEffect(
+    () => () => {
+      if (clearMessageTimer.current) clearTimeout(clearMessageTimer.current);
+    },
+    [],
+  );
 
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
@@ -454,7 +468,7 @@ export function CombinedGeneralSettings({
       await useGlobalDataStore.getState().refetchModels();
       getEventBus().emit("api-key:saved", { provider: "reliant" });
       setValidationMessage({ valid: true, message: "Reliant enabled." });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to enable Reliant";
       setValidationMessage({ valid: false, message });
@@ -539,7 +553,7 @@ export function CombinedGeneralSettings({
         valid: true,
         message: "API key saved successfully",
       });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       console.error("Failed to save API key:", error);
       const errorText =
@@ -663,7 +677,7 @@ export function CombinedGeneralSettings({
         valid: true,
         message: result.message || `Connected to ${displayName} successfully!`,
       });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       console.error(`Failed to connect ${displayName}:`, error);
       const errorMessage = error instanceof Error ? error.message : "Connection failed";

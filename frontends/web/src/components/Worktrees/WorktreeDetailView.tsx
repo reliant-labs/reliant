@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
@@ -33,9 +33,11 @@ import {
   lifecycleOf,
   workingTreeState,
 } from "./workspaceStatus";
-import { useWorkspaceGitStatus } from "./useWorkspaceGitStatus";
+import { useWorkspaceGitStatus } from "../../hooks/worktree-git-queries";
 import { useArchiveWorkspace, useOpenWorkspace } from "./useWorkspaceActions";
 import { IconAction, TimeCell } from "./WorkspaceTableParts";
+import { useCurrentWorktree, type Worktree, useWorktreeById } from "../../hooks/worktree-queries";
+import { updateWorktreeStatus } from "../../hooks/worktree-actions";
 
 interface WorktreeDetailViewProps {
   /**
@@ -68,11 +70,9 @@ export function WorktreeDetailView({
   onOpened,
   embedded = false,
 }: WorktreeDetailViewProps = {}) {
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const worktree = worktreeId
-    ? worktrees.find((candidate) => candidate.id === worktreeId) ?? null
-    : currentWorktree;
+  const currentWorktree = useCurrentWorktree();
+  const requested = useWorktreeById(worktreeId);
+  const worktree = worktreeId ? requested ?? null : currentWorktree;
 
   if (!worktree) {
     return (
@@ -105,7 +105,7 @@ function WorkspaceDetail({
   embedded: boolean;
 }) {
   const deletingId = useWorktreeStore((state) => state.deletingId);
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
   const { isElectron, openInNewWindow } = useWindowContext();
@@ -401,7 +401,6 @@ function DetailRow({
  * Abandoned). It is the user's own label: nothing acts on it automatically.
  */
 function LifecycleMenu({ worktree }: { worktree: Worktree }) {
-  const updateWorktreeStatus = useWorktreeStore((state) => state.updateWorktreeStatus);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const current = lifecycleOf(worktree.status);

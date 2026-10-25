@@ -30,7 +30,6 @@ import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { isElectron } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
@@ -43,6 +42,7 @@ import {
   SidebarSearchInput,
   SidebarEmptyState,
 } from "../RightSidebar/shared";
+import { useCachedWorktrees, useWorktreeById, ALL_PROJECTS } from "../../hooks/worktree-queries";
 
 interface CommandsViewerTabProps {
   worktreeId?: string;
@@ -386,12 +386,12 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
   const getWorktreeTabs = useBrowserStore((state) => state.getWorktreeTabs);
 
-  // Get workspace name from worktree store
+  // Get workspace names from the workspaces the app holds.
   // Default to main worktree when no worktreeId is provided
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const worktrees = useCachedWorktrees(ALL_PROJECTS);
   const mainWorktree = worktrees.find(w => w.is_main);
   const effectiveWorktreeId = worktreeId || mainWorktree?.id;
-  const currentWorktree = effectiveWorktreeId ? worktrees.find(w => w.id === effectiveWorktreeId) : null;
+  const currentWorktree = useWorktreeById(effectiveWorktreeId) ?? null;
 
   // Package commands via React Query (needs effectiveWorktreeId/projectPath)
   const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath);

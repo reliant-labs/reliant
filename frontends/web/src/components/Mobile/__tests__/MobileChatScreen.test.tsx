@@ -47,13 +47,10 @@ vi.mock("../../../store/projectStore", () => ({
   ),
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      worktrees: [{ id: "wt-main", is_main: true, name: "main", deleted_at: null }],
-      loadWorktrees: vi.fn(),
-    }),
+vi.mock("../../../hooks/worktree-queries", () => ({
+  useMainWorktree: () => ({ id: "wt-main", is_main: true, name: "main", deleted_at: null }),
 }));
+vi.mock("../../../hooks/worktree-actions", () => ({ loadMainWorktree: vi.fn() }));
 
 vi.mock("../../Chat/ChatContainer", () => ({
   ChatContainer: ({ tabId }: { tabId?: string }) => (

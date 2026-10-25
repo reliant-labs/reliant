@@ -21,15 +21,24 @@ const git = {
   revertFiles: vi.fn(),
 };
 
-vi.mock("../../../../src/api/worktree-grpc", () => ({
-  worktreeGrpc: {
-    getChanges: (...args: unknown[]) => getChangesMock(...args),
-  },
-}));
 
 vi.mock("../../../../src/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../src/hooks/project-queries")>()),
   fetchProjectChanges: vi.fn(),
+}));
+
+// The panel reads a workspace's changes through fetchWorktreeChanges (the
+// GetWorktreeChanges cache entry) and the multi-repo split through
+// useWorktreeRepoStatuses; with no repo rows it is the single-repo panel.
+vi.mock("../../../../src/hooks/worktree-git-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/worktree-git-queries")>()),
+  fetchWorktreeChanges: (...args: unknown[]) => getChangesMock(...args),
+  useWorktreeRepoStatuses: () => ({ data: undefined }),
+}));
+// The workspace row only supplies the PR's base branch; none here.
+vi.mock("../../../../src/hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../src/hooks/worktree-queries")>()),
+  useWorktreeById: () => undefined,
 }));
 
 vi.mock("../../../../src/api/git", () => ({

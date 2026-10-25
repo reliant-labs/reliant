@@ -6,8 +6,8 @@ import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { logger } from "../../lib/logger";
+import { useCurrentWorktree } from "../../hooks/worktree-queries";
 
 interface SingleBrowserViewProps {
   tabId: string;
@@ -42,7 +42,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
   
   // Get current project/worktree context for opening new tabs
   const currentProject = useProjectStore((state) => state.currentProject);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
 
   const tab = tabs.find((t) => t.id === tabId);
 

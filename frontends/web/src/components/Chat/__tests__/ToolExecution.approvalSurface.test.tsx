@@ -1,9 +1,11 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ToolExecution } from "../ToolExecution";
 import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
+import { withAppQueryClient } from "../../../test/withAppQueryClient";
+import { queryClient } from "../../../lib/query-client";
 
 // This is the approval UI that actually ships: ChatContainer -> ChatPresenter
 // -> InterleavedTimeline -> ChatMessage -> ToolExecution, shared by desktop
@@ -42,7 +44,7 @@ const pendingApproval: Approval = {
 
 function renderApproval(surface: "desktop" | "mobile" | "embed") {
   return render(
-    <SurfaceProvider surface={surface}>
+    withAppQueryClient(<SurfaceProvider surface={surface}>
       <ToolExecution
         toolCall={{
           id: "toolu_1",
@@ -58,9 +60,14 @@ function renderApproval(surface: "desktop" | "mobile" | "embed") {
         chatId="chat-1"
         showRichContent
       />
-    </SurfaceProvider>,
+    </SurfaceProvider>),
   );
 }
+
+afterEach(() => {
+  cleanup();
+  queryClient.clear();
+});
 
 describe("ToolExecution approval UI across surfaces", () => {
   it("shows the approval affordance with both actions on every surface", () => {

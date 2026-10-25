@@ -136,7 +136,7 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
       closedFiles: [],
 
       getCurrentWorktreeId: () => {
-        return useWorktreeStore.getState().currentWorktree?.id ?? null;
+        return useWorktreeStore.getState().currentWorktreeId ?? null;
       },
 
       toggleFullscreen: () => {

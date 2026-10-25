@@ -13,11 +13,12 @@ import {
 } from "../lib/settingsPersistence";
 import { useChatStore } from "./chatStore";
 import { useThreadActivityStore } from "./threadActivityStore";
-import { useWorktreeStore } from "./worktreeStore";
 import { useTourStore } from "./tourStore";
 import { useProjectStore } from "./projectStore";
 import { getCachedChatList } from "../hooks/chat-queries";
 import { getMessagesFromCache } from "../hooks/message-queries";
+import { getCachedWorktrees, hasLoadedWorktrees, isWorktreeQueryKey } from "../hooks/worktree-queries";
+import { queryClient } from "../lib/query-client";
 
 /**
  * Whether the guided tour is currently active. Source of truth: the URL
@@ -158,8 +159,8 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     // tips would evaluate against incomplete data — e.g. deciding the
     // user has no worktrees when they simply haven't loaded yet.
     const chatState = useChatStore.getState();
-    const worktreeState = useWorktreeStore.getState();
-    if (!chatState.hasLoaded || !worktreeState.hasLoaded) {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (!chatState.hasLoaded || !projectId || !hasLoadedWorktrees(projectId)) {
       return;
     }
 
@@ -179,8 +180,9 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
         ),
         activeMessages,
         activeThreads,
-        hasNonMainWorktree: worktreeState
-          .worktrees.some((worktree) => !worktree.is_main && !worktree.deleted_at),
+        hasNonMainWorktree: getCachedWorktrees(projectId).some(
+          (worktree) => !worktree.is_main && !worktree.deleted_at,
+        ),
         threadInteractionEngaged: state.featureEngagement.threadInteraction || Boolean(state.tipState["spawned-thread-intro"].engagedAt),
         branchingEngaged: state.featureEngagement.branching || Boolean(state.tipState["chat-branching"].engagedAt),
         paramsEngaged: state.featureEngagement.params,
@@ -306,7 +308,10 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
 
     const unsubscribeChat = useChatStore.subscribe(debouncedReevaluate);
     const unsubscribeThreads = useThreadActivityStore.subscribe(debouncedReevaluate);
-    const unsubscribeWorktrees = useWorktreeStore.subscribe(debouncedReevaluate);
+    // Workspace rows live in the query cache.
+    const unsubscribeWorktrees = queryClient.getQueryCache().subscribe((event) => {
+      if (isWorktreeQueryKey(event.query.queryKey)) debouncedReevaluate();
+    });
     // hasCompletedOnboarding still lives in the store and changes during
     // loadState / markTourCompleted, so we keep subscribing here. The active-
     // step (tour visibility) lives in the URL — popstate covers that.

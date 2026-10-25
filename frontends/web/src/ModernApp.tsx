@@ -77,6 +77,8 @@ import { useTourStore } from "./store/tourStore";
 import { useModalStore } from "./store/modalStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
 import { trackEvent } from "./lib/analytics";
+import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
+import { restoreLastWorktree } from "./hooks/worktree-actions";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -105,8 +107,9 @@ function App() {
     (state) => state.createSession
   );
   const openTerminal = useTerminalStore((state) => state.openTerminal);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
+  // The tray lists the workspaces the app already holds; it never pages them in.
+  const worktrees = useCachedWorktrees(currentProject?.id);
 
   // Backend ready gate is defined later in this file; we must not reference it
   // before initialization.
@@ -136,7 +139,7 @@ function App() {
   // worktree state object, which would cause re-renders on every state change.
   const [showFileBrowser, setShowFileBrowserLocal] = useState(() => {
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (!projectId) return false;
     return useWorkspaceStateStore.getState().getWorktreeState(projectId, worktreeId).rightPanelState.fileBrowser;
   });
@@ -165,7 +168,7 @@ function App() {
       const newValue = typeof value === 'function' ? value(prev) : value;
       // Persist to workspace state
       const projectId = useProjectStore.getState().currentProject?.id;
-      const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+      const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
       if (projectId) {
         useWorkspaceStateStore.getState().setRightPanelState(projectId, worktreeId, { fileBrowser: newValue });
       }
@@ -378,13 +381,12 @@ function App() {
       // Reload worktrees to get the updated main worktree with correct branch name
       // This is important because git init may have created a branch with a custom name
       // (e.g., "master" instead of "main") and the main worktree needs to reflect this
-      const { refreshWorktrees, restoreLastWorktree } = useWorktreeStore.getState();
-      await refreshWorktrees(projectId);
+      await invalidateWorktreeLists(queryClient);
       await restoreLastWorktree(projectId);
       logger.info('[ModernApp] Reloaded worktrees after git initialization');
     }
     handleCloseGitInitModal();
-  }, [handleCloseGitInitModal]);
+  }, [handleCloseGitInitModal, queryClient]);
 
   // Navigating to the project picker. Shared with Settings → Projects, which
   // offers the same "Add project" entry point — the store-clearing order this
@@ -393,7 +395,7 @@ function App() {
 
   // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
-    return useWorktreeStore.getState().currentWorktree?.id || undefined;
+    return useWorktreeStore.getState().currentWorktreeId || undefined;
   }, []);
 
   // Working directory for a new terminal in the current workspace, or
@@ -403,10 +405,7 @@ function App() {
   // the project root — a shell in the main checkout under a branch's tab.
   // TerminalPanel creates the session itself once the path settles.
   const getTerminalWorkingDir = useCallback(() => {
-    const { currentWorktree: selected, worktrees: loaded } = useWorktreeStore.getState();
-    const worktree = selected
-      ? loaded.find((w) => w.id === selected.id) ?? selected
-      : null;
+    const worktree = getCurrentWorktree();
     const resolved = resolveTerminalWorkingDir(worktree, currentProject);
     if (resolved.kind !== "ready") {
       logger.info("[Terminal] Workspace has no directory yet; not creating a terminal", {
@@ -487,7 +486,7 @@ function App() {
         const worktreeStore = useWorktreeStore.getState();
         const activeChatId = chatStore.activeChatId;
         const activeChat = activeChatId ? getChatFromCache(activeChatId) ?? null : null;
-        const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
+        const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktreeId || null;
         chatStore.clearCurrentChat(currentWorktreeId);
       },
       onCloseTab: () => {
@@ -1343,7 +1342,7 @@ function App() {
         if (!chat) return;
         if (project?.id) {
           if (chat.worktreeId) {
-            const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
+            const targetWorktree = await resolveWorktree(chat.worktreeId);
             if (targetWorktree) {
               await worktreeStore.switchWorktreeContext(project.id, targetWorktree);
             }
@@ -1438,7 +1437,7 @@ function App() {
           return;
         }
 
-        const target = await worktreeStore.resolveWorktree(targetId);
+        const target = await resolveWorktree(targetId);
         if (!target) return;
         await worktreeStore.switchWorktreeContext(project.id, target);
       });

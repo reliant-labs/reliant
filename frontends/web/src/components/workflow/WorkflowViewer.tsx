@@ -56,9 +56,9 @@ import { useExpandedLoops } from './hooks/useExpandedLoops'
 import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useProjectStore } from '../../store/projectStore'
-import { useWorktreeStore } from '../../store/worktreeStore'
 import { workflowGrpc } from '../../api/workflow-grpc'
 import { cn } from '../../lib/utils'
+import { useCurrentWorktree } from '../../hooks/worktree-queries'
 
 interface WorkflowViewerProps {
   /** The workflow definition to visualize */
@@ -133,7 +133,7 @@ function WorkflowViewerInner({
   const { getNodes, getNodesBounds, getViewport, setViewport } = useReactFlow()
   const navigate = useNavigate()
   const currentProject = useProjectStore((state) => state.currentProject)
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree)
+  const currentWorktree = useCurrentWorktree()
   
   // Track if we're currently saving positions (debounce)
   const savingPositionsRef = useRef(false)

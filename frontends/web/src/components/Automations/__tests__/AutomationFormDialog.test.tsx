@@ -59,7 +59,6 @@ const listConnections = vi.fn(async () => ({ connections: [] }));
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     workflow: () => ({ listWorkflows, getWorkflow }),
-    worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
   },
 }));
@@ -70,6 +69,8 @@ vi.mock("@/api/grpc-client", () => ({
 beforeEach(() => {
   setTransport(mockTransport({
       ...serviceHandlers("TriggerService", { createTrigger, updateTrigger }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       ...serviceHandlers("ProjectService", { listProjectDaemons }),
       "ConnectionService.ListConnections": (req) => listConnections(req),

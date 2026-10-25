@@ -4,28 +4,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Create mock store state
-let mockWorktreeState = {
-  worktrees: [] as unknown[],
-  currentWorktree: null as unknown,
-};
-
 let mockProjectState = {
   currentProject: null as unknown,
 };
 
 // Mock the stores before importing the module
-vi.mock('../../store/worktreeStore', () => ({
-  useWorktreeStore: Object.assign(
-    (selector?: (state: unknown) => unknown) => {
-      return selector ? selector(mockWorktreeState) : mockWorktreeState;
-    },
-    {
-      getState: () => mockWorktreeState,
-    }
-  ),
-}));
-
 vi.mock('../../store/projectStore', () => ({
   useProjectStore: Object.assign(
     (selector?: (state: unknown) => unknown) => {
@@ -57,6 +40,18 @@ vi.mock('../constants', async (importOriginal) => ({
 
 // Import after mocks are set up
 import { classifyPath } from '../fileOpener';
+import { queryClient } from '../query-client';
+import { setWorktreesForTest } from '../../test/worktreeCache';
+import type { Worktree } from '../../hooks/worktree-queries';
+
+/** The workspaces the app holds, as the cache would (project proj-1). */
+function holdWorktrees(state: { worktrees: Partial<Worktree>[]; currentWorktree: Partial<Worktree> | null }) {
+  queryClient.clear();
+  setWorktreesForTest({
+    worktrees: state.worktrees.map((w) => ({ project_id: 'proj-1', ...w })),
+    currentWorktree: state.currentWorktree ? { project_id: 'proj-1', ...state.currentWorktree } : null,
+  });
+}
 import type { ParsedFilePath } from '../filePath';
 
 describe('classifyPath', () => {
@@ -98,10 +93,10 @@ describe('classifyPath', () => {
     mockIsElectron = false;
     
     // Default mock state
-    mockWorktreeState = {
+    holdWorktrees({
       worktrees: [mainWorktree, featureWorktree, archivedWorktree],
       currentWorktree: mainWorktree,
-    };
+    });
     
     mockProjectState = {
       currentProject: {
@@ -250,7 +245,7 @@ describe('classifyPath', () => {
 
     it('explains an unresolvable relative path rather than calling it external', () => {
       mockIsElectron = true;
-      mockWorktreeState = { worktrees: [], currentWorktree: null };
+      holdWorktrees({ worktrees: [], currentWorktree: null });
 
       const result = classifyPath({
         fullPath: 'src/index.ts',
@@ -281,10 +276,10 @@ describe('classifyPath', () => {
 
     it('should classify relative path with NO worktree context as external', () => {
       // No worktrees available
-      mockWorktreeState = {
+      holdWorktrees({
         worktrees: [],
         currentWorktree: null,
-      };
+      });
       
       const parsed: ParsedFilePath = {
         fullPath: './src/file.ts',
@@ -392,10 +387,10 @@ describe('classifyPath', () => {
         deleted_at: null,
       };
       
-      mockWorktreeState = {
+      holdWorktrees({
         worktrees: [mainWorktree, nestedWorktree],
         currentWorktree: mainWorktree,
-      };
+      });
       
       const parsed: ParsedFilePath = {
         fullPath: '/home/user/my-project/packages/sub-package/src/file.ts',

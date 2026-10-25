@@ -55,7 +55,12 @@ service WorktreeService {
   
   // Import/Discovery Operations
   rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {}
-  rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {}
+  // DiscoverWorktrees only reads (git worktree list in each repo), and says so
+  // with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
+  // discovered list lives in the query cache under worktreeServiceKeys.
+  rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // PruneWorktrees runs `git worktree prune` in each repo of the project. It
   // only drops records whose directories are already gone; it never touches a
   // directory that exists. Explicit user action only, never automatic.

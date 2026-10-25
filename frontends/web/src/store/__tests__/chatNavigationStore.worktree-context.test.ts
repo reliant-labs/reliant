@@ -4,6 +4,7 @@ import { useProjectStore } from "../projectStore";
 import { useWorktreeStore } from "../worktreeStore";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
+import { setWorktreesForTest } from "../../test/worktreeCache";
 
 const selectChatMock = vi.fn();
 const chatStoreGetStateMock = vi.hoisted(() => vi.fn());
@@ -43,7 +44,7 @@ describe("chatNavigationStore worktree-aware navigation", () => {
       },
     });
 
-    useWorktreeStore.setState({
+    setWorktreesForTest({
       worktrees: [
         {
           id: "wt-1",
@@ -60,23 +61,9 @@ describe("chatNavigationStore worktree-aware navigation", () => {
         },
       ],
       currentWorktree: null,
-      discoveredWorktrees: [],
-      isLoading: false,
-      isDiscovering: false,
-      deletingId: null,
-      error: null,
-      loadWorktrees: vi.fn(),
-      selectWorktree: vi.fn(),
-      createWorktree: vi.fn(),
-      importWorktree: vi.fn(),
-      discoverWorktrees: vi.fn(),
-      archiveWorktree: vi.fn(),
-      deleteWorktree: vi.fn(),
-      unarchiveWorktree: vi.fn(),
-      updateWorktreeStatus: vi.fn(),
-      restoreLastWorktree: vi.fn(),
+    });
+    useWorktreeStore.setState({
       switchWorktreeContext: vi.fn().mockResolvedValue(undefined),
-      reset: vi.fn(),
     });
   });
 
@@ -97,11 +84,7 @@ describe("chatNavigationStore worktree-aware navigation", () => {
     };
 
     const switchWorktreeContextMock = vi.fn().mockResolvedValue(undefined);
-    useWorktreeStore.setState((state) => ({
-      ...state,
-      worktrees: [state.worktrees[0]],
-      switchWorktreeContext: switchWorktreeContextMock,
-    }));
+    useWorktreeStore.setState({ switchWorktreeContext: switchWorktreeContextMock });
 
     chatStoreGetStateMock.mockReturnValue({
       activeChatId: null,

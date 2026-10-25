@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { VirtuosoMockContext } from "react-virtuoso";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatActivity, ChatState } from "../../../gen/reliant/v1/chat_pb";
+import { getCachedWorktrees } from "../../../hooks/worktree-queries";
 
 const navigate = vi.fn();
 
@@ -27,8 +28,8 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 // The list response: chats (each carrying its workspace) plus the project's
-// main workspace. The worktree store is never consulted, so it is mocked with
-// nothing in it — a workspace that is in no store must still group correctly.
+// main workspace. No workspace read is consulted, so the cache holds none — a
+// workspace that is in no cache must still group correctly.
 const useChatListWithWorkspaces = vi.fn();
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: (...args: unknown[]) => useChatListWithWorkspaces(...args),
@@ -47,11 +48,10 @@ vi.mock("../../../store/projectStore", () => ({
     selector({ currentProject: { id: "p1", name: "reliant" } }),
 }));
 
-const archiveWorktree = vi.fn();
-const storeState = { worktrees: [] as unknown[], archiveWorktree };
+const archiveWorktree = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) => selector(storeState),
+vi.mock("../../../hooks/worktree-actions", () => ({
+  archiveWorktree: (...args: unknown[]) => archiveWorktree(...args),
 }));
 
 type Workspace = {
@@ -197,7 +197,7 @@ describe("MobileChatList", () => {
     });
     renderList();
 
-    expect(storeState.worktrees).toEqual([]);
+    expect(getCachedWorktrees()).toEqual([]);
     expect(screen.getByText("agent-112")).toBeInTheDocument();
     expect(screen.getByText("Far chat")).toBeInTheDocument();
     expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();

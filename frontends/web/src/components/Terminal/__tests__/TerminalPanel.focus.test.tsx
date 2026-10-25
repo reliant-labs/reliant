@@ -4,7 +4,6 @@ import { mockTransport } from "@/lib/test-utils";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 
 // ---------------------------------------------------------------------------
 // "I start typing in a chat on a new workspace, it can take ~10s for the
@@ -66,9 +65,6 @@ class FakeWebSocket {
   }
 }
 
-vi.mock("../../../api/worktree-grpc", () => ({
-  worktreeGrpc: { list: vi.fn(), listAll: vi.fn(), create: vi.fn() },
-}));
 
 // Closing a tab calls TerminalService.CloseSession; answer it in memory.
 setTransport(
@@ -156,6 +152,10 @@ import { TerminalPanel } from "../TerminalPanel";
 import { useWorktreeStore } from "../../../store/worktreeStore";
 import { useTerminalStore } from "../../../store/terminalStore";
 import { useProjectStore } from "../../../store/projectStore";
+import { type Worktree } from "../../../hooks/worktree-queries";
+import { setWorktreesForTest } from "../../../test/worktreeCache";
+import { withAppQueryClient } from "../../../test/withAppQueryClient";
+import { queryClient } from "../../../lib/query-client";
 
 const projectId = "project-1";
 const projectPath = "/home/u/src/proj";
@@ -193,10 +193,10 @@ const creatingWorktree = worktree({
 /** The chat composer, next to the panel, as in the app. */
 function renderApp() {
   render(
-    <>
+    withAppQueryClient(<>
       <textarea aria-label="Message" />
       <TerminalPanel />
-    </>,
+    </>),
   );
   return screen.getByLabelText("Message");
 }
@@ -205,7 +205,7 @@ function renderApp() {
 function settleNewWorkspace() {
   const settled = { ...creatingWorktree, path: workspacePath, status: WorktreeStatus.ACTIVE };
   act(() => {
-    useWorktreeStore.setState({ worktrees: [mainWorktree, settled], currentWorktree: settled });
+    setWorktreesForTest({ worktrees: [mainWorktree, settled], currentWorktree: settled });
   });
 }
 
@@ -289,15 +289,15 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: { id: projectId, path: projectPath } as never,
   });
-  useWorktreeStore.setState({
+  setWorktreesForTest({
     worktrees: [mainWorktree, creatingWorktree],
     currentWorktree: creatingWorktree,
-    hasLoaded: true,
   });
 });
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
   vi.unstubAllGlobals();
 });
 
@@ -372,7 +372,7 @@ describe("terminal focus is never taken without the user asking", () => {
     // restore. B's terminal is already the active session, so it shows the
     // moment B does: the request was for A's terminal, not this one.
     const other = worktree({ id: "wt-other", name: "other", path: "/w/other", branch: "other", is_main: false });
-    useWorktreeStore.setState({ worktrees: [mainWorktree, creatingWorktree, other], currentWorktree: creatingWorktree });
+    setWorktreesForTest({ worktrees: [mainWorktree, creatingWorktree, other], currentWorktree: creatingWorktree });
     useTerminalStore.setState({
       sessions: [sessionFor("wt-other", "t-other", "/w/other")],
       activeSessionId: "t-other",
@@ -388,7 +388,7 @@ describe("terminal focus is never taken without the user asking", () => {
     expect(useTerminalStore.getState().focusRequest).not.toBeNull();
 
     act(() => {
-      useWorktreeStore.setState({ currentWorktree: other });
+      setWorktreesForTest({ currentWorktree: other });
     });
     await connectNewestTerminal();
 
@@ -398,7 +398,7 @@ describe("terminal focus is never taken without the user asking", () => {
 
   it("keeps the cursor in the composer when switching to a workspace that has a terminal", async () => {
     const other = worktree({ id: "wt-other", name: "other", path: "/w/other", branch: "other", is_main: false });
-    useWorktreeStore.setState({ worktrees: [mainWorktree, other], currentWorktree: mainWorktree });
+    setWorktreesForTest({ worktrees: [mainWorktree, other], currentWorktree: mainWorktree });
     useTerminalStore.setState({
       sessions: [sessionFor("wt-main", "t-main", projectPath), sessionFor("wt-other", "t-other", "/w/other")],
       activeSessionId: "t-main",
@@ -409,7 +409,7 @@ describe("terminal focus is never taken without the user asking", () => {
     composer.focus();
 
     act(() => {
-      useWorktreeStore.setState({ currentWorktree: other });
+      setWorktreesForTest({ currentWorktree: other });
     });
 
     expect(useTerminalStore.getState().activeSessionId).toBe("t-other");
@@ -447,7 +447,7 @@ describe("terminal focus is never taken without the user asking", () => {
 
 describe("terminal focus on explicit request", () => {
   beforeEach(() => {
-    useWorktreeStore.setState({ worktrees: [mainWorktree], currentWorktree: mainWorktree });
+    setWorktreesForTest({ worktrees: [mainWorktree], currentWorktree: mainWorktree });
     useTerminalStore.setState({
       sessions: [sessionFor("wt-main", "t-main", projectPath)],
       activeSessionId: "t-main",

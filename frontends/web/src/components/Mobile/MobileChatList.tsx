@@ -54,7 +54,6 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
 import { chatListIndicators, stillRunningPhrase } from "../../lib/runStatus";
@@ -96,6 +95,7 @@ import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
+import { archiveWorktree } from "../../hooks/worktree-actions";
 
 interface ChatGroup {
   worktreeId: string;
@@ -401,7 +401,6 @@ export function MobileChatList() {
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const { data: chatList, isLoading } = useChatListWithWorkspaces(currentProjectId);
   const sortOrder = useSortOrder();
-  const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
   const queryClient = useQueryClient();
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -458,7 +457,7 @@ export function MobileChatList() {
       setIsArchiving(false);
       setConfirmingArchive(null);
     }
-  }, [confirmingArchive, isArchiving, archiveWorktree, queryClient]);
+  }, [confirmingArchive, isArchiving, queryClient]);
 
   // Memoized so Virtuoso gets a stable component type. An inline component
   // would remount the footer, and the button in it, on every render.

@@ -23,12 +23,11 @@ import { Tooltip } from "../ui/Tooltip";
 import { createFile, createFolder, deleteFileOrFolder, copyFile, moveFile, copyDirectoryRecursive } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import { useWorktreeById } from "../../hooks/useWorktreeById";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { cachedUserPreferences } from "../../hooks/settings-queries";
 import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
+import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 
 export type FileOperationType = "copy" | "delete";
 
@@ -140,7 +139,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   const itemRef = useRef<HTMLButtonElement>(null);
   const currentProject = useProjectStore((state) => state.currentProject);
   const viewerStore = useViewerStore();
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
   const listedWorktree = useWorktreeById(worktreeId);
   const { setClipboard, operation, filePath, fileName, isDirectory: clipboardIsDirectory, worktreeId: clipboardWorktreeId, projectId: clipboardProjectId, clearClipboard } = useFileClipboardStore();
   // Get the worktree for building full paths

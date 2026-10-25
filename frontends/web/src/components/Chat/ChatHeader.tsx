@@ -9,7 +9,6 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import {
   MoreHorizontal,
@@ -32,6 +31,8 @@ import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { loadMainWorktree } from "../../hooks/worktree-actions";
+import { resolveWorktree, type Worktree, getCachedMainWorktree } from "../../hooks/worktree-queries";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -75,8 +76,6 @@ export function ChatHeader({
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
-  const loadMainWorktree = useWorktreeStore((state) => state.loadMainWorktree);
   const deleteMutation = useDeleteChat();
   const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
@@ -140,18 +139,16 @@ export function ChatHeader({
       }
       // Only the recovery menu reads it, so fetch it (one row) rather than
       // depend on the store happening to hold it.
-      if (resolved.project_id) await loadMainWorktree(resolved.project_id);
+      if (!resolved.project_id) return;
+      await loadMainWorktree(resolved.project_id);
       if (cancelled) return;
-      setMainWorktree(
-        useWorktreeStore
-          .getState()
-          .worktrees.find((w) => w.is_main && w.project_id === resolved.project_id && !w.deleted_at),
-      );
+      const main = getCachedMainWorktree(resolved.project_id);
+      setMainWorktree(main && !main.deleted_at ? main : undefined);
     })();
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, resolveWorktree, loadMainWorktree]);
+  }, [workspaceId]);
   // Use branch name if available, otherwise use name
   const workspaceName = worktree ? worktree.branch || worktree.name || null : null;
   const workspacePath = worktree?.path || null;

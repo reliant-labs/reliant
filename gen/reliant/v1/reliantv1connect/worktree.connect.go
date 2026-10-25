@@ -136,6 +136,9 @@ type WorktreeServiceClient interface {
 	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)
 	// Import/Discovery Operations
 	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
+	// DiscoverWorktrees only reads (git worktree list in each repo), and says so
+	// with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
+	// discovered list lives in the query cache under worktreeServiceKeys.
 	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
 	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
 	// only drops records whose directories are already gone; it never touches a
@@ -231,6 +234,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceDiscoverWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		pruneWorktrees: connect.NewClient[v1.PruneWorktreesRequest, v1.PruneWorktreesResponse](
@@ -495,6 +499,9 @@ type WorktreeServiceHandler interface {
 	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)
 	// Import/Discovery Operations
 	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
+	// DiscoverWorktrees only reads (git worktree list in each repo), and says so
+	// with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
+	// discovered list lives in the query cache under worktreeServiceKeys.
 	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
 	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
 	// only drops records whose directories are already gone; it never touches a
@@ -586,6 +593,7 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceDiscoverWorktreesProcedure,
 		svc.DiscoverWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServicePruneWorktreesHandler := connect.NewUnaryHandler(

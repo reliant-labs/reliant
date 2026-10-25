@@ -77,6 +77,9 @@ import {
   type DotState as ChatActivityState,
 } from "../../store/activityStore";
 
+import { archiveWorktree } from "../../hooks/worktree-actions";
+import { resolveWorktree } from "../../hooks/worktree-queries";
+
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
 const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";
@@ -441,7 +444,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
 
     if (currentProject?.id) {
       if (chat.worktreeId) {
-        const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
+        const targetWorktree = await resolveWorktree(chat.worktreeId);
         if (targetWorktree) {
           await worktreeStore.switchWorktreeContext(currentProject.id, targetWorktree);
         }
@@ -1046,7 +1049,7 @@ function SidebarComponent({
     // Preserve current worktree context from active chat or current worktree store
     const worktreeStore = useWorktreeStore.getState();
     const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) ?? null : null;
-    const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
+    const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktreeId || null;
     useChatStore.getState().clearCurrentChat(currentWorktreeId);
   };
 
@@ -1054,7 +1057,7 @@ function SidebarComponent({
     async (worktreeId: string) => {
       if (!currentProject?.id) return;
 
-      const targetWorktree = await useWorktreeStore.getState().resolveWorktree(worktreeId);
+      const targetWorktree = await resolveWorktree(worktreeId);
       if (!targetWorktree) return;
 
       await switchWorktreeContext(currentProject.id, targetWorktree);
@@ -1068,7 +1071,7 @@ function SidebarComponent({
   const handleChatClick = useCallback(async (chat: Chat) => {
     // Switch worktree context first to save/restore viewer state
     if (chat.worktreeId && currentProject?.id) {
-      const worktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
+      const worktree = await resolveWorktree(chat.worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
       }
@@ -1403,7 +1406,7 @@ function SidebarComponent({
       const handleArchiveWorktree = (isNoWorktree || group.isMain)
         ? undefined
         : async () => {
-            const { archiveWorktree } = useWorktreeStore.getState();
+            
             await archiveWorktree(group.worktreeId);
           };
 

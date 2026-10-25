@@ -1255,9 +1255,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           // Read file content for each marker and format it in the message
           try {
             const { getFileContent, getFilePreviewInfo } = await import('../../api/fileSystem');
-            const { useWorktreeStore } = await import('../../store/worktreeStore');
-            const worktreeStore = useWorktreeStore.getState();
-            const currentWorktree = worktreeStore.currentWorktree;
+            const { getCurrentWorktree } = await import('../../hooks/worktree-queries');
+            const currentWorktree = getCurrentWorktree();
             
             const contextSections: string[] = [];
             

@@ -3,7 +3,6 @@ import { Minus, Plus, Trash2, Undo2 } from "lucide-react";
 import * as gitApi from "../../../api/git";
 import { useViewerStore } from "../../../store/viewerStore";
 import { useProjectStore } from "../../../store/projectStore";
-import { useWorktreeStore } from "../../../store/worktreeStore";
 import { logger } from "../../../lib/logger";
 import { retryAcrossWake } from "../../../lib/daemon-retry";
 import { cn } from "../../../lib/utils";
@@ -25,6 +24,7 @@ import { changeGroupOf, pluralize, splitPath } from "./fileStatus";
 import { MOD } from "./keys";
 import { useExistingPR, useRepoChanges } from "./useRepoChanges";
 import type { ChangeGroup, FileChange } from "./types";
+import { useWorktreeById } from "../../../hooks/worktree-queries";
 
 // =============================================================================
 // RepoChangesPanel — the source-control body for one repo (or the single-repo
@@ -87,9 +87,7 @@ export function RepoChangesPanel({
 }: RepoChangesPanelProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const openDiffViewer = useViewerStore((state) => state.openDiffViewer);
-  const baseBranch = useWorktreeStore(
-    (state) => (worktreeId ? state.worktrees.find((w) => w.id === worktreeId)?.base_branch : undefined),
-  );
+  const baseBranch = useWorktreeById(worktreeId)?.base_branch;
   // Default to true so a project that hasn't loaded yet doesn't flash the
   // "no repository" state.
   const isGitRepo = currentProject?.is_git_repo ?? true;

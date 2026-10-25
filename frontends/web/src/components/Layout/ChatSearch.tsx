@@ -12,6 +12,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { requestScrollToMessage } from "../../lib/scrollToMessage";
+import { resolveWorktree } from "../../hooks/worktree-queries";
 
 type SearchMode = "history" | "current";
 
@@ -352,7 +353,7 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
     if (chat) {
       if (currentProject?.id) {
         if (chat.worktreeId) {
-          const targetWorktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
+          const targetWorktree = await resolveWorktree(chat.worktreeId);
           if (targetWorktree) {
             await switchWorktreeContext(currentProject.id, targetWorktree);
           }
