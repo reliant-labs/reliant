@@ -3,13 +3,16 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -104,14 +107,24 @@ func (a *WorkflowStatusActivity) Name() string {
 
 // Execute writes workflow status to chat_updates table, updates chat state, and tracks workflow hierarchy
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
-	// Track workflow analytics (non-blocking)
-	go a.trackAnalytics(ctx, input)
-
 	// Track workflow in database for parent-child hierarchy
 	if err := a.trackWorkflow(ctx, input); err != nil {
+		if terminalWriteMustRetry(input.Status, err) {
+			// The row's last status write did not happen, and nothing will
+			// write it after this one: report it, so Temporal retries this
+			// activity (workflowStatusActivityOptions gives a terminal status
+			// an unlimited, deadline-bounded retry). Reporting success over
+			// it is how a finished run's chat read as running (e2e story
+			// 05). Nothing below has run yet, so a retry repeats none of it.
+			return WorkflowStatusOutput{Success: false}, fmt.Errorf("record %s status of workflow %s: %w", input.Status, input.WorkflowID, err)
+		}
 		// Log but don't fail - chat_update is more important for UI
 		logging.WarnContext(ctx, "[WorkflowStatus] Failed to track workflow", "error", err)
 	}
+
+	// Track workflow analytics (non-blocking). After the status write, so a
+	// retried terminal write is counted once.
+	go a.trackAnalytics(ctx, input)
 
 	// Determine if this is a root workflow (no parent)
 	isRootWorkflow := input.ParentWorkflowID == ""
@@ -197,6 +210,20 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
+}
+
+// terminalWriteMustRetry reports whether trackWorkflow's err must fail the
+// activity so Temporal retries it: a terminal status (completed, failed,
+// cancelled) whose write did not happen, for any reason but a row that does
+// not exist — no attempt can write that, and an inline workflow's notify
+// may name no row of its own.
+func terminalWriteMustRetry(status string, err error) bool {
+	switch status {
+	case "completed", "failed", "cancelled":
+	default:
+		return false
+	}
+	return !svcerr.IsNotFound(err) && !errors.Is(err, sql.ErrNoRows)
 }
 
 // completionNotifies reports whether a ROOT completion should mark the chat

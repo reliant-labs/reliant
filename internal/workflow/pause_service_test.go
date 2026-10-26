@@ -37,6 +37,10 @@ type mockPauseTemporalClient struct {
 	resetErr      error
 	resetCalled   bool
 	resetRequest  *workflowservice.ResetWorkflowExecutionRequest
+
+	// afterSignal, when set, runs once a signal is delivered: the woken run
+	// acting before the caller's next statement does.
+	afterSignal func(signalName string)
 }
 
 type signalCall struct {
@@ -55,8 +59,11 @@ func (m *mockPauseTemporalClient) SignalWorkflow(
 	})
 	// signalErr models the LIVE-execution signal (runID == ""). A signal to a
 	// specific run (the post-reset re-signal) always succeeds — that run is fresh.
-	if runID == "" {
+	if runID == "" && m.signalErr != nil {
 		return m.signalErr
+	}
+	if m.afterSignal != nil {
+		m.afterSignal(signalName)
 	}
 	return nil
 }
@@ -116,6 +123,10 @@ type mockPauseRepo struct {
 
 	// pausedForMachine is the chat -> mark state SetChatPausedForMachine keeps.
 	pausedForMachine map[string]bool
+
+	// initialStatus is what a row reads before anything writes it; zero
+	// reads as paused, the state a resume starts from.
+	initialStatus db.WorkflowStatus
 }
 
 // The fake keeps state (call order, the paused-for-machine marks), so it stays
@@ -140,6 +151,34 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 	m.callOrder = append(m.callOrder, "UpdateWorkflowStatus:"+id)
 	m.updatedStatuses[id] = status
 	return nil
+}
+
+// status is the row's current status: the last one written, else
+// initialStatus.
+func (m *mockPauseRepo) status(id string) db.WorkflowStatus {
+	if s, ok := m.updatedStatuses[id]; ok {
+		return s
+	}
+	if m.initialStatus == (db.WorkflowStatus{}) {
+		return db.Paused()
+	}
+	return m.initialStatus
+}
+
+func (m *mockPauseRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, error) {
+	return &db.Workflow{ID: id, Status: m.status(id)}, nil
+}
+
+func (m *mockPauseRepo) CompareAndSwapWorkflowStatus(_ context.Context, id string, newStatus, expected db.WorkflowStatus) (bool, error) {
+	if m.updateErr != nil {
+		return false, m.updateErr
+	}
+	if m.status(id) != expected {
+		return false, nil
+	}
+	m.callOrder = append(m.callOrder, "CompareAndSwapWorkflowStatus:"+id)
+	m.updatedStatuses[id] = newStatus
+	return true, nil
 }
 
 func (m *mockPauseRepo) ReviveSubtreeLiveAt(_ context.Context, rootWorkflowID string, at time.Time) (int64, int64, error) {
@@ -428,7 +467,7 @@ func TestResumeInterruptedWorkflow_RevivesSubtreeBeforeMarkingRootActive(t *test
 		"revive at the reset point's event time, got %v want %v", repo.reviveCalls[0].at, resetPointTime)
 
 	reviveAt := indexOfCall(repo.callOrder, "ReviveSubtreeLiveAt:wf-1")
-	activeAt := indexOfCall(repo.callOrder, "UpdateWorkflowStatus:wf-1")
+	activeAt := indexOfCall(repo.callOrder, "CompareAndSwapWorkflowStatus:wf-1")
 	require.GreaterOrEqual(t, reviveAt, 0, "revive was never called: %v", repo.callOrder)
 	require.GreaterOrEqual(t, activeAt, 0, "root was never marked active: %v", repo.callOrder)
 	assert.Less(t, reviveAt, activeAt,

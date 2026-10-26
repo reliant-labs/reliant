@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/machinewait"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 
@@ -308,11 +309,10 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	}
 	s.runs.RecordRun(ctx, chat.ID, workflowID, run.GetRunID())
 	// Recorded as running now, not when the run's own "started" lands, so a
-	// caller that takes the run-control lock next finds it live.
-	if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.WarnContext(ctx, "[ContinueQueued] Started the run but could not mark it running; the run's own status write corrects it",
-			"chatID", chat.ID, "workflowID", workflowID, "error", err)
-	}
+	// caller that takes the run-control lock next finds it live — but only
+	// over the closed run's status: the new one may already have written its
+	// own (workflow.MarkWokenRunActive).
+	workflow.MarkWokenRunActive(ctx, s.deps.Repo, workflowID, root.Status, true)
 	return run.GetRunID(), nil
 }
 

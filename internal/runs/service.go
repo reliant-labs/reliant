@@ -252,11 +252,12 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 // for a run parked on a channel that signal.resume does not release — an
 // unanswered question being the case that matters.
 //
-// On success the run's status is marked running and the chat's run id is
-// refreshed, because the delivery may have reset-replayed the execution into a
-// new run. Both writes are best-effort: the signal is the step that actually
+// On success the run's status is marked running — unless the woken run has
+// already written one of its own — and the chat's run id is refreshed,
+// because the delivery may have reset-replayed the execution into a new run. Both writes are best-effort: the signal is the step that actually
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
+	before, known := workflow.StatusBeforeWake(ctx, s.repo, in.WorkflowID)
 	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
 		logging.InfoContext(ctx, "[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,
@@ -264,10 +265,8 @@ func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) 
 		return ResumeOutcome{Kind: OutcomeNeedsRestart, WorkflowID: in.WorkflowID}, nil
 	}
 
-	if err := s.repo.UpdateWorkflowStatus(ctx, in.WorkflowID, db.Active()); err != nil {
-		logging.WarnContext(ctx, "[runs] Resumed run but failed to mark it running — the workflow or reconciler will correct it",
-			"workflowID", in.WorkflowID, "error", err)
-	}
+	// The woken run may already have moved on (workflow.MarkWokenRunActive).
+	workflow.MarkWokenRunActive(ctx, s.repo, in.WorkflowID, before, known)
 
 	return ResumeOutcome{
 		Kind:       OutcomeResumed,

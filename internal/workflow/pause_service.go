@@ -450,6 +450,7 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 		"chatID", chatID,
 	)
 
+	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
 	err := ps.SignalWithRecovery(ctx, workflowID, SignalResume, nil, inputUpdate)
 	if err != nil {
 		// Check if the error is because the workflow is truly not found (not just expired)
@@ -476,14 +477,8 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 	// whoever resumed it.
 	ps.clearPausedForMachine(ctx, chatID)
 
-	// Update DB status to running
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running",
-			"workflowID", workflowID,
-			"error", err,
-		)
-		// Don't fail — the workflow is already resumed in Temporal
-	}
+	// The run is awake, and may already have moved on (MarkWokenRunActive).
+	MarkWokenRunActive(ctx, ps.database, workflowID, before, known)
 
 	// Resume all paused child workflows for this chat
 	if chatID != "" {
@@ -511,6 +506,8 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 		"chatID", chatID,
 	)
 
+	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
+
 	// Reset the workflow to the last WorkflowTaskCompleted event (the pause point).
 	// Pass empty runID so Temporal uses the latest run.
 	reset, err := ResetExpiredWorkflow(ctx, ps.temporalClient, workflowID, "")
@@ -532,14 +529,7 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 
 	ps.clearPausedForMachine(ctx, chatID)
 
-	// Update DB status to running
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running after reset",
-			"workflowID", workflowID,
-			"error", err,
-		)
-		// Don't fail — the workflow is already resumed
-	}
+	MarkWokenRunActive(ctx, ps.database, workflowID, before, known)
 
 	logging.InfoContext(ctx, "[PauseService] Expired workflow reset and resumed",
 		"workflowID", workflowID,
@@ -570,6 +560,8 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 // so without it a model the user just chose — or one the send moved off a
 // provider that cannot serve it — would never reach it.
 func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) (string, error) {
+	before, known := StatusBeforeWake(ctx, ps.database, workflowID)
+
 	// resetInterruptedForResume has already revived the subtree the replay is
 	// about to rebuild — before this function marks the root Active, which is
 	// the ordering that matters. See reviveResumedSubtree.
@@ -591,13 +583,9 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 		return "", fmt.Errorf("failed to send resume signal after reset: %w", err)
 	}
 
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.ErrorContext(ctx, "[PauseService] Failed to update workflow status to running after interrupted resume",
-			"workflowID", workflowID,
-			"error", err,
-		)
-		// Don't fail — the workflow is already resumed in Temporal.
-	}
+	// The reset run replays to its reset point and goes on from there at
+	// once, so it can end before this write (MarkWokenRunActive).
+	MarkWokenRunActive(ctx, ps.database, workflowID, before, known)
 
 	logging.InfoContext(ctx, "[PauseService] Interrupted workflow reset-and-resumed",
 		"workflowID", workflowID,
