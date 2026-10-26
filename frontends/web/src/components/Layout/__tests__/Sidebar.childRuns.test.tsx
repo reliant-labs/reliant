@@ -61,9 +61,13 @@ const chats: Array<Record<string, unknown>> = ["chat-1", "chat-2", "chat-3"].map
   projectId: "project-1",
 }));
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),

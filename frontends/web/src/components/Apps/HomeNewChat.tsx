@@ -64,6 +64,7 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
     <MainNewChatView
       tabId="new-chat"
       onNavigateToWorktrees={onNavigateToWorktrees}
+      showProjectChip
       onChatCreated={building ? () => setStart(undefined) : undefined}
       composerPrefill={building ? { text: BUILD_APP_PROMPT, id: BUILD_PREFILL_ID } : deployPrefill}
       heading={

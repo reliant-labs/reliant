@@ -25,6 +25,7 @@ import {
 } from "@/lib/chatMachine";
 import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { NewChatProjectChip } from "./NewChatProjectChip";
 import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
@@ -74,6 +75,12 @@ interface NewChatViewProps {
    */
   heading?: ReactNode;
   welcomePanel?: ReactNode;
+  /**
+   * Show the project chip (the chat window's global New chat picks a project
+   * and lets the user change it). Off for a host whose chat belongs to one
+   * thing already, like the workflow editor's.
+   */
+  showProjectChip?: boolean;
 }
 
 export function NewChatView({
@@ -84,6 +91,7 @@ export function NewChatView({
   composerPrefill,
   heading,
   welcomePanel,
+  showProjectChip = false,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -148,6 +156,13 @@ export function NewChatView({
     loading: !daemonsAnswered,
     awaitingBundledDaemon,
   });
+  // A different project is a different set of checkouts: its new chat starts
+  // from the default machine again, not the one picked for another project.
+  const [machineChoiceProjectId, setMachineChoiceProjectId] = useState(currentProject?.id);
+  if (machineChoiceProjectId !== currentProject?.id) {
+    setMachineChoiceProjectId(currentProject?.id);
+    setMachineChoice(null);
+  }
   const machine = (canPickMachine ? machineChoice : null) ?? defaultMachine ?? DEFAULT_MACHINE;
   const noMachine = machine === NO_MACHINE;
   // A chat on a machine still waits for one to be connected, as before.
@@ -356,7 +371,7 @@ export function NewChatView({
       (currentWorktree?.id === selectedWorkspaceId
         ? currentWorktree.branch || currentWorktree.name
         : null) ||
-      "Select Workspace"
+      "Select workspace"
     : currentProject?.default_branch || "main";
 
   return (
@@ -403,6 +418,10 @@ export function NewChatView({
                 className="w-full flex flex-wrap items-center justify-center gap-3"
                 data-onboarding="workspace-buttons"
               >
+                {/* The project the chat starts in: the global New chat picks
+                    it (filter, open chat, last used); change it here. */}
+                {showProjectChip && <NewChatProjectChip disabled={isCreating} />}
+
                 {canPickMachine && (
                   <MachinePicker
                     value={machine}
@@ -420,7 +439,7 @@ export function NewChatView({
                 {/* Workspace Selector */}
                 <div className="relative" ref={workspaceDropdownRef}>
                   <Tooltip
-                    content="Workspaces are isolated copies of your codebase, powered by git worktrees — run multiple agents in parallel without conflicts."
+                    content="Workspaces are isolated copies of the project, powered by git worktrees — run several agents in parallel without conflicts."
                     side="top"
                   >
                     <button

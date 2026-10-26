@@ -26,6 +26,7 @@ import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundar
 import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
@@ -272,6 +273,9 @@ function RootShell() {
         <Outlet />
       </ShortcutHost>
       <ModalLayer />
+      {/* Add project opens over any route (the sidebar, Settings, the
+          new-chat project chip, the shortcut, the tray). */}
+      <AddProjectDialogHost />
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
@@ -459,17 +463,17 @@ const indexRoute = createRoute({
   component: App,
 })
 
-// Project routes — the URL is the source of truth for the currently-selected
-// project. `/project/$projectId` deep-links into a specific project; the App
-// component reads the param via useParams and calls selectProject. `/project`
-// (no id) redirects to `/` (the project picker view inside App).
+// Project routes — the URL carries the sidebar's project filter.
+// `/project/$projectId` shows one project (App reads the param via useParams
+// and calls setProjectFilter); `/` shows every project. `/project` (no id)
+// redirects to `/`.
 const projectRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: 'project/$projectId',
   component: App,
 })
 
-const projectPickerRedirectRoute = createRoute({
+const projectRootRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/project',
   component: () => <Navigate to="/" search={{}} />,
@@ -887,7 +891,7 @@ const routeTree = rootRoute.addChildren([
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,
-  projectPickerRedirectRoute,
+  projectRootRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
     mobileLayoutRoute.addChildren([

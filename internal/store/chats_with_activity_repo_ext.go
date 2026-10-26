@@ -118,9 +118,10 @@ func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core
 	return chatsFromView(rows), nil
 }
 
-// SearchChats lists a user's chats in one project whose title, or any text
-// block of any of their messages, contains the query; most recently active
-// first. A blank query matches nothing.
+// SearchChats lists a user's chats whose title, or any text block of any of
+// their messages, contains the query; most recently active first. A non-empty
+// ProjectID narrows it to that project; empty searches all of the user's. A
+// blank query matches nothing.
 func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) ([]*core.Chat, error) {
 	query := strings.TrimSpace(f.SearchQuery)
 	if query == "" {
@@ -132,8 +133,10 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 		Join("LEFT JOIN messages m ON chats_with_activity.id = m.chat_id").
 		// block_type 1 is CONTENT_BLOCK_TYPE_TEXT.
 		Join("LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1").
-		Where("chats_with_activity.user_id = ?", f.UserID).
-		Where("chats_with_activity.project_id = ?", f.ProjectID)
+		Where("chats_with_activity.user_id = ?", f.UserID)
+	if f.ProjectID != "" {
+		q = q.Where("chats_with_activity.project_id = ?", f.ProjectID)
+	}
 	if f.State != nil {
 		q = q.Where("chats_with_activity.state = ?", *f.State)
 	}

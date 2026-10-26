@@ -207,6 +207,24 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 	return worktreesToCore(rows), nil
 }
 
+// ListMainWorktreesForUser returns the live main workspace of each project
+// userID owns, or of the one project when projectID is set. Ownership is part
+// of the query: a project id that is not the caller's yields nothing.
+func ListMainWorktreesForUser(ctx context.Context, db orm.Context, userID string, projectID *string) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	q := db.Bun().NewSelect().Model(&rows).
+		Where("is_main").
+		Where("deleted_at IS NULL").
+		Where("project_id IN (SELECT id FROM projects WHERE user_id = ?)", userID)
+	if projectID != nil {
+		q = q.Where("project_id = ?", *projectID)
+	}
+	if err := q.OrderExpr("project_id, id").Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list main worktrees: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ReplaceWorktree rewrites a worktree's mutable columns, archived or not,
 // and stamps updated_at. Path is among them because asynchronous creation
 // only learns the on-disk location after the daemon reports it: the row is

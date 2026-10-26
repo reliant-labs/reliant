@@ -6,6 +6,7 @@ import {
   createProject as createProjectRpc,
   deleteProject as deleteProjectRpc,
   fetchProjects,
+  getCachedProjects,
   refreshProject,
   sameProject,
   subscribeToProjectRows,
@@ -57,12 +58,11 @@ function getRouter(): RouterLike | null {
   return r ?? null;
 }
 
-// Drive the URL to match the current project selection. The URL is the
-// canonical source of "which project am I in" now that `/project/$projectId`
-// is a real route. We compare the current pathname before navigating so we
-// don't loop when the route-param effect calls selectProject in response to a
-// URL change.
-function syncProjectUrl(projectId: string | null) {
+// Drive the URL to match the sidebar's project filter: `/project/$projectId`
+// while it shows one project, `/` for "All projects". We compare the current
+// pathname before navigating so we don't loop when the route-param effect
+// sets the filter in response to a URL change.
+export function syncProjectFilterUrl(projectId: string | null) {
   try {
     const router = getRouter();
     if (!router) return; // routes.tsx hasn't registered yet — startup window
@@ -116,10 +116,11 @@ function syncProjectUrl(projectId: string | null) {
         search: preserveSearch,
       });
     } else {
-      if (currentPath === "/" || currentPath.startsWith("/settings") || isWorkflowSurfacePath(currentPath)) {
-        return;
+      // Only the chat shell's own URL carries the filter; every other route
+      // keeps its path.
+      if (currentPath === "/project" || currentPath.startsWith("/project/")) {
+        router.navigate({ to: "/", search: preserveSearch });
       }
-      router.navigate({ to: "/", search: preserveSearch });
     }
   } catch (err) {
     logger.warn("[ProjectStore] Failed to sync project URL", err);
@@ -128,23 +129,57 @@ function syncProjectUrl(projectId: string | null) {
 
 export type { Project };
 
+/** The most recently used project of a list (by last_active), if any. */
+export function mostRecentProject(projects: readonly Project[]): Project | undefined {
+  let best: Project | undefined;
+  for (const project of projects) {
+    if (!best || (project.last_active ?? "") > (best.last_active ?? "")) best = project;
+  }
+  return best;
+}
+
+/** Options of selectProject. */
+export interface SelectProjectOptions {
+  skipClear?: boolean;
+  skipWorkspaceStateSave?: boolean;
+  /**
+   * Reopen the chat this project last had open (default true). False when the
+   * caller is about to open a chat of its own (openChat), or wants the new-chat
+   * view (the new-chat project chip).
+   */
+  restoreChat?: boolean;
+}
+
 interface ProjectStore {
   /**
-   * The selected project — client state. The row itself is server state: it
-   * is reconciled from the project cache entries (hooks/project-queries.ts)
-   * whenever one of them changes, so it never drifts from what the list
-   * shows.
+   * The project the main pane works in — the open chat's project, or the one
+   * a new chat will start in. Files, terminal, git and viewers follow it.
+   * It is NOT the sidebar filter (workspaceStateStore.projectFilterId): the
+   * sidebar can list every project while this is one of them. The row itself
+   * is server state: it is reconciled from the project cache entries
+   * (hooks/project-queries.ts) whenever one of them changes, so it never
+   * drifts from what the list shows.
    */
   currentProject: Project | null;
 
-  selectProject: (project: Project, options?: { skipClear?: boolean; skipWorkspaceStateSave?: boolean }) => Promise<void>;
+  /**
+   * Make `project` the context project. Switching never touches the sidebar:
+   * the chat list, its activity and the update stream span every project.
+   */
+  selectProject: (project: Project, options?: SelectProjectOptions) => Promise<void>;
+  /**
+   * Set the sidebar's project filter (null: All projects) and reflect it in
+   * the URL. Filtering to a project other than the context one also moves the
+   * context there, reopening that project's last chat.
+   */
+  setProjectFilter: (projectId: string | null) => Promise<void>;
   restoreLastProject: () => Promise<boolean>;
   /** Re-read the current project from the server (after a git init, a new workspace). */
   refreshCurrentProject: () => Promise<void>;
   /** Create a project and make it current. */
   createProject: (data: Partial<Project>) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
-  /** Delete a project; deleting the current one returns to the picker. */
+  /** Delete a project; deleting the current one moves to the most recent other one. */
   deleteProject: (id: string) => Promise<void>;
   reset: () => void;
 }
@@ -152,9 +187,17 @@ interface ProjectStore {
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentProject: null,
 
-  selectProject: async (project: Project, options?: { skipClear?: boolean; skipWorkspaceStateSave?: boolean }) => {
+  selectProject: async (project: Project, options?: SelectProjectOptions) => {
     const prevProjectId = get().currentProject?.id ?? null;
     const isProjectSwitch = prevProjectId !== null && prevProjectId !== project.id;
+    const restoreChat = options?.restoreChat ?? true;
+
+    // The open chat belongs to the project being left: show the new project's
+    // own last chat (restored below) or its new-chat view, never another
+    // project's chat in this project's context.
+    if (isProjectSwitch && restoreChat) {
+      useChatStore.getState().clearCurrentChat(null);
+    }
 
     // Clear worktrees and chats FIRST to avoid showing stale data
     // Skip clearing if this is initial window setup with context
@@ -173,9 +216,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (isProjectSwitch) {
       useViewerStore.getState().clearViewersForProjectSwitch();
     }
-
-    // Drive the URL to /project/$projectId so deep-linking + refresh works.
-    syncProjectUrl(project.id);
 
     trackEvent("project_opened", {
       projectId: project.id,
@@ -205,9 +245,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Workflows and presets need no nudge: their reads are keyed by project
     // (hooks/workflow-queries, hooks/preset-queries).
 
-    // Always load chats — even with skipClear (e.g. Electron window-context path)
-    // loadChats uses singleflight so concurrent calls are deduplicated.
-    await useChatStore.getState().loadChats();
+    // The chat list does not follow this: it spans every project (or the
+    // sidebar filter's one) and is loaded once for that scope.
 
     // Only reload worktrees and restore workspace state when not skipping clear
     // (user-initiated project switch). The Electron/skipClear path handles
@@ -227,7 +266,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       
       // Restore active chat from workspace state
       const worktreeState = useWorkspaceStateStore.getState().getWorktreeState(project.id, currentWorktreeId);
-      if (worktreeState.activeChatId) {
+      if (restoreChat && worktreeState.activeChatId) {
         const chat = worktreeState.activeChatId
           ? await resolveChat(worktreeState.activeChatId)
           : undefined;
@@ -256,13 +295,41 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
+  setProjectFilter: async (projectId: string | null) => {
+    const workspaceState = useWorkspaceStateStore.getState();
+    const changed = workspaceState.projectFilterId !== projectId;
+    workspaceState.setProjectFilterId(projectId);
+    syncProjectFilterUrl(projectId);
+    if (changed) {
+      trackEvent("project_filter_changed", { scope: projectId ? "project" : "all" });
+    }
+
+    if (projectId && get().currentProject?.id !== projectId) {
+      let projects = getCachedProjects();
+      if (!projects.some((p) => p.id === projectId)) {
+        try {
+          projects = await fetchProjects();
+        } catch (error) {
+          logger.warn("[ProjectStore] Could not load projects to filter by one", { projectId, error });
+          return;
+        }
+      }
+      const project = projects.find((p) => p.id === projectId);
+      if (!project) {
+        // The filter names a project that is gone: show them all.
+        workspaceState.setProjectFilterId(null);
+        syncProjectFilterUrl(null);
+        return;
+      }
+      await get().selectProject(project);
+    }
+
+    // The list of the new scope seeds activity and the stream's resume point.
+    await useChatStore.getState().loadChats();
+  },
+
   restoreLastProject: async () => {
     const { lastProjectId } = useWorkspaceStateStore.getState();
-
-    if (!lastProjectId) {
-      logger.info("[ProjectStore] No lastProjectId to restore");
-      return false;
-    }
 
     let projects: Project[];
     try {
@@ -273,12 +340,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logger.warn("[ProjectStore] Could not load projects to restore the last one", { lastProjectId, error });
       return false;
     }
-    const project = projects.find((p) => p.id === lastProjectId);
+    let project = lastProjectId ? projects.find((p) => p.id === lastProjectId) : undefined;
 
-    if (!project) {
+    if (lastProjectId && !project) {
       logger.warn("[ProjectStore] Last project no longer exists", { lastProjectId });
       // Clear invalid reference
       useWorkspaceStateStore.getState().setLastProject(null);
+    }
+    // There is no project picker to land on: with no (valid) last project,
+    // the window opens on the most recently used one.
+    project ??= mostRecentProject(projects);
+    if (!project) {
+      logger.info("[ProjectStore] No project to restore");
       return false;
     }
 
@@ -325,15 +398,24 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   deleteProject: async (id: string) => {
     await deleteProjectRpc(id);
 
-    const wasCurrent = get().currentProject?.id === id;
-    if (wasCurrent) {
-      set({ currentProject: null });
-      // We deleted the current project: push the URL back to the picker.
-      syncProjectUrl(null);
-    }
-
-    // Clean up workspace state for deleted project
+    const wasFiltered = useWorkspaceStateStore.getState().projectFilterId === id;
+    // Clean up workspace state for deleted project (drops a filter on it too)
     useWorkspaceStateStore.getState().removeProjectState(id);
+    if (wasFiltered) syncProjectFilterUrl(null);
+
+    if (get().currentProject?.id === id) {
+      // The context moves to the most recently used project left; with none,
+      // the shell shows its first-run state.
+      set({ currentProject: null });
+      let remaining: Project[] = [];
+      try {
+        remaining = (await fetchProjects()).filter((p) => p.id !== id);
+      } catch (error) {
+        logger.warn("[ProjectStore] Could not load projects after a delete", { error });
+      }
+      const next = mostRecentProject(remaining);
+      if (next) await get().selectProject(next);
+    }
   },
 
   reset: () => {

@@ -302,6 +302,18 @@ func TestChatListAndSearch(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(matched, []string{"l-1", "l-5"}) {
 		t.Fatalf("SearchChats(needle) = %v, %v; want l-1 (message text) and l-5 (title), one row per chat", matched, err)
 	}
+	// No ProjectID searches all of the user's projects; another user's search
+	// finds none of these.
+	allProjects, err := store.SearchChats(ctx, env.ORM, core.ChatSearchFilters{UserID: storetest.SeedUserID, SearchQuery: "needle", Limit: 10})
+	allMatched := convChatIDs(allProjects)
+	sort.Strings(allMatched)
+	if err != nil || !reflect.DeepEqual(allMatched, matched) {
+		t.Fatalf("SearchChats(needle, all projects) = %v, %v; want %v", allMatched, err, matched)
+	}
+	foreign, err := store.SearchChats(ctx, env.ORM, core.ChatSearchFilters{UserID: "someone-else", SearchQuery: "needle", Limit: 10})
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("SearchChats(needle) as another user = %v, %v; want none", convChatIDs(foreign), err)
+	}
 
 	// Archived chats with their worktree name: the live worktree's, else the
 	// name captured at archive time, else the project's.

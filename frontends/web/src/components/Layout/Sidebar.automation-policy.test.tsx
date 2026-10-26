@@ -9,6 +9,7 @@
  *  - An adopted automation row carries an origin glyph naming its automation.
  *  - "Move back to Runs" un-adopts, and the row leaves — even while open.
  */
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { act, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -45,14 +46,17 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: {
       chats: fixtures.listed,
       lastUserUpdateSequence: 0,
-      mainWorktree: {
-        id: "worktree-main",
-        name: "main",
-        branch: "main",
-        path: "/tmp/project",
-        isMain: true,
-        status: 1,
-      },
+      mainWorktrees: [
+        {
+          id: "worktree-main",
+          name: "main",
+          branch: "main",
+          path: "/tmp/project",
+          isMain: true,
+          status: 1,
+          projectId: "project-1",
+        },
+      ],
     },
     isLoading: false,
   }),
@@ -218,12 +222,23 @@ describe("the open chat stays in the sidebar (L2)", () => {
     expect(rowFor(scheduledRun.id)).toBeNull();
   });
 
-  it("does not pin a chat from another project", () => {
+  it("does not pin a chat from another project into a one-project list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     fixtures.detail = { ...scheduledRun, projectId: "project-other" };
     openChat(scheduledRun.id);
     renderSidebar();
 
     expect(rowFor(scheduledRun.id)).toBeNull();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+  });
+
+  it("pins a chat from any project into the All projects list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+    fixtures.detail = { ...scheduledRun, projectId: "project-other" };
+    openChat(scheduledRun.id);
+    renderSidebar();
+
+    expect(rowFor(scheduledRun.id)).not.toBeNull();
   });
 });
 

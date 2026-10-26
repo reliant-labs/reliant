@@ -30,7 +30,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
       {
         selector: "[data-onboarding='left-sidebar']",
         label: "Conversations",
-        description: "Every chat you've had, organized by workspace",
+        description: "Every chat you've had, grouped by project and workspace",
       },
       {
         selector: "[data-onboarding='chat-input']",
@@ -39,8 +39,8 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
       },
       {
         selector: "[data-onboarding='right-sidebar']",
-        label: "Project context",
-        description: "The files it's touched, the diffs it's made, and what's running",
+        label: "Files and changes",
+        description: "The open chat's files, the diffs it's made, and what's running",
       },
     ],
     skippable: true,
@@ -63,7 +63,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     type: "spotlight",
     title: "Workspaces",
     description:
-      "Work on more than one thing at once — each workspace is its own git branch, so nothing collides with your main code.",
+      "Work on more than one thing at once — each workspace is its own git branch, so nothing collides with the project's main workspace.",
     targetSelector: "[data-onboarding='workspace-buttons']",
     skippable: true,
     spotlightConfig: {

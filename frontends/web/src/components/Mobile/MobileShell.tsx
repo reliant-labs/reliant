@@ -79,7 +79,6 @@ export function MobileShell() {
 
   const currentProject = useProjectStore((s) => s.currentProject);
   const { projects } = useProjects();
-  const selectProject = useProjectStore((s) => s.selectProject);
 
   const needsOnboarding =
     !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
@@ -95,30 +94,32 @@ export function MobileShell() {
     navigate({ to: "/onboarding", search: (prev) => prev, replace: true });
   }, [isUserLoading, needsOnboarding, navigate]);
 
-  // Pick the project the way the desktop shell does: restore the last one the
-  // user had open, and only then fall back to the first. Phone browsers discard
-  // and reload tabs constantly, so "no project selected yet" is the normal
-  // state on mobile, and landing on projects[0] each time put the update stream
-  // on the wrong project. Guarded on `currentProject` being unset, so an
-  // explicit selection via `/m/projects` always sticks, and attempted once so
-  // a failed restore cannot loop.
+  // Pick the context project the way the desktop shell does: the last one the
+  // user had open, else the most recently used (restoreLastProject). Phone
+  // browsers discard and reload tabs constantly, so "no project selected yet"
+  // is the normal state on mobile. Guarded on `currentProject` being unset, so
+  // a project opened since always sticks, and attempted once so a failed
+  // restore cannot loop.
   const restoreLastProject = useProjectStore((s) => s.restoreLastProject);
   const initialSelectionAttempted = useRef(false);
   useEffect(() => {
     if (currentProject || projects.length === 0) return;
     if (initialSelectionAttempted.current) return;
     initialSelectionAttempted.current = true;
-    void (async () => {
-      if (await restoreLastProject()) return;
-      if (useProjectStore.getState().currentProject) return;
-      // The fallback is not a choice the user made: do not let it replace the
-      // remembered project.
-      await selectProject(projects[0]!, { skipWorkspaceStateSave: true });
-    })();
-  }, [currentProject, projects, selectProject, restoreLastProject]);
+    void restoreLastProject();
+  }, [currentProject, projects, restoreLastProject]);
 
+  // The chat list spans every project (or the /m/projects filter's one) and
+  // does not follow the context project: load it once, then keep the stream
+  // on it.
+  const chatListRequested = useRef(false);
+  useEffect(() => {
+    if (isUserLoading || needsOnboarding || chatListRequested.current) return;
+    chatListRequested.current = true;
+    void useChatStore.getState().loadChats();
+  }, [isUserLoading, needsOnboarding]);
   const chatsLoaded = useChatStore((s) => s.hasLoaded);
-  useUpdateStreamConnection(currentProject?.id, chatsLoaded);
+  useUpdateStreamConnection(chatsLoaded);
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);

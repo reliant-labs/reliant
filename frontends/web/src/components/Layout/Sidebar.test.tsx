@@ -53,9 +53,13 @@ const mockChatListData = [
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
@@ -260,7 +264,6 @@ describe("Sidebar selected chat scroll", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const onNavigateToProjectPicker = vi.fn();
     const onOpenWorkflows = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
@@ -269,7 +272,6 @@ describe("Sidebar selected chat scroll", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <Sidebar
-          onNavigateToProjectPicker={onNavigateToProjectPicker}
           onOpenWorkflows={onOpenWorkflows}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
@@ -283,7 +285,9 @@ describe("Sidebar selected chat scroll", () => {
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
+    // No "Projects" page to go to: the project is the chat list's filter.
+    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
+    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("All projects");
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     // Automations and Runs are tabs of the Workflows area now (§1.2), not
     // sidebar entries of their own.
@@ -296,14 +300,12 @@ describe("Sidebar selected chat scroll", () => {
       "workflow-button"
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
 
     expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);

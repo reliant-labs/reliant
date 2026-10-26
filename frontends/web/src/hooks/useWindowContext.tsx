@@ -50,9 +50,20 @@ export function useWindowContext() {
         const currentProjects = await fetchProjects();
         if (cancelled) return;
 
-        // Set the project in store based on window context
+        // Set the project in store based on window context. A window is a
+        // view of every project (the sidebar's filter, not the window, picks
+        // which); its saved project is only the context it reopens on. A new
+        // window has none and opens on the last project used, like a cold
+        // start — never on a picker.
+        const contextProject = context.projectId
+          ? currentProjects.find(p => p.id === context.projectId)
+          : undefined;
+        if (!contextProject) {
+          await useProjectStore.getState().restoreLastProject();
+          return;
+        }
         if (context.projectId) {
-          const project = currentProjects.find(p => p.id === context.projectId);
+          const project = contextProject;
           if (project) {
             // Use skipClear since electron context provides specific worktree to use
             await selectProject(project, { skipClear: true });

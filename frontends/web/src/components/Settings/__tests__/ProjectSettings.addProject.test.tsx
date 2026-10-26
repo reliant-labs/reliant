@@ -1,13 +1,8 @@
 /**
- * The Projects viewer tab (ProjectPanel) offers "Add project" only when its
- * host wires in picker navigation.
- *
- * ProjectPanel gates its picker affordance on `onNavigateToProjectPicker`
- * being supplied. Settings once rendered it with no props, so the button
- * existed in the component and was unreachable — indistinguishable from it not
- * existing. Settings → Projects now has its own page (ProjectsSection, see
- * ProjectSettings.section.test.tsx); ProjectPanel remains the viewer tab's
- * surface, and TabbedViewerPanel does wire the navigation in.
+ * The Projects viewer tab (ProjectPanel) always offers "Add project", and it
+ * opens the Add project dialog — over the window, never a page that replaces
+ * it. (Settings → Projects has its own page, ProjectsSection; see
+ * ProjectSettings.section.test.tsx.)
  */
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -82,24 +77,21 @@ afterEach(() => {
 });
 
 import { ProjectPanel } from "@/components/Projects/ProjectPanel";
+import { useAddProjectDialogStore } from "@/store/addProjectDialogStore";
 
-describe("Settings → Projects add-project entry point", () => {
-  it("offers Add project when the picker navigation is wired in", async () => {
-    const navigate = vi.fn();
-    renderWithQuery(<ProjectPanel onNavigateToProjectPicker={navigate} />);
+describe("Projects viewer tab add-project entry point", () => {
+  beforeEach(() => {
+    useAddProjectDialogStore.setState({ isOpen: false, method: null });
+  });
+
+  it("opens the Add project dialog", async () => {
+    renderWithQuery(<ProjectPanel />);
 
     const button = await screen.findByTestId("project-panel-add-project");
     expect(button).toHaveTextContent(/add project/i);
 
     await userEvent.click(button);
-    expect(navigate).toHaveBeenCalledTimes(1);
-  });
-
-  it("has no add-project affordance at all when navigation is not supplied", () => {
-    // This is exactly the state Settings shipped in, and the reason the
-    // button has to be wired up rather than merely present in the component.
-    renderWithQuery(<ProjectPanel />);
-
-    expect(screen.queryByTestId("project-panel-add-project")).toBeNull();
+    expect(useAddProjectDialogStore.getState().isOpen).toBe(true);
+    expect(useAddProjectDialogStore.getState().method).toBeNull();
   });
 });

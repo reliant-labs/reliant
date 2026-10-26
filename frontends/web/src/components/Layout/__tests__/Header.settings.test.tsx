@@ -1,12 +1,11 @@
 /**
- * The Header's Settings button must survive project-picker mode.
+ * The Header's Settings button must be there with no project.
  *
  * The app's only other Settings link lives in the Sidebar, which renders
  * exclusively inside ModernApp's main app shell — and that shell requires a
- * selected project. A user whose daemon never provisions never gets a project,
- * so if this button is gated on `!projectPickerMode` (as every other control
- * on the row is) there is no route to /settings at all, and therefore no way
- * to sign out.
+ * project. A user with none yet (the first-run state, or a machine that never
+ * provisions) would otherwise have no route to /settings at all, and
+ * therefore no way to sign out.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -79,10 +78,10 @@ describe("Header settings escape hatch", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the Settings button in project-picker mode", async () => {
+  it("renders the Settings button with no project (the first-run state)", async () => {
     const onNavigateToSettings = vi.fn();
     render(
-      <Header projectPickerMode onNavigateToSettings={onNavigateToSettings} />,
+      <Header onNavigateToSettings={onNavigateToSettings} />,
     );
 
     const button = screen.getByTestId("header-settings-button");
@@ -91,10 +90,4 @@ describe("Header settings escape hatch", () => {
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("renders it outside picker mode too", () => {
-    render(
-      <Header projectPickerMode={false} onNavigateToSettings={vi.fn()} />,
-    );
-    expect(screen.getByTestId("header-settings-button")).toBeInTheDocument();
-  });
 });

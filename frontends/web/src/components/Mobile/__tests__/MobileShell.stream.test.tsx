@@ -96,9 +96,11 @@ beforeEach(() => {
     connectionStatus: "disconnected",
     lastSequence: 0,
   });
-  useChatStore.setState({ hasLoaded: false });
-  // A project is already selected, so the shell's first-project fallback
-  // (selectProject → loadChats) does not run; the tests load chats by hand.
+  // The shell loads the chat list itself (every project's); here that load is
+  // a no-op the tests complete by hand (chatsLoad).
+  useChatStore.setState({ hasLoaded: false, loadChats: vi.fn(async () => {}) });
+  // A project is already selected, so the shell's initial-project restore
+  // does not run.
   seedProjects(queryClient, [project]);
   useProjectStore.setState({ currentProject: project });
 });
@@ -138,7 +140,8 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, undefined, 0, "proj-1");
+    // No project scope: the stream carries every project's updates.
+    expect(services[0]!.start).toHaveBeenCalledWith(42, undefined, 0);
   });
 
   it("connects a chat opened directly by URL, with its subscription on the first request", async () => {
@@ -157,7 +160,7 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, CHAT_ID, 0, "proj-1");
+    expect(services[0]!.start).toHaveBeenCalledWith(42, CHAT_ID, 0);
   });
 
   it("disconnects the stream when the shell goes away", async () => {
@@ -200,7 +203,7 @@ describe("MobileShell initial project", () => {
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-2" }), { skipWorkspaceStateSave: true });
   });
 
-  it("falls back to the first project without remembering it as the user's choice", async () => {
+  it("falls back to the most recent project without remembering it as the user's choice", async () => {
     const selectProject = vi.fn(async (p: Project) => useProjectStore.setState({ currentProject: p }));
     useProjectStore.setState({ selectProject });
 

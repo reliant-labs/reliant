@@ -38,9 +38,9 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 | Desktop | Browser | Action |
 |---------|---------|--------|
+| `Cmd+O` | `Cmd+K O` | Add Project |
 | `Cmd+W` | `Cmd+K X` | Close Tab |
 | `Cmd+T` | `Cmd+Alt+N` | New Chat |
-| `Cmd+O` | `Cmd+K O` | Open Project |
 | `Cmd+Shift+K` |  | Open Workflow Builder |
 
 ## Search & Navigation

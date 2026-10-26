@@ -71,7 +71,7 @@ function listOf(chats: Array<ReturnType<typeof chat>>, mainWorktree: Workspace |
     data: {
       chats: chats.map((c) => ({ ...c, worktree: WORKSPACES[c.worktreeId] })),
       lastUserUpdateSequence: 0,
-      mainWorktree,
+      mainWorktrees: mainWorktree ? [{ ...mainWorktree, projectId: "p1" }] : [],
     },
     isLoading: false,
   };
@@ -113,7 +113,8 @@ vi.mock("../MobileWorkspaceSheet", () => ({
   ),
 }));
 
-const { MobileChatList } = await import("../MobileChatList");
+const { MobileChatList, buildGroups } = await import("../MobileChatList");
+const { useWorkspaceStateStore } = await import("../../../store/workspaceStateStore");
 const { SurfaceProvider } = await import("../../../lib/surfaceContext");
 
 function renderList() {
@@ -145,6 +146,7 @@ function chat(overrides: Partial<{
 }>) {
   return {
     id: "chat-default",
+    projectId: "p1",
     title: "Untitled",
     worktreeId: "wt-main",
     activity: ChatActivity.IDLE,
@@ -158,6 +160,9 @@ function chat(overrides: Partial<{
 }
 
 beforeEach(() => {
+  // These tests are about one project's list (the /m/projects filter on p1);
+  // the all-projects grouping is pinned in its own describe below.
+  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
   navigate.mockReset();
   archiveWorktree.mockReset();
   useChatListWithWorkspaces.mockReset();
@@ -191,7 +196,7 @@ describe("MobileChatList", () => {
           { ...chat({ id: "c2", title: "Main chat", worktreeId: "wt-main" }), worktree: MAIN },
         ],
         lastUserUpdateSequence: 0,
-        mainWorktree: MAIN,
+        mainWorktrees: [{ ...MAIN, projectId: "p1" }],
       },
       isLoading: false,
     });
@@ -208,7 +213,7 @@ describe("MobileChatList", () => {
       data: {
         chats: [{ ...chat({ id: "c1", title: "Unbound chat" }), worktreeId: undefined, worktree: undefined }],
         lastUserUpdateSequence: 0,
-        mainWorktree: MAIN,
+        mainWorktrees: [{ ...MAIN, projectId: "p1" }],
       },
       isLoading: false,
     });
@@ -426,5 +431,24 @@ describe("MobileChatList", () => {
     useChatListWithWorkspaces.mockReturnValue({ data: undefined, isLoading: true });
     renderList();
     expect(screen.queryByText("reliant")).not.toBeInTheDocument();
+  });
+});
+
+describe("buildGroups across all projects", () => {
+  it("names each group by its project and lists no empty main workspaces", () => {
+    const groups = buildGroups(
+      [
+        { ...chat({ id: "a1", worktreeId: "wt-a" }), projectId: "pa", worktree: { ...FEATURE, id: "wt-a" } },
+        { ...chat({ id: "b1" }), projectId: "pb", worktreeId: undefined, worktree: undefined },
+      ] as never,
+      [
+        { ...MAIN, id: "main-pa", projectId: "pa" },
+        { ...MAIN, id: "main-pb", projectId: "pb" },
+      ] as never,
+      "recent_activity",
+      { scope: null, projectNames: new Map([["pa", "Alpha"], ["pb", "Beta"]]) },
+    );
+    expect(groups.map((g) => g.worktreeName).sort()).toEqual(["Alpha · feature-x", "Beta · reliant"]);
+    expect(groups.some((g) => g.worktreeId === "main-pa")).toBe(false);
   });
 });

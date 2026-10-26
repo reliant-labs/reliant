@@ -10,23 +10,30 @@ import type { Chat } from "../types/chat";
  */
 export type ChatWorkspace = WorktreeSummary;
 
-/** The list's main workspace plus the project id it belongs to is all a grouping needs. */
-export interface ChatListWorkspaces {
-  mainWorktree?: WorktreeSummary;
+/**
+ * The main workspace of a project, from the main workspaces a chat list
+ * carries (one per project in its scope).
+ */
+export function mainWorkspaceOf(
+  projectId: string | undefined,
+  mainWorktrees: readonly WorktreeSummary[] | undefined,
+): WorktreeSummary | undefined {
+  if (!projectId || !mainWorktrees) return undefined;
+  return mainWorktrees.find((w) => w.projectId === projectId);
 }
 
 /**
- * The workspace a chat belongs to. A chat with no worktree_id runs in the
+ * The workspace a chat belongs to. A chat with no worktree_id runs in its
  * project's main workspace. Undefined only when the server named a worktree it
  * could not find (its row is gone) — callers keep the chat and group it under
  * an "Unknown workspace" fallback rather than hiding it.
  */
 export function workspaceOfChat(
-  chat: Pick<Chat, "worktreeId" | "worktree">,
-  mainWorktree: WorktreeSummary | undefined,
+  chat: Pick<Chat, "worktreeId" | "worktree" | "projectId">,
+  mainWorktrees: readonly WorktreeSummary[] | undefined,
 ): WorktreeSummary | undefined {
   if (chat.worktree) return chat.worktree;
-  if (!chat.worktreeId) return mainWorktree;
+  if (!chat.worktreeId) return mainWorkspaceOf(chat.projectId, mainWorktrees);
   return undefined;
 }
 

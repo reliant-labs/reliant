@@ -1,7 +1,7 @@
 /**
  * Status label for a CONTROL-PLANE machine row.
  *
- * Extracted from ProjectPicker so it can be tested directly, because the bug
+ * Extracted from the old project picker so it can be tested directly, because the bug
  * it encodes was invisible by inspection: there are two `DaemonStatus` enums
  * in this app and their numeric values collide.
  *

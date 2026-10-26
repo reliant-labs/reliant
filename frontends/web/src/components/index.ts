@@ -16,10 +16,8 @@ export { MarkdownRenderer } from "./Chat/MarkdownRenderer";
 export { PermissionsPanel } from "./Chat/PermissionsPanel";
 
 // Project components
-export { ProjectPicker } from "./Projects/ProjectPicker";
 export { InitializationModal } from "./Projects/InitializationModal";
 export { RescanModal } from "./Projects/RescanModal";
-export { ProjectPickerModal } from "./Projects/ProjectPickerModal";
 
 // Settings components
 export { SettingsNavigation } from "./Settings/SettingsNavigation";

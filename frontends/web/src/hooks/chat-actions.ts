@@ -57,17 +57,19 @@ function chatOf<R extends { chat?: Parameters<typeof convertProtoChat>[0] }>(res
  * update sequence the stream resumes from and the project's main workspace.
  * No project lists nothing.
  */
+/**
+ * The sidebar's chat list: one project's chats, or every project's when
+ * `projectId` is undefined (the "All projects" view). `mainWorktrees` carries
+ * the main workspace of each project in that scope.
+ */
 export async function listChats(projectId?: string): Promise<{
   chats: Chat[];
   lastUserUpdateSequence: number;
-  mainWorktree?: WorktreeSummary;
+  mainWorktrees: WorktreeSummary[];
 }> {
-  if (!projectId) {
-    return { chats: [], lastUserUpdateSequence: 0, mainWorktree: undefined };
-  }
   const response = await client.listChats({
-    projectId,
-    // The project chat list is the sidebar's: it lists conversations the
+    projectId: projectId ?? "",
+    // The chat list is the sidebar's: it lists conversations the
     // user is having. Runs an automation started live on the Automations
     // pages instead, and the server keeps any that are waiting on the user
     // (pending approval/question) in this list so they cannot go unseen.
@@ -76,13 +78,18 @@ export async function listChats(projectId?: string): Promise<{
     // conversations out of it. An automation chat is still reachable by id
     // (GetChat) — see resolveChat in hooks/chat-queries.ts.
     sidebarOnly: true,
+    // Across every project a page has to hold more than one project's worth.
+    ...(projectId ? {} : { limit: ALL_PROJECTS_CHAT_LIMIT }),
   });
   return {
     chats: response.chats.map(convertProtoChat),
     lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
-    mainWorktree: response.mainWorktree,
+    mainWorktrees: response.mainWorktrees,
   };
 }
+
+/** How many chats the all-projects list asks for: the most recently active. */
+export const ALL_PROJECTS_CHAT_LIMIT = 300;
 
 export async function getChat(chatId: string): Promise<Chat> {
   return chatOf(await client.getChat({ chatId }));

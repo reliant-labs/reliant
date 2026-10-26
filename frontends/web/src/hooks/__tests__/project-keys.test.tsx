@@ -5,7 +5,8 @@
  *    every mounted project read — the list, the project_daemons rows;
  *  - the project store holds only the selection, and its `currentProject`
  *    follows the cache: a rename or a GetProject refresh reaches it without
- *    the store fetching anything itself, and a delete deselects it;
+ *    the store fetching anything itself, and a delete moves it to the
+ *    most recent project left;
  *  - saving prompts refetches a mounted prompt read;
  *  - the stream's `file_tree` refetch (a queued clone settled on a daemon)
  *    invalidates `projectServiceKeys.all`.
@@ -171,7 +172,7 @@ describe("ProjectService keys", () => {
     expect(useProjectStore.getState().currentProject?.is_git_repo).toBe(true);
   });
 
-  it("deleting the current project drops it from the mounted list and deselects it", async () => {
+  it("deleting the current project drops it from the mounted list and moves to the one left", async () => {
     const server = projectServer([ALPHA, BETA]);
     setTransport(server.transport);
 
@@ -182,7 +183,9 @@ describe("ProjectService keys", () => {
     await act(() => useProjectStore.getState().deleteProject("p-beta"));
 
     await waitFor(() => expect(list.result.current.projects.map((p) => p.id)).toEqual(["p-alpha"]));
-    expect(useProjectStore.getState().currentProject).toBeNull();
+    // No project picker to fall back to: the context moves to the most
+    // recent project left.
+    expect(useProjectStore.getState().currentProject?.id).toBe("p-alpha");
   });
 
   it("adding a repo refetches the mounted project list and the project_daemons rows", async () => {

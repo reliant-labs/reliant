@@ -159,8 +159,8 @@ class WindowManager {
         });
       });
     }
-    // For new windows (isNewWindow=true), don't send any project info
-    // so the project picker will be shown
+    // A new window (isNewWindow=true) gets no project info: it is a view of
+    // every project, and the renderer opens it on the last project used.
 
     // Force traffic light buttons to always be visible (even when window is unfocused)
     if (process.platform === 'darwin') {

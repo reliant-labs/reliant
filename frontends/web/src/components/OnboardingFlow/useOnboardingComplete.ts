@@ -25,7 +25,7 @@ async function defaultProjectPath(isCloud: boolean): Promise<string> {
 
 /**
  * Ensure a project exists and is selected. Without a project the main UI
- * never renders (ModernApp shows ProjectPicker instead), which breaks the
+ * never renders (ModernApp shows its first-run state instead), which breaks the
  * post-onboarding tour spotlight targets.
  */
 export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> {

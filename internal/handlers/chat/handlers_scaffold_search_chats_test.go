@@ -20,10 +20,12 @@ func TestSearchChats_Generated(t *testing.T) {
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SearchChatsRequest, pb.SearchChatsResponse]{
 		{
-			Name:    "project_id is required",
-			Req:     connect.NewRequest(&pb.SearchChatsRequest{Query: "deploy"}),
-			Ctx:     chat.AuthedContext(t),
-			WantErr: connect.CodeInvalidArgument,
+			Name: "an empty query matches nothing across all projects",
+			Req:  connect.NewRequest(&pb.SearchChatsRequest{}),
+			Ctx:  chat.AuthedContext(t),
+			Check: func(t *testing.T, resp *connect.Response[pb.SearchChatsResponse]) {
+				require.Empty(t, resp.Msg.GetChats())
+			},
 		},
 		{
 			Name: "an empty query matches nothing",

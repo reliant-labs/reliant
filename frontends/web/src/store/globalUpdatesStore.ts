@@ -19,8 +19,8 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
-import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
+import { openChat } from "./openChat";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
@@ -46,7 +46,6 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
-import { resolveWorktree } from "../hooks/worktree-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -300,11 +299,11 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
 
     set({ wsService });
-    // Forward subscribedChatId and projectId so the initial connection
-    // includes the chat subscription and project scope — avoids redundant
-    // disconnect/reconnect and filters catch-up replay to this project.
-    const projectId = useProjectStore.getState().currentProject?.id;
-    wsService.start(state.lastSequence, state.subscribedChatId ?? undefined, 0, projectId);
+    // Forward subscribedChatId so the initial connection includes the chat
+    // subscription — avoids a redundant disconnect/reconnect. No project
+    // scope: the window spans every project, so the stream carries every
+    // project's updates and a project switch never reconnects it.
+    wsService.start(state.lastSequence, state.subscribedChatId ?? undefined, 0);
   },
 
   disconnect: () => {
@@ -875,54 +874,22 @@ function handleChatStateChange(update: UserUpdate) {
             timestamp: new Date().toISOString(),
           });
           
-          const projectStore = useProjectStore.getState();
-          const worktreeStore = useWorktreeStore.getState();
-          const chatNavigationStore = useChatNavigationStore.getState();
-          
-          logger.warn(`${LOG_PREFIX} Current state`, {
-            activeChatId: chatStore.activeChatId?.slice(0, 8),
-            currentProject: projectStore.currentProject?.id?.slice(0, 8),
-          });
-          
           // Find the chat object in the React Query cache
           let chat = getChatFromCache(id);
           if (!chat) {
-            // Try to reload chats in case it's not in the list yet
-            await useChatStore.getState().loadChats();
-            // An automation-launched chat is never in the project list, so
-            // fall back to fetching it by id.
+            // An automation-launched chat is never in the sidebar list, so
+            // fetch it by id.
             chat = await resolveChat(id);
             if (!chat) {
-              logger.error(`${LOG_PREFIX} Chat not found after reload: ${id.slice(0, 8)}`);
+              logger.error(`${LOG_PREFIX} Chat not found: ${id.slice(0, 8)}`);
               return;
             }
           }
-          
-          // Switch worktree context if needed
-          const currentProject = projectStore.currentProject;
-          if (chat.worktreeId && currentProject?.id) {
-            const worktree = await resolveWorktree(chat.worktreeId);
-            if (worktree) {
-              logger.warn(`${LOG_PREFIX} 🔄 Switching worktree context: ${worktree.name}`);
-              await worktreeStore.switchWorktreeContext(currentProject.id, worktree);
-              logger.warn(`${LOG_PREFIX} ✅ Worktree context switched`);
-            }
-          } else if (currentProject?.id) {
-            logger.warn(`${LOG_PREFIX} 🔄 Switching to main worktree context`);
-            await worktreeStore.switchWorktreeContext(currentProject.id, null);
-            logger.warn(`${LOG_PREFIX} ✅ Switched to main worktree`);
-          }
-          
-          // Select the chat - ALWAYS force navigation, even if already selected
-          logger.warn(`${LOG_PREFIX} 🎯 SELECTING CHAT (FORCED): ${chat.id.slice(0, 8)}`);
-          
-          // Now select the chat - this triggers full navigation logic
-          logger.warn(`${LOG_PREFIX} Calling selectChat for: ${chat.id.slice(0, 8)}`);
-          useChatStore.getState().selectChat(chat);
-          
-          // Add to navigation queue
-          chatNavigationStore.navigateToChat(chat.id);
-          
+
+          // The chat may be in any project: openChat moves the context to its
+          // project and workspace, then selects it.
+          await openChat(chat);
+
           // Force a state refresh by reading and setting again
           const stateAfter = useChatStore.getState();
           if (stateAfter.activeChatId !== chat.id) {

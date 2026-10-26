@@ -70,14 +70,17 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: {
       chats: mockChatListData,
       lastUserUpdateSequence: 0,
-      mainWorktree: {
-        id: MAIN_WORKTREE_ID,
-        name: "main",
-        branch: "main",
-        path: "/tmp/project",
-        isMain: true,
-        status: 1,
-      },
+      mainWorktrees: [
+        {
+          id: MAIN_WORKTREE_ID,
+          name: "main",
+          branch: "main",
+          path: "/tmp/project",
+          isMain: true,
+          status: 1,
+          projectId: "project-1",
+        },
+      ],
     },
     isLoading: false,
   }),

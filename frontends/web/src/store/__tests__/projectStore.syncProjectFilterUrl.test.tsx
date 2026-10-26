@@ -1,10 +1,11 @@
 /**
- * syncProjectUrl must not clobber search params.
+ * syncProjectFilterUrl must not clobber search params.
  *
- * The URL is the source of truth for which project is selected, so selecting
- * one drives the router to `/project/$id`. That navigation is about the
- * PATHNAME only — every search param on the URL belongs to someone else and
- * has to survive it.
+ * The URL carries the sidebar's project filter: filtering to a project drives
+ * the router to `/project/$id`, and "All projects" back to `/`. That
+ * navigation is about the PATHNAME only — every search param on the URL
+ * belongs to someone else and has to survive it. Selecting the context
+ * project (selectProject) never navigates at all.
  *
  * The regression this guards: tanstack-router REPLACES search when `search`
  * is omitted, so the original `navigate({ to, params })` erased the whole
@@ -136,9 +137,9 @@ const project = (id: string) => ({
 });
 
 /**
- * Selecting a project runs a long tail of side effects (chats, worktrees,
- * workflows, analytics). We only care about the URL, so we invoke selection
- * the way the store does and let the rest reject harmlessly.
+ * Selecting a project runs a long tail of side effects (worktrees, analytics).
+ * We only care about the URL, so we invoke selection the way the store does
+ * and let the rest reject harmlessly.
  */
 async function selectProjectIgnoringSideEffects(
   useProjectStore: any,
@@ -150,7 +151,14 @@ async function selectProjectIgnoringSideEffects(
     .catch(() => undefined);
 }
 
-describe("syncProjectUrl — search params survive project selection", () => {
+/** Filter the sidebar the way setProjectFilter reflects it into the URL. */
+async function filterTo(id: string | null) {
+  const { syncProjectFilterUrl } = await import("../projectStore");
+  syncProjectFilterUrl(id);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+describe("syncProjectFilterUrl — search params survive the project filter", () => {
   // Each test imports a FRESH projectStore (vi.resetModules), but the first
   // import in a worker also transforms its whole module graph: ~4-5s alone,
   // past the test timeout under a loaded full run. Transform it once here,
@@ -172,11 +180,11 @@ describe("syncProjectUrl — search params survive project selection", () => {
   });
 
   it("preserves ?tour when moving / → /project/$id", async () => {
-    const { router, useProjectStore } = await withRouterAt(
+    const { router } = await withRouterAt(
       "/?tour=chat-and-sidebars",
     );
 
-    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+    await filterTo("p1");
 
     expect(router.state.location.pathname).toBe("/project/p1");
     // The whole point: the tour param is what starts the post-onboarding tour.
@@ -184,38 +192,56 @@ describe("syncProjectUrl — search params survive project selection", () => {
   });
 
   it("preserves ?tour when moving between two projects", async () => {
-    const { router, useProjectStore } = await withRouterAt(
+    const { router } = await withRouterAt(
       "/project/p1?tour=workspaces",
     );
 
-    await selectProjectIgnoringSideEffects(useProjectStore, "p2");
+    await filterTo("p2");
 
     expect(router.state.location.pathname).toBe("/project/p2");
     expect((router.state.location.search as any).tour).toBe("workspaces");
   });
 
+  it("preserves ?tour when All projects moves /project/$id → /", async () => {
+    const { router } = await withRouterAt("/project/p1?tour=workspaces");
+
+    await filterTo(null);
+
+    expect(router.state.location.pathname).toBe("/");
+    expect((router.state.location.search as any).tour).toBe("workspaces");
+  });
+
+  it("never navigates when only the context project changes", async () => {
+    const { router, useProjectStore } = await withRouterAt("/?tour=workspaces");
+
+    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+
+    expect(router.state.location.pathname).toBe("/");
+  });
+
   it("leaves the URL alone entirely while the user is on /onboarding", async () => {
     // ensureProject creates and selects a project mid-flow; that must not
     // yank the user out of onboarding before the flow decides to leave.
-    const { router, useProjectStore } = await withRouterAt("/onboarding");
+    const { router } = await withRouterAt("/onboarding");
 
-    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+    await filterTo("p1");
 
     expect(router.state.location.pathname).toBe("/onboarding");
   });
 
   it("still does not navigate away from /settings", async () => {
-    const { router, useProjectStore } = await withRouterAt("/settings");
+    const { router } = await withRouterAt("/settings");
 
-    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+    await filterTo("p1");
+    expect(router.state.location.pathname).toBe("/settings");
+    await filterTo(null);
 
     expect(router.state.location.pathname).toBe("/settings");
   });
 
-  // RunRouteLoader selects the run's project so ChatContainer can read it, and
-  // WorkflowsShell restores a project on a cold load; neither selection may
-  // navigate the user out of the Workflows area (WORKFLOW_UI.md §1.3) or the
-  // Inbox into the project view.
+  // Only the chat shell's URL carries the filter: no filter change may
+  // navigate the user out of the Workflows area (WORKFLOW_UI.md §1.3), the
+  // Inbox or Forge into the chat view.
   it.each([
     "/workflows/runs/chat-1",
     "/workflows/runs",
@@ -227,10 +253,12 @@ describe("syncProjectUrl — search params survive project selection", () => {
     // scope; it must not navigate out of Forge into the chat view.
     "/forge",
     "/forge/env/prod",
-  ])("leaves the user on %s when a project is selected", async (path) => {
-    const { router, useProjectStore } = await withRouterAt(path);
+  ])("leaves the user on %s when the filter changes", async (path) => {
+    const { router } = await withRouterAt(path);
 
-    await selectProjectIgnoringSideEffects(useProjectStore, "p1");
+    await filterTo("p1");
+    expect(router.state.location.pathname).toBe(path);
+    await filterTo(null);
 
     expect(router.state.location.pathname).toBe(path);
   });

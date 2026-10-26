@@ -36,9 +36,9 @@ import { useProjectStore } from "./projectStore";
 import { useWorktreeStore } from "./worktreeStore";
 import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
-import { getCachedChatList, getCachedMainWorktree, getChatFromCache } from "../hooks/chat-queries";
-import { sortChats, compareChatGroups } from "../lib/chatListOrder";
-import { resolveWorktree } from "../hooks/worktree-queries";
+import { getCachedChatList, getCachedListMainWorktrees, getChatFromCache } from "../hooks/chat-queries";
+import { groupByProject, groupByWorkspace } from "../lib/sidebarGroups";
+import { sortChats } from "../lib/chatListOrder";
 
 /**
  * Whether a chat is blocked on the user.
@@ -67,21 +67,10 @@ export function chatNeedsAttention(
 }
 
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
-  const projectId = useProjectStore.getState().currentProject?.id;
-  if (projectId) {
-    const worktreeStore = useWorktreeStore.getState();
-    if (chat.worktreeId) {
-      const targetWorktree = await resolveWorktree(chat.worktreeId);
-      if (targetWorktree) {
-        await worktreeStore.switchWorktreeContext(projectId, targetWorktree);
-      }
-    } else {
-      await worktreeStore.switchWorktreeContext(projectId, null);
-    }
-  }
-
-  const { useChatStore } = await import("./chatStore");
-  useChatStore.getState().selectChat(chat);
+  // The list spans projects: openChat moves the context to the chat's project
+  // and workspace before selecting it. Imported lazily (it imports this store).
+  const { openChat } = await import("./openChat");
+  await openChat(chat);
 }
 
 /**
@@ -94,18 +83,18 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
  */
 async function getOrderedChatList(): Promise<Chat[]> {
   const { useChatListPreferencesStore } = await import("./chatListPreferencesStore");
-  const { useProjectStore } = await import("./projectStore");
   // Read the chat list from the React Query cache — the same source the sidebar
   // renders from — so navigation order matches the sidebar exactly.
-  const projectId = useProjectStore.getState().currentProject?.id;
-  const chats = getCachedChatList(projectId);
-  const mainWorktree = getCachedMainWorktree(projectId);
+  // The sidebar's scope: the project filter, or every project.
+  const scope = useWorkspaceStateStore.getState().projectFilterId;
+  const chats = getCachedChatList(scope);
+  const mainWorktrees = getCachedListMainWorktrees(scope);
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
   const activities = useActivityStore.getState().activities;
 
   // The workspace comes from the chat list itself, as it does in the sidebar,
   // so the order here cannot disagree with what is rendered.
-  const getWorktreeForChat = (chat: Chat) => workspaceOfChat(chat, mainWorktree);
+  const getWorktreeForChat = (chat: Chat) => workspaceOfChat(chat, mainWorktrees);
 
   // The sidebar sorts by the same rule, so keyboard order matches the list.
   const needsAttention = (chat: Chat) => chatNeedsAttention(chat, activities);
@@ -150,30 +139,14 @@ async function getOrderedChatList(): Promise<Chat[]> {
     return sortChatList(activeChats);
   }
 
-  // For grouped view, group by worktree then flatten in visual order (matching Sidebar.tsx)
-  const worktreeGroups = new Map<string, { chats: Chat[] }>();
-
-  for (const chat of activeChats) {
-    const worktree = getWorktreeForChat(chat);
-    const groupKey = worktree?.id ?? (chat.worktreeId || "no-worktree");
-    if (!worktreeGroups.has(groupKey)) {
-      worktreeGroups.set(groupKey, { chats: [] });
-    }
-    worktreeGroups.get(groupKey)!.chats.push(chat);
+  // For grouped view, group (by project, then workspace) and flatten in
+  // visual order — the same grouping Sidebar.tsx renders (lib/sidebarGroups).
+  const groupOptions = { sortOrder, needsAttention };
+  if (scope) {
+    return groupByWorkspace(scope, activeChats, mainWorktrees, groupOptions).flatMap((group) => group.chats);
   }
-
-  // Sort chats within each group
-  worktreeGroups.forEach((group) => {
-    group.chats = sortChatList(group.chats);
-  });
-
-  // Sort groups by their leading chat (matching Sidebar.tsx)
-  const sortedGroups = Array.from(worktreeGroups.values()).sort((a, b) =>
-    compareChatGroups(a.chats, b.chats, sortOrder, needsAttention)
-  );
-
-  // Flatten groups into final ordered list
-  return sortedGroups.flatMap((group) => group.chats);
+  const projects = (await import("../hooks/project-queries")).getCachedProjects();
+  return groupByProject(activeChats, mainWorktrees, projects, groupOptions).flatMap((group) => group.chats);
 }
 
 interface ChatNavigationState {
