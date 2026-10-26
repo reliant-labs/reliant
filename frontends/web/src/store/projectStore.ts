@@ -128,6 +128,24 @@ function syncProjectUrl(projectId: string | null) {
 
 export type { Project };
 
+export interface SelectProjectOptions {
+  skipClear?: boolean;
+  skipWorkspaceStateSave?: boolean;
+  /**
+   * Restore the desktop workspace for the project: its last worktree, its
+   * viewers and chat queue, and its last ACTIVE CHAT, which is selected
+   * (marked read, subscribed on the update stream, its plan loaded). Default
+   * true.
+   *
+   * The mobile surface passes false. Its route names the chat on screen, so
+   * the desktop's remembered chat is one the user is not looking at — and
+   * restoring it cost several serial RPCs (worktree, main worktree, chat)
+   * before the switch could finish, then dismissed that chat's unread state
+   * and tore the update stream down to subscribe it.
+   */
+  restoreWorkspace?: boolean;
+}
+
 interface ProjectStore {
   /**
    * The selected project — client state. The row itself is server state: it
@@ -137,8 +155,8 @@ interface ProjectStore {
    */
   currentProject: Project | null;
 
-  selectProject: (project: Project, options?: { skipClear?: boolean; skipWorkspaceStateSave?: boolean }) => Promise<void>;
-  restoreLastProject: () => Promise<boolean>;
+  selectProject: (project: Project, options?: SelectProjectOptions) => Promise<void>;
+  restoreLastProject: (options?: Pick<SelectProjectOptions, "restoreWorkspace">) => Promise<boolean>;
   /** Re-read the current project from the server (after a git init, a new workspace). */
   refreshCurrentProject: () => Promise<void>;
   /** Create a project and make it current. */
@@ -152,7 +170,7 @@ interface ProjectStore {
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentProject: null,
 
-  selectProject: async (project: Project, options?: { skipClear?: boolean; skipWorkspaceStateSave?: boolean }) => {
+  selectProject: async (project: Project, options?: SelectProjectOptions) => {
     const prevProjectId = get().currentProject?.id ?? null;
     const isProjectSwitch = prevProjectId !== null && prevProjectId !== project.id;
 
@@ -211,8 +229,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // Only reload worktrees and restore workspace state when not skipping clear
     // (user-initiated project switch). The Electron/skipClear path handles
-    // worktree loading separately via useWindowContext.
-    if (!options?.skipClear) {
+    // worktree loading separately via useWindowContext; the mobile surface
+    // opts out with restoreWorkspace: false (see SelectProjectOptions).
+    if (!options?.skipClear && options?.restoreWorkspace !== false) {
       // Restore last worktree for this project. Fetches only that workspace
       // (or main) — the sidebar groups from the chat list, so the project's
       // full worktree list is not loaded here.
@@ -256,7 +275,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  restoreLastProject: async () => {
+  restoreLastProject: async (options) => {
     const { lastProjectId } = useWorkspaceStateStore.getState();
 
     if (!lastProjectId) {
@@ -285,7 +304,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     logger.info("[ProjectStore] Restoring last project", { projectId: project.id, name: project.name });
 
     // Select project with skipWorkspaceStateSave since we're restoring
-    await get().selectProject(project, { skipWorkspaceStateSave: true });
+    await get().selectProject(project, { ...options, skipWorkspaceStateSave: true });
 
     return true;
   },
