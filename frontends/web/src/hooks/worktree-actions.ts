@@ -49,6 +49,7 @@ import {
   type Worktree,
 } from "./worktree-queries";
 import { worktreeServiceKeys } from "./worktree-service-hooks_gen";
+import { inboxServiceKeys } from "./inbox-service-hooks_gen";
 
 const client = connectClient(WorktreeService);
 
@@ -57,7 +58,7 @@ export async function restoreWorktreeRecovery(recoveryId: string, targetDaemonId
   const response = await client.restoreWorktreeRecovery({ recoveryId, targetDaemonId, idempotencyKey });
   await Promise.all([
     invalidateWorktreeQueries(appQueryClient),
-    appQueryClient.invalidateQueries({ queryKey: ["inbox"] }),
+    appQueryClient.invalidateQueries({ queryKey: inboxServiceKeys.all }),
   ]);
   return response;
 }
@@ -67,7 +68,7 @@ export async function deleteWorktreeRecovery(recoveryId: string, idempotencyKey:
   const response = await client.deleteWorktreeRecovery({ recoveryId, idempotencyKey });
   await Promise.all([
     appQueryClient.invalidateQueries({ queryKey: worktreeServiceKeys.all }),
-    appQueryClient.invalidateQueries({ queryKey: ["inbox"] }),
+    appQueryClient.invalidateQueries({ queryKey: inboxServiceKeys.all }),
   ]);
   return response;
 }
