@@ -31,6 +31,7 @@
 #   lint         forge lint --no-fix, UNSCOPED: golangci over the module, buf
 #                lint, every whole-project lane, the frontends
 #   build        go build ./...
+#   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
 #   test         task test  (Go -race -count=1 without -short: every slow
 #                test, plus web and electron in full)
@@ -50,7 +51,7 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build vet test integration e2e)
+STEPS=(npm generate docs lint build typecheck vet test integration e2e)
 NOTES_REF=refs/notes/release-gate
 die() { printf 'release-gate: %s\n' "$*" >&2; exit 2; }
 
@@ -241,6 +242,7 @@ run_step() {
       if [ -n "${FORGE_BIN:-}" ]; then "$FORGE_BIN" lint --quiet --no-fix
       else env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin" lint --quiet --no-fix; fi ;;
     build) go build ./... ;;
+    typecheck) npm --prefix frontends/web run --silent typecheck ;;
     vet) go vet ./... ;;
     test) task test ;;
     integration) task test:integration ;;
@@ -255,6 +257,6 @@ case "$sub" in
   check) cmd_check "$@" ;;
   latest) cmd_latest "$@" ;;
   show) record_of "$(resolve "${1:-HEAD}")" | jq . ;;
-  -h|--help|"") sed -n '2,48p' "$0" ;;
+  -h|--help|"") sed -n '2,49p' "$0" ;;
   *) die "unknown command '$sub' (run, check, latest, show)" ;;
 esac
