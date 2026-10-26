@@ -27,7 +27,7 @@ import { setRuntimeConfig } from '@/test/runtimeConfig'
  */
 
 // `src/test/setup.ts` replaces this module globally with a stub so that
-// importing grpc-client doesn't need real Supabase credentials. This suite is
+// importing the Connect transport doesn't need real Supabase credentials. This suite is
 // specifically about the REAL storage adapter, so it opts back in.
 vi.unmock('@/lib/supabase')
 

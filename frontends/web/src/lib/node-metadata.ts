@@ -17,8 +17,8 @@ import {
   FolderMinus,
   type LucideIcon,
 } from 'lucide-react'
-import { getCatalogClient } from '../api/grpc-client'
-import type { NodeInfo } from '../gen/reliant/v1/catalog_pb'
+import { connectClient } from './connect'
+import { CatalogService, type NodeInfo } from '../gen/reliant/v1/catalog_pb'
 import type { NodeTheme } from '../components/workflow/nodes/NodeStatusWrapper'
 
 // ---------------------------------------------------------------------------
@@ -234,7 +234,7 @@ export async function ensureNodesCached(): Promise<NodeInfo[]> {
   if (_fetchPromise) return _fetchPromise
   _fetchPromise = (async () => {
     try {
-      const client = getCatalogClient()
+      const client = connectClient(CatalogService)
       const response = await client.listNodes({})
       _cachedNodes = response.nodes || []
     } catch (err) {

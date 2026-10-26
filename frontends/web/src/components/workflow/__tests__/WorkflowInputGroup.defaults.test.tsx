@@ -8,10 +8,14 @@
  * comma-separated string.
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
+import { renderWithQuery } from "../../../test/renderWithQuery";
 
 // PresetPicker reads a workflow's defaults through the query cache; these
-// renders have no QueryClient and no defaults to show.
+// renders have no defaults to show.
 vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
   useDefaultPresets: () => ({ defaults: {}, loading: false }),
@@ -22,15 +26,18 @@ vi.mock("../../../store/globalDataStore", () => ({
   useGlobalDataStore: (selector: (state: unknown) => unknown) =>
     selector({ isInitialized: true, isPrefetching: false, refetchWorkflowPresets: async () => undefined }),
 }));
-vi.mock("../../../api/client", () => ({
-  api: { tools: { list: async () => ({ tools: [{ name: "view", description: "Read a file", category: "File" }] }) } },
-}));
+// ListTools is answered at the transport (ToolsSelector reads the generated hook).
+setTransport(
+  mockTransport({
+    "CatalogService.ListTools": { response: { tools: [{ name: "view", description: "Read a file", category: "File" }] } },
+  }),
+);
 
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
 import { createInput } from "../../../lib/inputHelpers";
 
 function renderGroup() {
-  render(
+  renderWithQuery(
     <WorkflowInputGroup
       isTopLevel
       group={{

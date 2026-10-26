@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import {
   OAUTH_HELPER_POLL_INTERVAL_MS,
   useOAuthAvailability,
@@ -8,12 +10,11 @@ import {
 
 // The daemon is unreachable throughout: the helper in these tests is a
 // standalone `reliant auth serve`, which is the setup the reported bug was
-// filed against. Mocking this explicitly also keeps the Connect client graph
-// (and the auth interceptor's own lazy Supabase import) out of a hook test.
-vi.mock("@/api/daemon-grpc", () => ({
-  openOAuthHelper: vi.fn().mockRejectedValue(new Error("daemon unreachable")),
-  closeOAuthHelper: vi.fn().mockResolvedValue(undefined),
-}));
+// filed against. The transport answers no DaemonService rpc, so the hook's
+// OpenOAuthHelper is refused as an absent daemon's would be. Answering at the
+// transport also keeps the real interceptor chain (and the auth interceptor's
+// own lazy Supabase import) out of a hook test.
+setTransport(mockTransport({}));
 
 /**
  * THE REPORTED BUG: `reliant auth serve` is killed mid-session. The panel keeps
@@ -29,7 +30,7 @@ vi.mock("@/api/daemon-grpc", () => ({
  * These tests used to run on real timers and wait with `waitFor`, which made
  * them a race against the wall clock rather than a check of the hook. The step
  * that lost was not even the poll: the hook's FIRST check goes through a lazy
- * `import('@/api/daemon-grpc')`, which on first use loaded the whole Connect
+ * import of the DaemonService client, which on first use loaded the whole Connect
  * client graph — about 300ms on an idle machine, and past `waitFor`'s 1000ms
  * default whenever the suite shared the CPU (10 of 36 runs failed with twelve
  * copies running at once). The hook was fine; the deadline was measuring how
@@ -80,9 +81,9 @@ describe("useOAuthAvailability — helper disappears mid-session", () => {
   };
 
   beforeAll(async () => {
-    // Load the hook's lazily imported dependency before any clock starts, so
-    // the import inside the hook resolves from the module cache.
-    await import("@/api/daemon-grpc");
+    // Load the hook's lazily imported dependencies before any clock starts, so
+    // the imports inside the hook resolve from the module cache.
+    await Promise.all([import("@/lib/connect"), import("@/gen/reliant/v1/daemon_pb")]);
   });
 
   beforeEach(() => {

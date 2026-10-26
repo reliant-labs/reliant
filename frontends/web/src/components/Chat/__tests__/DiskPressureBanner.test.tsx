@@ -25,10 +25,6 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ activeDaemon: state.activeId ? { daemonId: state.activeId } : undefined }),
 }));
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ clearMachineCaches: vi.fn() }), inbox: () => ({}) },
-}));
-
 import { DiskPressureBanner } from "../DiskPressureBanner";
 
 function machine(

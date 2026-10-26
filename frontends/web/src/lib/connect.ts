@@ -4,9 +4,9 @@
  *
  * forge's generated hooks (`src/hooks/*-service-hooks_gen.ts`) call
  * `connectClient(<Service>)`, and so does every hand-written wrapper in
- * `src/api/*-grpc.ts` (through `api/grpc-client.ts`) and every control-plane
- * service module (through `services/controlPlane/client.ts`). This module
- * owns what those calls reach:
+ * `src/api/*-grpc.ts` and every control-plane service module (through
+ * `services/controlPlane/client.ts`). This module owns what those calls
+ * reach:
  *
  *   - the ROUTE table: which backend each procedure dials (`routeFor`);
  *   - each route's base URL (`reliantApiBaseUrl`, `controlPlaneBaseUrl`);

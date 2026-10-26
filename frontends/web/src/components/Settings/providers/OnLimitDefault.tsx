@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "../../../lib/utils";
-import { api } from "../../../api/client";
+import { driverDisplayName } from "../../../hooks/catalog-models";
 import { useModels } from "../../../store/globalDataStore";
 import { usePolicyDefaults } from "../../../hooks/provider-policy-queries";
 import { baseModelOf, driverOf, fallbackSuggestions, type PolicyModel } from "../../../lib/providerPolicy";
@@ -37,7 +37,7 @@ export function OnLimitDefault({ provider, displayName, variant }: OnLimitDefaul
   const value = choice.kind === "fallback" ? choice.model : WAIT;
   const label = (id: string) => {
     const m = models.find((x) => x.id === id);
-    return `${m?.name ?? baseModelOf(id)} · ${api.models._driverDisplayName(driverOf(id))}`;
+    return `${m?.name ?? baseModelOf(id)} · ${driverDisplayName(driverOf(id))}`;
   };
   const listed = choice.kind !== "fallback" || suggestions.some((s) => s.id === choice.model);
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { CatalogService } from "../gen/reliant/v1/catalog_pb";
+import { connectClient } from "../lib/connect";
 import { splitModelId } from "../lib/modelId";
 
 // One ListModelsByProvider request per driver per session: a provider's
@@ -10,9 +11,9 @@ const namesByDriver = new Map<string, Promise<Map<string, string>>>();
 function catalogNames(driverId: string): Promise<Map<string, string>> {
   let names = namesByDriver.get(driverId);
   if (!names) {
-    names = api.models
-      .listByProvider(driverId)
-      .then((models) => new Map(models.map((m) => [m.id, m.name])))
+    names = connectClient(CatalogService)
+      .listModelsByProvider({ provider: driverId })
+      .then(({ models }) => new Map(models.map((m) => [m.id, m.name])))
       .catch((error: unknown) => {
         namesByDriver.delete(driverId);
         throw error;

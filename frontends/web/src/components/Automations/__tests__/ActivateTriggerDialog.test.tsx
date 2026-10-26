@@ -45,9 +45,9 @@ const listConnections = vi.fn();
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {},
-  getGRPCBaseURLPublic: () => "https://api.example.com",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "https://api.example.com",
 }));
 
 vi.mock("@/store/projectStore", () => {

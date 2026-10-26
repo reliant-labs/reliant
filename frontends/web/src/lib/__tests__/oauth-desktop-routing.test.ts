@@ -7,16 +7,13 @@ vi.mock('@/api/settings-grpc', () => ({
   },
 }))
 
-vi.mock('@/api/daemon-grpc', () => ({
-  startOAuthViaDaemon: vi.fn(),
-}))
-
 vi.mock('@/lib/oauth-local', () => ({
+  startOAuthViaDaemon: vi.fn(),
   startOAuthViaLocalServer: vi.fn(),
 }))
 
 import { settingsGrpc } from '@/api/settings-grpc'
-import { startOAuthViaDaemon } from '@/api/daemon-grpc'
+import { startOAuthViaDaemon } from '@/lib/oauth-local'
 import { runClaudeOAuthFlow } from '@/lib/claude-oauth'
 import { runCodexOAuthFlow } from '@/lib/codex-oauth'
 

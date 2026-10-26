@@ -1,7 +1,7 @@
 /**
  * Backend-signalled-modal Connect interceptor — shared by every Connect
- * transport in the app (`api/grpc-client.ts` and
- * `services/controlPlane/client.ts`).
+ * transport in the app (every route `lib/connect.ts` builds, through
+ * `buildInterceptors` in `api/transport.ts`).
  *
  * Background: control-plane signals two kinds of "UI should intervene"
  * conditions via the reason on Connect errors (lib/errorReasons.ts):

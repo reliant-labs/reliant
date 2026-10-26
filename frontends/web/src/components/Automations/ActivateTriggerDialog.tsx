@@ -44,7 +44,7 @@ import {
   type Trigger,
   type WebhookCredential,
 } from "@/hooks/trigger-model";
-import { getGRPCBaseURLPublic } from "@/api/grpc-client";
+import { reliantApiBaseUrl } from "@/lib/connect";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import type { RunWorkflowValue } from "../workflow/run/runWorkflowValues";
 import { fieldClass, hintClass, labelClass, textareaClass, errorTextClass } from "../workflow/run/runFormStyles";
@@ -88,7 +88,7 @@ const NO_MACHINE = "__no_machine__";
  * Electron release cut after this dialog landed.
  */
 export function apiOrigin(): string {
-  return getGRPCBaseURLPublic() ?? globalThis.location?.origin ?? "";
+  return reliantApiBaseUrl() ?? globalThis.location?.origin ?? "";
 }
 
 export function ActivateTriggerDialog(props: ActivateTriggerDialogProps) {

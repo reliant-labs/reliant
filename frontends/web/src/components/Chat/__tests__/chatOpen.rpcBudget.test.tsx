@@ -38,7 +38,6 @@ vi.mock("../../../hooks/useSlashCommands", () => ({
 vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
-import { api } from "../../../api/client";
 import { invalidatePresets } from "../../../hooks/preset-queries";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
@@ -85,6 +84,10 @@ function spyRpcs() {
       "ChatService.ListQueuedAgentMessages": listQueuedAgentMessages,
       "ChatService.GetChat": (req: unknown) => getChat(req as { chatId: string }),
       "ChatService.ListMessages": listMessages,
+      // The model catalog is app-wide (prefetched once per session), not a
+      // chat-open read; answer it empty so the composer can mount.
+      "CatalogService.ListModels": { response: {} },
+      "CatalogService.ListAvailableModels": { response: {} },
     }),
   );
   counters = [
@@ -98,9 +101,6 @@ function spyRpcs() {
     { name: "ListPresetsForWorkflow", spy: listPresetsForWorkflow },
     { name: "GetDefaultPresets", spy: getDefaultPresetsBatch },
   ];
-  // The model catalog is app-wide (prefetched once per session), not a
-  // chat-open read; stub it so the composer can mount.
-  vi.spyOn(api.models, "list").mockResolvedValue({ models: [], tiers: {} } as never);
 }
 
 function snapshotCounts(): Record<string, number> {
