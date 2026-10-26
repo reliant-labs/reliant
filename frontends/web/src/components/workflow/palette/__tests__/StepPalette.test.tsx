@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
@@ -46,6 +46,7 @@ setTransport(
 );
 
 import { StepPalette, type StepPaletteProps } from "../StepPalette";
+import { CATALOG_SEARCH_DEBOUNCE_MS } from "../useCatalogSearch";
 
 const DISPLAY: Record<string, string> = { github: "GitHub", slack: "Slack", gmail: "Gmail" };
 
@@ -350,19 +351,35 @@ describe("StepPalette: browsing (nothing typed)", () => {
 
 describe("StepPalette: searching", () => {
   it("debounces the query and sends it to SearchCatalog, narrowing built-ins locally", async () => {
-    const user = userEvent.setup();
     searchCatalog.mockImplementation((req: SearchCatalogRequest) =>
       Promise.resolve(page(req.query === "issue" ? [entry("github/issue.create@1", { name: "Create issue" })] : [])),
     );
     renderPalette();
     await screen.findByText("Call LLM");
+    expect(searchCatalog).not.toHaveBeenCalled();
 
-    await user.type(input(), "issue");
+    // Real user.type yields between keystrokes: on a loaded host those gaps
+    // can exceed the debounce, legitimately searching for "i" before "issue".
+    // Control only this test's input clock, testing the actual boundary AND
+    // cancellation of each earlier keystroke's timer, not CPU scheduling.
+    vi.useFakeTimers();
+    try {
+      for (const value of ["i", "is", "iss", "issu", "issue"]) {
+        fireEvent.change(input(), { target: { value } });
+        await act(async () => { await vi.advanceTimersByTimeAsync(CATALOG_SEARCH_DEBOUNCE_MS - 1); });
+        expect(searchCatalog).not.toHaveBeenCalled();
+      }
+      expect(screen.queryByText("Call LLM")).not.toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      const queries = searchCatalog.mock.calls.map(([req]) => (req as SearchCatalogRequest).query);
+      expect(queries).toEqual(["issue"]);
+      // Let the query observer publish its resolved response without another
+      // keystroke or a real-time waitFor advancing our debounce clock.
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    } finally {
+      vi.useRealTimers();
+    }
     await screen.findByText("Create issue");
-    const queries = searchCatalog.mock.calls.map(([req]) => (req as SearchCatalogRequest).query);
-    // One request for the settled query: not one per keystroke, and none for the empty browse.
-    expect(queries).toEqual(["issue"]);
-    expect(screen.queryByText("Call LLM")).not.toBeInTheDocument();
     // A search result names its integration, since it is not under one.
     expect(within(optionNamed("Create issue")).getByText("GitHub")).toBeInTheDocument();
   });

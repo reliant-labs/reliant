@@ -17,6 +17,7 @@ import (
 // includes worktreesweep.StorageStore because the storage view and the
 // clean-up read through the same store.
 type Repository interface {
+	ListWorktreeRecoveries(context.Context, string, string) ([]*core.WorktreeRecovery, error)
 	worktreesweep.StorageStore
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.

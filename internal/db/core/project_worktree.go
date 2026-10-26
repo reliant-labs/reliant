@@ -227,6 +227,10 @@ type Worktree struct {
 	// — set only with a FAILED status, and only for a reason that is the
 	// user's to fix (internal/workspacecreate). Empty otherwise.
 	FailureReason string
+	// ActivityGeneration changes on every admitted server activity. Finalizing
+	// rejects new admissions until the exact journal is reconciled/cancelled.
+	ActivityGeneration   int64
+	RecoveryFinalizingID *string
 }
 
 // Repo is a git repository nested inside a project.

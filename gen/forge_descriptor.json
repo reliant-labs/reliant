@@ -2361,6 +2361,56 @@
       "PkgName": "reliantv1",
       "Methods": [
         {
+          "Name": "ListWorktreeRecoveries",
+          "InputType": "ListWorktreeRecoveriesRequest",
+          "OutputType": "ListWorktreeRecoveriesResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.ListWorktreeRecoveriesRequest",
+          "OutputTypeFQ": "reliant.v1.ListWorktreeRecoveriesResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
+          "Name": "RestoreWorktreeRecovery",
+          "InputType": "RestoreWorktreeRecoveryRequest",
+          "OutputType": "RestoreWorktreeRecoveryResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.RestoreWorktreeRecoveryRequest",
+          "OutputTypeFQ": "reliant.v1.RestoreWorktreeRecoveryResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
+        },
+        {
+          "Name": "DeleteWorktreeRecovery",
+          "InputType": "DeleteWorktreeRecoveryRequest",
+          "OutputType": "DeleteWorktreeRecoveryResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "InputTypeFQ": "reliant.v1.DeleteWorktreeRecoveryRequest",
+          "OutputTypeFQ": "reliant.v1.DeleteWorktreeRecoveryResponse",
+          "InputProtoFile": "reliant/v1/worktree.proto",
+          "OutputProtoFile": "reliant/v1/worktree.proto",
+          "Activity": {
+            "Mutating": true
+          }
+        },
+        {
           "Name": "CreateWorktree",
           "InputType": "CreateWorktreeRequest",
           "OutputType": "CreateWorktreeResponse",
@@ -2922,6 +2972,26 @@
             "MessageType": "reliant.v1.Worktree"
           }
         ],
+        "DeleteWorktreeRecoveryRequest": [
+          {
+            "Name": "recovery_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "idempotency_key",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DeleteWorktreeRecoveryResponse": [
+          {
+            "Name": "recovery",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeRecovery"
+          }
+        ],
         "DeleteWorktreeRequest": [
           {
             "Name": "worktree_id",
@@ -3275,6 +3345,26 @@
             "IsOptional": false
           }
         ],
+        "ListWorktreeRecoveriesRequest": [
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "source_worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          }
+        ],
+        "ListWorktreeRecoveriesResponse": [
+          {
+            "Name": "recoveries",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeRecovery"
+          }
+        ],
         "ListWorktreeRepoStatusesRequest": [
           {
             "Name": "worktree_id",
@@ -3429,6 +3519,36 @@
           {
             "Name": "snapshot_refs",
             "ProtoType": "[]string",
+            "IsOptional": false
+          }
+        ],
+        "RestoreWorktreeRecoveryRequest": [
+          {
+            "Name": "recovery_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "target_daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "idempotency_key",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "RestoreWorktreeRecoveryResponse": [
+          {
+            "Name": "recovery",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.WorktreeRecovery"
+          },
+          {
+            "Name": "worktree_id",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -3741,6 +3861,29 @@
             "name": "worktree",
             "kind": "message",
             "type_name": "reliant.v1.Worktree"
+          }
+        ],
+        "reliant.v1.DeleteWorktreeRecoveryRequest": [
+          {
+            "name": "recovery_id",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          },
+          {
+            "name": "idempotency_key",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          }
+        ],
+        "reliant.v1.DeleteWorktreeRecoveryResponse": [
+          {
+            "name": "recovery",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeRecovery"
           }
         ],
         "reliant.v1.DeleteWorktreeRequest": [
@@ -4112,6 +4255,26 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ListWorktreeRecoveriesRequest": [
+          {
+            "name": "project_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "source_worktree_id",
+            "kind": "string",
+            "optional": true
+          }
+        ],
+        "reliant.v1.ListWorktreeRecoveriesResponse": [
+          {
+            "name": "recoveries",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeRecovery",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ListWorktreeRepoStatusesRequest": [
           {
             "name": "worktree_id",
@@ -4253,6 +4416,40 @@
             "name": "snapshot_refs",
             "kind": "string",
             "repeated": true
+          }
+        ],
+        "reliant.v1.RestoreWorktreeRecoveryRequest": [
+          {
+            "name": "recovery_id",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          },
+          {
+            "name": "target_daemon_id",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          },
+          {
+            "name": "idempotency_key",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          }
+        ],
+        "reliant.v1.RestoreWorktreeRecoveryResponse": [
+          {
+            "name": "recovery",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeRecovery"
+          },
+          {
+            "name": "worktree_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.RevertFilesRequest": [
@@ -4482,6 +4679,96 @@
             "kind": "bool"
           }
         ],
+        "reliant.v1.WorktreeRecovery": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "source_worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "capture_id",
+            "kind": "string"
+          },
+          {
+            "name": "phase",
+            "kind": "string"
+          },
+          {
+            "name": "last_error",
+            "kind": "string"
+          },
+          {
+            "name": "created_at",
+            "kind": "string"
+          },
+          {
+            "name": "updated_at",
+            "kind": "string"
+          },
+          {
+            "name": "checkouts",
+            "kind": "message",
+            "type_name": "reliant.v1.WorktreeRecoveryCheckout",
+            "repeated": true
+          },
+          {
+            "name": "operation",
+            "kind": "string"
+          },
+          {
+            "name": "operation_key",
+            "kind": "string"
+          },
+          {
+            "name": "target_daemon_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.WorktreeRecoveryCheckout": [
+          {
+            "name": "repo_id",
+            "kind": "string"
+          },
+          {
+            "name": "rel",
+            "kind": "string"
+          },
+          {
+            "name": "remote_url",
+            "kind": "string"
+          },
+          {
+            "name": "recovery_ref",
+            "kind": "string"
+          },
+          {
+            "name": "commit_oid",
+            "kind": "string"
+          },
+          {
+            "name": "manifest_digest",
+            "kind": "string"
+          },
+          {
+            "name": "phase",
+            "kind": "string"
+          },
+          {
+            "name": "last_error",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.WorktreeRepoStatus": [
           {
             "name": "repo_id",
@@ -4531,6 +4818,8 @@
         "reliant.v1.CreateWorktreePRResponse": "reliant/v1/worktree.proto",
         "reliant.v1.CreateWorktreeRequest": "reliant/v1/worktree.proto",
         "reliant.v1.CreateWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.DeleteWorktreeRecoveryRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.DeleteWorktreeRecoveryResponse": "reliant/v1/worktree.proto",
         "reliant.v1.DeleteWorktreeRequest": "reliant/v1/worktree.proto",
         "reliant.v1.DeleteWorktreeResponse": "reliant/v1/worktree.proto",
         "reliant.v1.DiscoverWorktreesRequest": "reliant/v1/worktree.proto",
@@ -4551,6 +4840,8 @@
         "reliant.v1.ImportWorktreeResponse": "reliant/v1/worktree.proto",
         "reliant.v1.ListArchivedWorktreesRequest": "reliant/v1/worktree.proto",
         "reliant.v1.ListArchivedWorktreesResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreeRecoveriesRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.ListWorktreeRecoveriesResponse": "reliant/v1/worktree.proto",
         "reliant.v1.ListWorktreeRepoStatusesRequest": "reliant/v1/worktree.proto",
         "reliant.v1.ListWorktreeRepoStatusesResponse": "reliant/v1/worktree.proto",
         "reliant.v1.ListWorktreesRequest": "reliant/v1/worktree.proto",
@@ -4563,6 +4854,8 @@
         "reliant.v1.PushWorktreeResponse": "reliant/v1/worktree.proto",
         "reliant.v1.RecreateWorktreeRequest": "reliant/v1/worktree.proto",
         "reliant.v1.RecreateWorktreeResponse": "reliant/v1/worktree.proto",
+        "reliant.v1.RestoreWorktreeRecoveryRequest": "reliant/v1/worktree.proto",
+        "reliant.v1.RestoreWorktreeRecoveryResponse": "reliant/v1/worktree.proto",
         "reliant.v1.RevertFilesRequest": "reliant/v1/worktree.proto",
         "reliant.v1.RevertFilesResponse": "reliant/v1/worktree.proto",
         "reliant.v1.StageFilesRequest": "reliant/v1/worktree.proto",
@@ -4576,6 +4869,8 @@
         "reliant.v1.UpdateWorktreeResponse": "reliant/v1/worktree.proto",
         "reliant.v1.Worktree": "reliant/v1/worktree.proto",
         "reliant.v1.WorktreeFileChange": "reliant/v1/worktree.proto",
+        "reliant.v1.WorktreeRecovery": "reliant/v1/worktree.proto",
+        "reliant.v1.WorktreeRecoveryCheckout": "reliant/v1/worktree.proto",
         "reliant.v1.WorktreeRepoStatus": "reliant/v1/worktree.proto"
       },
       "Enums": {
@@ -19164,6 +19459,12 @@
             "kind": "message",
             "type_name": "reliant.v1.InboxAutomationNeedsSetup",
             "oneof": "payload"
+          },
+          {
+            "name": "recovery",
+            "kind": "message",
+            "type_name": "reliant.v1.RecoveryInboxItem",
+            "oneof": "payload"
           }
         ],
         "reliant.v1.InboxQuestion": [
@@ -19270,6 +19571,52 @@
             "kind": "int32"
           }
         ],
+        "reliant.v1.RecoveryInboxItem": [
+          {
+            "name": "recovery_id",
+            "kind": "string"
+          },
+          {
+            "name": "source_worktree_id",
+            "kind": "string"
+          },
+          {
+            "name": "source_worktree_name",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "project_name",
+            "kind": "string"
+          },
+          {
+            "name": "phase",
+            "kind": "string"
+          },
+          {
+            "name": "checkout_count",
+            "kind": "int32"
+          },
+          {
+            "name": "last_error",
+            "kind": "string"
+          },
+          {
+            "name": "operation",
+            "kind": "string"
+          },
+          {
+            "name": "operation_key",
+            "kind": "string"
+          },
+          {
+            "name": "target_daemon_id",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.RestoreInboxItemRequest": [
           {
             "name": "item_ids",
@@ -19334,6 +19681,7 @@
         "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
+        "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
@@ -19363,7 +19711,8 @@
           "INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED",
           "INBOX_ITEM_KIND_RUN_FINISHED",
           "INBOX_ITEM_KIND_STORAGE",
-          "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP"
+          "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
+          "INBOX_ITEM_KIND_RECOVERY"
         ],
         "reliant.v1.TriggerHealthStatus": [
           "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -19399,7 +19748,8 @@
           5,
           6,
           7,
-          8
+          8,
+          9
         ],
         "reliant.v1.TriggerHealthStatus": [
           0,
@@ -40344,7 +40694,7 @@
     "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "d975074ed16882b06823391fa8e1ab82c54e7b8624a1465cb45d11e3eb0c0138",
-    "reliant/v1/inbox.proto": "3674d17a4999e2cbdece60fcf227f1a52068616f22a28efff18b9c34f70608d3",
+    "reliant/v1/inbox.proto": "94d7bdbff7dc2d3cc85ed9ac7e47140ad217af70dff62ec3b7bd88d78bd3f732",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -40369,6 +40719,6 @@
     "reliant/v1/trigger.proto": "bf4b9bf002405448a9d185e3a16daaff0b61379d7352290130314d0a1d3011ec",
     "reliant/v1/workflow.proto": "ebbec9e5dfa96c5f3dcbf59f3e939ea7b3348309794fdc624f4b1dae582cb30e",
     "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
-    "reliant/v1/worktree.proto": "022f4037b2b5c6738267604851499a5d046be6379b057b865f35dbf0b0760e02"
+    "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
   }
 }

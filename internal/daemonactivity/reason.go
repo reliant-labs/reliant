@@ -128,6 +128,9 @@ var userActionCommands = map[string]bool{
 	"git.publish":         true,
 	"git.publish_prepare": true,
 	"git.remove":          true,
+	// Explicit retained-recovery deletion and separate workspace restoration.
+	"git.recovery_delete":       true,
+	"worktree.recovery_restore": true,
 
 	"localmodels.set_endpoints": true,
 
@@ -167,6 +170,14 @@ var userActionCommands = map[string]bool{
 // send on their own schedule.
 var backgroundCommands = map[string]bool{
 	"auth.close_oauth_helper": true,
+
+	// Automatic preservation/verification/reclamation is housekeeping, not
+	// evidence of a human or agent actively using the machine.
+	"git.recovery_publish":       true,
+	"git.recovery_verify":        true,
+	"worktree.recovery_observe":  true,
+	"worktree.recovery_capture":  true,
+	"worktree.recovery_finalize": true,
 
 	// exec.bg_status is the reconciler's 30s poll that kept a machine awake
 	// for hours with nobody on it.

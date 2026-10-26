@@ -21,6 +21,11 @@ import (
 
 // Repository is everything the worktree handlers read and write.
 type Repository interface {
+	GetWorktreeRecovery(context.Context, string, string) (*db.WorktreeRecovery, error)
+	ListWorktreeRecoveries(context.Context, string, string) ([]*db.WorktreeRecovery, error)
+	BeginWorktreeRecoveryOperation(context.Context, string, string, string, string, string) error
+	CompleteWorktreeRecoveryCheckout(context.Context, string, string, string, string, string) error
+	CancelWorktreeRecovery(context.Context, string, string, string) error
 	// Worktree rows: reads, idempotent creates, archive/unarchive, the
 	// cleanup metadata the sweep reads, and the permanent delete.
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
@@ -33,6 +38,7 @@ type Repository interface {
 	// The project a worktree belongs to, checked against the caller.
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 
 	// The chats archived with a worktree.
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

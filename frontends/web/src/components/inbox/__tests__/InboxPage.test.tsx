@@ -20,6 +20,7 @@ import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
   InboxItemKind,
+  InboxItemSchema,
   ListInboxResponseSchema,
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
@@ -52,6 +53,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useOnboardingQueries", () => ({
+  useDaemonList: () => ({ data: [], isPending: false, isError: false }),
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
       Promise.resolve(mocks.resumeDaemon(id)).catch((error) => callbacks.onError?.(error));
@@ -128,6 +130,25 @@ beforeEach(() => {
 });
 
 describe("InboxPage item kinds", () => {
+  it("shows retained recovery actions and dismisses only the notice, without restoring or deleting refs", async () => {
+    respond([create(InboxItemSchema, {
+      itemId: "recovery:retained", kind: InboxItemKind.RECOVERY, projectId: "project-1",
+      waitingSince: new Date().toISOString(),
+      payload: { case: "recovery", value: {
+        recoveryId: "retained", sourceWorktreeName: "Saved feature", phase: "held", checkoutCount: 2,
+      } },
+    })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-recovery:retained");
+    expect(within(row).getByText("Saved feature")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Recovery actions" }));
+    expect(within(row).getByText(/Dismissing this notice does not delete/)).toBeInTheDocument();
+    expect(within(row).getByText(/held, not confirmed complete/)).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Dismiss Saved feature" }));
+    await waitFor(() => expect(mocks.dismissInboxItem).toHaveBeenCalled());
+    expect(mocks.restoreInboxItem).not.toHaveBeenCalled();
+  });
+
   it("an approval shows its title on one line, with Approve / Deny", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);

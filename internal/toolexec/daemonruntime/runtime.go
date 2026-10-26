@@ -262,6 +262,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
 	// registration the record says so, which is what makes `reliant daemon
@@ -1432,6 +1433,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
 
+	releaseRecovery, admissionErr := beginRecoveryCommand(req.CommandType, req.Payload)
+	if admissionErr != nil {
+		d.sendCommandFailure(s, req, admissionErr)
+		return
+	}
+	defer releaseRecovery()
+
 	// What became of a tool call is the daemon's own bookkeeping, not the
 	// disk's, so it is answered even while the guard below refuses work.
 	if req.CommandType == toolexec.ToolStatusCommand {
@@ -1766,6 +1774,16 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 
 	// Before the tool can do anything a restart would cut short.
 	d.results.persistRunning(req.RequestId)
+
+	releaseRecovery, admissionErr := beginRecoveryWork()
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key

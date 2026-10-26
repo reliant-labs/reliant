@@ -72,6 +72,8 @@ enum InboxItemKind {
   // "Finish setup" renders, and leaves the list when setup is finished.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP = 8;
+  // Retained Git-host recovery, even if its source row/machine is gone.
+  INBOX_ITEM_KIND_RECOVERY = 9;
 }
 
 message ListInboxRequest {
@@ -148,7 +150,24 @@ message InboxItem {
     InboxRunFinished run_finished = 25;
     InboxStorage storage = 26;
     InboxAutomationNeedsSetup automation_needs_setup = 27;
+    RecoveryInboxItem recovery = 28;
   }
+}
+
+// Catalog-backed information; RestoreInboxItem still only undismisses.
+message RecoveryInboxItem {
+  string recovery_id = 1;
+  string source_worktree_id = 2;
+  string source_worktree_name = 3;
+  string project_id = 4;
+  string project_name = 5;
+  string phase = 6;
+  int32 checkout_count = 7;
+  string last_error = 8;
+  // Persisted operation identity allows safe retry after a client restart.
+  string operation = 9;
+  string operation_key = 10;
+  string target_daemon_id = 11;
 }
 
 message InboxApproval {
