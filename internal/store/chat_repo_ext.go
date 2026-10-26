@@ -81,8 +81,16 @@ func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID strin
 	return recoveryTx(ctx, db, func(ctx context.Context) error {
 		// A rebind locks old and new parents in the same stable order as the
 		// trigger. The trigger still protects against a concurrently moved row.
+		//
+		// FOR NO KEY UPDATE, as the trigger takes, not FOR UPDATE: it still
+		// excludes another admission and the recovery claim's FOR UPDATE,
+		// but not the FOR KEY SHARE of a foreign-key check. FOR UPDATE made
+		// a user_updates insert for this worktree wait behind every chat
+		// admission in it, which deadlocked concurrent StartChats in one
+		// worktree against their own activity announcements (see
+		// 20261026040257_recovery_admission_no_key_update.up.sql).
 		var ids []string
-		if err := db.Bun().NewRaw(`SELECT id FROM worktrees WHERE id=? OR id=(SELECT worktree_id FROM chats WHERE id=?) ORDER BY id FOR UPDATE`, worktreeID, chatID).Scan(ctx, &ids); err != nil {
+		if err := db.Bun().NewRaw(`SELECT id FROM worktrees WHERE id=? OR id=(SELECT worktree_id FROM chats WHERE id=?) ORDER BY id FOR NO KEY UPDATE`, worktreeID, chatID).Scan(ctx, &ids); err != nil {
 			return err
 		}
 		return fn(ctx)

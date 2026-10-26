@@ -374,7 +374,30 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// twice. Group them in one transaction so any failure leaves nothing
 	// behind (no orphan chat, no thread-less chat, no announcement for a
 	// chat that doesn't exist).
-	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	//
+	// READ COMMITTED, because what must hold here is atomicity, and nothing in
+	// it is a read-check-write that only SERIALIZABLE would keep correct:
+	//   - two launches of one event: the (kind, dedupe_key) unique constraint
+	//     on the insert, and the outcome predicate on the claim's UPDATE,
+	//     which READ COMMITTED re-checks against the row it waited for;
+	//   - a trigger's overlap guard: the trigger row's FOR UPDATE, taken
+	//     before the guard reads the previous fire, which each statement
+	//     here then sees committed;
+	//   - the selection merge: its advisory lock (MutateChatSelection);
+	//   - the chat_created sequence number: the user's counter row, raised
+	//     by one UPDATE … RETURNING;
+	//   - the thread's ordinals, seqs and context window: the chat and its
+	//     thread are new and invisible to every other transaction until this
+	//     one commits, so nothing else can number them.
+	// SERIALIZABLE bought none of that and cost every launch its predicate
+	// locks: on the young index pages of chats, workflows, threads,
+	// context_windows, messages and chat_selections (foreign-key checks and
+	// ON CONFLICT probes included), so concurrent launches for DIFFERENT
+	// users aborted one another with SQLSTATE 40001 at whichever insert
+	// closed the cycle — "failed to create workflow" when it was the root
+	// workflow's — until one ran out of attempts
+	// (TestConcurrentStartChatsTakeNoPredicateLocks).
+	if err := l.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
