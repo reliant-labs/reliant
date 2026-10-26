@@ -2546,6 +2546,51 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 	return swapped, err
 }
 
+// MarkWorkflowStartFailed records that a PENDING workflow's start attempt
+// failed (Workflow.StartFailedAt). No chat-activity emit: the row is still
+// PENDING, so whether the chat is busy has not changed.
+func (r *Repo) MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error) {
+	return store.MarkWorkflowStartFailed(ctx, r.ORM(), id)
+}
+
+// ClaimWorkflowStart clears a PENDING workflow's failed-start stamp before a
+// retry of its start, reporting whether it is still PENDING (see
+// store.ClaimWorkflowStart).
+func (r *Repo) ClaimWorkflowStart(ctx context.Context, id string) (bool, error) {
+	return store.ClaimWorkflowStart(ctx, r.ORM(), id)
+}
+
+// AbandonFailedWorkflowStart moves a PENDING workflow whose start failed to
+// STOPPED/FAILED, reporting whether it did (see
+// store.AbandonFailedWorkflowStart). Inside a caller's transaction it joins
+// it, and the chat's activity is announced after that commits.
+func (r *Repo) AbandonFailedWorkflowStart(ctx context.Context, id string) (bool, error) {
+	var abandoned bool
+	err := r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
+		ok, err := store.AbandonFailedWorkflowStart(txCtx, r.ORM(), id)
+		abandoned = ok
+		if err != nil || !ok {
+			return err
+		}
+		wf, err := r.GetWorkflow(txCtx, id)
+		if err != nil {
+			return err
+		}
+		if wf.ChatID == "" {
+			return nil
+		}
+		return r.emitChatActivityIfChanged(txCtx, wf.ChatID)
+	})
+	return abandoned, err
+}
+
+// ListStrandedWorkflowStarts is the PENDING roots whose launch committed
+// before cutoff and whose start was never recorded as failed (see
+// store.ListStrandedWorkflowStarts).
+func (r *Repo) ListStrandedWorkflowStarts(ctx context.Context, cutoff time.Time, limit int) ([]*Workflow, error) {
+	return store.ListStrandedWorkflowStarts(ctx, r.ORM(), cutoff, limit)
+}
+
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
 	return r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {

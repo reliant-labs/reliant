@@ -331,6 +331,11 @@ type WorkflowStore interface {
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
+	// MarkWorkflowStartFailed records a failed Temporal start on a PENDING
+	// root; ClaimWorkflowStart clears it before a retry, and false means the
+	// root left PENDING, so the start is no longer the caller's to make.
+	MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error)
+	ClaimWorkflowStart(ctx context.Context, id string) (bool, error)
 }
 
 // WorkflowResolver looks up the workflow definition and presets a spec names.
