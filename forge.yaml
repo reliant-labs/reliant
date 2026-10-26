@@ -141,6 +141,24 @@ generate:
             - internal/integrations/catalog/github/events
             - internal/integrations/catalog/github/schemas
             - internal/integrations/catalog/github/manifest.yaml
+upgrade:
+    # What `forge project upgrade` does beyond forge's own codemods. The proto
+    # vendored from control-plane (proto-vendor/controlplane/) is what a forge
+    # bump most often leaves stale. control-plane's check-vendored-proto.sh
+    # writes the lag report; it is control-plane's script and a control-plane
+    # checkout, so reliant has none until one is run:
+    #   CONTROL_PLANE_DIR=../control-plane ../control-plane/scripts/check-vendored-proto.sh \
+    #     --reliant . --report tmp/ci/reliant-vendored-proto.json
+    # (the pin bot does exactly that). The report names its own CONTROL_PLANE_DIR
+    # (revendor.env), which upgrade exports to the command; with no report there
+    # is nothing to re-vendor and upgrade says so.
+    vendored_contracts:
+        - name: controlplane
+          report: tmp/ci/reliant-vendored-proto.json
+          schema: reliant-vendored-proto/v1
+          env_path: revendor.env
+          commands:
+              - [task, "contract:controlplane:sync"]
 ci:
     gate:
         # `task ci` = forge's checks + these. Files no Go test reads.
