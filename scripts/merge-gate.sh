@@ -23,12 +23,16 @@
 #   test       tools/test-affected run -reach direct -lanes go,web,electron (-short,
 #              cached, no -race): the changed packages and their DIRECT importers;
 #              deeper dependents run in the release gate (MG_REACH=all for all)
+#   typecheck  frontends/web's `npm run typecheck` (tsc -b: app, tests, gen,
+#              node configs), when the web lane is selected or anything under
+#              frontends/web/ changed; vitest strips types without checking
+#              them, so this is the only phase that sees a test's type error
 #   lint       forge lint --scope <changed dirs> (unscoped when a pin moved)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
 # generate and docs run first, because they can change the tree the others
-# judge; build, test, lint and migsafety then run at the same time.
+# judge; build, test, typecheck, lint and migsafety then run at the same time.
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
 # phase nests inside it and never queues again. MG_LOGDIR=<dir> keeps the
@@ -42,7 +46,7 @@ while [ $# -gt 0 ]; do
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -178,35 +182,45 @@ gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|lengt
 elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
 hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
 [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
+# The web type-check. The test lane cannot stand in for it: vitest strips
+# types without checking them, and a changed .ts file no test imports selects
+# no test at all. tsc -b is whole-project, so it runs on any web change.
+typecheck=false
+if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
-need=()
-if [ "$webfull" = true ] || [ "$nweb" -gt 0 ]; then need+=(. frontends/web); fi
-if [ "$elec" = true ]; then need+=(. electron); fi
-if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
-for d in $(printf '%s\n' "${need[@]}" | sort -u); do
-  [ -f "$d/package-lock.json" ] || continue
+# npm_install <dir>: npm ci in <dir> unless its install is current.
+npm_install() {
+  local d=$1 n scripts
+  [ -f "$d/package-lock.json" ] || return 0
   # An install is current when npm's lockfile copy is newer than the lockfile,
   # and, for electron, its postinstall also fetched the binary: an interrupted
   # install leaves node_modules current but no node_modules/electron/path.txt,
   # and every electron test then fails "Electron failed to install correctly".
   if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
     && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
-    continue
+    return 0
   fi
   n=npm-$(echo "$d" | tr '/.' '-r')
   # electron's own install script fetches the Electron binary its tests load.
   scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
-  phase "$n" npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error || fail=1
+  phase "$n" npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error
+}
+need=()
+if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
+if [ "$elec" = true ]; then need+=(. electron); fi
+if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
+for d in $(printf '%s\n' "${need[@]}" | sort -u); do
+  npm_install "$d" || fail=1
 done
 
-# ── generate ‖ docs ‖ build ‖ test ‖ lint ‖ migsafety ──────────────────────
+# ── generate ‖ docs ‖ build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────────
 # A clean tree (the merge queue's case) runs the generators in scratch
 # checkouts, so every phase runs at once. A dirty one runs them in place,
 # first, because a scratch checkout of HEAD would not see your edits.
 inplace=0; [ -n "$(git status --porcelain)" ] && inplace=1
-files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
 pids=()
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
@@ -223,6 +237,9 @@ run_checks() {
   local sfx=${1:-}
   phase "build$sfx" go build ./... & pids+=($!)
   phase "test$sfx" go run ./tools/test-affected run -reach "$reach" -base "$base" -lanes go,web,electron & pids+=($!)
+  if [ "$typecheck" = true ]; then
+    phase "typecheck$sfx" npm --prefix frontends/web run --silent typecheck & pids+=($!)
+  fi
 }
 if [ "$fail" = 0 ]; then
   run_checks
@@ -277,6 +294,12 @@ if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
       commit_amend
       if cat "$L"/*.changed 2>/dev/null | grep -qE '\.(go|ts|tsx|proto)$'; then
         notes+=("regenerated code: build and test ran again on the amended tree")
+        # A regenerate that rewrote web sources (src/gen, the shortcuts
+        # data) type-checks them, even when the branch itself touched no web.
+        if [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
+          typecheck=true
+          npm_install . && npm_install frontends/web || fail=1
+        fi
         pids=(); run_checks -2; for p in "${pids[@]}"; do wait "$p" || fail=1; done
       fi
     fi
@@ -293,7 +316,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test lint migsafety migorder build-2 test-2 docs-2; do
+  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test typecheck lint migsafety migorder build-2 test-2 typecheck-2 docs-2; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
