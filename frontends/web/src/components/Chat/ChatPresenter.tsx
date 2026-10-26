@@ -59,6 +59,8 @@ import { unansweredMessage } from "../../lib/awaitingReply";
 import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
+import { installedDaemonIds } from "../../lib/chatMachine";
+import { useProjectDaemonInstalls } from "../../hooks/project-queries";
 import { useWakingMachines } from "../../lib/machineWake";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatActivity } from "../../store/activityStore";
@@ -509,7 +511,10 @@ export const ChatPresenter = memo(function ChatPresenter({
     (isAgentWorking || heldForMachine || sendingThisChat || usageLimitWait !== undefined);
   const { data: daemons } = useDaemonList({ enabled: workWaitsOnMachine });
   const wakes = useWakingMachines();
-  const chatMachineDaemon = workWaitsOnMachine ? resolveChatMachine(daemons, currentChat?.activeDaemonId) : undefined;
+  const installs = useProjectDaemonInstalls(workWaitsOnMachine && !currentChat?.activeDaemonId);
+  const chatMachineDaemon = workWaitsOnMachine
+    ? resolveChatMachine(daemons, currentChat?.activeDaemonId, installedDaemonIds(installs.data ?? [], projectId ?? undefined))
+    : undefined;
   const chatMachineWakeStartedAt = chatMachineDaemon ? wakes.get(chatMachineDaemon.daemonId) : undefined;
   const unansweredSentAt = unanswered ? Date.parse(unanswered.createdAt) : NaN;
   const machineNotice = useMemo(

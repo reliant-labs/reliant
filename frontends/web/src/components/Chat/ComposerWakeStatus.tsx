@@ -17,7 +17,7 @@
  *
  * An unpinned chat wakes whatever default resolution picks on the server.
  * Once its run is held for that machine, the line names the machine the
- * server's default resolves to (`defaultMachineDaemon`), the same rule the
+ * server will pin it to (`defaultMachineDaemon`), the same rule the
  * new-chat picker preselects with. If the wake fails the send still goes
  * through; the tool card then reports the pending error and the run's machine
  * banner offers Wake it.
@@ -45,7 +45,9 @@ import Status from "../forge-ui/status";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { machineDisplayName } from "@/lib/machineName";
 import { CANT_REACH_RELIANT, classifyDaemonWait, WAITING_FOR_MACHINE } from "@/lib/daemon-wait";
-import { defaultMachineDaemon } from "@/lib/chatMachine";
+import { defaultMachineDaemon, installedDaemonIds } from "@/lib/chatMachine";
+import { useProjectDaemonInstalls } from "@/hooks/project-queries";
+import { useProjectStore } from "@/store/projectStore";
 
 interface ComposerWakeStatusProps {
   /** A send for this chat is awaiting the server. */
@@ -134,7 +136,9 @@ function CantReachLine({ continueWithoutMachine }: { continueWithoutMachine?: Re
 function UnpinnedWaitLine({ continueWithoutMachine }: { continueWithoutMachine?: ReactNode }) {
   const list = useDaemonList();
   const { data: daemons } = list;
-  const daemon = daemons ? defaultMachineDaemon(daemons) : undefined;
+  const projectId = useProjectStore((s) => s.currentProject?.id);
+  const installs = useProjectDaemonInstalls();
+  const daemon = daemons ? defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], projectId)) : undefined;
   if (registryUnreachable(list) && (!daemon || daemon.status === DaemonStatus.FAILED)) {
     return <CantReachLine continueWithoutMachine={continueWithoutMachine} />;
   }

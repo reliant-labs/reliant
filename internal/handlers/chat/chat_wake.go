@@ -17,7 +17,10 @@ import (
 const attendedWakeTimeout = 30 * time.Second
 
 // wakeDaemonForAttendedTurn wakes the daemon a signed-in user's turn will run
-// on: the chat's pinned daemon, else default resolution. Tool-time traffic
+// on: the machine the chat is (or is about to be) pinned to, which for a chat
+// that names none is the project-aware default (daemonplacement.PinTarget),
+// not plain default resolution. Waking another machine than the one the run
+// then uses would leave the real one asleep. Tool-time traffic
 // never resumes a daemon, so a daemon that idle-suspended mid-conversation can
 // only be woken here (or by run preflight).
 //
@@ -44,8 +47,10 @@ func (s *Service) wakeDaemonForAttendedTurn(ctx context.Context, userID string, 
 		return
 	}
 	var selector *toolexec.DaemonSelector
-	if chat != nil && chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-		selector = &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
+	if chat != nil {
+		if id := s.chatPinner().Target(ctx, chat); id != "" {
+			selector = &toolexec.DaemonSelector{ID: id}
+		}
 	}
 	wakeCtx, cancel := context.WithTimeout(ctx, attendedWakeTimeout)
 	defer cancel()

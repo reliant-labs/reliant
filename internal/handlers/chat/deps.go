@@ -107,5 +107,6 @@ type Repository interface {
 	chatselection.Store
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
+	daemonplacement.PinStore
 	messageproto.ToolCallReader
 }

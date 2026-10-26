@@ -62,6 +62,7 @@ import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { useCapability } from "@/lib/surfaceContext";
 import {
   DEFAULT_MACHINE,
@@ -70,6 +71,7 @@ import {
   chatMachineOptions,
   defaultChatMachine,
   defaultMachineDaemon,
+  installedDaemonIds,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
 import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
@@ -163,13 +165,14 @@ export function MobileNewChat() {
 
   const canPickMachine = useCapability("chatDaemonSelection");
   const { data: daemons = [], isLoading: daemonsLoading } = useDaemonList();
+  const installs = useProjectDaemonInstalls();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const machine =
     selectedMachine ?? defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE;
   const noMachine = machine === NO_MACHINE;
   // DEFAULT_MACHINE sends no daemon (the server picks); show the machine it
   // will land on — an awake one, or one still starting.
-  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons)?.daemonId ?? "") : machine;
+  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))?.daemonId ?? "") : machine;
   const machineRowOptions = [
     ...chatMachineOptions(daemons).map((option) => ({
       value: option.value,
