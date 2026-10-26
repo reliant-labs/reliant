@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -425,6 +426,13 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		// Refused (a nearly full disk): it never starts, and says why.
 		cancel()
 		return nil, err
+	}
+	// credentials: none runs where the daemon's credential files are absent; see
+	// credsandbox. Outside the heavy-slot rewrite above, so the slot wrapper
+	// runs inside it.
+	if refusal := credsandbox.Wrap(cmd, opts.Credentials); refusal != "" {
+		cancel()
+		return nil, errors.New(refusal)
 	}
 
 	// Create buffers for output

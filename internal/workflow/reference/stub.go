@@ -293,6 +293,8 @@ func populateCELFunctions() {
 		// Custom functions (registered in cel/env.go)
 		{Name: "parseJson", Signature: "parseJson(string) -> dyn", Description: "Parse a JSON string into a dynamic value", Example: "parseJson(nodes.run.stdout)"},
 		{Name: "toJson", Signature: "toJson(dyn) -> string", Description: "Serialize a value to a JSON string", Example: "toJson(nodes.llm.tool_calls)"},
+		{Name: "untrustedText", Signature: "untrustedText(string[, int]) -> string", Description: "Text an outside party can write (an error message, an alert label, a webhook body) as one plain line: control and invisible characters dropped, backticks neutralized, at most 400 runes (or the given length). Use it on every such value before it goes into a prompt", Example: "untrustedText(trigger.payload.body.title, 120)"},
+		{Name: "untrustedJson", Signature: "untrustedJson(dyn[, int]) -> string", Description: "Outside data as compact JSON that is safe to quote in a prompt: every string treated as untrustedText, keys sorted, lists and nesting bounded, and <, > and & escaped so a value cannot close the tag it sits in", Example: "untrustedJson(inputs.alerts[0].labels)"},
 		{Name: "coalesce", Signature: "coalesce(dyn, dyn) -> dyn", Description: "Return first non-null/non-empty argument", Example: "coalesce(inputs.name, \"default\")"},
 		{Name: "getOrDefault", Signature: "getOrDefault(map, key, default) -> dyn", Description: "Safely access a map key with a fallback default value", Example: "getOrDefault(inputs, \"mode\", \"auto\")"},
 		{Name: "merge", Signature: "merge(map, map) -> map", Description: "Shallow-merge two maps; keys in the second map win (e.g. pin one setting on a model value)", Example: "merge(inputs.model, {\"thinking_level\": \"high\"})"},
