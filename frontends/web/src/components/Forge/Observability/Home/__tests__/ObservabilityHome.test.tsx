@@ -88,9 +88,26 @@ describe("the Observability home", () => {
     expect(await screen.findByTestId("obs-not-set-up")).toBeInTheDocument();
   });
 
+  it("leads the not-set-up answer with what the home shows and the command for this environment", async () => {
+    renderHome({ failWith: Code.FailedPrecondition });
+    const state = await screen.findByTestId("obs-not-set-up");
+    expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
+    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+  });
+
   it("explains an environment with nothing sent", async () => {
     renderHome({ empty: true });
     expect(await screen.findByTestId("observability-no-services")).toHaveTextContent("No service sent telemetry in the last hour");
+  });
+
+  it("says how to get started when nothing has arrived this week", async () => {
+    renderHome({ empty: true, signals: { services: [], truncated: false } }, "all");
+    const state = await screen.findByTestId("obs-nothing-yet");
+    // Every environment in scope: the command keeps its placeholder.
+    expect(within(state).getByText("forge env deploy <env>")).toBeInTheDocument();
+    expect(within(state).getByText("forge obs status <env>")).toBeInTheDocument();
+    expect(within(state).getByTestId("obs-nothing-yet-docs")).toHaveAttribute("href", expect.stringContaining("troubleshooting#nothing-shows-up-in-observability"));
+    expect(screen.queryByTestId("observability-strip")).not.toBeInTheDocument();
   });
 
   it("names an environment Reliant has no record of", async () => {

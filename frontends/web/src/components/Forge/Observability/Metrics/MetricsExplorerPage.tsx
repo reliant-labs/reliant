@@ -32,10 +32,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, Bell, Check, Link2, RefreshCw, Terminal, Timer } from "lucide-react";
+import { Bell, Check, Link2, RefreshCw, Terminal, Timer } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import { useDashboardIndex } from "@/hooks/dashboard-queries";
@@ -60,7 +59,8 @@ import { deliveryScopeOf } from "../deliveryScope";
 import { filterParam, filterTokensOf, scopeFiltersOf, type FilterToken } from "../obsFilters";
 import type { ObsEnvironment } from "../obsPlace";
 import { ObsScopeBar } from "../ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNoData, ObsNotSetUp } from "../ObsStates";
+import { ObsError, ObsLoadingRows, ObsNoData, ObsNoEnvironments, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { useNothingArrived } from "../serviceSignals";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { Breakdown } from "./Breakdown";
 import { Catalog } from "./Catalog";
@@ -119,11 +119,7 @@ export function MetricsExplorerPage() {
         <LocalEnvNote env={env} />
       ) : environments.length === 0 ? (
         <div data-testid="metrics-no-envs">
-          <EmptyState
-            icon={<Activity className="h-6 w-6" aria-hidden="true" />}
-            title="No environments to observe yet"
-            description="Metrics are filed under the environments Reliant records. Deploy one through Reliant (forge env deploy <env>) and its metrics appear here."
-          />
+          <ObsNoEnvironments topic="metrics" />
         </div>
       ) : (
         <MetricsExplorer project={forgeProject} env={env} environments={environments} search={search} onSearch={onSearch} hrefs={hrefs} />
@@ -245,6 +241,8 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
   const needle = useDebounce(catalogQuery.trim(), 250);
   const catalog = useMetricCatalog(scope, range);
   const searched = useMetricCatalog(needle && catalog.data?.truncated ? scope : null, range, needle);
+  // Asked only of an empty catalog: an empty window, or an app that has sent nothing yet?
+  const nothingYet = useNothingArrived(catalog.data && catalog.data.metrics.length === 0 ? scope : null);
   const metrics = useMemo(() => {
     const all = [...(catalog.data?.metrics ?? [])];
     for (const m of searched.data?.metrics ?? []) if (!all.some((e) => e.name === m.name && e.kind === m.kind)) all.push(m);
@@ -321,7 +319,13 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
 
   // ── Page-level states ──
   if (org.isLoading) return <ObsLoadingRows testId="metrics-org-loading" />;
-  if (!orgId) return org.error ? <ObsError error={org.error} subject={subject} onRetry={() => void org.refetch()} /> : <ObsNotSetUp subject={subject} />;
+  if (!orgId) {
+    return org.error ? (
+      <ObsError error={org.error} subject={subject} onRetry={() => void org.refetch()} />
+    ) : (
+      <ObsNotSetUp subject={subject} topic="metrics" env={env === ENV_ALL ? undefined : env} />
+    );
+  }
   if (unrecorded) {
     return (
       <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="metrics-unrecorded-env">
@@ -330,7 +334,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
     );
   }
   const catalogError = catalog.error;
-  if (catalogError && obsErrorKind(catalogError) === "not-set-up") return <ObsNotSetUp subject={subject} />;
+  if (catalogError && obsErrorKind(catalogError) === "not-set-up") return <ObsNotSetUp subject={subject} topic="metrics" env={env === ENV_ALL ? undefined : env} />;
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="metrics-toolbar">
@@ -400,7 +404,11 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
       <div className="space-y-4" data-testid="metrics-explorer">
         {toolbar}
         <div data-testid="metrics-catalog-empty">
-          <ObsNoData what="metrics" range={range} filtered={filterTokens.length > 0} onWiden={() => onSearch({ range: "24h" })} onClearFilters={() => onSearch({ f: undefined })} />
+          {nothingYet ? (
+            <ObsNothingYet subject={subject} topic="metrics" env={env === ENV_ALL ? undefined : env} />
+          ) : (
+            <ObsNoData what="metrics" range={range} filtered={filterTokens.length > 0} onWiden={() => onSearch({ range: "24h" })} onClearFilters={() => onSearch({ f: undefined })} />
+          )}
         </div>
       </div>
     );

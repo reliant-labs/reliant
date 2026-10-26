@@ -129,6 +129,7 @@ export function ReleasesPage() {
         releaseHref={releaseHref}
         onSelectEnv={setEnv}
         promote={control}
+        scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
       />
       {dialog}
     </div>

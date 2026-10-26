@@ -82,7 +82,8 @@ export function LiveReleases({
       </p>
     ) : (
       <p data-testid="live-releases-empty" className="px-4 py-3 text-sm text-muted-foreground">
-        Never promoted — the first deploy records the first release.
+        Never promoted. <code className="font-mono text-foreground">forge env deploy {env.name}</code> from your checkout cuts and
+        deploys the first release; it and every promotion after it are listed here.
       </p>
     );
   }

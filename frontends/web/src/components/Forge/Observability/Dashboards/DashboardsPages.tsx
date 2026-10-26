@@ -18,10 +18,8 @@
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -32,6 +30,7 @@ import { ENV_ALL } from "../../Console/envScope";
 import { CloudNotice } from "../../SourceNotices";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
+import { ObsNoEnvironments, type ObsTopic } from "../ObsStates";
 import { ObservabilityHome, type ObservabilityHomeHrefs } from "../Home/ObservabilityHome";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
@@ -93,7 +92,7 @@ function useObservabilityHrefs(): DashboardHrefs & ObservabilityHomeHrefs {
  * loading, or a project with no environment Reliant has recorded — there is
  * no telemetry to show and no environment to scope a dashboard to.
  */
-function RosterGate({ testId, children }: { testId: string; children: ReactNode }) {
+function RosterGate({ testId, topic, children }: { testId: string; topic: ObsTopic; children: ReactNode }) {
   const { roster } = useForgeConsole();
   const environments = useRecordedEnvs();
   if (roster.isLoading || roster.resolvingName) {
@@ -108,11 +107,7 @@ function RosterGate({ testId, children }: { testId: string; children: ReactNode 
       <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
       {environments.length === 0 ? (
         <div data-testid="observability-no-envs">
-          <EmptyState
-            icon={<Activity className="h-6 w-6" aria-hidden="true" />}
-            title="No environments to observe yet"
-            description="Telemetry and dashboards are filed under the environments Reliant records. Deploy one through Reliant (forge env deploy <env>) and its logs, traces, metrics and dashboards appear here."
-          />
+          <ObsNoEnvironments topic={topic} />
         </div>
       ) : (
         children
@@ -134,7 +129,7 @@ export function ObservabilityHomePage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   return (
-    <RosterGate testId="console-observability">
+    <RosterGate testId="console-observability" topic="overview">
       <ObservabilityHome
         project={forgeProject}
         env={env}
@@ -156,7 +151,7 @@ export function DashboardsPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   return (
-    <RosterGate testId="console-dashboards">
+    <RosterGate testId="console-dashboards" topic="dashboards">
       <DashboardsList
         project={forgeProject}
         env={env}
@@ -193,7 +188,7 @@ export function DashboardPage() {
   };
   if (!dashRef) return null;
   return (
-    <RosterGate testId="console-dashboard">
+    <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView
         // Another dashboard is another page: nothing (an open dialog, a drill menu) carries over.
         key={`${dashRef.kind}/${dashRef.key}`}

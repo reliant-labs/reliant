@@ -28,6 +28,7 @@ import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
 import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } from "../__fixtures__/fixtureApi";
+import { FIXTURE_SIGNALS } from "../__fixtures__/fixtureSignals";
 
 /** The fixture environments with what each declares (rules, routes, observability policy). */
 const ENVIRONMENTS = FIXTURE_ENVS.map((env) => ({ ...env, declared: FIXTURE_DECLARED[env.id] ?? null }));
@@ -44,7 +45,9 @@ const SCHEMES = [
 const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "data", label: "telemetry flowing", options: {} },
   { id: "not-set-up", label: "org not set up (FailedPrecondition)", options: { failWith: Code.FailedPrecondition } },
+  { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
   { id: "empty", label: "no data in range", options: { empty: true } },
+  { id: "window-empty", label: "no data in range, data this week", options: { empty: true, signals: FIXTURE_SIGNALS } },
   { id: "denied", label: "no permission", options: { failWith: Code.PermissionDenied } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
   { id: "quota", label: "query quota hit", options: { failWith: Code.ResourceExhausted } },

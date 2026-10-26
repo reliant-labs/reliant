@@ -30,8 +30,8 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Boxes, Search } from "lucide-react";
 
-import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
@@ -201,11 +201,24 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
     return (
       <div className="space-y-6" data-testid="overview" data-state="empty">
         {header}
-        <EmptyState
-          icon={<Boxes className="h-6 w-6" aria-hidden="true" />}
+        <GettingStarted
+          testId="overview-getting-started"
+          icon={<Boxes className="h-4 w-4" />}
           title="Nothing deployed yet"
-          description={`${project} has no deployed environment for Reliant to watch. Run forge env deploy <env> from your checkout: its services, jobs and their health appear here.`}
-        />
+          about="The overview shows every service, worker and job of each environment: whether it is healthy, its CPU and memory against its limits, restarts, and recent events."
+          steps={[
+            {
+              text: "Deploy an environment through Reliant from your checkout. Its workloads and their health appear here as soon as they start.",
+              command: "forge env deploy <env>",
+            },
+          ]}
+          docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+        >
+          <p>
+            {project} has no deployed environment for Reliant to watch yet. A local environment (forge env up) runs on your machine and
+            reports nothing here.
+          </p>
+        </GettingStarted>
       </div>
     );
   }

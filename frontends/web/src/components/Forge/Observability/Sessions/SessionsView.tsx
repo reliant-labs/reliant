@@ -110,6 +110,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           what="browser sessions"
           range={range}
           filtered={filtered}
+          topic="sessions"
           onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })}
           onClearFilters={() => navigate({ errors: undefined, replay: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
         />

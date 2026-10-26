@@ -36,6 +36,12 @@
  * so the panel asks once (the overview, a cache entry every view shares) and,
  * when that is the answer, shows the explanation in place of all the views
  * rather than one copy each.
+ *
+ * "Set up, but nothing has arrived yet" is the same kind of fact (about the
+ * scope, not a view), so it is asked once too (useNothingArrived, a week of
+ * GetServiceSignals) and answered once, in place of the telemetry views. Both
+ * lead with what the current view will show (ObsStates' OBS_TOPICS), then how
+ * to get data onto it.
  */
 
 import { useMemo } from "react";
@@ -74,13 +80,13 @@ import {
 } from "./obsSearch";
 import { envIdsOf, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
+import { ObsError, ObsLoadingRows, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
 import { useReleaseMarkers } from "./releaseMarkers";
 import { ReleaseStrip } from "./ReleaseStrip";
-import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
+import { signalState, useNothingArrived, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
@@ -89,6 +95,9 @@ export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview"];
+
+/** The views that read the scope's telemetry, so "nothing has arrived yet" is true of them (not Alerts or Usage). */
+const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "sessions", "logs", "traces", "profiles"];
 
 /** The views that read one signal of one service, and the signal. */
 const SIGNAL_VIEWS: Partial<Record<ObsView, ServiceSignal>> = { logs: "logs", traces: "traces", profiles: "profiles" };
@@ -175,6 +184,18 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
   // in the URL is always offered: a link never lands on a missing tab. The
   // console draws no tabs (its nav is the project's, every view kept).
   const signals = useSignalsIndex(!consoleChrome && search.service && !notSetUp ? scope : null, range);
+
+  // Set up, but nothing in scope has sent anything this week: the views say
+  // how to get data here, once, instead of each one "nothing in this window".
+  // Asked only when the window's overview came back empty: a service in it
+  // already answers "something has arrived", so a scope with data never pays
+  // for the week's probe. A deep link (an issue, a session, a trace) still
+  // opens: issues outlive the week, and the link is what the reader came for.
+  const deepLink = !!(search.issue || search.session || search.trace);
+  const windowEmpty = !notSetUp && overview.data?.services.length === 0;
+  const nothingYet = useNothingArrived(scope && windowEmpty ? scope : null) && !deepLink && NOTHING_YET_VIEWS.includes(view);
+  /** The one environment in scope, so a quoted command names it; none when it is all of them. */
+  const envHint = place.kind === "env" ? place.env.name : search.envs?.length === 1 ? search.envs[0] : undefined;
   const viewState = (id: ObsView): SignalState => {
     const signal = SIGNAL_VIEWS[id];
     return signal ? signalState(signals, search.service, signal) : { kind: "available" };
@@ -275,7 +296,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
       {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}
-      {scope && (!notSetUp || view === "alerts") && view !== "usage" && (
+      {/* Nor does a filter mean anything over a scope that has sent nothing yet. */}
+      {scope && (!notSetUp || view === "alerts") && !nothingYet && view !== "usage" && (
         <ObsScopeBar
           scope={scope}
           range={range}
@@ -312,7 +334,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           ) : (
             // Signed in, but no organization resolved yet (mid-provisioning):
             // there is no tenant to read, which is the not-set-up answer.
-            <ObsNotSetUp subject={subject} />
+            <ObsNotSetUp subject={subject} topic={view} env={envHint} />
           )
         ) : view === "usage" ? (
           // Usage is a Postgres read, not a tenant query: it stays available
@@ -342,7 +364,9 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             navigate={navigate}
           />
         ) : notSetUp ? (
-          <ObsNotSetUp subject={subject} />
+          <ObsNotSetUp subject={subject} topic={view} env={envHint} />
+        ) : nothingYet ? (
+          <ObsNothingYet subject={subject} topic={view} env={envHint} />
         ) : view === "errors" ? (
           <ErrorsView
             scope={scope}
