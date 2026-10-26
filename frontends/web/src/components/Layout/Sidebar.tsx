@@ -136,7 +136,7 @@ interface SidebarProps {
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
   onOpenForge?: () => void;
-  /** The project's Observability area (/forge/observability). */
+  /** The org-wide Observability area (/forge/observability). */
   onOpenObservability?: () => void;
   onOpenInbox?: () => void;
 }
@@ -742,13 +742,12 @@ function SidebarComponent({
   // not opted in.
   //
   // IT IS DELIBERATELY NOT ALSO GATED ON THE PROJECT BEING A FORGE PROJECT,
-  // and that is a reversal. Forge is a top-level feature, so the entry sits
-  // beside New chat / Projects / Workflows and stays PUT — a nav item that
-  // appears and disappears as you switch projects is harder to learn than one
-  // that is always there, and "is this a forge project?" is a question the
-  // destination can answer better than the nav can. Clicking it in a non-forge
-  // project lands on ForgeStates' NotForgeProject screen, which says so
-  // plainly.
+  // and that is a reversal. Apps and Observability are ORG-level surfaces
+  // (every app the org runs; telemetry across all of them), not views of the
+  // current project, so the entries sit beside New chat / Projects / Workflows
+  // and stay PUT — a nav item that appears and disappears as you switch
+  // projects is harder to learn than one that is always there, and which
+  // project is current has no bearing on where they lead.
   //
   // It also removes a failure mode that actually bit us: the old gate required
   // a LIVE GetTopology call to succeed, so when that RPC broke (a report-type
@@ -1563,9 +1562,10 @@ function SidebarComponent({
             onClick={handleNewChat}
             testId="create-chat-button"
           />
-          {/* Apps is the running side of a project (environments, releases,
-              observability), so it sits directly under New chat: after
-              writing code, the next place to go is what that code runs as. */}
+          {/* Apps (/apps) is the org's index of every app it runs, each one a
+              drill-in to its console (environments, releases, ...). It sits
+              directly under New chat: after writing code, the next place to
+              go is what that code runs as. */}
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}
@@ -1577,7 +1577,8 @@ function SidebarComponent({
           )}
           {/* What is live, one click from anywhere: each app's console and its site. */}
           {showForgeEntry && <SidebarApps />}
-          {/* Same gate as Apps: it is the same forge surface. */}
+          {/* Org-wide telemetry across every app and environment (apps and
+              envs are filters on the page). Same gate as Apps. */}
           {showForgeEntry && onOpenObservability && (
             <SidebarNavButton
               icon={<Activity className="h-4 w-4" />}

@@ -26,7 +26,8 @@ export function dashboardRetry(failureCount: number, error: unknown): boolean {
 
 export const dashboardKeys = {
   all: (orgId: string | null) => ["dashboards", orgId ?? ""] as const,
-  index: (orgId: string | null, projectId: string, envId: string) => [...dashboardKeys.all(orgId), "index", projectId, envId] as const,
+  // `null` is the whole org; "" is the project-less dashboards only. They are different lists.
+  index: (orgId: string | null, projectId: string | null, envId: string) => [...dashboardKeys.all(orgId), "index", projectId, envId] as const,
   templates: (orgId: string | null) => [...dashboardKeys.all(orgId), "templates"] as const,
   doc: (orgId: string | null, ref: DashboardRef | null, version: number, release: string) =>
     [...dashboardKeys.all(orgId), "doc", ref?.kind ?? "", ref?.projectId ?? "", ref?.key ?? "", version, release] as const,
@@ -34,11 +35,16 @@ export const dashboardKeys = {
     [...dashboardKeys.all(orgId), "versions", ref?.kind ?? "", ref?.projectId ?? "", ref?.key ?? ""] as const,
 };
 
-/** The merged index for one project, narrowed to one environment (by id) or none (every environment). */
-export function useDashboardIndex(orgId: string | null, projectId: string, envId: string | undefined) {
+/**
+ * The merged index for one project, narrowed to one environment (by id) or
+ * none (every environment). `projectId` undefined is the whole org: the wire
+ * field is omitted, which the server reads as every project ("" would mean
+ * only the project-less dashboards).
+ */
+export function useDashboardIndex(orgId: string | null, projectId: string | undefined, envId: string | undefined) {
   const api = useObservabilityApi();
   return useQuery({
-    queryKey: dashboardKeys.index(orgId, projectId, envId ?? ""),
+    queryKey: dashboardKeys.index(orgId, projectId ?? null, envId ?? ""),
     queryFn: () => api.listDashboards({ orgId: orgId as string, projectId, envId }),
     enabled: !!orgId,
     staleTime: 60_000,

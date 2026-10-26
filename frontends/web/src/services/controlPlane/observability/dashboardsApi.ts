@@ -170,9 +170,17 @@ export function dashboardToJson(dashboard: Dashboard): JsonObject {
 
 // ── RPCs ─────────────────────────────────────────────────────────────────────
 
-/** The merged index for a project and (optionally) one environment: release dashboards, then workspace ones. */
+/**
+ * The merged index for a project and (optionally) one environment: release
+ * dashboards, then workspace ones. No project is the whole org: the field is
+ * left off the request, because "" would mean only the project-less ones.
+ */
 export async function listDashboards(req: ListDashboardsInput): Promise<DashboardIndex> {
-  const res = await client().listDashboards({ orgId: req.orgId, projectId: req.projectId, envId: req.envId });
+  const res = await client().listDashboards({
+    orgId: req.orgId,
+    ...(req.projectId === undefined ? {} : { projectId: req.projectId }),
+    envId: req.envId,
+  });
   return { dashboards: res.dashboards.map(mapSummary), canWrite: res.canWrite };
 }
 

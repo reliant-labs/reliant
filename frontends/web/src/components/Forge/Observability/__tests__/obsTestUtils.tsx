@@ -63,3 +63,14 @@ export function renderWithApi(api: ObservabilityApi, ui: ReactElement): RenderRe
     </QueryClientProvider>
   );
 }
+
+/** The org place: two apps with environments (both with a `prod`), and one app without any. */
+export const ORG_PLACE: ObsPlace = {
+  kind: "org",
+  apps: ["api", "shop", "web"],
+  environments: [
+    { id: "env-shop-prod", name: "shop/prod", project: "shop", declared: null },
+    { id: "env-shop-dev", name: "shop/dev", project: "shop", declared: null },
+    { id: "env-api-prod", name: "api/prod", project: "api", declared: null },
+  ],
+};

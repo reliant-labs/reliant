@@ -4,9 +4,11 @@
  * The console's routes, end to end through the REAL route tree
  * (forgeConsoleRoutes) with probe pages:
  *
- *   - every way in that does not name a forge project — the bare /forge, the
- *     retired URLs a notification or bookmark carries — resolves one and lands
- *     on the page it means, scope included;
+ *   - the bare /forge and /forge/observability are the org's pages (stubbed
+ *     here), and name no project; every way in that does name or imply one —
+ *     `?project=`, `?forgeProject=`, the retired URLs a notification or
+ *     bookmark carries — resolves it and lands on the page it means, scope
+ *     included;
  *   - the console looks the Reliant project up from the forge project in its
  *     path, and a name no project here declares still opens (read from the
  *     control plane alone, no daemon);
@@ -126,6 +128,11 @@ vi.mock("@/hooks/forge-queries", () => ({
   }),
 }));
 
+// The app switcher's list (the Apps page's query) is covered on its own.
+vi.mock("@/hooks/apps-queries", () => ({
+  useApps: () => ({ apps: [], loading: false, availability: "available", detail: "" }),
+}));
+
 vi.mock("@/hooks/observability-queries", () => ({
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
@@ -151,6 +158,14 @@ vi.mock("@/hooks/dashboard-queries", () => ({
   }),
 }));
 
+// The org pages (slice D) are covered on their own; here they are stubs that
+// say which one rendered, so the routes' choices are what is under test.
+vi.mock("@/components/Forge/Org", async () => {
+  return {
+    OrgObservabilityPage: () => <div data-testid="org-page" data-page="org-observability" />,
+  };
+});
+
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
 import { ConsoleLayout } from "../ConsoleLayout";
@@ -160,9 +175,18 @@ import {
   LegacyCommandRoute,
   LegacyDomainsRoute,
   LegacyEnvRoute,
-  LegacyObservabilityRoute,
+  OrgObservabilityRoute,
 } from "../ForgeEntryRoutes";
 import { ForgeLayout } from "../../ForgeLayout";
+
+/** Stands in for the org chrome around the org pages. */
+function OrgLayoutStub() {
+  return (
+    <div data-testid="org-layout">
+      <Outlet />
+    </div>
+  );
+}
 
 /** A page that says which page it is and what the console told it. */
 function probe(name: string): RouteComponent {
@@ -197,9 +221,10 @@ function renderAt(initialEntry: string) {
     monitoring: probe("monitoring"),
     settings: probe("settings"),
     activity: probe("activity"),
+    orgLayout: OrgLayoutStub,
+    orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
-    legacyObservability: LegacyObservabilityRoute,
     legacyDomains: LegacyDomainsRoute,
     legacyCommand: LegacyCommandRoute,
   });
@@ -258,13 +283,54 @@ describe("the way in: /forge", () => {
     await landsOn(router, "/forge/p/gamma");
   });
 
-  it("offers a picker — never a dead-end sentence — when a named project does not resolve", async () => {
+  it("opens the app a ?forgeProject= link names, with no lookup", async () => {
+    const router = renderAt("/forge?forgeProject=elsewhere");
+    await landsOn(router, "/forge/p/elsewhere");
+    expect(screen.queryByTestId("forge-project-picker")).toBeNull();
+  });
+
+  it("offers a picker — never a dead-end sentence — when a ?project= resolves to nothing", async () => {
     const user = userEvent.setup();
-    const router = renderAt("/forge?project=project-gone");
+    const router = renderAt("/forge?project=gone");
     await screen.findByTestId("forge-project-picker");
     await user.click(await screen.findByTestId("forge-project-option-project-a"));
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-a" }));
     await landsOn(router, "/forge/p/alpha");
+  });
+});
+
+describe("the org's Observability: /forge/observability", () => {
+  it("is the org page — no project is resolved", async () => {
+    state.currentProject = PROJECTS[0]!;
+    const router = renderAt("/forge/observability");
+    expect(await screen.findByTestId("org-page")).toHaveAttribute("data-page", "org-observability");
+    expect(router.state.location.pathname).toBe("/forge/observability");
+  });
+
+  it("hosts a view at /forge/observability/<view>, keeping the filters", async () => {
+    const router = renderAt("/forge/observability/logs?apps=%5B%22shop%22%5D&q=timeout");
+    expect(await screen.findByTestId("org-page")).toHaveAttribute("data-page", "org-observability");
+    await landsOn(router, "/forge/observability/logs", { apps: ["shop"], q: "timeout" });
+  });
+
+  it("lands a view that is not a nav entry on the org overview, keeping the filters", async () => {
+    const router = renderAt("/forge/observability/heatmaps?apps=%5B%22shop%22%5D");
+    await landsOn(router, "/forge/observability", { apps: ["shop"] });
+  });
+
+  it("sends a bare ?view= (an old link) to that view's org page, keeping the filters", async () => {
+    const router = renderAt("/forge/observability?view=logs&envs=%5B%22shop%2Fprod%22%5D&apps=%5B%22shop%22%5D&q=timeout");
+    await landsOn(router, "/forge/observability/logs", { envs: ["shop/prod"], apps: ["shop"], q: "timeout" });
+  });
+
+  it("sends the retired ?view=usage to the org overview", async () => {
+    const router = renderAt("/forge/observability?view=usage");
+    await landsOn(router, "/forge/observability", {});
+  });
+
+  it("resolves ?forgeProject= to that app's page for the view", async () => {
+    const router = renderAt("/forge/observability?forgeProject=elsewhere&view=logs&q=timeout");
+    await landsOn(router, "/forge/p/elsewhere/observability/logs", { env: "all", q: "timeout" });
   });
 });
 
@@ -287,9 +353,8 @@ describe("redirects from the retired URLs", () => {
     expect(roster.calls.at(-1)).toEqual([null, "elsewhere"]);
   });
 
-  it("sends /forge/observability to the view's page with envs as the scope", async () => {
-    state.currentProject = PROJECTS[0]!;
-    const router = renderAt('/forge/observability?view=logs&envs=%5B%22e2e%22%5D&q=timeout');
+  it("sends /forge/observability?project= to the view's page with envs as the scope", async () => {
+    const router = renderAt('/forge/observability?project=project-a&view=logs&envs=%5B%22e2e%22%5D&q=timeout');
     await landsOn(router, "/forge/p/alpha/observability/logs", { env: "e2e", q: "timeout" });
   });
 

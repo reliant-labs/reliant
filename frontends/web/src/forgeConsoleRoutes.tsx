@@ -6,9 +6,12 @@
  * against the mirror while the real tree drifted.
  *
  *   _forge                                  ForgeLayout: Escape, the exit
- *     /forge                                → resolve the project, redirect
- *     /forge/env/$env, /forge/observability,
- *     /forge/domains, /forge/topology, …    → the retired URLs, redirected
+ *     /forge                                → /apps (the Apps list); ?project= / ?forgeProject= → that app's console
+ *     _forgeOrg                             OrgConsoleLayout: the org's nav (no app chosen)
+ *       /forge/observability                org-wide Observability (?project= → that app's)
+ *       /forge/observability/$view          errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
+ *     /forge/env/$env, /forge/domains,
+ *     /forge/topology, …                    → the retired URLs, redirected
  *     /forge/p/$project                     ConsoleLayout: nav, top bar, scope
  *       /                                   Overview (with the workloads)
  *       /workloads/$env/$name               one workload
@@ -39,7 +42,7 @@ import {
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
-  forgeObservabilitySearchSchema,
+  forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
 } from './routeSchemas'
 
@@ -65,10 +68,13 @@ export interface ForgeConsoleComponents {
   monitoring: RouteComponent
   settings: RouteComponent
   activity: RouteComponent
-  /** The entries that resolve a project and redirect (ForgeEntryRoutes.tsx). */
+  /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
+  orgLayout: RouteComponent
+  /** /forge/observability and /forge/observability/$view: org-wide Observability. */
+  orgObservability: RouteComponent
+  /** /forge: to the Apps list, or the entry that resolves a project and redirects (ForgeEntryRoutes.tsx). */
   landing: RouteComponent
   legacyEnv: RouteComponent
-  legacyObservability: RouteComponent
   legacyDomains: RouteComponent
   legacyCommand: RouteComponent
 }
@@ -85,6 +91,30 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     component: components.layout,
   })
 
+  // ── The org console: org-wide Observability ──
+  const orgLayoutRoute = createRoute({
+    getParentRoute: () => layoutRoute,
+    id: '_forgeOrg',
+    component: components.orgLayout,
+  })
+  const orgObservabilityRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: '/forge/observability',
+    validateSearch: forgeOrgObsSearchSchema,
+    component: components.orgObservability,
+  })
+  // A view that is not a nav entry (a hand-edited URL) lands on the org Observability overview.
+  const orgObservabilityViewRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: '/forge/observability/$view',
+    validateSearch: forgeOrgObsSearchSchema,
+    beforeLoad: ({ params, location }) => {
+      if (isObsNavView(params.view)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    },
+    component: components.orgObservability,
+  })
+
   // ── Entries that resolve a project and redirect ──
   const landingRoute = createRoute({
     getParentRoute: () => layoutRoute,
@@ -97,12 +127,6 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     path: '/forge/env/$env',
     validateSearch: forgeLegacyEnvSearchSchema,
     component: components.legacyEnv,
-  })
-  const legacyObservabilityRoute = createRoute({
-    getParentRoute: () => layoutRoute,
-    path: '/forge/observability',
-    validateSearch: forgeObservabilitySearchSchema,
-    component: components.legacyObservability,
   })
   const legacyDomainsRoute = createRoute({
     getParentRoute: () => layoutRoute,
@@ -229,8 +253,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
 
   return layoutRoute.addChildren([
     landingRoute,
+    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute]),
     legacyEnvRoute,
-    legacyObservabilityRoute,
     legacyDomainsRoute,
     legacyCommandRoute('/forge/topology'),
     legacyCommandRoute('/forge/environments'),
