@@ -36,10 +36,19 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
+import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 
 export function MobileLayout({ children }: { children: ReactNode }) {
+  // While the on-screen keyboard is up, only the VISUAL viewport shrinks: the
+  // layout viewport (and so `100dvh`) keeps its full height, which leaves the
+  // composer behind the keyboard, and iOS compensates by panning the page so
+  // the header slides off the top. Sizing the shell to the visual viewport and
+  // pinning it to its offset keeps header, timeline and composer all on screen.
+  const viewport = useVisualViewport();
+  const keyboardOpen = viewport?.keyboardOpen ?? false;
+
   // The pre-hydration bootstrap in index.html only runs on a full page load,
   // but users reach /m/* by client-side redirect — so without this the mobile
   // type scale would only apply to hard navigations. Re-applying on mount (and
@@ -64,9 +73,21 @@ export function MobileLayout({ children }: { children: ReactNode }) {
       <div
         className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background text-foreground"
         style={{
-          // Top inset keeps content clear of the notch. Inline because these
-          // are `env()` values Tailwind has no token for.
+          // The ONE place the top inset is applied. Screens, headers and the
+          // chat header sit inside this padding and must not add their own;
+          // only the fixed full-screen overlays (drawer, workspace sheet,
+          // progress bar) sit outside it and inset themselves. Inline because
+          // these are `env()` values Tailwind has no token for.
           paddingTop: "env(safe-area-inset-top)",
+          // `fixed` rather than a transform: a transform would make the shell
+          // the containing block of every fixed descendant.
+          ...(keyboardOpen && viewport
+            ? { position: "fixed" as const, insetInline: 0, top: viewport.offsetTop, height: viewport.height }
+            : null),
+          // The home indicator is under the keyboard while it is open, so
+          // bottom-edge composers must not reserve room for it. Screens read
+          // this instead of `env(safe-area-inset-bottom)` directly.
+          ["--mobile-safe-bottom" as string]: keyboardOpen ? "0px" : "env(safe-area-inset-bottom)",
           // The BOTTOM inset is deliberately not applied here. Padding on this
           // container would stop the tab bar's background short of the screen
           // edge, leaving a strip of page behind the home indicator. The bar

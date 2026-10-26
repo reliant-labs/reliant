@@ -137,9 +137,12 @@ export function MobileChatScreen() {
           otherwise sit under the home indicator. */}
       <div
         className="min-h-0 flex-1"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" }}
       >
-        <ChatContainer tabId={chatId} />
+        {/* The screen header above already shows the title; ChatHeader's own
+            copy was a second 50px band under it. Its menu, context ring and
+            thread tabs stay. */}
+        <ChatContainer tabId={chatId} hideChatTitle />
       </div>
     </div>
   );
