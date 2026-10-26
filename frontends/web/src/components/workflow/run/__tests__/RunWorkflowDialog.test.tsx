@@ -263,12 +263,12 @@ describe("RunWorkflowDialog", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("input 'label': model gpt-x is not available");
     // Only a missing provider key points at Settings.
-    expect(screen.queryByRole("link", { name: /Your providers/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /AI → Providers/ })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
     expect(loadRunContext).not.toHaveBeenCalled();
   });
 
-  it("a run with no model provider links to Settings → AI → Your providers", async () => {
+  it("a run with no model provider links to Settings → AI → Providers", async () => {
     startChat.mockRejectedValue(
       new ConnectError("no API keys configured: please add an API key in Settings > API Keys", Code.FailedPrecondition),
     );
@@ -282,8 +282,8 @@ describe("RunWorkflowDialog", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("no API keys configured");
-    const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Your providers" });
-    // The AI section opens on its "Your providers" tab.
+    const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Providers" });
+    // The AI section opens on its Providers tab.
     expect(link).toHaveAttribute("href", "/settings/general");
     await user.click(link);
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/general"));

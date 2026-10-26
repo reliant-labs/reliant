@@ -367,10 +367,14 @@ func (*ListModelEndpointsRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListModelEndpointsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Endpoints     []*ModelEndpoint       `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Endpoints []*ModelEndpoint       `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+	// Whether this server can store an endpoint's API key and header values (a
+	// sealed credential store is configured). False, a create or update that
+	// carries a key is refused, so the form offers no key field.
+	CredentialsAvailable bool `protobuf:"varint,2,opt,name=credentials_available,json=credentialsAvailable,proto3" json:"credentials_available,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ListModelEndpointsResponse) Reset() {
@@ -408,6 +412,13 @@ func (x *ListModelEndpointsResponse) GetEndpoints() []*ModelEndpoint {
 		return x.Endpoints
 	}
 	return nil
+}
+
+func (x *ListModelEndpointsResponse) GetCredentialsAvailable() bool {
+	if x != nil {
+		return x.CredentialsAvailable
+	}
+	return false
 }
 
 type ModelEndpointInput struct {
@@ -941,9 +952,10 @@ const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\x12_supports_thinkingB\x0e\n" +
 	"\f_temperatureB\b\n" +
 	"\x06_top_p\"\x1b\n" +
-	"\x19ListModelEndpointsRequest\"U\n" +
+	"\x19ListModelEndpointsRequest\"\x8a\x01\n" +
 	"\x1aListModelEndpointsResponse\x127\n" +
-	"\tendpoints\x18\x01 \x03(\v2\x19.reliant.v1.ModelEndpointR\tendpoints\"\xfb\x02\n" +
+	"\tendpoints\x18\x01 \x03(\v2\x19.reliant.v1.ModelEndpointR\tendpoints\x123\n" +
+	"\x15credentials_available\x18\x02 \x01(\bR\x14credentialsAvailable\"\xfb\x02\n" +
 	"\x12ModelEndpointInput\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x124\n" +

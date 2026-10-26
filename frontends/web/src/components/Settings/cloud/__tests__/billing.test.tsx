@@ -163,13 +163,15 @@ describe('BillingSection', () => {
       screen.getByRole('heading', { level: 1, name: /billing/i }),
     ).toBeInTheDocument()
 
-    // Exactly three, in order. An inclusion-only check would still pass if a
-    // fourth tab came back, and the whole point of the merge was that the
-    // strip stops being a filing cabinet.
+    // Exactly these, in order. An inclusion-only check would still pass if
+    // invoices came back as its own tab, and the whole point of that merge was
+    // that the strip stops being a filing cabinet. Reliant AI's keys and spend
+    // moved here from Settings → AI, where Reliant appeared three times.
     expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
       'Overview',
       'Change plan',
       'Usage & invoices',
+      'Reliant AI',
     ])
   })
 

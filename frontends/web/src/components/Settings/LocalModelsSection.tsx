@@ -391,9 +391,9 @@ export function LocalModelsSection() {
 
   return (
     <div className="space-y-4">
+      {/* The tab already names the page, so no heading repeats it here. */}
       <div>
-        <h2 className="text-base font-semibold text-foreground">Custom &amp; local models</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Run models like Ollama or LM Studio on your own hardware. Each machine's Reliant daemon finds
           the servers running on it and relays chats to them, so nothing about them is sent through
           Reliant's cloud. Servers it can't find, like a GPU cluster, can be added as custom endpoints.

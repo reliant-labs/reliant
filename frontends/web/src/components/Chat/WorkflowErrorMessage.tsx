@@ -38,7 +38,7 @@ function OpenProviderSettingsButton() {
     <button
       type="button"
       onClick={() =>
-        // "general" is the AI section; it opens on its "Your providers" tab.
+        // "general" is the AI section; it opens on its Providers tab.
         navigate({ to: '/settings/$section', params: { section: 'general' } })
       }
       className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-background/60 px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-destructive/10"

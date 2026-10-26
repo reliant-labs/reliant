@@ -1,9 +1,9 @@
 /**
- * MobileAIProvidersPanel — pins that it writes through the exact same
- * `api.settings.*` calls, preferences hooks, OAuth hooks, and `onboardingService` desktop
- * `CombinedGeneralSettings` uses (a divergent write path here would be a
- * real bug, not a UI difference — see the module comment), and that no
- * interactive element falls under the 44px touch-target floor.
+ * MobileAIProvidersPanel — the mobile-only parts around the shared providers
+ * surface (ProvidersSection, tested in Settings/providers): the browser
+ * sign-in notice, the streaming preference written through the same
+ * useUpdatePreferences desktop uses, MobileModelPreferences, and the 44px /
+ * semantic-token source guards.
  */
 
 import { screen, waitFor } from "@testing-library/react";
@@ -85,17 +85,8 @@ const { setTransport } = await import("../../../lib/connect");
 const { mockTransport } = await import("../../../lib/test-utils");
 const { useAuthStore } = await import("../../../store/authStore");
 
-function renderPanel(providers: Array<{
-  provider: string;
-  configured: boolean;
-  hasApiKey: boolean;
-  displayName: string;
-}> = []) {
-  const onProvidersUpdate = vi.fn();
-  const utils = render(
-    <MobileAIProvidersPanel providers={providers} onProvidersUpdate={onProvidersUpdate} />,
-  );
-  return { ...utils, onProvidersUpdate };
+function renderPanel() {
+  return render(<MobileAIProvidersPanel />);
 }
 
 beforeEach(() => {
@@ -116,6 +107,8 @@ beforeEach(() => {
     mockTransport({
       "SettingsService.GetPreferences": () => mocks.getPreferences(),
       "SettingsService.UpdatePreferences": (req) => mocks.updatePreferences(req),
+      "SettingsService.GetProviderStatuses": () => ({ providers: [] }),
+      "ProviderAccountService.ListProviderAccounts": () => ({ accounts: [] }),
     }),
   );
 });
@@ -126,147 +119,15 @@ afterEach(() => {
 });
 
 describe("MobileAIProvidersPanel", () => {
-  it("always shows the desktop-only Claude/Codex OAuth notice", () => {
+  it("always shows the desktop-only browser sign-in notice", () => {
     renderPanel();
-    const notice = screen.getByText(/claude, codex and antigravity sign-in needs/i);
+    const notice = screen.getByText(/claude, chatgpt and google sign-in needs/i);
     expect(notice.textContent).toMatch(/github copilot/i);
   });
 
-  it("lists configured providers as connected", () => {
-    renderPanel([
-      {
-        provider: "anthropic",
-        configured: true,
-        hasApiKey: true,
-        displayName: "Anthropic",
-      },
-    ]);
-    expect(screen.getByText("Anthropic")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete anthropic/i })).toBeInTheDocument();
-  });
-
-  it("saves a manual API key through the same api.settings.updateProvider call desktop uses", async () => {
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    const { onProvidersUpdate } = renderPanel();
-
-    await user.click(screen.getByText("Anthropic API"));
-    const input = await screen.findByPlaceholderText(/enter your anthropic api api key/i);
-    await user.type(input, "sk-ant-test-key");
-    await user.click(screen.getByRole("button", { name: /^save$/i }));
-
-    await waitFor(() =>
-      expect(mocks.updateProvider).toHaveBeenCalledWith("anthropic", "sk-ant-test-key"),
-    );
-    await waitFor(() => expect(mocks.refetchModels).toHaveBeenCalled());
-    expect(onProvidersUpdate).toHaveBeenCalled();
-  });
-
-  it("validates a key through the same api.settings.validateProviderAPIKey call desktop uses", async () => {
-    mocks.validateProviderAPIKey.mockResolvedValue({ valid: true, message: "" });
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
+  it("offers the one Add provider entry point", () => {
     renderPanel();
-
-    await user.click(screen.getByText("Anthropic API"));
-    const input = await screen.findByPlaceholderText(/enter your anthropic api api key/i);
-    await user.type(input, "sk-ant-test-key");
-    await user.click(screen.getByRole("button", { name: /test connection/i }));
-
-    await waitFor(() =>
-      expect(mocks.validateProviderAPIKey).toHaveBeenCalledWith(
-        "anthropic",
-        "sk-ant-test-key",
-      ),
-    );
-    expect(
-      await screen.findByText(/connection successful/i),
-    ).toBeInTheDocument();
-  });
-
-  it("deletes a configured provider through deleteProvider", async () => {
-    vi.stubGlobal("confirm", vi.fn(() => true));
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    renderPanel([
-      {
-        provider: "anthropic",
-        configured: true,
-        hasApiKey: true,
-        displayName: "Anthropic",
-      },
-    ]);
-
-    await user.click(screen.getByRole("button", { name: /delete anthropic/i }));
-    await waitFor(() => expect(mocks.deleteProvider).toHaveBeenCalledWith("anthropic"));
-    vi.unstubAllGlobals();
-  });
-
-  it("confirms a sign-in provider's disconnect by name, and says the others stay connected", async () => {
-    const confirmSpy = vi.fn(() => false);
-    vi.stubGlobal("confirm", confirmSpy);
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    renderPanel([
-      { provider: "codex", configured: true, hasApiKey: true, displayName: "Codex (ChatGPT)" },
-    ]);
-
-    await user.click(screen.getByRole("button", { name: /disconnect codex/i }));
-    const prompt = (confirmSpy.mock.calls[0] as unknown as [string])[0];
-    expect(prompt).toMatch(/^Disconnect Codex \(ChatGPT\)\?/);
-    expect(prompt).toContain("Your other providers stay connected");
-    expect(prompt).not.toMatch(/api key/i);
-    expect(mocks.deleteProvider).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
-  });
-
-  it("starts Antigravity's OWN flow, not Codex's, when Antigravity is picked", async () => {
-    // The ternary this replaced (`kind === "claude" ? claudeOAuth : codexOAuth`)
-    // routed Antigravity into the Codex flow with no error anywhere — the user
-    // would have linked a ChatGPT account from a Google button.
-    mocks.antigravityStart.mockResolvedValue({ ok: true, message: "Connected!" });
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.click(screen.getByText("Antigravity"));
-    await user.click(
-      await screen.findByRole("button", { name: /login with antigravity/i }),
-    );
-
-    await waitFor(() => expect(mocks.antigravityStart).toHaveBeenCalled());
-    expect(mocks.codexStart).not.toHaveBeenCalled();
-    expect(mocks.claudeStart).not.toHaveBeenCalled();
-  });
-
-  it("starts the Claude OAuth flow through the shared useClaudeOAuth hook", async () => {
-    mocks.claudeStart.mockResolvedValue({ ok: true, message: "Connected!" });
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    renderPanel();
-
-    await user.click(screen.getByText("Claude subscription"));
-    await user.click(await screen.findByRole("button", { name: /login with claude subscription/i }));
-
-    await waitFor(() => expect(mocks.claudeStart).toHaveBeenCalled());
-  });
-
-  it("provisions Reliant through the same onboardingService.provisionManagedKey call desktop uses", async () => {
-    // Re-mock cloud eligibility as eligible for this one test.
-    vi.doMock("../../../hooks/useOnboardingQueries", () => ({
-      useCloudEligibility: () => ({ eligible: true, reason: null, isLoading: false }),
-    }));
-    vi.resetModules();
-    const { MobileAIProvidersPanel: PanelWithReliant } = await import(
-      "../MobileAIProvidersPanel"
-    );
-    const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
-    render(<PanelWithReliant providers={[]} onProvidersUpdate={vi.fn()} />);
-
-    await user.click(screen.getByText("Reliant"));
-    await waitFor(() => expect(mocks.provisionManagedKey).toHaveBeenCalled());
-    vi.doUnmock("../../../hooks/useOnboardingQueries");
+    expect(screen.getByRole("button", { name: "Add provider" })).toBeInTheDocument();
   });
 
   it("writes the streaming toggle through the same useUpdatePreferences write desktop uses", async () => {
@@ -297,8 +158,9 @@ describe("MobileAIProvidersPanel", () => {
     expect(source).not.toMatch(/\bh-(9|10|11)\b/);
   });
 
-  it("uses only semantic Tailwind color tokens, no hardcoded hex values", () => {
+  it("uses only semantic Tailwind color tokens, no hardcoded hex values or palette colors", () => {
     const source = readFileSync(join(MOBILE_DIR, "MobileAIProvidersPanel.tsx"), "utf8");
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(source).not.toMatch(/\b(amber|emerald|red|sky|zinc)-\d{2,3}\b/);
   });
 });

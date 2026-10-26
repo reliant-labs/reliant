@@ -1,6 +1,7 @@
 /**
  * ReliantAISection — the managed-Reliant AI settings surface, rendered as the
- * "Reliant AI" tab of the `/settings/general` AI section (see AISettings).
+ * "Reliant AI" tab of Billing (`/settings/billing?tab=ai`), which the Reliant
+ * provider card in Settings → AI links to.
  *
  * This is the END-USER view of Reliant-issued LLM access + spend, ported from
  * admin-web's `(dashboard)/ai/page.tsx` but built on the PUBLIC RPCs only:
@@ -9,8 +10,8 @@
  *   - LLMGatewayService.GetLLMSpend                → spend by model + usage rows
  *   - LLMGatewayService.ListLLMKeys / Create / Revoke / Rotate → key management
  *
- * Distinct from `/settings/general` (CombinedGeneralSettings), which manages the
- * user's OWN bring-your-own provider API keys. There is no platform-admin data
+ * Distinct from Settings → AI's providers, which manage the user's OWN
+ * bring-your-own provider accounts and keys. There is no platform-admin data
  * here — admin-web's BillingAdminService cards are intentionally omitted; the
  * per-user GetLLMSpend gives the end-user the equivalent spend view.
  */
@@ -34,7 +35,6 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-  PageHeader,
   Table,
   Thead,
   Tbody,
@@ -150,10 +150,6 @@ export function ReliantAISection() {
   if (!reliantAIAvailable) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          title="Reliant AI"
-          subtitle="Managed AI access, credits, spend, and LLM keys."
-        />
         <EmptyState
           icon={KeyRound}
           title="Cloud not configured"
@@ -249,10 +245,9 @@ function ReliantAIPanel() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Reliant AI"
-        subtitle="Manage your Reliant-issued AI access, available models, credit balance, spend, and LLM keys."
-      />
+      <p className="text-sm text-muted-foreground">
+        Your Reliant-issued AI access: the models you can use, your credit balance, spend, and LLM keys.
+      </p>
 
       {fatalError && (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive-ink">

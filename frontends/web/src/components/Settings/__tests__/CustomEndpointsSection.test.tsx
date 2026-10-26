@@ -170,15 +170,17 @@ describe("add / edit form", () => {
     expect(screen.getByText(/All your machines are offline/)).toBeTruthy();
   });
 
-  it("disables the key and header fields with a coming-soon note, and never sends a key", async () => {
+  it("leaves the key field out, with a one-line reason, when the server cannot store keys", async () => {
     await openAddForm();
-    expect((screen.getByLabelText("API key") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Custom headers") as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByTestId("credential-note").textContent).toMatch(/sealed credential store/);
+    expect(screen.queryByLabelText("API key")).toBeNull();
+    expect(screen.queryByLabelText("Custom headers")).toBeNull();
+    expect(screen.getByTestId("credential-note").textContent).toMatch(/can't store endpoint API keys/);
+    expect(screen.getByTestId("credential-note").textContent).not.toMatch(/coming/i);
   });
 
-  it("enables the key field once the store is available, and sends the key", async () => {
-    render(<CustomEndpointsSection credentialsAvailable />);
+  it("offers the key field when the server reports a credential store, and sends the key", async () => {
+    mocks.list.mockResolvedValue({ endpoints: [], credentialsAvailable: true });
+    render(<CustomEndpointsSection />);
     await screen.findByTestId("no-endpoints");
     await userEvent.click(screen.getByRole("button", { name: /add custom endpoint/i }));
     expect((screen.getByLabelText("API key") as HTMLInputElement).disabled).toBe(false);

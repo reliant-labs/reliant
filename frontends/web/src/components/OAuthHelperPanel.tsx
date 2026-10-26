@@ -46,6 +46,12 @@ export interface OAuthHelperPanelProps {
   buttonVariant?: "primary" | "subtle";
   /** Text density. `compact` is suitable for tight onboarding layouts. */
   size?: "default" | "compact";
+  /**
+   * Draw the panel's own inset frame and "Authenticate via X" title. False
+   * when a host already frames and titles it (Settings' connect panel), so the
+   * flow does not sit in a well inside a well.
+   */
+  framed?: boolean;
 }
 
 /**
@@ -70,6 +76,7 @@ export function OAuthHelperPanel({
   buttonAlign = "end",
   buttonVariant = "primary",
   size = "default",
+  framed = true,
 }: OAuthHelperPanelProps) {
   const compact = size === "compact";
   const bodyText = compact ? "text-xs leading-relaxed" : "text-sm";
@@ -147,7 +154,7 @@ export function OAuthHelperPanel({
       onClick={onConnect}
       disabled={connecting || loading || !available}
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
+        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         buttonAlign === "stretch" && "w-full",
         loginButtonClass,
       )}
@@ -165,7 +172,7 @@ export function OAuthHelperPanel({
       type="button"
       onClick={onCancel}
       className={cn(
-        "rounded-lg border border-border/40 bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted",
+        "rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-foreground/5",
         buttonAlign === "stretch" && "w-full",
       )}
     >
@@ -179,7 +186,7 @@ export function OAuthHelperPanel({
       onClick={onRetry}
       disabled={loading}
       className={cn(
-        "rounded-lg border border-border/40 bg-background px-4 py-2 text-sm transition-colors hover:bg-muted disabled:opacity-50",
+        "rounded-lg border border-border bg-background px-4 py-2 text-sm transition-colors hover:bg-foreground/5 disabled:opacity-50",
         buttonAlign === "stretch" && "w-full",
       )}
     >
@@ -198,11 +205,20 @@ export function OAuthHelperPanel({
   const showManualInstall = !isElectron || cliInstalled !== true;
 
   return (
-    <div className="space-y-3 rounded-lg border border-border/40 bg-muted/30 p-4">
+    <div
+      className={cn(
+        "space-y-3",
+        // An inset (bg-background + border), never bg-muted: muted lifts in
+        // dark mode and recesses in light, so it read as a slab on one of them.
+        framed && "rounded-lg border border-border/60 bg-background p-4",
+      )}
+    >
       <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">
-          Authenticate via {providerName}
-        </p>
+        {framed && (
+          <p className="text-sm font-medium text-foreground">
+            Authenticate via {providerName}
+          </p>
+        )}
         <p className={cn(bodyText, "text-muted-foreground")}>
           {connecting
             ? // Names what the app is waiting on. A bare spinner is
@@ -224,7 +240,7 @@ export function OAuthHelperPanel({
                 tinted container so the boundary is a surface change, and both
                 halves are numbered — "Install it:" followed by "Then run:"
                 described a sequence without ever presenting one. */}
-            <div className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+            <div className="space-y-2 rounded-lg border border-info/30 bg-info/5 p-3">
               <p className={cn(bodyText, "font-medium text-foreground")}>
                 1. Install the Reliant CLI
               </p>
@@ -237,8 +253,8 @@ export function OAuthHelperPanel({
                   className={cn(
                     "inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     installingCli
-                      ? "cursor-not-allowed bg-muted text-muted-foreground"
-                      : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
+                      ? "cursor-not-allowed opacity-50 bg-foreground text-background"
+                      : "bg-foreground text-background hover:bg-foreground/90",
                   )}
                 >
                   {installingCli ? (
@@ -251,7 +267,7 @@ export function OAuthHelperPanel({
               )}
 
               {isElectron && cliInstalled === true && (
-                <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                <p className="flex items-center gap-1.5 text-xs text-success-ink">
                   <Check className="h-3.5 w-3.5" />
                   <span>
                     <code className="font-mono">reliant</code> CLI installed

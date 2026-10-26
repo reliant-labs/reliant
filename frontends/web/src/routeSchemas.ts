@@ -338,6 +338,7 @@ export const BILLING_TAB_IDS = [
   "plans",
   "invoices",
   "usage",
+  "ai",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -347,7 +348,7 @@ export type BillingTab = (typeof BILLING_TAB_IDS)[number];
  * were one tab pretending to be two, and reconciling a number meant checking
  * both.
  */
-export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage"] as const;
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as const;
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */

@@ -87,6 +87,15 @@ func NewManager(cfg Config) *Manager {
 
 const probeBudget = 25 * time.Second
 
+// CredentialsAvailable reports whether endpoints can carry an API key or
+// header values: a sealed store is wired, not the NotAvailableCredentials
+// default that refuses every secret. The settings form asks before it offers
+// a key field, so it never shows one the server will refuse.
+func (m *Manager) CredentialsAvailable() bool {
+	_, refuses := m.cfg.Credentials.(NotAvailableCredentials)
+	return !refuses
+}
+
 // ---- reads ----
 
 // List returns the user's endpoints as the API presents them.

@@ -1,40 +1,34 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { GripVertical, MoreHorizontal } from "lucide-react";
+import { ChevronDown, GripVertical, MoreHorizontal } from "lucide-react";
+import Button from "@/components/forge-ui/button";
 import { cn } from "../../../lib/utils";
 import type { AccountStatus, ProviderAccount } from "../../../types/providerAccount";
-import { PlanBadge } from "./PlanBadge";
-import { UsageBars } from "./UsageBars";
-import { formatResetsIn, limitedLabel } from "./accountFormat";
+import { UsageBars, UsageMeters } from "./UsageBars";
+import { limitedSentence, needsAttention, planLabel } from "./accountFormat";
 
-const PILL: Record<AccountStatus, string> = {
-  available: "border-success/20 bg-success/10 text-success-ink",
-  limited: "border-warning/30 bg-warning/10 text-warning-ink",
-  paused: "border-border bg-foreground/5 text-muted-foreground",
-  needs_sign_in: "border-destructive/30 bg-destructive/10 text-destructive-ink",
+const STATUS_INK: Record<Exclude<AccountStatus, "available">, string> = {
+  limited: "text-warning-ink",
+  paused: "text-muted-foreground",
+  needs_sign_in: "text-destructive-ink",
 };
 
-export function StatusPill({ account, now }: { account: ProviderAccount; now: Date }) {
+/**
+ * The account's state in words, or nothing when it is healthy. An "Available"
+ * pill on every row said nothing that the absence of a problem does not.
+ */
+export function AccountStatusText({ account, now }: { account: ProviderAccount; now: Date }) {
+  if (account.status === "available") return null;
   const text =
-    account.status === "available"
-      ? "Available"
-      : account.status === "limited"
-        ? limitedLabel(account, now)
-        : account.status === "paused"
-          ? "Paused"
-          : "Needs sign-in";
-  const countdown =
-    account.status === "limited" ? formatResetsIn(account.limitedUntil, now) : "";
-  const title =
-    account.status === "needs_sign_in" ? account.needsSignInReason : countdown || undefined;
+    account.status === "limited"
+      ? limitedSentence(account, now)
+      : account.status === "paused"
+        ? "Paused"
+        : "Needs sign-in";
   return (
     <span
-      data-testid="status-pill"
+      data-testid="account-status"
       data-status={account.status}
-      title={title}
-      className={cn(
-        "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-2xs font-medium leading-none",
-        PILL[account.status],
-      )}
+      className={cn("shrink-0 text-xs font-medium", STATUS_INK[account.status])}
     >
       {text}
     </span>
@@ -64,6 +58,12 @@ export interface AccountRowProps {
   };
 }
 
+/**
+ * One account, exception-first. A healthy account is a single line — its
+ * label, plan and a small meter per usage window. A limited, nearly limited or
+ * signed-out account opens by itself to say what is wrong and when it ends;
+ * any row opens on request for its identity line and the full usage bars.
+ */
 export function AccountRow({
   account,
   index,
@@ -84,9 +84,15 @@ export function AccountRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(account.label);
+  // null follows the account's state; a click pins it open or shut.
+  const [expandedByUser, setExpandedByUser] = useState<boolean | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const hintId = useId();
+  const detailId = useId();
+
+  const open = expandedByUser ?? needsAttention(account, now);
+  const several = count > 1;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -121,6 +127,7 @@ export function AccountRow({
   };
 
   const canReconnect = account.authKind === "oauth" || account.authKind === "device";
+  const plan = planLabel(account);
   const secondary = [
     account.email && account.email !== account.label ? account.email : null,
     account.organizationName,
@@ -146,20 +153,23 @@ export function AccountRow({
       }
     : {};
 
+  const showGrip = !mobile && several && !!drag;
+
   return (
     <li
       data-testid="account-row"
       data-account-id={account.id}
+      data-expanded={open}
       aria-label={account.label}
       className={cn(
-        "rounded-lg border border-border/60 bg-background p-3",
+        "px-3 py-2.5",
         drag?.dragging && "opacity-50",
         account.status === "paused" && "opacity-80",
       )}
       {...dragProps}
     >
-      <div className="flex items-start gap-2">
-        {!mobile && (
+      <div className="flex items-center gap-2">
+        {showGrip && (
           <>
             <button
               type="button"
@@ -173,7 +183,7 @@ export function AccountRow({
                 drag?.onDragStart(account.id);
               }}
               onDragEnd={() => drag?.onDragEnd()}
-              className="mt-0.5 shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 active:cursor-grabbing"
+              className="shrink-0 cursor-grab rounded-md p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 active:cursor-grabbing"
             >
               <GripVertical className="h-4 w-4" />
             </button>
@@ -182,58 +192,72 @@ export function AccountRow({
             </span>
           </>
         )}
+        {several && (
+          <span className="w-4 shrink-0 text-center text-xs tabular-nums text-muted-foreground" aria-hidden="true">
+            {index + 1}
+          </span>
+        )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {renaming ? (
-              <input
-                autoFocus
-                aria-label={`Name for ${account.label}`}
-                value={draft}
-                placeholder={account.email ?? "Account name"}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename();
-                  if (e.key === "Escape") {
-                    setDraft(account.label);
-                    setRenaming(false);
-                  }
-                }}
-                className={cn(
-                  "min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40",
-                  mobile ? "min-h-[44px] w-full" : "py-1",
-                )}
-              />
-            ) : (
-              <span
-                data-sentry-mask
-                className="min-w-0 truncate text-sm font-medium text-foreground"
-              >
-                {account.label}
-              </span>
-            )}
-            <PlanBadge account={account} />
-            <StatusPill account={account} now={now} />
-            {account.status === "needs_sign_in" && canReconnect && (
-              <button
-                type="button"
-                onClick={onReconnect}
-                className={cn(
-                  "rounded-md border border-border px-2 text-xs font-medium text-foreground hover:bg-foreground/5",
-                  mobile ? "min-h-[44px]" : "py-0.5",
-                )}
-              >
-                Reconnect
-              </button>
-            )}
-          </div>
-          {secondary.length > 0 && (
-            <p data-sentry-mask className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-              {secondary.join(" · ")}
-            </p>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+          {renaming ? (
+            <input
+              autoFocus
+              aria-label={`Name for ${account.label}`}
+              value={draft}
+              placeholder={account.email ?? "Account name"}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") {
+                  setDraft(account.label);
+                  setRenaming(false);
+                }
+              }}
+              className={cn(
+                "min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40",
+                mobile ? "min-h-[44px] w-full" : "py-1",
+              )}
+            />
+          ) : (
+            <span data-sentry-mask className="min-w-0 truncate text-sm font-medium text-foreground">
+              {account.label}
+            </span>
           )}
+          {plan && (
+            <span data-testid="account-plan" className="shrink-0 text-xs text-muted-foreground">
+              {plan}
+            </span>
+          )}
+          <AccountStatusText account={account} now={now} />
         </div>
+
+        {!open && !mobile && <UsageMeters account={account} now={now} />}
+
+        {account.status === "needs_sign_in" && canReconnect && (
+          <Button
+            variant="outline"
+            size={mobile ? "xl" : "xs"}
+            className={mobile ? "min-h-[44px]" : undefined}
+            onClick={onReconnect}
+          >
+            Reconnect
+          </Button>
+        )}
+
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={detailId}
+          aria-label={`Details for ${account.label}`}
+          onClick={() => setExpandedByUser(!open)}
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+            mobile ? "min-h-[44px] min-w-[44px]" : "h-7 w-7",
+          )}
+        >
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </button>
 
         <div ref={menuRef} className="relative shrink-0" onKeyDown={onMenuKey}>
           <button
@@ -271,24 +295,28 @@ export function AccountRow({
               <button type="button" role="menuitem" className={itemClass} onClick={choose(onTogglePause)}>
                 {account.status === "paused" ? "Resume" : "Pause"}
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={itemClass}
-                disabled={index === 0}
-                onClick={choose(() => onMove(-1))}
-              >
-                Move up
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={itemClass}
-                disabled={index >= count - 1}
-                onClick={choose(() => onMove(1))}
-              >
-                Move down
-              </button>
+              {several && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={itemClass}
+                    disabled={index === 0}
+                    onClick={choose(() => onMove(-1))}
+                  >
+                    Move up
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={itemClass}
+                    disabled={index >= count - 1}
+                    onClick={choose(() => onMove(1))}
+                  >
+                    Move down
+                  </button>
+                </>
+              )}
               {canReconnect && (
                 <button type="button" role="menuitem" className={itemClass} onClick={choose(onReconnect)}>
                   Reconnect
@@ -307,20 +335,26 @@ export function AccountRow({
         </div>
       </div>
 
-      {account.status === "needs_sign_in" && account.needsSignInReason && (
-        <p className="mt-2 text-xs text-destructive-ink">{account.needsSignInReason}</p>
+      {open && (
+        <div id={detailId} className={cn("mt-2 space-y-2", several && (showGrip ? "pl-12" : "pl-6"))}>
+          {secondary.length > 0 && (
+            <p data-sentry-mask className="truncate font-mono text-xs text-muted-foreground">
+              {secondary.join(" · ")}
+            </p>
+          )}
+          {account.status === "needs_sign_in" && account.needsSignInReason && (
+            <p className="text-xs text-destructive-ink">{account.needsSignInReason}</p>
+          )}
+          <UsageBars
+            account={account}
+            now={now}
+            onRefresh={onRefresh}
+            refreshing={refreshing}
+            refreshNote={refreshNote}
+            compact={mobile}
+          />
+        </div>
       )}
-
-      <div className={cn("mt-3", !mobile && "pl-7")}>
-        <UsageBars
-          account={account}
-          now={now}
-          onRefresh={onRefresh}
-          refreshing={refreshing}
-          refreshNote={refreshNote}
-          compact={mobile}
-        />
-      </div>
     </li>
   );
 }

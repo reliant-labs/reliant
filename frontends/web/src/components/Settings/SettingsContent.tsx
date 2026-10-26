@@ -13,11 +13,10 @@ import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import { PromptsSettings } from "./PromptsSettings";
 import { PresetsSettings } from "./PresetsSettings";
 import { useProjectStore } from "../../store/projectStore";
-import { api } from "../../api/client";
 import { ProjectsSection } from "./ProjectsSection";
 
 // Cloud settings sections are lazy-loaded so they code-split out of the main
@@ -32,36 +31,12 @@ const MachinesSection = lazy(() =>
 
 interface SettingsContentProps {
   activeSection: SettingsSection;
-  apiUrl: string;
-}
-
-interface ProviderStatus {
-  provider: string;
-  configured: boolean;
-  hasApiKey: boolean;
-  displayName: string;
 }
 
 export function SettingsContent({
-  apiUrl,
   activeSection,
 }: SettingsContentProps) {
-  const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const currentProject = useProjectStore((state) => state.currentProject);
-
-  useEffect(() => {
-    fetchProviderStatuses();
-  }, [apiUrl]);
-
-  const fetchProviderStatuses = async () => {
-    try {
-      const data = await api.settings.getProviders();
-      setProviders(data || []);
-    } catch (error) {
-      console.error("Failed to fetch provider statuses:", error);
-      setProviders([]);
-    }
-  };
 
   const renderContent = () => {
     if (activeSection === "account") {
@@ -146,18 +121,14 @@ export function SettingsContent({
     );
   }
 
-  // The "AI" section is a tabbed container (bring-your-own providers + managed
-  // Reliant AI). It gets its own full-height wrapper with a wider container so
-  // the Reliant AI tab's data tables have room; the providers tab renders inside
-  // its own narrow card (see AISettings).
+  // The "AI" section draws its own panels (one per provider, one per models
+  // block), so it sits on the page background rather than inside the generic
+  // card below — a card inside a card is the defect that wrapper used to cause.
   if (activeSection === "general") {
     return (
       <div className="h-full overflow-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto w-full max-w-7xl">
-          <AISettings
-            providers={providers}
-            onProvidersUpdate={fetchProviderStatuses}
-          />
+        <div className="mx-auto w-full max-w-4xl">
+          <AISettings />
         </div>
       </div>
     );

@@ -12,6 +12,7 @@ import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type 
 import "./settings-range.css";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -514,6 +515,10 @@ export function AppearanceSettings() {
         )}
       </div>
 
+      {/* Response streaming — a chat preference, so it lives with the other
+          chat display settings rather than under AI providers. */}
+      <ResponseStreamingSetting />
+
       {/* Spawn Display Settings */}
       <div className="border-t border-border/40 pt-6 space-y-4">
         <div>
@@ -840,6 +845,38 @@ function MonacoEditorSettings() {
           project gets its own index, and <code>requiresFiles</code> so it only starts
           in projects it can actually serve.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Whether replies appear as they are generated or all at once when done. */
+function ResponseStreamingSetting() {
+  const { data, isPending } = usePreferences();
+  const update = useUpdatePreferences();
+  const enabled = data.streamingEnabled;
+  return (
+    <div className="border-t border-border/40 pt-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <label htmlFor="streaming-toggle" className="text-sm font-semibold">
+            Response streaming
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Show replies as they are written. Off, each reply arrives all at once when it is done, which can be
+            faster for short replies.
+          </p>
+        </div>
+        <ToggleSwitch
+          id="streaming-toggle"
+          checked={enabled}
+          // The switch flips at once and back if the server refuses.
+          onChange={(next) => void update.mutateAsync({ streamingEnabled: next }).catch(() => {})}
+          disabled={isPending}
+          ariaLabel={`${enabled ? "Disable" : "Enable"} response streaming`}
+          size="lg"
+          className="forge-ui"
+        />
       </div>
     </div>
   );

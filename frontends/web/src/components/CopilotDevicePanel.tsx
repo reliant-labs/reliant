@@ -14,6 +14,8 @@ import type { UseCopilotOAuthReturn } from "../hooks";
 export interface CopilotDevicePanelProps {
   oauth: UseCopilotOAuthReturn;
   onStart: () => void;
+  /** Draw the panel's own inset frame and title. False when a host already frames and titles it. */
+  framed?: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ export interface CopilotDevicePanelProps {
 export function CopilotDevicePanel({
   oauth,
   onStart,
+  framed = true,
 }: CopilotDevicePanelProps) {
   const [copied, setCopied] = useState(false);
   const { phase, userCode, verificationUri, message } = oauth;
@@ -50,13 +53,21 @@ export function CopilotDevicePanel({
   const verificationUrl = verificationUri || "https://github.com/login/device";
 
   return (
-    <div className="space-y-4 rounded-lg border border-border/40 bg-muted/30 p-4">
-      <div className="flex items-center gap-2">
-        <Github className="h-4 w-4 text-foreground" />
-        <p className="text-sm font-medium text-foreground">
-          Sign in with GitHub Copilot
-        </p>
-      </div>
+    <div
+      className={cn(
+        "space-y-4",
+        // An inset, never bg-muted (it lifts in dark mode and recesses in light).
+        framed && "rounded-lg border border-border/60 bg-background p-4",
+      )}
+    >
+      {framed && (
+        <div className="flex items-center gap-2">
+          <Github className="h-4 w-4 text-foreground" />
+          <p className="text-sm font-medium text-foreground">
+            Sign in with GitHub Copilot
+          </p>
+        </div>
+      )}
 
       {/* Device-code display + polling status */}
       {showCode && (
@@ -74,11 +85,11 @@ export function CopilotDevicePanel({
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex items-center justify-center rounded-lg border border-border/40 bg-background p-2.5 transition-colors hover:bg-muted"
+              className="inline-flex items-center justify-center rounded-lg border border-border bg-background p-2.5 transition-colors hover:bg-foreground/5"
               aria-label={copied ? "Code copied" : "Copy code to clipboard"}
             >
               {copied ? (
-                <Check className="h-4 w-4 text-emerald-500" />
+                <Check className="h-4 w-4 text-success-ink" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}
@@ -152,8 +163,8 @@ export function CopilotDevicePanel({
           className={cn(
             "flex items-center gap-2 rounded-lg p-3 text-sm",
             phase === "success"
-              ? "border border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-              : "border border-red-500/20 bg-red-500/10 text-red-600"
+              ? "border border-success/20 bg-success/10 text-success-ink"
+              : "border border-destructive/20 bg-destructive/10 text-destructive-ink"
           )}
         >
           {phase === "success" ? (

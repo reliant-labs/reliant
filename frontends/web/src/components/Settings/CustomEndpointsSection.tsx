@@ -32,8 +32,8 @@ import type { EndpointDraft, ModelDraft, Tri } from "./modelEndpoints";
 // update, delete, and a test, which records the probe on a saved endpoint)
 // refetches the list.
 
-function selectEndpoints(response: ListModelEndpointsResponse): ModelEndpoint[] {
-  return response.endpoints;
+function selectList(response: ListModelEndpointsResponse): { endpoints: ModelEndpoint[]; credentialsAvailable: boolean } {
+  return { endpoints: response.endpoints, credentialsAvailable: response.credentialsAvailable };
 }
 
 const inputClass =
@@ -308,21 +308,18 @@ function EndpointForm({
         )}
       </fieldset>
 
-      <div className="space-y-1">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="API key" htmlFor="ep-key">
-            <input id="ep-key" type="password" autoComplete="off" className={inputClass} placeholder="Optional" disabled={!credentialsAvailable} value={draft.apiKey} onChange={(e) => patch({ apiKey: e.target.value })} />
-          </Field>
-          <Field label="Custom headers" htmlFor="ep-headers">
-            <input id="ep-headers" className={inputClass} placeholder="Optional" disabled />
-          </Field>
-        </div>
-        {!credentialsAvailable && (
-          <p className="text-xs text-muted-foreground" data-testid="credential-note">
-            {CREDENTIAL_STORE_NOTE}
-          </p>
-        )}
-      </div>
+      {/* The server says whether it can seal an endpoint's key. When it
+          cannot, the field is left out rather than shown disabled behind a
+          permanent "coming soon": a key it would refuse is not a choice. */}
+      {credentialsAvailable ? (
+        <Field label="API key" htmlFor="ep-key">
+          <input id="ep-key" type="password" autoComplete="off" className={inputClass} placeholder="Optional" value={draft.apiKey} onChange={(e) => patch({ apiKey: e.target.value })} />
+        </Field>
+      ) : (
+        <p className="text-xs text-muted-foreground" data-testid="credential-note">
+          {CREDENTIAL_STORE_NOTE}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={test} disabled={testing || saving} className={buttonGhost}>
@@ -414,12 +411,13 @@ function EndpointRow({ endpoint, machine, onEdit, onDelete, deleting }: { endpoi
  * User-configured OpenAI-compatible endpoints: a GPU cluster, vLLM, a hosted
  * inference API. Auto-detected servers live in the per-machine cards above.
  */
-export function CustomEndpointsSection({ credentialsAvailable = false }: { credentialsAvailable?: boolean }) {
+export function CustomEndpointsSection() {
   const { daemons } = useDaemonStatus();
-  const list = useListModelEndpoints({}, { select: selectEndpoints });
+  const list = useListModelEndpoints({}, { select: selectList });
   const deleteEndpoint = useDeleteModelEndpoint();
   // Null until the first answer; a failed first read shows the error over an empty list.
-  const endpoints = list.data ?? (list.isError ? [] : null);
+  const endpoints = list.data?.endpoints ?? (list.isError ? [] : null);
+  const credentialsAvailable = list.data?.credentialsAvailable ?? false;
   const loadError = list.error ? errorText(list.error) : null;
   const [mode, setMode] = useState<{ kind: "list" } | { kind: "add" } | { kind: "edit"; endpoint: ModelEndpoint }>({ kind: "list" });
   const [deleting, setDeleting] = useState<string | null>(null);

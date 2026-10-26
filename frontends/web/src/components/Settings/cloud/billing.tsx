@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -12,6 +12,7 @@ import {
   Loader2,
   Pencil,
   Server,
+  Sparkles,
 } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -113,7 +114,8 @@ import { DeployUsageSection } from "./usage/DeployUsageSection";
 import { useDeployUsage } from "./usage/useDeployUsage";
 
 /**
- * Three tabs, not four.
+ * Overview, plans, usage — and Reliant AI, the managed keys and spend that
+ * Settings → AI's Reliant card links to.
  *
  * "Plans" became "Change plan" because it is a verb and the tab is entered to
  * DO something. Invoices folded into Usage because an invoice is the settled
@@ -130,8 +132,15 @@ const TAB_META: Record<
   overview: { label: "Overview", icon: CreditCard },
   plans: { label: "Change plan", icon: Cpu },
   usage: { label: "Usage & invoices", icon: BarChart3 },
+  // Reliant's managed AI keys and spend. They used to be a tab of Settings →
+  // AI, a third place Reliant appeared there; AI now shows Reliant once, as a
+  // provider card that links here.
+  ai: { label: "Reliant AI", icon: Sparkles },
 };
 const TABS = VISIBLE_BILLING_TABS.map((id) => ({ id, ...TAB_META[id] }));
+
+// Reliant AI's keys and spend tables load only when their tab is opened.
+const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default: m.ReliantAISection })));
 
 /**
  * BillingSection — the end-user billing dashboard rendered inside
@@ -251,6 +260,11 @@ export function BillingSection() {
       )}
       {tab === "plans" && <PlansTab />}
       {tab === "usage" && <UsageAndInvoicesTab />}
+      {tab === "ai" && (
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+          <ReliantAISection />
+        </Suspense>
+      )}
     </div>
   );
 }
