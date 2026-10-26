@@ -12,33 +12,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 
-type MockService = {
+type MockUserService = {
   isConnected: () => boolean;
-  getSubscribedChatId: () => string | undefined;
-  subscribeToChatDetails: ReturnType<typeof vi.fn>;
-  unsubscribeFromChatDetails: ReturnType<typeof vi.fn>;
   start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+};
+
+type MockChatService = {
+  isConnected: () => boolean;
+  getChatId: () => string | undefined;
+  subscribeToChat: ReturnType<typeof vi.fn>;
+  unsubscribe: ReturnType<typeof vi.fn>;
+  setProjectScope: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   subscribed: string | undefined;
 };
 
-const services: MockService[] = [];
+const services: MockUserService[] = [];
+const chatServices: MockChatService[] = [];
 
 vi.mock("../../../api/streaming-grpc", () => ({
-  UserStreamingService: class implements MockService {
-    subscribed: string | undefined = undefined;
+  UserStreamingService: class implements MockUserService {
     isConnected = () => false;
-    getSubscribedChatId = () => this.subscribed;
-    subscribeToChatDetails = vi.fn((chatId: string) => {
-      this.subscribed = chatId;
-    });
-    unsubscribeFromChatDetails = vi.fn();
-    start = vi.fn((_seq: number, chatId?: string) => {
-      this.subscribed = chatId;
-    });
+    start = vi.fn();
     stop = vi.fn();
     constructor() {
       services.push(this);
+    }
+  },
+}));
+
+vi.mock("../../../api/chat-streaming-grpc", () => ({
+  ChatStreamingService: class implements MockChatService {
+    subscribed: string | undefined = undefined;
+    isConnected = () => false;
+    getChatId = () => this.subscribed;
+    subscribeToChat = vi.fn((chatId: string) => {
+      this.subscribed = chatId;
+    });
+    unsubscribe = vi.fn();
+    setProjectScope = vi.fn();
+    stop = vi.fn();
+    constructor() {
+      chatServices.push(this);
     }
   },
 }));
@@ -89,9 +105,11 @@ function ChatScreen() {
 
 beforeEach(() => {
   services.length = 0;
+  chatServices.length = 0;
   screen = () => null;
   useGlobalUpdatesStore.setState({
     wsService: null,
+    chatStream: null,
     subscribedChatId: null,
     connectionStatus: "disconnected",
     lastSequence: 0,
@@ -138,18 +156,22 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, undefined, 0, "proj-1");
+    expect(services[0]!.start).toHaveBeenCalledWith(42, "proj-1");
+    expect(chatServices).toHaveLength(0);
   });
 
-  it("connects a chat opened directly by URL, with its subscription on the first request", async () => {
-    // The chat screen mounts before the chat list has loaded, so its
-    // subscription is recorded but the stream it asks for is deferred.
+  it("streams a chat opened directly by URL at once, and connects the user stream once chats have loaded", async () => {
+    // The chat screen mounts before the chat list has loaded. Its chat
+    // stream needs nothing from the list, so it opens now; the user stream
+    // waits for the resume point the list brings.
     screen = () => <ChatScreen />;
 
     await act(async () => {
       renderShell();
     });
     expect(services).toHaveLength(0);
+    expect(chatServices).toHaveLength(1);
+    expect(chatServices[0]!.subscribeToChat).toHaveBeenCalledWith(CHAT_ID);
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_ID);
 
     await act(async () => {
@@ -157,7 +179,11 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, CHAT_ID, 0, "proj-1");
+    expect(services[0]!.start).toHaveBeenCalledWith(42, "proj-1");
+    // The chat stream learns the user stream's project scope.
+    expect(chatServices[0]!.setProjectScope).toHaveBeenCalledWith("proj-1");
+    // Connecting the user stream did not reopen the chat stream.
+    expect(chatServices[0]!.subscribeToChat).toHaveBeenCalledTimes(1);
   });
 
   it("disconnects the stream when the shell goes away", async () => {
@@ -174,6 +200,7 @@ describe("MobileShell update stream", () => {
 
     expect(services[0]!.stop).toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().wsService).toBeNull();
+    expect(useGlobalUpdatesStore.getState().chatStream).toBeNull();
   });
 });
 

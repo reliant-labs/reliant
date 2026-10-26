@@ -31828,24 +31828,80 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "StreamChatUpdates",
+          "InputType": "StreamChatUpdatesRequest",
+          "OutputType": "ChatStreamEvent",
+          "ClientStreaming": false,
+          "ServerStreaming": true,
+          "AuthRequired": true,
+          "Errors": null,
+          "NoSideEffects": true,
+          "InputTypeFQ": "reliant.v1.StreamChatUpdatesRequest",
+          "OutputTypeFQ": "reliant.v1.ChatStreamEvent",
+          "InputProtoFile": "reliant/v1/streaming.proto",
+          "OutputProtoFile": "reliant/v1/streaming.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/streaming.proto",
       "ModulePath": "",
       "Messages": {
-        "StreamUserUpdatesRequest": [
+        "ChatStreamEvent": [
+          {
+            "Name": "snapshot",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatSyncSnapshot"
+          },
+          {
+            "Name": "updates",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatUpdateBatch"
+          },
+          {
+            "Name": "caught_up",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatCaughtUp"
+          },
+          {
+            "Name": "heartbeat",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Heartbeat"
+          },
+          {
+            "Name": "user_updates",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatUserUpdates"
+          }
+        ],
+        "StreamChatUpdatesRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
           {
             "Name": "since_seq",
             "ProtoType": "int64",
             "IsOptional": false
           },
           {
-            "Name": "subscribe_chat_id",
+            "Name": "project_id",
             "ProtoType": "string",
             "IsOptional": true
-          },
+          }
+        ],
+        "StreamUserUpdatesRequest": [
           {
-            "Name": "chat_since_seq",
+            "Name": "since_seq",
             "ProtoType": "int64",
             "IsOptional": false
           },
@@ -31873,42 +31929,6 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.Heartbeat"
-          },
-          {
-            "Name": "chat_sync_snapshot",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatSyncSnapshot"
-          },
-          {
-            "Name": "chat_updates",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatUpdateBatch"
-          },
-          {
-            "Name": "workflow_event",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.WorkflowExecutionEvent"
-          },
-          {
-            "Name": "node_event",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.NodeExecutionEvent"
-          },
-          {
-            "Name": "execution_log",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ExecutionLog"
-          },
-          {
-            "Name": "chat_caught_up",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatCaughtUp"
           }
         ]
       },
@@ -31940,6 +31960,38 @@
           {
             "name": "latest_sequence",
             "kind": "int64"
+          }
+        ],
+        "reliant.v1.ChatStreamEvent": [
+          {
+            "name": "snapshot",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatSyncSnapshot",
+            "oneof": "event"
+          },
+          {
+            "name": "updates",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatUpdateBatch",
+            "oneof": "event"
+          },
+          {
+            "name": "caught_up",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatCaughtUp",
+            "oneof": "event"
+          },
+          {
+            "name": "heartbeat",
+            "kind": "message",
+            "type_name": "reliant.v1.Heartbeat",
+            "oneof": "event"
+          },
+          {
+            "name": "user_updates",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatUserUpdates",
+            "oneof": "event"
           }
         ],
         "reliant.v1.ChatSyncSnapshot": [
@@ -32025,6 +32077,14 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ChatUserUpdates": [
+          {
+            "name": "updates",
+            "kind": "message",
+            "type_name": "reliant.v1.UserUpdateData",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ContentBlock": [
           {
             "name": "id",
@@ -32090,45 +32150,6 @@
             "name": "child_workflow_id",
             "kind": "string",
             "optional": true
-          }
-        ],
-        "reliant.v1.ExecutionLog": [
-          {
-            "name": "id",
-            "kind": "string"
-          },
-          {
-            "name": "workflow_id",
-            "kind": "string"
-          },
-          {
-            "name": "node_id",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "level",
-            "kind": "enum",
-            "type_name": "reliant.v1.ExecutionLogLevel"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "timestamp",
-            "kind": "int64"
-          },
-          {
-            "name": "source",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "fields",
-            "kind": "map",
-            "map_key_kind": "string",
-            "map_value_kind": "string"
           }
         ],
         "reliant.v1.Heartbeat": [
@@ -32245,28 +32266,6 @@
             "optional": true
           }
         ],
-        "reliant.v1.NodeExecutionEvent": [
-          {
-            "name": "event_type",
-            "kind": "enum",
-            "type_name": "reliant.v1.NodeExecutionEventType"
-          },
-          {
-            "name": "node",
-            "kind": "message",
-            "type_name": "reliant.v1.NodeExecutionState"
-          },
-          {
-            "name": "progress_message",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "progress_percent",
-            "kind": "double",
-            "optional": true
-          }
-        ],
         "reliant.v1.NodeExecutionState": [
           {
             "name": "node_id",
@@ -32337,18 +32336,24 @@
             "map_value_kind": "string"
           }
         ],
-        "reliant.v1.StreamUserUpdatesRequest": [
+        "reliant.v1.StreamChatUpdatesRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
           {
             "name": "since_seq",
             "kind": "int64"
           },
           {
-            "name": "subscribe_chat_id",
+            "name": "project_id",
             "kind": "string",
             "optional": true
-          },
+          }
+        ],
+        "reliant.v1.StreamUserUpdatesRequest": [
           {
-            "name": "chat_since_seq",
+            "name": "since_seq",
             "kind": "int64"
           },
           {
@@ -32374,42 +32379,6 @@
             "name": "heartbeat",
             "kind": "message",
             "type_name": "reliant.v1.Heartbeat",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_sync_snapshot",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatSyncSnapshot",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_updates",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatUpdateBatch",
-            "oneof": "event"
-          },
-          {
-            "name": "workflow_event",
-            "kind": "message",
-            "type_name": "reliant.v1.WorkflowExecutionEvent",
-            "oneof": "event"
-          },
-          {
-            "name": "node_event",
-            "kind": "message",
-            "type_name": "reliant.v1.NodeExecutionEvent",
-            "oneof": "event"
-          },
-          {
-            "name": "execution_log",
-            "kind": "message",
-            "type_name": "reliant.v1.ExecutionLog",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_caught_up",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatCaughtUp",
             "oneof": "event"
           }
         ],
@@ -32480,18 +32449,6 @@
           {
             "name": "created_at",
             "kind": "string"
-          }
-        ],
-        "reliant.v1.WorkflowExecutionEvent": [
-          {
-            "name": "event_type",
-            "kind": "enum",
-            "type_name": "reliant.v1.WorkflowExecutionEventType"
-          },
-          {
-            "name": "workflow",
-            "kind": "message",
-            "type_name": "reliant.v1.WorkflowExecutionState"
           }
         ],
         "reliant.v1.WorkflowExecutionState": [
@@ -32565,22 +32522,22 @@
       "SchemaFiles": {
         "reliant.v1.Attachment": "reliant/v1/chat.proto",
         "reliant.v1.ChatCaughtUp": "reliant/v1/streaming.proto",
+        "reliant.v1.ChatStreamEvent": "reliant/v1/streaming.proto",
         "reliant.v1.ChatSyncSnapshot": "reliant/v1/streaming.proto",
         "reliant.v1.ChatUpdateBatch": "reliant/v1/streaming.proto",
         "reliant.v1.ChatUpdateData": "reliant/v1/streaming.proto",
+        "reliant.v1.ChatUserUpdates": "reliant/v1/streaming.proto",
         "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
-        "reliant.v1.ExecutionLog": "reliant/v1/streaming.proto",
         "reliant.v1.Heartbeat": "reliant/v1/streaming.proto",
         "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto",
-        "reliant.v1.NodeExecutionEvent": "reliant/v1/streaming.proto",
         "reliant.v1.NodeExecutionState": "reliant/v1/streaming.proto",
+        "reliant.v1.StreamChatUpdatesRequest": "reliant/v1/streaming.proto",
         "reliant.v1.StreamUserUpdatesRequest": "reliant/v1/streaming.proto",
         "reliant.v1.UserStreamEvent": "reliant/v1/streaming.proto",
         "reliant.v1.UserSyncInfo": "reliant/v1/streaming.proto",
         "reliant.v1.UserUpdateBatch": "reliant/v1/streaming.proto",
         "reliant.v1.UserUpdateData": "reliant/v1/streaming.proto",
-        "reliant.v1.WorkflowExecutionEvent": "reliant/v1/streaming.proto",
         "reliant.v1.WorkflowExecutionState": "reliant/v1/streaming.proto"
       },
       "Enums": {
@@ -32633,26 +32590,12 @@
           "ENTITY_TYPE_SYSTEM",
           "ENTITY_TYPE_WORKFLOW_DRAFT"
         ],
-        "reliant.v1.ExecutionLogLevel": [
-          "EXECUTION_LOG_LEVEL_UNSPECIFIED",
-          "EXECUTION_LOG_LEVEL_DEBUG",
-          "EXECUTION_LOG_LEVEL_INFO",
-          "EXECUTION_LOG_LEVEL_WARN",
-          "EXECUTION_LOG_LEVEL_ERROR"
-        ],
         "reliant.v1.MessageRole": [
           "MESSAGE_ROLE_UNSPECIFIED",
           "MESSAGE_ROLE_USER",
           "MESSAGE_ROLE_ASSISTANT",
           "MESSAGE_ROLE_SYSTEM",
           "MESSAGE_ROLE_TOOL"
-        ],
-        "reliant.v1.NodeExecutionEventType": [
-          "NODE_EXECUTION_EVENT_TYPE_UNSPECIFIED",
-          "NODE_EXECUTION_EVENT_TYPE_STARTED",
-          "NODE_EXECUTION_EVENT_TYPE_PROGRESS",
-          "NODE_EXECUTION_EVENT_TYPE_COMPLETED",
-          "NODE_EXECUTION_EVENT_TYPE_FAILED"
         ],
         "reliant.v1.NodeExecutionStatus": [
           "NODE_EXECUTION_STATUS_UNSPECIFIED",
@@ -32701,13 +32644,6 @@
           "USER_UPDATE_TYPE_REFETCH",
           "USER_UPDATE_TYPE_DAEMON_HEARTBEAT",
           "USER_UPDATE_TYPE_WORKFLOW_DRAFT_UPDATED"
-        ],
-        "reliant.v1.WorkflowExecutionEventType": [
-          "WORKFLOW_EXECUTION_EVENT_TYPE_UNSPECIFIED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_STARTED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_COMPLETED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_FAILED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_CANCELLED"
         ],
         "reliant.v1.WorkflowExecutionStatus": [
           "WORKFLOW_EXECUTION_STATUS_UNSPECIFIED",
@@ -32767,21 +32703,7 @@
           5,
           6
         ],
-        "reliant.v1.ExecutionLogLevel": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
         "reliant.v1.MessageRole": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "reliant.v1.NodeExecutionEventType": [
           0,
           1,
           2,
@@ -32836,13 +32758,6 @@
           20,
           21
         ],
-        "reliant.v1.WorkflowExecutionEventType": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
         "reliant.v1.WorkflowExecutionStatus": [
           0,
           1,
@@ -32868,17 +32783,9 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "EntityType"
         },
-        "reliant.v1.ExecutionLogLevel": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "ExecutionLogLevel"
-        },
         "reliant.v1.MessageRole": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "MessageRole"
-        },
-        "reliant.v1.NodeExecutionEventType": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "NodeExecutionEventType"
         },
         "reliant.v1.NodeExecutionStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -32895,10 +32802,6 @@
         "reliant.v1.UserUpdateType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "UserUpdateType"
-        },
-        "reliant.v1.WorkflowExecutionEventType": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "WorkflowExecutionEventType"
         },
         "reliant.v1.WorkflowExecutionStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -41119,7 +41022,7 @@
     "reliant/v1/run.proto": "40df7416b308111e1627565d8498943ad1ceeaefb0adf22c3e2c212f518762a7",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
-    "reliant/v1/streaming.proto": "e75666fc99eae37e14188b9a98efdf06699d92ad922db89abf5dc9190ae8d2bc",
+    "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",

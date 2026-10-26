@@ -1107,6 +1107,9 @@
         "Methods": [
           {
             "Name": "StreamUserUpdates"
+          },
+          {
+            "Name": "StreamChatUpdates"
           }
         ]
       },
