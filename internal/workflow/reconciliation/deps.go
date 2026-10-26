@@ -11,6 +11,7 @@ package reconciliation
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -32,6 +33,10 @@ type ReconcilerStore interface {
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
+
+	// Launches whose start never reached Temporal.
+	ListStrandedWorkflowStarts(ctx context.Context, cutoff time.Time, limit int) ([]*db.Workflow, error)
+	MarkWorkflowStartFailed(ctx context.Context, id string) (bool, error)
 
 	// Orphan reaps.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]db.ReapedWorkflow, error)

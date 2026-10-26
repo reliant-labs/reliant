@@ -23,6 +23,8 @@ type fakeRepo struct {
 	triggers map[string]*core.Trigger
 	events   []*core.TriggerEvent
 	statuses map[string]core.WorkflowStatus
+	// startFailed is the chats whose PENDING root carries a failed start.
+	startFailed map[string]bool
 
 	getTriggerErr error
 	// daemons are the daemon ids that exist; GetDaemon misses on the rest.
@@ -40,9 +42,10 @@ type fakeSubject struct {
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		triggers: map[string]*core.Trigger{},
-		statuses: map[string]core.WorkflowStatus{},
-		daemons:  map[string]bool{testDaemonID: true},
+		triggers:    map[string]*core.Trigger{},
+		statuses:    map[string]core.WorkflowStatus{},
+		startFailed: map[string]bool{},
+		daemons:     map[string]bool{testDaemonID: true},
 
 		connections: map[string]*core.Connection{},
 		subjects:    map[string]fakeSubject{},
@@ -145,6 +148,33 @@ func (r *fakeRepo) GetRootWorkflowStatusForChats(_ context.Context, chatIDs []st
 		}
 	}
 	return out, nil
+}
+
+// ListRootWorkflows models one root per chat, id = chat id, at the chat's
+// status; startFailed marks the chats whose PENDING root's start failed.
+func (r *fakeRepo) ListRootWorkflows(_ context.Context, chatID string) ([]*core.Workflow, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	status, ok := r.statuses[chatID]
+	if !ok {
+		return nil, nil
+	}
+	root := &core.Workflow{ID: chatID, ChatID: chatID, Status: status}
+	if r.startFailed[chatID] {
+		failedAt := time.Date(2026, 1, 1, 9, 1, 0, 0, time.UTC)
+		root.StartFailedAt = &failedAt
+	}
+	return []*core.Workflow{root}, nil
+}
+
+func (r *fakeRepo) AbandonFailedWorkflowStart(_ context.Context, id string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.statuses[id] != core.Pending() || !r.startFailed[id] {
+		return false, nil
+	}
+	r.statuses[id] = core.Failed()
+	return true, nil
 }
 
 func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {

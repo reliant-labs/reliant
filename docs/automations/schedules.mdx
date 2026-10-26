@@ -24,7 +24,7 @@ triggers:
 | `overlap` | What to do if the previous run is still going: `skip` (default) or `allow` |
 | `catchup_window` | How late a fire missed during an outage may still run. Default 10 minutes |
 
-`skip` records a skipped firing in the history instead of starting a second run on top of the first. `allow` starts a concurrent run, which can pile up if each run takes longer than the gap between fires. The short catch-up window is deliberate: after an outage you get at most the last few minutes' runs, not a replay of everything you missed.
+`skip` records a skipped firing in the history instead of starting a second run on top of the first. A run that is still starting counts as going. A run that could not start does not hold the schedule up: the next fire runs in its place, and the one that failed to start is marked failed so it never runs late beside it. `allow` starts a concurrent run, which can pile up if each run takes longer than the gap between fires. The short catch-up window is deliberate: after an outage you get at most the last few minutes' runs, not a replay of everything you missed.
 
 ## From the CLI
 

@@ -32,8 +32,8 @@ import (
 // aborts the surrounding transaction the way a duplicate-key violation
 // (SQLSTATE 25P02) would.
 //
-// It writes the columns a new run has: the outcome and the worker stamps
-// start NULL whatever w carries.
+// It writes the columns a new run has: the outcome, the worker stamps and
+// the failed-start stamp start NULL whatever w carries.
 func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflow) error {
 	state := w.Status.State
 	row := &Workflow{
@@ -51,7 +51,7 @@ func InsertWorkflowIfAbsent(ctx context.Context, db orm.Context, w *core.Workflo
 		OwnerUserID:     w.OwnerUserID,
 	}
 	_, err := db.Bun().NewInsert().Model(row).
-		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt).
+		ExcludeColumn(WorkflowFieldOutcome, WorkflowFieldWorkerStartedAt, WorkflowFieldWorkerStoppedAt, WorkflowFieldStartFailedAt).
 		On("CONFLICT (id) DO NOTHING").
 		Returning("NULL").
 		Exec(ctx)
@@ -233,6 +233,97 @@ func CompareAndSwapWorkflowStatus(ctx context.Context, db orm.Context, id string
 		Where("state = ?", expected.State).
 		Where("stop_reason = ?", expected.StopReason).
 		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// MarkWorkflowStartFailed stamps start_failed_at on a PENDING workflow whose
+// start attempt failed, reporting whether it did. A workflow that already
+// left PENDING (the run got there first) or already carries a stamp is left
+// alone: the stamp is the time the start was first found failed.
+func MarkWorkflowStartFailed(ctx context.Context, db orm.Context, id string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("start_failed_at = NOW()").
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Where("start_failed_at IS NULL").
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// ClaimWorkflowStart clears a PENDING workflow's failed-start stamp before a
+// retry of its start, reporting whether the workflow is still PENDING. False
+// means the start is no longer this caller's to make: the run started, or a
+// later trigger fire abandoned it (AbandonFailedWorkflowStart). One UPDATE,
+// so it serializes with that abandon on the row lock: whichever commits
+// first wins, and the other matches nothing.
+func ClaimWorkflowStart(ctx context.Context, db orm.Context, id string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
+		Set("start_failed_at = NULL").
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// AbandonFailedWorkflowStart moves a PENDING workflow whose start failed to
+// STOPPED/FAILED, reporting whether it did. False means it is not stranded:
+// it left PENDING, or a retry of its start has claimed it (ClaimWorkflowStart
+// cleared the stamp), so its run is starting.
+func AbandonFailedWorkflowStart(ctx context.Context, db orm.Context, id string) (bool, error) {
+	res, err := setWorkflowStatus(db.Bun().NewUpdate().Model((*Workflow)(nil)), core.Failed()).
+		Where("id = ?", id).
+		Where("state = ?", core.WorkflowStatePending).
+		Where("start_failed_at IS NOT NULL").
+		Exec(ctx)
+	return rowsChanged(res, err)
+}
+
+// strandedStartsSQL is every PENDING root workflow whose launch committed (its
+// chat has a launched trigger event) before cutoff and that no failed start
+// has been recorded for. The launch time is the later of the root's creation
+// and its event's: a branch's root is created when it is branched, long
+// before its first send records the event and starts it.
+var strandedStartsSQL = `
+SELECT ` + columnsOf[Workflow]("w") + `
+FROM workflows w
+WHERE w.parent_id IS NULL
+  AND w.state = ?0
+  AND w.start_failed_at IS NULL
+  AND w.created_at < ?1
+  AND EXISTS (
+      SELECT 1 FROM trigger_events e
+      WHERE e.chat_id = w.chat_id
+        AND e.outcome = ?2
+        AND e.created_at < ?1
+  )
+ORDER BY w.created_at ASC
+LIMIT ?3`
+
+// ListStrandedWorkflowStarts is the PENDING roots whose launch committed
+// before cutoff and whose start was never recorded as failed: either their
+// start is still in flight (a slow one, or one the bound is shorter than) or
+// whoever was starting them died between the commit and the Temporal start.
+// The reconciler tells the two apart by asking Temporal.
+func ListStrandedWorkflowStarts(ctx context.Context, db orm.Context, cutoff time.Time, limit int) ([]*core.Workflow, error) {
+	var rows []*Workflow
+	if err := db.Bun().NewRaw(strandedStartsSQL,
+		core.WorkflowStatePending, cutoff, core.TriggerEventLaunched, limit,
+	).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		out[i] = workflowToCore(row)
+	}
+	return out, nil
+}
+
+// rowsChanged reports whether an UPDATE matched a row.
+func rowsChanged(res sql.Result, err error) (bool, error) {
 	if err != nil {
 		return false, err
 	}
@@ -488,6 +579,7 @@ func workflowToCore(row *Workflow) *core.Workflow {
 		CompletedAt:     row.CompletedAt,
 		WorkerStartedAt: row.WorkerStartedAt,
 		WorkerStoppedAt: row.WorkerStoppedAt,
+		StartFailedAt:   row.StartFailedAt,
 		Outcome:         row.Outcome,
 		OwnerUserID:     row.OwnerUserID,
 	}

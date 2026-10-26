@@ -412,8 +412,8 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// chat that doesn't exist).
 	//
 	// READ COMMITTED, because what must hold here is atomicity, and nothing in
-	// an unguarded launch is a read-check-write that only SERIALIZABLE would
-	// keep correct:
+	// a launch is a read-check-write that only SERIALIZABLE would keep
+	// correct:
 	//   - two launches of one event: the (kind, dedupe_key) unique constraint
 	//     on the insert, and the outcome predicate on the claim's UPDATE,
 	//     which READ COMMITTED re-checks against the row it waited for;
@@ -422,7 +422,15 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	//     by one UPDATE … RETURNING;
 	//   - the thread's ordinals, seqs and context window: the chat and its
 	//     thread are new and invisible to every other transaction until this
-	//     one commits, so nothing else can number them.
+	//     one commits, so nothing else can number them;
+	//   - a trigger's overlap guard (Spec.Guard): it row-locks the trigger
+	//     first, so a fire queued behind another reads only after that one
+	//     committed, and READ COMMITTED's next statement sees its rows. What
+	//     it reads there is unambiguous: a predecessor's root is PENDING with
+	//     no failed start while its start is in flight (blocks), and the one
+	//     write it makes, abandoning a predecessor whose start failed, is a
+	//     single conditional UPDATE that a concurrent retry of that start
+	//     (ClaimWorkflowStart) serializes with on the row lock.
 	// SERIALIZABLE bought none of that and cost every launch its predicate
 	// locks: on the young index pages of chats, workflows, threads,
 	// context_windows, messages and chat_selections (foreign-key checks and
@@ -431,20 +439,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// closed the cycle — "failed to create workflow" when it was the root
 	// workflow's — until one ran out of attempts
 	// (TestConcurrentStartChatsTakeNoPredicateLocks).
-	//
-	// A guarded launch (a trigger's overlap guard) keeps SERIALIZABLE, as
-	// before. Its guard does not count the previous fire's root as live while
-	// it is still PENDING — the shape of a fire whose Temporal start failed —
-	// but a fire that has just committed is pending too, until its start marks
-	// it active. A fire queued on the trigger lock behind it reads it as
-	// stranded and launches beside it, sooner under READ COMMITTED than after
-	// SERIALIZABLE's retry backoff (TestConcurrentFiresRespectOverlapSkip,
-	// already intermittent on main). One trigger's fires are rare and
-	// serialize on its lock anyway, so they keep the level they had.
-	var launchTx orm.TxPolicy = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
-	if spec.Guard != nil {
-		launchTx = orm.Serializable
-	}
+	launchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
@@ -840,6 +835,20 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		return nil, err
 	}
 
+	// This may be the retry of a start that failed, so the root may carry a
+	// failed-start stamp, which a trigger's next fire reads as "stranded" and
+	// abandons. Clearing it is how this start says it is in flight again, and
+	// it is conditional on the root still being PENDING: if a later fire
+	// abandoned it first, this fire's slot is spent and must not start a run
+	// beside the one that replaced it.
+	stillPending, err := l.repo.ClaimWorkflowStart(ctx, chat.ID)
+	if err != nil {
+		return nil, &InternalError{Reason: "failed to claim the start", Err: err}
+	}
+	if !stillPending {
+		return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: recorded.ID}
+	}
+
 	return l.start(ctx, startParams{
 		chat:          chat,
 		workflowName:  workflowName,
@@ -1188,6 +1197,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", chatID)
+		l.recordFailedStart(ctx, workflowID)
 		return nil, &InternalError{Reason: "failed to start workflow", Err: err}
 	}
 
@@ -1216,6 +1226,37 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		RunID:      runID,
 		EventID:    p.eventID,
 	}, nil
+}
+
+// failedStartMarkBudget bounds recording a failed start. The write runs on a
+// context detached from the caller's, because the commonest failed start is
+// the caller's own deadline expiring, and that is exactly when the record
+// matters.
+const failedStartMarkBudget = 5 * time.Second
+
+// recordFailedStart stamps the root PENDING-with-a-failed-start, which is
+// what lets a trigger's next fire tell this stranded launch from one whose
+// start is still in flight (the overlap guard blocks only on the latter).
+//
+// Best-effort: if the write is lost too, the root stays PENDING with no stamp
+// and reads as in flight, and the reconciler records the failure once the
+// start has been missing from Temporal for its bound
+// (reconciliation.strandedStartBound). That is the trade-off of a lost write:
+// a trigger's later fires skip until then, rather than risk a second run
+// beside one that may yet start.
+//
+// A failed call does not always mean Temporal has no run: one that timed out
+// after the server accepted it did start. A retry of this launch claims the
+// start again and re-issues it with USE_EXISTING, which attaches to that run;
+// only a later fire that abandons this one in the window before that retry
+// can leave the row failed while its run executes, and the run's own status
+// writes repair the row once it executes.
+func (l *Launcher) recordFailedStart(ctx context.Context, workflowID string) {
+	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failedStartMarkBudget)
+	defer cancel()
+	if _, err := l.repo.MarkWorkflowStartFailed(markCtx, workflowID); err != nil {
+		logging.WarnContext(ctx, "Failed to record a failed workflow start; the reconciler will", "error", err, "workflowID", workflowID)
+	}
 }
 
 // startTitleGeneration starts GenerateTitleWorkflow in the background when the

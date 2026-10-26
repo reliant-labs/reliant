@@ -42,6 +42,11 @@ type Repo interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
+	// ListRootWorkflows is a chat's root workflows, newest first.
+	ListRootWorkflows(ctx context.Context, chatID string) ([]*core.Workflow, error)
+	// AbandonFailedWorkflowStart stops a PENDING root whose start is
+	// recorded as failed; false means it is not stranded (any more).
+	AbandonFailedWorkflowStart(ctx context.Context, id string) (bool, error)
 }
 
 // EventRepo is what the inbound path — intake, event fire and redriver —

@@ -251,6 +251,16 @@ const (
 	// for a run Temporal stopped outright, where no workflow code ran to
 	// cascade. Expected, not a bug; see reapOrphanedDescendants.
 	anomalyOrphanDescendantReapedAfterTerminate = "orphan_descendant_reaped_after_terminate"
+	// anomalyStrandedStartFailed is a PENDING root whose launch committed but
+	// whose run never reached Temporal within strandedStartBound, with no
+	// failed start recorded: whoever was starting it died between the commit
+	// and the start, or lost the write. Recorded as a failed start, so a
+	// trigger's next fire stops treating it as in flight. See
+	// markStrandedStarts.
+	anomalyStrandedStartFailed = "stranded_start_failed"
+	// anomalyStrandedStartRepaired is the same PENDING root, but Temporal has
+	// its run: the launch's mark-active was lost. Moved to ACTIVE.
+	anomalyStrandedStartRepaired = "stranded_start_repaired"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -2884,6 +2894,14 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// (and the run) that started it, and only its daemon can say it ended.
 	if _, repairErr := r.reconcileBackgroundedProcesses(ctx, stats); repairErr != nil {
 		errors = append(errors, repairErr)
+	}
+	// Before the active list: a stranded start whose run Temporal does have
+	// moves to ACTIVE here, so the drift scan below already compares it with
+	// that run in this pass.
+	settled, strandedErr := r.markStrandedStarts(ctx, stats)
+	reconciled += settled
+	if strandedErr != nil {
+		errors = append(errors, strandedErr)
 	}
 
 	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.Active())

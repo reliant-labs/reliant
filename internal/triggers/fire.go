@@ -223,10 +223,16 @@ func (f *Firer) overlapGuard(triggerID string) func(ctx context.Context) (string
 
 // previousRunBlocks reports whether this trigger's previous run is still going.
 //
-// "Still going" is the root run being active or paused. PENDING does not
-// count: a pending root has never started, which for a launched event means a
-// half-launched fire whose Temporal start failed — it is stranded, not
-// running, and treating it as live would wedge the trigger behind it forever.
+// "Still going" is the root run being active or paused, or PENDING with its
+// start in flight: a fire that has just committed is PENDING until its
+// Temporal start marks it ACTIVE, and the fire queued on the trigger lock
+// behind it reads it in exactly that window. Only a root whose start is
+// recorded as failed (Workflow.StartFailedAt — by the launcher's error branch,
+// or by the reconciler once the start has been missing from Temporal for its
+// bound) is stranded, and that one must not wedge the trigger: this fire
+// abandons it and launches. The abandon is conditional on the stamp, so a
+// retry of the stranded fire that has just claimed its start again wins, and
+// this fire skips instead of running beside it.
 func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string, error) {
 	launched := core.TriggerEventLaunched
 	prev, err := f.repo.GetLatestTriggerEvent(ctx, triggerID, &launched)
@@ -250,11 +256,46 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 		return "", fmt.Errorf("load root workflow status for chat %s: %w", *prev.ChatID, err)
 	}
 	status, ok := statuses[*prev.ChatID]
-	if !ok || status.State == core.WorkflowStatePending {
+	if !ok {
 		return "", nil
+	}
+	if status.State == core.WorkflowStatePending {
+		return f.pendingRunBlocks(ctx, *prev.ChatID)
 	}
 	if status.Live() {
 		return fmt.Sprintf("previous run is %s (chat %s)", status.Label(), *prev.ChatID), nil
+	}
+	return "", nil
+}
+
+// pendingRunBlocks decides a previous fire whose root is still PENDING: in
+// flight blocks, a recorded failed start is abandoned and does not.
+func (f *Firer) pendingRunBlocks(ctx context.Context, chatID string) (string, error) {
+	starting := fmt.Sprintf("previous run is starting (chat %s)", chatID)
+	// A chat's effective status is PENDING only when its newest root is.
+	roots, err := f.repo.ListRootWorkflows(ctx, chatID)
+	if err != nil {
+		return "", fmt.Errorf("load root workflow of chat %s: %w", chatID, err)
+	}
+	if len(roots) == 0 {
+		return "", nil
+	}
+	root := roots[0]
+	if root.Status.State != core.WorkflowStatePending {
+		// Moved on between the two reads; it is no longer PENDING, so this
+		// fire treats it as the conservative case and skips.
+		return starting, nil
+	}
+	if root.StartFailedAt == nil {
+		return starting, nil
+	}
+	abandoned, err := f.repo.AbandonFailedWorkflowStart(ctx, root.ID)
+	if err != nil {
+		return "", fmt.Errorf("abandon the failed start of chat %s: %w", chatID, err)
+	}
+	if !abandoned {
+		// A retry of that fire claimed its start again after the read above.
+		return starting, nil
 	}
 	return "", nil
 }
