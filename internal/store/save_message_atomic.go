@@ -84,12 +84,13 @@ type AtomicMessageResult struct {
 //
 // # Why the counters
 //
-// ordinal and seq come from message_order_counters rather than MAX()+1. A
-// MAX() read followed by an INSERT into the range just read takes an SSI
-// predicate lock over that range, so concurrent savers abort each other. An
-// upsert on a single counter row takes a row lock instead: a concurrent writer
-// WAITS microseconds rather than aborting. See migration
-// 20260901000000_message_order_counters.sql.
+// ordinal and seq come from message_order_counters (messageOrderCTEs), never
+// from MAX()+1. A MAX() read followed by an INSERT into the range just read
+// takes an SSI predicate lock over that range, so concurrent savers abort each
+// other. An upsert on a single counter row takes a row lock instead: a
+// concurrent writer WAITS microseconds rather than aborting. The counters are
+// authoritative: every other message writer allocates from them too, or
+// raises them to the numbers it wrote (InsertMessage).
 //
 // # Why this is safe at READ COMMITTED
 //
@@ -112,42 +113,7 @@ type AtomicMessageResult struct {
 // +40% per save (P1 benchmark, research/forge-migration/08-p5b-spike.md).
 const saveMessageAtomicSQL = `
 WITH
--- Both allocators are SELF-HEALING: they take the greater of the counter's
--- next value and the table's actual high-water mark.
---
--- This is not belt-and-braces, it is required. Three production paths still
--- insert messages directly with their own allocation — the branch repair in
--- chat_branch.go, the orphan repair in cleanup.go, and the denial message in
--- approval.go. A row written by any of them advances the table past the
--- counter, and a counter that then handed out its own stale next value would
--- collide with messages_chat_seq_key (observed: SQLSTATE 23505 under exactly
--- this mix). Healing here means those writers stay correct without every one
--- of them having to know the counter exists.
---
--- The subquery is an indexed MAX on a single chat/thread, not the recursive
--- fork walk this replaced, and it is evaluated once per write rather than
--- scanning a range the insert then lands in — so it does not reintroduce the
--- SSI predicate conflict that motivated the change.
-ord AS (
-    INSERT INTO message_order_counters (counter_kind, scope_id, last_assigned)
-    VALUES ('ordinal', $1, COALESCE((SELECT MAX(ordinal) FROM messages WHERE thread_id = $1), -1) + 1)
-    ON CONFLICT (counter_kind, scope_id) DO UPDATE
-    SET last_assigned = GREATEST(
-            message_order_counters.last_assigned + 1,
-            COALESCE((SELECT MAX(ordinal) FROM messages WHERE thread_id = $1), -1) + 1
-        )
-    RETURNING last_assigned
-),
-sq AS (
-    INSERT INTO message_order_counters (counter_kind, scope_id, last_assigned)
-    VALUES ('seq', $2, COALESCE((SELECT MAX(seq) FROM messages WHERE chat_id = $2), -1) + 1)
-    ON CONFLICT (counter_kind, scope_id) DO UPDATE
-    SET last_assigned = GREATEST(
-            message_order_counters.last_assigned + 1,
-            COALESCE((SELECT MAX(seq) FROM messages WHERE chat_id = $2), -1) + 1
-        )
-    RETURNING last_assigned
-),
+` + messageOrderCTEs + `,
 upd AS (
     INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq)
     VALUES ('chat', $2, 1)

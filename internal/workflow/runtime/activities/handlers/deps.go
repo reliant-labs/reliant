@@ -160,9 +160,7 @@ type CleanupStore interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	GetNextSeq(ctx context.Context, chatID string, threadID string) (int64, error)
-	CreateMessage(ctx context.Context, msg *db.Message) error
+	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
 	db.ToolCallStatusStore
 }

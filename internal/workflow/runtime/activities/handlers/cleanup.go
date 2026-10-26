@@ -366,25 +366,10 @@ func (a *CleanupActivity) createRepairToolMessage(
 	now := time.Now().UTC()
 	msgID := uuid.New().String()
 
-	// Get next ordinal for this thread
-	// The repair message should come after the assistant message
-	nextOrdinal, err := a.repo.GetNextOrdinal(ctx, assistantMsg.ThreadID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get next ordinal: %w", err)
-	}
-
-	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-	nextSeq, err := a.repo.GetNextSeq(ctx, chatID, assistantMsg.ThreadID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get next seq: %w", err)
-	}
-
 	// Create the tool message with the same context_window_id as the assistant message
 	repairMsg := &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
-		Ordinal:         nextOrdinal,
-		Seq:             nextSeq,
 		ThreadID:        assistantMsg.ThreadID,
 		ContextWindowID: assistantMsg.ContextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -392,7 +377,9 @@ func (a *CleanupActivity) createRepairToolMessage(
 		UpdatedAt:       now,
 	}
 
-	if err := a.repo.CreateMessage(ctx, repairMsg); err != nil {
+	// The next ordinal and seq, after the assistant message's, are allocated
+	// with the insert.
+	if err := a.repo.CreateNumberedMessage(ctx, repairMsg); err != nil {
 		return "", fmt.Errorf("failed to create repair message: %w", err)
 	}
 
