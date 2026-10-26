@@ -64,6 +64,11 @@ lint:
         # fails the build. Both ship at warn; reliant has no findings left.
         forgeconv-no-handler-error-mapping: error
         forgeconv-handler-connect-error: error
+        # P7b A4 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.2):
+        # every handler file is under lint.handler_file_max_loc (1000), so a
+        # handler file that grows past it fails the build. Split it into
+        # rpc_<family>.go siblings rather than raising the limit.
+        forgeconv-handler-file-size: error
         # access_tokens' scopes and resource-kind CHECKs are declared
         # `forge:closed-set accesstoken.*`. The rule warns until v0.1.48, so a
         # forge bump that grew AllScopes (billing:read, forge #1566) passed the
