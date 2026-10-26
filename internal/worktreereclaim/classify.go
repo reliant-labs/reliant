@@ -286,7 +286,11 @@ func headIsSafe(ctx context.Context, checkout, head, baseBranch string, onRemote
 // a property of those commits alone and the reaper asks it of the same pair
 // up to four times a pass.
 func inBase(ctx context.Context, checkout, head, baseBranch string, memo *commitMemo) (bool, error) {
-	bases := baseRefs(ctx, checkout, baseBranch)
+	return inCommits(ctx, checkout, head, baseRefs(ctx, checkout, baseBranch), memo)
+}
+
+// inCommits is inBase against base commits already resolved.
+func inCommits(ctx context.Context, checkout, head string, bases []string, memo *commitMemo) (bool, error) {
 	if len(bases) == 0 {
 		return false, nil
 	}

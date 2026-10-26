@@ -141,6 +141,27 @@ type CleanupMetadata struct {
 	// every pass.
 	StrippedPaths []string `json:"stripped_paths,omitempty"`
 	StrippedBytes int64    `json:"stripped_bytes,omitempty"`
+	// LandedAt is when the daemon first reported a live worktree's work
+	// landed (merged into its base branch, nothing else in it); cleared when
+	// a later check finds new work. ArchivedBecause says why the sweep
+	// archived a row on the user's behalf ("landed"); empty for an archive
+	// the user made.
+	LandedAt        *time.Time `json:"landed_at,omitempty"`
+	ArchivedBecause string     `json:"archived_because,omitempty"`
+}
+
+// ArchivedBecauseLanded marks a worktree the sweep archived because its work
+// had landed and its chats had gone quiet. Its chats stay live; the first
+// tool batch one of them runs brings the worktree back.
+const ArchivedBecauseLanded = "landed"
+
+// WorktreeRunActivity is what the chats working in a worktree say about it:
+// whether any run is going (pending, active, or paused awaiting a resume) and
+// when anything last happened in it. A chat works in a worktree when it is
+// bound to it, or one of its threads is.
+type WorktreeRunActivity struct {
+	Running    bool
+	LastActive time.Time
 }
 
 // CleaningNow reports whether a clean-up is genuinely running: flagged, and its

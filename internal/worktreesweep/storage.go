@@ -325,7 +325,7 @@ func (s *Sweeper) cleanBatch(ctx context.Context, t target, batch []*core.Reclai
 		*out = append(*out, CleanupResult{WorktreeID: c.Worktree.ID, Outcome: CleanupFailed, Message: msg})
 		s.mergeMeta(ctx, c.Worktree, func(m *core.CleanupMetadata) { m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil })
 	}
-	req, shared := s.describe(ctx, batch, live, false)
+	req, shared := s.describe(ctx, batch, live, false, nil)
 	byID := map[string]*core.ReclaimCandidate{}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c

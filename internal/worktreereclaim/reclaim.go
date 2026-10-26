@@ -67,6 +67,15 @@ type Reclaimer struct {
 	// the locking that precedes it; zero means DefaultProbeBudget. A probe that
 	// runs out of it is OutcomeProbeInconclusive, not a "no".
 	ProbeBudget time.Duration
+	// LandedShedFloor is the quiet time before a landed active worktree's
+	// regenerable output is shed (ShedLanded); zero means
+	// DefaultLandedShedFloor.
+	LandedShedFloor time.Duration
+	// ProcessUse is the complete process inspection (executables, open and
+	// mapped files, not only working directories) a live worktree must pass
+	// before anything in it is shed. NewReclaimer sets CheckProcessUse; nil
+	// relies on Cwds alone.
+	ProcessUse func(ctx context.Context, paths []string) error
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -100,7 +109,7 @@ type cachedSize struct {
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
 	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
-		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch}
+		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch, ProcessUse: CheckProcessUse}
 }
 
 // DefaultRoot is where reliant creates worktrees on this machine.
@@ -462,6 +471,10 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 // own git in the checkout for an earlier request — and it held an idle
 // worktree as in use on that alone.
 func (r *Reclaimer) inUse(ctx context.Context, w Worktree, fresh bool) *Result {
+	if selfWithin(w.Path) {
+		res := held(w, ReasonInUse, "the daemon itself runs from here")
+		return &res
+	}
 	cwds, err := r.cwds(ctx, fresh)
 	if err == nil && !fresh && cwdWithin(cwds, w.Path) {
 		cwds, err = r.cwds(ctx, true)
@@ -1072,7 +1085,12 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
-	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
+		r.probeLanded(ctx, w, &res)
+	}
+	// A landed worktree is the server's to decide on by its own rule; asking
+	// whether it is also "finished" would repeat the same checks.
+	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
 		switch r.finished(ctx, w) {
 		case probeFinished:
 			res.Outcome = OutcomeIdleDone

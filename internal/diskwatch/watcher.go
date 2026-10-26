@@ -60,6 +60,8 @@ type Watcher struct {
 	reaper reaperState
 	// trim is the native cache trim (cachetrim.go), guarded by mu.
 	trim cacheTrimState
+	// wtSizes remembers each worktree's size across scans (worktreesizes.go).
+	wtSizes worktreeSizes
 	// systemEnv: the watcher reads the daemon's own environment, so its
 	// caches are this machine's real ones (never trimmed from a test).
 	systemEnv bool

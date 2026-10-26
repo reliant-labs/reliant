@@ -29,6 +29,10 @@ type fakeStore struct {
 	daemon     string
 	// disk is each daemon's stored disk report (diskwatch.Encode).
 	disk map[string]string
+	// activity is each worktree's chat runs (WorktreeRunActivities); a row
+	// with no entry has had nothing happen in it since the epoch.
+	activity    map[string]core.WorktreeRunActivity
+	activityErr error
 }
 
 func newFakeStore(daemon string) *fakeStore {
@@ -124,6 +128,40 @@ func (f *fakeStore) ArchiveWorktree(_ context.Context, id string) error {
 	return nil
 }
 
+func (f *fakeStore) WorktreeRunActivities(_ context.Context, ids []string) (map[string]core.WorktreeRunActivity, error) {
+	if f.activityErr != nil {
+		return nil, f.activityErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]core.WorktreeRunActivity{}
+	for _, id := range ids {
+		out[id] = f.activity[id]
+	}
+	return out, nil
+}
+func (f *fakeStore) ArchiveLandedWorktree(_ context.Context, id string, quietSince time.Time) (bool, error) {
+	if f.archiveErr != nil {
+		return false, f.archiveErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	wt := f.rows[id].Worktree
+	if a := f.activity[id]; wt.DeletedAt != nil || wt.IsMain || a.Running || a.LastActive.After(quietSince) {
+		return false, nil
+	}
+	f.archived = append(f.archived, id)
+	at := time.Now().UTC()
+	wt.DeletedAt = &at
+	m := core.CleanupMetadata{}
+	if wt.CleanupMetadata != nil {
+		m = *wt.CleanupMetadata
+	}
+	m.ArchivedBecause = core.ArchivedBecauseLanded
+	wt.CleanupMetadata = &m
+	return true, nil
+}
+
 // scriptSender answers each worktree from a script and can fail any request
 // that contains a chosen worktree, the way a daemon that timed out does.
 type scriptSender struct {
@@ -132,6 +170,8 @@ type scriptSender struct {
 	answer   func(w worktreereclaim.Worktree) worktreereclaim.Result
 	requests [][]string
 	probed   map[string]bool
+	// seen is the last description of each worktree the daemon was sent.
+	seen map[string]worktreereclaim.Worktree
 }
 
 func (s *scriptSender) SendDaemonCommandToDaemon(_ context.Context, _, _, _ string, payload []byte, _ int32) ([]byte, error) {
@@ -155,6 +195,9 @@ func (s *scriptSender) SendDaemonCommandToDaemon(_ context.Context, _, _, _ stri
 	for _, w := range req.Worktrees {
 		if s.probed != nil {
 			s.probed[w.ID] = w.ProbeIdle
+		}
+		if s.seen != nil {
+			s.seen[w.ID] = w
 		}
 		resp.Results = append(resp.Results, s.answer(w))
 	}

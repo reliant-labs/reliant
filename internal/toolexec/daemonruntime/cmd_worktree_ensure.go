@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // =============================================================================
@@ -63,6 +64,9 @@ type workspaceEnsurer struct {
 	byPath map[string]*workspaceRecord
 	now    func() time.Time
 	home   func() (string, error)
+	// retire re-locks a revived worktree's checkouts as restored under the
+	// archive fence it names (WorkspaceEnsureRequest.Retire).
+	retire func(ctx context.Context, w worktreereclaim.Worktree) worktreereclaim.Result
 }
 
 func newWorkspaceEnsurer() *workspaceEnsurer {
@@ -70,6 +74,40 @@ func newWorkspaceEnsurer() *workspaceEnsurer {
 		byPath: map[string]*workspaceRecord{},
 		now:    time.Now,
 		home:   os.UserHomeDir,
+		retire: retireWithReclaimer,
+	}
+}
+
+// retireWithReclaimer is the unarchive's re-lock (an ACTIVE reconcile that
+// names the fence to retire), through the same reclaimer the sweep's
+// removals use, so it waits for one in progress on this worktree and makes
+// any not yet started refuse.
+func retireWithReclaimer(ctx context.Context, w worktreereclaim.Worktree) worktreereclaim.Result {
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return worktreereclaim.Result{ID: w.ID, Outcome: worktreereclaim.OutcomeError, Error: err.Error()}
+	}
+	return r.Reconcile(ctx, worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
+}
+
+// retireFence retires a revived worktree's archive fence before its directory
+// is looked at. Whatever it answers, the ensure goes on: a checkout it could
+// not re-lock is still there to run in, a missing one is recreated (and
+// locked restored) below, and the server keeps the fence on the row for the
+// sweep to deliver until a re-lock succeeds.
+func (e *workspaceEnsurer) retireFence(ctx context.Context, root string, req toolexec.WorkspaceEnsureRequest) {
+	if req.Retire == "" || req.WorktreeID == "" || e.retire == nil {
+		return
+	}
+	w := worktreereclaim.Worktree{ID: req.WorktreeID, Path: root, State: worktreereclaim.StateActive, Retire: req.Retire}
+	for _, repo := range req.Repos {
+		w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{RepoPath: repo.RepoPath, Rel: repo.Rel})
+	}
+	switch res := e.retire(ctx, w); res.Outcome {
+	case worktreereclaim.OutcomeLocked, worktreereclaim.OutcomeGone:
+	default:
+		logging.WarnContext(ctx, "worktree.ensure: could not retire a revived workspace's archive fence",
+			"path", root, "worktree_id", req.WorktreeID, "outcome", res.Outcome, "reason", res.Reason, "detail", res.Detail, "error", res.Error)
 	}
 }
 
@@ -127,6 +165,7 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	now := e.now()
+	e.retireFence(ctx, root, req)
 
 	checkouts := ensureCheckouts(req)
 	missing := missingCheckouts(root, checkouts)
@@ -283,6 +322,7 @@ func repairWorkspace(ctx context.Context, root string, req toolexec.WorkspaceEns
 		WorktreePath: root,
 		Branch:       req.Branch,
 		WorktreeID:   req.WorktreeID,
+		Fence:        req.Retire,
 		Repos:        repos,
 	})
 	if !resp.Success {

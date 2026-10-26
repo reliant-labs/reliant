@@ -67,8 +67,14 @@ func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) 
 	if hold := r.inUse(ctx, w, false); hold != nil {
 		return
 	}
+	r.strip(ctx, w, sc.Repos, checkouts, res)
+}
+
+// strip deletes the regenerable paths of checkouts (see shed) and records
+// them on res. The caller has established that nothing uses them.
+func (r *Reclaimer) strip(ctx context.Context, w Worktree, repos, checkouts []string, res *Result) {
 	for _, c := range checkouts {
-		for _, rel := range regenerableTargets(ctx, c, sc.Repos) {
+		for _, rel := range regenerableTargets(ctx, c, repos) {
 			if ctx.Err() != nil {
 				break
 			}

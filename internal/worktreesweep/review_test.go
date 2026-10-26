@@ -68,7 +68,7 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 	}
 	require.NotNil(t, cand)
 	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
-	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{cand}, live, false)
+	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{cand}, live, false, nil)
 	_, err = e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req) // phase one: claims
 	require.NoError(t, err)
 	require.NoError(t, worktreereclaim.RestoreCheckout(e.ctx, path, wt.ID, Fence(e.get(t, wt.ID)))) // restore re-locks as active and retires the fence
@@ -470,7 +470,7 @@ func TestSweep_DeliversAPendingFenceRetirement(t *testing.T) {
 	fence := Fence(archived)
 	// The machine claims it under that fence.
 	live, _ := e.repo.ListLiveWorktreePathsForUser(e.ctx, e.userID)
-	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{{Worktree: archived, OwnerUserID: e.userID, ProjectPath: e.project.Path}}, live, false)
+	req, _ := e.sweeper.describe(e.ctx, []*core.ReclaimCandidate{{Worktree: archived, OwnerUserID: e.userID, ProjectPath: e.project.Path}}, live, false, nil)
 	_, err := e.sweeper.send(e.ctx, target{e.userID, e.daemon}, cmdReconcile, 60000, req)
 	require.NoError(t, err)
 
