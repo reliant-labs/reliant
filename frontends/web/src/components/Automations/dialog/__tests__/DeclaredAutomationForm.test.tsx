@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * WorkflowSetupDialog: one workflow turned on in one project, in three modes
- * (set up, finish setup, settings), with one EnableWorkflow request. The RPC
+ * DeclaredAutomationForm: the automation dialog for a workflow that declares
+ * its triggers — one workflow turned on in one project, in three phases (turn
+ * on, finish setup, settings), with one EnableWorkflow request. The RPC
  * client is the only mock, answering with the real generated messages.
  *
  * Pinned here: the sections and what lands in them (scope inputs first, typed
@@ -41,7 +42,7 @@ import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
 import { InputBaseSchema, InputSchema, IntegrationInputConfigSchema, StringInputConfigSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
 import { triageWorkflowResponse, presetsResponse, worktreesResponse, WORKFLOW_LIST } from "@/components/workflow/run/__tests__/runFormFixtures";
-import { renderAtRoute } from "./automationTestUtils";
+import { renderAtRoute } from "../../__tests__/automationTestUtils";
 
 const enableWorkflow = vi.fn();
 const listTriggers = vi.fn();
@@ -106,7 +107,7 @@ vi.mock("@/store/projectStore", () => {
   return { useProjectStore };
 });
 
-import { WorkflowSetupDialog, type SetupMode } from "../WorkflowSetupDialog";
+import { DeclaredAutomationForm, type SetupMode } from "../DeclaredAutomationForm";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 
 const nightly = {
@@ -230,8 +231,7 @@ function render(declared: DeclaredTrigger[], opts: { mode?: SetupMode; workflowR
   const onClose = vi.fn();
   const onEnabled = vi.fn();
   renderAtRoute(
-    <WorkflowSetupDialog
-      open
+    <DeclaredAutomationForm
       onClose={onClose}
       onEnabled={onEnabled}
       workflowRef={opts.workflowRef ?? "triage"}
@@ -247,7 +247,7 @@ function render(declared: DeclaredTrigger[], opts: { mode?: SetupMode; workflowR
 const sentRequest = () => enableWorkflow.mock.calls[0]![0] as EnableWorkflowRequest;
 const machineReady = () => waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
 
-describe("WorkflowSetupDialog: set up", () => {
+describe("DeclaredAutomationForm: set up", () => {
   it("turns every trigger on with one request, then says it is on and what happens next", async () => {
     const user = userEvent.setup();
     enableWorkflow.mockResolvedValue(
@@ -257,20 +257,27 @@ describe("WorkflowSetupDialog: set up", () => {
       }),
     );
     const { onEnabled } = render([nightly, hook]);
-    expect(await screen.findByRole("heading", { name: "Set up Triage" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "2 triggers" }));
-    const list = screen.getByRole("list", { name: "What starts it" });
-    expect(within(list).getByText("nightly")).toBeInTheDocument();
-    expect(within(list).getByText("ci-deploy")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Turn on Triage" })).toBeInTheDocument();
+    // When comes first, set by the workflow, in words rather than trigger slugs.
+    const when = screen.getByTestId("declared-when");
+    const list = within(when).getByRole("list", { name: "What starts it" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(list).getByText("Webhook")).toBeInTheDocument();
+    expect(within(list).queryByText("ci-deploy")).not.toBeInTheDocument();
     await machineReady();
-    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Deploy checks" } });
+    fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "Deploy checks" } });
     fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "deploy" } });
     await user.click(screen.getByRole("button", { name: "Turn on" }));
 
     await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
     const request = sentRequest();
     expect(request).toMatchObject({ workflow: "triage", projectId: "proj-1", daemonId: "daemon-1", noMachine: false, message: "Deploy checks" });
-    expect(request.overrides).toHaveLength(0);
+    // New activations are named by what starts them, not by the trigger's slug.
+    expect(request.overrides.map((o) => [o.trigger, o.name])).toEqual([
+      ["nightly", expect.stringMatching(/^Triage · Every weekday/)],
+      ["ci-deploy", "Triage · Webhook"],
+    ]);
+    expect(request.overrides.every((o) => o.noMachine === undefined && !o.message)).toBe(true);
     expect(request.params.label?.kind).toEqual({ case: "stringValue", value: "deploy" });
     await waitFor(() => expect(onEnabled).toHaveBeenCalled());
 
@@ -375,7 +382,7 @@ describe("WorkflowSetupDialog: set up", () => {
     );
     render([nightly, hook]);
     await machineReady();
-    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "go" } });
+    fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "go" } });
     fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "x" } });
     await user.click(screen.getByRole("button", { name: "Turn on" }));
     expect(await screen.findByText("Something is still running that you did not ask for.")).toBeInTheDocument();
@@ -400,25 +407,53 @@ describe("WorkflowSetupDialog: set up", () => {
     enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true, results: [result("nightly", WorkflowTriggerOutcome.ENABLED), result("ci-deploy", WorkflowTriggerOutcome.ENABLED)] }));
     render([nightly, hook]);
     await machineReady();
-    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "shared prompt" } });
+    fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "shared prompt" } });
     fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "x" } });
     await user.click(screen.getByRole("button", { name: /Per-trigger exceptions/ }));
     await user.click(screen.getByRole("button", { name: /^nightly/ }));
-    const machines = screen.getAllByRole("combobox", { name: "Runs on" });
+    // The shared machine is inferred and summarised; the exception's picker is the visible one.
+    const machines = screen.getAllByRole("combobox", { name: "Runs on", hidden: true });
     expect(machines).toHaveLength(2);
     const noMachine = within(machines[1]!).getByRole("option", { name: /No machine/ }) as HTMLOptionElement;
     fireEvent.change(machines[1]!, { target: { value: noMachine.value } });
     await user.click(screen.getByRole("button", { name: "Turn on" }));
 
     await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
-    expect(sentRequest().overrides).toHaveLength(1);
-    expect(sentRequest().overrides[0]).toMatchObject({ trigger: "nightly", noMachine: true });
+    const overrides = sentRequest().overrides;
+    expect(overrides.find((o) => o.trigger === "nightly")).toMatchObject({ noMachine: true });
+    expect(overrides.find((o) => o.trigger === "ci-deploy")?.noMachine).toBeUndefined();
   });
 
   it("words the notification as what it adds: failures always notify (O7)", async () => {
     render([nightly]);
-    expect(await screen.findByRole("switch", { name: "Also notify me when a run succeeds" })).toBeInTheDocument();
-    expect(screen.getByText("Failures always notify you.")).toBeInTheDocument();
+    expect(await screen.findByRole("switch", { name: "Notify me when a run succeeds" })).toBeInTheDocument();
+    expect(screen.getByText("Failures always notify you, once per streak.")).toBeInTheDocument();
+  });
+
+  it("names the trigger it was opened from, and turns the whole set on together", async () => {
+    const user = userEvent.setup();
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true, results: [result("nightly", WorkflowTriggerOutcome.ENABLED), result("ci-deploy", WorkflowTriggerOutcome.ENABLED)] }));
+    renderAtRoute(
+      <DeclaredAutomationForm onClose={vi.fn()} workflowRef="triage" workflowTitle="Triage" declared={[nightly, hook]} defaultProjectId="proj-1" declaredTrigger="ci-deploy" />,
+    );
+    const when = await screen.findByTestId("declared-when");
+    expect(when).toHaveTextContent("Set by the workflow: Webhook — and its other trigger, turned on together");
+    await machineReady();
+    fireEvent.change(screen.getByLabelText("What should it do?"), { target: { value: "go" } });
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "x" } });
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().overrides.map((o) => o.trigger)).toEqual(["nightly", "ci-deploy"]);
+  });
+
+  it("offers a WHEN of its own: Need a different trigger?", async () => {
+    const user = userEvent.setup();
+    const onUseCustom = vi.fn();
+    renderAtRoute(
+      <DeclaredAutomationForm onClose={vi.fn()} workflowRef="triage" workflowTitle="Triage" declared={[nightly]} defaultProjectId="proj-1" onUseCustom={onUseCustom} />,
+    );
+    await user.click(await screen.findByRole("button", { name: "Need a different trigger?" }));
+    expect(onUseCustom).toHaveBeenCalledWith("proj-1");
   });
 
   it("offers no per-trigger exceptions for a workflow with one trigger", async () => {
@@ -428,7 +463,7 @@ describe("WorkflowSetupDialog: set up", () => {
   });
 });
 
-describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
+describe("DeclaredAutomationForm: finish setup and settings (O2)", () => {
   it("finish: prefills what was chosen, says what changed, and focuses the missing field", async () => {
     getWorkflow.mockResolvedValue(reviewWorkflowResponse());
     listTriggers.mockResolvedValue(
@@ -445,7 +480,7 @@ describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
     await waitFor(() => expect(repos).toHaveFocus());
     expect(screen.getByRole("button", { name: "Save and turn on" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Reliant bot/ })).toBeChecked();
-    expect(screen.getByRole("switch", { name: "Also notify me when a run succeeds" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("switch", { name: "Notify me when a run succeeds" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("settings: reads the stored setup back and sends it whole, so Enable updates rather than wipes", async () => {
@@ -478,7 +513,7 @@ describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
   });
 });
 
-describe("WorkflowSetupDialog: on-call", () => {
+describe("DeclaredAutomationForm: on-call", () => {
   const alerts = {
     name: "alertmanager",
     filter: "",

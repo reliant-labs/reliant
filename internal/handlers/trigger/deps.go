@@ -13,6 +13,7 @@ package trigger
 import (
 	"context"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -62,4 +63,19 @@ type AutomationKeyStore interface {
 // before it revokes that daemon's token.
 type TriggerLister interface {
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+}
+
+// AutomationDrafter writes an automation draft from a description
+// (DraftAutomation). The model call runs on the worker — the api-server has no
+// LLM drivers — so internal/app implements it over Temporal.
+type AutomationDrafter interface {
+	DraftAutomation(ctx context.Context, in DraftRequest) (*reliantv1.AutomationDraft, error)
+}
+
+// DraftRequest is a validated DraftAutomationRequest and its caller.
+type DraftRequest struct {
+	UserID      string
+	Description string
+	Workflow    string
+	Timezone    string
 }

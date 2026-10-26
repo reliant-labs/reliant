@@ -80,6 +80,9 @@ const (
 	// TriggerServicePreviewReplayProcedure is the fully-qualified name of the TriggerService's
 	// PreviewReplay RPC.
 	TriggerServicePreviewReplayProcedure = "/reliant.v1.TriggerService/PreviewReplay"
+	// TriggerServiceDraftAutomationProcedure is the fully-qualified name of the TriggerService's
+	// DraftAutomation RPC.
+	TriggerServiceDraftAutomationProcedure = "/reliant.v1.TriggerService/DraftAutomation"
 )
 
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
@@ -169,6 +172,14 @@ type TriggerServiceClient interface {
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
 	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
+	// DraftAutomation turns a person's description ("every weekday at 9,
+	// summarise yesterday's failed CI runs") into a proposed automation for
+	// them to review in the automation dialog. It stores nothing and creates
+	// nothing: only the person's Create in the dialog makes a trigger. The
+	// draft is written by the caller's own fast model, with the draft_automation
+	// tool's schema as the structured output, and normalized by the same code
+	// that tool runs.
+	DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error)
 }
 
 // NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. By
@@ -274,6 +285,12 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		draftAutomation: connect.NewClient[v1.DraftAutomationRequest, v1.DraftAutomationResponse](
+			httpClient,
+			baseURL+TriggerServiceDraftAutomationProcedure,
+			connect.WithSchema(triggerServiceMethods.ByName("DraftAutomation")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -294,6 +311,7 @@ type triggerServiceClient struct {
 	resolveTriggerSenders *connect.Client[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse]
 	listReplayEvents      *connect.Client[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse]
 	previewReplay         *connect.Client[v1.PreviewReplayRequest, v1.PreviewReplayResponse]
+	draftAutomation       *connect.Client[v1.DraftAutomationRequest, v1.DraftAutomationResponse]
 }
 
 // CreateTrigger calls reliant.v1.TriggerService.CreateTrigger.
@@ -369,6 +387,11 @@ func (c *triggerServiceClient) ListReplayEvents(ctx context.Context, req *connec
 // PreviewReplay calls reliant.v1.TriggerService.PreviewReplay.
 func (c *triggerServiceClient) PreviewReplay(ctx context.Context, req *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
 	return c.previewReplay.CallUnary(ctx, req)
+}
+
+// DraftAutomation calls reliant.v1.TriggerService.DraftAutomation.
+func (c *triggerServiceClient) DraftAutomation(ctx context.Context, req *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error) {
+	return c.draftAutomation.CallUnary(ctx, req)
 }
 
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
@@ -458,6 +481,14 @@ type TriggerServiceHandler interface {
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
 	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
+	// DraftAutomation turns a person's description ("every weekday at 9,
+	// summarise yesterday's failed CI runs") into a proposed automation for
+	// them to review in the automation dialog. It stores nothing and creates
+	// nothing: only the person's Create in the dialog makes a trigger. The
+	// draft is written by the caller's own fast model, with the draft_automation
+	// tool's schema as the structured output, and normalized by the same code
+	// that tool runs.
+	DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error)
 }
 
 // NewTriggerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -559,6 +590,12 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	triggerServiceDraftAutomationHandler := connect.NewUnaryHandler(
+		TriggerServiceDraftAutomationProcedure,
+		svc.DraftAutomation,
+		connect.WithSchema(triggerServiceMethods.ByName("DraftAutomation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TriggerServiceCreateTriggerProcedure:
@@ -591,6 +628,8 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 			triggerServiceListReplayEventsHandler.ServeHTTP(w, r)
 		case TriggerServicePreviewReplayProcedure:
 			triggerServicePreviewReplayHandler.ServeHTTP(w, r)
+		case TriggerServiceDraftAutomationProcedure:
+			triggerServiceDraftAutomationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -658,4 +697,8 @@ func (UnimplementedTriggerServiceHandler) ListReplayEvents(context.Context, *con
 
 func (UnimplementedTriggerServiceHandler) PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.PreviewReplay is not implemented"))
+}
+
+func (UnimplementedTriggerServiceHandler) DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.DraftAutomation is not implemented"))
 }

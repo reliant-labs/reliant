@@ -5,12 +5,18 @@
  * speak as, as two radio cards side by side (stacked on a phone). The cards
  * are labels around real radios, so arrow keys move between them and the
  * whole card is the click target.
+ *
+ * The bot needs a control plane to mint its installation tokens; where there
+ * is none (self-hosted) there is nothing to choose between, so the field is
+ * not shown at all — unless an automation already writes as the bot, which
+ * must stay visible to be changed.
  */
 
 import { useId, type ReactNode } from "react";
 
 import type { ActingIdentityKey } from "@/hooks/trigger-model";
 import { cn } from "@/lib/utils";
+import { hasControlPlane } from "@/services/controlPlane/config";
 
 export interface ActingIdentityFieldProps {
   value: ActingIdentityKey;
@@ -20,6 +26,8 @@ export interface ActingIdentityFieldProps {
   /** A non-blocking note under the cards (the bot cannot write somewhere). */
   warning?: ReactNode;
   disabled?: boolean;
+  /** Whether this deployment can write as the bot. Default: it has a control plane. */
+  botAvailable?: boolean;
 }
 
 function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string; hint: string }[] {
@@ -32,13 +40,14 @@ function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string
     {
       value: "app",
       label: "Reliant bot",
-      hint: "They appear as reliant-labs[bot]. Only where you can push; hosted Reliant only.",
+      hint: "Comments and reviews appear as reliant-labs[bot]. Works in repositories you can push to.",
     },
   ];
 }
 
-export function ActingIdentityField({ value, onChange, ownerLogin, warning, disabled = false }: ActingIdentityFieldProps) {
+export function ActingIdentityField({ value, onChange, ownerLogin, warning, disabled = false, botAvailable = hasControlPlane }: ActingIdentityFieldProps) {
   const ids = useId();
+  if (!botAvailable && value !== "app") return null;
   return (
     <fieldset className="min-w-0">
       <legend className="mb-1.5 text-sm font-medium text-foreground">Writes as</legend>

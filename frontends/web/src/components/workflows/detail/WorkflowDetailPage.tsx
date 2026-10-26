@@ -39,7 +39,7 @@ import { useProjects } from "@/hooks/project-queries";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
 import PageHeader from "../../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
-import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
+import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { AutomationStateNotice } from "../../Automations/AutomationStateNotice";
 import { RunList } from "../../runs/RunList";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
@@ -79,7 +79,6 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
   // Unknown until the answer arrives: no "default" badge rather than a guess.
   const defaultWorkflow = scopePreferences.isPending ? undefined : scopePreferences.data.defaultWorkflow;
   const [running, setRunning] = useState(false);
-  const [creatingAutomation, setCreatingAutomation] = useState(false);
   const allTriggers = useTriggers();
   const naming = useIntegrationEventNaming();
 
@@ -90,6 +89,9 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
   if (library.data && !listing && !invalid) return <WorkflowNotFound workflowRef={workflowRef} />;
 
   const displayName = workflowDisplayName({ name: workflowRef, title: listing?.title });
+  // A schedule (or any WHEN) of its own for this workflow: the automation
+  // dialog, with the workflow fixed and When first.
+  const addAutomation = () => openAutomationDialog({ workflowRef, workflowTitle: displayName, projectId, custom: true });
   const isDraft = listing?.status === "draft";
   const runBlockedReason = invalid
     ? "This workflow failed to load, so it cannot run."
@@ -168,13 +170,13 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
             declared={declared}
             projectId={projectId}
             setupBlockedReason={setupBlockedReason}
-            onAddCustom={() => setCreatingAutomation(true)}
+            onAddCustom={addAutomation}
           />
           <RecentRunsCard
             projectId={projectId}
             workflowRef={workflowRef}
             onRun={runBlockedReason ? undefined : () => setRunning(true)}
-            onSchedule={() => setCreatingAutomation(true)}
+            onSchedule={addAutomation}
           />
           <DefinitionCard
             projectId={projectId}
@@ -203,12 +205,6 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
       </div>
 
       <RunNowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} />
-      <AutomationFormDialog
-        open={creatingAutomation}
-        onClose={() => setCreatingAutomation(false)}
-        prefill={{ workflow: workflowRef, projectId, name: displayName }}
-        defaultProjectId={projectId}
-      />
     </div>
   );
 }

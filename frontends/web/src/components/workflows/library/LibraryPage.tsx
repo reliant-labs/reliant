@@ -26,8 +26,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { triggerRunsWorkflow } from "@/lib/triggerRail";
-import type { DeclaredTrigger } from "@/lib/declaredTriggers";
-import { WorkflowSetupDialog } from "../../Automations/WorkflowSetupDialog";
+import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import type { LibrarySearch, LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
 import {
@@ -293,7 +292,6 @@ function LibraryBody({ projectId }: { projectId: string }) {
   const lastRuns = useLastRunPerWorkflow(projectId);
   const triggers = useTriggers(projectId);
   const [runRef, setRunRef] = useState<string | null>(null);
-  const [settingUp, setSettingUp] = useState<WorkflowResponse | null>(null);
   // The workflow whose Delete is being confirmed.
   const [deleting, setDeleting] = useState<WorkflowResponse | null>(null);
 
@@ -440,7 +438,15 @@ function LibraryBody({ projectId }: { projectId: string }) {
       turnedOn: turnedOnSummary(health, declares),
       attention,
       onRun: workflow.status === "draft" ? undefined : () => setRunRef(workflow.name),
-      onSetUp: declares && runsHere.length === 0 && workflow.status !== "draft" ? () => setSettingUp(workflow) : undefined,
+      onSetUp: declares && runsHere.length === 0 && workflow.status !== "draft" ? () =>
+              openAutomationDialog({
+                workflowRef: workflow.name,
+                workflowTitle: workflowDisplayName(workflow),
+                projectId,
+                mode: "setup",
+                showOpenWorkflow: true,
+              })
+          : undefined,
       cta: needing.length > 0 ? { spec: health!.cta!, triggers: needing, projectId } : undefined,
       actions: actionsFor(workflow),
     };
@@ -548,19 +554,6 @@ function LibraryBody({ projectId }: { projectId: string }) {
           });
         }}
       />
-
-      {settingUp && (
-        <WorkflowSetupDialog
-          open
-          onClose={() => setSettingUp(null)}
-          workflowRef={settingUp.name}
-          workflowTitle={workflowDisplayName(settingUp)}
-          declared={(settingUp.triggers ?? []) as DeclaredTrigger[]}
-          defaultProjectId={projectId}
-          mode="setup"
-          showOpenWorkflow
-        />
-      )}
 
       <RunNowDialog
         open={runRef !== null}

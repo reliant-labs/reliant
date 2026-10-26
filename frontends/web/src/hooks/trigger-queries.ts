@@ -31,6 +31,7 @@ import {
 } from "../gen/reliant/v1/trigger_pb";
 import { connectClient } from "../lib/connect";
 import {
+  automationDraftFromProto,
   definitionToProto,
   enableWorkflowRequest,
   enableWorkflowResultFromProto,
@@ -41,6 +42,7 @@ import {
   resolvedSendersFromProto,
   triggerFromProto,
   triggerWithCredentialFromProto,
+  type AutomationDraft,
   type EnableWorkflowInput,
   type ResolvedSender,
   type Trigger,
@@ -194,6 +196,28 @@ export async function previewReplay(
   sender?: TriggerSender,
 ): Promise<{ inputs: Record<string, unknown>; prompt: string }> {
   return previewFromProto(await client.previewReplay(previewReplayRequest(projectId, workflow, replay, sender)));
+}
+
+/**
+ * Drafts an automation from a sentence ("Describe it"): starting values for
+ * the dialog, never a saved trigger. Called directly, not through the
+ * generated mutation hook, because nothing is written: invalidating every
+ * trigger read after a draft would refetch for nothing.
+ */
+export async function draftAutomation(input: {
+  description: string;
+  projectId: string;
+  workflow?: string;
+  timezone?: string;
+}): Promise<AutomationDraft> {
+  const response = await client.draftAutomation({
+    description: input.description,
+    projectId: input.projectId,
+    workflow: input.workflow ?? "",
+    timezone: input.timezone ?? "",
+  });
+  if (!response.draft) throw new Error("No draft in response");
+  return automationDraftFromProto(response.draft);
 }
 
 // ── Writes ──────────────────────────────────────────────────────────────────

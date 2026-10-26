@@ -27,14 +27,13 @@ import Button from "@/components/forge-ui/button";
 import { triggerErrorMessage } from "@/hooks/trigger-model";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { AutomationFormDialog } from "./AutomationFormDialog";
+import { openAutomationDialog } from "./dialog/openAutomationDialog";
 import { AutomationGroups, GroupBySwitch, NeedsYouList } from "./AutomationGroups";
 import { ComingUpTimeline } from "./ComingUpTimeline";
 import { automationCounts, automationOverview, type AutomationGroupBy } from "./automationGrouping";
 
 export function AutomationsListPage() {
   const triggersQuery = useTriggers();
-  const [creating, setCreating] = useState(false);
   const [groupBy, setGroupBy] = useState<AutomationGroupBy>("workflow");
 
   const triggers = useMemo(() => triggersQuery.data ?? [], [triggersQuery.data]);
@@ -50,10 +49,10 @@ export function AutomationsListPage() {
           subtitle="What runs by itself, across every project, and whether it is working."
           actions={[
             {
-              label: "Custom automation",
-              variant: "secondary",
+              label: "New automation",
+              variant: "primary",
               icon: <Plus className="h-4 w-4" aria-hidden="true" />,
-              onClick: () => setCreating(true),
+              onClick: () => openAutomationDialog(),
             },
           ]}
         />
@@ -70,7 +69,7 @@ export function AutomationsListPage() {
           </Button>
         </Card>
       ) : overview.all.length === 0 ? (
-        <EmptyAutomations onCreate={() => setCreating(true)} />
+        <EmptyAutomations onCreate={() => openAutomationDialog()} />
       ) : (
         <>
           <CountsStrip counts={counts} />
@@ -87,8 +86,6 @@ export function AutomationsListPage() {
           )}
         </>
       )}
-
-      <AutomationFormDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   );
 }
@@ -151,7 +148,7 @@ function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
           Browse the Library
         </Link>
         <Button variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={onCreate}>
-          Custom automation
+          New automation
         </Button>
       </div>
     </Card>

@@ -26,6 +26,7 @@ import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundar
 import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AutomationDialogHost } from './components/Automations/dialog/AutomationDialogHost'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
@@ -274,6 +275,8 @@ function RootShell() {
         <Outlet />
       </ShortcutHost>
       <ModalLayer />
+      {/* openAutomationDialog: one automation dialog for every page, chat card and builder panel. */}
+      <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />

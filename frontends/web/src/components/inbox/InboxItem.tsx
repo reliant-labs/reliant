@@ -44,7 +44,7 @@ import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
 import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
-import { SetupDialogFor } from "../Automations/SetupDialogFor";
+import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -334,16 +334,18 @@ function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: s
 /** "Open settings" for a workflow automation that can't start; its own page for a custom one. */
 function LaunchFailedAction({ triggerId }: { triggerId: string }) {
   const trigger = useTriggerById(triggerId);
-  const [open, setOpen] = useState(false);
   const mobile = useSurface() === "mobile";
   if (mobile) return <OnDesktopNote>Fix on desktop</OnDesktopNote>;
   if (trigger?.workflowTrigger) {
     return (
       <>
-        <button type="button" className={actionButtonClass} onClick={() => setOpen(true)}>
+        <button
+          type="button"
+          className={actionButtonClass}
+          onClick={() => openAutomationDialog({ workflowRef: trigger.workflow, projectId: trigger.projectId, mode: "settings", showOpenWorkflow: true })}
+        >
           Open settings
         </button>
-        {open && <SetupDialogFor workflowRef={trigger.workflow} projectId={trigger.projectId} mode="settings" onClose={() => setOpen(false)} />}
       </>
     );
   }

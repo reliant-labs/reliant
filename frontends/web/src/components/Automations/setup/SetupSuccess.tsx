@@ -16,7 +16,7 @@ import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, scheduleOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import Button from "@/components/forge-ui/button";
-import { WebhookCredentialPanel } from "../ActivateTriggerDialog";
+import { WebhookCredentialPanel } from "../dialog/WebhookCredentialPanel";
 
 export interface SetupSuccessProps {
   workflowTitle: string;

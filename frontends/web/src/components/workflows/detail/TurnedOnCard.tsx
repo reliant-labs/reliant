@@ -41,7 +41,7 @@ import Button from "@/components/forge-ui/button";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { HealthIndicator, AutomationRow } from "../../Automations/AutomationRow";
 import { automationMachineLabel } from "../../Automations/daemonChoices";
-import { WorkflowSetupDialog, type SetupMode } from "../../Automations/WorkflowSetupDialog";
+import { openAutomationDialog, type AutomationDialogMode } from "../../Automations/dialog/openAutomationDialog";
 
 export interface TurnedOnCardProps {
   workflowRef: string;
@@ -87,7 +87,8 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
     [triggers.data, workflowRef],
   );
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [setup, setSetup] = useState<{ projectId: string; mode?: SetupMode } | null>(null);
+  const setUp = (target: { projectId: string; mode?: AutomationDialogMode }) =>
+    openAutomationDialog({ workflowRef, workflowTitle, projectId: target.projectId, mode: target.mode });
 
   // Arriving on #automation-<projectId> opens that row and brings it into view.
   useEffect(() => {
@@ -111,7 +112,7 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
             Turned on
           </h2>
           {hasDeclared && units.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setSetup({ projectId: otherProject, mode: "setup" })} disabled={!!setupBlockedReason}>
+            <Button variant="ghost" size="sm" onClick={() => setUp({ projectId: otherProject, mode: "setup" })} disabled={!!setupBlockedReason}>
               Turn on in another project
             </Button>
           )}
@@ -132,11 +133,11 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
         ) : units.length === 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4" data-testid="turned-on-empty">
             <p className="max-w-xl text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Not turned on.</span> Set up {workflowTitle} to run it by itself: {when}.
+              <span className="font-medium text-foreground">Not turned on.</span> Turn on {workflowTitle} to run it by itself: {when}.
               {setupBlockedReason && <span className="mt-1 block text-warning-ink">{setupBlockedReason}</span>}
             </p>
-            <Button variant="primary" size="sm" onClick={() => setSetup({ projectId })} disabled={!!setupBlockedReason}>
-              Set up {workflowTitle}
+            <Button variant="primary" size="sm" onClick={() => setUp({ projectId })} disabled={!!setupBlockedReason}>
+              Turn on {workflowTitle}
             </Button>
           </div>
         ) : (
@@ -148,7 +149,7 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
                 declared={declared}
                 expanded={!!expanded[unit.projectId]}
                 onToggleExpanded={() => setExpanded((prev) => ({ ...prev, [unit.projectId]: !prev[unit.projectId] }))}
-                onSettings={() => setSetup({ projectId: unit.projectId })}
+                onSettings={() => setUp({ projectId: unit.projectId })}
                 workflowRef={workflowRef}
               />
             ))}
@@ -157,8 +158,8 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
 
         {custom.length > 0 && (
           <div className="border-t border-border/60">
-            <h3 className="px-4 pb-1 pt-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Custom automations</h3>
-            <ul aria-label="Custom automations that run this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
+            <h3 className="px-4 pb-1 pt-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Other automations</h3>
+            <ul aria-label="Other automations that run this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
               {custom.map((trigger) => (
                 <AutomationRow key={trigger.id} trigger={trigger} />
               ))}
@@ -167,28 +168,17 @@ export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, 
         )}
 
         <div className="border-t border-border/60 bg-background px-4 py-2 text-xs text-muted-foreground">
-          {hasDeclared ? "Need it on a different schedule or event? " : "Run it on a schedule, a webhook or an app event: "}
+          {hasDeclared ? "Need a different schedule or event? " : "Run it on a schedule or when something happens: "}
           <button
             type="button"
             onClick={onAddCustom}
             className="rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
-            Add a custom automation
+            Add an automation
           </button>
         </div>
       </Card>
 
-      {setup && (
-        <WorkflowSetupDialog
-          open
-          onClose={() => setSetup(null)}
-          workflowRef={workflowRef}
-          workflowTitle={workflowTitle}
-          declared={declared}
-          defaultProjectId={setup.projectId}
-          mode={setup.mode}
-        />
-      )}
     </section>
   );
 }

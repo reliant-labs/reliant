@@ -37,11 +37,10 @@ import { CELCompletionProvider, useCELCompletionContext } from "../CELCompletion
 import { useWorkflowMutations } from "../WorkflowMutationContext";
 import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { Section, SectionFields, SectionLabel } from "./primitives";
-import { ScheduleFields } from "../../Automations/AutomationFormDialog";
+import { ScheduleSentence } from "../../Automations/dialog/ScheduleSentence";
 import { formFromSchedule, scheduleFromForm, validateScheduleForm, type ScheduleFormState } from "../../Automations/scheduleForm";
 import { HealthIndicator } from "../../Automations/AutomationRow";
 import { automationHealth } from "../../../lib/automationHealth";
-import { describeSchedule } from "../../../lib/cronText";
 import {
   canFilter,
   findingFieldLabel,
@@ -331,7 +330,11 @@ function ScheduleSection({ trigger, onChange, disabled, findings }: { trigger: D
   const ids = useId();
   const schedule = scheduleOf(trigger)!;
   const [form, setForm] = useState<ScheduleFormState>(() => formFromSchedule({ cron: schedule.cron, interval: schedule.interval }));
-  const [timezone, setTimezone] = useState(schedule.timezone ?? "");
+  // An unset zone is UTC on the server, so it reads as UTC here; a new
+  // declaration starts in the browser's zone (defaultSource), so "every
+  // weekday at 9" means the same wall-clock time here as in the automation
+  // dialog.
+  const [timezone, setTimezone] = useState(schedule.timezone || "UTC");
   const error = validateScheduleForm(form);
   const apply = (nextForm: ScheduleFormState, nextZone: string) => {
     if (validateScheduleForm(nextForm)) return;
@@ -342,32 +345,21 @@ function ScheduleSection({ trigger, onChange, disabled, findings }: { trigger: D
     <Section>
       <SectionLabel>Schedule</SectionLabel>
       <fieldset disabled={disabled} className="space-y-3">
-        <ScheduleFields
-          fieldId={(name) => `${ids}-${name}`}
-          schedule={form}
+        <ScheduleSentence
+          idPrefix={ids}
+          value={form}
+          timezone={timezone}
           error={error ?? undefined}
           onChange={(patch) => {
             const next = { ...form, ...patch };
             setForm(next);
             apply(next, timezone);
           }}
+          onTimezoneChange={(zone) => {
+            setTimezone(zone);
+            apply(form, zone);
+          }}
         />
-        <div>
-          <label htmlFor={`${ids}-tz`} className="cpv2-field-label">Time zone</label>
-          <input
-            id={`${ids}-tz`}
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            onBlur={() => apply(form, timezone)}
-            placeholder="UTC"
-            className="cpv2-field-input w-full"
-          />
-        </div>
-        {!error && (
-          <p className="cpv2-field-hint !mt-0">
-            {describeSchedule({ ...scheduleFromForm(form), timezone: timezone.trim() || "UTC" })}
-          </p>
-        )}
       </fieldset>
       <FindingList findings={findings} />
     </Section>

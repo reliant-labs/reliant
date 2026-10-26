@@ -46,9 +46,10 @@ function setup(canEditDefinition: boolean) {
   );
   const declare = vi.fn();
   const closePalette = vi.fn();
+  const startAutomation = vi.fn();
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  const hook = renderHook(() => useAddTrigger({ canEditDefinition, declared: existing, declare, closePalette }), { wrapper });
-  return { hook, declare, closePalette };
+  const hook = renderHook(() => useAddTrigger({ canEditDefinition, declared: existing, declare, closePalette, startAutomation }), { wrapper });
+  return { hook, declare, closePalette, startAutomation };
 }
 
 describe("useAddTrigger", () => {
@@ -57,7 +58,6 @@ describe("useAddTrigger", () => {
     act(() => hook.result.current.chooseBuiltin("schedule"));
     expect(closePalette).toHaveBeenCalled();
     expect(declare).toHaveBeenCalledWith(expect.objectContaining({ name: "schedule-2", source: expect.objectContaining({ case: "schedule" }) }), undefined);
-    expect(hook.result.current.personal).toBeNull();
   });
 
   it("declares an integration trigger with the type's events and its catalog ref", async () => {
@@ -73,16 +73,16 @@ describe("useAddTrigger", () => {
     expect(getCatalogEntry).not.toHaveBeenCalled();
   });
 
-  it("on a built-in, the same pick becomes a personal trigger instead of a declaration", async () => {
-    const { hook, declare, closePalette } = setup(false);
+  it("on a built-in, the same pick starts an automation with that WHEN instead of a declaration", async () => {
+    const { hook, declare, closePalette, startAutomation } = setup(false);
     await act(() => hook.result.current.chooseCatalog(issueOpened));
     expect(declare).not.toHaveBeenCalled();
     expect(closePalette).toHaveBeenCalled();
-    expect(hook.result.current.personal).toMatchObject({
-      catalogRef: "github/issue.opened@1",
-      trigger: { source: { case: "integration", value: { integration: "github" } } },
-    });
-    act(() => hook.result.current.closePersonal());
-    expect(hook.result.current.personal).toBeNull();
+    expect(startAutomation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        catalogRef: "github/issue.opened@1",
+        trigger: expect.objectContaining({ source: { case: "integration", value: expect.objectContaining({ integration: "github" }) } }),
+      }),
+    );
   });
 });

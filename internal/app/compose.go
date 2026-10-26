@@ -998,6 +998,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Senders:      g.TriggerSenders(),
 		Options:      optionsChecker{svc: g.InputOptions()},
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
+		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
 	})
 }
 

@@ -24,6 +24,7 @@ import {
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
+import { useAutomationDialogStore } from "../dialog/openAutomationDialog";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
 import { setTransport } from "@/lib/connect";
 import { serviceHandlers } from "@/test/serviceTransport";
@@ -407,7 +408,7 @@ describe("AutomationsListPage", () => {
     );
   });
 
-  it("points to the Library when nothing runs by itself, and still offers a custom automation", async () => {
+  it("points to the Library when nothing runs by itself, and still offers a new automation", async () => {
     listTriggers.mockResolvedValue({ triggers: [] });
 
     renderAtRoute(<AutomationsListPage />);
@@ -416,8 +417,8 @@ describe("AutomationsListPage", () => {
     expect(screen.getByRole("link", { name: "Browse the Library" })).toHaveAttribute("href", "/workflows/library");
     expect(screen.queryByTestId("coming-up-timeline")).toBeNull();
     expect(screen.queryByText("Not enabled yet")).toBeNull();
-    await userEvent.click(within(screen.getByTestId("automations-empty")).getByRole("button", { name: "Custom automation" }));
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await userEvent.click(within(screen.getByTestId("automations-empty")).getByRole("button", { name: "New automation" }));
+    expect(useAutomationDialogStore.getState().request).toEqual({});
   });
 
   it("offers a retry when the list cannot load", async () => {

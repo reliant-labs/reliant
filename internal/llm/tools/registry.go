@@ -117,11 +117,13 @@ const (
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
 
-	// list_triggers shows the user's triggers. There is no tool that creates
-	// or enables one: the user does that in the app.
+	// list_triggers shows the user's triggers, and draft_automation proposes
+	// one for the user to review. There is no tool that creates or enables
+	// one: the user does that in the app, from the draft or from scratch.
 	ToolListTriggers      = "list_triggers"
 	ToolFireTrigger       = "fire_trigger"
 	ToolListTriggerEvents = "list_trigger_events"
+	ToolDraftAutomation   = "draft_automation"
 
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
@@ -793,6 +795,9 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolListTriggers, (*ToolsFactory).ListTriggers, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 		{ToolFireTrigger, (*ToolsFactory).FireTrigger, []ToolTag{TagWorkflow, TagRuns}, PlacementServer, false},
 		{ToolListTriggerEvents, (*ToolsFactory).ListTriggerEvents, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
+		// Proposes an automation; the user reviews it in the app and presses
+		// Create. Pure validation, so it runs anywhere.
+		{ToolDraftAutomation, (*ToolsFactory).DraftAutomation, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
 
 		// Workflow discovery tools
 		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},

@@ -395,6 +395,9 @@
           },
           {
             "Name": "PreviewReplay"
+          },
+          {
+            "Name": "DraftAutomation"
           }
         ]
       },

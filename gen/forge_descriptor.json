@@ -10115,6 +10115,22 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "DraftAutomation",
+          "InputType": "DraftAutomationRequest",
+          "OutputType": "DraftAutomationResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.DraftAutomationRequest",
+          "OutputTypeFQ": "reliant.v1.DraftAutomationResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/trigger.proto",
@@ -10174,6 +10190,36 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.TriggerFailure"
+          }
+        ],
+        "DraftAutomationRequest": [
+          {
+            "Name": "description",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "timezone",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DraftAutomationResponse": [
+          {
+            "Name": "draft",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.AutomationDraft"
           }
         ],
         "EnableWorkflowRequest": [
@@ -10502,6 +10548,22 @@
       },
       "Audience": "user",
       "Schemas": {
+        "reliant.v1.AutomationDraft": [
+          {
+            "name": "definition",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerDefinition"
+          },
+          {
+            "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "assumptions",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
         "reliant.v1.CreateTriggerRequest": [
           {
             "name": "trigger",
@@ -10551,6 +10613,38 @@
             "kind": "message",
             "type_name": "reliant.v1.TriggerFailure",
             "repeated": true
+          }
+        ],
+        "reliant.v1.DraftAutomationRequest": [
+          {
+            "name": "description",
+            "kind": "string",
+            "validate": {
+              "min_len": 1,
+              "max_len": 4000
+            }
+          },
+          {
+            "name": "project_id",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          },
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "timezone",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DraftAutomationResponse": [
+          {
+            "name": "draft",
+            "kind": "message",
+            "type_name": "reliant.v1.AutomationDraft"
           }
         ],
         "reliant.v1.EnableWorkflowRequest": [
@@ -11463,12 +11557,15 @@
         ]
       },
       "SchemaFiles": {
+        "reliant.v1.AutomationDraft": "reliant/v1/trigger.proto",
         "reliant.v1.CreateTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.CreateTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.DisableWorkflowRequest": "reliant/v1/trigger.proto",
         "reliant.v1.DisableWorkflowResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.DraftAutomationRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.DraftAutomationResponse": "reliant/v1/trigger.proto",
         "reliant.v1.EnableWorkflowRequest": "reliant/v1/trigger.proto",
         "reliant.v1.EnableWorkflowResponse": "reliant/v1/trigger.proto",
         "reliant.v1.FireTriggerRequest": "reliant/v1/trigger.proto",
@@ -41126,7 +41223,7 @@
     "reliant/v1/token.proto": "280e0dcd903d116bb7805890cace95e2440c24d33047fcac2e2cba1b5a986bd2",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
-    "reliant/v1/trigger.proto": "865ce2ff003ba8acd15c4f2e664e149a00e7e6c840e4fcae5a5503b93f4a411a",
+    "reliant/v1/trigger.proto": "7f3ee97c2c0865739de41f0629144e9160331b534a46ff228825dd0ebae53981",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
     "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"

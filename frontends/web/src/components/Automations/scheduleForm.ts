@@ -57,8 +57,8 @@ export const PRESET_OPTIONS: Array<{ value: SchedulePreset; label: string }> = [
   { value: "daily", label: "Every day" },
   { value: "weekdays", label: "Every weekday" },
   { value: "weekly", label: "Every week" },
-  { value: "interval", label: "Every N minutes or hours" },
-  { value: "advanced", label: "Advanced (cron)" },
+  { value: "interval", label: "Every few minutes or hours" },
+  { value: "advanced", label: "Custom (cron)" },
 ];
 
 export const WEEKDAY_OPTIONS = [

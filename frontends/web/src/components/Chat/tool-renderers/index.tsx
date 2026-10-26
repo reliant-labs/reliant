@@ -16,6 +16,7 @@ import { SpawnToolRenderer } from './SpawnToolRenderer';
 import { RunToolRenderer } from './RunToolRenderer';
 import { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 import { RequestMachineToolRenderer } from './RequestMachineToolRenderer';
+import { DraftAutomationToolRenderer, isDraftAutomationTool } from './DraftAutomationToolRenderer';
 import { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';
 import {
   isShellTool,
@@ -86,6 +87,9 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <GenerateVideoToolRenderer ctx={ctx} />;
   }
 
+  if (isDraftAutomationTool(toolName)) {
+    return <DraftAutomationToolRenderer ctx={ctx} />;
+  }
   if (isRequestMachineTool(toolName)) {
     return <RequestMachineToolRenderer ctx={ctx} />;
   }
@@ -108,4 +112,5 @@ export { SpawnToolRenderer } from './SpawnToolRenderer';
 export { RunToolRenderer } from './RunToolRenderer';
 export { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 export { RequestMachineToolRenderer, RequestMachineCard, requestMachineReason } from './RequestMachineToolRenderer';
+export { DraftAutomationCard, DraftAutomationToolRenderer, draftFromToolResult, isDraftAutomationTool } from './DraftAutomationToolRenderer';
 export { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';

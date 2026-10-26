@@ -931,6 +931,9 @@
     "internal/handlers/trigger/handlers_scaffold_disable_workflow_test.go": {
       "scaffolded_at": "2026-10-14T19:47:45Z"
     },
+    "internal/handlers/trigger/handlers_scaffold_draft_automation_test.go": {
+      "scaffolded_at": "2026-10-26T04:30:59Z"
+    },
     "internal/handlers/trigger/handlers_scaffold_enable_workflow_test.go": {
       "scaffolded_at": "2026-10-14T19:47:45Z"
     },
