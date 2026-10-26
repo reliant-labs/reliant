@@ -21,7 +21,7 @@ import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { serviceHandlers } from "@/test/serviceTransport";
 import { queryClient as presetQueryClient } from "@/lib/query-client";
-import { screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -98,6 +98,12 @@ beforeEach(() => {
     }));
 });
 afterEach(() => {
+  // Unmount BEFORE the transport goes. Testing Library's own cleanup is an
+  // afterEach registered at import, so it runs after this one: until then the
+  // run detail is still mounted, and a GetChat its detail query starts in that
+  // window (late under load) went to the real network and failed the test
+  // ("This test made a real network request … ChatService/GetChat").
+  cleanup();
   setTransport(null);
   // The preset reads are cached in the app's query client; no test may see
   // another's answers.

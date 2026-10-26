@@ -85,8 +85,26 @@ describe("MobileProjectList", () => {
 
     expect(selectProject).toHaveBeenCalledWith(
       expect.objectContaining({ id: "p2", name: "forge" }),
+      { restoreWorkspace: false },
     );
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
+  });
+
+  // The freeze: the switch used to be awaited before navigating, behind a row
+  // spinner, so every serial RPC it made (chats, worktree, main worktree, the
+  // remembered chat) — none with a timeout — held the user on this screen. A
+  // switch that never settles must still take the user to the chat list.
+  it("navigates without waiting for the switch to finish", async () => {
+    selectProject.mockImplementationOnce(() => new Promise<void>(() => {}));
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(screen.getByText("forge"));
+
+    expect(selectProject).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
+    // No row is left disabled behind a pending switch.
+    expect(screen.getByText("forge").closest("button")).not.toBeDisabled();
   });
 
   it("navigating back without selecting doesn't call selectProject", async () => {

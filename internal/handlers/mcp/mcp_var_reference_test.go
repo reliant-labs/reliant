@@ -157,6 +157,44 @@ func TestMCPService_ReferencesReachStoreResponsesAndDaemonUnresolved(t *testing.
 	require.Positive(t, writeConfig, "no mcp.write_config payload was recorded")
 }
 
+// ${HOME} is the reference users actually write ("${HOME}/bin/server",
+// "--root=${HOME}/code"), and every process has one, so it is the case a
+// server-side expansion would silently get wrong: the server's home is not
+// the user's. InstallServer must store it exactly as written.
+func TestMCPService_InstallServerStoresHomeReferenceVerbatim(t *testing.T) {
+	const serverHome = "/server/home/must-not-leak"
+	t.Setenv("HOME", serverHome)
+	ctx, svc, manager, projectID := setupMCPServiceToggleTest(t)
+	manager.startErr = nil
+	require.NoError(t, svc.deps.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+		ProjectID: projectID,
+		DaemonID:  "daemon-test",
+		PushedAt:  time.Now().UTC(),
+	}))
+
+	args := []string{"--root", "${HOME}/code", "--config=${HOME}/.config/server.json"}
+	resp, err := svc.InstallServer(ctx, connect.NewRequest(&reliantv1.InstallServerRequest{
+		ProjectId: projectID,
+		Name:      "home-ref",
+		Scope:     reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
+		Config:    &reliantv1.MCPServerConfig{Command: "${HOME}/bin/server", Args: args},
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success, resp.Msg.Message)
+
+	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
+	require.NoError(t, err)
+	require.NotNil(t, record.MCPConfigs)
+	require.NotContains(t, *record.MCPConfigs, serverHome, "the stored row carries the server's HOME")
+
+	stored, ok, err := readScopeConfigFromStoredRecord(record, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT)
+	require.NoError(t, err)
+	require.True(t, ok, "no project-scope MCP config was stored")
+	require.Contains(t, stored.MCPServers, "home-ref")
+	require.Equal(t, "${HOME}/bin/server", stored.MCPServers["home-ref"].Command)
+	require.Equal(t, args, stored.MCPServers["home-ref"].Args)
+}
+
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
 	encoded, err := json.Marshal(v)
