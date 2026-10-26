@@ -1,0 +1,609 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "process": {
+    "name": "reliant-gateway",
+    "binary": "reliant",
+    "args": [
+      "server",
+      "gateway"
+    ],
+    "root": "gateway",
+    "serviceNames": [
+      "daemon-gateway"
+    ],
+    "workloads": [
+      "daemon-gateway"
+    ],
+    "rpcServices": [
+      "reliant.v1.ToolsDaemonService"
+    ]
+  },
+  "dashboard": {
+    "sections": [
+      {
+        "id": "rpc",
+        "title": "RPC health"
+      },
+      {
+        "id": "runtime",
+        "title": "Runtime"
+      },
+      {
+        "id": "workload",
+        "title": "Workload saturation"
+      },
+      {
+        "id": "logs",
+        "title": "Logs"
+      }
+    ],
+    "id": "process-reliant-gateway",
+    "title": "reliant: reliant-gateway",
+    "description": "Deployed process reliant server gateway. Runtime and workload panels appear once, independent of RPC breakdowns.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      },
+      {
+        "panelIds": [
+          "requests",
+          "errors",
+          "p95",
+          "request-rate",
+          "error-rate",
+          "latency"
+        ],
+        "id": "rpc-procedure",
+        "label": "RPC procedure (metrics)",
+        "field": "metric.attr.procedure",
+        "signal": "metrics"
+      },
+      {
+        "panelIds": [
+          "red-by-rpc"
+        ],
+        "id": "rpc-service",
+        "label": "RPC service (traces)",
+        "field": "span.attr.rpc.service",
+        "signal": "traces"
+      },
+      {
+        "panelIds": [
+          "red-by-rpc"
+        ],
+        "id": "rpc-method",
+        "label": "RPC method (traces)",
+        "field": "span.attr.rpc.method",
+        "signal": "traces"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "section": "rpc",
+        "id": "requests",
+        "title": "Requests",
+        "kind": "number",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "increase",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "section": "rpc",
+        "id": "errors",
+        "title": "Server faults",
+        "kind": "number",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "server faults",
+            "agg": "increase",
+            "field": "rpc.server.errors",
+            "metricType": "sum",
+            "where": [
+              {
+                "field": "metric.attr.error_class",
+                "op": "eq",
+                "value": "server"
+              }
+            ]
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "section": "rpc",
+        "id": "p95",
+        "title": "p95 RPC duration",
+        "kind": "number",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "rpc.server.duration",
+            "metricType": "histogram"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "s",
+        "width": 8,
+        "height": 4
+      },
+      {
+        "section": "rpc",
+        "id": "request-rate",
+        "title": "Request rate by process",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "rate",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "count",
+        "width": 8,
+        "height": 7
+      },
+      {
+        "section": "rpc",
+        "id": "error-rate",
+        "title": "Server fault rate by process",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "server faults",
+            "agg": "rate",
+            "field": "rpc.server.errors",
+            "metricType": "sum",
+            "where": [
+              {
+                "field": "metric.attr.error_class",
+                "op": "eq",
+                "value": "server"
+              }
+            ]
+          },
+          {
+            "label": "requests",
+            "agg": "rate",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
+          }
+        ],
+        "ratio": true,
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "percent",
+        "width": 8,
+        "height": 7
+      },
+      {
+        "section": "rpc",
+        "id": "latency",
+        "title": "p95 duration by process",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "rpc.server.duration",
+            "metricType": "histogram"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "s",
+        "width": 8,
+        "height": 7
+      },
+      {
+        "section": "rpc",
+        "id": "red-by-rpc",
+        "title": "Rate, errors and latency by RPC",
+        "kind": "table",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          },
+          {
+            "label": "errors",
+            "agg": "count",
+            "where": [
+              {
+                "field": "span.status",
+                "op": "eq",
+                "value": "error"
+              }
+            ]
+          },
+          {
+            "label": "p50",
+            "agg": "quantile",
+            "quantile": 0.5,
+            "field": "span.duration"
+          },
+          {
+            "label": "p95",
+            "agg": "quantile",
+            "quantile": 0.95,
+            "field": "span.duration"
+          },
+          {
+            "label": "p99",
+            "agg": "quantile",
+            "quantile": 0.99,
+            "field": "span.duration"
+          }
+        ],
+        "limit": 50,
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          },
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          },
+          {
+            "field": "span.name",
+            "op": "match",
+            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+          }
+        ],
+        "groupBy": [
+          "span.name"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "section": "runtime",
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "runtime",
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "runtime",
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "section": "logs",
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "section": "logs",
+        "id": "logs",
+        "title": "Process logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "section": "workload",
+        "id": "cpu-vs-limit",
+        "title": "CPU against its limit",
+        "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.cpu_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "percent",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "workload",
+        "id": "memory-vs-limit",
+        "title": "Memory against its limit",
+        "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.memory_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "percent",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "workload",
+        "id": "restarts",
+        "title": "Container restarts",
+        "description": "The highest restart count among each workload's containers; a step is a restart.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "restarts",
+            "agg": "max",
+            "field": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "daemon-gateway"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-process-reliant-gateway",
+      "title": "reliant-gateway: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "in",
+          "values": [
+            "daemon-gateway"
+          ]
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ]
+}

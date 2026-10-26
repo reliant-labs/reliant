@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -125,6 +126,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	if err != nil {
 		// Refused (a nearly full disk): it never starts, and says why.
 		return json.Marshal(daemon.CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()})
+	}
+
+	// credentials: none is a sandbox, not just a scrubbed environment: the
+	// command runs where the daemon's credential files are absent. It wraps
+	// OUTSIDE the heavy-slot rewrite above, so the slot wrapper runs inside it.
+	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+		return json.Marshal(daemon.CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal})
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer

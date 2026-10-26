@@ -174,7 +174,7 @@ func install(output io.Writer, s Settings, level slog.Level, options ...installO
 	// withReporting, as in serverkit's logger, so they see the level the
 	// error-class policy decided.
 	handler = newCallSiteHandler(observe.NewLogHandler(handler, observe.Config{}))
-	handler = newUserHandler(handler)
+	handler = newScopeHandler(handler)
 	handler = withReporting(handler)
 	if cfg.fields != nil {
 		handler = newIdentityHandler(handler, cfg.fields)

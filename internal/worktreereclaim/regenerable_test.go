@@ -16,9 +16,9 @@ func TestReconcile_ToolOutputIsRegenerable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds 7 git fixtures; TestRebuildablePath_Entries covers the rule under -short")
 	}
-	f := newFixture(t)
-	f.idle()
-	ignore(t, f, ".forge/*\n.tools/\ntmp/\n")
+	// One fixture per case, in parallel: the seven in a row on one fixture
+	// were this package's critical path (157s of a 226s run at load ~100,
+	// against the race-enabled release gate's 5-minute package timeout).
 	for name, rel := range map[string]string{
 		"forge-tmp":            ".forge/tmp/render-123/main.k",
 		"forge-generate-cache": ".forge/generate-cache.json",
@@ -28,11 +28,17 @@ func TestReconcile_ToolOutputIsRegenerable(t *testing.T) {
 		"tmp":                  "tmp/notes.md",
 		"tmp-ci":               "tmp/ci/summary.txt",
 	} {
-		w := f.worktree("regen-"+name, "feat/regen-"+name)
-		write(t, filepath.Join(w.Path, filepath.FromSlash(rel)), "x")
-		if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-			t.Fatalf("%s (%s): got %+v, want removed", name, rel, got)
-		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t)
+			f.idle()
+			ignore(t, f, ".forge/*\n.tools/\ntmp/\n")
+			w := f.worktree("regen-"+name, "feat/regen-"+name)
+			write(t, filepath.Join(w.Path, filepath.FromSlash(rel)), "x")
+			if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
+				t.Fatalf("%s (%s): got %+v, want removed", name, rel, got)
+			}
+		})
 	}
 }
 

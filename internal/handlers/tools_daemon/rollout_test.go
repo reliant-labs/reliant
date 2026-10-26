@@ -178,9 +178,42 @@ func ackOn(t *testing.T, stream *pipeStream, requestID string) {
 // about requestID on stream.
 func answerStatus(t *testing.T, stream *pipeStream, requestID string, state toolexec.ToolRequestState) {
 	t.Helper()
-	cmd := expect(t, stream, "a tool.status question", func(m *reliantv1.ServerMessage) bool {
-		return m.GetDaemonCommand().GetCommandType() == toolexec.ToolStatusCommand
-	}).GetDaemonCommand()
+	cmd := expect(t, stream, "a tool.status question", isToolStatusQuestion).GetDaemonCommand()
+	replyStatus(t, stream, cmd, requestID, state)
+}
+
+func isToolStatusQuestion(m *reliantv1.ServerMessage) bool {
+	return m.GetDaemonCommand().GetCommandType() == toolexec.ToolStatusCommand
+}
+
+// answerEveryStatusUntil plays the daemon answering EVERY tool.status question
+// it is asked about requestID on stream, as a real daemon does, until the call
+// returns, and returns its outcome. The worker asks again whenever an answer
+// does not reach it — a replica still tearing down the old stream answered
+// first, or the round trip outlasted its timeout on a loaded host — so a
+// daemon that answers only the first question leaves the call waiting out its
+// own deadline.
+func answerEveryStatusUntil(t *testing.T, stream *pipeStream, requestID string, state toolexec.ToolRequestState, results <-chan callResult) callResult {
+	t.Helper()
+	timeout := time.After(60 * time.Second)
+	for {
+		select {
+		case r := <-results:
+			return r
+		case msg := <-stream.toDaemon:
+			if isToolStatusQuestion(msg) {
+				replyStatus(t, stream, msg.GetDaemonCommand(), requestID, state)
+			}
+		case <-timeout:
+			t.Fatal("the tool call never returned")
+			return callResult{}
+		}
+	}
+}
+
+// replyStatus answers the tool.status question cmd about requestID with state.
+func replyStatus(t *testing.T, stream *pipeStream, cmd *reliantv1.DaemonCommandRequest, requestID string, state toolexec.ToolRequestState) {
+	t.Helper()
 	var q toolexec.ToolStatusRequest
 	require.NoError(t, json.Unmarshal(cmd.Payload, &q))
 	require.Equal(t, requestID, q.RequestID)
@@ -340,9 +373,62 @@ func TestRolloutFailsCleanlyWhenTheDaemonRestartedMidCall(t *testing.T) {
 	podA.Close() // the stream drops; the daemon process restarts
 	streamB, ok := attach(t, podB, userID, daemonID)
 	require.True(t, ok)
-	answerStatus(t, streamB, req.RequestId, toolexec.ToolRequestUnknown)
 
-	got := outcome(t, results)
+	requireLostAndSaysWhy(t, answerEveryStatusUntil(t, streamB, req.RequestId, toolexec.ToolRequestUnknown, results))
+}
+
+// The same restart, with the old replica slow to let go: until its teardown
+// unsubscribes it, a replica whose stream just dropped still takes the
+// daemon's commands, and answers the worker's first tool.status — "not
+// connected" — before the replica holding the new stream can. On a loaded
+// host that lag is real (the release gate, load 65-140); here it is pinned by
+// a stand-in for the old replica that answers the first question it sees.
+// The worker asks again, the daemon answers, and the call still fails
+// promptly with the right reason.
+func TestRolloutFailsCleanlyWhenTheOldReplicaAnswersFirst(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: an embedded NATS server and two gateway replicas; runs in task test")
+	}
+	cluster := newRolloutCluster(t)
+	const userID, daemonID = "user-1", "daemon-1"
+	podA, podB := cluster.replica(), cluster.replica()
+	router := cluster.worker(daemonID)
+
+	streamA, _ := attach(t, podA, userID, daemonID)
+	results := call(router, userID)
+	req := toolRequestOn(t, streamA)
+
+	// The old replica, not yet unsubscribed: it answers the first command
+	// the way a replica that no longer holds the stream does.
+	lagging := cluster.connect()
+	answered := make(chan struct{})
+	var once sync.Once
+	sub, err := lagging.Subscribe("daemon.command."+userID+"."+daemonID, func(msg *nats.Msg) {
+		once.Do(func() {
+			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon ` + daemonID + ` is not connected for user ` + userID + `","error_code":"` + toolexec.ErrorCodeDaemonRoundTrip + `"}`))
+			close(answered)
+		})
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, lagging.Flush())
+
+	podA.Close()
+	streamB, ok := attach(t, podB, userID, daemonID)
+	require.True(t, ok)
+
+	requireLostAndSaysWhy(t, answerEveryStatusUntil(t, streamB, req.RequestId, toolexec.ToolRequestUnknown, results))
+	select {
+	case <-answered:
+	default:
+		t.Fatal("the lagging replica was never asked: this test did not exercise the race it pins")
+	}
+}
+
+// requireLostAndSaysWhy asserts the call failed as a request its restarted
+// daemon no longer knows.
+func requireLostAndSaysWhy(t *testing.T, got callResult) {
+	t.Helper()
 	require.NoError(t, got.err)
 	require.Equal(t, toolexec.ErrorCodeDaemonInterrupted, got.resp.ErrorCode)
 	require.Contains(t, got.resp.ErrorMessage, "no longer knows the request")

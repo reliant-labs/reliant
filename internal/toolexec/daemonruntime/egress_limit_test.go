@@ -54,6 +54,7 @@ func TestDaemonEgressLimits_LocalCeilingIsHigherThanManagedAndConfigurable(t *te
 // The limiter is on the executor the daemon really runs tools through, so a
 // fetch past the limit comes back as the fail-soft tool result and never dials.
 func TestNewDaemonClient_FetchIsEgressLimited(t *testing.T) {
+	t.Parallel() // its own temp dirs and servers; off the package's serial phase
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits++

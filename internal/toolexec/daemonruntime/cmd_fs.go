@@ -593,7 +593,7 @@ func handleFSGlob(ctx context.Context, payload []byte) ([]byte, error) {
 				}
 			}
 			truncated := maxResults > 0 && len(files) >= maxResults
-			return json.Marshal(daemon.GlobResult{Files: files, Truncated: truncated})
+			return json.Marshal(daemon.GlobResult{Files: withoutCredentialFiles(files), Truncated: truncated})
 		}
 		// Fall through to doublestar on rg failure
 	}
@@ -607,7 +607,7 @@ func handleFSGlob(ctx context.Context, payload []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob: %w", err)
 	}
-	return json.Marshal(daemon.GlobResult{Files: files, Truncated: truncated})
+	return json.Marshal(daemon.GlobResult{Files: withoutCredentialFiles(files), Truncated: truncated})
 }
 
 // =============================================================================
@@ -789,7 +789,30 @@ func handleFSSearch(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	truncated := maxResults > 0 && len(matches) >= maxResults
-	return json.Marshal(daemon.SearchResult{Matches: matches, Truncated: truncated})
+	return json.Marshal(daemon.SearchResult{Matches: withoutCredentialMatches(matches), Truncated: truncated})
+}
+
+// withoutCredentialFiles drops the Reliant credential files from a list of
+// paths a search or glob found. A search rooted at the home directory would
+// otherwise print the daemon's PAT as a match.
+func withoutCredentialFiles(files []string) []string {
+	out := files[:0:0]
+	for _, f := range files {
+		if !daemonpolicy.IsReliantCredentialFile(f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func withoutCredentialMatches(matches []daemon.SearchMatch) []daemon.SearchMatch {
+	out := matches[:0:0]
+	for _, m := range matches {
+		if !daemonpolicy.IsReliantCredentialFile(m.File) {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // =============================================================================
@@ -863,7 +886,7 @@ func handleFSFindReplace(ctx context.Context, payload []byte) ([]byte, error) {
 
 	resp := daemon.FindReplaceResult{}
 
-	for _, filePath := range files {
+	for _, filePath := range withoutCredentialFiles(files) {
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			continue
