@@ -21,6 +21,9 @@ import Button from "@/components/forge-ui/button";
 import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 
+import { AskReliantButton } from "./AskReliant/AskReliant";
+import { useObsAskContext } from "./AskReliant/askReliantContext";
+import { traceEnvName } from "./AskReliant/askReliantPrompt";
 import { AttributeTable } from "./AttributeTable";
 import { ExploreLink } from "./Metrics/ExploreLink";
 import { tracePivot, useExploreHref } from "./Metrics/pivots";
@@ -48,6 +51,7 @@ export function TraceDetail({
   navigate: ObsNavigate;
 }) {
   const trace = useTrace(scope, traceId);
+  const { environments } = useObsAskContext();
   const spans = trace.data?.spans ?? [];
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
   const selected = spans.find((span) => span.spanId === spanId) ?? null;
@@ -124,6 +128,7 @@ export function TraceDetail({
             {shortId(traceId)}
           </span>
           {extent && <span className="text-xs text-muted-foreground">{formatTimestamp(extent.startMs)}</span>}
+          <AskReliantButton subject={{ kind: "trace", traceId, env: traceEnvName(scope.envIds, environments, root?.resource) }} />
           <Button
             variant="outline"
             size="sm"

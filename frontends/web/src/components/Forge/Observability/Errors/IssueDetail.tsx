@@ -21,6 +21,7 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { ActivityFeed } from "../../Activity/ActivityFeed";
+import { AskReliantButton } from "../AskReliant/AskReliant";
 import { AttributeTable } from "../AttributeTable";
 import { shortCommit } from "../deliveryScope";
 import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
@@ -153,6 +154,9 @@ function IssueBody({
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={issue.status} />
           <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{issue.title || issue.exceptionType || issue.fingerprint}</h3>
+          <span className="ml-auto">
+            <AskReliantButton subject={{ kind: "issue", issueId: issue.id, env: issue.envName || null }} />
+          </span>
         </div>
         {issue.culprit && <p className="break-all font-mono text-xs text-muted-foreground" data-testid="obs-issue-culprit">{issue.culprit}</p>}
         <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">

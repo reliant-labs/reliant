@@ -58,6 +58,7 @@ import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/ob
 import { cn } from "@/lib/utils";
 
 import { AlertNotifications } from "./AlertNotifications";
+import { ObsAskContextValue } from "./AskReliant/askReliantContext";
 import { AlertsView } from "./AlertsView";
 import { ObsChartMarkersProvider } from "./charts/UPlotChart";
 import { compareParam, healthWindowOf, parseCompareParam } from "./deliveryScope";
@@ -178,6 +179,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
+  const askContext = useMemo(() => ({ environments, forgeProject: place.kind === "project" ? place.project : undefined }), [environments, place]);
 
   // Narrowed to one service, the signal views it neither sends nor declares
   // are not offered and the idle ones are muted (serviceSignals.ts). The view
@@ -204,6 +206,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
   const selectableViews = tabViews.filter((id) => id === view || viewState(id).kind === "available");
 
   return (
+    <ObsAskContextValue.Provider value={askContext}>
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
       <div className={cn("flex flex-wrap items-center gap-3", consoleChrome ? "justify-end" : "justify-between")}>
         {!consoleChrome && (
@@ -439,5 +442,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         </ObsChartMarkersProvider>
       </div>
     </div>
+    </ObsAskContextValue.Provider>
   );
 }
