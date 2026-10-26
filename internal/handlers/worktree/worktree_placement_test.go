@@ -262,6 +262,56 @@ func TestCreateWorktree_NoChatContextUsesDefaultMachine(t *testing.T) {
 	assertPlacedOn(t, f.router, wt, placementDefaultDaemon)
 }
 
+// placingRouter is placementRouter for a router that can place a machine from
+// the registry: default resolution says the user's laptop, and an id resolves
+// the machine it names.
+type placingRouter struct {
+	*placementRouter
+}
+
+func (r *placingRouter) PlacementDaemonID(_ context.Context, _ string, daemonID string) (string, error) {
+	if daemonID == "" {
+		return "daemon-laptop", nil
+	}
+	return daemonID, nil
+}
+
+// TestCreateWorktree_UnpinnedChatIsPlacedOnTheMachineWithTheProject is the
+// worktree half of the incident (research/CHAT_MACHINE_PLACEMENT.md): a chat
+// that was never pinned has its tools on whichever machine default resolution
+// names, which with a laptop connected is the laptop, where the project is not
+// installed. The new workspace goes where the project is, the machine the chat
+// is pinned to at its next run.
+func TestCreateWorktree_UnpinnedChatIsPlacedOnTheMachineWithTheProject(t *testing.T) {
+	t.Parallel()
+
+	f := newPlacementFixture(t)
+	f.svc.deps.Router = &placingRouter{f.router}
+	require.NoError(t, f.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: "daemon-vm", UserID: f.userID}))
+	require.NoError(t, f.repo.UpsertProjectDaemon(context.Background(), f.projectID, "daemon-vm", "/work/project", nil))
+	require.NoError(t, f.repo.MarkProjectDaemonInstalled(context.Background(), f.projectID, "daemon-vm"))
+	chatID := f.chat(t, f.userID, "", "")
+
+	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID})
+	require.NoError(t, err)
+
+	assertPlacedOn(t, f.router, wt, "daemon-vm")
+}
+
+// With no install recorded for the project there is nothing to narrow to, so
+// the router's default answers, as before.
+func TestCreateWorktree_NoInstallsRecordedUsesTheRoutersDefault(t *testing.T) {
+	t.Parallel()
+
+	f := newPlacementFixture(t)
+	f.svc.deps.Router = &placingRouter{f.router}
+
+	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{})
+	require.NoError(t, err)
+
+	assertPlacedOn(t, f.router, wt, "daemon-laptop")
+}
+
 // TestCreateWorktree_RejectsAnotherUsersChat: chat_id now decides which
 // machine a checkout lands on, so it must not accept a chat the caller does not
 // own.

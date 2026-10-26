@@ -65,7 +65,7 @@ function navItems(): NavItem[] {
     { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
     ...(forge
       ? [
-          { to: "/forge", label: "Apps", icon: Boxes },
+          { to: "/apps", label: "Apps", icon: Boxes },
           { to: "/forge/observability", label: "Observability", icon: Activity },
         ]
       : []),

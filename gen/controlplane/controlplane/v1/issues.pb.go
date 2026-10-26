@@ -219,7 +219,11 @@ type Issue struct {
 	LastVersion  string                 `protobuf:"bytes,16,opt,name=last_version,json=lastVersion,proto3" json:"last_version,omitempty"`
 	// Events in the queried window.
 	Events int64 `protobuf:"varint,17,opt,name=events,proto3" json:"events,omitempty"`
-	// Distinct sessions (browser) or traces (server) in the queried window.
+	// Distinct things the issue touched in the queried window, counted over
+	// affected_unit: sessions for a browser issue; for a server issue the users its
+	// events name when at least half of them do, else the chats, threads or workflows
+	// they ran for (a worker or reconciler logs on behalf of a run, not a request),
+	// else traces.
 	Affected int64 `protobuf:"varint,18,opt,name=affected,proto3" json:"affected,omitempty"`
 	// Hourly event counts across the queried window, oldest first.
 	Trend           []*IssueTrendPoint     `protobuf:"bytes,19,rep,name=trend,proto3" json:"trend,omitempty"`
@@ -237,7 +241,10 @@ type Issue struct {
 	// The issue source its events carry (a log record's issue.source, forge
 	// observe.IssueSource): a report filed like an error without being one, such
 	// as an agent's bug report ("llm_bug_report"). Empty for an error.
-	Source        string `protobuf:"bytes,27,opt,name=source,proto3" json:"source,omitempty"`
+	Source string `protobuf:"bytes,27,opt,name=source,proto3" json:"source,omitempty"`
+	// What affected counted: "users", "chats", "threads", "workflows", "traces" or
+	// "sessions". Empty on a control plane older than the field.
+	AffectedUnit  string `protobuf:"bytes,28,opt,name=affected_unit,json=affectedUnit,proto3" json:"affected_unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -461,6 +468,13 @@ func (x *Issue) GetSource() string {
 	return ""
 }
 
+func (x *Issue) GetAffectedUnit() string {
+	if x != nil {
+		return x.AffectedUnit
+	}
+	return ""
+}
+
 var File_controlplane_v1_issues_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_issues_proto_rawDesc = "" +
@@ -468,7 +482,7 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"\x1ccontrolplane/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"Y\n" +
 	"\x0fIssueTrendPoint\x12.\n" +
 	"\x04hour\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04hour\x12\x16\n" +
-	"\x06events\x18\x02 \x01(\x03R\x06events\"\xa3\b\n" +
+	"\x06events\x18\x02 \x01(\x03R\x06events\"\xc8\b\n" +
 	"\x05Issue\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12:\n" +
 	"\bplatform\x18\x02 \x01(\x0e2\x1e.controlplane.v1.IssuePlatformR\bplatform\x12\x15\n" +
@@ -501,7 +515,8 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"mergedInto\x12\"\n" +
 	"\fsymbolicated\x18\x19 \x01(\bR\fsymbolicated\x12\x18\n" +
 	"\aversion\x18\x1a \x01(\x05R\aversion\x12\x16\n" +
-	"\x06source\x18\x1b \x01(\tR\x06source*f\n" +
+	"\x06source\x18\x1b \x01(\tR\x06source\x12#\n" +
+	"\raffected_unit\x18\x1c \x01(\tR\faffectedUnit*f\n" +
 	"\rIssuePlatform\x12\x1e\n" +
 	"\x1aISSUE_PLATFORM_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_PLATFORM_BROWSER\x10\x01\x12\x19\n" +

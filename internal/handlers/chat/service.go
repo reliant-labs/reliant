@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -113,6 +114,11 @@ type Service struct {
 	// SendMessage need lives there and this service calls through.
 	launcherOnce sync.Once
 	launcherImpl *launch.Launcher
+
+	// pinner chooses and stores the machine of a chat that names none. Lazy
+	// for the same reason the launcher is.
+	pinnerOnce sync.Once
+	pinnerImpl *daemonplacement.Pinner
 }
 
 // New creates a new chat service instance with the supplied Deps.
@@ -144,9 +150,23 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, s.deps.TaskQueue)
+		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, s.deps.TaskQueue,
+			launch.WithChatPinner(s.chatPinner()))
 	})
 	return s.launcherImpl
+}
+
+// chatPinner returns the pinner every run start in this service goes through:
+// a chat that names no machine is pinned to one before its run starts, so it
+// stays there when another machine connects (research/CHAT_MACHINE_PLACEMENT.md).
+// A router that cannot place (none wired, or a test double) leaves only the
+// chat's own pin and its worktree's owner to place it.
+func (s *Service) chatPinner() *daemonplacement.Pinner {
+	s.pinnerOnce.Do(func() {
+		machines, _ := s.deps.Router.(daemonplacement.Machines)
+		s.pinnerImpl = daemonplacement.NewPinner(s.deps.Repo, machines)
+	})
+	return s.pinnerImpl
 }
 
 // Name returns the service name for logging and registry.

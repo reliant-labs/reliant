@@ -9,7 +9,7 @@ import { getActionUses, isIntegrationActionStep } from '../../../lib/actionNodeA
 import { cachedCatalogEntry, refIntegration } from '../../../hooks/catalog-queries'
 import { IntegrationLogoTile } from '../../icons/IntegrationLogo'
 
-interface ActionNodeProps {
+export interface ActionNodeProps {
   data: {
     step: Step
     label: string

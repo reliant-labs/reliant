@@ -54,7 +54,13 @@ export interface Harness<S> extends RenderResult {
 
 export function renderList(
   api: ReleasesApi,
-  { env = "prod", search = {}, blocked = null, obs = fixtureObsApi() }: { env?: string; search?: ReleasesSearch; blocked?: string | null; obs?: ObservabilityApi } = {}
+  {
+    env = "prod",
+    search = {},
+    blocked = null,
+    obs = fixtureObsApi(),
+    scopeIsLocal = false,
+  }: { env?: string; search?: ReleasesSearch; blocked?: string | null; obs?: ObservabilityApi; scopeIsLocal?: boolean } = {}
 ): Harness<ReleasesSearch> {
   let latest = search;
   const promote = vi.fn();
@@ -78,6 +84,7 @@ export function renderList(
         releaseHref={(version, extra) => `/r/${version}${extra ? `?${new URLSearchParams(extra as Record<string, string>)}` : ""}`}
         onSelectEnv={selectEnv}
         promote={control}
+        scopeIsLocal={scopeIsLocal}
       />
     );
   }

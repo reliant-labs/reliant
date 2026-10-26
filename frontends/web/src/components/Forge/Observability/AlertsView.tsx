@@ -24,10 +24,11 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, LineChart, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, LineChart, Lock, ShieldCheck } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
+import { CommandLine, DOCS } from "@/components/Forge/GettingStarted";
 import { useAlertHistory, useAlerts } from "@/hooks/observability-queries";
 import type { AlertEvent, AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind } from "@/services/controlPlane/observability/errors";
@@ -35,6 +36,7 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
+import { AskReliantButton } from "./AskReliant/AskReliant";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
@@ -377,6 +379,7 @@ function FiringTab({
                   <LabelChips labels={a.labels} skip={["alertname", "severity"]} />
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <AskReliantButton subject={{ kind: "alert", rule: a.rule, fingerprint: a.fingerprint, env: environments.find((env) => env.id === a.envId)?.name ?? null }} />
                   {declared && (
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule
@@ -549,6 +552,20 @@ function RulesTab({
           <p>
             Rules live in your code, per environment, and arrive with its next deploy. forge adds best-practice defaults (error rate, a
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
+          </p>
+          <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
+          <CommandLine command="forge obs alerts check" />
+          <p>
+            <a
+              href={DOCS.alerts}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="obs-rules-none-docs"
+            >
+              How alerts work
+              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+            </a>
           </p>
         </Frame>
         <CodeSnippet snippet={starterRuleKcl(env)} />

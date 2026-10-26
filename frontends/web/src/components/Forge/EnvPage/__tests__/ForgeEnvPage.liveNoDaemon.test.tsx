@@ -542,7 +542,8 @@ describe("the Environments table needs no daemon", () => {
 
     const empty = await screen.findByTestId("forge-environments-empty", {}, { timeout: 5000 });
     expect(empty).toHaveTextContent(/no environments recorded yet/i);
-    expect(empty).toHaveTextContent("forge env build");
+    expect(empty).toHaveTextContent("forge env deploy <env>");
+    expect(empty).toHaveTextContent("Environments lists where this project runs");
 
     expectNoBannerOrError();
     expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);

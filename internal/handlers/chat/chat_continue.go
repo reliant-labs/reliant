@@ -276,6 +276,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
+	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	// The ended run left its thread terminal, and a terminal thread with a

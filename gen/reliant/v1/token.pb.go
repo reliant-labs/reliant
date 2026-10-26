@@ -925,14 +925,20 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\x89\x04\n" +
-	"\fTokenService\x12P\n" +
-	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\xad\x06\n" +
+	"\fTokenService\x12\x93\x01\n" +
+	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"C\xa2\xbb\x18?:=\n" +
+	"\x06create\x12-\n" +
+	"\x05token\x12\x10response.info.id\x1a\x12response.info.name*\x04kind\x12M\n" +
 	"\n" +
-	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12P\n" +
-	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x00\x12P\n" +
-	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12\\\n" +
-	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
+	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12k\n" +
+	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x1b\xa2\xbb\x18\x17:\x15\n" +
+	"\x06revoke\x12\v\n" +
+	"\x05token\x12\x02id\x12\x7f\n" +
+	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"/\xa2\xbb\x18+:)\n" +
+	"\x06update\x12\x1f\n" +
+	"\x05token\x12\x02id\x1a\x12response.info.name\x12\xf1\x01\n" +
+	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x9a\x01\xa2\xbb\x18\x95\x01\b\x00:\x90\x01:\x8d\x01per-command credential exchange: forge mints one short-lived, attenuated token for each control-plane call, so an event per exchange is noise\x12V\n" +
 	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

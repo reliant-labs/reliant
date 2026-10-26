@@ -25,6 +25,12 @@ const state = vi.hoisted(() => ({
   daemons: [] as DaemonInfo[],
 }));
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChat: () => ({ data: state.chat }),
 }));

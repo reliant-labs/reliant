@@ -2,15 +2,7 @@
   "files": {
     "deploy/observability/alert-defaults_gen.json": "562a30287cac51062483dbdbf35b96b0f4af01a628d90e104138445ab091e5d7",
     "deploy/observability/dashboards/reliant-frontend_gen.json": "65ba97a4a0dd12652a7e49279ee692063a1579484973692767560b18e0f7b4a4",
-    "deploy/observability/dashboards/reliant-overview_gen.json": "6a87aa4cb88175ba960b60bfdfad5127ea1f2800bbfecbbf2af2626948a75d7f",
-    "deploy/observability/dashboards/reliant-process-reliant-api_gen.json": "cd9ac116f5bb6805b2101b66e2b2e3cbf2a3f80ef36743a16776cbed83115ab4",
-    "deploy/observability/dashboards/reliant-process-reliant-api_gen.ndjson": "f4a738ef7982b9b30edf23ddbbf8f16f0c5e0f30a1900aa11fb3aa0c7843304e",
-    "deploy/observability/dashboards/reliant-process-reliant-db-migrate-up_gen.json": "7cbdb859e850bab27cab06b89864e042ff49883e715a2dd9556e4cb6f42b1bcf",
-    "deploy/observability/dashboards/reliant-process-reliant-db-migrate-up_gen.ndjson": "e65dcb08ecc47e161bea9c41cefba8550b2ed81b9c49862d06de7f10ada1f6c7",
-    "deploy/observability/dashboards/reliant-process-reliant-gateway_gen.json": "8574c5054ca48e77823224ca86c6c8fce472bfcc3b3d04705e5fc6f521afda99",
-    "deploy/observability/dashboards/reliant-process-reliant-gateway_gen.ndjson": "0bc55c5f40b16b1339e30f2d8959f4933dca1cee9ef32fb5b0cbc4672042e2b9",
-    "deploy/observability/dashboards/reliant-process-reliant-worker_gen.json": "b12ef96fa48ee968835d8fbec271f3788ed8a60546d723e2ef93f88e97d4acbd",
-    "deploy/observability/dashboards/reliant-process-reliant-worker_gen.ndjson": "4b7340f843a466780f0307d1f94d85e39f3d244da45cd9cfc33bc86061fdcc2e",
+    "deploy/observability/dashboards/reliant-overview_gen.json": "9baaaad87840c8c6710fd25ffc7bcb6ccd295c43f6fcfbbe6467d2abcf1cd733",
     "deploy/observability/spec/alert-service-account_gen.json": "971793a97152b2a26075bf2f42a8791d8f33f333109454823ea3460b004cc0c9",
     "deploy/observability/spec/alert-service-approval_gen.json": "6cf8b24c098e6492730a04e2ea05b2487d85dfdc11849aee66bd21e76928e077",
     "deploy/observability/spec/alert-service-attachment_gen.json": "3a536b83acd7b492c17428c1d948ea0a231a43652fdcaa11cb772cb5773a1802",
@@ -47,11 +39,7 @@
     "deploy/observability/spec/alert-service-trigger_gen.json": "f7313befa54d1362548bc498cb28b3b9bc2f249203627a0f446daed4de520f5a",
     "deploy/observability/spec/alert-service-workflow_gen.json": "46c17239abb1b1bcc46fb75779d0e3524f0a27448a4e97b98aed8a8e54aba07e",
     "deploy/observability/spec/alert-service-worktree_gen.json": "bca3edcc2da6f7b4141a2220119dea4a71230d4b1f9b85407cf99f6d8646a54d",
-    "deploy/observability/spec/process-reliant-api_gen.json": "6938d810a3e931cb80da9bc3740dce4d0dd8073baa67bab712d735e10c1c6eab",
-    "deploy/observability/spec/process-reliant-db-migrate-up_gen.json": "87fdbc90e9419d6fe063af988f86bf0ee4a23ace45159433bd5c246adefb6d0f",
-    "deploy/observability/spec/process-reliant-gateway_gen.json": "90fd1feddb5259fc15f758bdc478ce0c424e929a5b99b33e2624f43761159199",
-    "deploy/observability/spec/process-reliant-worker_gen.json": "d784e135b68c6f7bae9a51a807c18a2b38b8073c1bbeb360b94594d1932a24dc",
-    "deploy/observability/spec/project_gen.json": "d63199694b308852ac66500584fe5ac64ab88b5b3e11b183085bf542ef8fd50e",
+    "deploy/observability/spec/project_gen.json": "089894cb0f36be1e11f1ba4063f1c9356663c7aebc16b1e27fb7e2d17cab5eea",
     "frontends/web/src/lib/config_schema_gen.json": "2a164ec49f2d8c36b828a7fc60aa120af12ee2593304464d5f3be153206aa72e"
   }
 }

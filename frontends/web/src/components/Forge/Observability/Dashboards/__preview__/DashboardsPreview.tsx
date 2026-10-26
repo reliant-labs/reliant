@@ -16,7 +16,7 @@
  *   …&dash=release/frontend-web   (funnel, issues, sessions)    …&dash=release/overview
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
  *   …&env=all|staging|dev
- *   …&case=empty|read-only|error|loading|not-set-up|no-telemetry
+ *   …&case=empty|read-only|error|loading|not-set-up|no-telemetry|nothing-yet
  *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
  */
@@ -59,7 +59,8 @@ const CASES: { id: string; label: string; options: FixtureOptions & { loading?: 
   { id: "error", label: "dashboards unavailable", options: { dashboardsFailWith: Code.Unavailable } },
   { id: "loading", label: "loading", options: { loading: true } },
   { id: "not-set-up", label: "observability not set up", options: { failWith: Code.FailedPrecondition } },
-  { id: "no-telemetry", label: "nothing sent yet", options: { empty: true } },
+  { id: "no-telemetry", label: "nothing sent in the window", options: { empty: true } },
+  { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
 ];
 
 type PreviewSearch = DashboardsSearch &

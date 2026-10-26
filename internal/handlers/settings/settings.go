@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -1000,6 +1001,9 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 
 	tokens, err := s.deps.PollCopilotDevice(ctx, deviceCode)
 	if err != nil {
+		// The flow has not authorized: no account was stored, so no
+		// "connect" event, whatever the poll answers.
+		activity.Skip(ctx)
 		switch {
 		case errors.Is(err, copilot.ErrAuthorizationPending), errors.Is(err, copilot.ErrSlowDown):
 			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{

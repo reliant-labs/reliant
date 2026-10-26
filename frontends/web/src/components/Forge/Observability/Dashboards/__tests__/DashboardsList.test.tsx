@@ -128,7 +128,11 @@ describe("Dashboards", () => {
 
   it("explains an empty project, and a failure", async () => {
     renderList({ dashboardsEmpty: true });
-    expect(await screen.findByTestId("dashboards-empty")).toHaveTextContent("Dashboards ship with your releases");
+    const empty = await screen.findByTestId("dashboards-empty");
+    expect(empty).toHaveTextContent("Dashboards ship with your releases");
+    expect(within(empty).getByTestId("dashboards-getting-started-about")).toHaveTextContent("the dashboards forge generates");
+    expect(within(empty).getByText("forge obs dashboards add-panel <slug> --panel <panel.json>")).toBeInTheDocument();
+    expect(within(empty).getByTestId("dashboards-getting-started-docs")).toHaveAttribute("href", expect.stringContaining("#dashboards"));
     expect(await screen.findByTestId("dashboards-templates")).toBeInTheDocument();
   });
 

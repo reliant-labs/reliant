@@ -34,7 +34,8 @@ import {
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
 import { FileLink } from "./FileLink";
-import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
+import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool, isShellTool } from "../../lib/toolFormatters";
+import { DeployedAppCard, deployOfShellCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
@@ -430,6 +431,11 @@ function ToolExecutionComponent({
   // result.
   const isCompleted = currentStatus === "completed" || (!spawnChildWorkflowId && !!toolResult);
   const hasFailed = currentStatus === "failed" || (!spawnChildWorkflowId && (toolResult?.is_error ?? false));
+  // A shell call that deployed a forge app links to what it deployed (Apps/DeployedAppCard).
+  const shellDeploy = useMemo(
+    () => (isShellTool(toolNameLower) ? deployOfShellCall(toolCall.input, toolResult) : null),
+    [toolNameLower, toolCall.input, toolResult]
+  );
 
   // Approval logic - if backend created a pending approval, we need to show UI for it.
   const needsApproval = approval?.status === ApprovalStatus.PENDING;
@@ -996,6 +1002,9 @@ function ToolExecutionComponent({
             <ToolContentArea ctx={renderContext} />
           </div>
         )}
+
+        {/* The deploy's outcome stays visible collapsed: the live URL is what the user asked for. */}
+        {shellDeploy && !shouldShowApprovalUI && <DeployedAppCard deploy={shellDeploy} />}
       </div>
   );
 }

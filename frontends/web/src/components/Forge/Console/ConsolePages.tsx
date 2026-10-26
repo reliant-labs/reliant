@@ -16,10 +16,10 @@
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Rocket } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Link from "@/components/forge-ui/link";
 import PageHeader, { type PageHeaderAction } from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
@@ -133,12 +133,26 @@ function ScopedEnvNote({ scoped, what }: { scoped: RosterEnv | null; what: strin
 
 // Releases and a release are their own pages (../Releases/ReleasesPages).
 
-function NothingDeployed({ what }: { what: string }) {
+function NothingDeployed({ what, about }: { what: string; about: string }) {
   return (
-    <EmptyState
+    <GettingStarted
+      testId="console-nothing-deployed"
+      icon={<Rocket className="h-4 w-4" />}
       title="Nothing deployed yet"
-      description={`An environment has ${what} once a release is promoted to it. Run forge env deploy <env> to deploy one through Reliant.`}
-    />
+      about={about}
+      steps={[
+        {
+          text: "Deploy an environment through Reliant from your checkout. It builds, cuts a release and deploys it.",
+          command: "forge env deploy <env>",
+        },
+      ]}
+      docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+    >
+      <p>
+        An environment has {what} once a release is promoted to it. A local environment (forge env up) runs your working tree and
+        records none.
+      </p>
+    </GettingStarted>
   );
 }
 
@@ -288,7 +302,12 @@ export function ActivityPage() {
           {envs.map((candidate) => (
             <EnvActivity key={candidate.name} env={candidate.live} />
           ))}
-          {envs.length === 0 && !scoped && <NothingDeployed what="activity" />}
+          {envs.length === 0 && !scoped && (
+            <NothingDeployed
+              what="activity"
+              about="Activity is everything that changed in this project: each promotion and rollback, what the platform observed after it, and what people and agents did."
+            />
+          )}
         </>
       )}
     </Page>

@@ -223,6 +223,8 @@ message IssueVersionBreakdown {
   int64 affected = 3;
   google.protobuf.Timestamp first_seen_at = 4;
   google.protobuf.Timestamp last_seen_at = 5;
+  // What affected counted, as controlplane.v1.Issue.affected_unit.
+  string affected_unit = 6;
 }
 
 // IssueReleaseRef names the release an issue first appeared in and what changed

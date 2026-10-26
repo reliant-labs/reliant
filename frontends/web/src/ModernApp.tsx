@@ -28,7 +28,7 @@ import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
-import { NewChatView } from "./components/Chat/NewChatView";
+import { HomeNewChat } from "./components/Apps/HomeNewChat";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { approveAllPendingApprovals } from "./hooks/approval-queries";
 import { useChatList, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
@@ -1550,10 +1550,7 @@ function App() {
                 onNavigateToWorktrees={noopNavigateWorktrees}
               />
             ) : (
-              <NewChatView
-                tabId="new-chat"
-                onNavigateToWorktrees={noopNavigateWorktrees}
-              />
+              <HomeNewChat onNavigateToWorktrees={noopNavigateWorktrees} />
             )}
           </div>
         </div>
@@ -1717,7 +1714,7 @@ function App() {
                   navigate({ to: '/settings' });
                 }}
                 onOpenForge={() => {
-                  navigate({ to: '/forge' });
+                  navigate({ to: '/apps' });
                 }}
                 onOpenObservability={() => {
                   navigate({ to: '/forge/observability' });
@@ -1756,7 +1753,7 @@ function App() {
                     navigate({ to: '/settings' });
                   }}
                   onOpenForge={() => {
-                    navigate({ to: '/forge' });
+                    navigate({ to: '/apps' });
                   }}
                   onOpenObservability={() => {
                     navigate({ to: '/forge/observability' });

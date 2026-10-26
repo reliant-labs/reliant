@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ConnectorService manages connector grants: the stored consent that lets a
@@ -29,7 +31,17 @@ service ConnectorService {
 
   // RevokeConnector marks a connector revoked. It stops working on its very
   // next request; sessions are not allowed to outlive revocation.
-  rpc RevokeConnector(RevokeConnectorRequest) returns (RevokeConnectorResponse) {}
+  rpc RevokeConnector(RevokeConnectorRequest) returns (RevokeConnectorResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "connector"
+          id: "id"
+        }
+      }
+    };
+  }
 
   // ListConnectorActivity returns the audit log — what connectors actually
   // did, including refused attempts. A burst of denials is the signal that a
@@ -50,7 +62,18 @@ service ConnectorService {
   // Passing an existing connector_id binds to it. Passing new_connector
   // creates one first, so consent and connector creation are a single step
   // rather than a detour through settings.
-  rpc AuthorizeClient(AuthorizeClientRequest) returns (AuthorizeClientResponse) {}
+  rpc AuthorizeClient(AuthorizeClientRequest) returns (AuthorizeClientResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "authorize"
+        target: {
+          kind: "connector_client"
+          id: "client_id"
+          label: "client_name"
+        }
+      }
+    };
+  }
 
   // ListAuthorizedClients returns the applications acting through the caller's
   // connectors, so a user can see what is connected.
@@ -58,7 +81,17 @@ service ConnectorService {
 
   // RevokeClientAuthorization disconnects one application. The connector
   // survives, since it may serve several applications.
-  rpc RevokeClientAuthorization(RevokeClientAuthorizationRequest) returns (RevokeClientAuthorizationResponse) {}
+  rpc RevokeClientAuthorization(RevokeClientAuthorizationRequest) returns (RevokeClientAuthorizationResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "connector_client"
+          id: "client_id"
+        }
+      }
+    };
+  }
 }
 
 message AuthorizeClientRequest {

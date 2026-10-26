@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -479,6 +480,7 @@ func (s *Service) CreatePreset(
 	// Validate slug (alphanumeric, dashes, underscores only)
 	validSlug := regexp.MustCompile(`^[a-z0-9_-]+$`)
 	if !validSlug.MatchString(slug) {
+		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
 		return connect.NewResponse(&reliantv1.CreatePresetResponse{
 			Success: false,
 			Error:   "preset name can only contain letters, numbers, dashes, and underscores",
@@ -494,6 +496,7 @@ func (s *Service) CreatePreset(
 		existing, _ = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 	if existing != nil {
+		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
 		return connect.NewResponse(&reliantv1.CreatePresetResponse{
 			Success: false,
 			Error:   fmt.Sprintf("preset with slug '%s' already exists", slug),
@@ -503,6 +506,7 @@ func (s *Service) CreatePreset(
 	// Check against builtin presets
 	builtinPath := "presets/" + slug + ".yaml"
 	if _, err := builtin.BuiltinPresetsFS.ReadFile(builtinPath); err == nil {
+		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
 		return connect.NewResponse(&reliantv1.CreatePresetResponse{
 			Success: false,
 			Error:   fmt.Sprintf("preset name '%s' conflicts with a built-in preset; please choose a different name", req.Msg.Name),
@@ -518,6 +522,7 @@ func (s *Service) CreatePreset(
 		if err == nil {
 			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil && cfg.FindStoredPresetByName(storedPresets, slug) != nil {
+				activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
 				return connect.NewResponse(&reliantv1.CreatePresetResponse{
 					Success: false,
 					Error:   fmt.Sprintf("preset name '%s' conflicts with a project preset; please choose a different name", req.Msg.Name),
@@ -715,6 +720,7 @@ func (s *Service) UpdatePreset(
 	// 2. Not in database - check if it's a stored project preset or builtin
 	filePreset, err := s.loadPresetByNameFromDB(ctx, req.Msg.ProjectId, req.Msg.Name)
 	if err != nil {
+		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
 		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
 			Success: false,
 			Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
@@ -723,18 +729,21 @@ func (s *Service) UpdatePreset(
 
 	// Builtin and project presets cannot be edited directly (they're read-only on the server)
 	if filePreset.Source == "builtin" {
+		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
 		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
 			Success: false,
 			Error:   "builtin presets cannot be edited",
 		}), nil
 	}
 	if filePreset.Source == "project" {
+		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
 		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
 			Success: false,
 			Error:   "project presets cannot be edited from the server; edit the YAML file directly",
 		}), nil
 	}
 
+	activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
 	return connect.NewResponse(&reliantv1.UpdatePresetResponse{
 		Success: false,
 		Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
@@ -778,12 +787,14 @@ func (s *Service) DeletePreset(
 		logging.InfoContext(ctx, "Deleted user preset", "slug", slug, "user_id", userID)
 		return connect.NewResponse(&reliantv1.DeletePresetResponse{
 			Success: true,
+			Id:      dbPreset.ID,
 		}), nil
 	}
 
 	// 2. Not in database - check if it's a stored project preset or builtin
 	filePreset, err := s.loadPresetByNameFromDB(ctx, req.Msg.ProjectId, req.Msg.Name)
 	if err != nil {
+		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
 		return connect.NewResponse(&reliantv1.DeletePresetResponse{
 			Success: false,
 			Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
@@ -792,6 +803,7 @@ func (s *Service) DeletePreset(
 
 	// Builtin presets cannot be deleted
 	if filePreset.Source == "builtin" {
+		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
 		return connect.NewResponse(&reliantv1.DeletePresetResponse{
 			Success: false,
 			Error:   "builtin presets cannot be deleted",
@@ -800,12 +812,14 @@ func (s *Service) DeletePreset(
 
 	// Project presets cannot be deleted from the server (they're synced from filesystem by daemon)
 	if filePreset.Source == "project" {
+		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
 		return connect.NewResponse(&reliantv1.DeletePresetResponse{
 			Success: false,
 			Error:   "project presets cannot be deleted from the server; delete the YAML file directly",
 		}), nil
 	}
 
+	activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
 	return connect.NewResponse(&reliantv1.DeletePresetResponse{
 		Success: false,
 		Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),

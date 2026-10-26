@@ -42,6 +42,24 @@ export function useSignalsIndex(scope: ObsScope | null, range: RangePreset): Sig
   return useMemo(() => signalsIndex(signals.data, probe), [signals.data, probe]);
 }
 
+/**
+ * Whether nothing in `scope` has sent telemetry in the last 7 days: the "set
+ * up, but nothing has arrived yet" answer, which gets the getting-started
+ * state instead of "nothing in this window".
+ *
+ * True only on a definite answer: the store answered, no service in it emits
+ * any signal (one listed only because its release declares signals has sent
+ * nothing either), and the list was not truncated. Loading, an error (a control
+ * plane that predates GetServiceSignals answers Unimplemented) or no scope are
+ * all false, so a view falls back to its own window-empty state rather than
+ * telling a reader with data that their app is empty.
+ */
+export function useNothingArrived(scope: ObsScope | null): boolean {
+  const signals = useServiceSignals(scope, "7d");
+  const data = signals.data;
+  return !!data && !data.truncated && data.services.every((service) => service.emitting.length === 0);
+}
+
 export type SignalState = { kind: "available" } | { kind: "idle"; badge: string; hint: string } | { kind: "absent" };
 
 const AVAILABLE: SignalState = { kind: "available" };

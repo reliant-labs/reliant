@@ -116,6 +116,15 @@ describe("rules are code", () => {
     expect(screen.getByTestId("obs-rules-observability-off")).toHaveTextContent("Observability is off for dev");
   });
 
+  it("with no rule declared, starts one and says how to check it locally", async () => {
+    // The env place carries no declared shape: nothing in view declares a rule.
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules" });
+    const none = await screen.findByTestId("obs-rules-none");
+    expect(within(none).getByText("forge obs alerts check")).toBeInTheDocument();
+    expect(within(none).getByTestId("obs-rules-none-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability#alerts");
+    expect(screen.getByTestId("obs-code-snippet")).toHaveTextContent("forge.AlertRule {");
+  });
+
   it("shows a forge default with how to turn it off and how to tune it", async () => {
     renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules", rule: "staging/ServiceSilent" }, PROJECT);
     const detail = await screen.findByTestId("obs-rule-detail");

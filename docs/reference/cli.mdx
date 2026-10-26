@@ -248,7 +248,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`reliant forge project scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`reliant forge project shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
-| [`reliant forge project upgrade`](#reliant-forge-project-upgrade) | Update frozen project files from latest Forge templates |
+| [`reliant forge project upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 | [`reliant forge project upgrade apply`](#reliant-forge-project-upgrade-apply) | Record a migration as applied (writes .forge/migrations.json) |
 | [`reliant forge project upgrade list`](#reliant-forge-project-upgrade-list) | List pending forge migrations for this project |
 | [`reliant forge registry`](#reliant-forge-registry) | Log in to and read refs from the registries an env's workloads declare |
@@ -962,6 +962,9 @@ reliant db vault verify
 ## reliant forge
 
 Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first
+
+Reliant Forge (github.com/reliant-labs/forge) — not Atlassian Forge, Foundry's
+forge (Solidity) or Laravel Forge.
 
 Forge takes a project from an empty directory to production, purpose-built
 for LLM-driven development: environments, build-once releases, hosting,
@@ -9704,7 +9707,7 @@ reliant forge project
 | [`rescaffold`](#reliant-forge-project-rescaffold) | Re-create scaffold-once files you deleted, as forge would scaffold them today |
 | [`scaffolded`](#reliant-forge-project-scaffolded) | List the scaffold-once files forge has written, and which are absent |
 | [`shapes`](#reliant-forge-project-shapes) | List every API shape — RPCs, messages, enums, tables, handlers, hooks — with file:line |
-| [`upgrade`](#reliant-forge-project-upgrade) | Update frozen project files from latest Forge templates |
+| [`upgrade`](#reliant-forge-project-upgrade) | Move the project to a newer forge and apply every mechanical fix for the range |
 
 ---
 
@@ -10421,7 +10424,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
-| `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary ('forge skill search|load') and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run 'forge skill search `<query>`'. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as 'harness:' in forge.yaml and honored by every later generate |
+| `--harness` | `string` | - | AI harness to scaffold for: reliant, claude, cursor, copilot or codex. Default: detected from the agent running this command (RELIANT_AGENT_SHELL, CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT), else reliant. Every harness gets AGENTS.md, the project guide; claude adds CLAUDE.md (imports AGENTS.md) and a .claude/skills/forge pointer skill, cursor adds .cursorrules and .cursor/rules/forge.mdc, copilot adds .github/copilot-instructions.md, reliant renders the guide in memory from forge.yaml. The pointers hold no skill bodies: skills are read from the forge binary ('forge skill search|load'). Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
 | `--kind` | `string` | - | Project kind: service (default), cli, library, site (adopt the static frontend at this directory's root, with --in-place) |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
@@ -10563,9 +10566,43 @@ reliant forge project shapes [flags]
 
 #### reliant forge project upgrade
 
-Update frozen project files from latest Forge templates
+Move the project to a newer forge and apply every mechanical fix for the range
 
-Detect template drift on frozen files (files written at 'forge project new' time but
+Take the project from the forge it pins to a newer one, and do every mechanical
+step on the way, so the gate is green without hand edits. In order:
+
+  modules             go get / go mod tidy the forge requirement of each module
+  codemods            the codemods keyed to the releases the range crosses
+  templates           frozen-file drift (below)
+  pin                 forge.yaml forge_version
+  playbooks           the "automation:" steps of each crossed migration playbook
+  vendored-contracts  re-vendor a contract forge.yaml upgrade.vendored_contracts
+                      declares, when its lag report says it lags
+  generate            forge generate
+  locks               refresh lockfiles that disagree with their package.json
+  lint                forge lint --json; what remains is reported, not fixed
+
+Whatever is left is printed as "Still needs a person" (--json: needs_human): a
+lint error, a playbook whose old shape remains, a codemod that listed what it
+could not decide. Rules still in their warn-first grace are listed under
+"Gating soon" (--json: upcoming) with the release they gate from.
+
+EXIT CODES (the contract a pin bot branches on)
+  0  converged: every fix applied, nothing left for a person
+  1  failed: an error stopped the run (generate failed, a codemod errored,
+     bad flags). The run is not retried blindly: read the error
+  2  could not determine: a package manager, registry or lint verdict could
+     not be reached or read. Retryable
+  9  needs a person: everything mechanical is applied; needs_human is not
+     empty. Re-running changes nothing
+
+--json prints exactly one document on stdout (schema forge-project-upgrade/v1:
+ok, exit_code, error, mode, from, to, converged, phases, codemods, locks,
+playbooks, vendored_contracts, needs_human, upcoming, template_drift); progress
+goes to stderr. ok and exit_code are the process's own. It is also printed for
+a failing run, so a bot can read what was applied before the failure.
+
+Template drift: detect on frozen files (files written at 'forge project new' time but
 not updated by 'forge generate') and apply updates from newer Forge templates.
 
 Files that haven't been modified by the user are updated automatically.
@@ -10612,6 +10649,7 @@ Examples:
   forge project upgrade --check --all          # Every reported file (still no inline diffs)
   forge project upgrade --force                # Apply all updates, even for user-modified files
   forge project upgrade --force buf.yaml       # Overwrite ONLY buf.yaml; leave other edits alone
+  forge project upgrade --json                 # What a pin bot runs; exit 0 means merge, 9 means hand to a person
 
 ```
 reliant forge project upgrade [--force <path>...] [flags]
@@ -10629,9 +10667,12 @@ reliant forge project upgrade [--force <path>...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | List every reported file instead of the first few per group |
+| `--allow-dirty` | `bool` | - | Run codemods that replace files you own even over uncommitted changes (they are otherwise left for you, and reported) |
 | `--check` | `bool` | - | Dry-run: only show what would change, don't write files |
 | `--dry-run` | `bool` | - | Alias for --check |
 | `--force` | `bool` | - | Overwrite user-modified files. Name paths after it to overwrite only those |
+| `--json` | `bool` | - | Print one JSON document (schema forge-project-upgrade/v1) on stdout; progress goes to stderr |
+| `--skip` | `stringSlice` | `[]` | Phases not to run: playbooks, vendored-contracts, generate, locks, lint |
 | `--to` | `string` | - | Target forge version (defaults to the current binary version) |
 
 ---

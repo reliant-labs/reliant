@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import {
   DEFAULT_MACHINE,
   NO_MACHINE,
@@ -10,6 +11,7 @@ import {
   defaultChatMachine,
   defaultMachineDaemon,
   hasMachine,
+  installedDaemonIds,
   isUsableMachineForChat,
   startOptionsForMachine,
 } from "../chatMachine";
@@ -118,6 +120,60 @@ describe("defaultMachineDaemon", () => {
     expect(defaultMachineDaemon([offline, starting])?.daemonId).toBe("d-start");
     expect(defaultMachineDaemon([offline])?.daemonId).toBe("d-off");
     expect(defaultMachineDaemon([])).toBeUndefined();
+  });
+
+  // Prod 2026-10: a user with a cloud machine and several chats connected their
+  // laptop, and every chat moved to it. The laptop is local and connected, so
+  // the router's default prefers it, but the project is installed only on the
+  // cloud machine — which is where the server pins a new chat.
+  describe("with the project's installs", () => {
+    const cloud = machine(DaemonStatus.ACTIVE, "d-cloud", "cloud", "managed");
+    const laptop = machine(DaemonStatus.ACTIVE, "d-laptop", "laptop", "self_hosted");
+
+    it("skips a connected laptop the project is not installed on", () => {
+      expect(defaultMachineDaemon([cloud, laptop], new Set(["d-cloud"]))?.daemonId).toBe("d-cloud");
+    });
+
+    it("still prefers the self-hosted machine among those that have the project", () => {
+      expect(defaultMachineDaemon([cloud, laptop], new Set(["d-cloud", "d-laptop"]))?.daemonId).toBe("d-laptop");
+    });
+
+    it("names an installed machine that is asleep over a connected one without the project", () => {
+      const asleep = machine(DaemonStatus.SUSPENDED, "d-cloud", "cloud", "managed");
+      expect(defaultMachineDaemon([asleep, laptop], new Set(["d-cloud"]))?.daemonId).toBe("d-cloud");
+    });
+
+    it("narrows nothing when no listed machine has the project", () => {
+      expect(defaultMachineDaemon([cloud, laptop], new Set(["d-gone"]))?.daemonId).toBe("d-laptop");
+      expect(defaultMachineDaemon([cloud, laptop], undefined)?.daemonId).toBe("d-laptop");
+    });
+  });
+});
+
+describe("installedDaemonIds", () => {
+  const row = (project_id: string, daemon_id: string, install_state: ProjectInstallState) => ({
+    project_id,
+    daemon_id,
+    install_state,
+  });
+
+  it("is the project's installed machines only — a clone in flight or failed has no checkout", () => {
+    const ids = installedDaemonIds(
+      [
+        row("p1", "d-ok", ProjectInstallState.INSTALLED),
+        row("p1", "d-cloning", ProjectInstallState.INSTALLING),
+        row("p1", "d-failed", ProjectInstallState.FAILED),
+        row("p2", "d-other", ProjectInstallState.INSTALLED),
+      ],
+      "p1",
+    );
+    expect([...(ids ?? [])]).toEqual(["d-ok"]);
+  });
+
+  it("is undefined, meaning no narrowing, with no project or no installed machine", () => {
+    expect(installedDaemonIds([row("p1", "d", ProjectInstallState.INSTALLED)], undefined)).toBeUndefined();
+    expect(installedDaemonIds([row("p1", "d", ProjectInstallState.INSTALLING)], "p1")).toBeUndefined();
+    expect(installedDaemonIds([], "p1")).toBeUndefined();
   });
 });
 

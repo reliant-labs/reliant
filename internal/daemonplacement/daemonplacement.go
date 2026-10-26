@@ -5,7 +5,12 @@
 // existing worktree or about a chat's files has to reach that machine: the
 // checkout exists nowhere else.
 //
-//forge:exclude-contract: pure placement rules over chat and worktree rows; ChatDaemonID reads a worktree only through the WorktreeReader its caller passes, and the package holds no state
+// It also decides where a chat that names no machine goes (PinTarget,
+// ProjectDefaultDaemonID) and records that decision (Pinner), so the answer
+// is made once instead of by default resolution on every tool call: see
+// research/CHAT_MACHINE_PLACEMENT.md.
+//
+//forge:exclude-contract: placement rules over chat, worktree and project-install rows; every read goes through an interface its caller passes (WorktreeReader, Installs, Machines, PinStore) and the only state is the Pinner's two handles
 package daemonplacement
 
 import (

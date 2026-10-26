@@ -24,8 +24,8 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LayoutDashboard, Lock, Plus, Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
+import { GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import Tag from "@/components/forge-ui/tag";
 import { useDashboardIndex, useDashboardMutation, useDashboardTemplates, useStarDashboard } from "@/hooks/dashboard-queries";
@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { ENV_ALL } from "../../Console/envScope";
 import { formatAgo } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
-import { ObsError } from "../ObsStates";
+import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
 import { filterIndex, NAV_STARRED, ownerOf, ownersOf, recentOf, starredOf, type SourceFilter } from "./dashboardModel";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
@@ -184,11 +184,28 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   } else if (all.length === 0) {
     body = (
       <div data-testid="dashboards-empty">
-        <EmptyState
-          icon={<LayoutDashboard className="h-6 w-6" aria-hidden="true" />}
+        <GettingStarted
+          testId="dashboards-getting-started"
+          icon={<LayoutDashboard className="h-4 w-4" />}
           title="No dashboards yet"
-          description={`Dashboards ship with your releases — forge generates one per service, and any file under deploy/observability/dashboards joins them — once a release is promoted${env === ENV_ALL ? "" : ` to ${env}`}. You can also start one here, from a template or blank.`}
-        />
+          about={OBS_TOPICS.dashboards.about}
+          steps={[
+            {
+              text: "Deploy a release. Forge generates a dashboard for every service and frontend, and they appear here with it.",
+              command: `forge env deploy ${env === ENV_ALL ? "<env>" : env}`,
+            },
+            {
+              text: "Keep one in your repository: add a panel to a dashboard under deploy/observability/dashboards, and it ships with the next release.",
+              command: "forge obs dashboards add-panel <slug> --panel <panel.json>",
+            },
+            { text: "Or start one here, from a template or blank, below." },
+          ]}
+          docs={OBS_TOPICS.dashboards.docs}
+        >
+          <p>
+            Dashboards ship with your releases, so none is here until one is promoted{env === ENV_ALL ? "" : ` to ${env}`}.
+          </p>
+        </GettingStarted>
       </div>
     );
   } else {

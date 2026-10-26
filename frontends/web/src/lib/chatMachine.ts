@@ -14,6 +14,7 @@
  */
 
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { daemonLabel, daemonStatusLabel, NO_MACHINE } from "@/components/Automations/daemonChoices";
 
 export { NO_MACHINE };
@@ -70,21 +71,47 @@ export function isUsableMachineForChat(daemon: Pick<DaemonInfo, "status">): bool
 }
 
 /**
- * The machine the server's default resolution picks for a chat that names
- * none (toolexec NATSDaemonRouter.resolveDaemonID with no selector): a
- * connected machine, a self-hosted one first; else one starting or asleep;
- * else any. The web uses it to NAME that machine, so what the picker shows is
- * where an unpinned chat actually runs.
+ * The machines a project is installed on: the ids of its `installed`
+ * project_daemons rows (a clone still in flight or failed has no checkout).
+ * Undefined when there are none — the server then narrows nothing
+ * (daemonplacement.ProjectDefaultDaemonID), and so does the picker.
  */
-export function defaultMachineDaemon<T extends Pick<DaemonInfo, "status"> & Partial<Pick<DaemonInfo, "daemonType">>>(
+export function installedDaemonIds(
+  installs: ReadonlyArray<{ project_id: string; daemon_id: string; install_state: ProjectInstallState }>,
+  projectId: string | undefined,
+): ReadonlySet<string> | undefined {
+  if (!projectId) return undefined;
+  const ids = installs
+    .filter((row) => row.project_id === projectId && row.install_state === ProjectInstallState.INSTALLED)
+    .map((row) => row.daemon_id);
+  return ids.length > 0 ? new Set(ids) : undefined;
+}
+
+/**
+ * The machine a new chat lands on when it names none — the server pins it
+ * there before its first run (daemonplacement.ProjectDefaultDaemonID, research/
+ * CHAT_MACHINE_PLACEMENT.md): among the machines the project is installed on
+ * (`installedOn`, when it is installed anywhere) the one default resolution
+ * picks — a connected machine, a self-hosted one first; else one starting or
+ * asleep; else any. The web uses it to NAME that machine, so what the picker
+ * shows is where the chat actually runs.
+ *
+ * The server breaks a tie between installed machines it cannot rank by oldest
+ * install; this ranks by the same default order and cannot see install age,
+ * so the two can differ only between machines the default order treats alike.
+ */
+export function defaultMachineDaemon<T extends Pick<DaemonInfo, "status" | "daemonId"> & Partial<Pick<DaemonInfo, "daemonType">>>(
   daemons: ReadonlyArray<T>,
+  installedOn?: ReadonlySet<string>,
 ): T | undefined {
-  const connected = daemons.filter(isAwakeMachine);
+  const narrowed = installedOn ? daemons.filter((d) => installedOn.has(d.daemonId)) : daemons;
+  const candidates = narrowed.length > 0 ? narrowed : daemons;
+  const connected = candidates.filter(isAwakeMachine);
   return (
     connected.find((d) => d.daemonType === "self_hosted") ??
     connected[0] ??
-    daemons.find((d) => isStartingMachine(d) || d.status === DaemonStatus.SUSPENDED) ??
-    daemons[0]
+    candidates.find((d) => isStartingMachine(d) || d.status === DaemonStatus.SUSPENDED) ??
+    candidates[0]
   );
 }
 

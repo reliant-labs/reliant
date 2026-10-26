@@ -32,6 +32,7 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { RANGE_LABELS } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { ENV_ALL } from "../../Console/envScope";
 import { FIELD_SUGGESTIONS, METRIC_TYPES, OP_LABELS, OPS, panelProblems, UNITS } from "../obsdashSpec";
 import { GRID_SPANS, spanOf, widthOfSpan } from "./dashboardModel";
 import {
@@ -58,6 +59,7 @@ import {
   type AggPreset,
   type Visualization,
 } from "./panelBuilder";
+import { AskReliantButton } from "../AskReliant/AskReliant";
 import { AlertFromPanelDialog, CreateAlertButton } from "./AlertFromPanelDialog";
 import { unsupportedReason } from "./alertSnippet";
 import { PanelBody } from "./PanelBody";
@@ -162,11 +164,19 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
               <p className="text-xs text-ink-muted">
                 Live preview · {scopeLabel} · {RANGE_LABELS[range].toLowerCase()}
               </p>
-              <CreateAlertButton
-                onClick={() => setAlerting(true)}
-                disabled={incomplete}
-                title={incomplete ? "Finish the panel first: an alert is written from a complete panel." : "Write this panel's query as a KCL alert rule"}
-              />
+              <div className="flex items-center gap-2">
+                <AskReliantButton
+                  appearance="small"
+                  subject={{ kind: "panel", panel: draft, dashboard: dashboardTitle, window: range, env: env === ENV_ALL ? null : env }}
+                  disabled={incomplete}
+                  title={incomplete ? "Finish the panel first: Reliant is asked about a complete query." : undefined}
+                />
+                <CreateAlertButton
+                  onClick={() => setAlerting(true)}
+                  disabled={incomplete}
+                  title={incomplete ? "Finish the panel first: an alert is written from a complete panel." : "Write this panel's query as a KCL alert rule"}
+                />
+              </div>
             </div>
             <div className="rounded-lg border border-border/60 bg-surface-sunken p-3" data-testid="panel-drawer-preview">
               <p className="mb-2 truncate text-sm font-medium text-ink">{draft.title || "Untitled panel"}</p>

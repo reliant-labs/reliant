@@ -89,6 +89,8 @@ function syncProjectUrl(projectId: string | null) {
         // user out of Forge into the chat view on every switch.
         currentPath === "/forge" ||
         currentPath.startsWith("/forge/") ||
+        // The Apps list spans projects, like the Inbox.
+        currentPath === "/apps" ||
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||

@@ -5,7 +5,7 @@ import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName, type NodeTheme } from './NodeStatusWrapper'
 import { cn } from '../../../lib/utils'
 
-interface EventNodeProps {
+export interface EventNodeProps {
   data: {
     eventType: string
     label: string

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -904,7 +905,10 @@ type DeletePresetResponse struct {
 	// Whether the preset was deleted successfully
 	Success bool `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	// Error message if deletion failed
-	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Error string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	// The deleted preset's id, set when success is true: the target of the
+	// deletion's activity event (the request names the preset only by name).
+	Id            string `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -949,6 +953,13 @@ func (x *DeletePresetResponse) GetSuccess() bool {
 func (x *DeletePresetResponse) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *DeletePresetResponse) GetId() string {
+	if x != nil {
+		return x.Id
 	}
 	return ""
 }
@@ -1342,7 +1353,7 @@ var File_reliant_v1_preset_proto protoreflect.FileDescriptor
 const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/preset.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
 	"\n" +
 	"PresetInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -1419,10 +1430,11 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\x13DeletePresetRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"F\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"V\n" +
 	"\x14DeletePresetResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xc6\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xc6\x01\n" +
 	"\x17SetDefaultPresetRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
@@ -1458,15 +1470,24 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\x13presets_by_workflow\x18\x01 \x03(\v2A.reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntryR\x11presetsByWorkflow\x1ah\n" +
 	"\x16PresetsByWorkflowEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
-	"\x05value\x18\x02 \x01(\v2\".reliant.v1.WorkflowDefaultPresetsR\x05value:\x028\x012\xd4\x06\n" +
+	"\x05value\x18\x02 \x01(\v2\".reliant.v1.WorkflowDefaultPresetsR\x05value:\x028\x012\xc4\b\n" +
 	"\rPresetService\x12P\n" +
 	"\vListPresets\x12\x1e.reliant.v1.ListPresetsRequest\x1a\x1f.reliant.v1.ListPresetsResponse\"\x00\x12J\n" +
 	"\tGetPreset\x12\x1c.reliant.v1.GetPresetRequest\x1a\x1d.reliant.v1.GetPresetResponse\"\x00\x12q\n" +
-	"\x16ListPresetsForWorkflow\x12).reliant.v1.ListPresetsForWorkflowRequest\x1a*.reliant.v1.ListPresetsForWorkflowResponse\"\x00\x12S\n" +
-	"\fCreatePreset\x12\x1f.reliant.v1.CreatePresetRequest\x1a .reliant.v1.CreatePresetResponse\"\x00\x12S\n" +
-	"\fUpdatePreset\x12\x1f.reliant.v1.UpdatePresetRequest\x1a .reliant.v1.UpdatePresetResponse\"\x00\x12S\n" +
-	"\fDeletePreset\x12\x1f.reliant.v1.DeletePresetRequest\x1a .reliant.v1.DeletePresetResponse\"\x00\x12_\n" +
-	"\x10SetDefaultPreset\x12#.reliant.v1.SetDefaultPresetRequest\x1a$.reliant.v1.SetDefaultPresetResponse\"\x00\x12_\n" +
+	"\x16ListPresetsForWorkflow\x12).reliant.v1.ListPresetsForWorkflowRequest\x1a*.reliant.v1.ListPresetsForWorkflowResponse\"\x00\x12\x85\x01\n" +
+	"\fCreatePreset\x12\x1f.reliant.v1.CreatePresetRequest\x1a .reliant.v1.CreatePresetResponse\"2\xa2\xbb\x18.:,\n" +
+	"\x06create\x12\"\n" +
+	"\x06preset\x12\x12response.preset.id\x1a\x04name\x12\x95\x01\n" +
+	"\fUpdatePreset\x12\x1f.reliant.v1.UpdatePresetRequest\x1a .reliant.v1.UpdatePresetResponse\"B\xa2\xbb\x18>:<\n" +
+	"\x06update\x122\n" +
+	"\x06preset\x12\x12response.preset.id\x1a\x14response.preset.name\x12~\n" +
+	"\fDeletePreset\x12\x1f.reliant.v1.DeletePresetRequest\x1a .reliant.v1.DeletePresetResponse\"+\xa2\xbb\x18':%\n" +
+	"\x06delete\x12\x1b\n" +
+	"\x06preset\x12\vresponse.id\x1a\x04name\x12\xad\x01\n" +
+	"\x10SetDefaultPreset\x12#.reliant.v1.SetDefaultPresetRequest\x1a$.reliant.v1.SetDefaultPresetResponse\"N\xa2\xbb\x18J:H\n" +
+	"\x12set_default_preset\x12\x19\n" +
+	"\bworkflow\x12\rworkflow_name*\vpreset_name*\n" +
+	"group_name\x12_\n" +
 	"\x10GetDefaultPreset\x12#.reliant.v1.GetDefaultPresetRequest\x1a$.reliant.v1.GetDefaultPresetResponse\"\x00\x12q\n" +
 	"\x16GetDefaultPresetsBatch\x12).reliant.v1.GetDefaultPresetsBatchRequest\x1a*.reliant.v1.GetDefaultPresetsBatchResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

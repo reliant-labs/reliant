@@ -147,6 +147,11 @@ describe("resolveChatMachine", () => {
     expect(resolveChatMachine([starting, up], undefined)?.daemonId).toBe("up");
   });
 
+  it("is the machine the project is installed on for an unpinned chat, not a connected one without it", () => {
+    const laptop = create(DaemonInfoSchema, { daemonId: "laptop", status: DaemonStatus.ACTIVE, daemonType: "self_hosted" });
+    expect(resolveChatMachine([laptop, starting], undefined, new Set(["starting"]))?.daemonId).toBe("starting");
+  });
+
   it("is unknown until the registry answers", () => {
     expect(resolveChatMachine(undefined, "starting")).toBeUndefined();
   });

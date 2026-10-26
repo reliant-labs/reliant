@@ -1275,6 +1275,38 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
 }
 
+// PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID
+// and returns the pin the row holds afterwards, whichever send wrote it ("" for
+// none). A chat that already has a pin, or has no machine by design, is left
+// as it is. Clients are told of a pin this call wrote through the same
+// chat_config_changed update SetChatDaemon sends.
+func (r *Repo) PinChatDaemonIfUnset(ctx context.Context, chatID, daemonID string) (string, error) {
+	var stored string
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var pinned *store.PinnedChat
+		var err error
+		stored, pinned, err = store.PinChatDaemonIfUnset(txCtx, r.ORM(), chatID, daemonID)
+		if err != nil || pinned == nil {
+			return err
+		}
+		data, err := json.Marshal(map[string]interface{}{"chat_id": chatID, "active_daemon_id": daemonID})
+		if err != nil {
+			return err
+		}
+		return r.CreateUserUpdate(txCtx, &UserUpdate{
+			UserID:     pinned.UserID,
+			ProjectID:  &pinned.ProjectID,
+			ChatID:     &chatID,
+			WorktreeID: pinned.WorktreeID,
+			UpdateType: UserUpdateChatConfigChanged,
+			EntityType: EntityTypeChat,
+			EntityID:   chatID,
+			Data:       data,
+		})
+	})
+	return stored, err
+}
+
 // SetChatAdopted adopts or un-adopts a chat for its owner. It reports whether
 // the chat exists and belongs to userID. Repeating the call is a no-op that
 // still reports true. Adoption changes list_in_sidebar, so it emits

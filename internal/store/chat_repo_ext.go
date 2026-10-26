@@ -174,6 +174,48 @@ func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, 
 	return err
 }
 
+// pinChatDaemonIfUnsetSQL pins an unpinned chat that is on a machine. A
+// no-machine chat has no daemon by constraint, so it is never matched. Neither
+// updated_at nor last_active moves: choosing where a chat runs is not
+// something the user did to it, and the sidebar orders by them.
+const pinChatDaemonIfUnsetSQL = `
+UPDATE chats SET active_daemon_id = ?0
+WHERE id = ?1 AND NOT no_machine AND (active_daemon_id IS NULL OR active_daemon_id = '')
+RETURNING user_id, project_id, worktree_id`
+
+// PinnedChat is the chat PinChatDaemonIfUnset pinned.
+type PinnedChat struct {
+	UserID     string  `bun:"user_id"`
+	ProjectID  string  `bun:"project_id"`
+	WorktreeID *string `bun:"worktree_id"`
+}
+
+// PinChatDaemonIfUnset pins the chat to daemonID only when it has no pin and
+// is not a no-machine chat, and returns the pin the row holds afterwards ("" for
+// none). pinned is non-nil only when THIS call wrote it, so of two racing
+// callers exactly one announces the pin and both return the same machine.
+func PinChatDaemonIfUnset(ctx context.Context, db orm.Context, chatID, daemonID string) (stored string, pinned *PinnedChat, err error) {
+	var rows []PinnedChat
+	if err := db.Bun().NewRaw(pinChatDaemonIfUnsetSQL, daemonID, chatID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", nil, fmt.Errorf("pinning chat %s to daemon %s: %w", chatID, daemonID, err)
+	}
+	if len(rows) > 0 {
+		return daemonID, &rows[0], nil
+	}
+	// Not written: the chat already had a pin (a concurrent send won), has no
+	// machine by design, or is gone. A second statement, so under READ
+	// COMMITTED it reads what the winner committed.
+	var existing *string
+	err = db.Bun().NewRaw(`SELECT active_daemon_id FROM chats WHERE id = ?0`, chatID).Scan(ctx, &existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", nil, fmt.Errorf("reading chat %s pin: %w", chatID, err)
+	}
+	if existing == nil {
+		return "", nil, nil
+	}
+	return *existing, nil, nil
+}
+
 // UnpinnedChat is a chat UnpinChatsFromDaemon released.
 type UnpinnedChat struct {
 	ID         string  `bun:"id"`
