@@ -39,6 +39,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { uniqueMachineName } from "@/lib/uniqueMachineName";
 import { ArrowLeft, Check, Cloud, Loader2, Monitor } from "lucide-react";
 import Modal from "../forge-ui/modal";
 import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
@@ -55,9 +57,12 @@ const MANAGED_DAEMON_SIZE_SMALL = 1;
 export function ConnectDaemonModal({
   isOpen,
   onClose,
+  fallbackFocus,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  /** Where focus goes when the modal closes and its opener is gone. */
+  fallbackFocus?: () => void;
 }) {
   const hasCloud = capabilities.cloudDaemons;
   // "cloud" | "self" | null — null shows the choice, the others show the
@@ -66,6 +71,7 @@ export function ConnectDaemonModal({
   const [mode, setMode] = useState<"cloud" | "self" | null>(null);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudStarted, setCloudStarted] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const goToBilling = useGoToBilling();
@@ -85,7 +91,7 @@ export function ConnectDaemonModal({
   const createDaemonMutation = useCreateDaemon({
     onError: (err) => {
       if (isAccountRequiredError(err)) return;
-      const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
+      const msg = err instanceof Error ? err.message : "Failed to start a cloud machine";
       setCloudError(msg);
     },
   });
@@ -97,8 +103,19 @@ export function ConnectDaemonModal({
       setMode(null);
       setCloudError(null);
       setCloudStarted(false);
+      setCreatedId(null);
     }
   }, [isOpen]);
+
+  // Close once the machine THIS modal created attaches — not when any machine
+  // is active, which is already true when the picker opens it.
+  const { daemons: registry } = useDaemonStatus();
+  const createdReady =
+    !!createdId &&
+    registry.some((d) => d.daemonId === createdId && d.status === DaemonStatus.ACTIVE);
+  useEffect(() => {
+    if (isOpen && createdReady) onClose();
+  }, [isOpen, createdReady, onClose]);
 
   const startCloudDaemon = useCallback(async () => {
     // Belt and braces with the button's disabled state, for the same reason
@@ -110,41 +127,32 @@ export function ConnectDaemonModal({
 
     setCloudError(null);
     try {
-      // The registry list, not control-plane's: it is the one that knows
-      // whether a machine has actually attached, which is exactly the question
-      // being asked here (docs/design/one-daemon-list.md).
+      // The user asked to ADD a machine, so this always creates one. It used
+      // to short-circuit when any machine was active ("requested", nothing
+      // created) and resume the first machine otherwise — which made the
+      // picker's Add machine, offered only while a machine is connected, a
+      // button that could never add anything.
+      //
+      // The name must be one the account is not using: CreateDaemon is keyed
+      // on (owner, name), and the old fixed "workspace-daemon" refreshed the
+      // first machine on every later click.
       const daemons = await fetchDaemonList(queryClient);
-      if (daemons.some((d) => d.status === DaemonStatus.ACTIVE)) {
-        // Already have an active daemon — nothing to provision; the picker
-        // will pick it up on the next poll.
-        setCloudStarted(true);
-        return;
-      }
-      if (daemons.length > 0) {
-        // A suspended/disconnected daemon exists — resume it instead of
-        // creating a duplicate. Resume failures are non-fatal; the user can
-        // retry from the "Resume a daemon" list.
-        const id = daemons[0]?.daemonId ?? "";
-        if (id) {
-          const { resumeDaemon } = await import(
-            "../../services/controlPlane/daemon"
-          );
-          await resumeDaemon(id);
-          setCloudStarted(true);
-          return;
-        }
-      }
-      await createDaemonMutation.mutateAsync({
-        name: "workspace-daemon",
+      const name = uniqueMachineName(
+        "cloud-small",
+        daemons.map((d) => d.name),
+      );
+      const id = await createDaemonMutation.mutateAsync({
+        name,
         daemonType: MANAGED_DAEMON_TYPE,
         size: MANAGED_DAEMON_SIZE_SMALL,
         gitRepo: "",
         gitBranch: "main",
       });
+      setCreatedId(id || null);
       setCloudStarted(true);
     } catch (err) {
       if (accountGate.handleError(err, () => startCloudDaemon())) return;
-      const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
+      const msg = err instanceof Error ? err.message : "Failed to start a cloud machine";
       setCloudError(msg);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,18 +163,18 @@ export function ConnectDaemonModal({
   // Why the user is not being offered a cloud daemon. Only reached when
   // `canStartCloud` is false — the enabled tile carries its own copy.
   const cloudBlockedCopy = !hasCloud
-    ? "Cloud daemons are not enabled for this deployment."
+    ? "Cloud machines are not enabled for this deployment."
     : (reason ??
       "Redeem a coupon code or choose a plan to start a cloud machine.");
 
   return (
-    <Modal open={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
+    <Modal open={isOpen} fallbackFocus={fallbackFocus} onClose={onClose} title="Add a machine" size="lg">
       {accountGate.modal}
       {mode === null && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            A daemon runs your code. Connect one to start working — either a
-            hosted Reliant Cloud daemon or your own self-hosted machine.
+            A machine runs your code. Add a hosted Reliant Cloud machine or
+            connect your own computer.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Only offered when it would work. An account with no compute
@@ -196,7 +204,7 @@ export function ConnectDaemonModal({
                     Reliant Cloud
                   </span>
                   <span className="block text-xs leading-relaxed text-muted-foreground">
-                    Provision a hosted daemon now. No install required.
+                    Start a hosted machine now. No install required.
                   </span>
                 </div>
               </button>
@@ -215,7 +223,7 @@ export function ConnectDaemonModal({
                   Self-hosted
                 </span>
                 <span className="block text-xs leading-relaxed text-muted-foreground">
-                  Run the daemon on your own laptop or server with a token.
+                  Run Reliant on your own laptop or server.
                 </span>
               </div>
             </button>
@@ -278,15 +286,15 @@ export function ConnectDaemonModal({
             <div className="min-w-0">
               <h3 className="text-sm font-medium text-foreground">
                 {startingCloud
-                  ? "Requesting a cloud daemon..."
+                  ? "Creating your cloud machine..."
                   : cloudStarted
-                    ? "Cloud daemon requested"
+                    ? "Cloud machine starting"
                     : "Reliant Cloud"}
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {cloudStarted
                   ? "It may take a few minutes to provision. This screen will refresh once it connects."
-                  : "Provisioning a hosted daemon for your account."}
+                  : "Creating a hosted machine for your account."}
               </p>
             </div>
           </div>
@@ -319,7 +327,7 @@ export function ConnectDaemonModal({
           {/* Shared with onboarding's ComputeStep — generates a token and
               shows `reliant daemon start --token` install steps. Closes the
               modal the moment the daemon connects. */}
-          <SelfHostedDaemonConnect onConnected={onClose} />
+          <SelfHostedDaemonConnect mode="add" onConnected={onClose} />
         </div>
       )}
     </Modal>

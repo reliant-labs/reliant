@@ -5083,6 +5083,73 @@ func failureText(err error) string {
 	return text
 }
 
+// Terminal status delivery budget (workflowStatusActivityOptions). Variables
+// so a test can shrink them.
+var (
+	// terminalStatusAttemptTimeout bounds one attempt: long enough for the
+	// status transaction on a loaded database, short enough that a hung
+	// connection is abandoned and retried.
+	terminalStatusAttemptTimeout = 30 * time.Second
+	// terminalStatusDeadline bounds every attempt together. Past it the run
+	// ends without its status written, and the reconciler, which compares
+	// every running row with Temporal, repairs the row on its next pass.
+	terminalStatusDeadline = 10 * time.Minute
+)
+
+// isTerminalWorkflowStatus reports whether a WorkflowStatus notification
+// ends its workflow row's run: the last status write it will ever get.
+func isTerminalWorkflowStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "cancelled":
+		return true
+	}
+	return false
+}
+
+// workflowStatusActivityOptions is how hard a WorkflowStatus notification is
+// tried.
+//
+// A terminal status is the run's last word on its row: nothing after it will
+// ever write the row again, so a lost one leaves the chat reading as running
+// over a run that has ended. It used to share the in-flight statuses' budget
+// — 5s per attempt, three attempts, ~20s in all — and on a loaded database
+// every attempt timed out and the run ended with its row still ACTIVE (e2e
+// story 05). It is now retried until it lands, each attempt bounded and the
+// whole bounded by terminalStatusDeadline, and the activity fails a terminal
+// write it could not make instead of reporting success over it
+// (WorkflowStatusActivity.Execute), so Temporal's retry carries it.
+//
+// The in-flight statuses (started, paused) keep the short budget: each is
+// superseded by the next status the run writes, and a run should not wait
+// on one.
+//
+// Changing these options is replay-safe: Temporal matches a replayed
+// activity by type and id, not by its options.
+func workflowStatusActivityOptions(status string) workflow.ActivityOptions {
+	if isTerminalWorkflowStatus(status) {
+		return workflow.ActivityOptions{
+			StartToCloseTimeout:    terminalStatusAttemptTimeout,
+			ScheduleToCloseTimeout: terminalStatusDeadline,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    30 * time.Second,
+				// Unlimited: ScheduleToCloseTimeout is the bound.
+				MaximumAttempts: 0,
+			},
+		}
+	}
+	return workflow.ActivityOptions{
+		StartToCloseTimeout: time.Second * 5,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Second,
+			MaximumAttempts:    3,
+		},
+	}
+}
+
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
 // and tracks workflow hierarchy in the database.
 // This is a fire-and-forget notification - errors are logged but don't fail the workflow
@@ -5102,16 +5169,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 			"workflowID", workflowID)
 	}
 
-	// Execute workflow status activity with short timeout
-	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
-		StartToCloseTimeout: time.Second * 5,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    5 * time.Second,
-			MaximumAttempts:    3,
-		},
-	})
+	activityCtx := workflow.WithActivityOptions(baseCtx, workflowStatusActivityOptions(status))
 
 	// Use map with correct JSON field names (snake_case) to avoid import cycle
 	input := map[string]interface{}{
@@ -5163,7 +5221,16 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 	var result map[string]interface{}
 	// Use baseCtx (which may be disconnected) for the Get() call as well
 	err := workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input).Get(baseCtx, &result)
-	if err != nil {
+	if err != nil && isTerminalWorkflowStatus(status) {
+		// Retried for terminalStatusDeadline and still not written: the row
+		// reads running over a run that is ending, until the reconciler's
+		// next pass repairs it. Not a workflow failure — the run's work is
+		// done — but nobody should have to notice it from a stuck chat.
+		logger.Error("[Workflow Runtime] Terminal workflow status was not written; the reconciler will repair the row",
+			"status", status,
+			"workflowID", workflowID,
+			"error", err)
+	} else if err != nil {
 		// Log error but don't fail workflow
 		logger.Warn("[Workflow Runtime] Failed to notify workflow status",
 			"status", status,
