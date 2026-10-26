@@ -28,14 +28,19 @@
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
 #   lint       forge lint --scope <changed dirs> (unscoped when a pin moved);
-#              re-run on the amended tree whenever a generator rewrote it, and
-#              that run is the verdict (lint reads generated files such as
-#              gen/forge_descriptor.json, so the first run judged a stale tree)
+#              like build and test it starts after the generators in --amend
+#              mode, so it reads the amended tree (lint reads generated files
+#              such as gen/forge_descriptor.json)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
-# generate and docs run first, because they can change the tree the others
-# judge; build, test, typecheck, lint and migsafety then run at the same time.
+# When the gate may rewrite the tree it judges (--amend, or a dirty tree),
+# generate and docs run FIRST, in place, and only then do build, test,
+# typecheck, lint and migsafety run, at the same time, on the regenerated tree:
+# a stale generated file (a mock the merge left a step behind) must never be
+# built and tested before the regenerate that fixes it. On a clean tree without
+# --amend the generators cannot change what is judged, so they run in scratch
+# checkouts beside the other phases.
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
 # phase nests inside it and never queues again. MG_LOGDIR=<dir> keeps the
@@ -100,9 +105,9 @@ snapshot() {
 }
 # judge <phase> <snapshot before> <checkout>: did the generator change <checkout>?
 # Writes $L/<phase>.changed (the paths) and $L/<phase>.wt (where). In --amend
-# mode a change confined to generated paths passes, and is copied into the
-# gate's own tree and amended once every phase has finished (never while build
-# and test are reading it); anything else fails the phase.
+# mode a change confined to generated paths passes (the generators ran in the
+# gate's own tree, which is amended into HEAD before build and test start);
+# anything else fails the phase.
 judge() {
   local n=$1 before=$2 wt=$3 changed bad
   changed=$(cd "$wt" && diff <(printf '%s\n' "$before") <(snapshot) | awk -F'\t' '/^[<>] / { print substr($1, 3) }' | sort -u | grep -v '^$' | grep -v '\(^\|/\)node_modules$' || true)
@@ -142,6 +147,7 @@ scratch() {
   done
   return 0
 }
+commit_amend() { git add -A && git -c user.name="${GIT_AUTHOR_NAME:-reliant-merge-gate}" -c user.email="${GIT_AUTHOR_EMAIL:-merge-gate@reliantlabs.io}" commit -q --amend --no-edit --no-verify; }
 cleanup() { local wt; for wt in "${scratches[@]}"; do git worktree remove --force "$wt" >/dev/null 2>&1; done; }
 scratches=()
 trap cleanup EXIT
@@ -227,15 +233,35 @@ for d in $(printf '%s\n' "${need[@]}" | sort -u); do
   npm_install "$d" || fail=1
 done
 
-# ── generate ‖ docs ‖ build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────────
-# A clean tree (the merge queue's case) runs the generators in scratch
-# checkouts, so every phase runs at once. A dirty one runs them in place,
-# first, because a scratch checkout of HEAD would not see your edits.
-inplace=0; [ -n "$(git status --porcelain)" ] && inplace=1
+# ── generate → docs, then build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────
+# Where a generator's output becomes the tree the other phases judge, it runs
+# first, in place: in --amend mode (the merge queue's: a regenerate is folded
+# into the squash, so build and test must judge the regenerated tree, never
+# the stale one the merge left), and in a dirty tree (a scratch checkout of
+# HEAD would not see your edits). The phases that read the tree start only
+# once the generators are done and, with --amend, their output is committed.
+# This costs generate's wall time only when generate is selected at all.
+#
+# Otherwise (a clean tree without --amend) a regenerate cannot change what is
+# judged — any change fails the generate phase — so the generators run in
+# scratch checkouts and every phase runs at once.
+inplace=0; { [ "$amend" = 1 ] || [ -n "$(git status --porcelain)" ]; } && inplace=1
 pids=()
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
   [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
+  # --amend: fold what the generators rewrote (judge allowed generated paths
+  # only) into HEAD before anything builds or tests it.
+  if [ "$amend" = 1 ] && [ "$fail" = 0 ] && [ -n "$(git status --porcelain)" ]; then
+    commit_amend || fail=1
+    notes+=("regenerated before build and test: they judged the amended tree")
+    # A regenerate that rewrote web sources (src/gen, the shortcuts data)
+    # type-checks them, even when the branch itself touched no web.
+    if [ "$fail" = 0 ] && [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
+      typecheck=true
+      npm_install . && npm_install frontends/web || fail=1
+    fi
+  fi
 elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
     if scratch gen; then phase generate gen_forge "$SCRATCH" & pids+=($!); else fail=1; fi
@@ -244,38 +270,25 @@ elif [ "$fail" = 0 ]; then
     if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
-run_checks() {
-  local sfx=${1:-}
-  phase "build$sfx" go build ./... & pids+=($!)
-  phase "test$sfx" go run ./tools/test-affected run -reach "$reach" -base "$base" -lanes go,web,electron & pids+=($!)
-  if [ "$typecheck" = true ]; then
-    phase "typecheck$sfx" npm --prefix frontends/web run --silent typecheck & pids+=($!)
-  fi
-}
-# lint reads generated files (gen/forge_descriptor.json for db-grants, among
-# others), so a run beside a generator judges the tree the generator is about to
-# rewrite. Its verdict is therefore held until the generators finish: when they
-# rewrote nothing it stands; when --amend folds a rewrite in, lint runs again on
-# the amended tree and that run is the verdict.
-lint_cmd=() lint_pid= lint_deferred=0
-if echo "$files" | grep -qE '^(go\.(mod|sum)|forge\.yaml)$'; then
-  notes+=("lint: unscoped (a pin moved)")
-  lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends)
-else
-  # One awk, not a dirname per file: forking hundreds of processes on a
-  # loaded host delayed lint's start by over a minute.
-  scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
-  if [ -n "$scope" ]; then
-    notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
-    lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope")
-  else
-    notes+=("lint: not run (only root files changed)")
-  fi
-fi
 if [ "$fail" = 0 ]; then
-  run_checks
-  if [ ${#lint_cmd[@]} -gt 0 ]; then
-    phase lint "${lint_cmd[@]}" & lint_pid=$!
+  phase build go build ./... & pids+=($!)
+  phase test go run ./tools/test-affected run -reach "$reach" -base "$base" -lanes go,web,electron & pids+=($!)
+  if [ "$typecheck" = true ]; then
+    phase typecheck npm --prefix frontends/web run --silent typecheck & pids+=($!)
+  fi
+  if echo "$files" | grep -qE '^(go\.(mod|sum)|forge\.yaml)$'; then
+    notes+=("lint: unscoped (a pin moved)")
+    phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends & pids+=($!)
+  else
+    # One awk, not a dirname per file: forking hundreds of processes on a
+    # loaded host delayed lint's start by over a minute.
+    scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+    if [ -n "$scope" ]; then
+      notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
+      phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" & pids+=($!)
+    else
+      notes+=("lint: not run (only root files changed)")
+    fi
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
@@ -287,63 +300,11 @@ if [ "$fail" = 0 ]; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
   for p in "${pids[@]}"; do wait "$p" || fail=1; done
-  if [ -n "$lint_pid" ] && ! wait "$lint_pid"; then
-    # A failure stands unless a generator rewrote the tree lint read and
-    # --amend will fold that in: then the re-run below decides.
-    if [ "$amend" = 1 ] && ls "$L"/*.changed >/dev/null 2>&1; then lint_deferred=1; else fail=1; fi
-  fi
 fi
-lint_rerun() {
-  lint_deferred=0
-  [ ${#lint_cmd[@]} -gt 0 ] || return 0
-  [ -f "$L/lint.log" ] && mv "$L/lint.log" "$L/lint.pre-amend.log"
-  notes+=("lint: ran again on the amended tree (a generator rewrote files it reads)")
-  phase lint "${lint_cmd[@]}" & pids+=($!)
-}
-# --amend: fold what the generators rewrote (generated paths only) into HEAD.
-# build and test judged the tree before it; when the regenerated files include
-# code, run them again on the amended tree.
-if [ "$amend" = 1 ] && [ "$fail" = 0 ]; then
-  for n in generate docs; do
-    [ -f "$L/$n.changed" ] || continue
-    wt=$(cat "$L/$n.wt"); [ "$wt" = "$root" ] && continue
-    while IFS= read -r f; do
-      if [ -e "$wt/$f" ]; then mkdir -p "$(dirname "$f")" && cp -p "$wt/$f" "$f"; else rm -f "$f"; fi
-    done <"$L/$n.changed"
-  done
+# --amend: a failed gate leaves no half-regenerated tree behind.
+if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
+  git reset -q --hard; git clean -fdq
 fi
-commit_amend() { git add -A && git -c user.name="${GIT_AUTHOR_NAME:-reliant-merge-gate}" -c user.email="${GIT_AUTHOR_EMAIL:-merge-gate@reliantlabs.io}" commit -q --amend --no-edit --no-verify; }
-if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
-  if [ "$fail" = 0 ]; then
-    # The docs generators compile what generate just rewrote: re-judge them,
-    # in place and before the re-check (they may rewrite code too).
-    if [ "$dgen" = true ] && grep -qE '\.(go|proto)$' "$L/generate.changed" 2>/dev/null; then
-      rm -f "$L/docs.changed"; b=$(snapshot)
-      phase docs-2 bash -c "task generate:docs" || fail=1
-      [ "$fail" = 0 ] && { judge docs "$b" "$root" || fail=1; }
-    fi
-    if [ "$fail" = 0 ]; then
-      commit_amend
-      pids=()
-      lint_rerun
-      if cat "$L"/*.changed 2>/dev/null | grep -qE '\.(go|ts|tsx|proto)$'; then
-        notes+=("regenerated code: build and test ran again on the amended tree")
-        # A regenerate that rewrote web sources (src/gen, the shortcuts
-        # data) type-checks them, even when the branch itself touched no web.
-        if [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
-          typecheck=true
-          npm_install . && npm_install frontends/web || fail=1
-        fi
-        run_checks -2
-      fi
-      for p in "${pids[@]}"; do wait "$p" || fail=1; done
-    fi
-  fi
-  [ "$fail" = 0 ] || { git reset -q --hard; git clean -fdq; }
-fi
-# A lint failure held for a re-run that never happened (nothing was amended)
-# stands: a held verdict is never a pass.
-[ "$lint_deferred" = 1 ] && fail=1
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
@@ -365,7 +326,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test typecheck lint migsafety migorder build-2 test-2 typecheck-2 docs-2; do
+  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test typecheck lint migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
