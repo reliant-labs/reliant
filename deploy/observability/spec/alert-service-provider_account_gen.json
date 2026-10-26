@@ -1,0 +1,7 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "alert": {
+    "name": "provider_account",
+    "rpc_service": "reliant.v1.ProviderAccountService"
+  }
+}

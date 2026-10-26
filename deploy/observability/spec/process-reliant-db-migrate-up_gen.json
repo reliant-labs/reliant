@@ -1,0 +1,318 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "process": {
+    "name": "reliant-db-migrate-up",
+    "binary": "reliant",
+    "args": [
+      "db",
+      "migrate",
+      "up"
+    ],
+    "serviceNames": [
+      "reliant-migrate"
+    ],
+    "workloads": [
+      "reliant-migrate"
+    ]
+  },
+  "dashboard": {
+    "sections": [
+      {
+        "id": "runtime",
+        "title": "Runtime"
+      },
+      {
+        "id": "workload",
+        "title": "Workload saturation"
+      },
+      {
+        "id": "logs",
+        "title": "Logs"
+      }
+    ],
+    "id": "process-reliant-db-migrate-up",
+    "title": "reliant: reliant-db-migrate-up",
+    "description": "Deployed process reliant db migrate up. Runtime and workload panels appear once, independent of RPC breakdowns.",
+    "filters": [
+      {
+        "id": "service",
+        "label": "service.name",
+        "field": "service.name"
+      },
+      {
+        "id": "env",
+        "label": "deployment.environment.name",
+        "field": "deployment.environment.name"
+      }
+    ],
+    "annotations": [
+      {
+        "source": "releases",
+        "label": "Releases"
+      }
+    ],
+    "panels": [
+      {
+        "section": "runtime",
+        "id": "go-memory",
+        "title": "Go memory used",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "used",
+            "agg": "sum",
+            "field": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "label": "gc goal",
+            "agg": "avg",
+            "field": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "unit": "bytes",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "runtime",
+        "id": "go-goroutines",
+        "title": "Goroutines",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "goroutines",
+            "agg": "sum",
+            "field": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "runtime",
+        "id": "go-alloc",
+        "title": "Heap allocation",
+        "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "allocated",
+            "agg": "sum",
+            "field": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "unit": "bytes",
+        "width": 24,
+        "height": 7
+      },
+      {
+        "section": "logs",
+        "id": "error-logs",
+        "title": "Error logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          },
+          {
+            "field": "log.severity",
+            "op": "eq",
+            "value": "error"
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "section": "logs",
+        "id": "logs",
+        "title": "Process logs",
+        "kind": "search",
+        "signal": "logs",
+        "where": [
+          {
+            "field": "service.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "columns": [
+          "timestamp",
+          "service.name",
+          "log.severity",
+          "log.body"
+        ],
+        "width": 24,
+        "height": 8
+      },
+      {
+        "section": "workload",
+        "id": "cpu-vs-limit",
+        "title": "CPU against its limit",
+        "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.cpu_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "percent",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "workload",
+        "id": "memory-vs-limit",
+        "title": "Memory against its limit",
+        "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.memory_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "percent",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "section": "workload",
+        "id": "restarts",
+        "title": "Container restarts",
+        "description": "The highest restart count among each workload's containers; a step is a restart.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "restarts",
+            "agg": "max",
+            "field": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "in",
+            "values": [
+              "reliant-migrate"
+            ]
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      }
+    ]
+  },
+  "savedSearches": [
+    {
+      "id": "errors-process-reliant-db-migrate-up",
+      "title": "reliant-db-migrate-up: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "in",
+          "values": [
+            "reliant-migrate"
+          ]
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ]
+}
