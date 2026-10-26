@@ -65,6 +65,53 @@ func runIncoming(t *testing.T, svc *Service, conn *daemonConnection, stream *par
 	})
 }
 
+// leaseProbeRepo is the real repository, reporting each lease renewal and
+// detected-ports write the gateway's background goroutines finish. A test
+// waits on these instead of polling the database against a wall-clock bound:
+// on a loaded gate host one write can take seconds (a fresh pool connection
+// to a busy shared Postgres), and the renewer and the state worker run
+// independently, so polling also left the test unable to tell WHICH
+// heartbeat's write it was looking at.
+type leaseProbeRepo struct {
+	Repository
+	renewed chan bool     // one per finished RenewDaemonAttachment: whether it re-created the row
+	ports   chan struct{} // one per finished UpdateDaemonAttachmentPorts
+}
+
+func newLeaseProbeRepo(repo Repository) *leaseProbeRepo {
+	return &leaseProbeRepo{Repository: repo, renewed: make(chan bool, 64), ports: make(chan struct{}, 64)}
+}
+
+func (r *leaseProbeRepo) RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (bool, error) {
+	created, err := r.Repository.RenewDaemonAttachment(ctx, att)
+	if err == nil {
+		r.renewed <- created
+	}
+	return created, err
+}
+
+func (r *leaseProbeRepo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
+	err := r.Repository.UpdateDaemonAttachmentPorts(ctx, daemonID, ports)
+	if err == nil {
+		r.ports <- struct{}{}
+	}
+	return err
+}
+
+// awaitProbe waits for the gateway's next finished write of one kind. The
+// bound only keeps a broken gateway from hanging the run; it is not a
+// latency requirement.
+func awaitProbe[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(30 * time.Second):
+		t.Fatalf("timed out waiting for the gateway to %s", what)
+		panic("unreachable")
+	}
+}
+
 // A heartbeat read off a live stream must restore a lease the reaper deleted,
 // tell the owner's clients — which were showing the machine disconnected — to
 // re-read, and put back the detected ports the fresh row lost.
@@ -76,7 +123,8 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	userID, daemonID := "lease-user", uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 
-	svc := newTestService(repo)
+	probe := newLeaseProbeRepo(repo)
+	svc := newTestService(probe)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
 	stream := newParkedStream()
@@ -99,8 +147,17 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 		}
 		return p.String
 	}
+
+	// The first heartbeat renews the connect-time lease and records the
+	// ports. Both writes must have LANDED before the reaper is simulated: a
+	// renewal still in flight when the row is deleted re-creates it on the
+	// first heartbeat's behalf (correctly — the stream is alive), and the
+	// re-creation this test is about would then never come from the next one.
 	beat()
-	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond)
+	require.False(t, awaitProbe(t, probe.renewed, "renew the lease for the first heartbeat"),
+		"the first heartbeat's renewal re-created a lease that existed")
+	awaitProbe(t, probe.ports, "record the first heartbeat's detected ports")
+	require.Equal(t, "[3000]", ports())
 
 	// The reaper deletes the lease while the stream is still held (it does
 	// so whenever no renewal landed for 15 minutes).
@@ -111,21 +168,25 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	// The stream is moving again: the daemon's next heartbeat is read.
 	beat()
 
-	require.Eventually(t, func() bool {
-		attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemon_registry.AttachmentStaleThreshold)
-		return err == nil && attached
-	}, 3*time.Second, 20*time.Millisecond,
+	require.True(t, awaitProbe(t, probe.renewed, "renew the lease for the heartbeat after the reap"),
 		"a heartbeat read off a live stream must re-create the lease the reaper deleted; "+
 			"otherwise ListDaemons reports the daemon DISCONNECTED until it happens to reconnect")
-	require.Eventually(t, func() bool { return len(daemonListRefetches(t, hub)[userID]) > refetchesBefore },
-		3*time.Second, 20*time.Millisecond,
-		"re-creating a lease must tell the owner's clients to re-read the daemon list; "+
+	attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemon_registry.AttachmentStaleThreshold)
+	require.NoError(t, err)
+	require.True(t, attached, "the re-created lease does not read as attached")
+	// Announced right after the re-creating write returns, in memory.
+	require.Eventually(t, func() bool { return len(daemonListRefetches(t, hub)[userID]) == refetchesBefore+1 },
+		30*time.Second, 5*time.Millisecond,
+		"re-creating a lease must tell the owner's clients to re-read the daemon list, once; "+
 			"they were showing the machine disconnected and nothing else would correct them before the slow fallback poll")
 
 	// The re-created row starts with no detected ports; the next heartbeat
-	// must rewrite them even though the set did not change.
+	// must rewrite them even though the set did not change. Exactly one of
+	// the two heartbeats since the reap writes them: whichever the state
+	// worker applies after the renewer flagged the re-creation.
 	beat()
-	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond,
+	awaitProbe(t, probe.ports, "rewrite the detected ports the re-created lease lost")
+	require.Equal(t, "[3000]", ports(),
 		"the re-created lease lost the daemon's detected ports and the unchanged set was never rewritten")
 }
 
