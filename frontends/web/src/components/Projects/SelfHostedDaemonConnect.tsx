@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { TokenKind } from "@/gen/reliant/v1/token_pb";
 import { useCreateToken } from "@/hooks/token-service-hooks_gen";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useEventBus } from "@/lib/event-context";
 import {
   daemonStartCommand,
@@ -30,8 +31,12 @@ import {
  *   whether the user still wants to set up the machine in front of them, so
  *   the instructions stay put and the flow-control affordances (waiting
  *   spinner, "check connection" button) are dropped.
+ * - "add" — the caller is adding ANOTHER machine and waits for it (the
+ *   picker's Add machine). Like "bootstrap", except that only a machine that
+ *   was not in the list when the panel opened counts: the one already
+ *   connected is the reason the button was offered, not the one being set up.
  */
-export type SelfHostedDaemonConnectMode = "bootstrap" | "reference";
+export type SelfHostedDaemonConnectMode = "bootstrap" | "add" | "reference";
 
 /**
  * A numbered step label. The steps were previously "1." and "2." rendered as
@@ -105,6 +110,20 @@ export function SelfHostedDaemonConnect({
   const createToken = useCreateToken();
   const notifiedConnectedRef = useRef(false);
 
+  // The machines that existed when the panel opened. In "add" mode none of
+  // them is the one the user is setting up.
+  const knownIdsRef = useRef<Set<string> | null>(null);
+  if (knownIdsRef.current === null && !daemonLoading) {
+    knownIdsRef.current = new Set(daemons.map((d) => d.daemonId));
+  }
+  const known = knownIdsRef.current;
+  const connectedDaemon =
+    mode === "add"
+      ? known
+        ? daemons.find((d) => d.status === DaemonStatus.ACTIVE && !known.has(d.daemonId))
+        : undefined
+      : activeDaemon;
+
   // ──────────────────────────────────────────────────────────────────────────
   // CLI install state (Electron only). When the user runs the desktop app,
   // electron's main process auto-installs `reliant` to PATH at first launch
@@ -139,11 +158,11 @@ export function SelfHostedDaemonConnect({
   // Notify the caller exactly once when a daemon connects.
   useEffect(() => {
     if (daemonLoading) return;
-    if (!activeDaemon) return;
+    if (!connectedDaemon) return;
     if (notifiedConnectedRef.current) return;
     notifiedConnectedRef.current = true;
     onConnected?.();
-  }, [activeDaemon, daemonLoading, onConnected]);
+  }, [connectedDaemon, daemonLoading, onConnected]);
 
   const handleInstallCli = async () => {
     if (!window.electronAPI?.installCLI) return;
@@ -240,8 +259,8 @@ export function SelfHostedDaemonConnect({
   const terminal = describeTerminal(detectedOS);
 
   const handleManualCheck = () => {
-    if (activeDaemon) {
-      setManualFeedback("Daemon connected.");
+    if (connectedDaemon) {
+      setManualFeedback("Machine connected.");
       return;
     }
     if (daemonLoading) {
@@ -261,7 +280,7 @@ export function SelfHostedDaemonConnect({
     );
   };
 
-  if (activeDaemon && mode === "bootstrap") {
+  if (connectedDaemon && mode !== "reference") {
     return (
       <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
         <div className="flex items-start gap-3">
@@ -503,7 +522,7 @@ export function SelfHostedDaemonConnect({
           daemon wants a spinner and a "check connection" button. In reference
           mode the user may already have a working machine and is simply
           reading how to add another. */}
-      {mode === "bootstrap" && (
+      {mode !== "reference" && (
         <div className="space-y-2 border-t border-border/30 pt-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

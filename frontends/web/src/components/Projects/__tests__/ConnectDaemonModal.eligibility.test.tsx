@@ -69,6 +69,7 @@ import { ConnectDaemonModal } from "../ConnectDaemonModal";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 // The daemon list is read through connectClient(DaemonRegistryService).
 beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mockListDaemons() })));
@@ -171,3 +172,25 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
     });
   });
 });
+
+// H2: the picker offers Add machine only while a machine is connected, so the
+// modal must create a NEW one in exactly that state — not report success for
+// the machine already there, not resume it, and not reuse its name.
+describe("ConnectDaemonModal — adding another machine", () => {
+  it("creates a machine even when one is already active, under a free name", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [
+        { daemonId: "d-1", name: "cloud-small", status: DaemonStatus.ACTIVE },
+        { daemonId: "d-2", name: "cloud-small-2", status: DaemonStatus.SUSPENDED },
+      ],
+    });
+    mockCreateDaemon.mockResolvedValue("d-3");
+
+    renderWithQuery(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Reliant Cloud/i }));
+
+    await waitFor(() => expect(mockCreateDaemon).toHaveBeenCalledTimes(1));
+    expect(mockCreateDaemon.mock.calls[0][0]).toMatchObject({ name: "cloud-small-3" });
+  });
+});
+
