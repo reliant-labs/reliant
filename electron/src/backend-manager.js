@@ -943,19 +943,28 @@ class BackendManager {
    * that keeps us from killing anything.
    */
   isProcessAlive(pid) {
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      try {
         const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
           encoding: 'utf8',
           timeout: 5000
         });
         return out.includes(String(pid));
+      } catch (e) {
+        return true;
       }
-      execSync(`kill -0 ${pid}`, { timeout: 1000 });
+    }
+    // Signal 0 in-process: no shell, so no timeout to lose. This used to
+    // shell out to `kill -0` with a 1s timeout, and on a loaded machine the
+    // timeout fired and read as "dead", which convicted a live owner's daemon
+    // as an orphan. Only ESRCH means the process is gone. EPERM means it
+    // exists but belongs to someone else, and anything else is no answer.
+    try {
+      process.kill(pid, 0);
       return true;
     } catch (e) {
-      return false;
+      return e.code !== 'ESRCH';
     }
   }
 
