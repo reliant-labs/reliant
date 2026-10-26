@@ -64,8 +64,9 @@ import {
   LegacyCommandRoute,
   LegacyDomainsRoute,
   LegacyEnvRoute,
-  LegacyObservabilityRoute,
+  OrgObservabilityRoute,
 } from "../Console/ForgeEntryRoutes";
+import { OrgConsoleLayout } from "../Org";
 import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
 import { ForgeLayout } from "../ForgeLayout";
@@ -445,9 +446,10 @@ function buildRouter(path: string) {
     monitoring: MonitoringSettingsPage,
     settings: ProjectSettingsPage,
     activity: ActivityPage,
+    orgLayout: OrgConsoleLayout,
+    orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
-    legacyObservability: LegacyObservabilityRoute,
     legacyDomains: LegacyDomainsRoute,
     legacyCommand: LegacyCommandRoute,
   });

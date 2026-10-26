@@ -14,7 +14,7 @@ import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-rout
 import {
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
-  forgeObservabilitySearchSchema,
+  forgeOrgObsSearchSchema,
 } from "@/routeSchemas";
 
 import { MAX_FILTERS, MAX_GROUP_BY, MAX_IN_VALUES } from "../attributes";
@@ -35,7 +35,7 @@ import { OBS_SEARCH_KEYS, type ObsSearch } from "../obsSearch";
 const PROJECT_PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] };
 
 /** What the router does to a search object on its way into the address bar and back. */
-function throughTheUrl(search: Record<string, unknown>, schema = forgeObservabilitySearchSchema) {
+function throughTheUrl(search: Record<string, unknown>, schema = forgeOrgObsSearchSchema) {
   const url = defaultStringifySearch(search);
   return { url, parsed: schema.parse(defaultParseSearch(url)) };
 }
@@ -141,7 +141,7 @@ describe("the URL round trip", () => {
   });
 
   it("drops a bad value instead of failing the route", () => {
-    const parsed = forgeObservabilitySearchSchema.parse({
+    const parsed = forgeOrgObsSearchSchema.parse({
       view: "heatmaps",
       range: "90d",
       groupBy: "not-a-list",
@@ -153,7 +153,7 @@ describe("the URL round trip", () => {
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
-        "alerts", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
+        "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort",
         "session", "t", "replay", "user", "cursor",

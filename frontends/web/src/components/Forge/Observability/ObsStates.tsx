@@ -231,6 +231,16 @@ export function ObsNoEnvironments({ topic }: { topic: ObsTopic }) {
   );
 }
 
+/** Apps are selected but none of them has an environment recorded: there is nothing to read (and nothing is queried). */
+export function ObsNoAppEnvironments({ apps }: { apps: readonly string[] }) {
+  const names = apps.join(", ");
+  return (
+    <StateFrame testId="obs-no-app-environments" icon={<Boxes className="h-4 w-4" />} title={`No environments recorded for ${names}`}>
+      <p>Telemetry is read per environment, and the selected {apps.length === 1 ? "app has" : "apps have"} none yet. Pick another app, or clear the app filter.</p>
+    </StateFrame>
+  );
+}
+
 export function ObsNoData({
   what,
   range,

@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Layers, Plus, Server, X } from "lucide-react";
+import { Boxes, Check, ChevronDown, Layers, Plus, Server, X } from "lucide-react";
 
 import { useAttributeValues } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
@@ -46,6 +46,15 @@ export interface ObsScopeBarProps {
   range: RangePreset;
   /** Project area: every environment, for the picker. Env page: undefined. */
   environments?: ObsEnvironment[];
+  /**
+   * Org place: every app name, for the App picker. The
+   * environments are then already narrowed to the selected apps and named
+   * `app/env`. Present in both chrome modes.
+   */
+  apps?: string[];
+  /** Selected app names; empty = all. */
+  selectedApps?: string[];
+  onAppsChange?: (names: string[]) => void;
   /** Selected environment names; empty = all. */
   selectedEnvs: string[];
   onEnvsChange: (names: string[]) => void;
@@ -74,6 +83,9 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="obs-scope-bar" role="group" aria-label="What to show">
+      {props.apps && (
+        <AppPicker apps={props.apps} selected={props.selectedApps ?? []} onChange={props.onAppsChange ?? (() => undefined)} />
+      )}
       {props.environments ? (
         <EnvPicker environments={props.environments} selected={props.selectedEnvs} onChange={props.onEnvsChange} />
       ) : props.pinnedEnv ? (
@@ -218,6 +230,56 @@ export function Popover({
 }
 
 // ── Environments ─────────────────────────────────────────────────────────────
+
+function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: string[]; onChange: (names: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const active = selected.filter((name) => apps.includes(name));
+  const summary =
+    active.length === 0 ? "All apps" : active.length <= 2 ? active.join(", ") : `${active.length} apps`;
+  const toggle = (name: string) => onChange(active.includes(name) ? active.filter((n) => n !== name) : [...active, name]);
+
+  return (
+    <Popover
+      label="Apps"
+      open={open}
+      onOpenChange={setOpen}
+      testId="obs-app-picker"
+      trigger={
+        <>
+          <Boxes className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+          <span className="text-muted-foreground">App</span>
+          <span className="font-medium">{summary}</span>
+          <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        </>
+      }
+    >
+      <fieldset>
+        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Apps</legend>
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="obs-app-all"
+        >
+          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
+          Every app
+        </button>
+        {apps.map((app) => (
+          <label key={app} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+            <input
+              type="checkbox"
+              checked={active.includes(app)}
+              onChange={() => toggle(app)}
+              className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              data-testid={`obs-app-option-${app}`}
+            />
+            <span className="font-mono">{app}</span>
+          </label>
+        ))}
+      </fieldset>
+    </Popover>
+  );
+}
 
 function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvironment[]; selected: string[]; onChange: (names: string[]) => void }) {
   const [open, setOpen] = useState(false);

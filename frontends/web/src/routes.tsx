@@ -193,8 +193,10 @@ const ForgeLandingRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
 const ForgeLegacyEnvRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
-const ForgeLegacyObservabilityRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyObservabilityRoute')
+const ForgeOrgObservabilityRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute')
+const ForgeOrgLayout = lazyRoute(
+  () => import('./components/Forge/Org'), 'OrgConsoleLayout')
 const ForgeLegacyDomainsRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
 const ForgeLegacyCommandRoute = lazyRoute(
@@ -703,9 +705,10 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   monitoring: gated(ForgeConsoleMonitoringPage),
   settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
+  orgLayout: gated(ForgeOrgLayout),
+  orgObservability: gated(ForgeOrgObservabilityRoute),
   landing: gated(ForgeLandingRoute),
   legacyEnv: gated(ForgeLegacyEnvRoute),
-  legacyObservability: gated(ForgeLegacyObservabilityRoute),
   legacyDomains: gated(ForgeLegacyDomainsRoute),
   legacyCommand: gated(ForgeLegacyCommandRoute),
 })

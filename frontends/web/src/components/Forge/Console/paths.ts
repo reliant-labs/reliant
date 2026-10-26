@@ -21,6 +21,18 @@
  *   /forge/p/:project/settings                Project settings (Usage lives here)
  *   /forge/p/:project/activity                Activity
  *
+ * The org pages sit beside them: the whole org, with app and environment as
+ * filters (the `apps` and `envs` search keys) rather than a path segment.
+ *
+ *   /forge/observability                      org-wide Observability overview
+ *   /forge/observability/:view                errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
+ *
+ * The org's list of apps is not a console page: it is /apps (components/Apps),
+ * and the bare /forge redirects there. `/forge?project=` and
+ * `/forge?forgeProject=` (and the same on /forge/observability) still resolve
+ * that one app's console: links written before the org pages (a control
+ * plane's action URL, an old bookmark).
+ *
  * `:project` is the FORGE project name (forge.yaml `name`), not a Reliant
  * project id. Everything the console shows — environments, releases,
  * telemetry, secrets — is filed by the control plane under that name, and it
@@ -44,6 +56,9 @@ import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/
 
 export const FORGE_ROOT = "/forge";
 
+/** The org's Apps list (components/Apps/AppsPage.tsx): the way out of one app's console to all of them. */
+export const APPS_PATH = "/apps";
+
 /** The Observability sub-pages that are nav entries (decision D9). */
 export const OBS_NAV_VIEWS = ["errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
 export type ObsNavView = (typeof OBS_NAV_VIEWS)[number];
@@ -61,6 +76,27 @@ export const OBS_NAV_LABELS: Record<ObsNavView, string> = {
 
 export function isObsNavView(value: string | undefined): value is ObsNavView {
   return (OBS_NAV_VIEWS as readonly string[]).includes(value ?? "");
+}
+
+/** The pages of the org console (not inside one app): org-wide Observability. */
+export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView };
+
+/** The path of an org page. */
+export function orgPath(page: OrgPage): string {
+  switch (page.kind) {
+    case "observability":
+      return `${FORGE_ROOT}/observability`;
+    case "obs-view":
+      return `${FORGE_ROOT}/observability/${page.view}`;
+  }
+}
+
+/** Which org page `pathname` is, or null for any other path. The inverse of orgPath. */
+export function orgPageOf(pathname: string): OrgPage | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "forge" || parts[1] !== "observability") return null;
+  if (parts.length === 2) return { kind: "observability" };
+  return parts.length === 3 && isObsNavView(parts[2]) ? { kind: "obs-view", view: parts[2] } : null;
 }
 
 /** Every page of the console, as the nav and the breadcrumb name it. */
@@ -232,13 +268,25 @@ export function envScopeOfEnvs(envs: readonly string[] | undefined): string {
   return envs && envs.length === 1 ? envs[0]! : "all";
 }
 
-/** The Observability keys of `search`, without the two the console moved out of the query (view, envs). */
+/**
+ * The Observability keys of `search`, without the three a project console does
+ * not take: the view and the environment filter (moved into the path and the
+ * `env` scope), and the org's app filter.
+ */
 export function carriedObsSearch(search: Record<string, unknown>): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
   for (const key of OBS_SEARCH_KEYS) {
-    if (key === "view" || key === "envs") continue;
+    if (key === "view" || key === "envs" || key === "apps") continue;
     if (search[key] !== undefined) kept[key] = search[key];
   }
+  return kept;
+}
+
+/** The keys to carry between org pages: the Observability ones, plus the org's own filters, `envs` and `apps`. */
+export function carriedOrgSearch(search: Record<string, unknown>): Record<string, unknown> {
+  const kept = carriedObsSearch(search);
+  if (search.envs !== undefined) kept.envs = search.envs;
+  if (search.apps !== undefined) kept.apps = search.apps;
   return kept;
 }
 

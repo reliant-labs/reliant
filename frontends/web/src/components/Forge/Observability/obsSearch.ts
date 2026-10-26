@@ -95,6 +95,8 @@ export interface ObsSearch {
    * env page pins its own environment and ignores this.
    */
   envs?: string[];
+  /** The org place's app filter: forge app names. Absent: every app. */
+  apps?: string[];
   /** Attribute filters, one token each (obsFilters.ts): `service.version:v1.8`. */
   f?: string[];
   /** Up to three keys every aggregating view splits its series by. */
@@ -155,6 +157,7 @@ export const OBS_SEARCH_KEYS = [
   "errors",
   "minDuration",
   "envs",
+  "apps",
   "f",
   "groupBy",
   "alerts",

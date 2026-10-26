@@ -11,16 +11,21 @@ import { describe, expect, it } from "vitest";
 import { defaultParseSearch } from "@tanstack/react-router";
 
 import {
+  carriedObsSearch,
+  carriedOrgSearch,
   consolePageOf,
   consolePath,
   envScopeOfEnvs,
   legacyEnvTarget,
   legacyObservabilityTarget,
   obsViewOfPage,
+  orgPageOf,
+  orgPath,
   pageOfObsView,
   pinnedEnvOf,
   withSearch,
   type ConsolePage,
+  type OrgPage,
 } from "../paths";
 
 const PAGES: ConsolePage[] = [
@@ -151,5 +156,56 @@ describe("redirects from the retired URLs", () => {
     // Every environment: the Overview, filtered to the workload, lets the reader pick one.
     expect(legacyObservabilityTarget("shop", { view: "workloads", workload: "api" })).toBe("/forge/p/shop?env=all&q=api");
     expect(legacyEnvTarget("shop", "e2e", { tab: "observability", view: "workloads", workload: "api" })).toBe("/forge/p/shop/workloads/e2e/api?env=e2e");
+  });
+});
+
+const ORG_PAGES: OrgPage[] = [
+  { kind: "observability" },
+  { kind: "obs-view", view: "errors" },
+  { kind: "obs-view", view: "dashboards" },
+  { kind: "obs-view", view: "alerts" },
+];
+
+describe("org paths", () => {
+  it("are /forge/observability and /forge/observability/<view>", () => {
+    expect(orgPath({ kind: "observability" })).toBe("/forge/observability");
+    expect(orgPath({ kind: "obs-view", view: "logs" })).toBe("/forge/observability/logs");
+  });
+
+  it.each(ORG_PAGES)("round-trip %o through orgPageOf", (page) => {
+    expect(orgPageOf(orgPath(page))).toEqual(page);
+  });
+
+  it("tolerate a trailing slash", () => {
+    expect(orgPageOf("/forge/observability/")).toEqual({ kind: "observability" });
+  });
+
+  it("are null outside the org pages", () => {
+    expect(orgPageOf("/")).toBeNull();
+    // The Apps list is /apps, not an org console page; bare /forge redirects there.
+    expect(orgPageOf("/forge")).toBeNull();
+    expect(orgPageOf("/forge/observability/heatmaps")).toBeNull();
+    expect(orgPageOf("/forge/observability/logs/extra")).toBeNull();
+    expect(orgPageOf("/forge/p/shop")).toBeNull();
+    expect(orgPageOf("/forge/p/shop/observability")).toBeNull();
+    expect(orgPageOf("/forge/domains")).toBeNull();
+    expect(orgPageOf("/forge/env/prod")).toBeNull();
+  });
+
+  it("leave the project console's own parsing alone", () => {
+    expect(consolePageOf("/forge")).toBeNull();
+    expect(consolePageOf("/forge/observability")).toBeNull();
+  });
+});
+
+describe("carried search", () => {
+  const search = { range: "6h", q: "timeout", envs: ["shop/prod"], apps: ["shop"], view: "logs", project: "p1", unrelated: 1 };
+
+  it("an org page carries the Observability keys plus envs and apps (the view is the path)", () => {
+    expect(carriedOrgSearch(search)).toEqual({ range: "6h", q: "timeout", envs: ["shop/prod"], apps: ["shop"] });
+  });
+
+  it("an app's console takes neither the org's envs nor its apps", () => {
+    expect(carriedObsSearch(search)).toEqual({ range: "6h", q: "timeout" });
   });
 });
