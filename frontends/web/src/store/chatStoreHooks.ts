@@ -106,12 +106,17 @@ export function useChatMessages(chatId: string | undefined): Message[] {
  * Scroll-back paging state for a chat's message list.
  *
  * `hasOlder` is the server's has_more from the bounded initial snapshot, kept
- * on the message envelope (see message-queries.ts). `isLoadingOlder` is local
- * to the caller: the fetch is an imperative store action, not a query, so the
- * in-flight flag is owned by whoever awaits it (see ChatContainer).
+ * on the message envelope (see message-queries.ts). `isLoadingOlder` is the
+ * store's per-chat in-flight flag for loadOlderMessages.
  */
 export function useHasOlderMessages(chatId: string | undefined): boolean {
   return useMessages(chatId).data?.hasMore ?? false;
+}
+
+export function useIsLoadingOlderMessages(chatId: string | undefined): boolean {
+  return useChatStore((state) =>
+    chatId ? state.olderLoadingByChat[chatId] === true : false,
+  );
 }
 
 /**

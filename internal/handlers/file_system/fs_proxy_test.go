@@ -394,6 +394,77 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 	}
 }
 
+// TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace pins the
+// viewer's exemption: a read-only viewer rpc forwards an absolute path outside
+// the workspace to the user's daemon unchanged, while every rpc that lists or
+// mutates still refuses it.
+func TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace(t *testing.T) {
+	repo, projectID, base := seedFSProxyProject(t)
+	outside := filepath.Join(filepath.Dir(base), "elsewhere", "notes.md")
+
+	viewers := map[string]func(context.Context, *Service) error{
+		"GetFileContent": func(ctx context.Context, s *Service) error {
+			_, err := s.GetFileContent(ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+		"GetFileMetadata": func(ctx context.Context, s *Service) error {
+			_, err := s.GetFileMetadata(ctx, connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+		"GetFilePreviewInfo": func(ctx context.Context, s *Service) error {
+			_, err := s.GetFilePreviewInfo(ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+		"GetFilePreview": func(ctx context.Context, s *Service) error {
+			_, err := s.GetFilePreview(ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+	}
+	for name, call := range viewers {
+		t.Run(name, func(t *testing.T) {
+			router := &fsTreeStubRouter{respJSON: []byte(`{}`)}
+			svc := newProxy(t, router, repo)
+
+			// The stub's empty reply may still fail the rpc (no such file,
+			// not previewable); what matters is that it was not refused.
+			err := call(fsProxyContext(), svc)
+			assert.NotEqual(t, connect.CodePermissionDenied, svcerr.Code(err), "%s refused a viewable path: %v", name, err)
+			require.NotNil(t, router.lastPayload, "%s never reached the daemon", name)
+			var sent struct {
+				Path string `json:"path"`
+			}
+			require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
+			assert.Equal(t, outside, sent.Path)
+		})
+	}
+
+	confined := map[string]func(context.Context, *Service) error{
+		"GetFileTree": func(ctx context.Context, s *Service) error {
+			_, err := s.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+		"SaveFileContent": func(ctx context.Context, s *Service) error {
+			_, err := s.SaveFileContent(ctx, connect.NewRequest(&reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: outside, Content: "x"}))
+			return err
+		},
+		"DeleteFileOrFolder": func(ctx context.Context, s *Service) error {
+			_, err := s.DeleteFileOrFolder(ctx, connect.NewRequest(&reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: outside}))
+			return err
+		},
+	}
+	for name, call := range confined {
+		t.Run(name, func(t *testing.T) {
+			router := &fsTreeStubRouter{respJSON: []byte(`{}`)}
+			svc := newProxy(t, router, repo)
+
+			err := call(fsProxyContext(), svc)
+			require.Error(t, err, "%s forwarded a path outside the workspace", name)
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+			assert.Nil(t, router.lastPayload, "%s reached the daemon with a refused path", name)
+		})
+	}
+}
+
 // TestFileSystemProxy_SendsOnlyAbsolutePathsToTheDaemon pins the wire contract:
 // the sentinels are normalised on the server, so the client-facing API keeps
 // accepting "/" while the daemon only ever sees a resolved absolute path.

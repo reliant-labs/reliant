@@ -77,8 +77,12 @@ gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^fro
 
 rows=() notes=() fail=0
 # phase <name> <cmd>...: run one phase, timed, output to $L/<name>.log.
+# Each phase is recorded in $L/expected BEFORE it launches and leaves its .row
+# only when it finishes, so a phase that was started and cut off (queued past a
+# timeout, cancelled, killed) has no row and fails the gate (gate-verify below).
 phase() {
   local n=$1 s e rc; shift
+  echo "$n" >>"$L/expected"
   s=$(date +%s)
   "$@" >"$L/$n.log" 2>&1; rc=$?
   e=$(date +%s)
@@ -177,6 +181,10 @@ gen_docs() {
 reach=${MG_REACH:-direct}
 phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
+# Fail closed: without jq, or with a plan it cannot parse, every lane would read
+# as "not selected" and be silently skipped.
+command -v jq >/dev/null 2>&1 || { echo "merge-gate: jq is not installed, so the plan cannot be read and no selected lane could be checked" >&2; exit 1; }
+jq -e . "$L/plan.json" >/dev/null 2>&1 || { echo "merge-gate: $L/plan.json is not valid JSON; refusing to guess what was selected" >&2; cat "$L/plan.log" >&2; exit 1; }
 j() { jq -r "$1" "$L/plan.json"; }
 gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
 elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
@@ -307,6 +315,17 @@ if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
   [ "$fail" = 0 ] || { git reset -q --hard; git clean -fdq; }
 fi
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
+
+# ── fail closed: every phase the plan selected must have COMPLETED ────────
+# A selected lane that never ran (queued for a slot, cancelled, timed out, tool
+# missing) leaves no result row; build/test green around it would otherwise
+# pass (reliant#1393 merged with docs-generate still queued). gate-verify fails
+# it by name. Its own failure to run is a failure too.
+if go run ./tools/test-affected gate-verify -plan "$L/plan.json" -dir "$L" >"$L/verify.log" 2>&1; then :; else
+  fail=1
+  [ -f "$L/verdict" ] || echo "FAILED: gate-verify could not run" >"$L/verdict"
+  notes+=("$(head -c 300 "$L/verdict")")
+fi
 
 # ── summary ───────────────────────────────────────────────────────────────
 end=$(date +%s)

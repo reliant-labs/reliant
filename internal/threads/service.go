@@ -65,10 +65,12 @@ type Repository interface {
 	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*db.Message, error)
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
 	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	// GetNextSeq returns the next chat-global seq. See
-	// 20260802000000_add_message_seq.sql.
-	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
+	// AllocateMessageOrder takes a message's ordinal and seq from their
+	// counters (db.Repo.AllocateMessageOrder).
+	AllocateMessageOrder(ctx context.Context, threadID, chatID string) (ordinal, seq int64, err error)
+	// AllocateContextWindowSequence takes the sequence of a thread's next
+	// context window from its counter.
+	AllocateContextWindowSequence(ctx context.Context, threadID string) (int, error)
 	GetContextUsage(ctx context.Context, chatID, threadID string) (*db.ContextUsage, error)
 
 	// Content block operations

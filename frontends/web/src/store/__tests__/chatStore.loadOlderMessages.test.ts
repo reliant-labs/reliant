@@ -79,6 +79,7 @@ beforeEach(() => {
   useChatStore.setState({
     toolResultsByCallId: {},
     streamingMessages: {},
+    olderLoadingByChat: {},
   } as never);
 });
 
@@ -222,5 +223,68 @@ describe("loadOlderMessages", () => {
     const index = useChatStore.getState().toolResultsByCallId[CHAT];
     expect(index["call-new"]?.content).toBe("newer");
     expect(index["call-old"]?.content).toBe("result-for-call-old");
+  });
+
+  describe("olderLoadingByChat", () => {
+    const loading = () => useChatStore.getState().olderLoadingByChat[CHAT] === true;
+
+    function seed() {
+      setMessagesInCache(CHAT, [msg("m300", 300)], {
+        total: 400,
+        hasMore: true,
+        oldestSeq: 300,
+      });
+    }
+
+    it("is true for exactly the life of the fetch", async () => {
+      seed();
+      let resolve!: (value: ReturnType<typeof page>) => void;
+      listMessages.mockReturnValue(
+        new Promise((r) => {
+          resolve = r;
+        }) as never,
+      );
+
+      const pending = useChatStore.getState().loadOlderMessages(CHAT);
+      expect(loading()).toBe(true);
+
+      resolve(page([msg("m200", 200)], 400));
+      await pending;
+      expect(loading()).toBe(false);
+    });
+
+    it("is not cleared by a duplicate call the in-flight guard turns away", async () => {
+      seed();
+      let resolve!: (value: ReturnType<typeof page>) => void;
+      listMessages.mockReturnValue(
+        new Promise((r) => {
+          resolve = r;
+        }) as never,
+      );
+
+      const store = useChatStore.getState();
+      const first = store.loadOlderMessages(CHAT);
+      // The second call returns at once; it must leave the flag alone.
+      await store.loadOlderMessages(CHAT);
+      expect(loading()).toBe(true);
+
+      resolve(page([msg("m200", 200)], 400));
+      await first;
+      expect(loading()).toBe(false);
+    });
+
+    it("clears after a failed fetch", async () => {
+      seed();
+      listMessages.mockRejectedValueOnce(new Error("network"));
+      await useChatStore.getState().loadOlderMessages(CHAT);
+      expect(loading()).toBe(false);
+    });
+
+    it("is per chat", async () => {
+      seed();
+      listMessages.mockReturnValue(new Promise(() => {}) as never);
+      void useChatStore.getState().loadOlderMessages(CHAT);
+      expect(useChatStore.getState().olderLoadingByChat["other-chat"]).toBeUndefined();
+    });
   });
 });

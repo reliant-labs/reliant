@@ -97,6 +97,9 @@ type Repository interface {
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
 	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	// CreateNumberedMessage appends a message the handler builds itself (the
+	// branch repair), numbered from the counters.
+	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 
 	// GetChat, CreateChat, UpdateChat, GetThread, SaveMessageToThread,
 	// GetWorkflow, RunTx and the rest of the 74 methods the handlers call

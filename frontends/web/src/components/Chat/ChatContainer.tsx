@@ -5,7 +5,7 @@
  * Passes all data as props to ChatPresenter for rendering.
  */
 
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
@@ -18,6 +18,7 @@ import {
   useRunOutputs,
   useStreamingMessages,
   useHasOlderMessages,
+  useIsLoadingOlderMessages,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -256,22 +257,16 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
 
   // --- Scroll-back paging ---
   // The initial snapshot is bounded to the newest messages, so older history is
-  // fetched on demand when the user scrolls to the top of the timeline.
-  // hasOlderMessages comes from the server (via the message envelope); the
-  // in-flight flag is local because loadOlderMessages is an imperative store
-  // action rather than a query. The store guards against duplicate concurrent
-  // fetches independently — this flag exists to drive the spinner.
+  // fetched on demand when the user nears the top of the timeline. Both flags
+  // are reactive store state: hasMore rides the message envelope and the
+  // in-flight flag is the store's own (a duplicate call that the store's guard
+  // turns away cannot clear it).
   const hasOlderMessages = useHasOlderMessages(chatId);
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const isLoadingOlderMessages = useIsLoadingOlderMessages(chatId);
 
-  const handleLoadOlderMessages = useCallback(async () => {
+  const handleLoadOlderMessages = useCallback(() => {
     if (!chatId) return;
-    setIsLoadingOlderMessages(true);
-    try {
-      await useChatStore.getState().loadOlderMessages(chatId);
-    } finally {
-      setIsLoadingOlderMessages(false);
-    }
+    void useChatStore.getState().loadOlderMessages(chatId);
   }, [chatId]);
 
   // Fetch workflow executions for sidebar/header metadata
