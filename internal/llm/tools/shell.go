@@ -70,7 +70,7 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 // It is prose with commas and apostrophes, which a struct tag would have to escape.
 //
 //nolint:gosec // G101: a parameter description that names credentials, not a credential.
-const shellCredentialsParamDoc = "Set to 'none' to run this command with no GitHub, git, ssh or cloud credentials in its environment (git push, gh and kubectl then fail to authenticate, without prompting). Not a sandbox: files the daemon's user can read stay readable."
+const shellCredentialsParamDoc = "Set to 'none' to run this command with no GitHub, git, ssh or cloud credentials in its environment, and on Linux in a sandbox where the daemon's credential files (~/.reliant, ~/.config/forge, ~/.git-credentials, ~/.ssh, kubeconfig) and the container engine's socket are absent (git push, gh and kubectl then fail to authenticate, without prompting). It still shares the network and can write its working directory."
 
 // JSONSchemaExtend attaches the multi-line description doc after the reflector
 // has built the schema from the struct tags. invopop/jsonschema calls this for
