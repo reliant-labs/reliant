@@ -7,7 +7,6 @@ import { useWorktreeStore } from '../store/worktreeStore';
 import { ALL_PROJECTS, getCachedWorktrees, getCurrentWorktree, useCachedWorktrees, useCurrentWorktree, type Worktree } from '../hooks/worktree-queries';
 import { useViewerStore } from '../store/viewerStore';
 import { useProjectStore } from '../store/projectStore';
-import { isElectron } from './constants';
 import { logger } from './logger';
 import type { ParsedFilePath } from './filePath';
 import type { FileNode } from '../components/FileBrowser';
@@ -24,25 +23,6 @@ export interface PathClassificationResult {
   matchedWorktree: Worktree | null;
   isClickable: boolean;
   tooltipMessage: string;
-}
-
-/**
- * Whether the backend will serve a file that lives outside the workspace.
- *
- * Only the desktop app will. There the server runs on the user's own machine
- * and serves that one user, so reading a file they explicitly named grants
- * them nothing they did not already have with a shell or Finder — the
- * read-only viewer RPCs accept an absolute host path
- * (internal/grpc/services/filesystem.go, validateReadPath).
- *
- * A hosted deployment routes filesystem requests through a daemon
- * (FileSystemProxyService), which keeps every path confined to the workspace.
- * Marking such a link clickable there would render a button that looks live
- * and then fails with PermissionDenied, which is worse than saying up front
- * that it cannot be opened.
- */
-function canOpenFilesOutsideWorkspace(): boolean {
-  return isElectron();
 }
 
 /** The store state classification needs, so the core stays pure and testable. */
@@ -133,23 +113,16 @@ function classifyPathWithContext(
     };
   }
 
-  // Outside the project entirely. The desktop app can still read it, so the
-  // link stays live there; a hosted deployment cannot, and says why rather
-  // than offering a button that would fail on click.
-  if (canOpenFilesOutsideWorkspace()) {
-    return {
-      classification: 'external',
-      targetWorktreeId: null,
-      matchedWorktree: null,
-      isClickable: true,
-      tooltipMessage: `Click to open ${parsedPath.path} (outside this workspace, read-only)`,
-    };
-  }
-
-  return unopenable(
-    `Cannot open ${parsedPath.path}: it is outside this workspace, and files on the host are ` +
-      `only readable in the desktop app. Open it in a project or workspace that contains it.`
-  );
+  // Outside the project entirely. The read-only viewer RPCs read an absolute
+  // path anywhere on the workspace's machine (FileSystemProxyService,
+  // resolveForView), so the link stays live; only saving is confined.
+  return {
+    classification: 'external',
+    targetWorktreeId: null,
+    matchedWorktree: null,
+    isClickable: true,
+    tooltipMessage: `Click to open ${parsedPath.path} (outside this workspace, read-only)`,
+  };
 }
 
 /**
