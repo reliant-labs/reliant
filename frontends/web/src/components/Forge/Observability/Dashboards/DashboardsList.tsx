@@ -18,10 +18,14 @@
  * "New dashboard" offers a blank one, a template, or a forge dashboard file
  * to import. Authoring needs the admin role (the index says, `canWrite`):
  * without it the write actions stay visible, disabled, with the reason.
+ *
+ * ORG MODE (`project` undefined): the dashboards of EVERY app, as a read-only
+ * index. Each row names its app and opens in that app's console; creating,
+ * copying and saving belong to an app, so the list offers none of them.
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, LayoutDashboard, Lock, Plus, Search } from "lucide-react";
+import { Boxes, ChevronDown, LayoutDashboard, Lock, Plus, Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
@@ -36,7 +40,7 @@ import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../../Console/envScope";
 import { formatAgo } from "../format";
-import type { ObsEnvironment } from "../obsPlace";
+import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
 import { filterIndex, NAV_STARRED, ownerOf, ownersOf, recentOf, starredOf, type SourceFilter } from "./dashboardModel";
@@ -51,23 +55,39 @@ export interface DashboardsSearch {
   owner?: string;
 }
 
+/** The app filter of the org list: every app that has a dashboard, and the ones picked. */
+export interface DashboardsAppFilter {
+  selected: string[];
+  onChange: (apps: string[]) => void;
+}
+
 export interface DashboardsListProps {
-  project: string;
-  /** The console scope: an environment name or "all". */
+  /** The app whose dashboards these are. Undefined: the whole org (read-only, see the header). */
+  project?: string;
+  /** The console scope: an environment name or "all". Ignored in org mode, where an environment name is not unique. */
   env: string;
   environments: readonly ObsEnvironment[];
   search: DashboardsSearch;
   onSearch: (next: Partial<DashboardsSearch>) => void;
-  hrefs: { dashboard: (ref: DashboardRef) => string; release: (version: string) => string };
+  /** An empty `dashboard` href is a dashboard with no console to open (a project-less one). */
+  hrefs: { dashboard: (ref: DashboardRef) => string; release: (version: string, project?: string) => string };
   navigateTo: (href: string) => void;
+  /** Org mode: narrow to some apps. */
+  appFilter?: DashboardsAppFilter;
 }
 
-export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo }: DashboardsListProps) {
+function requireProject(project: string | undefined): string {
+  if (project === undefined) throw new Error("dashboards are written in an app, not from the org list");
+  return project;
+}
+
+export function DashboardsList({ project, env, environments, search, onSearch, hrefs, navigateTo, appFilter }: DashboardsListProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
-  const envId = env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id;
+  const orgWide = project === undefined;
+  const envId = orgWide || env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id;
   const index = useDashboardIndex(orgId, project, envId);
-  const templates = useDashboardTemplates(orgId);
+  const templates = useDashboardTemplates(orgId, !orgWide);
   const star = useStarDashboard(orgId);
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const [creating, setCreating] = useState<"blank" | "import" | null>(null);
@@ -75,17 +95,30 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
 
   const envIdOf = (name: string) => environments.find((candidate) => candidate.name === name)?.id;
   const create = useDashboardMutation(orgId, (api, org, input: { slug: string; spec: Dashboard; scope: "scope" | "all" }) =>
-    api.saveDashboard({ orgId: org, projectId: project, slug: input.slug, spec: input.spec, envScope: envScopeOf(input.scope, env, envIdOf), baseVersion: 0, message: "Created" })
+    api.saveDashboard({ orgId: org, projectId: requireProject(project), slug: input.slug, spec: input.spec, envScope: envScopeOf(input.scope, env, envIdOf), baseVersion: 0, message: "Created" })
   );
   const copy = useDashboardMutation(orgId, (api, org, input: { from: DashboardRef; title: string; scope: "scope" | "all" }) =>
-    api.saveDashboardAsCopy({ orgId: org, from: input.from, projectId: project, title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) })
+    api.saveDashboardAsCopy({ orgId: org, from: input.from, projectId: requireProject(project), title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) })
   );
 
-  const scope = useMemo<ObsScope | null>(() => (orgId ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null), [orgId, project, envId]);
+  // A card's sparklines read the app the dashboard belongs to, never the whole org.
+  const scopeOf = useMemo(
+    () => (appOf: string | undefined): ObsScope | null => (orgId ? { orgId, projectId: appOf || undefined, envIds: envId ? [envId] : [], filters: [] } : null),
+    [orgId, envId]
+  );
   const all = useMemo(() => index.data?.dashboards ?? [], [index.data]);
   const canWrite = !!index.data?.canWrite;
-  const shown = useMemo(() => filterIndex(all, search), [all, search]);
-  const filtered = !!(search.q || search.source || search.owner);
+  const pickedApps = appFilter?.selected;
+  const shown = useMemo(
+    () => filterIndex(all, search).filter((d) => !pickedApps?.length || pickedApps.includes(d.ref.projectId)),
+    [all, search, pickedApps]
+  );
+  const apps = useMemo(() => [...new Set(all.map((d) => d.ref.projectId))].sort(compareApps), [all]);
+  const filtered = !!(search.q || search.source || search.owner || pickedApps?.length);
+  const clearFilters = () => {
+    onSearch({ q: undefined, source: undefined, owner: undefined });
+    appFilter?.onChange([]);
+  };
   const starred = starredOf(shown);
   const recent = recentOf(shown);
   const releases = shown.filter((d) => d.ref.kind === "release");
@@ -98,16 +131,28 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     <DashboardHeader
       title="Dashboards"
       meta={
-        <>
-          <span>
-            {index.data ? `${all.length} dashboard${all.length === 1 ? "" : "s"} in ${project}` : project}
-            {env === ENV_ALL ? " · all environments" : ""}
-          </span>
-          {env !== ENV_ALL && <Tag>{env}</Tag>}
-          <span>Release dashboards are code; workspace dashboards are edited here</span>
-        </>
+        orgWide ? (
+          <>
+            <span>
+              {index.data
+                ? `${all.length} dashboard${all.length === 1 ? "" : "s"} across ${apps.length} app${apps.length === 1 ? "" : "s"}`
+                : "Every app in your organization"}
+            </span>
+            <span>Open one to edit it, or to copy it, in its app</span>
+          </>
+        ) : (
+          <>
+            <span>
+              {index.data ? `${all.length} dashboard${all.length === 1 ? "" : "s"} in ${project}` : project}
+              {env === ENV_ALL ? " · all environments" : ""}
+            </span>
+            {env !== ENV_ALL && <Tag>{env}</Tag>}
+            <span>Release dashboards are code; workspace dashboards are edited here</span>
+          </>
+        )
       }
       actions={
+        orgWide ? undefined : (
         <Menu
           label="New dashboard"
           trigger={
@@ -129,6 +174,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             { label: "Import JSON…", detail: "a forge dashboard file", onSelect: () => setCreating("import"), disabled: !canWrite, hint: writeHint, testId: "dashboards-new-import" },
           ]}
         />
+        )
       }
     />
   );
@@ -180,7 +226,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   if (index.isLoading || org.isLoading) {
     body = <ListSkeleton />;
   } else if (index.error || (!orgId && org.error)) {
-    body = <ObsError error={index.error ?? org.error} subject={project} onRetry={() => void (index.error ? index.refetch() : org.refetch())} retrying={index.isFetching} />;
+    body = <ObsError error={index.error ?? org.error} subject={project ?? "your apps"} onRetry={() => void (index.error ? index.refetch() : org.refetch())} retrying={index.isFetching} />;
   } else if (all.length === 0) {
     body = (
       <div data-testid="dashboards-empty">
@@ -198,7 +244,8 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               text: "Keep one in your repository: add a panel to a dashboard under deploy/observability/dashboards, and it ships with the next release.",
               command: "forge obs dashboards add-panel <slug> --panel <panel.json>",
             },
-            { text: "Or start one here, from a template or blank, below." },
+            // The org-wide list has no app to start one in: that is each app's own Dashboards page.
+            { text: orgWide ? "Or open an app and start one there, from a template or blank." : "Or start one here, from a template or blank, below." },
           ]}
           docs={OBS_TOPICS.dashboards.docs}
         >
@@ -211,14 +258,14 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   } else {
     body = (
       <>
-        <Toolbar search={search} onSearch={onSearch} owners={owners} filtered={filtered} />
+        <Toolbar search={search} onSearch={onSearch} owners={owners} filtered={filtered} apps={appFilter ? apps : undefined} appFilter={appFilter} onClear={clearFilters} />
         {shown.length === 0 ? (
           <Card className="mt-4 py-8 text-center text-sm text-ink-muted" data-testid="dashboards-no-match">
             No dashboards match.{" "}
-            <button type="button" className={INK_LINK} onClick={() => onSearch({ q: undefined, source: undefined, owner: undefined })}>
+            <button type="button" className={INK_LINK} onClick={clearFilters}>
               Clear the filters
-            </button>{" "}
-            or start from a template below.
+            </button>
+            {orgWide ? "." : " or start from a template below."}
           </Card>
         ) : (
           <>
@@ -226,7 +273,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               <Group title="Starred" meta={`${starred.length} · the first ${NAV_STARRED} also sit in the nav`}>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="dashboards-starred">
                   {starred.map((d) => (
-                    <StarredCard key={`${d.ref.kind}/${d.ref.key}`} summary={d} scope={scope} href={hrefs.dashboard(d.ref)} onStar={() => toggleStar(d)} />
+                    <StarredCard key={`${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`} summary={d} scope={scopeOf(d.ref.projectId)} href={hrefs.dashboard(d.ref)} app={orgWide ? d.ref.projectId : undefined} onStar={() => toggleStar(d)} />
                   ))}
                 </div>
               </Group>
@@ -238,18 +285,21 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                     <caption className="sr-only">Dashboards you opened recently</caption>
                     <tbody>
                       {recent.map((d) => (
-                        <Row key={`${d.ref.kind}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
+                        <Row key={`${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
                           <td className="h-10 px-4">
-                            <Link href={hrefs.dashboard(d.ref)} className="no-color font-medium text-ink">
-                              {d.title}
-                            </Link>
+                            <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
                           </td>
+                          {orgWide && (
+                            <td className="h-10 px-4">
+                              <AppTag app={d.ref.projectId} />
+                            </td>
+                          )}
                           <td className="h-10 px-4">
                             <SourceTag source={d.source} />
                           </td>
                           <td className="h-10 px-4 text-ink-muted">viewed {d.lastViewedAtMs ? formatAgo(d.lastViewedAtMs) : ""}</td>
                           <td className="hidden h-10 px-4 lg:table-cell">
-                            <PreviewRow summary={d} scope={scope} />
+                            <PreviewRow summary={d} scope={scopeOf(d.ref.projectId)} />
                           </td>
                           <td className="h-10 w-11 pr-2 text-right">
                             <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />
@@ -270,6 +320,11 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                         <th scope="col" className="h-9 px-4 font-medium">
                           Name
                         </th>
+                        {orgWide && (
+                          <th scope="col" className="h-9 px-4 font-medium">
+                            App
+                          </th>
+                        )}
                         <th scope="col" className="h-9 px-4 font-medium">
                           Source
                         </th>
@@ -286,15 +341,18 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                     </thead>
                     <tbody>
                       {releases.map((d) => (
-                        <Row key={d.ref.key} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
+                        <Row key={`${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
                           <td className="h-10 px-4">
                             <span className="inline-flex items-center gap-2">
                               <Lock className="h-3.5 w-3.5 text-ink-muted" aria-label="read-only" />
-                              <Link href={hrefs.dashboard(d.ref)} className="no-color font-medium text-ink">
-                                {d.title}
-                              </Link>
+                              <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
                             </span>
                           </td>
+                          {orgWide && (
+                            <td className="h-10 px-4">
+                              <AppTag app={d.ref.projectId} />
+                            </td>
+                          )}
                           <td className="h-10 px-4">
                             <span className="inline-flex items-center gap-2">
                               <SourceTag source={d.source} />
@@ -303,9 +361,13 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                           </td>
                           <td className="h-10 px-4">
                             {d.release?.releaseVersion ? (
-                              <Link href={hrefs.release(d.release.releaseVersion)} className={INK_LINK}>
-                                {d.release.releaseVersion}
-                              </Link>
+                              hrefs.release(d.release.releaseVersion, d.ref.projectId) ? (
+                                <Link href={hrefs.release(d.release.releaseVersion, d.ref.projectId)} className={INK_LINK}>
+                                  {d.release.releaseVersion}
+                                </Link>
+                              ) : (
+                                <span className="text-ink">{d.release.releaseVersion}</span>
+                              )
                             ) : (
                               <span className="text-ink-muted">—</span>
                             )}
@@ -330,6 +392,11 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                         <th scope="col" className="h-9 px-4 font-medium">
                           Name
                         </th>
+                        {orgWide && (
+                          <th scope="col" className="h-9 px-4 font-medium">
+                            App
+                          </th>
+                        )}
                         <th scope="col" className="h-9 px-4 font-medium">
                           Author
                         </th>
@@ -349,12 +416,15 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                     </thead>
                     <tbody>
                       {workspace.map((d) => (
-                        <Row key={d.ref.key} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
+                        <Row key={`${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
                           <td className="h-10 px-4">
-                            <Link href={hrefs.dashboard(d.ref)} className="no-color font-medium text-ink">
-                              {d.title}
-                            </Link>
+                            <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
                           </td>
+                          {orgWide && (
+                            <td className="h-10 px-4">
+                              <AppTag app={d.ref.projectId} />
+                            </td>
+                          )}
                           <td className="h-10 px-4 text-ink">{ownerOf(d)}</td>
                           <td className="h-10 px-4 text-right tabular-nums text-ink">v{d.workspace?.version ?? 1}</td>
                           <td className="h-10 px-4 text-ink-muted">{d.workspace?.updatedAtMs ? formatAgo(d.workspace.updatedAtMs) : "—"}</td>
@@ -381,13 +451,13 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     <div className="space-y-2" data-testid="dashboards" data-state={index.isLoading ? "loading" : index.error ? "error" : "ready"}>
       {header}
       <div className="pt-4">{body}</div>
-      {!index.isLoading && !index.error && gallery}
-      {!canWrite && index.data && (
+      {!orgWide && !index.isLoading && !index.error && gallery}
+      {!orgWide && !canWrite && index.data && (
         <p className="pt-2 text-xs text-ink-muted" data-testid="dashboards-read-only">
           You can view and star dashboards. Creating, copying and changing them needs an organization admin.
         </p>
       )}
-      {creating && (
+      {!orgWide && creating && (
         <NewDashboardDialog
           mode={creating}
           env={env}
@@ -407,7 +477,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
           }
         />
       )}
-      {fromTemplate && (
+      {!orgWide && fromTemplate && (
         <SaveCopyDialog
           sourceTitle={fromTemplate.title}
           what="template"
@@ -456,11 +526,18 @@ function Toolbar({
   onSearch,
   owners,
   filtered,
+  apps,
+  appFilter,
+  onClear,
 }: {
   search: DashboardsSearch;
   onSearch: (next: Partial<DashboardsSearch>) => void;
   owners: string[];
   filtered: boolean;
+  /** Org mode: the apps that have a dashboard, for the App filter. */
+  apps?: string[];
+  appFilter?: DashboardsAppFilter;
+  onClear: () => void;
 }) {
   const chip = (on: boolean) => cn(CHIP, on ? "border-ink/40 bg-ink/8 text-ink" : "border-border bg-surface text-ink-muted hover:text-ink");
   return (
@@ -495,8 +572,32 @@ function Toolbar({
         testId="dashboards-chip-owner"
         entries={[{ label: "anyone", checked: !search.owner, onSelect: () => onSearch({ owner: undefined }) }, ...owners.map((owner) => ({ label: owner, checked: search.owner === owner, onSelect: () => onSearch({ owner }) }))]}
       />
+      {apps && appFilter && (
+        <Menu
+          label="App"
+          align="left"
+          trigger={
+            <>
+              <Boxes className="h-3.5 w-3.5" aria-hidden="true" />
+              App: {appFilter.selected.length === 0 ? "every app" : appFilter.selected.length === 1 ? appLabel(appFilter.selected[0]!) : `${appFilter.selected.length} apps`}
+              <ChevronDown className="h-3 w-3" aria-hidden="true" />
+            </>
+          }
+          triggerClassName={chip(appFilter.selected.length > 0)}
+          testId="dashboards-chip-app"
+          entries={[
+            { label: "every app", checked: appFilter.selected.length === 0, onSelect: () => appFilter.onChange([]) },
+            ...apps.map((app) => ({
+              label: appLabel(app),
+              checked: appFilter.selected.includes(app),
+              onSelect: () =>
+                appFilter.onChange(appFilter.selected.includes(app) ? appFilter.selected.filter((name) => name !== app) : [...appFilter.selected, app]),
+            })),
+          ]}
+        />
+      )}
       {filtered && (
-        <button type="button" className="h-8 px-2 text-sm text-ink-muted hover:text-ink" onClick={() => onSearch({ q: undefined, source: undefined, owner: undefined })} data-testid="dashboards-clear">
+        <button type="button" className="h-8 px-2 text-sm text-ink-muted hover:text-ink" onClick={onClear} data-testid="dashboards-clear">
           Clear
         </button>
       )}
@@ -508,15 +609,42 @@ function Toolbar({
 function Row({ href, navigateTo, children }: { href: string; navigateTo: (href: string) => void; children: ReactNode }) {
   return (
     <tr
-      className="cursor-pointer border-b border-border/70 last:border-b-0 hover:bg-ink/5"
+      className={cn("border-b border-border/70 last:border-b-0 hover:bg-ink/5", href && "cursor-pointer")}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a, button, input")) return;
+        if (!href || (event.target as HTMLElement).closest("a, button, input")) return;
         navigateTo(href);
       }}
     >
       {children}
     </tr>
   );
+}
+
+/** A dashboard's title as a link, or plain text when its app has no console to open it in. */
+function DashLink({ href, children }: { href: string; children: ReactNode }) {
+  if (!href) return <span className="font-medium text-ink">{children}</span>;
+  return (
+    <Link href={href} className="no-color font-medium text-ink">
+      {children}
+    </Link>
+  );
+}
+
+/** The app a dashboard belongs to (org mode). Unassigned is a dashboard with no app: it has no console. */
+function AppTag({ app }: { app: string }) {
+  return (
+    <Tag title={app ? undefined : "Saved before projects existed: it has no app console to open in"}>
+      {appLabel(app)}
+    </Tag>
+  );
+}
+
+/** The apps in display order: named ones alphabetically, Unassigned last. */
+function compareApps(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === "") return 1;
+  if (b === "") return -1;
+  return a.localeCompare(b);
 }
 
 function EnvScopeTags({ ids, environments }: { ids: string[]; environments: readonly ObsEnvironment[] }) {
@@ -530,18 +658,23 @@ function EnvScopeTags({ ids, environments }: { ids: string[]; environments: read
   );
 }
 
-function StarredCard({ summary, scope, href, onStar }: { summary: DashboardSummary; scope: ObsScope | null; href: string; onStar: () => void }) {
+function StarredCard({ summary, scope, href, app, onStar }: { summary: DashboardSummary; scope: ObsScope | null; href: string; app?: string; onStar: () => void }) {
   return (
     <Card padding="none" className="relative min-w-0 transition-colors hover:border-ink-muted" data-testid={`dashboards-card-${summary.ref.key}`}>
       <div className="flex items-center justify-between gap-2 px-4 pt-3">
-        <Link href={href} className="no-color min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-['']">
-          {summary.title}
-        </Link>
+        {href ? (
+          <Link href={href} className="no-color min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-['']">
+            {summary.title}
+          </Link>
+        ) : (
+          <span className="min-w-0 truncate text-sm font-medium text-ink">{summary.title}</span>
+        )}
         <span className="relative z-10">
           <StarButton starred={summary.starred} title={summary.title} onToggle={onStar} />
         </span>
       </div>
       <div className="flex min-h-5 items-center gap-1.5 px-4">
+        {app !== undefined && <AppTag app={app} />}
         <SourceTag source={summary.source} />
         <span className="truncate text-xs text-ink-muted">
           {summary.release

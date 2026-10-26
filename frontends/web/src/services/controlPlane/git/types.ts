@@ -92,18 +92,28 @@ export interface ListGitReposPage {
   hasMore: boolean;
 }
 
+export interface BuildOAuthURLArgs {
+  /** A fresh Supabase access token; the control plane authenticates the redirect with it. */
+  token: string;
+  /** In-app path to land on after the flow (web). */
+  returnTo: string;
+  /** The desktop app's loopback receiver, when it is the one finishing the flow. */
+  loopback?: string;
+}
+
 export interface GitService {
   getCredential(provider: string): Promise<GitCredentialStatus>;
   saveCredential(
     provider: string,
     accessToken: string,
     scopes: string,
+    refreshToken?: string,
   ): Promise<void>;
   deleteCredential(provider: string): Promise<void>;
   listCredentials(
     provider?: string,
   ): Promise<{ accounts: GitAccount[] }>;
-  getOAuthURL(): string | null;
+  buildOAuthURL(args: BuildOAuthURLArgs): string | null;
   cloneRepo(args: CloneRepoArgs): Promise<{ clonedPath: string }>;
   listRepos(
     page?: number,

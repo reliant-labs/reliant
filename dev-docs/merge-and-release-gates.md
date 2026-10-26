@@ -238,8 +238,28 @@ Say so in the release notes. There is no waiver for a red run: fix it.
 ## The merge queue
 
 The fleet's merge queue (`.fm-tools/merge_queue3.sh`, outside this repo) is a
-thin orchestrator over `scripts/merge-gate.sh`. For each branch, in parallel, on
-its own pool checkout, it:
+thin orchestrator over `scripts/merge-gate.sh`. Branches gate in parallel, one
+per pool checkout. There are three pools. The host's heavy slots are the
+limit, not the number of checkouts, so more pools would only add gates that
+queue for a slot.
+
+Pools are granted **first come, first served** (`.fm-tools/mq3/sched.sh`). A
+branch takes a ticket when it arrives. It gets a pool once every earlier ticket
+has one. While it waits it prints its place in line and an estimated wait, from
+the median time recent runs held a pool. It prints this at the start and every
+3 minutes. `merge_queue3.sh --status` prints every queue. A run that dies loses
+its place, and the run behind it moves up at once. A rerun gets its old place
+back when the last run failed for a reason that was not the branch's:
+
+- a host flake (an OOM kill or a build-cache trim);
+- a test timeout;
+- main moving into its files until its gates ran out;
+- any other gate failure, if you rerun it with `--flake-retry`.
+
+A run keeps its old place for up to 6 hours and 3 reruns.
+`.fm-tools/mq3/sched_test.sh` tests the scheduler.
+
+On its pool checkout, each branch's run:
 
 1. merges main in (never a rebase);
 2. re-versions the branch's migrations above main's;

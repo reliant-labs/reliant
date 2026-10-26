@@ -54,7 +54,8 @@ const cloneRepo = vi.fn();
 vi.mock("../../../services/controlPlane/git", () => ({
   gitService: {
     getCredential: (...a: unknown[]) => getCredential(...a),
-    getOAuthURL: () => "https://cp.example/auth/github/authorize",
+    buildOAuthURL: (a: { token: string; returnTo: string }) =>
+      `https://cp.example/auth/github/authorize?${new URLSearchParams({ token: a.token, returnTo: a.returnTo })}`,
     cloneRepo: (...a: unknown[]) => cloneRepo(...a),
   },
 }));
@@ -247,9 +248,7 @@ describe("git access on the consent screen", () => {
         ...original,
         pathname: "/oauth/consent",
         search: "?authorization_id=auth-123",
-        set href(v: string) {
-          assign(v);
-        },
+        assign,
       },
     });
 

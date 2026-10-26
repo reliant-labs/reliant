@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { CheckCircle2 } from 'lucide-react'
 import { gitService } from '@/services/controlPlane/git'
+import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
+import { decodeGitHubState, parseLoopbackRedirect } from '@/lib/githubOAuthState'
+import { isSafeReturnTo } from '@/lib/returnTo'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 
@@ -43,15 +47,85 @@ import { BrandMark } from './icons/BrandMark'
  * installation_id ("bad actors can hit this URL with a spoofed
  * installation_id... you should not rely on [its] validity").
  *
+ * THREE MORE SHAPES, all about who finishes the flow and who is signed in.
+ *
+ *   Desktop relay      state carries `lb`, the loopback address of the desktop
+ *                      app that started the flow. This page then does NOT
+ *                      exchange: it hands code + state (or GitHub's error) to
+ *                      that address and tells the user to go back to the app,
+ *                      which exchanges them as the signed-in user. The system
+ *                      browser holding this tab has no Reliant session.
+ *   Needs install      the exchange succeeded but the GitHub App is installed
+ *                      on no account, so no repository would be visible. Send
+ *                      the user to the App's install page, remembering where
+ *                      they were so the setup return (which carries no state)
+ *                      can land them back.
+ *   No session         the browser that finishes the flow may not be signed in
+ *                      (a desktop user's system browser, an install opened from
+ *                      the desktop app). Navigating into a route that needs a
+ *                      session would bounce to sign-in, so say what happened
+ *                      and stop.
+ *
  * So an install return is handled as a pure signal: refresh what the server
  * reports and tell the user their access changed. Nothing is trusted from the
  * URL. A user who has no credential yet is sent through the ordinary,
  * state-bearing connect flow, which lands back here in the OAuth shape.
  */
+/** Where an in-app connect was started from, kept across the hop to GitHub's
+ *  App install page so the stateless setup return can land back on it. */
+const INSTALL_RETURN_KEY = 'reliant:github-install-return'
+
+type Terminal = 'relayed' | 'connected' | 'installed'
+
+async function hasSession(): Promise<boolean> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    return !!session
+  } catch {
+    return false
+  }
+}
+
+function TerminalView({ kind }: { kind: Terminal }) {
+  const copy = {
+    relayed: {
+      title: 'Return to the Reliant app',
+      body: 'GitHub is authorized. Switch back to the Reliant app to finish connecting. You can close this tab.',
+    },
+    connected: {
+      title: 'GitHub connected',
+      body: 'Return to Reliant to continue. You can close this tab.',
+    },
+    installed: {
+      title: 'GitHub App installed',
+      body: 'Return to Reliant to continue. You can close this tab.',
+    },
+  }[kind]
+  return (
+    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
+      <GradientBackground />
+      <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <BrandMark className="h-8 w-8" />
+            <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
+            <h2 className="text-lg font-medium">{copy.title}</h2>
+            <p className="text-sm text-muted-foreground">{copy.body}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function GitHubOAuthCallback() {
   const navigate = useNavigate()
   const search = useSearch({ from: '/auth/github/callback' })
   const [error, setError] = useState<string | null>(null)
+  const [terminal, setTerminal] = useState<Terminal | null>(null)
   const exchanged = useRef(false)
 
   useEffect(() => {
@@ -66,6 +140,25 @@ export function GitHubOAuthCallback() {
         error_description: errorDescription,
         setup_action: setupAction,
       } = search
+
+      // A desktop app started this flow: relay and stop. GitHub echoes `state`
+      // on an error redirect too, so a denial reaches the app as well. The
+      // receiver understands `code`, `state`, `error` and `error_description`.
+      const loopback = parseLoopbackRedirect(decodeGitHubState(state)?.lb)
+      if (loopback && (code || errorParam)) {
+        const relay = new URL(loopback.toString())
+        if (code && !errorParam) relay.searchParams.set('code', code)
+        if (state) relay.searchParams.set('state', state)
+        if (errorParam) relay.searchParams.set('error', errorParam)
+        if (errorDescription) relay.searchParams.set('error_description', errorDescription)
+        logger.info('[GitHubOAuthCallback] Relaying GitHub result to the desktop app', {
+          hadCode: !!code && !errorParam,
+          error: errorParam,
+        })
+        setTerminal('relayed')
+        window.location.replace(relay.toString())
+        return
+      }
 
       // GitHub denied / errored before we ever get a code.
       if (errorParam) {
@@ -90,7 +183,12 @@ export function GitHubOAuthCallback() {
           setupAction,
           hadStatelessCode: !!code,
         })
-        landBackHome('github_installed')
+        const remembered = takeInstallReturn()
+        if (!(await hasSession())) {
+          setTerminal('installed')
+          return
+        }
+        landBackHome('github_installed', undefined, undefined, remembered)
         return
       }
 
@@ -107,11 +205,43 @@ export function GitHubOAuthCallback() {
           landBackHome('github_error', res.error || 'github_error', undefined, res.returnTo)
           return
         }
-        logger.info('[GitHubOAuthCallback] GitHub credential connected')
+        logger.info('[GitHubOAuthCallback] GitHub credential connected', {
+          needsInstall: res.needsInstall,
+        })
+        // Authorizing is not installing: the user token lists only repos of
+        // accounts the App is installed on, so a user with no installation
+        // would land on an empty picker. Install first, and come back.
+        if (res.needsInstall && res.installUrl) {
+          rememberInstallReturn(res.returnTo)
+          window.location.assign(res.installUrl)
+          return
+        }
+        if (!(await hasSession())) {
+          setTerminal('connected')
+          return
+        }
         landBackHome('github_connected', undefined, undefined, res.returnTo)
       } catch (err) {
         logger.error('[GitHubOAuthCallback] Unexpected exchange error', err)
         setError(err instanceof Error ? err.message : 'Failed to connect GitHub')
+      }
+    }
+
+    const rememberInstallReturn = (returnTo: string | undefined) => {
+      try {
+        if (isSafeReturnTo(returnTo)) sessionStorage.setItem(INSTALL_RETURN_KEY, returnTo)
+      } catch {
+        /* storage unavailable: the install return lands on '/' */
+      }
+    }
+
+    const takeInstallReturn = (): string | undefined => {
+      try {
+        const value = sessionStorage.getItem(INSTALL_RETURN_KEY)
+        sessionStorage.removeItem(INSTALL_RETURN_KEY)
+        return isSafeReturnTo(value) ? value : undefined
+      } catch {
+        return undefined
       }
     }
 
@@ -149,6 +279,8 @@ export function GitHubOAuthCallback() {
 
     void run()
   }, [search])
+
+  if (terminal) return <TerminalView kind={terminal} />
 
   if (error) {
     return (

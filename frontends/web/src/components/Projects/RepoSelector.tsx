@@ -16,11 +16,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { hasErrorReason } from "@/lib/errorReasons";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase";
+import { connectGitHub } from "@/lib/github-connect";
 import { useGitRepos } from "@/hooks/useOnboardingQueries";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { trackEvent } from "@/lib/analytics";
-import { gitService } from "@/services/controlPlane/git";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { ManageGitHubAccess } from "./ManageGitHubAccess";
 
@@ -84,6 +83,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
   const {
     installUrl,
     installations,
+    kind,
     refresh: refreshCredential,
   } = useGitHubCredential();
 
@@ -126,6 +126,20 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
     };
   }, [fetchRepos, refreshCredential]);
 
+  // A GitHub App token only lists repos of accounts the App is installed on.
+  // With positive evidence of zero installations (an App credential, and the
+  // control plane enumerated none) the list is empty by construction, and
+  // installing is the one thing that can fill it — so it replaces the list
+  // rather than sitting above a "No repositories found." row.
+  const installIsPrimary =
+    !reposCredentialMissing &&
+    !reposLoading &&
+    !reposIsError &&
+    repos.length === 0 &&
+    !!installUrl &&
+    kind === "github_app" &&
+    installations.length === 0;
+
   const filteredRepos = useMemo(() => {
     if (!search.trim()) return repos;
     const q = search.toLowerCase();
@@ -140,26 +154,12 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
-    try {
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        throw new Error("Control plane URL not configured");
-      }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Not signed in");
-      }
-      const returnTo = oauthReturnTo ?? `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      trackEvent("github_reconnect_clicked", { phase: analyticsPhase ?? "repo_selector" });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
-      setConnecting(false);
-    }
+    trackEvent("github_reconnect_clicked", { phase: analyticsPhase ?? "repo_selector" });
+    const outcome = await connectGitHub({ returnTo: oauthReturnTo });
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    if (outcome.kind === "connected") void fetchRepos();
+    setConnecting(false);
   };
 
   const handleManualSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -223,6 +223,8 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
         <ManageGitHubAccess
           installUrl={installUrl}
           installations={installations}
+          // An empty list proves "nothing installed" only for an App token.
+          installationsKnown={kind === "github_app"}
           variant="prominent"
           onNavigate={() =>
             trackEvent("github_manage_access_clicked", {
@@ -281,104 +283,108 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
         )}
       </form>
 
-      {/* Search */}
-      <div className="relative">
-        <svg
-          className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search repositories"
-          aria-label="Search repositories"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={cn(
-            "w-full rounded-md py-2 pl-9 pr-3 text-sm transition-colors",
-            "border border-input bg-background text-foreground placeholder:text-muted-foreground/70",
-            "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
-          )}
-        />
-      </div>
-
-      {/* Repo list */}
-      <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-card">
-        {reposError && !reposCredentialMissing && (
-          <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive-ink">
-            {reposError}
-          </div>
-        )}
-
-        {!reposLoading && filteredRepos.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            {search ? "No repos match your search." : "No repositories found."}
-          </div>
-        )}
-
-        {filteredRepos.map((repo) => (
-          <button
-            key={repo.fullName}
-            type="button"
-            onClick={() => onSelect(repo)}
-            className={cn(
-              "flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors last:border-b-0",
-              "hover:bg-muted/60 focus:outline-none focus-visible:bg-muted/60",
-            )}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {repo.fullName}
-                </span>
-                {repo.private && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
-                    <Lock className="w-2.5 h-2.5" aria-hidden="true" />
-                    Private
-                  </span>
-                )}
-              </div>
-              {repo.description && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {repo.description}
-                </p>
-              )}
-              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
-                {repo.language && <span>{repo.language}</span>}
-                {repo.defaultBranch && (
-                  <span className="flex items-center gap-0.5">
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                    </svg>
-                    {repo.defaultBranch}
-                  </span>
-                )}
-                {repo.updatedAt && (
-                  <span>Updated {formatUpdated(repo.updatedAt)}</span>
-                )}
-              </div>
-            </div>
-          </button>
-        ))}
-
-        {reposLoading && (
-          <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-            <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      {!installIsPrimary && (
+        <>
+          {/* Search */}
+          <div className="relative">
+            <svg
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
             </svg>
-            Loading repos...
+            <input
+              type="text"
+              placeholder="Search repositories"
+              aria-label="Search repositories"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={cn(
+                "w-full rounded-md py-2 pl-9 pr-3 text-sm transition-colors",
+                "border border-input bg-background text-foreground placeholder:text-muted-foreground/70",
+                "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+              )}
+            />
           </div>
-        )}
-      </div>
+
+          {/* Repo list */}
+          <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-card">
+            {reposError && !reposCredentialMissing && (
+              <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive-ink">
+                {reposError}
+              </div>
+            )}
+
+            {!reposLoading && filteredRepos.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                {search ? "No repos match your search." : "No repositories found."}
+              </div>
+            )}
+
+            {filteredRepos.map((repo) => (
+              <button
+                key={repo.fullName}
+                type="button"
+                onClick={() => onSelect(repo)}
+                className={cn(
+                  "flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors last:border-b-0",
+                  "hover:bg-muted/60 focus:outline-none focus-visible:bg-muted/60",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {repo.fullName}
+                    </span>
+                    {repo.private && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
+                        <Lock className="w-2.5 h-2.5" aria-hidden="true" />
+                        Private
+                      </span>
+                    )}
+                  </div>
+                  {repo.description && (
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {repo.description}
+                    </p>
+                  )}
+                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
+                    {repo.language && <span>{repo.language}</span>}
+                    {repo.defaultBranch && (
+                      <span className="flex items-center gap-0.5">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        {repo.defaultBranch}
+                      </span>
+                    )}
+                    {repo.updatedAt && (
+                      <span>Updated {formatUpdated(repo.updatedAt)}</span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+
+            {reposLoading && (
+              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Loading repos...
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Always present under a populated list. The user who is missing ONE
           repo out of twenty sees a normal-looking picker and has no reason to

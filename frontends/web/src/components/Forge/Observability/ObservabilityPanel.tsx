@@ -79,9 +79,9 @@ import {
   type ObsSearch,
   type ObsView,
 } from "./obsSearch";
-import { envIdsOf, placeEnvironments, type ObsPlace } from "./obsPlace";
+import { envIdsOf, orgPickerEnvironments, orgSelectionIsEmpty, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
+import { ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
@@ -125,8 +125,12 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
 
   const filterTokens = useMemo(() => filterTokensOf(search.f), [search.f]);
   const groupBy = useMemo(() => groupByOf(search.groupBy), [search.groupBy]);
-  const envIdsKey = envIdsOf(place, search.envs).join(",");
-  const projectId = place.kind === "project" ? place.project : undefined;
+  const envIdsKey = envIdsOf(place, search.envs, search.apps).join(",");
+  // Apps picked that own no environment: an empty id list would read the whole org, so nothing is queried.
+  const noEnvironments = orgSelectionIsEmpty(place, search.envs, search.apps);
+  const selectedApps = useMemo(() => (place.kind === "org" ? (search.apps ?? []) : []), [place.kind, search.apps]);
+  const projectId =
+    place.kind === "project" ? place.project : place.kind === "org" && selectedApps.length === 1 && selectedApps[0] ? selectedApps[0] : undefined;
   const scope = useMemo<ObsScope | null>(
     () =>
       org.orgId
@@ -134,14 +138,22 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         : null,
     [org.orgId, projectId, envIdsKey, filterTokens]
   );
-  const subject = place.kind === "env" ? place.env.name : place.project;
-  const overview = useServiceOverview(scope, range);
+  const subject =
+    place.kind === "env"
+      ? place.env.name
+      : place.kind === "project"
+        ? place.project
+        : selectedApps.length
+          ? selectedApps.join(", ")
+          : "All apps";
+  const queryScope = noEnvironments ? null : scope;
+  const overview = useServiceOverview(queryScope, range);
   const notSetUp = !!overview.error && obsErrorKind(overview.error) === "not-set-up";
   const groupable = (GROUPABLE_VIEWS as readonly ObsView[]).includes(view);
   const environments = useMemo(() => placeEnvironments(place), [place]);
   const comparing = parseCompareParam(search.compare);
-  const marked = !!scope && !notSetUp && !comparing && MARKED_VIEWS.includes(view);
-  const releases = useReleaseMarkers(scope, range, environments, marked);
+  const marked = !!queryScope && !notSetUp && !comparing && MARKED_VIEWS.includes(view);
+  const releases = useReleaseMarkers(queryScope, range, environments, marked);
   /** A comparison opens over the view (Back returns to it); a push, so the browser's Back closes it too. */
   const openCompare = (promotion: Promotion) => navigate({ compare: compareParam(promotion) });
   const closeCompare = () => navigate({ compare: undefined, cmpWindow: undefined });
@@ -304,7 +316,21 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         <ObsScopeBar
           scope={scope}
           range={range}
-          environments={place.kind === "project" && !consoleChrome ? place.environments : undefined}
+          environments={
+            place.kind === "org"
+              ? orgPickerEnvironments(place, selectedApps)
+              : place.kind === "project" && !consoleChrome
+                ? place.environments
+                : undefined
+          }
+          apps={place.kind === "org" ? place.apps : undefined}
+          selectedApps={selectedApps}
+          onAppsChange={(names) => {
+            // Picked environments that no longer belong to a selected app are dropped with it.
+            const inApps = new Set(orgPickerEnvironments(place, names).map((env) => env.name));
+            const envs = (search.envs ?? []).filter((name) => inApps.has(name));
+            navigate({ apps: names.length ? names : undefined, envs: envs.length ? envs : undefined }, { replace: true });
+          }}
           selectedEnvs={search.envs ?? []}
           onEnvsChange={(names) => navigate({ envs: names.length ? names : undefined }, { replace: true })}
           pinnedEnv={place.kind === "env" ? place.env.name : undefined}
@@ -313,8 +339,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           onFiltersChange={(tokens) => navigate({ f: filterParam(tokens) }, { replace: true })}
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
-          groupable={groupable}
-          filterable={view !== "alerts" && view !== "errors" && view !== "sessions"}
+          groupable={groupable && !noEnvironments}
+          filterable={view !== "alerts" && view !== "errors" && view !== "sessions" && !noEnvironments}
         />
       )}
 
@@ -343,6 +369,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           // Usage is a Postgres read, not a tenant query: it stays available
           // before the store exists, which is when the allowance is worth seeing.
           <UsageView orgId={scope.orgId} subject={subject} />
+        ) : noEnvironments ? (
+          <ObsNoAppEnvironments apps={selectedApps} />
         ) : view === "alerts" ? (
           // Alerting answers for itself (AlertingService, its own "not
           // configured"), and the declared rules come from the release shape,

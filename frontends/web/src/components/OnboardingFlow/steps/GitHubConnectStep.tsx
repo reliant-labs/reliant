@@ -7,11 +7,10 @@ import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import { fetchProjects } from "@/hooks/project-queries";
 import type { Project } from "@/store/projectStore";
-import { supabase } from "@/lib/supabase";
+import { connectGitHub } from "@/lib/github-connect";
 import { useEventBus } from "@/lib/event-context";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
-import { gitService } from "@/services/controlPlane/git";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
@@ -66,31 +65,12 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
-    try {
-      // Always go through the control-plane custom OAuth flow. Supabase's
-      // GitHub provider is sign-in only (0 scopes); the long-lived repo-scoped
-      // token comes from /auth/github/authorize, which writes it to
-      // git_credentials.
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        throw new Error("Control plane URL not configured");
-      }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Not signed in");
-      }
-      // Preserve the onboarding step/plan params so the callback lands the
-      // user back on this step instead of restarting onboarding.
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
-      setConnecting(false);
-    }
+    // Keep the onboarding step/plan params so a web return lands back on this
+    // step instead of restarting onboarding; desktop finishes in place.
+    const outcome = await connectGitHub();
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    setConnecting(false);
   };
 
   const handleSelectRepo = (repo: GitRepo) => {

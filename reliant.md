@@ -52,6 +52,12 @@ merge queue merges main into the branch (never a rebase), squashes, runs
 /home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
 ```
 
+Pool checkouts are granted first come, first served: a run prints its place in
+line and an estimated wait, and `merge_queue3.sh --status` shows the whole
+queue. A run you kill loses its place. When a run failed on a host flake or a
+test timeout, rerun it and it gets its old place back. For a test failure
+unrelated to your diff, rerun with `--flake-retry`.
+
 The only other way in is an audited waiver — a hotfix that cannot wait, or a
 gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
 comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:

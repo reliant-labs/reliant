@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   credential: {
     hasToken: true,
     scopes: "",
+    kind: "github_app" as string | undefined,
     installUrl: "https://github.com/apps/reliant-labs/installations/new" as string | undefined,
     installations: [] as Array<{
       accountLogin: string;
@@ -52,7 +53,7 @@ vi.mock("../../../hooks/useGitHubCredential", () => ({
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 
 vi.mock("../../../services/controlPlane/git", () => ({
-  gitService: { getOAuthURL: () => "https://cp.example/auth/github/authorize" },
+  gitService: { buildOAuthURL: () => "https://cp.example/auth/github/authorize?token=t&returnTo=/" },
 }));
 
 vi.mock("../../../lib/supabase", () => ({
@@ -83,6 +84,7 @@ beforeEach(() => {
   mocks.reposQuery.refetch = vi.fn();
   mocks.credential.installUrl = INSTALL_URL;
   mocks.credential.installations = [];
+  mocks.credential.kind = "github_app";
   mocks.credential.refresh = vi.fn();
 });
 
@@ -149,6 +151,49 @@ describe("RepoSelector — managing GitHub repository access", () => {
 
     expect(screen.getByText("No GitHub accounts connected")).toBeInTheDocument();
     expect(installLink()).toBeDefined();
+  });
+
+  it("makes the install CTA the whole picker for an App user with no installation", () => {
+    mocks.credential.installations = [];
+    mocks.credential.kind = "github_app";
+
+    render(<RepoSelector onSelect={vi.fn()} />);
+
+    expect(screen.getByText("Install the GitHub App")).toBeInTheDocument();
+    expect(installLink()).toBeDefined();
+    // An empty list here is by construction, not a finding: no dead-end row,
+    // no search box over nothing.
+    expect(screen.queryByText("No repositories found.")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Search repositories")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty-list row when emptiness is not proof of no installation", () => {
+    // A classic OAuth token or PAT cannot enumerate installations, so an empty
+    // list could just be an account with no repos.
+    mocks.credential.kind = "oauth_app";
+    mocks.credential.installations = [];
+
+    render(<RepoSelector onSelect={vi.fn()} />);
+
+    expect(screen.getByText("No repositories found.")).toBeInTheDocument();
+    expect(screen.queryByText("No GitHub accounts connected")).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty-list row when installations exist but hold no repository", () => {
+    mocks.credential.installations = [
+      {
+        accountLogin: "me",
+        accountType: "User",
+        avatarUrl: "",
+        configureUrl: "https://github.com/settings/installations/1",
+        repositorySelection: "selected",
+      },
+    ];
+
+    render(<RepoSelector onSelect={vi.fn()} />);
+
+    expect(screen.getByText("No repositories found.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configure" })).toBeInTheDocument();
   });
 
   it("renders no link at all when the control plane has no App slug", () => {

@@ -528,6 +528,7 @@ export const obsSearchShape = {
   errors: z.boolean().optional().catch(undefined),
   minDuration: z.string().optional().catch(undefined),
   envs: z.array(z.string()).optional().catch(undefined),
+  apps: z.array(z.string()).optional().catch(undefined),
   f: z.array(z.string()).optional().catch(undefined),
   groupBy: z.array(z.string()).optional().catch(undefined),
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
@@ -555,9 +556,10 @@ export type _ObsShapeMatchesSearch = AssertTrue<
 /**
  * A console page hosting an Observability view (Console/ObservabilityHost):
  * the panel's keys minus the two the console moved out of the query — the
- * view is the page's path, and the environment filter is the scope (`env`).
+ * view is the page's path, and the environment filter is the scope (`env`) —
+ * and the org's app filter, which a one-app console has no use for.
  */
-const { view: _view, envs: _envs, ...obsConsoleShape } = obsSearchShape;
+const { view: _view, envs: _envs, apps: _apps, ...obsConsoleShape } = obsSearchShape;
 export const forgeConsoleObsSearchSchema = z.object({
   env: envScopeParam,
   ...obsConsoleShape,
@@ -616,10 +618,6 @@ export const forgeConsoleDashboardSearchSchema = z.object({
 });
 
 /**
- * The retired /forge/observability: read only to redirect to the page
- * hosting `view`, with `envs` turned into the scope (Console/paths.ts).
- */
-/**
  * The retired URLs' view: a current view, or the retired `workloads` (the
  * workloads are the Overview's now, with a page per workload) and the
  * workload it had open — read only so the redirect lands on the right page.
@@ -630,7 +628,14 @@ const legacyObsShape = {
   workload: z.string().optional().catch(undefined),
 };
 
-export const forgeObservabilitySearchSchema = z.object({
+/**
+ * The org-wide /forge/observability[/:view]: the panel's keys, where `envs`
+ * (`app/env` names) and `apps` are the filters. `project` and `forgeProject`
+ * (a link to ONE app, redirected to its console) and a bare `view` /
+ * `workload` (the retired URLs) are read only so those redirects land right
+ * (ForgeEntryRoutes).
+ */
+export const forgeOrgObsSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
   ...legacyObsShape,

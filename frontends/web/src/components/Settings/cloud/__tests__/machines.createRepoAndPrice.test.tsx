@@ -166,7 +166,7 @@ vi.mock("@/hooks/useGitHubCredential", () => ({
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 
 vi.mock("@/services/controlPlane/git", () => ({
-  gitService: { getOAuthURL: () => "https://cp.example/auth/github/authorize" },
+  gitService: { buildOAuthURL: () => "https://cp.example/auth/github/authorize?token=t&returnTo=/" },
 }));
 
 vi.mock("@/lib/supabase", () => ({

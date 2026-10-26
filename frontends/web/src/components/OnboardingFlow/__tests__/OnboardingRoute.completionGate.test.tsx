@@ -74,7 +74,7 @@ vi.mock("@/services/controlPlane/billing", () => ({
 }));
 
 vi.mock("@/services/controlPlane/git", () => ({
-  gitService: { listRepos: vi.fn(), cloneRepo: vi.fn(), getOAuthURL: () => "" },
+  gitService: { listRepos: vi.fn(), cloneRepo: vi.fn(), buildOAuthURL: () => "" },
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));

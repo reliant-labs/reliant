@@ -44,7 +44,7 @@ import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitche
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
-import { consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -62,10 +62,8 @@ export function projectDeclaring(
   return projects.find(declares) ?? null;
 }
 
-/** Where switching to `project` lands: the same page there, when it has a forge name to address it by. */
-export function switchTarget(project: Project, page: ConsolePage): string {
-  const name = (project.forge_project_name ?? "").trim();
-  if (!name) return withSearch("/forge", { project: project.id });
+/** Where switching to the forge app `app` lands: the same page there. */
+export function switchTarget(app: string, page: ConsolePage): string {
   // An environment's page is about an environment the other project may not
   // have, and a release's, a workload's (or a dashboard's) about one it cannot
   // have: land on the list.
@@ -79,7 +77,7 @@ export function switchTarget(project: Project, page: ConsolePage): string {
           : page.kind === "dashboard"
             ? { kind: "obs-view", view: "dashboards" }
             : page;
-  return consolePath(name, same);
+  return consolePath(app, same);
 }
 
 export function ConsoleLayout() {
@@ -227,7 +225,8 @@ export function ConsoleLayout() {
           <ForgeCloseButton onClose={onClose} />
           <ConsoleProjectSwitcher
             forgeProject={forgeProject}
-            onSelect={(project) => void navigate({ href: switchTarget(project, page) })}
+            onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
+            onSelectAll={() => void navigate({ href: APPS_PATH })}
           />
         </div>
       }

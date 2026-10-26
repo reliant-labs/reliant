@@ -20,7 +20,7 @@ vi.mock("@/services/controlPlane/git", () => ({
     getCredential: () => mockGetCredential(),
     saveCredential: vi.fn(),
     deleteCredential: vi.fn(),
-    getOAuthURL: () => "https://admin.example.com/auth/github/authorize",
+    buildOAuthURL: () => "https://admin.example.com/auth/github/authorize?token=t&returnTo=/",
   },
 }));
 
