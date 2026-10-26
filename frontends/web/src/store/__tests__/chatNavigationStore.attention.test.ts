@@ -52,6 +52,7 @@ function setActive(chatId: string | null) {
   chatStoreGetStateMock.mockReturnValue({
     activeChatId: chatId,
     selectChat: selectChatMock,
+    persistActiveChat: vi.fn(),
     clearCurrentChat: vi.fn(),
   });
 }
@@ -126,6 +127,7 @@ describe("navigateToNextAttention", () => {
     expect(found).toBe(true);
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-3" }),
+      { deferPersist: true },
     );
   });
 
@@ -139,6 +141,7 @@ describe("navigateToNextAttention", () => {
     await useChatNavigationStore.getState().navigateToNextAttention();
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
 
     selectChatMock.mockReset();
@@ -153,6 +156,7 @@ describe("navigateToNextAttention", () => {
     await useChatNavigationStore.getState().navigateToNextAttention();
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
   });
 
@@ -169,6 +173,7 @@ describe("navigateToNextAttention", () => {
 
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
   });
 
@@ -184,6 +189,7 @@ describe("navigateToNextAttention", () => {
 
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-1" }),
+      { deferPersist: true },
     );
   });
 

@@ -429,14 +429,28 @@ func (s *Service) LoadRecentDisplayMessages(ctx context.Context, threadID string
 // walk actually reaches; a cycle beyond the windows the tail needs is never
 // visited, so it no longer fails the read.
 func (s *Service) recentDisplayMessagesFromCW(ctx context.Context, latest *db.ContextWindow, limit int) ([]*db.Message, error) {
+	return s.recentDisplayMessagesBeforeFromCW(ctx, latest, 0, limit)
+}
+
+// recentDisplayMessagesBeforeFromCW is recentDisplayMessagesFromCW below a
+// cursor: the last `limit` messages of the resolved transcript whose seq is
+// strictly below cursorSeq (0 means no cursor). It is the scroll-back page.
+//
+// The resolved transcript is seq-ascending (seq is a chat-global allocator
+// that a fork and a compaction both continue from), so "the messages below
+// the cursor" is a prefix of it and its tail is what the walk collects: the
+// cursor simply joins every window's exclusive upper bound, tightened by the
+// fork cut where one applies. A window entirely above the cursor contributes
+// nothing and the walk moves on to its parent.
+func (s *Service) recentDisplayMessagesBeforeFromCW(ctx context.Context, latest *db.ContextWindow, cursorSeq int64, limit int) ([]*db.Message, error) {
 	// Each window's contribution, collected newest window first.
 	var contributions [][]*db.Message
 	need := limit
 	visited := make(map[string]bool)
 
 	cw := latest
-	contributes := true // false only for a fork with no fork message
-	var beforeSeq int64 // exclusive upper bound on seq; 0 = unbounded
+	contributes := true    // false only for a fork with no fork message
+	beforeSeq := cursorSeq // exclusive upper bound on seq; 0 = unbounded
 	for need > 0 {
 		if visited[cw.ID] {
 			return nil, fmt.Errorf("circular reference detected in CW chain at %s", cw.ID)
@@ -459,8 +473,9 @@ func (s *Service) recentDisplayMessagesFromCW(ctx context.Context, latest *db.Co
 			break
 		}
 
-		// What the parent contributes is decided by THIS window's edge to it.
-		contributes, beforeSeq = true, 0
+		// What the parent contributes is decided by THIS window's edge to it,
+		// and never reaches past the cursor.
+		contributes, beforeSeq = true, cursorSeq
 		if cw.CompactionSummaryMessageID == nil {
 			// A fork: cut the parent's own messages at the fork message.
 			if cw.ForkAtMessageID == nil {
@@ -472,7 +487,9 @@ func (s *Service) recentDisplayMessagesFromCW(ctx context.Context, latest *db.Co
 				}
 				// seq <= forkSeq, as an exclusive bound. Seqs are never
 				// negative, so this is >= 1 and never reads as "unbounded".
-				beforeSeq = forkMsg.Seq + 1
+				if bound := forkMsg.Seq + 1; cursorSeq == 0 || bound < cursorSeq {
+					beforeSeq = bound
+				}
 			}
 		}
 

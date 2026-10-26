@@ -19,10 +19,11 @@ import { useWorktreeStore } from "../store/worktreeStore";
 import { useViewerStore } from "../store/viewerStore";
 import { useChatStore } from "../store/chatStore";
 import { resolveChat } from "../hooks/chat-queries";
+import { openChatInWorkspace } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
 import { restoreLastWorktree } from "./worktree-actions";
-import { resolveWorktree, getCurrentWorktree } from "./worktree-queries";
+import { getCurrentWorktree } from "./worktree-queries";
 
 export interface WorkspaceRestoreResult {
   /** Whether restoration is in progress */
@@ -244,15 +245,7 @@ export function useWorkspaceRestore(
             chatId: chatToRestore.id,
             title: chatToRestore.title,
           });
-          if (chatToRestore.worktreeId) {
-            const targetWorktree = await resolveWorktree(chatToRestore.worktreeId);
-            if (targetWorktree) {
-              await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, targetWorktree);
-            }
-          } else {
-            await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, null);
-          }
-          useChatStore.getState().selectChat(chatToRestore);
+          await openChatInWorkspace(chatToRestore);
 
           // Step 8: Schedule scroll position restoration (after chat renders)
           const scrollPosition = worktreeState.scrollPositions[chatToRestore.id];

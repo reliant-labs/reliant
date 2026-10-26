@@ -96,6 +96,8 @@ vi.mock("@/store/chatStore", () => {
     // not in it, so this seeds nothing for it.
     loadChats: vi.fn(async () => undefined),
     selectChat,
+    persistActiveChat: vi.fn(),
+    activeChatId: "auto-chat",
   });
   return { useChatStore: Object.assign(() => state(), { getState: state }) };
 });
@@ -175,7 +177,10 @@ describe("workspace restore", () => {
     const { result } = renderHook(() => useWorkspaceRestore({ skipProjectRestore: true }));
 
     await waitFor(() => expect(result.current.isComplete).toBe(true));
-    expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: "auto-chat" }));
+    expect(selectChat).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "auto-chat" }),
+      { deferPersist: true },
+    );
     // The stored active chat was NOT cleared as "no longer exists".
     expect(setActiveChatId).not.toHaveBeenCalled();
     expect(result.current.warnings).toEqual([]);

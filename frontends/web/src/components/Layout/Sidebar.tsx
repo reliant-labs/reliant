@@ -10,6 +10,7 @@ import React, {
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { isWorkspaceClosed, workspaceOfChat } from "../../lib/chatWorkspace";
+import { openChatInWorkspace } from "../../lib/openChatInWorkspace";
 import {
   Plus,
   Trash2,
@@ -53,7 +54,7 @@ import { SidebarApps } from "../Apps/SidebarApps";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
-import { activityNeedsAttention, useChatNavigationStore } from "../../store/chatNavigationStore";
+import { activityNeedsAttention } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
@@ -443,26 +444,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
   const deleteChatMutation = useDeleteChat();
   const unarchiveMutation = useUnarchiveChat();
 
-  const handleViewChat = async () => {
-    const currentProject = useProjectStore.getState().currentProject;
-    const worktreeStore = useWorktreeStore.getState();
-
-    if (currentProject?.id) {
-      if (chat.worktreeId) {
-        const targetWorktree = await resolveWorktree(chat.worktreeId);
-        if (targetWorktree) {
-          await worktreeStore.switchWorktreeContext(currentProject.id, targetWorktree);
-        }
-      } else {
-        await worktreeStore.switchWorktreeContext(currentProject.id, null);
-      }
-    }
-
-    const { selectChat } = useChatStore.getState();
-    selectChat(chat);
-    const { navigateToChat } = useChatNavigationStore.getState();
-    navigateToChat(chatId);
-  };
+  const handleViewChat = () => openChatInWorkspace(chat, { navigate: true });
 
   const handleRestore = () => {
     unarchiveMutation.mutate(chatId);
@@ -766,7 +748,6 @@ function SidebarComponent({
   }, []);
 
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
-  const selectChat = useChatStore((state) => state.selectChat);
   const deleteChatMutation = useDeleteChat();
   const renameChatMutation = useRenameChat();
   const markUnreadMutation = useMarkUnread();
@@ -1062,21 +1043,10 @@ function SidebarComponent({
     [currentProject?.id, switchWorktreeContext]
   );
 
-  const handleChatClick = useCallback(async (chat: Chat) => {
-    // Switch worktree context first to save/restore viewer state
-    if (chat.worktreeId && currentProject?.id) {
-      const worktree = await resolveWorktree(chat.worktreeId);
-      if (worktree) {
-        await switchWorktreeContext(currentProject.id, worktree);
-      }
-    } else if (currentProject?.id) {
-      await switchWorktreeContext(currentProject.id, null);
-    }
-    
-    selectChat(chat);
-    const { navigateToChat } = useChatNavigationStore.getState();
-    navigateToChat(chat.id);
-  }, [currentProject?.id, switchWorktreeContext, selectChat]);
+  const handleChatClick = useCallback(
+    (chat: Chat) => openChatInWorkspace(chat, { navigate: true }),
+    []
+  );
 
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
     e.preventDefault();

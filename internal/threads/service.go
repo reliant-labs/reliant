@@ -49,15 +49,13 @@ type Repository interface {
 	// messages -- used by resolveForkPoint to fork a thread's latest state.
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
 
-	// Bounded message operations for LoadRecentMessagesBefore /
-	// LoadMessagesInSeqRange / CountCurrentMessages -- these bound the read
-	// or count in SQL for the common (unforked, uncompacted) case instead of
+	// Bounded message operations for the display walk
+	// (recentDisplayMessagesBeforeFromCW) and CountCurrentMessages -- these
+	// bound the read or count in SQL, one window at a time, instead of
 	// resolving a thread's whole history.
 	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
 	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
-	HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error)
-	ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error

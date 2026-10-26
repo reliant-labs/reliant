@@ -105,9 +105,9 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 }
 
 // TestListMessages_Bounded_MainThreadWithSiblings proves the bounded path
-// merges a sibling (spawn) thread's messages correctly within the main
-// thread's window, and Total accounts for sibling messages outside the
-// current page.
+// merges the inline sibling threads (workflow-node threads) into the main
+// thread's window, leaves spawn threads out as the snapshot does, and keeps
+// Total the chat-wide count.
 func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +122,8 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	mainCWID := uuid.New().String()
 	spawnThreadID := uuid.New().String()
 	spawnCWID := uuid.New().String()
+	nodeThreadID := uuid.New().String()
+	nodeCWID := uuid.New().String()
 
 	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
 		ID: chatID, Title: "siblings", ProjectID: "test-project", UserID: "test-user",
@@ -134,6 +136,10 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	_, err = repo.CreateThread(ctx, &db.Thread{ID: spawnThreadID, ChatID: chatID, ParentThreadID: &mainThreadID, Origin: db.ThreadOriginSpawn, CreatedAt: now})
 	require.NoError(t, err)
 	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{ID: spawnCWID, ThreadID: spawnThreadID, Sequence: 0, CreatedAt: now})
+	require.NoError(t, err)
+	_, err = repo.CreateThread(ctx, &db.Thread{ID: nodeThreadID, ChatID: chatID, ParentThreadID: &mainThreadID, Origin: db.ThreadOriginNode, CreatedAt: now})
+	require.NoError(t, err)
+	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{ID: nodeCWID, ThreadID: nodeThreadID, Sequence: 0, CreatedAt: now})
 	require.NoError(t, err)
 
 	addMsg := func(threadID, cwID string, seq int64) string {
@@ -152,12 +158,13 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 		return msgID
 	}
 
-	// Interleaved seq: main-1(1), spawn-1(2), spawn-2(3), main-2(4), spawn-3(5).
+	// Interleaved seq: main-1(1), spawn-1(2), node-1(3), main-2(4), spawn-2(5), node-2(6).
 	main1 := addMsg(mainThreadID, mainCWID, 1)
-	spawn1 := addMsg(spawnThreadID, spawnCWID, 2)
-	spawn2 := addMsg(spawnThreadID, spawnCWID, 3)
+	addMsg(spawnThreadID, spawnCWID, 2)
+	node1 := addMsg(nodeThreadID, nodeCWID, 3)
 	main2 := addMsg(mainThreadID, mainCWID, 4)
-	spawn3 := addMsg(spawnThreadID, spawnCWID, 5)
+	addMsg(spawnThreadID, spawnCWID, 5)
+	node2 := addMsg(nodeThreadID, nodeCWID, 6)
 
 	svc := &Service{deps: Deps{Repo: repo}}
 	recent := int32(10)
@@ -166,11 +173,24 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	require.EqualValues(t, 5, resp.Msg.Total)
+	require.EqualValues(t, 6, resp.Msg.Total, "total is the chat-wide count, spawn messages included")
 	gotIDs := make([]string, len(resp.Msg.Messages))
 	for i, m := range resp.Msg.Messages {
 		gotIDs[i] = m.Id
 	}
-	require.ElementsMatch(t, []string{main1, spawn1, spawn2, main2, spawn3}, gotIDs,
-		"sibling thread messages inside the main thread's window must be present")
+	require.Equal(t, []string{main1, node1, main2, node2}, gotIDs,
+		"main and inline sibling messages, in seq order; spawn-thread messages stay out")
+
+	// A page below a cursor takes the siblings inside its own range only.
+	before := int64(4)
+	older, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+		ChatId: chatID, Recent: &recent, BeforeSeq: &before,
+	}))
+	require.NoError(t, err)
+	olderIDs := make([]string, len(older.Msg.Messages))
+	for i, m := range older.Msg.Messages {
+		olderIDs[i] = m.Id
+	}
+	require.Equal(t, []string{main1, node1}, olderIDs)
+	require.False(t, older.Msg.HasMore)
 }

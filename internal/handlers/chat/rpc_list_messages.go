@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"golang.org/x/sync/errgroup"
 )
 
 // ListMessages lists messages for a chat with content blocks
@@ -281,29 +282,51 @@ func (s *Service) listThreadMessages(
 // only the window a page actually needs instead of the chat's entire
 // history:
 //
-//   - Main thread: LoadRecentMessagesBefore bounds the read in SQL for the
-//     common (unforked) case, falling back to the full resolution only for a
-//     forked/compacted main thread.
-//   - Sibling threads: bounded to the seq span the main-thread window
-//     resolved to (LoadMessagesInSeqRange), rather than each sibling's whole
-//     history -- exactly mirroring what windowByMainThread would have kept
-//     from an unbounded read, at a fraction of the read cost.
+//   - Main thread: LoadRecentMessagesBefore walks the main thread's
+//     context-window chain newest-first and stops once the page is full, so a
+//     compacted or branched chat costs the windows the page spans rather than
+//     its whole transcript.
+//   - Siblings: ONE query for the messages of every non-main, non-spawn
+//     thread inside the seq span the main-thread window covers. This is the
+//     same set, from the same query, the chat snapshot builds its siblings
+//     from, so a scroll-back page and the snapshot agree on what a transcript
+//     holds. Spawn threads are left out for the snapshot's reason: a spawn
+//     renders as one tool-call card that reads its own thread
+//     (ListMessages with thread_id) when expanded.
 //   - Total: CountDisplayMessages(main) covers the main thread's own
 //     CW-chain-resolved count -- the DISPLAY resolution, matching the
 //     transcript this page is a window into; the LLM count stops at a
 //     compaction summary and would undercount a compacted chat by its whole
-//     summarized history. CountMessagesInChat(chat) - CountMessagesInThread(main)
-//     covers every sibling thread's messages (siblings don't inherit from
-//     elsewhere, so their own chat_id-scoped rows are their whole count).
+//     summarized history. The chat's messages on every other thread are one
+//     COUNT (siblings don't inherit from elsewhere, so their own chat_id-scoped
+//     rows are their whole count).
 //   - HasMore: taken directly from the main thread's own hasMoreOlder. This
 //     is sufficient because seq is a chat-global order (the chat's seq
 //     counter, which a branch's fork raises past its inherited history) and every
 //     message a branch chat displays -- inherited or local -- carries a seq
 //     from that same allocator, so no sibling thread's oldest message can
 //     precede the resolved main thread's oldest message.
+//
+// The two counts depend on nothing the page read produces, so they run
+// beside it.
 func (s *Service) listMessagesBounded(
 	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string, beforeSeq int64, recentLimit int,
 ) ([]*db.Message, int, int64, bool, error) {
+	var mainCount, siblingCount int
+	counts, countsCtx := errgroup.WithContext(ctx)
+	counts.Go(func() (err error) {
+		if mainCount, err = threadsSvc.CountDisplayMessages(countsCtx, mainThreadID); err != nil {
+			return fmt.Errorf("failed to count main thread messages: %w", err)
+		}
+		return nil
+	})
+	counts.Go(func() (err error) {
+		if siblingCount, err = s.deps.Repo.CountMessagesInChatOutsideThread(countsCtx, chatID, mainThreadID); err != nil {
+			return fmt.Errorf("failed to count sibling thread messages: %w", err)
+		}
+		return nil
+	})
+
 	mainThreadMessages, mainHasMoreOlder, err := threadsSvc.LoadRecentMessagesBefore(ctx, mainThreadID, beforeSeq, recentLimit)
 	if err != nil {
 		return nil, 0, 0, false, fmt.Errorf("failed to load recent main thread messages: %w", err)
@@ -314,10 +337,10 @@ func (s *Service) listMessagesBounded(
 		}
 	}
 
-	// The seq span this page's main-thread window actually covers. Sibling
-	// threads are bounded to this range rather than their whole history --
-	// same effect as windowByMainThread's "every sibling message inside that
-	// seq range". On the newest page the range is open above, like the chat
+	// The seq span this page's main-thread window actually covers. Siblings
+	// are bounded to this range rather than their whole history -- same
+	// effect as windowByMainThread's "every sibling message inside that seq
+	// range". On the newest page the range is open above, like the chat
 	// snapshot's own window (buildChatSnapshot): a sibling thread can
 	// out-write and out-live the main thread, finishing after the main
 	// thread's newest message in this page.
@@ -335,29 +358,18 @@ func (s *Service) listMessagesBounded(
 		toSeq = &beforeSeq
 	}
 
-	allThreads, err := s.deps.Repo.ListThreadsByConversation(ctx, chatID)
+	siblingMessages, err := s.deps.Repo.ListTranscriptSiblingMessagesInRange(ctx, chatID, mainThreadID, fromSeq, toSeq)
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to list threads for conversation", "error", err, "chatID", chatID)
-		allThreads = []*db.Thread{}
+		return nil, 0, 0, false, fmt.Errorf("failed to load sibling thread messages: %w", err)
 	}
 
-	messageMap := make(map[string]*db.Message, len(mainThreadMessages))
+	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(siblingMessages))
 	for _, msg := range mainThreadMessages {
 		messageMap[msg.ID] = msg
 	}
-	for _, thread := range allThreads {
-		if thread.ID == mainThreadID {
-			continue
-		}
-		childMsgs, err := threadsSvc.LoadMessagesInSeqRange(ctx, thread.ID, fromSeq, toSeq)
-		if err != nil {
-			logging.WarnContext(ctx, "Failed to load child thread messages in range", "error", err, "threadID", thread.ID)
-			continue
-		}
-		for _, msg := range childMsgs {
-			if _, exists := messageMap[msg.ID]; !exists {
-				messageMap[msg.ID] = msg
-			}
+	for _, msg := range siblingMessages {
+		if _, exists := messageMap[msg.ID]; !exists {
+			messageMap[msg.ID] = msg
 		}
 	}
 
@@ -375,26 +387,16 @@ func (s *Service) listMessagesBounded(
 	// push the reported page past recentLimit main-thread messages.
 	messages = windowByMainThread(messages, mainThreadID, recentLimit)
 
-	mainCount, err := threadsSvc.CountDisplayMessages(ctx, mainThreadID)
-	if err != nil {
-		return nil, 0, 0, false, fmt.Errorf("failed to count main thread messages: %w", err)
+	if err := counts.Wait(); err != nil {
+		return nil, 0, 0, false, err
 	}
-	chatCount, err := s.deps.Repo.CountMessagesInChat(ctx, chatID)
-	if err != nil {
-		return nil, 0, 0, false, fmt.Errorf("failed to count chat messages: %w", err)
-	}
-	mainOwnCount, err := s.deps.Repo.CountMessagesInThread(ctx, mainThreadID)
-	if err != nil {
-		return nil, 0, 0, false, fmt.Errorf("failed to count main thread's own messages: %w", err)
-	}
-	totalCount := mainCount + chatCount - mainOwnCount
 
 	var oldestSeq int64
 	if len(messages) > 0 {
 		oldestSeq = messages[0].Seq
 	}
 
-	return messages, totalCount, oldestSeq, mainHasMoreOlder, nil
+	return messages, mainCount + siblingCount, oldestSeq, mainHasMoreOlder, nil
 }
 
 // messagePage carries the cursor facts a paginated message read has to report

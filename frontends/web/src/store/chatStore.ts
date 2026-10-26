@@ -923,7 +923,11 @@ interface ChatStoreState {
 
   // Methods for active chat
   setActiveChat: (chatId: string | null) => void;
-  selectChat: (chat: Chat) => void;
+  // deferPersist skips recording the chat as the worktree's active chat: a
+  // caller still resolving the chat's worktree context calls persistActiveChat
+  // once that context is current (see selectChatWithWorktreeContext).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => void;
+  persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
   // Message methods
@@ -1459,7 +1463,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1536,20 +1540,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // The worktree context is managed by worktreeStore (single source of truth)
     // Browser viewers are filtered based on worktreeStore.currentWorktreeId
 
-    // Save to workspace state for persistence
-    // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
-    // This ensures state is saved to where the user is currently viewing (e.g., __main__)
-    // so it can be properly restored on reload
-    const projectId = useProjectStore.getState().currentProject?.id;
-    const currentWorktreeId =
-      useWorktreeStore.getState().currentWorktreeId ?? null;
-    if (projectId) {
-      useWorkspaceStateStore
-        .getState()
-        .setActiveChatId(projectId, currentWorktreeId, chat.id);
-      useWorkspaceStateStore
-        .getState()
-        .addToChatQueue(projectId, currentWorktreeId, chat.id);
+    // Save to workspace state for persistence (see persistActiveChat).
+    if (!options?.deferPersist) {
+      get().persistActiveChat(chat.id);
     }
 
     // New chats already had their empty message-list cache seeded by
@@ -1615,6 +1608,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
     }
+  },
+
+  // Record the chat as the active and most recent chat of the worktree the
+  // user is viewing.
+  // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
+  // This ensures state is saved to where the user is currently viewing (e.g., __main__)
+  // so it can be properly restored on reload
+  persistActiveChat: (chatId: string) => {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (!projectId) return;
+    const currentWorktreeId =
+      useWorktreeStore.getState().currentWorktreeId ?? null;
+    useWorkspaceStateStore
+      .getState()
+      .setActiveChatId(projectId, currentWorktreeId, chatId);
+    useWorkspaceStateStore
+      .getState()
+      .addToChatQueue(projectId, currentWorktreeId, chatId);
   },
 
   // Clear the current chat selection

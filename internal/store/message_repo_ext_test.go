@@ -319,18 +319,23 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	if page, _ := store.ListRecentMessagesInContextWindowBeforeSeq(ctx, o, f.mainCW1, 7, 5); ids(page) != "[m4]" {
 		t.Fatalf("recent before 7 = %s; want [m4]", ids(page))
 	}
-	if more, err := store.HasMessagesBeforeInContextWindow(ctx, o, f.mainCW1, 7); err != nil || !more {
-		t.Fatalf("has before 7 = %v, %v; want true", more, err)
+	// Sibling ranges: the snapshot's filter (not main, never spawn), bounded
+	// on both sides, ascending, uncapped.
+	to := int64(5)
+	if r, err := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil); err != nil || ids(r) != "[n2 n5]" {
+		t.Fatalf("sibling range [0,∞) = %s, %v; want [n2 n5]", ids(r), err)
 	}
-	if more, _ := store.HasMessagesBeforeInContextWindow(ctx, o, f.mainCW1, 4); more {
-		t.Fatal("has before 4 = true; want false")
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 3, nil); ids(r) != "[n5]" {
+		t.Fatalf("sibling range [3,∞) = %s; want [n5]", ids(r))
 	}
-	to := int64(7)
-	if r, _ := store.ListMessagesInContextWindowRange(ctx, o, f.nodeCW, 0, nil); ids(r) != "[n2 n5]" {
-		t.Fatalf("range [0,∞) = %s; want [n2 n5]", ids(r))
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, &to); ids(r) != "[n2]" {
+		t.Fatalf("sibling range [0,5) = %s; want [n2]", ids(r))
 	}
-	if r, _ := store.ListMessagesInContextWindowRange(ctx, o, f.mainCW1, 4, &to); ids(r) != "[m4]" {
-		t.Fatalf("range [4,7) = %s; want [m4]", ids(r))
+	if twin, _ := f.env.Repo.ListTranscriptSiblingMessagesInRange(ctx, f.chat, f.main, 0, nil); ids(twin) != "[n2 n5]" {
+		t.Fatalf("Repo sibling range = %s; want [n2 n5]", ids(twin))
+	}
+	if n, err := store.CountMessagesInChatOutsideThread(ctx, o, f.chat, f.main); err != nil || n != 4 {
+		t.Fatalf("messages outside the main thread = %d, %v; want 4 (2 node + 2 spawn)", n, err)
 	}
 
 	// Counts through the generated CountMessage, as the Repository reads them.

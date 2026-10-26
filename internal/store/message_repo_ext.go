@@ -144,33 +144,40 @@ func ListMessages(ctx context.Context, db orm.Context, chatID string, opts core.
 	return messagesFromRows(rows), nil
 }
 
-// ListRecentTranscriptSiblingMessages is the chat snapshot's sibling-thread
-// rows, ascending: the newest limit messages at or above fromSeq that belong
-// to neither the main thread (read separately, through its context-window
-// chain) nor any spawn thread.
+// transcriptSiblingMessages selects the messages of a chat that belong to
+// neither the main thread (read separately, through its context-window chain)
+// nor any spawn thread, at or above fromSeq.
 //
 // Spawn threads are excluded outright. A spawn renders as one tool-call card
 // in its parent's transcript, and the card reads its child thread when it is
-// expanded, so spawn rows in the snapshot are never rendered from. They were
-// also most of it: spawn threads out-write the main thread by an order of
-// magnitude (636KB of a 2.3MB snapshot on a real 55k-message chat). What
-// remains are the threads the transcript renders inline (workflow-node and
-// fork threads), bounded so a node-heavy chat cannot balloon the payload.
-// Read DESC, against messages_chat_seq_key walked backward, so the LIMIT
-// keeps the newest rows.
+// expanded (ListMessages with thread_id), so spawn rows in a transcript page
+// are never rendered from. They were also most of it: spawn threads out-write
+// the main thread by an order of magnitude (636KB of a 2.3MB snapshot on a
+// real 55k-message chat). What remains are the threads the transcript renders
+// inline (workflow-node and fork threads).
+func transcriptSiblingMessages(db orm.Context, chatID, mainThreadID string, fromSeq int64, rows *[]*Message) *bun.SelectQuery {
+	spawnThreads := db.Bun().NewSelect().Model((*Thread)(nil)).Column("id").
+		Where("chat_id = ?", chatID).
+		Where("origin = ?", "spawn")
+	return db.Bun().NewSelect().Model(rows).
+		Where("chat_id = ?", chatID).
+		Where("thread_id <> ?", mainThreadID).
+		Where("seq >= ?", fromSeq).
+		Where("thread_id NOT IN (?)", spawnThreads)
+}
+
+// ListRecentTranscriptSiblingMessages is the chat snapshot's sibling-thread
+// rows, ascending: the newest limit messages at or above fromSeq that belong
+// to neither the main thread nor any spawn thread (see
+// transcriptSiblingMessages), bounded so a node-heavy chat cannot balloon the
+// payload. Read DESC, against messages_chat_seq_key walked backward, so the
+// LIMIT keeps the newest rows.
 func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
 	if limit <= 0 {
 		return []*core.Message{}, nil
 	}
-	spawnThreads := db.Bun().NewSelect().Model((*Thread)(nil)).Column("id").
-		Where("chat_id = ?", chatID).
-		Where("origin = ?", "spawn")
 	var rows []*Message
-	err := db.Bun().NewSelect().Model(&rows).
-		Where("chat_id = ?", chatID).
-		Where("thread_id <> ?", mainThreadID).
-		Where("seq >= ?", fromSeq).
-		Where("thread_id NOT IN (?)", spawnThreads).
+	err := transcriptSiblingMessages(db, chatID, mainThreadID, fromSeq, &rows).
 		OrderExpr("seq DESC").
 		Limit(int64(limit)).
 		Scan(ctx)
@@ -178,6 +185,24 @@ func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, ch
 		return nil, fmt.Errorf("failed to list recent transcript sibling messages: %w", err)
 	}
 	slices.Reverse(rows)
+	return messagesFromRows(rows), nil
+}
+
+// ListTranscriptSiblingMessagesInRange is the same sibling set as
+// ListRecentTranscriptSiblingMessages, for a ListMessages page: every such
+// message with seq >= fromSeq and, when toSeq is set, seq < toSeq, ascending.
+// It is not capped, because a page's seq range is already bounded by the
+// main-thread window it accompanies, and capping inside that range would lose
+// siblings no later page returns (the next cursor is the page's oldest seq).
+func ListTranscriptSiblingMessagesInRange(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
+	var rows []*Message
+	q := transcriptSiblingMessages(db, chatID, mainThreadID, fromSeq, &rows)
+	if toSeq != nil {
+		q = q.Where("seq < ?", *toSeq)
+	}
+	if err := q.OrderExpr("seq ASC").Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list transcript sibling messages in range: %w", err)
+	}
 	return messagesFromRows(rows), nil
 }
 
@@ -247,39 +272,18 @@ func ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Cont
 	return messagesFromRows(rows), nil
 }
 
-// HasMessagesBeforeInContextWindow reports whether any message of the
-// context window precedes beforeSeq: the cursor read's hasMore, without
-// fetching rows.
-func HasMessagesBeforeInContextWindow(ctx context.Context, db orm.Context, contextWindowID string, beforeSeq int64) (bool, error) {
-	exists, err := db.Bun().NewSelect().Model((*Message)(nil)).
-		Where("context_window_id = ?", contextWindowID).
-		Where("seq < ?", beforeSeq).
-		Exists(ctx)
+// CountMessagesInChatOutsideThread is how many messages of the chat sit on
+// threads other than threadID: with a thread's own resolved count, the chat's
+// total, in one COUNT instead of a chat-wide count minus a thread count.
+func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatID, threadID string) (int, error) {
+	n, err := db.Bun().NewSelect().Model((*Message)(nil)).
+		Where("chat_id = ?", chatID).
+		Where("thread_id <> ?", threadID).
+		Count(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to check for messages before seq: %w", err)
+		return 0, fmt.Errorf("failed to count messages outside thread: %w", err)
 	}
-	return exists, nil
-}
-
-// ListMessagesInContextWindowRange is one context window's messages with
-// seq >= fromSeq and, when toSeq is set, seq < toSeq, ascending. It bounds a
-// sibling thread's read to the seq span the main thread's window covers,
-// instead of that thread's entire history; nil mirrors the initial
-// (uncursored) snapshot's own window, unbounded above because spawn threads
-// out-write and out-live the main thread.
-func ListMessagesInContextWindowRange(ctx context.Context, db orm.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
-	opts := []orm.QueryOption{
-		orm.WhereEq(MessageFieldContextWindowID, contextWindowID),
-		orm.WhereGte(MessageFieldSeq, fromSeq),
-	}
-	if toSeq != nil {
-		opts = append(opts, orm.WhereLt(MessageFieldSeq, *toSeq))
-	}
-	rows, err := ListMessage(ctx, db, append(opts, orm.WithOrderBy(MessageFieldSeq, orm.Asc))...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list messages in context window range: %w", err)
-	}
-	return messagesFromRows(rows), nil
+	return int(n), nil
 }
 
 // UpdateMessageUsage records what a message cost: the context size the LLM

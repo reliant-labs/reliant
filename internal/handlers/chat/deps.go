@@ -49,6 +49,8 @@ type Repository interface {
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
+	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
+	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
 

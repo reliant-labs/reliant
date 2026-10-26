@@ -250,12 +250,31 @@ export function useChatListWithWorkspaces(projectId?: string) {
   });
 }
 
-export function useChat(chatId?: string) {
-  return useQuery({
+/**
+ * The chat's detail, kept current by the stream. The stream patches this cache
+ * as the chat changes (title, state, activity, worktree, config), and every
+ * path that reads a chat from the server seeds it (seedChatDetail, which
+ * selectChat runs on open) -- so a mount re-reading GetChat is a round trip
+ * for what the cache already holds. That duplicate was the extra GetChat on
+ * every open and every switch back to a chat.
+ *
+ * Fresh for CHAT_DETAIL_STALE_MS rather than forever: a missed event heals on
+ * the next mount past that, and a stream disruption invalidates every chat
+ * query read before it (globalUpdatesStore.handleStatusChange).
+ */
+export const CHAT_DETAIL_STALE_MS = 5 * 60_000;
+
+export function chatDetailQueryOptions(chatId: string | undefined) {
+  return {
     queryKey: chatKeys.detail(chatId),
     queryFn: () => chatActions.getChat(chatId!),
     enabled: !!chatId,
-  });
+    staleTime: CHAT_DETAIL_STALE_MS,
+  };
+}
+
+export function useChat(chatId?: string) {
+  return useQuery(chatDetailQueryOptions(chatId));
 }
 
 /**
@@ -277,10 +296,27 @@ export function useChat(chatId?: string) {
 export function useChatSelection(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
-    queryFn: async () => (await chatActions.getChat(chatId!)).selection ?? null,
+    queryFn: () => fetchChatSelection(chatId!),
     enabled: !!chatId,
     staleTime: Infinity,
   });
+}
+
+/**
+ * The read of a chat's selection: the chat's own GetChat (the selection rides
+ * on it), joined to the detail query's request when one is already in flight.
+ * A chat opened with no detail cached would otherwise make that call twice,
+ * once for the header and once for the composer.
+ *
+ * It never answers from a cached detail, however fresh: the project list seeds
+ * details without a selection, so a cached detail says nothing about whether
+ * the chat has one, and a selection read after the stream stopped maintaining
+ * it must reach the server. staleTime 0 makes fetchQuery fetch (or join the
+ * request in flight) instead of returning the cache.
+ */
+async function fetchChatSelection(chatId: string): Promise<ChatSelection | null> {
+  const chat = await queryClient.fetchQuery({ ...chatDetailQueryOptions(chatId), staleTime: 0 });
+  return chat.selection ?? null;
 }
 
 /**
