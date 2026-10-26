@@ -65,7 +65,8 @@ The phases:
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **typecheck**, **lint** and **migsafety** run alongside them:
+4. **build**, **test**, **typecheck**, **lint** and **migsafety** then run at
+   the same time (after the generators, when they may rewrite the tree; below):
    - **build** is `go build ./...`.
    - **test** is `tools/test-affected run -reach direct -lanes go,web,electron`.
      It runs the changed packages and the packages that import one by name,
@@ -73,8 +74,7 @@ The phases:
    - **typecheck** is frontends/web's `npm run typecheck` (`tsc -b`, which
      includes `tsconfig.test.json`, so test files are type-checked). It runs
      when the plan selects the web lane or the diff touches anything under
-     `frontends/web/`, and again on the amended tree when a regenerate rewrote
-     a web file. The web test lane cannot stand in for it: vitest strips types
+     `frontends/web/`, or when a regenerate rewrote a web file. The web test lane cannot stand in for it: vitest strips types
      without checking them, and a changed module no test imports selects no
      test. #1556 merged a test type error because the gate had no such phase.
      Each file is type-checked once: `tsconfig.test.json` holds only the
@@ -96,12 +96,20 @@ The phases:
      `origin/main` as last fetched, and a branch reviewed while main moved
      passes it against a stale head.
 
-generate and docs run in scratch checkouts of HEAD, at the same time as the
-other phases. A regenerate that changes only generated paths (`--amend`) is
-copied back and amended after every phase has finished. If that regenerated
-code, build and test run again on the amended tree. A dirty tree (a local run
-with uncommitted edits) runs the generators in place, first, because a scratch
-checkout of HEAD would not see your edits.
+Where a regenerate becomes the tree the other phases judge, the generators run
+FIRST, in place, and build, test, typecheck, lint and migsafety start only once
+they are done. That is the merge queue's `--amend` mode: a regenerate that
+changes only generated paths is amended into the squash before anything builds
+or tests it, so a generated file the merge with main left a step behind (a
+stale mock) is never compiled or tested in its stale form. It is also a dirty
+tree (a local run with uncommitted edits), because a scratch checkout of HEAD
+would not see your edits. Ordering costs generate's wall time only when
+generate is selected at all.
+
+On a clean tree without `--amend` (`task ci:merge` on a committed branch) a
+regenerate cannot change what is judged: any change fails the generate phase.
+There, generate and docs run in scratch checkouts of HEAD, at the same time as
+the other phases.
 
 ### A skip is not a pass
 

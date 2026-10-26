@@ -45,7 +45,13 @@ var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, l
 var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
 	"proto/**", "db/**",
-	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
+	"**/contract.go", "**/doc.go", "internal/handlers/**",
+	// Every forge output, as the merge gate's gen_re names them: a changed
+	// generated file runs generate, which re-renders it before build and
+	// test judge it (a merge with main can leave one a step behind, and
+	// frontends/web/src/hooks/*_gen.ts sits outside every directory below).
+	"**/*_gen.go", "**/*_gen_test.go", "**/*_gen.ts", "**/*_gen_test.ts", "**/*_gen.test.ts",
+	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client.
