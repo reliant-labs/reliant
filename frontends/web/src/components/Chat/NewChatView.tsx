@@ -65,6 +65,13 @@ interface NewChatViewProps {
    */
   emptyState?: (context: { noMachine: boolean }) => ReactNode;
   composerPrefill?: ComposerPrefill;
+  /**
+   * The home host's additions to the welcome block, for a pane with no host
+   * empty state: a heading under the mark, and a panel under the workspace
+   * controls (the app shell puts the project's apps there — Apps/HomeNewChat).
+   */
+  heading?: ReactNode;
+  welcomePanel?: ReactNode;
 }
 
 export function NewChatView({
@@ -73,6 +80,8 @@ export function NewChatView({
   onChatCreated,
   emptyState,
   composerPrefill,
+  heading,
+  welcomePanel,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -382,6 +391,7 @@ export function NewChatView({
                   <ReliantIcon className="h-10 w-10" />
                 </div>
               )}
+              {!emptyState && heading}
 
               {/* Workspace controls */}
               <div
@@ -519,6 +529,7 @@ export function NewChatView({
                 )}
               </div>
 
+              {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}
             </div>
           </div>
 

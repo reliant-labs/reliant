@@ -32,9 +32,9 @@ const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
 export const launchPlanSchema = z
   .object({
     // Keep in sync with OnboardingIntent in
-    // components/OnboardingFlow/types.ts — only the two values the rendered
+    // components/OnboardingFlow/types.ts — only the values the rendered
     // wizard can set are accepted here.
-    intent: z.enum(["build_app", "existing_codebase"]).optional(),
+    intent: z.enum(["build_app", "existing_codebase", "chat"]).optional(),
     compute: z
       .enum(["cloud_free_trial", "cloud_paid", "local_daemon", "undecided"])
       .optional(),
@@ -164,6 +164,11 @@ export const indexSearchSchema = z.object({
   devForceShow: z.boolean().optional(),
   "onboarding-credits": z.string().optional(),
   tour: tourParam,
+  // `?start=app` opens the new chat with the app-building composer
+  // (components/Apps/appStart.ts): onboarding's "Build an app" and every
+  // other "build an app" entry land here. NewChatView applies it once and
+  // drops it.
+  start: z.enum(["app"]).optional(),
 });
 
 export const authSearchSchema = z.object({

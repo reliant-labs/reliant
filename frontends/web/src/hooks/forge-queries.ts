@@ -158,6 +158,8 @@ function cloudKey<Args extends readonly string[]>(name: string) {
 export const forgeCloudKeys = {
   all: ["forge"] as const,
   cloudEnvs: cloudKey<[forgeProject: string]>("cloud-envs"),
+  // Every project's environments at once: the Apps list (hooks/apps-queries.ts).
+  orgEnvs: cloudKey<[]>("org-envs"),
   // LIVE. Keyed by the forge project name, like cloudEnvs — one entry holds
   // every environment's whole Live answer, because GetLiveView returns them
   // together (see services/forge/live.ts on why it is one round trip).
@@ -632,6 +634,7 @@ export function useInvalidateCloudEnvironments() {
   const queryClient = useQueryClient();
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
+    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.orgEnvs.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
   }, [queryClient]);

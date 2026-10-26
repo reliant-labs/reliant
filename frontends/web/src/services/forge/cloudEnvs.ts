@@ -318,6 +318,18 @@ export async function listProjectEnvironments(project: string): Promise<CloudEnv
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Every environment the org holds, across all its forge projects — the Apps
+ * list's one read. An environment with no project predates the project
+ * dimension and names no app, so it is dropped here.
+ */
+export async function listOrgEnvironments(): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments({});
+  return (res.environments ?? [])
+    .map(toCloudEnv)
+    .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
+}
+
 /** The control plane's observation of one environment — a database read, no cluster hop. */
 export async function getEnvironmentStatus(environmentId: string): Promise<CloudEnvStatus> {
   return toCloudEnvStatus(await client().getStatus({ environmentId }));

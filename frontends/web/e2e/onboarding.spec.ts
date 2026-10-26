@@ -482,7 +482,7 @@ test.describe('Onboarding Flow', () => {
 
   // ── Model → Project-choice / Finish ─────────────────
 
-  test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to work on?', async ({ page }) => {
+  test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to do first?', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
@@ -491,8 +491,8 @@ test.describe('Onboarding Flow', () => {
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
-    // Cloud path lands on project-choice ("What do you want to work on?").
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible({ timeout: 10_000 });
+    // Cloud path lands on project-choice ("What do you want to do first?").
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/modelProvider.*anthropic|anthropic.*modelProvider/, {
       timeout: 10_000,
     });
@@ -523,7 +523,7 @@ test.describe('Onboarding Flow', () => {
 
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
 
-  test('Project-choice: "Start something new" (cloud) creates a project and leaves onboarding', async ({ page }) => {
+  test('Project-choice: "Build an app" (cloud) creates a project and leaves onboarding', async ({ page }) => {
     // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
     // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
     await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
@@ -541,9 +541,9 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     // completeOnboarding + ensureProject succeed, the commit provisions the
     // machine, and the gate reports it connected — Continue is the only exit.
@@ -558,7 +558,7 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
     // Simulate an existing_codebase plan seeded directly (equivalent to the
     // OAuth round trip having already happened) — deriveStep sends an
@@ -789,9 +789,9 @@ test.describe('Onboarding – Failure Scenarios', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     // The machine task reports failed; the user is not trapped in the
     // wizard for a provisioning failure — Continue stays enabled (see
@@ -816,9 +816,9 @@ test.describe('Onboarding – Failure Scenarios', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+    await expect(dialog.getByText('What do you want to do first?')).toBeVisible();
 
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
 
     await expect(
       dialog.getByText(/Couldn't set up your project/i),
@@ -865,7 +865,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
   // fires (it owns the terminal step for that branch), then the commit
   // provisions a machine and ProvisioningGate/DaemonConnectingGate gate the
   // actual exit — see commitLaunchPlan.ts and ProvisioningGate.tsx.
-  test('Cloud + build_app: "Start something new" leaves onboarding directly', async ({ page }) => {
+  test('Cloud + build_app: "Build an app" leaves onboarding directly', async ({ page }) => {
     // DaemonConnectingGate reads the daemon registry (reliant.v1), not the
     // control-plane list, and treats DAEMON_STATUS_ACTIVE as connected.
     await page.route('**/reliant.v1.DaemonRegistryService/ListDaemons', (route: Route) =>
@@ -883,7 +883,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await dialog.getByRole('button', { name: /Build an app/i }).click();
     await expect(dialog.getByText('Your machine is ready')).toBeVisible({ timeout: 10_000 });
     await dialog.getByRole('button', { name: 'Continue' }).click();
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });

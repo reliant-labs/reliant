@@ -28,7 +28,9 @@
 import { logger } from "@/lib/logger";
 import { trackEvent } from "@/lib/analytics";
 import { ONBOARDING_STEPS as TOUR_STEPS } from "@/components/Onboarding/constants";
+import { START_APP } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
+import type { OnboardingIntent } from "./types";
 
 /**
  * The first step of the post-onboarding guided tour.
@@ -87,13 +89,24 @@ export interface OnboardingExitTarget {
  * to preserve, and relying on that is what dropped the tour for every cloud
  * user.
  */
+/**
+ * What the user said they came to do, for the exits that finish the flow.
+ * "build_app" lands on the app-building composer (`?start=app`,
+ * components/Apps/startBuilding.ts); anything else on the plain new chat.
+ */
+export type OnboardingLanding = OnboardingIntent | undefined;
+
 export function onboardingExitTarget(
   reason: OnboardingExitReason,
+  landing?: OnboardingLanding,
 ): OnboardingExitTarget {
   switch (reason) {
     case "completed_local":
     case "completed_cloud_gate_continue":
-      return { to: "/", search: { tour: TOUR_FIRST_STEP_ID } };
+      return {
+        to: "/",
+        search: landing === "build_app" ? { tour: TOUR_FIRST_STEP_ID, start: START_APP } : { tour: TOUR_FIRST_STEP_ID },
+      };
     case "already_complete":
     case "returning_user_heal":
       return { to: "/", search: keepTourHandoff };
@@ -119,14 +132,15 @@ export type NavigateFn = (options: OnboardingExitTarget) => Promise<void> | void
 export async function leaveOnboarding(
   reason: OnboardingExitReason,
   navigate: NavigateFn,
+  landing?: OnboardingLanding,
 ): Promise<void> {
   const stepsViewed = stepsViewedCount();
 
-  logger.info("[Onboarding] exit", { reason, steps_viewed_count: stepsViewed });
+  logger.info("[Onboarding] exit", { reason, landing, steps_viewed_count: stepsViewed });
   trackEvent("onboarding_exited", {
     reason,
     steps_viewed_count: stepsViewed,
   });
 
-  await navigate(onboardingExitTarget(reason));
+  await navigate(onboardingExitTarget(reason, landing));
 }

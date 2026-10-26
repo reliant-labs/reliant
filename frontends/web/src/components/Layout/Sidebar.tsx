@@ -49,6 +49,7 @@ import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
+import { SidebarApps } from "../Apps/SidebarApps";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -1574,6 +1575,8 @@ function SidebarComponent({
               onboardingId="apps-button"
             />
           )}
+          {/* What is live, one click from anywhere: each app's console and its site. */}
+          {showForgeEntry && <SidebarApps />}
           {/* Same gate as Apps: it is the same forge surface. */}
           {showForgeEntry && onOpenObservability && (
             <SidebarNavButton

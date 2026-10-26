@@ -430,7 +430,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: "/forge", search: {} });
+          void navigate({ to: "/apps" });
         }}
         leftIcon={<ArrowLeft />}
       >

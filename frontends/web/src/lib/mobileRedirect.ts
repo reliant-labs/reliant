@@ -65,7 +65,8 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   // has no `/m/*` twin on purpose: its chrome collapses to an off-canvas nav
   // below `md` (forge-ui/sidebar_layout.tsx), so the one console serves both,
   // and redirecting it would make Apps and Observability unreachable from a
-  // phone — which is what this list used to do.
+  // phone — which is what this list used to do. /apps, the list of apps the
+  // console opens from, is one responsive page for the same reason.
   const PRESERVED = [
     "/auth",
     "/oauth",
@@ -76,6 +77,7 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/upgrade",
     "/design-sandbox",
     "/forge",
+    "/apps",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;

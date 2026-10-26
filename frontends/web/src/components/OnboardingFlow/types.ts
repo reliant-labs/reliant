@@ -1,7 +1,9 @@
-// Intent values the rendered onboarding wizard can actually set. ProjectChoiceStep
-// only ever writes "build_app" or "existing_codebase"; deriveStep / getStepsForPlan
-// / codeSourceForCompute branch on those two alone.
-export type OnboardingIntent = "build_app" | "existing_codebase";
+// Intent values the rendered onboarding wizard can actually set, all from
+// ProjectChoiceStep: build and deploy an app, work in an existing repository,
+// or just chat. deriveStep / getStepsForPlan / codeSourceForCompute branch
+// only on "existing_codebase" (the one with a further step); "build_app" and
+// "chat" differ only in where the user lands (leaveOnboarding).
+export type OnboardingIntent = "build_app" | "existing_codebase" | "chat";
 
 export type ComputeChoice =
   | "cloud_free_trial"
