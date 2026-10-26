@@ -39,3 +39,12 @@ describe("triage rules", () => {
     expect(frameText({ function: "", file: "", line: 0, column: 0 })).toBe("(unknown frame)");
   });
 });
+
+describe("a conflict on the assignee", () => {
+  const read = { status: "unresolved", resolvedVersion: "", assignee: null } as unknown as Issue;
+  it("says who it is assigned to now", () => {
+    expect(conflictSummary(read, { ...read, assignee: { id: "u3", name: "alan" } })).toBe("It is assigned to alan now, not unassigned.");
+    const assigned = { ...read, assignee: { id: "u1", name: "ada" } } as Issue;
+    expect(conflictSummary(assigned, { ...assigned, assignee: null })).toBe("It is unassigned now, not assigned to ada.");
+  });
+});

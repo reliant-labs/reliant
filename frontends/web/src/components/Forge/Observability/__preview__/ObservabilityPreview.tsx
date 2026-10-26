@@ -71,6 +71,12 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "issues-empty", label: "errors: no issues", options: { issues: "empty" } },
   { id: "issues-not-configured", label: "errors: older control plane (Unimplemented)", options: { issues: "not-configured" } },
   { id: "issues-conflict", label: "errors: first triage loses a race (Aborted)", options: { issueConflict: true } },
+  // Discussion on an issue (&issue=iss-orders-deadline has a thread, an assignee, a chat and a related error; iss-worker-conns is unassigned).
+  { id: "issues-assign-conflict", label: "errors: first assignment loses a race (Aborted)", options: { assignConflict: true } },
+  { id: "issues-merged", label: "errors: iss-checkout-total merged into iss-orders-deadline (its entries labelled; writes refused)", options: { mergedIssue: true } },
+  { id: "issues-member", label: "errors: a plain member (edits nothing of others', deletes nothing)", options: { issueReader: "grace" } },
+  { id: "issues-no-person", label: "errors: a credential that acts for no person (cannot comment)", options: { issueReader: "none" } },
+  { id: "issues-roster-denied", label: "errors: member list closed (needs token:read)", options: { rosterDenied: true } },
   // Sessions (view=sessions, &session=<id> for one; sess-1a8c2f1d91e is the failed checkout, sess-live01 is still recording).
   { id: "sessions-empty", label: "sessions: none in range", options: { sessions: "empty" } },
   { id: "sessions-not-configured", label: "sessions: older control plane (Unimplemented)", options: { sessions: "not-configured" } },

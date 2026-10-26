@@ -20,6 +20,7 @@ import * as rpc from "./api";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
+import * as members from "./membersApi";
 import * as metrics from "./metricsApi";
 import * as rum from "./rumApi";
 
@@ -64,6 +65,16 @@ export interface ObservabilityApi {
   getIssue: typeof issues.getIssue;
   listIssueEvents: typeof issues.listIssueEvents;
   updateIssueStatus: typeof issues.updateIssueStatus;
+  // Discussion on an issue: comments, the assignee, chats started from it, the one timeline.
+  listIssueTimeline: typeof issues.listIssueTimeline;
+  addIssueComment: typeof issues.addIssueComment;
+  updateIssueComment: typeof issues.updateIssueComment;
+  deleteIssueComment: typeof issues.deleteIssueComment;
+  assignIssue: typeof issues.assignIssue;
+  linkIssueChat: typeof issues.linkIssueChat;
+  // People: who an issue can be assigned to (token:read to list), and the reader.
+  listOrgMembers: typeof members.listOrgMembers;
+  getCurrentIssueUser: typeof members.getCurrentIssueUser;
   // Activity (ActivityService): who changed what — an issue's history, the project feed.
   listActivity: typeof activity.listActivity;
   // Sessions (RumService): real-user sessions, their timelines and masked replays.
@@ -122,6 +133,14 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getIssue: issues.getIssue,
   listIssueEvents: issues.listIssueEvents,
   updateIssueStatus: issues.updateIssueStatus,
+  listIssueTimeline: issues.listIssueTimeline,
+  addIssueComment: issues.addIssueComment,
+  updateIssueComment: issues.updateIssueComment,
+  deleteIssueComment: issues.deleteIssueComment,
+  assignIssue: issues.assignIssue,
+  linkIssueChat: issues.linkIssueChat,
+  listOrgMembers: members.listOrgMembers,
+  getCurrentIssueUser: members.getCurrentIssueUser,
   listActivity: activity.listActivity,
   listSessions: rum.listSessions,
   getSession: rum.getSession,

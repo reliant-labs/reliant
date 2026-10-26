@@ -155,10 +155,14 @@ describe("the URL round trip", () => {
       [
         "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
-        "issue", "istatus", "platform", "isort",
+        "issue", "istatus", "platform", "isort", "assignee",
         "session", "t", "replay", "user", "cursor",
       ].sort()
     );
+  });
+
+  it("carries the Errors view's assignee filter: me, unassigned or a user id", () => {
+    for (const assignee of ["me", "unassigned", "user-ada"]) expect(throughTheUrl({ view: "errors", assignee }).parsed.assignee).toBe(assignee);
   });
 
   it("carries a release comparison and its window, and drops one out of bounds", () => {

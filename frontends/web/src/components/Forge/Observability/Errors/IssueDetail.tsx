@@ -8,13 +8,15 @@
  */
 
 import { useMemo, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink, GitCommitHorizontal, MonitorPlay } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useIssue, useIssueEvents } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
-import type { IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";
+import type { Issue, IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";
 import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -32,7 +34,10 @@ import { rumScopeOf, sessionLink } from "../Sessions/sessionModel";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, frameText, PLATFORM_LABEL } from "./issueModel";
 import { IssueNotFound, IssuesNotConfigured } from "./IssueStates";
+import { IssueAssignee } from "./IssueAssignee";
+import { IssueTimeline } from "./IssueTimeline";
 import { IssueTriage } from "./IssueTriage";
+import { linkChatToIssue } from "./linkIssueChat";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 export function IssueDetail({
@@ -80,7 +85,7 @@ export function IssueDetail({
     );
   }
   const openTrace = (traceId: string, spanId?: string) =>
-    navigate({ view: "traces", trace: traceId, span: spanId || undefined, issue: undefined, istatus: undefined, platform: undefined, isort: undefined, q: undefined });
+    navigate({ view: "traces", trace: traceId, span: spanId || undefined, issue: undefined, istatus: undefined, platform: undefined, isort: undefined, assignee: undefined, q: undefined });
   // A browser error's session, opened a few seconds before the error so the replay shows what led to it.
   const openSession: SessionLinks = {
     scope: rumScopeOf(scope),
@@ -146,6 +151,10 @@ function IssueBody({
 }) {
   const { issue } = detail;
   const now = Date.now();
+  // Captured at render: the chat's first send happens after this view has unmounted.
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  const onChatCreated = useMemo(() => linkChatToIssue(api, queryClient, issue.id), [api, queryClient, issue.id]);
   const historyScope = useMemo(() => ({ orgId: scope.orgId, projectId: scope.projectId, envIds: issue.envId ? [issue.envId] : [] }), [scope.orgId, scope.projectId, issue.envId]);
   return (
     <div className="space-y-4" data-testid="obs-issue" data-state="ready" data-status={issue.status ?? ""}>
@@ -155,7 +164,7 @@ function IssueBody({
           <StatusBadge status={issue.status} />
           <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{issue.title || issue.exceptionType || issue.fingerprint}</h3>
           <span className="ml-auto">
-            <AskReliantButton subject={{ kind: "issue", issueId: issue.id, env: issue.envName || null }} />
+            <AskReliantButton subject={{ kind: "issue", issueId: issue.id, env: issue.envName || null }} onChatCreated={onChatCreated} />
           </span>
         </div>
         {issue.culprit && <p className="break-all font-mono text-xs text-muted-foreground" data-testid="obs-issue-culprit">{issue.culprit}</p>}
@@ -176,9 +185,15 @@ function IssueBody({
       </header>
 
       <IssueTriage issue={issue} />
+      <IssueAssignee issue={issue} />
+      {issue.relatedCount > 0 && <Incident issue={issue} detail={detail} openIssue={openIssue} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
+          <Card padding="none" data-testid="obs-issue-discussion">
+            <Section title="Discussion" note="Status changes, comments, assignments and chats, oldest first." />
+            <IssueTimeline issueId={issue.id} />
+          </Card>
           <Card padding="none" data-testid="obs-issue-latest">
             <Section title="Latest event" note={detail.latestEvent ? formatTimestamp(detail.latestEvent.timeMs, now) : undefined} />
             {detail.latestEvent ? (
@@ -267,6 +282,39 @@ function IssueBody({
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * "N related errors (same incident)". ListIssues has no incident_key filter, so
+ * there is no list to link to; the issues of the incident come from GetIssue
+ * (incident_issue_ids), which the reader opens one by one.
+ */
+function Incident({ issue, detail, openIssue }: { issue: Issue; detail: IssueDetailModel; openIssue: (id: string) => void }) {
+  const ids = detail.incidentIssueIds;
+  return (
+    <div className="rounded-md border border-border/60 bg-background px-3 py-2 text-xs" data-testid="obs-issue-incident" data-incident={issue.incidentKey}>
+      <p className="text-foreground">
+        <strong className="font-medium">{issue.relatedCount} related {issue.relatedCount === 1 ? "error" : "errors"}</strong> (same incident)
+        <span className="text-muted-foreground"> — one cause failing several callers at about the same time. Each keeps its own counts and state.</span>
+      </p>
+      {ids.length > 0 && (
+        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+          {ids.map((id) => (
+            <li key={id}>
+              <button
+                type="button"
+                onClick={() => openIssue(id)}
+                className="font-mono text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid={`obs-issue-incident-${id}`}
+              >
+                {id}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

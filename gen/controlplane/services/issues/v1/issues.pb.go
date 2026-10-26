@@ -188,6 +188,58 @@ func (IssueResolveKind) EnumDescriptor() ([]byte, []int) {
 	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{2}
 }
 
+type IssueActor_Kind int32
+
+const (
+	IssueActor_KIND_UNSPECIFIED IssueActor_Kind = 0
+	IssueActor_KIND_USER        IssueActor_Kind = 1
+	IssueActor_KIND_MACHINE     IssueActor_Kind = 2
+	IssueActor_KIND_SYSTEM      IssueActor_Kind = 3
+)
+
+// Enum value maps for IssueActor_Kind.
+var (
+	IssueActor_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "KIND_USER",
+		2: "KIND_MACHINE",
+		3: "KIND_SYSTEM",
+	}
+	IssueActor_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"KIND_USER":        1,
+		"KIND_MACHINE":     2,
+		"KIND_SYSTEM":      3,
+	}
+)
+
+func (x IssueActor_Kind) Enum() *IssueActor_Kind {
+	p := new(IssueActor_Kind)
+	*p = x
+	return p
+}
+
+func (x IssueActor_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IssueActor_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_issues_v1_issues_proto_enumTypes[3].Descriptor()
+}
+
+func (IssueActor_Kind) Type() protoreflect.EnumType {
+	return &file_services_issues_v1_issues_proto_enumTypes[3]
+}
+
+func (x IssueActor_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IssueActor_Kind.Descriptor instead.
+func (IssueActor_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28, 0}
+}
+
 // IssueTimeRange is a half-open range [start, end). Both ends are required when
 // the range is present, and end must be after start.
 type IssueTimeRange struct {
@@ -346,14 +398,19 @@ type ListIssuesRequest struct {
 	Text *string `protobuf:"bytes,6,opt,name=text,proto3,oneof" json:"text,omitempty"`
 	// Only the issues of this issue source (Issue.source). Unset or empty: errors
 	// only — a source's issues are never mixed into the error inbox.
-	Source *string   `protobuf:"bytes,10,opt,name=source,proto3,oneof" json:"source,omitempty"`
-	Sort   IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
+	Source *string `protobuf:"bytes,10,opt,name=source,proto3,oneof" json:"source,omitempty"`
+	// Only the issues assigned to this user (a user id). Unset: every issue.
+	Assignee *string   `protobuf:"bytes,12,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
+	Sort     IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
 	// Rows per page. Default 50, max 100.
 	PageSize int32 `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// next_page_token from the previous page; valid only with the same request.
-	PageToken     string `protobuf:"bytes,9,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PageToken string `protobuf:"bytes,9,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// How close in first-seen time issues of one cause must be to share an
+	// incident (Issue.incident_key). Default 600 (ten minutes); max 3600.
+	IncidentWindowSeconds int32 `protobuf:"varint,11,opt,name=incident_window_seconds,json=incidentWindowSeconds,proto3" json:"incident_window_seconds,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ListIssuesRequest) Reset() {
@@ -435,6 +492,13 @@ func (x *ListIssuesRequest) GetSource() string {
 	return ""
 }
 
+func (x *ListIssuesRequest) GetAssignee() string {
+	if x != nil && x.Assignee != nil {
+		return *x.Assignee
+	}
+	return ""
+}
+
 func (x *ListIssuesRequest) GetSort() IssueSort {
 	if x != nil {
 		return x.Sort
@@ -454,6 +518,13 @@ func (x *ListIssuesRequest) GetPageToken() string {
 		return x.PageToken
 	}
 	return ""
+}
+
+func (x *ListIssuesRequest) GetIncidentWindowSeconds() int32 {
+	if x != nil {
+		return x.IncidentWindowSeconds
+	}
+	return 0
 }
 
 type ListIssuesResponse struct {
@@ -514,9 +585,11 @@ type GetIssueRequest struct {
 	IssueId string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
 	// The window the counts and the trend are over. Unset = the last 24 hours.
 	// Max 30 days.
-	TimeRange     *IssueTimeRange `protobuf:"bytes,2,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TimeRange *IssueTimeRange `protobuf:"bytes,2,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
+	// ListIssuesRequest.incident_window_seconds, for the incident this issue lists.
+	IncidentWindowSeconds int32 `protobuf:"varint,3,opt,name=incident_window_seconds,json=incidentWindowSeconds,proto3" json:"incident_window_seconds,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetIssueRequest) Reset() {
@@ -563,6 +636,13 @@ func (x *GetIssueRequest) GetTimeRange() *IssueTimeRange {
 	return nil
 }
 
+func (x *GetIssueRequest) GetIncidentWindowSeconds() int32 {
+	if x != nil {
+		return x.IncidentWindowSeconds
+	}
+	return 0
+}
+
 type GetIssueResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Issue *v1.Issue              `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
@@ -577,9 +657,13 @@ type GetIssueResponse struct {
 	CoOccurringIssueIds []string `protobuf:"bytes,5,rep,name=co_occurring_issue_ids,json=coOccurringIssueIds,proto3" json:"co_occurring_issue_ids,omitempty"`
 	// The release the issue first appeared in. Unset when the version is not a
 	// release the ledger knows.
-	FirstRelease  *IssueReleaseRef `protobuf:"bytes,6,opt,name=first_release,json=firstRelease,proto3" json:"first_release,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	FirstRelease *IssueReleaseRef `protobuf:"bytes,6,opt,name=first_release,json=firstRelease,proto3" json:"first_release,omitempty"`
+	// The other issues of this issue's incident (issue.incident_key): the same
+	// cause, first seen close in time, in any service. Empty when it is part of
+	// none.
+	IncidentIssueIds []string `protobuf:"bytes,7,rep,name=incident_issue_ids,json=incidentIssueIds,proto3" json:"incident_issue_ids,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetIssueResponse) Reset() {
@@ -650,6 +734,13 @@ func (x *GetIssueResponse) GetCoOccurringIssueIds() []string {
 func (x *GetIssueResponse) GetFirstRelease() *IssueReleaseRef {
 	if x != nil {
 		return x.FirstRelease
+	}
+	return nil
+}
+
+func (x *GetIssueResponse) GetIncidentIssueIds() []string {
+	if x != nil {
+		return x.IncidentIssueIds
 	}
 	return nil
 }
@@ -1304,6 +1395,1242 @@ func (x *UpdateIssueStatusResponse) GetIssue() *v1.Issue {
 	return nil
 }
 
+// IssueComment is one comment on an issue.
+type IssueComment struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	IssueId string                 `protobuf:"bytes,2,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	// The author. Unset when the account no longer exists.
+	Author *v1.IssueUser `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
+	// Plain text or markdown, verbatim. Render it safely.
+	Body      string                 `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Later than created_at once the comment was edited.
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueComment) Reset() {
+	*x = IssueComment{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueComment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueComment) ProtoMessage() {}
+
+func (x *IssueComment) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueComment.ProtoReflect.Descriptor instead.
+func (*IssueComment) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *IssueComment) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IssueComment) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *IssueComment) GetAuthor() *v1.IssueUser {
+	if x != nil {
+		return x.Author
+	}
+	return nil
+}
+
+func (x *IssueComment) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *IssueComment) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *IssueComment) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type AddIssueCommentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IssueId       string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	Body          string                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddIssueCommentRequest) Reset() {
+	*x = AddIssueCommentRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddIssueCommentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddIssueCommentRequest) ProtoMessage() {}
+
+func (x *AddIssueCommentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddIssueCommentRequest.ProtoReflect.Descriptor instead.
+func (*AddIssueCommentRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AddIssueCommentRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *AddIssueCommentRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+type AddIssueCommentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Comment       *IssueComment          `protobuf:"bytes,1,opt,name=comment,proto3" json:"comment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddIssueCommentResponse) Reset() {
+	*x = AddIssueCommentResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddIssueCommentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddIssueCommentResponse) ProtoMessage() {}
+
+func (x *AddIssueCommentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddIssueCommentResponse.ProtoReflect.Descriptor instead.
+func (*AddIssueCommentResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *AddIssueCommentResponse) GetComment() *IssueComment {
+	if x != nil {
+		return x.Comment
+	}
+	return nil
+}
+
+type UpdateIssueCommentRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The issue the comment is on.
+	IssueId       string `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	CommentId     string `protobuf:"bytes,2,opt,name=comment_id,json=commentId,proto3" json:"comment_id,omitempty"`
+	Body          string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateIssueCommentRequest) Reset() {
+	*x = UpdateIssueCommentRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateIssueCommentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateIssueCommentRequest) ProtoMessage() {}
+
+func (x *UpdateIssueCommentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateIssueCommentRequest.ProtoReflect.Descriptor instead.
+func (*UpdateIssueCommentRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *UpdateIssueCommentRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *UpdateIssueCommentRequest) GetCommentId() string {
+	if x != nil {
+		return x.CommentId
+	}
+	return ""
+}
+
+func (x *UpdateIssueCommentRequest) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+type UpdateIssueCommentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Comment       *IssueComment          `protobuf:"bytes,1,opt,name=comment,proto3" json:"comment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateIssueCommentResponse) Reset() {
+	*x = UpdateIssueCommentResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateIssueCommentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateIssueCommentResponse) ProtoMessage() {}
+
+func (x *UpdateIssueCommentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateIssueCommentResponse.ProtoReflect.Descriptor instead.
+func (*UpdateIssueCommentResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UpdateIssueCommentResponse) GetComment() *IssueComment {
+	if x != nil {
+		return x.Comment
+	}
+	return nil
+}
+
+type DeleteIssueCommentRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The issue the comment is on.
+	IssueId       string `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	CommentId     string `protobuf:"bytes,2,opt,name=comment_id,json=commentId,proto3" json:"comment_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteIssueCommentRequest) Reset() {
+	*x = DeleteIssueCommentRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteIssueCommentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteIssueCommentRequest) ProtoMessage() {}
+
+func (x *DeleteIssueCommentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteIssueCommentRequest.ProtoReflect.Descriptor instead.
+func (*DeleteIssueCommentRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DeleteIssueCommentRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *DeleteIssueCommentRequest) GetCommentId() string {
+	if x != nil {
+		return x.CommentId
+	}
+	return ""
+}
+
+type DeleteIssueCommentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteIssueCommentResponse) Reset() {
+	*x = DeleteIssueCommentResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteIssueCommentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteIssueCommentResponse) ProtoMessage() {}
+
+func (x *DeleteIssueCommentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteIssueCommentResponse.ProtoReflect.Descriptor instead.
+func (*DeleteIssueCommentResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{21}
+}
+
+type AssignIssueRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	IssueId string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	// The user to assign; empty clears the assignee. Must be a member of the
+	// issue's org.
+	AssigneeUserId string `protobuf:"bytes,2,opt,name=assignee_user_id,json=assigneeUserId,proto3" json:"assignee_user_id,omitempty"`
+	// The Issue.version the caller read. Non-zero and stale = Aborted. Zero = do
+	// not check.
+	ExpectedVersion int32 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *AssignIssueRequest) Reset() {
+	*x = AssignIssueRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignIssueRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignIssueRequest) ProtoMessage() {}
+
+func (x *AssignIssueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignIssueRequest.ProtoReflect.Descriptor instead.
+func (*AssignIssueRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *AssignIssueRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *AssignIssueRequest) GetAssigneeUserId() string {
+	if x != nil {
+		return x.AssigneeUserId
+	}
+	return ""
+}
+
+func (x *AssignIssueRequest) GetExpectedVersion() int32 {
+	if x != nil {
+		return x.ExpectedVersion
+	}
+	return 0
+}
+
+type AssignIssueResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issue         *v1.Issue              `protobuf:"bytes,1,opt,name=issue,proto3" json:"issue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AssignIssueResponse) Reset() {
+	*x = AssignIssueResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AssignIssueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AssignIssueResponse) ProtoMessage() {}
+
+func (x *AssignIssueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AssignIssueResponse.ProtoReflect.Descriptor instead.
+func (*AssignIssueResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AssignIssueResponse) GetIssue() *v1.Issue {
+	if x != nil {
+		return x.Issue
+	}
+	return nil
+}
+
+type LinkIssueChatRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	IssueId string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	// The chat started from the issue (an id in the reliant product).
+	ChatId string `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// The chat's title when it was linked. Optional.
+	ChatTitle     string `protobuf:"bytes,3,opt,name=chat_title,json=chatTitle,proto3" json:"chat_title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkIssueChatRequest) Reset() {
+	*x = LinkIssueChatRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkIssueChatRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkIssueChatRequest) ProtoMessage() {}
+
+func (x *LinkIssueChatRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkIssueChatRequest.ProtoReflect.Descriptor instead.
+func (*LinkIssueChatRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *LinkIssueChatRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *LinkIssueChatRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *LinkIssueChatRequest) GetChatTitle() string {
+	if x != nil {
+		return x.ChatTitle
+	}
+	return ""
+}
+
+// IssueChatLink is a chat started from an issue.
+type IssueChatLink struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	IssueId   string                 `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	ChatId    string                 `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	ChatTitle string                 `protobuf:"bytes,3,opt,name=chat_title,json=chatTitle,proto3" json:"chat_title,omitempty"`
+	// Who linked it. Unset for a credential that acts for no person.
+	LinkedBy      *v1.IssueUser          `protobuf:"bytes,4,opt,name=linked_by,json=linkedBy,proto3" json:"linked_by,omitempty"`
+	LinkedAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=linked_at,json=linkedAt,proto3" json:"linked_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueChatLink) Reset() {
+	*x = IssueChatLink{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueChatLink) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueChatLink) ProtoMessage() {}
+
+func (x *IssueChatLink) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueChatLink.ProtoReflect.Descriptor instead.
+func (*IssueChatLink) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *IssueChatLink) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *IssueChatLink) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *IssueChatLink) GetChatTitle() string {
+	if x != nil {
+		return x.ChatTitle
+	}
+	return ""
+}
+
+func (x *IssueChatLink) GetLinkedBy() *v1.IssueUser {
+	if x != nil {
+		return x.LinkedBy
+	}
+	return nil
+}
+
+func (x *IssueChatLink) GetLinkedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LinkedAt
+	}
+	return nil
+}
+
+type LinkIssueChatResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Link  *IssueChatLink         `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	// False when the chat was already linked.
+	Created       bool `protobuf:"varint,2,opt,name=created,proto3" json:"created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkIssueChatResponse) Reset() {
+	*x = LinkIssueChatResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkIssueChatResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkIssueChatResponse) ProtoMessage() {}
+
+func (x *LinkIssueChatResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkIssueChatResponse.ProtoReflect.Descriptor instead.
+func (*LinkIssueChatResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *LinkIssueChatResponse) GetLink() *IssueChatLink {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+func (x *LinkIssueChatResponse) GetCreated() bool {
+	if x != nil {
+		return x.Created
+	}
+	return false
+}
+
+type ListIssueTimelineRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The issue whose timeline is listed. A merged issue's request is answered
+	// with the timeline of the issue it was merged into.
+	IssueId string `protobuf:"bytes,1,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	// Rows per page. Default 50, max 100.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// next_page_token from the previous page; valid only with the same issue.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIssueTimelineRequest) Reset() {
+	*x = ListIssueTimelineRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIssueTimelineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIssueTimelineRequest) ProtoMessage() {}
+
+func (x *ListIssueTimelineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIssueTimelineRequest.ProtoReflect.Descriptor instead.
+func (*ListIssueTimelineRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListIssueTimelineRequest) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *ListIssueTimelineRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListIssueTimelineRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// IssueActor is who did something: a person, a machine credential or the
+// system (the issues worker).
+type IssueActor struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  IssueActor_Kind        `protobuf:"varint,1,opt,name=kind,proto3,enum=controlplane.v1.IssueActor_Kind" json:"kind,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// A person's display name (their email when they have none); empty for a
+	// machine or the system.
+	Name          string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueActor) Reset() {
+	*x = IssueActor{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueActor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueActor) ProtoMessage() {}
+
+func (x *IssueActor) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueActor.ProtoReflect.Descriptor instead.
+func (*IssueActor) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *IssueActor) GetKind() IssueActor_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return IssueActor_KIND_UNSPECIFIED
+}
+
+func (x *IssueActor) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IssueActor) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// IssueStatusEntry is a status change.
+type IssueStatusEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unspecified for the issue's opening.
+	From v1.IssueStatus `protobuf:"varint,1,opt,name=from,proto3,enum=controlplane.v1.IssueStatus" json:"from,omitempty"`
+	To   v1.IssueStatus `protobuf:"varint,2,opt,name=to,proto3,enum=controlplane.v1.IssueStatus" json:"to,omitempty"`
+	// With a resolve: the version it resolves in, when one was named.
+	Version string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	// With an ignore: when it is un-ignored, when bounded.
+	IgnoredUntil  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=ignored_until,json=ignoredUntil,proto3" json:"ignored_until,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueStatusEntry) Reset() {
+	*x = IssueStatusEntry{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueStatusEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueStatusEntry) ProtoMessage() {}
+
+func (x *IssueStatusEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueStatusEntry.ProtoReflect.Descriptor instead.
+func (*IssueStatusEntry) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *IssueStatusEntry) GetFrom() v1.IssueStatus {
+	if x != nil {
+		return x.From
+	}
+	return v1.IssueStatus(0)
+}
+
+func (x *IssueStatusEntry) GetTo() v1.IssueStatus {
+	if x != nil {
+		return x.To
+	}
+	return v1.IssueStatus(0)
+}
+
+func (x *IssueStatusEntry) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *IssueStatusEntry) GetIgnoredUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IgnoredUntil
+	}
+	return nil
+}
+
+// IssueCommentEntry is a comment.
+type IssueCommentEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Comment       *IssueComment          `protobuf:"bytes,1,opt,name=comment,proto3" json:"comment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueCommentEntry) Reset() {
+	*x = IssueCommentEntry{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueCommentEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueCommentEntry) ProtoMessage() {}
+
+func (x *IssueCommentEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueCommentEntry.ProtoReflect.Descriptor instead.
+func (*IssueCommentEntry) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *IssueCommentEntry) GetComment() *IssueComment {
+	if x != nil {
+		return x.Comment
+	}
+	return nil
+}
+
+// IssueAssignmentEntry is an assignment change.
+type IssueAssignmentEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unset: it was unassigned.
+	From *v1.IssueUser `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	// Unset: it was unassigned.
+	To            *v1.IssueUser `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueAssignmentEntry) Reset() {
+	*x = IssueAssignmentEntry{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueAssignmentEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueAssignmentEntry) ProtoMessage() {}
+
+func (x *IssueAssignmentEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueAssignmentEntry.ProtoReflect.Descriptor instead.
+func (*IssueAssignmentEntry) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *IssueAssignmentEntry) GetFrom() *v1.IssueUser {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *IssueAssignmentEntry) GetTo() *v1.IssueUser {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+// IssueChatEntry is a chat started from the issue.
+type IssueChatEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Link          *IssueChatLink         `protobuf:"bytes,1,opt,name=link,proto3" json:"link,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueChatEntry) Reset() {
+	*x = IssueChatEntry{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueChatEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueChatEntry) ProtoMessage() {}
+
+func (x *IssueChatEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueChatEntry.ProtoReflect.Descriptor instead.
+func (*IssueChatEntry) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *IssueChatEntry) GetLink() *IssueChatLink {
+	if x != nil {
+		return x.Link
+	}
+	return nil
+}
+
+// IssueTimelineEntry is one thing that happened to an issue.
+type IssueTimelineEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unique and stable; a client keys on it.
+	Id   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Time *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
+	// The issue it happened on: the requested one, or an issue merged into it.
+	IssueId string      `protobuf:"bytes,3,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	Actor   *IssueActor `protobuf:"bytes,4,opt,name=actor,proto3" json:"actor,omitempty"`
+	// Types that are valid to be assigned to Entry:
+	//
+	//	*IssueTimelineEntry_Status
+	//	*IssueTimelineEntry_Comment
+	//	*IssueTimelineEntry_Assignment
+	//	*IssueTimelineEntry_Chat
+	Entry         isIssueTimelineEntry_Entry `protobuf_oneof:"entry"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueTimelineEntry) Reset() {
+	*x = IssueTimelineEntry{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueTimelineEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueTimelineEntry) ProtoMessage() {}
+
+func (x *IssueTimelineEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueTimelineEntry.ProtoReflect.Descriptor instead.
+func (*IssueTimelineEntry) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *IssueTimelineEntry) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IssueTimelineEntry) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
+func (x *IssueTimelineEntry) GetActor() *IssueActor {
+	if x != nil {
+		return x.Actor
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetEntry() isIssueTimelineEntry_Entry {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetStatus() *IssueStatusEntry {
+	if x != nil {
+		if x, ok := x.Entry.(*IssueTimelineEntry_Status); ok {
+			return x.Status
+		}
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetComment() *IssueCommentEntry {
+	if x != nil {
+		if x, ok := x.Entry.(*IssueTimelineEntry_Comment); ok {
+			return x.Comment
+		}
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetAssignment() *IssueAssignmentEntry {
+	if x != nil {
+		if x, ok := x.Entry.(*IssueTimelineEntry_Assignment); ok {
+			return x.Assignment
+		}
+	}
+	return nil
+}
+
+func (x *IssueTimelineEntry) GetChat() *IssueChatEntry {
+	if x != nil {
+		if x, ok := x.Entry.(*IssueTimelineEntry_Chat); ok {
+			return x.Chat
+		}
+	}
+	return nil
+}
+
+type isIssueTimelineEntry_Entry interface {
+	isIssueTimelineEntry_Entry()
+}
+
+type IssueTimelineEntry_Status struct {
+	Status *IssueStatusEntry `protobuf:"bytes,10,opt,name=status,proto3,oneof"`
+}
+
+type IssueTimelineEntry_Comment struct {
+	Comment *IssueCommentEntry `protobuf:"bytes,11,opt,name=comment,proto3,oneof"`
+}
+
+type IssueTimelineEntry_Assignment struct {
+	Assignment *IssueAssignmentEntry `protobuf:"bytes,12,opt,name=assignment,proto3,oneof"`
+}
+
+type IssueTimelineEntry_Chat struct {
+	Chat *IssueChatEntry `protobuf:"bytes,13,opt,name=chat,proto3,oneof"`
+}
+
+func (*IssueTimelineEntry_Status) isIssueTimelineEntry_Entry() {}
+
+func (*IssueTimelineEntry_Comment) isIssueTimelineEntry_Entry() {}
+
+func (*IssueTimelineEntry_Assignment) isIssueTimelineEntry_Entry() {}
+
+func (*IssueTimelineEntry_Chat) isIssueTimelineEntry_Entry() {}
+
+type ListIssueTimelineResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Oldest first.
+	Entries []*IssueTimelineEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// Empty on the last page.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The issue the timeline is of: issue_id, or the issue it was merged into.
+	IssueId       string `protobuf:"bytes,3,opt,name=issue_id,json=issueId,proto3" json:"issue_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIssueTimelineResponse) Reset() {
+	*x = ListIssueTimelineResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIssueTimelineResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIssueTimelineResponse) ProtoMessage() {}
+
+func (x *ListIssueTimelineResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIssueTimelineResponse.ProtoReflect.Descriptor instead.
+func (*ListIssueTimelineResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ListIssueTimelineResponse) GetEntries() []*IssueTimelineEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ListIssueTimelineResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListIssueTimelineResponse) GetIssueId() string {
+	if x != nil {
+		return x.IssueId
+	}
+	return ""
+}
+
 var File_services_issues_v1_issues_proto protoreflect.FileDescriptor
 
 const file_services_issues_v1_issues_proto_rawDesc = "" +
@@ -1321,7 +2648,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x98\x04\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xfe\x04\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +
 	"\bstatuses\x18\x02 \x03(\x0e2\x1c.controlplane.v1.IssueStatusR\bstatuses\x12?\n" +
@@ -1330,23 +2657,27 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x12since_promotion_id\x18\x05 \x01(\tH\x02R\x10sincePromotionId\x88\x01\x01\x12\x17\n" +
 	"\x04text\x18\x06 \x01(\tH\x03R\x04text\x88\x01\x01\x12\x1b\n" +
 	"\x06source\x18\n" +
-	" \x01(\tH\x04R\x06source\x88\x01\x01\x12.\n" +
+	" \x01(\tH\x04R\x06source\x88\x01\x01\x12\x1f\n" +
+	"\bassignee\x18\f \x01(\tH\x05R\bassignee\x88\x01\x01\x12.\n" +
 	"\x04sort\x18\a \x01(\x0e2\x1a.controlplane.v1.IssueSortR\x04sort\x12\x1b\n" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\t \x01(\tR\tpageTokenB\v\n" +
+	"page_token\x18\t \x01(\tR\tpageToken\x126\n" +
+	"\x17incident_window_seconds\x18\v \x01(\x05R\x15incidentWindowSecondsB\v\n" +
 	"\t_platformB\x15\n" +
 	"\x13_first_seen_releaseB\x15\n" +
 	"\x13_since_promotion_idB\a\n" +
 	"\x05_textB\t\n" +
-	"\a_source\"l\n" +
+	"\a_sourceB\v\n" +
+	"\t_assignee\"l\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"l\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa4\x01\n" +
 	"\x0fGetIssueRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
-	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\"\xf8\x02\n" +
+	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x126\n" +
+	"\x17incident_window_seconds\x18\x03 \x01(\x05R\x15incidentWindowSeconds\"\xa6\x03\n" +
 	"\x10GetIssueResponse\x12,\n" +
 	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue\x12>\n" +
 	"\flatest_event\x18\x02 \x01(\v2\x1b.controlplane.v1.IssueEventR\vlatestEvent\x123\n" +
@@ -1354,7 +2685,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"by_version\x18\x04 \x03(\v2&.controlplane.v1.IssueVersionBreakdownR\tbyVersion\x123\n" +
 	"\x16co_occurring_issue_ids\x18\x05 \x03(\tR\x13coOccurringIssueIds\x12E\n" +
-	"\rfirst_release\x18\x06 \x01(\v2 .controlplane.v1.IssueReleaseRefR\ffirstRelease\"\x83\x03\n" +
+	"\rfirst_release\x18\x06 \x01(\v2 .controlplane.v1.IssueReleaseRefR\ffirstRelease\x12,\n" +
+	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\"\x83\x03\n" +
 	"\n" +
 	"IssueEvent\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x19\n" +
@@ -1417,7 +2749,98 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\v_resolve_inB\x10\n" +
 	"\x0e_ignored_until\"I\n" +
 	"\x19UpdateIssueStatusResponse\x12,\n" +
-	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue*\xa0\x01\n" +
+	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue\"\xf7\x01\n" +
+	"\fIssueComment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
+	"\bissue_id\x18\x02 \x01(\tR\aissueId\x122\n" +
+	"\x06author\x18\x03 \x01(\v2\x1a.controlplane.v1.IssueUserR\x06author\x12\x12\n" +
+	"\x04body\x18\x04 \x01(\tR\x04body\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"G\n" +
+	"\x16AddIssueCommentRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\"R\n" +
+	"\x17AddIssueCommentResponse\x127\n" +
+	"\acomment\x18\x01 \x01(\v2\x1d.controlplane.v1.IssueCommentR\acomment\"i\n" +
+	"\x19UpdateIssueCommentRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x1d\n" +
+	"\n" +
+	"comment_id\x18\x02 \x01(\tR\tcommentId\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\tR\x04body\"U\n" +
+	"\x1aUpdateIssueCommentResponse\x127\n" +
+	"\acomment\x18\x01 \x01(\v2\x1d.controlplane.v1.IssueCommentR\acomment\"U\n" +
+	"\x19DeleteIssueCommentRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x1d\n" +
+	"\n" +
+	"comment_id\x18\x02 \x01(\tR\tcommentId\"\x1c\n" +
+	"\x1aDeleteIssueCommentResponse\"\x84\x01\n" +
+	"\x12AssignIssueRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12(\n" +
+	"\x10assignee_user_id\x18\x02 \x01(\tR\x0eassigneeUserId\x12)\n" +
+	"\x10expected_version\x18\x03 \x01(\x05R\x0fexpectedVersion\"C\n" +
+	"\x13AssignIssueResponse\x12,\n" +
+	"\x05issue\x18\x01 \x01(\v2\x16.controlplane.v1.IssueR\x05issue\"i\n" +
+	"\x14LinkIssueChatRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x17\n" +
+	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x1d\n" +
+	"\n" +
+	"chat_title\x18\x03 \x01(\tR\tchatTitle\"\xd4\x01\n" +
+	"\rIssueChatLink\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x17\n" +
+	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x1d\n" +
+	"\n" +
+	"chat_title\x18\x03 \x01(\tR\tchatTitle\x127\n" +
+	"\tlinked_by\x18\x04 \x01(\v2\x1a.controlplane.v1.IssueUserR\blinkedBy\x127\n" +
+	"\tlinked_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\blinkedAt\"e\n" +
+	"\x15LinkIssueChatResponse\x122\n" +
+	"\x04link\x18\x01 \x01(\v2\x1e.controlplane.v1.IssueChatLinkR\x04link\x12\x18\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"q\n" +
+	"\x18ListIssueTimelineRequest\x12\x19\n" +
+	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xb6\x01\n" +
+	"\n" +
+	"IssueActor\x124\n" +
+	"\x04kind\x18\x01 \x01(\x0e2 .controlplane.v1.IssueActor.KindR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"N\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
+	"\tKIND_USER\x10\x01\x12\x10\n" +
+	"\fKIND_MACHINE\x10\x02\x12\x0f\n" +
+	"\vKIND_SYSTEM\x10\x03\"\xcd\x01\n" +
+	"\x10IssueStatusEntry\x120\n" +
+	"\x04from\x18\x01 \x01(\x0e2\x1c.controlplane.v1.IssueStatusR\x04from\x12,\n" +
+	"\x02to\x18\x02 \x01(\x0e2\x1c.controlplane.v1.IssueStatusR\x02to\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12?\n" +
+	"\rignored_until\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fignoredUntil\"L\n" +
+	"\x11IssueCommentEntry\x127\n" +
+	"\acomment\x18\x01 \x01(\v2\x1d.controlplane.v1.IssueCommentR\acomment\"r\n" +
+	"\x14IssueAssignmentEntry\x12.\n" +
+	"\x04from\x18\x01 \x01(\v2\x1a.controlplane.v1.IssueUserR\x04from\x12*\n" +
+	"\x02to\x18\x02 \x01(\v2\x1a.controlplane.v1.IssueUserR\x02to\"D\n" +
+	"\x0eIssueChatEntry\x122\n" +
+	"\x04link\x18\x01 \x01(\v2\x1e.controlplane.v1.IssueChatLinkR\x04link\"\xa8\x03\n" +
+	"\x12IssueTimelineEntry\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
+	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x19\n" +
+	"\bissue_id\x18\x03 \x01(\tR\aissueId\x121\n" +
+	"\x05actor\x18\x04 \x01(\v2\x1b.controlplane.v1.IssueActorR\x05actor\x12;\n" +
+	"\x06status\x18\n" +
+	" \x01(\v2!.controlplane.v1.IssueStatusEntryH\x00R\x06status\x12>\n" +
+	"\acomment\x18\v \x01(\v2\".controlplane.v1.IssueCommentEntryH\x00R\acomment\x12G\n" +
+	"\n" +
+	"assignment\x18\f \x01(\v2%.controlplane.v1.IssueAssignmentEntryH\x00R\n" +
+	"assignment\x125\n" +
+	"\x04chat\x18\r \x01(\v2\x1f.controlplane.v1.IssueChatEntryH\x00R\x04chatB\a\n" +
+	"\x05entry\"\x9d\x01\n" +
+	"\x19ListIssueTimelineResponse\x12=\n" +
+	"\aentries\x18\x01 \x03(\v2#.controlplane.v1.IssueTimelineEntryR\aentries\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x19\n" +
+	"\bissue_id\x18\x03 \x01(\tR\aissueId*\xa0\x01\n" +
 	"\tIssueSort\x12\x1a\n" +
 	"\x16ISSUE_SORT_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19ISSUE_SORT_LAST_SEEN_DESC\x10\x01\x12\x1e\n" +
@@ -1433,13 +2856,19 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x1eISSUE_RESOLVE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_RESOLVE_KIND_NOW\x10\x01\x12#\n" +
 	"\x1fISSUE_RESOLVE_KIND_NEXT_RELEASE\x10\x02\x12\x1e\n" +
-	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\x89\x03\n" +
+	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xf3\a\n" +
 	"\rIssuesService\x12U\n" +
 	"\n" +
 	"ListIssues\x12\".controlplane.v1.ListIssuesRequest\x1a#.controlplane.v1.ListIssuesResponse\x12O\n" +
 	"\bGetIssue\x12 .controlplane.v1.GetIssueRequest\x1a!.controlplane.v1.GetIssueResponse\x12d\n" +
 	"\x0fListIssueEvents\x12'.controlplane.v1.ListIssueEventsRequest\x1a(.controlplane.v1.ListIssueEventsResponse\x12j\n" +
-	"\x11UpdateIssueStatus\x12).controlplane.v1.UpdateIssueStatusRequest\x1a*.controlplane.v1.UpdateIssueStatusResponseB\xd3\x01\n" +
+	"\x11UpdateIssueStatus\x12).controlplane.v1.UpdateIssueStatusRequest\x1a*.controlplane.v1.UpdateIssueStatusResponse\x12d\n" +
+	"\x0fAddIssueComment\x12'.controlplane.v1.AddIssueCommentRequest\x1a(.controlplane.v1.AddIssueCommentResponse\x12m\n" +
+	"\x12UpdateIssueComment\x12*.controlplane.v1.UpdateIssueCommentRequest\x1a+.controlplane.v1.UpdateIssueCommentResponse\x12m\n" +
+	"\x12DeleteIssueComment\x12*.controlplane.v1.DeleteIssueCommentRequest\x1a+.controlplane.v1.DeleteIssueCommentResponse\x12X\n" +
+	"\vAssignIssue\x12#.controlplane.v1.AssignIssueRequest\x1a$.controlplane.v1.AssignIssueResponse\x12^\n" +
+	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12j\n" +
+	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponseB\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vIssuesProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/issues/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -1454,73 +2883,131 @@ func file_services_issues_v1_issues_proto_rawDescGZIP() []byte {
 	return file_services_issues_v1_issues_proto_rawDescData
 }
 
-var file_services_issues_v1_issues_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_services_issues_v1_issues_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_services_issues_v1_issues_proto_goTypes = []any{
-	(IssueSort)(0),                    // 0: controlplane.v1.IssueSort
-	(IssueStatusChange)(0),            // 1: controlplane.v1.IssueStatusChange
-	(IssueResolveKind)(0),             // 2: controlplane.v1.IssueResolveKind
-	(*IssueTimeRange)(nil),            // 3: controlplane.v1.IssueTimeRange
-	(*IssueScope)(nil),                // 4: controlplane.v1.IssueScope
-	(*ListIssuesRequest)(nil),         // 5: controlplane.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),        // 6: controlplane.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),           // 7: controlplane.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),          // 8: controlplane.v1.GetIssueResponse
-	(*IssueEvent)(nil),                // 9: controlplane.v1.IssueEvent
-	(*IssueFrame)(nil),                // 10: controlplane.v1.IssueFrame
-	(*IssueVersionBreakdown)(nil),     // 11: controlplane.v1.IssueVersionBreakdown
-	(*IssueReleaseRef)(nil),           // 12: controlplane.v1.IssueReleaseRef
-	(*ListIssueEventsRequest)(nil),    // 13: controlplane.v1.ListIssueEventsRequest
-	(*ListIssueEventsResponse)(nil),   // 14: controlplane.v1.ListIssueEventsResponse
-	(*IssueResolveIn)(nil),            // 15: controlplane.v1.IssueResolveIn
-	(*UpdateIssueStatusRequest)(nil),  // 16: controlplane.v1.UpdateIssueStatusRequest
-	(*UpdateIssueStatusResponse)(nil), // 17: controlplane.v1.UpdateIssueStatusResponse
-	nil,                               // 18: controlplane.v1.IssueEvent.AttributesEntry
-	(*timestamppb.Timestamp)(nil),     // 19: google.protobuf.Timestamp
-	(v1.IssueStatus)(0),               // 20: controlplane.v1.IssueStatus
-	(v1.IssuePlatform)(0),             // 21: controlplane.v1.IssuePlatform
-	(*v1.Issue)(nil),                  // 22: controlplane.v1.Issue
+	(IssueSort)(0),                     // 0: controlplane.v1.IssueSort
+	(IssueStatusChange)(0),             // 1: controlplane.v1.IssueStatusChange
+	(IssueResolveKind)(0),              // 2: controlplane.v1.IssueResolveKind
+	(IssueActor_Kind)(0),               // 3: controlplane.v1.IssueActor.Kind
+	(*IssueTimeRange)(nil),             // 4: controlplane.v1.IssueTimeRange
+	(*IssueScope)(nil),                 // 5: controlplane.v1.IssueScope
+	(*ListIssuesRequest)(nil),          // 6: controlplane.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),         // 7: controlplane.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),            // 8: controlplane.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),           // 9: controlplane.v1.GetIssueResponse
+	(*IssueEvent)(nil),                 // 10: controlplane.v1.IssueEvent
+	(*IssueFrame)(nil),                 // 11: controlplane.v1.IssueFrame
+	(*IssueVersionBreakdown)(nil),      // 12: controlplane.v1.IssueVersionBreakdown
+	(*IssueReleaseRef)(nil),            // 13: controlplane.v1.IssueReleaseRef
+	(*ListIssueEventsRequest)(nil),     // 14: controlplane.v1.ListIssueEventsRequest
+	(*ListIssueEventsResponse)(nil),    // 15: controlplane.v1.ListIssueEventsResponse
+	(*IssueResolveIn)(nil),             // 16: controlplane.v1.IssueResolveIn
+	(*UpdateIssueStatusRequest)(nil),   // 17: controlplane.v1.UpdateIssueStatusRequest
+	(*UpdateIssueStatusResponse)(nil),  // 18: controlplane.v1.UpdateIssueStatusResponse
+	(*IssueComment)(nil),               // 19: controlplane.v1.IssueComment
+	(*AddIssueCommentRequest)(nil),     // 20: controlplane.v1.AddIssueCommentRequest
+	(*AddIssueCommentResponse)(nil),    // 21: controlplane.v1.AddIssueCommentResponse
+	(*UpdateIssueCommentRequest)(nil),  // 22: controlplane.v1.UpdateIssueCommentRequest
+	(*UpdateIssueCommentResponse)(nil), // 23: controlplane.v1.UpdateIssueCommentResponse
+	(*DeleteIssueCommentRequest)(nil),  // 24: controlplane.v1.DeleteIssueCommentRequest
+	(*DeleteIssueCommentResponse)(nil), // 25: controlplane.v1.DeleteIssueCommentResponse
+	(*AssignIssueRequest)(nil),         // 26: controlplane.v1.AssignIssueRequest
+	(*AssignIssueResponse)(nil),        // 27: controlplane.v1.AssignIssueResponse
+	(*LinkIssueChatRequest)(nil),       // 28: controlplane.v1.LinkIssueChatRequest
+	(*IssueChatLink)(nil),              // 29: controlplane.v1.IssueChatLink
+	(*LinkIssueChatResponse)(nil),      // 30: controlplane.v1.LinkIssueChatResponse
+	(*ListIssueTimelineRequest)(nil),   // 31: controlplane.v1.ListIssueTimelineRequest
+	(*IssueActor)(nil),                 // 32: controlplane.v1.IssueActor
+	(*IssueStatusEntry)(nil),           // 33: controlplane.v1.IssueStatusEntry
+	(*IssueCommentEntry)(nil),          // 34: controlplane.v1.IssueCommentEntry
+	(*IssueAssignmentEntry)(nil),       // 35: controlplane.v1.IssueAssignmentEntry
+	(*IssueChatEntry)(nil),             // 36: controlplane.v1.IssueChatEntry
+	(*IssueTimelineEntry)(nil),         // 37: controlplane.v1.IssueTimelineEntry
+	(*ListIssueTimelineResponse)(nil),  // 38: controlplane.v1.ListIssueTimelineResponse
+	nil,                                // 39: controlplane.v1.IssueEvent.AttributesEntry
+	(*timestamppb.Timestamp)(nil),      // 40: google.protobuf.Timestamp
+	(v1.IssueStatus)(0),                // 41: controlplane.v1.IssueStatus
+	(v1.IssuePlatform)(0),              // 42: controlplane.v1.IssuePlatform
+	(*v1.Issue)(nil),                   // 43: controlplane.v1.Issue
+	(*v1.IssueUser)(nil),               // 44: controlplane.v1.IssueUser
 }
 var file_services_issues_v1_issues_proto_depIdxs = []int32{
-	19, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
-	19, // 1: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
-	3,  // 2: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
-	4,  // 3: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
-	20, // 4: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
-	21, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
+	40, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
+	40, // 1: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
+	4,  // 2: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
+	5,  // 3: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
+	41, // 4: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
+	42, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
 	0,  // 6: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
-	22, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
-	3,  // 8: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	22, // 9: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
-	9,  // 10: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
-	10, // 11: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
-	11, // 12: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
-	12, // 13: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
-	19, // 14: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
-	18, // 15: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
-	19, // 16: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
-	19, // 17: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
-	19, // 18: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
-	3,  // 19: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	9,  // 20: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
+	43, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
+	4,  // 8: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	43, // 9: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
+	10, // 10: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
+	11, // 11: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
+	12, // 12: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
+	13, // 13: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
+	40, // 14: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
+	39, // 15: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
+	40, // 16: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
+	40, // 17: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
+	40, // 18: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
+	4,  // 19: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
+	10, // 20: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
 	2,  // 21: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
 	1,  // 22: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
-	15, // 23: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
-	19, // 24: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
-	22, // 25: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
-	5,  // 26: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
-	7,  // 27: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
-	13, // 28: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
-	16, // 29: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
-	6,  // 30: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
-	8,  // 31: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
-	14, // 32: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
-	17, // 33: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
-	30, // [30:34] is the sub-list for method output_type
-	26, // [26:30] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	16, // 23: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
+	40, // 24: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
+	43, // 25: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
+	44, // 26: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
+	40, // 27: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
+	40, // 28: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 29: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	19, // 30: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
+	43, // 31: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
+	44, // 32: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
+	40, // 33: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
+	29, // 34: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
+	3,  // 35: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
+	41, // 36: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
+	41, // 37: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
+	40, // 38: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
+	19, // 39: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
+	44, // 40: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
+	44, // 41: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
+	29, // 42: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
+	40, // 43: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	32, // 44: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
+	33, // 45: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
+	34, // 46: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
+	35, // 47: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
+	36, // 48: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
+	37, // 49: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
+	6,  // 50: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
+	8,  // 51: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
+	14, // 52: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
+	17, // 53: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
+	20, // 54: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
+	22, // 55: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
+	24, // 56: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
+	26, // 57: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
+	28, // 58: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
+	31, // 59: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
+	7,  // 60: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
+	9,  // 61: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
+	15, // 62: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
+	18, // 63: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
+	21, // 64: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
+	23, // 65: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
+	25, // 66: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
+	27, // 67: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
+	30, // 68: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
+	38, // 69: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
+	60, // [60:70] is the sub-list for method output_type
+	50, // [50:60] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_services_issues_v1_issues_proto_init() }
@@ -1531,13 +3018,19 @@ func file_services_issues_v1_issues_proto_init() {
 	file_services_issues_v1_issues_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[2].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[13].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[33].OneofWrappers = []any{
+		(*IssueTimelineEntry_Status)(nil),
+		(*IssueTimelineEntry_Comment)(nil),
+		(*IssueTimelineEntry_Assignment)(nil),
+		(*IssueTimelineEntry_Chat)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_issues_v1_issues_proto_rawDesc), len(file_services_issues_v1_issues_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   16,
+			NumEnums:      4,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

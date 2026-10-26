@@ -539,6 +539,7 @@ export const obsSearchShape = {
   istatus: z.string().optional().catch(undefined),
   platform: z.enum(ISSUE_PLATFORMS).optional().catch(undefined),
   isort: z.enum(ISSUE_SORTS).optional().catch(undefined),
+  assignee: z.string().optional().catch(undefined),
   session: z.string().optional().catch(undefined),
   t: z.number().int().nonnegative().optional().catch(undefined),
   replay: z.boolean().optional().catch(undefined),

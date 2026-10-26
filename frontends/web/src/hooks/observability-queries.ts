@@ -22,13 +22,22 @@ import type { ActivityList } from "@/services/controlPlane/observability/activit
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
+  AddIssueCommentRequest,
+  AssignIssueRequest,
+  DeleteIssueCommentRequest,
   Issue,
+  IssueComment,
   IssueEventList,
   IssueList,
   IssuePlatform,
   IssueScope,
   IssueSort,
   IssueStatus,
+  IssueTimelineList,
+  IssueUser,
+  LinkIssueChatRequest,
+  LinkIssueChatResult,
+  UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "@/services/controlPlane/observability/issuesTypes";
 import type { GetMetricRequest, ListMetricExemplarsRequest, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
@@ -614,6 +623,8 @@ export interface IssueFilters {
   statuses: IssueStatus[];
   platform?: IssuePlatform;
   service?: string;
+  /** Only the issues assigned to this user id (the server filters). */
+  assignee?: string;
   sort: IssueSort;
   text: string;
 }
@@ -631,6 +642,14 @@ export const issueKeys = {
     [...issueKeys.root(), "list", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], filters] as const,
   detail: (issueId: string, range: RangePreset) => [...issueKeys.root(), "detail", issueId, range] as const,
   events: (issueId: string) => [...issueKeys.root(), "events", issueId] as const,
+  timelines: () => [...issueKeys.root(), "timeline"] as const,
+  timeline: (issueId: string) => [...issueKeys.timelines(), issueId] as const,
+};
+
+/** People change rarely; the roster and the reader are read once a while, not per issue. */
+export const peopleKeys = {
+  members: () => ["observability", "people", "members"] as const,
+  me: () => ["observability", "people", "me"] as const,
 };
 
 /** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
@@ -646,6 +665,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         window,
         statuses: filters.statuses,
         platform: filters.platform,
+        assignee: filters.assignee,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
@@ -705,6 +725,100 @@ export function useUpdateIssueStatus() {
       void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
     },
+  });
+}
+
+export const ISSUE_TIMELINE_PAGE_SIZE = 100;
+
+/** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
+export function useIssueTimeline(issueId: string | undefined) {
+  const api = useObservabilityApi();
+  return useInfiniteQuery({
+    queryKey: issueKeys.timeline(issueId ?? ""),
+    queryFn: ({ pageParam }): Promise<IssueTimelineList> =>
+      api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextPageToken || undefined,
+    enabled: !!issueId,
+    staleTime: 15_000,
+    retry: issuesRetry,
+  });
+}
+
+/** The signed-in person: who "me" is, and whose comments are editable. */
+export function useCurrentIssueUser() {
+  const api = useObservabilityApi();
+  return useQuery<IssueUser | null>({
+    queryKey: peopleKeys.me(),
+    queryFn: () => api.getCurrentIssueUser(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** The org's members, for the assignee picker. Refused (denied) for a member without token:read; the picker copes. */
+export function useOrgMembers() {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: peopleKeys.members(),
+    queryFn: () => api.listOrgMembers(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** Every write below never retries and never re-sends; a refusal is shown, and the reads are re-fetched either way. */
+export function useAddIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, AddIssueCommentRequest>({
+    mutationFn: (req) => api.addIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useUpdateIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, UpdateIssueCommentRequest>({
+    mutationFn: (req) => api.updateIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useDeleteIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<void, unknown, DeleteIssueCommentRequest>({
+    mutationFn: (req) => api.deleteIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+/**
+ * Assign or unassign. Like a triage it echoes the version read, never retries,
+ * and on a stale one (Aborted: a conflict) re-reads the issue instead of
+ * re-sending, so the reader sees what changed.
+ */
+export function useAssignIssue() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<Issue, unknown, AssignIssueRequest>({
+    mutationFn: (req) => api.assignIssue(req),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+    },
+  });
+}
+
+/** Record a chat started from an issue. Idempotent per (issue, chat), so a repeat is harmless. */
+export function useLinkIssueChat() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<LinkIssueChatResult, unknown, LinkIssueChatRequest>({
+    mutationFn: (req) => api.linkIssueChat(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
   });
 }
 

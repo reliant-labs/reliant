@@ -120,6 +120,8 @@ export interface ObsSearch {
   platform?: IssuePlatform;
   /** Errors: the order. Absent: most recently seen first. */
   isort?: IssueSort;
+  /** Errors: `me`, `unassigned` or a user id (assigneeFilterOf). Absent: anyone's. */
+  assignee?: string;
   /** Sessions: the session open in detail (its rum.sessionId). */
   session?: string;
   /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
@@ -168,6 +170,7 @@ export const OBS_SEARCH_KEYS = [
   "istatus",
   "platform",
   "isort",
+  "assignee",
   "session",
   "t",
   "replay",

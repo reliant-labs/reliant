@@ -244,7 +244,20 @@ type Issue struct {
 	Source string `protobuf:"bytes,27,opt,name=source,proto3" json:"source,omitempty"`
 	// What affected counted: "users", "chats", "threads", "workflows", "traces" or
 	// "sessions". Empty on a control plane older than the field.
-	AffectedUnit  string `protobuf:"bytes,28,opt,name=affected_unit,json=affectedUnit,proto3" json:"affected_unit,omitempty"`
+	AffectedUnit string `protobuf:"bytes,28,opt,name=affected_unit,json=affectedUnit,proto3" json:"affected_unit,omitempty"`
+	// Shared by the issues of one incident: issues of the environment that share a
+	// cause (the SQLSTATE or refused connection target their error carries, else its
+	// normalized error class) and first fired within the request's incident window of
+	// one another, in any service. One dead dependency fails every caller, and each
+	// caller is its own issue; the key marks them as one outage. Empty when the issue
+	// is part of none, and for browser issues. Issues are never merged: each keeps its
+	// own counts and state.
+	IncidentKey string `protobuf:"bytes,29,opt,name=incident_key,json=incidentKey,proto3" json:"incident_key,omitempty"`
+	// How many OTHER issues carry the same incident_key.
+	RelatedCount int32 `protobuf:"varint,30,opt,name=related_count,json=relatedCount,proto3" json:"related_count,omitempty"`
+	// The person the issue is assigned to; unset when unassigned. Changed by
+	// IssuesService.AssignIssue, which bumps version.
+	Assignee      *IssueUser `protobuf:"bytes,31,opt,name=assignee,proto3" json:"assignee,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -475,6 +488,81 @@ func (x *Issue) GetAffectedUnit() string {
 	return ""
 }
 
+func (x *Issue) GetIncidentKey() string {
+	if x != nil {
+		return x.IncidentKey
+	}
+	return ""
+}
+
+func (x *Issue) GetRelatedCount() int32 {
+	if x != nil {
+		return x.RelatedCount
+	}
+	return 0
+}
+
+func (x *Issue) GetAssignee() *IssueUser {
+	if x != nil {
+		return x.Assignee
+	}
+	return nil
+}
+
+// IssueUser is a person as an issue shows them: an assignee. name is the
+// user's display name, or their email when they have none, as of the read.
+type IssueUser struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IssueUser) Reset() {
+	*x = IssueUser{}
+	mi := &file_controlplane_v1_issues_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IssueUser) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IssueUser) ProtoMessage() {}
+
+func (x *IssueUser) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_issues_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IssueUser.ProtoReflect.Descriptor instead.
+func (*IssueUser) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_issues_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IssueUser) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IssueUser) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_controlplane_v1_issues_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_issues_proto_rawDesc = "" +
@@ -482,7 +570,7 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"\x1ccontrolplane/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"Y\n" +
 	"\x0fIssueTrendPoint\x12.\n" +
 	"\x04hour\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04hour\x12\x16\n" +
-	"\x06events\x18\x02 \x01(\x03R\x06events\"\xc8\b\n" +
+	"\x06events\x18\x02 \x01(\x03R\x06events\"\xc8\t\n" +
 	"\x05Issue\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12:\n" +
 	"\bplatform\x18\x02 \x01(\x0e2\x1e.controlplane.v1.IssuePlatformR\bplatform\x12\x15\n" +
@@ -516,7 +604,13 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"\fsymbolicated\x18\x19 \x01(\bR\fsymbolicated\x12\x18\n" +
 	"\aversion\x18\x1a \x01(\x05R\aversion\x12\x16\n" +
 	"\x06source\x18\x1b \x01(\tR\x06source\x12#\n" +
-	"\raffected_unit\x18\x1c \x01(\tR\faffectedUnit*f\n" +
+	"\raffected_unit\x18\x1c \x01(\tR\faffectedUnit\x12!\n" +
+	"\fincident_key\x18\x1d \x01(\tR\vincidentKey\x12#\n" +
+	"\rrelated_count\x18\x1e \x01(\x05R\frelatedCount\x126\n" +
+	"\bassignee\x18\x1f \x01(\v2\x1a.controlplane.v1.IssueUserR\bassignee\"/\n" +
+	"\tIssueUser\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name*f\n" +
 	"\rIssuePlatform\x12\x1e\n" +
 	"\x1aISSUE_PLATFORM_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_PLATFORM_BROWSER\x10\x01\x12\x19\n" +
@@ -543,29 +637,31 @@ func file_controlplane_v1_issues_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_issues_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_controlplane_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_controlplane_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_controlplane_v1_issues_proto_goTypes = []any{
 	(IssuePlatform)(0),            // 0: controlplane.v1.IssuePlatform
 	(IssueStatus)(0),              // 1: controlplane.v1.IssueStatus
 	(*IssueTrendPoint)(nil),       // 2: controlplane.v1.IssueTrendPoint
 	(*Issue)(nil),                 // 3: controlplane.v1.Issue
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*IssueUser)(nil),             // 4: controlplane.v1.IssueUser
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_controlplane_v1_issues_proto_depIdxs = []int32{
-	4, // 0: controlplane.v1.IssueTrendPoint.hour:type_name -> google.protobuf.Timestamp
-	0, // 1: controlplane.v1.Issue.platform:type_name -> controlplane.v1.IssuePlatform
-	1, // 2: controlplane.v1.Issue.status:type_name -> controlplane.v1.IssueStatus
-	4, // 3: controlplane.v1.Issue.first_seen_at:type_name -> google.protobuf.Timestamp
-	4, // 4: controlplane.v1.Issue.last_seen_at:type_name -> google.protobuf.Timestamp
-	2, // 5: controlplane.v1.Issue.trend:type_name -> controlplane.v1.IssueTrendPoint
-	4, // 6: controlplane.v1.Issue.resolved_at:type_name -> google.protobuf.Timestamp
-	4, // 7: controlplane.v1.Issue.regressed_at:type_name -> google.protobuf.Timestamp
-	4, // 8: controlplane.v1.Issue.ignored_until:type_name -> google.protobuf.Timestamp
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	5,  // 0: controlplane.v1.IssueTrendPoint.hour:type_name -> google.protobuf.Timestamp
+	0,  // 1: controlplane.v1.Issue.platform:type_name -> controlplane.v1.IssuePlatform
+	1,  // 2: controlplane.v1.Issue.status:type_name -> controlplane.v1.IssueStatus
+	5,  // 3: controlplane.v1.Issue.first_seen_at:type_name -> google.protobuf.Timestamp
+	5,  // 4: controlplane.v1.Issue.last_seen_at:type_name -> google.protobuf.Timestamp
+	2,  // 5: controlplane.v1.Issue.trend:type_name -> controlplane.v1.IssueTrendPoint
+	5,  // 6: controlplane.v1.Issue.resolved_at:type_name -> google.protobuf.Timestamp
+	5,  // 7: controlplane.v1.Issue.regressed_at:type_name -> google.protobuf.Timestamp
+	5,  // 8: controlplane.v1.Issue.ignored_until:type_name -> google.protobuf.Timestamp
+	4,  // 9: controlplane.v1.Issue.assignee:type_name -> controlplane.v1.IssueUser
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_issues_proto_init() }
@@ -579,7 +675,7 @@ func file_controlplane_v1_issues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_issues_proto_rawDesc), len(file_controlplane_v1_issues_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
