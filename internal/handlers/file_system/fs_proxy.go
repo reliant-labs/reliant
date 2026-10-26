@@ -172,9 +172,10 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 //
 // The "" | "/" == workspace root rule and the confinement check are NOT
 // reimplemented here: both come from filepreview.ValidatePathScoped via
-// validateWorkspacePath. ScopeBaseOnly is deliberate — this service serves a
-// user whose files live on a remote daemon, so an absolute path outside the
-// workspace is refused rather than honoured.
+// validateWorkspacePath. ScopeBaseOnly is deliberate — every rpc that lists,
+// writes, creates, deletes, copies or searches stays inside the workspace, so
+// an absolute path outside it is refused rather than honoured. The read-only
+// viewer rpcs use resolveForView instead.
 //
 // The returned path is always absolute, so "" and "/" never cross the wire to
 // the daemon.
@@ -185,6 +186,21 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 // refused traversal as a missing file.
 func (w workspaceScope) resolve(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeBaseOnly)
+}
+
+// resolveForView is resolve for the read-only viewer rpcs (GetFileContent,
+// GetFileMetadata, GetFilePreviewInfo, GetFilePreview): it also honours an
+// absolute path outside the workspace.
+//
+// The daemon those rpcs reach is the requesting user's own machine (or cloud
+// machine), whose files their agents already read with a shell, so viewing a
+// file they named there grants nothing new — and a path an agent mentioned
+// outside the workspace (a sibling repo, the module cache, ~/.config) is
+// exactly what the viewer is asked to open. A RELATIVE path that climbs out
+// of the workspace is still refused: it is resolved against a base the user
+// did not choose, so escaping it can only be a traversal.
+func (w workspaceScope) resolveForView(requestedPath string) (string, error) {
+	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeAllowAbsolute)
 }
 
 // validateWorkspacePath is the single place this package applies the shared
@@ -439,7 +455,7 @@ func (s *Service) GetFileContent(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +531,7 @@ func (s *Service) GetFileMetadata(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -570,7 +586,7 @@ func (s *Service) GetFilePreviewInfo(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +680,7 @@ func (s *Service) GetFilePreview(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolveForView(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
