@@ -70,7 +70,9 @@ export const DEFAULT_RECENT_MESSAGES = 200;
 /**
  * Minimum seq across a message list, as a plain number (Message.seq is a
  * bigint). Returns 0 for an empty list — the same "unknown" sentinel the server
- * uses for oldest_seq.
+ * uses for oldest_seq. Messages without a seq (0) are skipped: they carry no
+ * position, and counting one would make the paging cursor 0, which ends
+ * scroll-back for good.
  *
  * seq is a chat-global total order, so this is exactly "the oldest message" in
  * display order, and exactly what the paging RPC wants: the server filters with
@@ -81,6 +83,7 @@ export function oldestSeqOf(messages: Message[]): number {
   let oldest = 0;
   for (const message of messages) {
     const seq = Number(message.seq ?? 0);
+    if (seq <= 0) continue;
     if (oldest === 0 || seq < oldest) oldest = seq;
   }
   return oldest;
