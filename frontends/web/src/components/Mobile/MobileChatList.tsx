@@ -30,7 +30,7 @@
  * at without starting or opening a chat in it.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, memo, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -199,7 +199,12 @@ function primeChatOpen(chat: Chat): void {
   prefetchChatMessages(chat.id);
 }
 
-function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
+// Memoized: Virtuoso re-invokes `itemContent` for every visible row whenever
+// the list re-renders, and the list re-renders on every chat-list cache write
+// (an activity change, an unread flip, a new message's lastMessageAt on any
+// chat). React Query keeps an unchanged chat's object identity across those
+// writes, so only the row whose chat actually changed re-renders.
+const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
   const busy = isChatBusy(state);
@@ -291,7 +296,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
       </Link>
     </div>
   );
-}
+});
 
 interface GroupHeaderProps {
   group: ChatGroup;
@@ -420,22 +425,28 @@ export function MobileChatList() {
     setCollapsed((prev) => ({ ...prev, [worktreeId]: !prev[worktreeId] }));
   }, []);
 
-  const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
+  // Derived once per (groups, collapsed) change rather than on every render:
+  // a fresh `groupCounts` array hands Virtuoso a new prop each render.
+  const { totalChats, groupCounts, flatChats, groupEndIndices } = useMemo(() => {
+    const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
 
-  const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
-  // Flatten visible (expanded) chats in group order, so a Virtuoso item index
-  // maps directly to `flatChats[index]` regardless of which groups are
-  // collapsed.
-  const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
+    const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
+    // Flatten visible (expanded) chats in group order, so a Virtuoso item index
+    // maps directly to `flatChats[index]` regardless of which groups are
+    // collapsed.
+    const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
 
-  // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
-  // finishing the card the group header opened — CSS `last:` can't express
-  // this because Virtuoso renders every row as a flat sibling of every other.
-  const groupEndIndices = new Set<number>();
-  groupCounts.reduce((offset, count) => {
-    if (count > 0) groupEndIndices.add(offset + count - 1);
-    return offset + count;
-  }, 0);
+    // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
+    // finishing the card the group header opened — CSS `last:` can't express
+    // this because Virtuoso renders every row as a flat sibling of every other.
+    const groupEndIndices = new Set<number>();
+    groupCounts.reduce((offset, count) => {
+      if (count > 0) groupEndIndices.add(offset + count - 1);
+      return offset + count;
+    }, 0);
+
+    return { totalChats, groupCounts, flatChats, groupEndIndices };
+  }, [groups, collapsed]);
 
   // Archiving can take as long as waking the workspace's machine (the store
   // retries across a wake for up to two minutes). Before this state existed the
