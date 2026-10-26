@@ -14,13 +14,11 @@ import { useLocation } from "@tanstack/react-router";
 import {
   useModalStore,
   type UpgradeRequiredData,
-  type BillingEmailRequiredData,
   type AppOutOfDateData,
 } from "@/store/modalStore";
 import { isModalAllowedOnRoute } from "./modalRoutePolicy";
 import { ApiKeySetupModal } from "../ApiKeySetupModal";
 import { UpgradeRequiredModal } from "../UpgradeRequiredModal";
-import { BillingEmailRequiredModal } from "../BillingEmailRequiredModal";
 import { AppOutOfDateModal } from "../AppOutOfDateModal";
 
 export function ModalLayer() {
@@ -48,16 +46,6 @@ export function ModalLayer() {
         isOpen
         onClose={closeModal}
         data={data as UpgradeRequiredData}
-      />
-    );
-  }
-
-  if (activeModal === "billing-email-required") {
-    return (
-      <BillingEmailRequiredModal
-        isOpen
-        onClose={closeModal}
-        data={data as BillingEmailRequiredData}
       />
     );
   }

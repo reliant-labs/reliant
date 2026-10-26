@@ -2850,10 +2850,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             duplicatesInBatch: inBatchDuplicateCount,
           });
         }
-        const updatedToolResults: ToolResultsByCallId = {
-          ...existingToolResults,
-          ...batchToolResults,
-        };
+        // A batch that adds no result keeps the index's identity. Every
+        // rendered ChatMessage subscribes to it and re-parses its content when
+        // it changes reference, so a fresh copy per batch re-processed the
+        // whole visible transcript on every streaming delta.
+        const updatedToolResults: ToolResultsByCallId =
+          Object.keys(batchToolResults).length === 0
+            ? existingToolResults
+            : { ...existingToolResults, ...batchToolResults };
 
         // Gather all streaming messages: newly processed ones merged with existing ones
         // Thread-aware: each thread can have its own streaming message

@@ -1,6 +1,24 @@
 import { useNavigate } from "@tanstack/react-router";
 
 /**
+ * Where a trip to billing started. Required at every call site: billing
+ * renders a way back for each one, so no visit to it is a dead end. Payment
+ * itself happens in place (the Add machine sheet, the upgrade and
+ * out-of-credit modals); billing is where plans are compared and settings
+ * changed, and the user always has the route home.
+ */
+export type BillingOrigin =
+  | "onboarding"
+  | "forge"
+  | "machines"
+  | "chat"
+  | "runs"
+  | "inbox"
+  | "reliant-ai"
+  | "credit"
+  | "upgrade";
+
+/**
  * Send the user to billing, on the Plans tab, carrying where they came from.
  *
  * WHY THERE IS NO LONGER A DETOUR: this hook used to fork on anonymity and
@@ -25,9 +43,10 @@ import { useNavigate } from "@tanstack/react-router";
  *   "onboarding" is what closes the dead end where a user who detoured from the
  *   compute step had no way back into the wizard. "forge" is an environment
  *   whose deploy is queued on billing: the way back is that environment's
- *   page, where the deploy can be watched going out.
+ *   page, where the deploy can be watched going out. Every other origin gets
+ *   a generic "Back to where you were".
  */
-export function useGoToBilling(from?: "onboarding" | "forge"): () => void {
+export function useGoToBilling(from: BillingOrigin): () => void {
   const navigate = useNavigate();
 
   return () => {
@@ -39,7 +58,7 @@ export function useGoToBilling(from?: "onboarding" | "forge"): () => void {
     // ProjectChoiceStep and GitHubConnectStep already do for the GitHub OAuth
     // hop, which is the other place onboarding leaves the app and comes back.
     // An environment page needs its search too: it names the project.
-    const returnTo = from ? `${window.location.pathname}${window.location.search}` : undefined;
+    const returnTo = `${window.location.pathname}${window.location.search}`;
 
     void navigate({
       to: "/settings/$section",

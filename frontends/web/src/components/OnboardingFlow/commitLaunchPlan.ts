@@ -65,11 +65,12 @@ import type { LaunchPlan } from "./types";
 /**
  * The daemon name onboarding always uses.
  *
- * Load-bearing, not cosmetic: the control plane's `CreateDaemon` is idempotent
- * BY NAME (it refreshes the existing row rather than erroring), so a second
- * commit with the same name cannot mint a second machine. Any caller that
- * re-runs CreateDaemon for this user during onboarding must use this exact
- * name — `GitHubConnectStep` re-runs it to attach the picked repo.
+ * Load-bearing, not cosmetic: onboarding's `CreateDaemon` asks for
+ * refresh-by-name (`refreshExisting`), so a second commit with the same name
+ * refreshes the existing row rather than minting a second machine. Any caller
+ * that re-runs CreateDaemon for this user during onboarding must use this
+ * exact name AND set refreshExisting — `GitHubConnectStep` re-runs it to
+ * attach the picked repo. Without the flag the server refuses a repeated name.
  */
 export const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
 
@@ -188,6 +189,7 @@ export interface CommitDeps {
     size: number;
     gitRepo: string;
     gitBranch: string;
+    refreshExisting: boolean;
   }) => Promise<string>;
   resumeDaemon: (daemonId: string) => Promise<void>;
   /** Injected so tests do not sleep. */
@@ -440,6 +442,7 @@ async function provisionDaemon(
       size: daemonSizeForPlan(plan.computePlanId),
       gitRepo: "",
       gitBranch: "main",
+      refreshExisting: true,
     });
     return {
       name: "provision_daemon",

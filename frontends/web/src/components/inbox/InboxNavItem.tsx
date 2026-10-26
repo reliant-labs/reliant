@@ -20,7 +20,6 @@
  * Self-contained so the Sidebar hunk that mounts it stays one line.
  */
 
-import { useMemo } from "react";
 import { Inbox } from "lucide-react";
 
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
@@ -50,12 +49,15 @@ export interface InboxBadgeState {
  */
 export function useInboxBadge(): InboxBadgeState {
   const counts = useInboxCounts(useInboxProjectId());
-  const activities = useActivityStore((state) => state.activities);
-  const knownAwaiting = useMemo(() => {
+  // Selects the count, not the map: the map is replaced on every activity
+  // change of every chat, and this hook backs a badge on every mobile screen
+  // header as well as the drawer and the desktop sidebar. A number only
+  // changes — and only re-renders them — when the count does.
+  const knownAwaiting = useActivityStore((state) => {
     let n = 0;
-    for (const activity of activities.values()) if (activity === ChatActivity.AWAITING_INPUT) n += 1;
+    for (const activity of state.activities.values()) if (activity === ChatActivity.AWAITING_INPUT) n += 1;
     return n;
-  }, [activities]);
+  });
 
   const degraded = counts.isError;
   const count = degraded ? knownAwaiting : (counts.data?.blockingCount ?? 0);

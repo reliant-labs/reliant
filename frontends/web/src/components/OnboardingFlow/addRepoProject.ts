@@ -111,6 +111,7 @@ export async function addRepoProject({
       size: DAEMON_SIZE_SMALL,
       gitRepo: cloneUrl,
       gitBranch: branch,
+      refreshExisting: true,
     });
   } catch (refreshErr) {
     console.warn("CreateDaemon refresh with git_repo failed (continuing with clone):", refreshErr);

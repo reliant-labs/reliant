@@ -27,7 +27,10 @@
 #              node configs), when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
-#   lint       forge lint --scope <changed dirs> (unscoped when a pin moved)
+#   lint       forge lint --scope <changed dirs> (unscoped when a pin moved);
+#              like build and test it starts after the generators in --amend
+#              mode, so it reads the amended tree (lint reads generated files
+#              such as gen/forge_descriptor.json)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed

@@ -116,7 +116,7 @@ describe("commitLaunchPlan — idempotency", () => {
     await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(deps.createDaemon).toHaveBeenCalledWith(
-      expect.objectContaining({ name: ONBOARDING_DAEMON_NAME }),
+      expect.objectContaining({ name: ONBOARDING_DAEMON_NAME, refreshExisting: true }),
     );
   });
 

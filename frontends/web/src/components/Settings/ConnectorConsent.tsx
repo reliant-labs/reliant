@@ -1,3 +1,4 @@
+import { uniqueMachineName } from "@/lib/uniqueMachineName";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { create } from "@bufbuild/protobuf";
 import { useQueryClient } from "@tanstack/react-query";
@@ -252,8 +253,10 @@ export function ConnectorConsent({
       const known = new Set(daemons.map((d) => d.daemonId));
 
       const { createDaemon } = await import("../../services/controlPlane/daemon");
+      // A valid, unused name: the server refuses one already in use, and
+      // "<App> workspace" (a space, capitals) was never a valid name at all.
       const createdID = await createDaemon({
-        name: clientName ? `${clientName} workspace` : "connector workspace",
+        name: uniqueMachineName(`${clientName || "connector"}-workspace`, daemons.map((d) => d.name)),
         daemonType: DAEMON_TYPE_MANAGED_ENUM,
         size: DAEMON_SIZE_SMALL_ENUM,
       });

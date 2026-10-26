@@ -655,6 +655,72 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // --- Deploy attempts ----------------------------------------------------
+  //
+  // One `forge env deploy` invocation, from the first thing it does to its
+  // exit: the record a human opens when "my deploy broke". The ledger cannot
+  // hold it — a build that failed or a plan the guard refused writes no
+  // release and no promotion — so this is the one place that does.
+  //
+  // FORGE IS THE ONLY WRITER, and that is what makes one record cover every
+  // way a deploy starts: a terminal, CI, and the console's Deploy dialog
+  // (which runs forge on the daemon). Every write is best-effort on forge's
+  // side: a control plane that cannot record an attempt never fails a
+  // deploy.
+  //
+  // NOT A CLAIM ABOUT WHAT IS RUNNING — the line between these and the
+  // deleted BeginApply/FinishApply. An attempt says what forge was asked and
+  // how the invocation ended; whether the release then runs is the
+  // promotion's (intent) and ListConvergences' (observation) answer, and an
+  // attempt carries the promotion id so a reader can follow it there.
+
+  // OpenDeployAttempt starts an attempt. Idempotent on the forge-minted id: a
+  // retried open returns the existing row unchanged.
+  rpc OpenDeployAttempt(OpenDeployAttemptRequest) returns (OpenDeployAttemptResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "records a deploy invocation; the promotion it writes is the activity"}
+    };
+  }
+
+  // ReportDeployAttempt is a heartbeat: the phase, what the attempt has
+  // learned (release, promotion), and the next chunk of its log. Refused for
+  // a closed attempt, so a late heartbeat cannot reopen one.
+  rpc ReportDeployAttempt(ReportDeployAttemptRequest) returns (ReportDeployAttemptResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "deploy progress heartbeat"}
+    };
+  }
+
+  // CloseDeployAttempt records how the invocation ended. Exactly once: a
+  // second close is refused, so the first outcome reported is the outcome.
+  rpc CloseDeployAttempt(CloseDeployAttemptRequest) returns (CloseDeployAttemptResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "records how a deploy invocation ended; the promotion it wrote is the activity"}
+    };
+  }
+
+  // ListDeployAttempts pages a project's attempts newest first, optionally
+  // one environment's. Without logs or reports — GetDeployAttempt has those.
+  //
+  // MEMBER, like the rest of the ledger reads.
+  //
+  // forge:custom — keyset-paged by (started_at, id) with a derived state, not
+  // the generated CRUD list.
+  rpc ListDeployAttempts(ListDeployAttemptsRequest) returns (ListDeployAttemptsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // GetDeployAttempt returns one attempt with its log tail and report.
+  //
+  // forge:custom — returns the log and report beside the attempt, and derives
+  // its state.
+  rpc GetDeployAttempt(GetDeployAttemptRequest) returns (GetDeployAttemptResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // GetLiveView returns every environment of one forge project with its
   // declaration, promotion, release, bundle, latest apply and sessions — the
   // whole Live screen in ONE round trip.
@@ -1719,6 +1785,118 @@ message ListDeployConvergencesRequest {
 message ListDeployConvergencesResponse {
   // Newest first.
   repeated DeployConvergence convergences = 1;
+}
+
+// === Deploy attempts ===
+
+message OpenDeployAttemptRequest {
+  // Minted by forge (a UUID), stable across retries of this call.
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // The forge project (forge.yaml `name`); '' is a valid project.
+  string project = 2 [(buf.validate.field).string.max_len = 200];
+  string environment_name = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // apply | plan | rollback.
+  string mode = 4 [(buf.validate.field).string = {
+    in: [
+      "apply",
+      "plan",
+      "rollback"
+    ]
+  }];
+  // terminal | ci | console, or empty.
+  string source = 5 [(buf.validate.field).string = {
+    in: [
+      "",
+      "terminal",
+      "ci",
+      "console"
+    ]
+  }];
+  // The release named on the command line, when one was.
+  string release_version = 6 [(buf.validate.field).string.max_len = 200];
+  // The CI run this invocation belongs to, when there is one.
+  DeployRun run = 7;
+  string forge_version = 8 [(buf.validate.field).string.max_len = 100];
+  // Automation label (--actor). The human half is the credential.
+  string started_by_actor = 9 [(buf.validate.field).string.max_len = 200];
+}
+
+message OpenDeployAttemptResponse {
+  DeployAttempt attempt = 1;
+}
+
+message ReportDeployAttemptRequest {
+  string id = 1 [(buf.validate.field).required = true];
+  // The phase the attempt is in now. Empty keeps the current one; a name
+  // different from the current one is appended to the attempt's phases.
+  string phase = 2 [(buf.validate.field).string.max_len = 64];
+  // Learned along the way; empty keeps what is recorded.
+  string release_version = 3 [(buf.validate.field).string.max_len = 200];
+  string promotion_id = 4 [(buf.validate.field).string.max_len = 128];
+  // Output produced since the previous report. The server keeps a bounded
+  // tail, so a client may send everything it has.
+  string log_append = 5 [(buf.validate.field).string.max_len = 1048576];
+}
+
+message ReportDeployAttemptResponse {}
+
+message CloseDeployAttemptRequest {
+  string id = 1 [(buf.validate.field).required = true];
+  // SUCCEEDED | FAILED | QUEUED | CANCELLED. RUNNING and ABANDONED are not
+  // outcomes.
+  DeployAttemptState outcome = 2 [(buf.validate.field).enum = {
+    in: [
+      2,
+      3,
+      4,
+      5
+    ]
+  }];
+  string failed_phase = 3 [(buf.validate.field).string.max_len = 64];
+  string error_message = 4 [(buf.validate.field).string.max_len = 16384];
+  int32 exit_code = 5;
+  string release_version = 6 [(buf.validate.field).string.max_len = 200];
+  string promotion_id = 7 [(buf.validate.field).string.max_len = 128];
+  // forge's `--json` document, verbatim.
+  string report_json = 8 [(buf.validate.field).string.max_len = 1048576];
+  string log_append = 9 [(buf.validate.field).string.max_len = 1048576];
+}
+
+message CloseDeployAttemptResponse {
+  DeployAttempt attempt = 1;
+}
+
+message ListDeployAttemptsRequest {
+  string project = 1 [(buf.validate.field).string.max_len = 200];
+  // One environment's attempts; unset lists the whole project.
+  optional string environment_name = 2 [(buf.validate.field).string.max_len = 200];
+  int32 limit = 3;
+  // Keyset cursor: attempts strictly older than this one.
+  optional string before_id = 4;
+}
+
+message ListDeployAttemptsResponse {
+  // Newest first.
+  repeated DeployAttempt attempts = 1;
+}
+
+message GetDeployAttemptRequest {
+  string id = 1 [(buf.validate.field).required = true];
+}
+
+message GetDeployAttemptResponse {
+  DeployAttempt attempt = 1;
+  // The tail of the invocation's output (attempt.log_truncated says whether
+  // the head was dropped).
+  string log = 2;
+  // forge's `--json` deploy document, when one was produced.
+  string report_json = 3;
 }
 
 // === The Live view ===

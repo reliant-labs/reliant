@@ -25,11 +25,6 @@ vi.mock("../../ApiKeySetupModal", () => ({
 vi.mock("../../UpgradeRequiredModal", () => ({
   UpgradeRequiredModal: () => <div data-testid="upgrade-required-modal" />,
 }));
-vi.mock("../../BillingEmailRequiredModal", () => ({
-  BillingEmailRequiredModal: () => (
-    <div data-testid="billing-email-required-modal" />
-  ),
-}));
 
 import { ModalLayer } from "../ModalLayer";
 import { useModalStore } from "@/store/modalStore";
@@ -100,13 +95,14 @@ describe("ModalLayer route awareness", () => {
   });
 
   it("still renders billing modals on /onboarding", async () => {
-    useModalStore.getState().openModal("billing-email-required", {
+    useModalStore.getState().openModal("upgrade-required", {
+      reason: "billing_email_missing",
       message: "billing email required",
     });
     await renderAt("/onboarding");
 
     expect(
-      await screen.findByTestId("billing-email-required-modal"),
+      await screen.findByTestId("upgrade-required-modal"),
     ).toBeInTheDocument();
   });
 });

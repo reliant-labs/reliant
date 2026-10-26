@@ -1,8 +1,17 @@
-import { ArrowUpRight, Zap } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, Zap } from "lucide-react";
+
 import Modal from "./forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import type { UpgradeRequiredData } from "../store/modalStore";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { useComputeSubscription, usePlans } from "@/hooks/useCloudBillingQueries";
 import { LinkIdentityModal } from "./Billing/LinkIdentityModal";
+import { ComputeSubscriptionCheckout } from "./Billing/ComputeSubscriptionCheckout";
+import { InlineCreditTopup } from "./Billing/InlineCreditTopup";
+import { deriveMachineOptions } from "./Billing/machineOptions";
+import { isPurchasableComputePlan, sortPlansForDisplay } from "./Settings/cloud/billingUtils";
 import {
   ACCOUNT_REQUIRED_MACHINE_COPY,
   ACCOUNT_REQUIRED_REASON,
@@ -72,83 +81,169 @@ const GENERIC_COPY = {
 };
 
 /**
- * The CTA label per reason — "add credit" is not "upgrade".
- *
- * Every reason this modal can now receive is fixable by a billing action, so
- * the CTA is unconditional. There was briefly an opt-out for
- * `free_tier_global_budget`, a service-wide capacity cap no amount of the
- * user's money could clear; that reason no longer exists anywhere in
- * control-plane, and a set listing exceptions with no exceptions in it is
- * machinery pretending to make a decision.
+ * The reasons a compute plan fixes. The modal mounts the compute checkout for
+ * these instead of sending the user to billing.
  */
-const CTA_LABEL: Record<string, string> = {
-  reliant_credit_exhausted: "Add credit",
-};
+const COMPUTE_REASONS = new Set(["no_compute_subscription", "compute_budget_exhausted", "daemon_size_denied", "daemon_storage_denied"]);
 
+/** The reasons an email on the account fixes: one prompt for both. */
+const IDENTITY_REASONS = new Set<string>([ACCOUNT_REQUIRED_REASON, "billing_email_missing"]);
+
+/**
+ * A plan limit, a spent budget or an empty wallet stopped what the user was
+ * doing. The fix happens HERE, over their work:
+ *
+ * - a compute reason mounts the compute checkout (the same one billing and
+ *   the Add machine sheet use);
+ * - credit exhaustion mounts the credit top-up;
+ * - a missing email opens the one account prompt, and the call that needed
+ *   it is re-run automatically once the account has one — that call
+ *   (creating a checkout intent, or similar) charges nothing by itself.
+ *
+ * After a PAYMENT nothing re-runs on its own. The modal shows one button that
+ * repeats the blocked action (`data.retry`, from the interceptor), because the
+ * action may itself be billable — starting a machine — and a billable call
+ * fires only on a person's click. Without a retry (the chat path resends on
+ * its own), the button just closes.
+ */
 export function UpgradeRequiredModal({
   isOpen,
   onClose,
   data,
 }: UpgradeRequiredModalProps) {
-  const goToBilling = useGoToBilling();
+  const qc = useQueryClient();
+  const goToBilling = useGoToBilling("upgrade");
   const copy = REASON_COPY[data.reason] ?? GENERIC_COPY;
-  const ctaLabel = CTA_LABEL[data.reason] ?? "Upgrade plan";
+  const [paid, setPaid] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState("");
 
-  // Not a plan problem: the fix is an email on the account, so ask for that
-  // instead of sending the user to a plans page that would refuse them again.
-  if (data.reason === ACCOUNT_REQUIRED_REASON) {
+  const retry = useCallback(async () => {
+    setRetryError("");
+    if (!data.retry) {
+      onClose();
+      return;
+    }
+    setRetrying(true);
+    try {
+      await data.retry();
+      // Whatever the action changed, the screens reading it should see it.
+      void qc.invalidateQueries();
+      onClose();
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message.replace(/^\[[a-z_]+\]\s*/i, "") : "It failed again.");
+    } finally {
+      setRetrying(false);
+    }
+  }, [data, onClose, qc]);
+
+  if (IDENTITY_REASONS.has(data.reason)) {
     return (
       <LinkIdentityModal
         intro={ACCOUNT_REQUIRED_MACHINE_COPY}
         message={data.message}
-        onLinked={onClose}
+        onLinked={() => void retry()}
         onDismiss={onClose}
       />
     );
   }
 
-  const handleUpgrade = () => {
-    onClose();
-    // The billing dashboard lives in-app at /settings/billing. goToBilling
-    // routes an ANONYMOUS session through identity linking first — the users
-    // who hit a credit wall are disproportionately the ones still on anonymous
-    // sessions, and billing is a dead end without a real identity.
-    goToBilling();
-  };
-
   return (
-    <Modal open={isOpen} onClose={onClose} title={copy.title} size="sm">
-      <div className="flex flex-col gap-4 p-6">
-        <div className="flex items-start gap-3">
-          <div className="rounded-full bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-            <Zap className="h-5 w-5" />
+    <Modal open={isOpen} onClose={onClose} title={paid ? "You're all set" : copy.title} size="lg">
+      <div className="flex flex-col gap-4 px-6 py-4">
+        {paid ? (
+          <div className="space-y-4" data-testid="upgrade-paid">
+            <div className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500" aria-hidden="true" />
+              <p className="text-sm text-foreground">
+                {data.reason === "reliant_credit_exhausted" ? "Credit added." : "Your plan is active."}{" "}
+                {data.retry ? "Nothing was retried yet." : ""}
+              </p>
+            </div>
+            {retryError && <p className="text-xs text-destructive-ink">{retryError}</p>}
+            <Button className="w-full" onClick={() => void retry()} loading={retrying}>
+              {data.retry ? (data.retryLabel ?? "Try again") : "Done"}
+            </Button>
           </div>
-          <div className="flex-1 text-sm text-foreground">
-            <p>{copy.body}</p>
-            {data.message ? (
-              <p className="mt-2 text-xs text-muted-foreground">{data.message}</p>
+        ) : (
+          <>
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div className="flex-1 text-sm text-foreground">
+                <p>{copy.body}</p>
+                {data.message ? <p className="mt-2 text-xs text-muted-foreground">{data.message}</p> : null}
+              </div>
+            </div>
+            {data.reason === "reliant_credit_exhausted" ? (
+              <InlineCreditTopup onDone={() => setPaid(true)} />
+            ) : COMPUTE_REASONS.has(data.reason) ? (
+              <ComputeUpgrade onDone={() => setPaid(true)} />
             ) : null}
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted"
-          >
-            Not now
-          </button>
-          <button
-            type="button"
-            onClick={handleUpgrade}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            {ctaLabel}
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={onClose}>
+                Not now
+              </Button>
+              {!COMPUTE_REASONS.has(data.reason) && data.reason !== "reliant_credit_exhausted" && (
+                <Button
+                  onClick={() => {
+                    onClose();
+                    goToBilling();
+                  }}
+                >
+                  Open billing
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </Modal>
+  );
+}
+
+/** The compute checkout, mounted in the modal. */
+function ComputeUpgrade({ onDone }: { onDone: () => void }) {
+  const plansQ = usePlans();
+  const subQ = useComputeSubscription();
+  const currentPlanId = subQ.data?.subscription?.plan?.id ?? null;
+  const options = useMemo(
+    () =>
+      deriveMachineOptions(
+        sortPlansForDisplay((plansQ.data?.plans ?? []).filter(isPurchasableComputePlan)),
+        plansQ.data?.daemonPricing,
+      ),
+    [plansQ.data],
+  );
+  // Start on the first plan the user is not already on.
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const selectedPlanId = selected ?? options.find((o) => o.planId !== currentPlanId)?.planId;
+  const [linkAttempt, setLinkAttempt] = useState(0);
+
+  const landed = useCallback(async () => {
+    if (!selectedPlanId) return false;
+    try {
+      const { data } = await subQ.refetch();
+      return data?.subscription?.plan?.id === selectedPlanId;
+    } catch {
+      return false;
+    }
+  }, [subQ, selectedPlanId]);
+
+  return (
+    <ComputeSubscriptionCheckout
+      key={`upgrade:${linkAttempt}`}
+      plans={options}
+      loadingPlans={plansQ.isLoading}
+      selectedPlanId={selectedPlanId}
+      onSelectPlan={(o) => setSelected(o.planId)}
+      currentPlanId={currentPlanId}
+      confirmSettlement={landed}
+      onDone={onDone}
+      renderIdentityRequired={(message) => (
+        <LinkIdentityModal message={message} onLinked={() => setLinkAttempt((n) => n + 1)} onDismiss={() => undefined} />
+      )}
+    />
   );
 }

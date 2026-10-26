@@ -173,7 +173,7 @@ function ReliantAIPanel() {
     kind: "created" | "rotated";
   } | null>(null);
 
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("reliant-ai");
   const overviewQ = useReliantOverview();
   const walletQ = useWalletOverview();
 

@@ -676,9 +676,11 @@ Credential resolution order:
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
      earlier 'daemon start' or 'reliant daemon register').
-  3. Otherwise a browser login of its own that mints a daemon credential.
-     This is a separate credential from 'reliant auth login', which is never
-     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+  3. Otherwise it pairs the machine: it prints a short code and a link, and
+     you approve "this machine" in the Reliant app — on the link, or by typing
+     the code into the Add machine window. Nothing has to reach back to this
+     terminal, so it works over ssh. The credential it is given is separate
+     from 'reliant auth login', which is never reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
      the daemon never opens a browser: it stays resident and idle, publishing
      "awaiting_credentials" in its runtime state (see 'reliant daemon
      status'), and polls for a credential to appear on disk. Electron spawns
@@ -4484,6 +4486,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--allow-unmerged-migrations` | `bool` | - | When this deploy cuts the release (no version) for an env on a control plane: cut it even though it carries a migration not on the default branch (exit 4 without it) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--approve` | `string` | - | Proceed only if the plan is EXACTLY this digest (from an earlier --plan-only). The stronger form of --yes, for a two-stage pipeline where a human reviews stage one's plan: a plan that changed between the stages is refused (exit 3, plan_stale) rather than re-approved blind. The digest also travels on the write, and the server recomputes the plan under the environment's row lock before admitting it |
+| `--claimable` | `bool` | - | Deploy with NO account: forge gets an anonymous identity, publishes, and prints a live URL plus a claim link to hand to your human. Unless someone opens the link the deploy goes offline in 72h and is deleted 7 days later; opening it signs them up for free and makes the deploy theirs. For an env of one static site, or one service with one database. Refused when you are signed in (drop it to deploy to your organization); a throttle exits 4 and never retries on its own |
 | `--dry-run` | `bool` | - | Print manifests without applying (env-cluster guard still runs) |
 | `--expect-current` | `string` | - | Promotion id the env must still be on (default: the one the plan read); `unbound` = --expect-unbound. Exit 3 if it moved |
 | `--expect-unbound` | `bool` | - | Refuse (exit 3) unless the env has never been promoted |
@@ -5998,6 +6001,7 @@ reliant forge env status [environment...] [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--before` | `string` | - | --history only: return entries older than this promotion id (the previous page's next_before) |
+| `--claimable` | `bool` | - | Print this machine's claimable deploy of the environment again: its live URL, when it goes offline, and the claim link to hand to a human. Reads the stored anonymous deploy; needs no credential |
 | `--fail-fast` | `bool` | - | --wait only: exit 1 on the FIRST degraded observation instead of waiting out --timeout |
 | `--history` | `bool` | - | Page the environment's promotion ledger, newest first |
 | `--include-unpinned` | `bool` | - | Let a degraded UNPINNED workload (a database, a third-party image) count too |

@@ -236,6 +236,8 @@ export function useDaemonWait({
   // says retrying is still worthwhile — a FAILED or SUSPENDED machine will
   // not start serving because we asked a fourth time.
   const registryUnreachable = isError || failureCount > 0;
+  // Answered, and empty: there is no machine to wait for.
+  const noMachine = daemons !== undefined && daemons.length === 0 && !registryUnreachable;
   const state = useMemo<DaemonWaitState | null>(() => {
     if (!waiting) return null;
     return classifyDaemonWait({
@@ -244,8 +246,9 @@ export function useDaemonWait({
       isCloud: capabilities.cloudDaemons,
       wakeStartedAt: daemon ? waking.get(daemon.daemonId) : undefined,
       registryUnreachable,
+      noMachine,
     });
-  }, [waiting, daemon, elapsedMs, waking, registryUnreachable]);
+  }, [waiting, daemon, elapsedMs, waking, registryUnreachable, noMachine]);
 
   const shouldRetry = state?.shouldRetry ?? false;
 

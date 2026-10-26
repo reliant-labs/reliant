@@ -374,6 +374,15 @@ const cliLoginRoute = createRoute({
   component: lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin'),
 })
 
+// Self-hosted machine pairing (`reliant daemon start` prints this link with
+// its code). Root-level and unguarded like /oauth/cli: the page signs the user
+// in itself and keeps the code across that detour.
+const devicePairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/device',
+  component: lazyRoute(() => import('./components/Auth/DevicePairing'), 'DevicePairing'),
+})
+
 const proxyAuthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/proxy',
@@ -876,6 +885,7 @@ const routeTree = rootRoute.addChildren([
   connectionOAuthCallbackRoute,
   oauthConsentRoute,
   cliLoginRoute,
+  devicePairingRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
