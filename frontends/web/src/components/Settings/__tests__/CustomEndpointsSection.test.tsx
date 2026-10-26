@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { DaemonInfoSchema, DaemonStatus } from "../../../gen/reliant/v1/daemon_registry_pb";
@@ -10,6 +11,9 @@ import {
   ModelEndpointSchema,
 } from "../../../gen/reliant/v1/model_endpoint_pb";
 import { LocalModelEndpointSchema, LocalModelInfoSchema } from "../../../gen/reliant/v1/tools_daemon_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport, renderWithTransport } from "../../../lib/test-utils";
+import { serviceHandlers } from "../../../test/serviceTransport";
 
 const mocks = vi.hoisted(() => ({
   daemons: [] as DaemonInfo[],
@@ -23,16 +27,24 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: mocks.daemons, loading: false, refresh: vi.fn() }),
 }));
-vi.mock("../../../api/grpc-client", () => ({ getTransport: () => ({}) }));
-vi.mock("@connectrpc/connect", () => ({
-  createClient: () => ({
-    listModelEndpoints: mocks.list,
-    createModelEndpoint: mocks.create,
-    updateModelEndpoint: mocks.update,
-    deleteModelEndpoint: mocks.remove,
-    testModelEndpoint: mocks.test,
-  }),
-}));
+
+// ModelEndpointService is reached through its generated hooks, so it answers
+// at the transport; each render gets a fresh query cache.
+function render(ui: ReactElement) {
+  return renderWithTransport(ui, {
+    transport: mockTransport(
+      serviceHandlers("ModelEndpointService", {
+        listModelEndpoints: (req) => mocks.list(req),
+        createModelEndpoint: (req) => mocks.create(req),
+        updateModelEndpoint: (req) => mocks.update(req),
+        deleteModelEndpoint: (req) => mocks.remove(req),
+        testModelEndpoint: (req) => mocks.test(req),
+      }),
+    ),
+  });
+}
+
+afterEach(() => setTransport(null));
 
 import { CustomEndpointsSection } from "../CustomEndpointsSection";
 
@@ -127,7 +139,8 @@ describe("add / edit form", () => {
     expect(input).toMatchObject({ name: "Lab", baseUrl: "https://llm.example.com/v1", route: ModelEndpointRoute.DIRECT, daemonId: "" });
     expect(input.apiKey).toBeUndefined();
     await waitFor(() => expect(screen.queryByRole("form", { name: /new custom endpoint/i })).toBeNull());
-    expect(mocks.list).toHaveBeenCalledTimes(2);
+    // The generated create refetches the list.
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
   });
 
   it("explains both routes and requires a machine for the second", async () => {

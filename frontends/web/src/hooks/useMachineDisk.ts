@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useClearMachineCaches as useClearMachineCachesRpc } from "@/hooks/daemon-registry-service-hooks_gen";
-import { inboxKeys } from "@/hooks/inbox-queries";
+import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 
 /**
  * Clears the rebuildable caches the user confirmed on one machine. The machine
@@ -18,7 +18,7 @@ export function useClearMachineCaches() {
   const queryClient = useQueryClient();
   return useClearMachineCachesRpc({
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+      void queryClient.invalidateQueries({ queryKey: inboxServiceKeys.all });
     },
   });
 }
