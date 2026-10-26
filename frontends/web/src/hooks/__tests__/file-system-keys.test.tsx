@@ -66,6 +66,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   setTransport(null);
   client.clear();
   useProjectStore.setState({ currentProject: null } as never);
@@ -108,7 +109,17 @@ describe("content search", () => {
     await waitFor(() => expect(result.current.b.results).toHaveLength(1));
     expect(server.searchFiles).toHaveBeenCalledTimes(1);
 
+    // Each reader debounces on its own timer. Real timers can fire in two
+    // different ticks on a loaded host, and the second reader then mounts on a
+    // search that already resolved (stale, staleTime 0) and refetches it. Both
+    // timers fire inside one act() here, so both readers move to the new key in
+    // one render, which is what the test is about. shouldAdvanceTime keeps the
+    // clock moving for React Query's own zero-delay timers; afterEach restores it.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     rerender({ q: "pin" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FILE_SEARCH_DEBOUNCE_MS);
+    });
     await waitFor(() => expect(result.current.a.results.map((r) => r.path)).toEqual(["/ws/pin.ts"]));
     expect(server.searchFiles).toHaveBeenCalledTimes(2);
     expect(server.searchFiles.mock.calls[1][0].query).toBe("pin");
