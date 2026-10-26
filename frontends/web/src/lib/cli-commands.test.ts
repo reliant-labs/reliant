@@ -173,7 +173,7 @@ describe('production renders a bare command', () => {
       SUPABASE_ANON_KEY: 'sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod',
     });
     const { daemonStartCommand } = await load();
-    expect(daemonStartCommand()).toBe('reliant daemon start --token');
+    expect(daemonStartCommand()).toBe('reliant daemon start');
     expect(daemonStartCommand()).not.toContain('sb_publishable');
   });
 

@@ -132,8 +132,8 @@ vi.mock("@/components/RedeemCouponForm", () => ({
   RedeemCouponForm: () => <div data-testid="redeem-coupon" />,
 }));
 
-vi.mock("@/components/Projects/SelfHostedDaemonConnect", () => ({
-  SelfHostedDaemonConnect: () => <div data-testid="self-hosted-connect" />,
+vi.mock("@/components/Machines/PairMachinePanel", () => ({
+  PairMachinePanel: () => <div data-testid="self-hosted-connect" />,
 }));
 
 vi.mock("@/hooks/useBundledDaemonPending", () => ({

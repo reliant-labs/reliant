@@ -26,8 +26,13 @@ vi.mock("@/store/chatStore", () => ({
   useChatStore: Object.assign(vi.fn(), { getState: () => store }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("../../Layout/ConnectDaemonModal", () => ({
-  ConnectDaemonModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div>Set up your machine</div> : null),
+vi.mock("../../Machines/AddMachineSheet", () => ({
+  AddMachineSheet: ({ open, onReady }: { open: boolean; onReady?: (m: { daemonId: string; name: string }) => void }) =>
+    open ? (
+      <button type="button" onClick={() => onReady?.({ daemonId: "new-machine", name: "cloud-small" })}>
+        Set up your machine
+      </button>
+    ) : null,
 }));
 
 const { ConnectMachineDialog } = await import("../ConnectMachineDialog");
@@ -76,12 +81,14 @@ describe("ConnectMachineDialog", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("can't go back to no machine");
   });
 
-  it("offers to set one up when the user has none", () => {
+  it("offers Add machine when the user has none, and connects the chat to the new one", async () => {
     state.daemons = [];
     render(<ConnectMachineDialog chatId="chat-1" open onClose={vi.fn()} />);
     expect(screen.queryByTestId("connect-machine-confirm")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Set up a machine" }));
-    expect(screen.getByText("Set up your machine")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add machine" }));
+    // The sheet hands back the machine it made; the chat moves onto it.
+    fireEvent.click(screen.getByText("Set up your machine"));
+    await vi.waitFor(() => expect(store.connectChatToMachine).toHaveBeenCalledWith("chat-1", "new-machine"));
   });
 });
 

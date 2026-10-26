@@ -40,7 +40,7 @@ function writeDismissed(sig: string): void {
 }
 
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("chat");
   // Daemons whose Resume RPC succeeded. The registry's lifecycle mirror lags
   // the real state (control-plane's reconciler writes it), so the list keeps
   // saying "suspended" for a while after a successful resume; trust the RPC

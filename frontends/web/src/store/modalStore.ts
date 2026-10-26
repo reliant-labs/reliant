@@ -14,7 +14,6 @@ import { create } from "zustand";
 export type ModalId =
   | "api-key-setup"
   | "upgrade-required"
-  | "billing-email-required"
   | "app-out-of-date";
 
 export interface AppOutOfDateData {
@@ -32,20 +31,17 @@ export interface UpgradeRequiredData {
   // Human-readable message from the backend (Connect error message). Shown
   // verbatim under the title as the explanation.
   message: string;
-}
-
-export interface BillingEmailRequiredData {
-  // Human-readable message from the backend (Connect error). Shown under
-  // the title as the explanation. The actual fix is identical regardless
-  // of message — the user must set a billing_email via
-  // BillingService.UpdateBillingEmail — so this is informational only.
-  message: string;
+  // Re-issue the request that was refused (api/upgradeInterceptor). After a
+  // payment the modal offers it behind one explicit button; after an account
+  // link it runs on its own. Absent when the caller retries by itself (chat).
+  retry?: () => Promise<unknown>;
+  // The button that runs `retry`, e.g. "Start my machine". Default "Try again".
+  retryLabel?: string;
 }
 
 export interface ModalData {
   "api-key-setup": undefined;
   "upgrade-required": UpgradeRequiredData;
-  "billing-email-required": BillingEmailRequiredData;
   "app-out-of-date": AppOutOfDateData;
 }
 

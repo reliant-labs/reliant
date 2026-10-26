@@ -12,12 +12,14 @@
  * one is chosen.
  */
 
-import { AlertTriangle, Loader2, RefreshCw, Server } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Loader2, MonitorOff, Plus, RefreshCw, Server } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { cn } from "../lib/utils";
 import type { DaemonWaitState as WaitState } from "../lib/daemon-wait";
 import { useDaemonWaitSpeaker } from "../hooks/useDaemonWaitSpeaker";
+import { AddMachineSheet } from "./Machines/AddMachineSheet";
 
 export interface DaemonWaitStateProps {
   state: WaitState;
@@ -57,6 +59,9 @@ function WaitIcon({ tone, className }: { tone: WaitState["tone"]; className?: st
   if (tone === "failed") {
     return <AlertTriangle className={cn("text-warning", className)} aria-hidden="true" />;
   }
+  if (tone === "none") {
+    return <MonitorOff className={cn("text-muted-foreground", className)} aria-hidden="true" />;
+  }
   return (
     <Loader2
       className={cn("animate-spin", tone === "slow" ? "text-warning" : "text-muted-foreground", className)}
@@ -73,6 +78,7 @@ export function DaemonWaitState({
   className,
 }: DaemonWaitStateProps) {
   const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
   const speaker = useDaemonWaitSpeaker({
     rank: speakerRank(variant, secondary),
     secondary,
@@ -98,8 +104,21 @@ export function DaemonWaitState({
   );
 
   // Actions are shared across densities; only the layout around them changes.
-  const actions = (state.showRetry && onRetry) || state.showManage ? (
+  const actions = (state.showRetry && onRetry) || state.showManage || state.showAddMachine ? (
     <div className="flex flex-wrap items-center justify-center gap-2">
+      {state.showAddMachine && (
+        <>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-3 w-3" aria-hidden="true" />
+            Add machine
+          </button>
+          {adding && <AddMachineSheet open onClose={() => setAdding(false)} onReady={() => onRetry?.()} />}
+        </>
+      )}
       {state.showRetry && onRetry && (
         <button
           type="button"

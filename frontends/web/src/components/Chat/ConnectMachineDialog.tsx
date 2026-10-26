@@ -18,7 +18,7 @@ import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatStore } from "@/store/chatStore";
 import { chatMachineOptions } from "@/lib/chatMachine";
 import { cn } from "@/lib/utils";
-import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
+import { AddMachineSheet, type ReadyMachine } from "../Machines/AddMachineSheet";
 
 interface ConnectMachineDialogProps {
   chatId: string;
@@ -46,13 +46,13 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
   }, [open]);
   const choice = selected ?? firstUsable;
 
-  const connect = async () => {
-    if (!choice) return;
+  const connect = async (target = choice, targetLabel?: string) => {
+    if (!target) return;
     setConnecting(true);
     setError("");
     try {
-      await useChatStore.getState().connectChatToMachine(chatId, choice);
-      const label = options.find((o) => o.value === choice)?.label ?? "your machine";
+      await useChatStore.getState().connectChatToMachine(chatId, target);
+      const label = targetLabel ?? options.find((o) => o.value === target)?.label ?? "your machine";
       toast.success(`Connected to ${label}`, {
         description: "Send a message to continue. The next turn can use this project's files.",
       });
@@ -93,7 +93,7 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">You don&apos;t have a machine yet.</p>
               <Button variant="outline" onClick={() => setShowSetup(true)}>
-                Set up a machine
+                Add machine
               </Button>
             </div>
           ) : (
@@ -126,7 +126,15 @@ export function ConnectMachineDialog({ chatId, open, onClose, onConnected }: Con
           {error && <p className="mt-3 text-xs text-destructive-ink">{error}</p>}
         </div>
       </Modal>
-      <ConnectDaemonModal isOpen={open && showSetup} onClose={() => setShowSetup(false)} />
+      {/* The chat asked for a machine; the new one is what it connects to. */}
+      <AddMachineSheet
+        open={open && showSetup}
+        onClose={() => setShowSetup(false)}
+        onReady={(machine: ReadyMachine) => {
+          setShowSetup(false);
+          void connect(machine.daemonId, machine.name);
+        }}
+      />
     </>
   );
 }

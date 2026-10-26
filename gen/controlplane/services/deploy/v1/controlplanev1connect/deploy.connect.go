@@ -137,6 +137,21 @@ const (
 	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
 	// ListConvergences RPC.
 	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
+	// DeployServiceOpenDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// OpenDeployAttempt RPC.
+	DeployServiceOpenDeployAttemptProcedure = "/controlplane.v1.DeployService/OpenDeployAttempt"
+	// DeployServiceReportDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// ReportDeployAttempt RPC.
+	DeployServiceReportDeployAttemptProcedure = "/controlplane.v1.DeployService/ReportDeployAttempt"
+	// DeployServiceCloseDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// CloseDeployAttempt RPC.
+	DeployServiceCloseDeployAttemptProcedure = "/controlplane.v1.DeployService/CloseDeployAttempt"
+	// DeployServiceListDeployAttemptsProcedure is the fully-qualified name of the DeployService's
+	// ListDeployAttempts RPC.
+	DeployServiceListDeployAttemptsProcedure = "/controlplane.v1.DeployService/ListDeployAttempts"
+	// DeployServiceGetDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// GetDeployAttempt RPC.
+	DeployServiceGetDeployAttemptProcedure = "/controlplane.v1.DeployService/GetDeployAttempt"
 	// DeployServiceGetLiveViewProcedure is the fully-qualified name of the DeployService's GetLiveView
 	// RPC.
 	DeployServiceGetLiveViewProcedure = "/controlplane.v1.DeployService/GetLiveView"
@@ -404,6 +419,29 @@ type DeployServiceClient interface {
 	//
 	// MEMBER. This is the deploy history of a team's own environment.
 	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
+	// OpenDeployAttempt starts an attempt. Idempotent on the forge-minted id: a
+	// retried open returns the existing row unchanged.
+	OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error)
+	// ReportDeployAttempt is a heartbeat: the phase, what the attempt has
+	// learned (release, promotion), and the next chunk of its log. Refused for
+	// a closed attempt, so a late heartbeat cannot reopen one.
+	ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error)
+	// CloseDeployAttempt records how the invocation ended. Exactly once: a
+	// second close is refused, so the first outcome reported is the outcome.
+	CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error)
+	// ListDeployAttempts pages a project's attempts newest first, optionally
+	// one environment's. Without logs or reports — GetDeployAttempt has those.
+	//
+	// MEMBER, like the rest of the ledger reads.
+	//
+	// forge:custom — keyset-paged by (started_at, id) with a derived state, not
+	// the generated CRUD list.
+	ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error)
+	// GetDeployAttempt returns one attempt with its log tail and report.
+	//
+	// forge:custom — returns the log and report beside the attempt, and derives
+	// its state.
+	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
 	// GetLiveView returns every environment of one forge project with its
 	// declaration, promotion, release, bundle, latest apply and sessions — the
 	// whole Live screen in ONE round trip.
@@ -713,6 +751,36 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 			connect.WithClientOptions(opts...),
 		),
+		openDeployAttempt: connect.NewClient[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceOpenDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("OpenDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		reportDeployAttempt: connect.NewClient[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceReportDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ReportDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		closeDeployAttempt: connect.NewClient[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceCloseDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CloseDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		listDeployAttempts: connect.NewClient[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse](
+			httpClient,
+			baseURL+DeployServiceListDeployAttemptsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+			connect.WithClientOptions(opts...),
+		),
+		getDeployAttempt: connect.NewClient[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceGetDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
 		getLiveView: connect.NewClient[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse](
 			httpClient,
 			baseURL+DeployServiceGetLiveViewProcedure,
@@ -790,6 +858,11 @@ type deployServiceClient struct {
 	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
 	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
 	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
+	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
+	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
+	closeDeployAttempt      *connect.Client[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse]
+	listDeployAttempts      *connect.Client[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse]
+	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
 	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
@@ -976,6 +1049,31 @@ func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Reques
 // ListConvergences calls controlplane.v1.DeployService.ListConvergences.
 func (c *deployServiceClient) ListConvergences(ctx context.Context, req *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return c.listConvergences.CallUnary(ctx, req)
+}
+
+// OpenDeployAttempt calls controlplane.v1.DeployService.OpenDeployAttempt.
+func (c *deployServiceClient) OpenDeployAttempt(ctx context.Context, req *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error) {
+	return c.openDeployAttempt.CallUnary(ctx, req)
+}
+
+// ReportDeployAttempt calls controlplane.v1.DeployService.ReportDeployAttempt.
+func (c *deployServiceClient) ReportDeployAttempt(ctx context.Context, req *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error) {
+	return c.reportDeployAttempt.CallUnary(ctx, req)
+}
+
+// CloseDeployAttempt calls controlplane.v1.DeployService.CloseDeployAttempt.
+func (c *deployServiceClient) CloseDeployAttempt(ctx context.Context, req *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error) {
+	return c.closeDeployAttempt.CallUnary(ctx, req)
+}
+
+// ListDeployAttempts calls controlplane.v1.DeployService.ListDeployAttempts.
+func (c *deployServiceClient) ListDeployAttempts(ctx context.Context, req *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error) {
+	return c.listDeployAttempts.CallUnary(ctx, req)
+}
+
+// GetDeployAttempt calls controlplane.v1.DeployService.GetDeployAttempt.
+func (c *deployServiceClient) GetDeployAttempt(ctx context.Context, req *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error) {
+	return c.getDeployAttempt.CallUnary(ctx, req)
 }
 
 // GetLiveView calls controlplane.v1.DeployService.GetLiveView.
@@ -1256,6 +1354,29 @@ type DeployServiceHandler interface {
 	//
 	// MEMBER. This is the deploy history of a team's own environment.
 	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
+	// OpenDeployAttempt starts an attempt. Idempotent on the forge-minted id: a
+	// retried open returns the existing row unchanged.
+	OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error)
+	// ReportDeployAttempt is a heartbeat: the phase, what the attempt has
+	// learned (release, promotion), and the next chunk of its log. Refused for
+	// a closed attempt, so a late heartbeat cannot reopen one.
+	ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error)
+	// CloseDeployAttempt records how the invocation ended. Exactly once: a
+	// second close is refused, so the first outcome reported is the outcome.
+	CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error)
+	// ListDeployAttempts pages a project's attempts newest first, optionally
+	// one environment's. Without logs or reports — GetDeployAttempt has those.
+	//
+	// MEMBER, like the rest of the ledger reads.
+	//
+	// forge:custom — keyset-paged by (started_at, id) with a derived state, not
+	// the generated CRUD list.
+	ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error)
+	// GetDeployAttempt returns one attempt with its log tail and report.
+	//
+	// forge:custom — returns the log and report beside the attempt, and derives
+	// its state.
+	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
 	// GetLiveView returns every environment of one forge project with its
 	// declaration, promotion, release, bundle, latest apply and sessions — the
 	// whole Live screen in ONE round trip.
@@ -1561,6 +1682,36 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceOpenDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceOpenDeployAttemptProcedure,
+		svc.OpenDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("OpenDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceReportDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceReportDeployAttemptProcedure,
+		svc.ReportDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("ReportDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCloseDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceCloseDeployAttemptProcedure,
+		svc.CloseDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("CloseDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListDeployAttemptsHandler := connect.NewUnaryHandler(
+		DeployServiceListDeployAttemptsProcedure,
+		svc.ListDeployAttempts,
+		connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceGetDeployAttemptProcedure,
+		svc.GetDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetLiveViewHandler := connect.NewUnaryHandler(
 		DeployServiceGetLiveViewProcedure,
 		svc.GetLiveView,
@@ -1671,6 +1822,16 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
 		case DeployServiceListConvergencesProcedure:
 			deployServiceListConvergencesHandler.ServeHTTP(w, r)
+		case DeployServiceOpenDeployAttemptProcedure:
+			deployServiceOpenDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceReportDeployAttemptProcedure:
+			deployServiceReportDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceCloseDeployAttemptProcedure:
+			deployServiceCloseDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceListDeployAttemptsProcedure:
+			deployServiceListDeployAttemptsHandler.ServeHTTP(w, r)
+		case DeployServiceGetDeployAttemptProcedure:
+			deployServiceGetDeployAttemptHandler.ServeHTTP(w, r)
 		case DeployServiceGetLiveViewProcedure:
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
@@ -1834,6 +1995,26 @@ func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Req
 
 func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListConvergences is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.OpenDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ReportDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CloseDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListDeployAttempts is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetDeployAttempt is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {

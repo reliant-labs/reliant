@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   listDaemons: vi.fn(async () => ({ daemons: [] as unknown[] })),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),

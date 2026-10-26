@@ -13,24 +13,28 @@ A daemon serves one **workspace**: the git worktree root of the directory you st
 cd ~/src/my-service
 ```
 
-## 2. Register and start
+## 2. Pair and start
 
-On a computer where you can open a browser, just start the daemon. With no credential yet, it registers the machine on the spot:
+Start the daemon. With no credential yet, it pairs the machine with your account:
 
 ```text
 $ reliant daemon start
 No daemon credentials found. Registering...
-Registering this machine as a daemon — approve the login in your browser.
-Opening your browser to log in.
-If it does not open, visit:
-    https://admin.reliantapi.com/oauth/authorize?client_id=reliant-cli&…&scope=daemon%3Aconnect+deploy%3Aread+…
+
+Pair this machine with your Reliant account.
+
+  Code:     BDFG-HJKL
+  Approve:  https://app.reliantlabs.io/oauth/device?user_code=BDFG-HJKL
+
+Or type the code into the Add machine window waiting in Reliant.
+Waiting for approval...
 ```
 
-Once you approve, the daemon saves its credential to `~/.reliant/daemon.json` and connects. The computer appears in the app under **Settings → Machines**, named `<instance-id>@<hostname>` unless you passed `--name`. `reliant daemon register` does only the registration step, if you prefer to keep it separate.
+Approve it on any device: open the link, or type the code into **Add machine → Your own computer**, which then asks "Approve machine `<hostname>`?". Nothing has to reach back to this terminal, so pairing works the same over SSH. Once you approve, the daemon saves its credential to `~/.reliant/daemon.json` and connects. The computer appears in the app under **Settings → Machines**, named `<instance-id>@<hostname>` unless you passed `--name`. `reliant daemon register` does only the pairing step, if you prefer to keep it separate.
 
-### On a machine with no browser
+### With nobody to approve it
 
-The browser login redirects to `127.0.0.1` on the machine itself, so it cannot finish over SSH. Create a daemon credential in the app under **Settings → Access Tokens** and pipe it in:
+For a CI runner or an image you bake once, create a daemon credential in the app under **Settings → Access Tokens** and pipe it in:
 
 ```bash
 echo "rlat_…" | reliant daemon start --token
@@ -43,7 +47,7 @@ $ echo hello | reliant daemon start --token
 invalid token format (expected an rlat_ daemon token)
 ```
 
-If Reliant refuses the token you piped in, the daemon stops, tells you, and deletes that token. Because you chose the token, it does not switch to a browser login behind your back. A daemon that registered through the browser re-registers by itself instead.
+If Reliant refuses the token you piped in, the daemon stops, tells you, and deletes that token. Because you chose the token, it does not switch to pairing behind your back. A daemon that was paired pairs again by itself instead.
 
 ## 3. Keep it running
 
