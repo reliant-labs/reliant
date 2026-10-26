@@ -3,11 +3,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2, MessageSquare, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
-import { supabase } from "@/lib/supabase";
+import { connectGitHub } from "@/lib/github-connect";
+import { gitService } from "@/services/controlPlane/git";
 import { trackEvent } from "@/lib/analytics";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
-import { gitService } from "@/services/controlPlane/git";
 import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
@@ -18,7 +18,7 @@ import type { LaunchPlan, OnboardingIntent, StepProps } from "../types";
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
-  const { hasToken: hasGithubCredential } = useGitHubCredential();
+  const { hasToken: hasGithubCredential, isLoading: credentialLoading } = useGitHubCredential();
   // Which choice is in flight, so its card shows the spinner; false when idle.
   const [busy, setBusy] = useState<false | OnboardingIntent>(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,27 +84,29 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   const handleConnectExisting = useCallback(async () => {
     setError(null);
     trackEvent("onboarding_intent_selected", { intent: "existing_codebase" });
-    // Set intent first. If we already have a credential, derivation will
-    // immediately route to the github-connect step (repo picker) on the
-    // next render. If we don't, launch the custom OAuth flow with
-    // returnTo back to /; the picker step naturally appears once intent
-    // is set and the credential lands.
+    // Set intent first. With a credential already stored, derivation routes
+    // straight to the github-connect step (the repo picker) and there is no
+    // OAuth hop. Without one, connect GitHub; the picker step appears once
+    // intent is set and the credential lands (a web return reloads onto it,
+    // the desktop app finishes in place).
     await updatePlan({ intent: "existing_codebase" });
-    if (hasGithubCredential) return;
-    setBusy("existing_codebase");
-    try {
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) throw new Error("Control plane URL not configured");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not signed in");
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({ token: session.access_token, returnTo });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start GitHub OAuth");
-      setBusy(false);
+    // While the credential query is still loading `hasToken` reads false for a
+    // user who has one; ask the server rather than send them through consent
+    // they have already given.
+    let hasCredential = hasGithubCredential;
+    if (!hasCredential && credentialLoading) {
+      hasCredential = await gitService
+        .getCredential("github")
+        .then((status) => status.hasToken)
+        .catch(() => false);
     }
-  }, [hasGithubCredential, updatePlan]);
+    if (hasCredential) return;
+    setBusy("existing_codebase");
+    const outcome = await connectGitHub();
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    setBusy(false);
+  }, [hasGithubCredential, credentialLoading, updatePlan]);
 
   if (commit) {
     return (

@@ -27,6 +27,7 @@ import { gitService } from "@/services/controlPlane/git";
 import { hasControlPlane } from "@/services/controlPlane/config";
 import type {
   GitAppInstallation,
+  GitCredentialKind,
   GitCredentialStatus,
 } from "@/services/controlPlane/git";
 
@@ -39,6 +40,9 @@ export function useGitHubCredential(): {
   /** That account's GitHub user id; unset when control-plane could not resolve it (GitCredentialStatus.accountId). */
   accountId?: string;
   scopes: string;
+  /** How the credential was obtained. Only a `github_app` credential can
+   *  enumerate installations, so only then is an empty list proof of none. */
+  kind?: GitCredentialKind;
   /** GitHub's installation flow — where a user adds an account or widens a
    *  "selected repositories" installation. Undefined when the control plane
    *  has no App slug configured; callers omit the affordance rather than
@@ -95,6 +99,7 @@ export function useGitHubCredential(): {
     accountLogin: data?.accountLogin,
     accountId: data?.accountId,
     scopes: data?.scopes ?? "",
+    kind: data?.kind,
     installUrl: data?.installUrl,
     installations: data?.installations ?? [],
     isLoading,

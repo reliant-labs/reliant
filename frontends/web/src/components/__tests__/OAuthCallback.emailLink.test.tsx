@@ -46,6 +46,12 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
+const syncProviderTokenFromSession = vi.fn()
+
+vi.mock('@/lib/githubCredentialSync', () => ({
+  githubCredentialSync: { syncProviderTokenFromSession },
+}))
+
 const setUser = vi.fn()
 const setSession = vi.fn()
 
@@ -202,5 +208,27 @@ describe('OAuthCallback — the OAuth code path still works', () => {
     const { findByText } = render(<OAuthCallback />)
 
     expect(await findByText(/Invalid authentication callback/i)).toBeInTheDocument()
+  })
+})
+
+describe('OAuthCallback — GitHub sign-in token capture', () => {
+  it('hands the session to the credential sync so a ghu_ token is kept', async () => {
+    mockSearch = { code: 'abc' }
+    const session = { access_token: 'fresh', provider_token: 'ghu_abc', provider_refresh_token: 'ghr_def' }
+    exchangeCodeForSessionMock.mockResolvedValue({ data: { user: LINKED.user, session }, error: null })
+
+    render(<OAuthCallback />)
+
+    await waitFor(() => expect(syncProviderTokenFromSession).toHaveBeenCalledWith(session))
+  })
+
+  it('does not capture anything when the code exchange fails', async () => {
+    mockSearch = { code: 'abc' }
+    exchangeCodeForSessionMock.mockResolvedValue({ data: {}, error: new Error('pkce_code_verifier_not_found') })
+
+    render(<OAuthCallback />)
+
+    await waitFor(() => expect(exchangeCodeForSessionMock).toHaveBeenCalled())
+    expect(syncProviderTokenFromSession).not.toHaveBeenCalled()
   })
 })

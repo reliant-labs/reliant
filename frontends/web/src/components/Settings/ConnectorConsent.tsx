@@ -23,6 +23,7 @@ import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
 import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
+import { connectGitHub } from "../../lib/github-connect";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { machineDisplayName } from "@/lib/machineName";
 
@@ -345,36 +346,11 @@ export function ConnectorConsent({
    */
   const handleConnectGitHub = async () => {
     setError(null);
-    try {
-      const [{ gitService }, { supabase }] = await Promise.all([
-        import("../../services/controlPlane/git"),
-        import("../../lib/supabase"),
-      ]);
-
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        setError("GitHub connections are not available in this deployment.");
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError("You need to be signed in to connect GitHub.");
-        return;
-      }
-
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start the GitHub connection."
-      );
+    const outcome = await connectGitHub();
+    if (outcome.kind === "error") {
+      setError(outcome.message);
+    } else if (outcome.kind === "connected") {
+      setGithubConnected(true);
     }
   };
 

@@ -17,7 +17,7 @@ vi.mock("../../../hooks/useGitHubCredential", () => ({
 
 vi.mock("../../../services/controlPlane/git", () => ({
   gitService: {
-    getOAuthURL: vi.fn(),
+    buildOAuthURL: vi.fn(),
     deleteCredential: vi.fn(),
     listRepos: vi.fn().mockResolvedValue({ repos: [], hasMore: false }),
   },
