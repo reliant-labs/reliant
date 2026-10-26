@@ -92,7 +92,7 @@ func (h *IdempotencyTestHelper) Repo() *db.Repo {
 // violating UNIQUE(chat_id, seq).
 func createMessageWithSeq(ctx context.Context, t *testing.T, repo *db.Repo, msg *db.Message) error {
 	t.Helper()
-	seq, err := repo.GetNextSeq(ctx, msg.ChatID, msg.ThreadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, msg.ThreadID, msg.ChatID)
 	if err != nil {
 		return err
 	}
@@ -298,9 +298,7 @@ func (h *IdempotencyTestHelper) CreateTestUserMessage(ctx context.Context, chatI
 func (h *IdempotencyTestHelper) CreateTestUserMessageWithText(ctx context.Context, chatID, threadID, text string) {
 	contextWindowID := chatID + ":" + threadID + ":0"
 	msgID := uuid.New().String()
-	ordinal, err := h.repo.GetNextOrdinal(ctx, threadID)
-	require.NoError(h.t, err)
-	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	ordinal, seq, err := h.repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(h.t, err)
 
 	err = h.repo.CreateMessage(ctx, &db.Message{

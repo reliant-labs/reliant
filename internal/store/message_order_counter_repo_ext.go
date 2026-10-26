@@ -113,23 +113,34 @@ func AllocateContextWindowSequence(ctx context.Context, db orm.Context, threadID
 	return seq, nil
 }
 
-// seedSeqCounterFromParentSQL raises a branch's seq counter ($1) to the seq
-// counter of the chat that owns the window the branch forks at ($2).
+// seedSeqCounterFromParentSQL raises a branch's seq counter ($1) to the
+// highest seq counter of the chats that own the windows of its fork chain,
+// from the window $2 up through its parents.
 //
 // A branched chat displays its parent's messages but does not own those rows —
 // they keep the parent's chat_id and are resolved on read by walking the
 // window chain. So a fresh branch's own counter would start at 0, placing
 // every message the user sends numerically BENEATH the inherited messages
-// rendered above it. The parent's counter is at least every seq the parent
-// shows, its own and the ones it inherited (its own fork seeded it the same
-// way), so it covers the whole chain without reading a message.
+// rendered above it. A parent's counter is at least every seq the parent
+// shows (its own fork seeded it the same way), so the chain's counters cover
+// everything the branch inherits. It walks windows and reads counters; it
+// reads no message.
 const seedSeqCounterFromParentSQL = `
+WITH RECURSIVE chain AS (
+    SELECT cw.id, cw.parent_context_window_id, cw.thread_id
+    FROM context_windows cw
+    WHERE cw.id = $2
+    UNION
+    SELECT parent.id, parent.parent_context_window_id, parent.thread_id
+    FROM context_windows parent
+    JOIN chain ON chain.parent_context_window_id = parent.id
+)
 INSERT INTO message_order_counters (counter_kind, scope_id, last_assigned)
-SELECT 'seq', $1, c.last_assigned
-FROM context_windows cw
-JOIN threads t ON t.id = cw.thread_id
+SELECT 'seq', $1, MAX(c.last_assigned)
+FROM chain
+JOIN threads t ON t.id = chain.thread_id
 JOIN message_order_counters c ON c.counter_kind = 'seq' AND c.scope_id = t.chat_id
-WHERE cw.id = $2
+HAVING MAX(c.last_assigned) IS NOT NULL
 ON CONFLICT (counter_kind, scope_id) DO UPDATE
 SET last_assigned = GREATEST(message_order_counters.last_assigned, EXCLUDED.last_assigned)
 `

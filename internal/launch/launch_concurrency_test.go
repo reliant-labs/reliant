@@ -74,10 +74,9 @@ func activityEvents(t *testing.T, repo *db.Repo, userID, chatID string) []db.Use
 // The seed messages used to be numbered by MAX(ordinal)+1 and a fork-chain
 // walk for MAX(seq)+1, reads whose predicate locks every launch shared on a
 // young table's few index pages; they now come from message_order_counters
-// with no read at all (db.Repo.SaveMessageToNewChat). Measured on one pgtest
-// server at 16 users, 4 runs each: MAX()-numbered, 1.3-1.7 retries per launch
-// and up to 4 failed attempts of one launch; counters healed against
-// messages, 0.7-0.8; counters alone, 0.2-0.4 with at most 2. The remaining
+// with no read of messages at all. Measured on one pgtest server at 16 users,
+// 4 runs each: MAX()-numbered, 1.3-1.7 retries per launch and up to 4 failed
+// attempts of one launch; counters, 0.2-0.4 with at most 2. The remaining
 // retries share the other tables a launch writes. The deterministic proof
 // that the emit left the launch's transaction is
 // TestLaunchSucceedsWhenThePostCommitActivityEmitFails.
