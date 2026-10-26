@@ -45,6 +45,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -58,6 +59,27 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 		return "", nil
 	}
 	return id, err
+}
+
+// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
+// chat with a run that is pending or active: a worktree an agent may be about
+// to write to, whatever its files' ages say.
+func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool)
+	if len(worktreeIDs) == 0 {
+		return out, nil
+	}
+	var ids []string
+	err := db.Bun().NewRaw(`SELECT DISTINCT c.worktree_id FROM chats c JOIN workflows w ON w.chat_id = c.id
+WHERE c.worktree_id = ANY(?0::text[]) AND w.state IN (?1, ?2)`,
+		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive).Scan(ctx, &ids)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 // The chats writes (P5b L1b). Reads go through the view — see

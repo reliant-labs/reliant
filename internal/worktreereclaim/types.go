@@ -279,9 +279,15 @@ type Worktree struct {
 	KeepFiles bool `json:"keep_files,omitempty"`
 	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
 	// with, in addition to locking it; see OutcomeIdleDone.
-	ProbeIdle  bool       `json:"probe_idle,omitempty"`
-	BaseBranch string     `json:"base_branch,omitempty"`
-	Checkouts  []Checkout `json:"checkouts,omitempty"`
+	ProbeIdle bool `json:"probe_idle,omitempty"`
+	// ShedIdleAfterSeconds (ACTIVE requests only), when positive, asks the
+	// daemon to delete the regenerable files of a live worktree that has been
+	// left alone this long (see Reclaimer.shedLive). The server sends it only
+	// for a worktree no chat is running in. What was deleted comes back in
+	// Result.Stripped; the worktree stays locked and live.
+	ShedIdleAfterSeconds int64      `json:"shed_idle_after_s,omitempty"`
+	BaseBranch           string     `json:"base_branch,omitempty"`
+	Checkouts            []Checkout `json:"checkouts,omitempty"`
 }
 
 // Result reports what happened to one worktree.

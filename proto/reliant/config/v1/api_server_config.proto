@@ -181,6 +181,19 @@ message ApiServerConfig {
     description: "Worktree auto-archive: dry-run, on or off"
   }];
 
+  // How long a LIVE worktree must be left alone — no chat running in it, no
+  // process working in it, no file changed outside its regenerable paths —
+  // before the worktree sweep has its daemon delete those regenerable files
+  // (node_modules, build output, pinned tools, tmp/). 0 turns it off.
+  google.protobuf.Duration worktree_live_shed_idle = 81 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_LIVE_SHED_IDLE"
+      default_value: "24h"
+      description: "Idle time before a live worktree's regenerable files are shed (0 = off)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
   // The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
   // logs in through: its origin and its PUBLIC publishable key
   // (sb_publishable_*, the browser-facing anon identity, not a service-role

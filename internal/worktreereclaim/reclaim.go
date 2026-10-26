@@ -1082,6 +1082,7 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome = OutcomeProbeInconclusive
 		}
 	}
+	r.shedLive(ctx, w, &res)
 	return res
 }
 

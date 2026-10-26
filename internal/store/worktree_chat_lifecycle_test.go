@@ -42,6 +42,32 @@ func TestGetLiveChatIDForWorktree(t *testing.T) {
 	require.Empty(t, id)
 }
 
+// A worktree counts as running only while a bound chat has a pending or active
+// run; a stopped run, a paused one or no chat at all leaves it idle.
+func TestListWorktreeIDsWithRunningChat(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for id, status := range map[string]*core.WorkflowStatus{
+		"active": ptr(core.Active()), "pending": ptr(core.Pending()),
+		"done": ptr(core.Completed()), "paused": ptr(core.Paused()), "nochat": nil,
+	} {
+		if status == nil {
+			wt := &core.Worktree{ID: id, ProjectID: storetest.SeedProjectID, Name: id, Path: "/tmp/" + id, Branch: id}
+			require.NoError(t, env.Repo.CreateWorktree(ctx, wt))
+			continue
+		}
+		c := boundFixture(t, env, id, false)
+		require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("wf-"+id, c.ID, nil, *status, now)))
+	}
+	got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{"active", "pending", "done", "paused", "nochat", "missing"})
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"active": true, "pending": true}, got)
+	got, err = env.Repo.ListWorktreeIDsWithRunningChat(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
 func TestChatWorktreeArchiveSymmetry(t *testing.T) {
 	for _, main := range []bool{false, true} {
 		t.Run(fmt.Sprintf("main=%v", main), func(t *testing.T) {

@@ -151,6 +151,7 @@ type Sweeper struct {
 	sender   Sender
 	keep     KeepFilesSetting
 	auto     *autoArchive
+	shed     *liveShed
 	recovery *recoveryEngine
 	// candidates and archived count this pass's finished active worktrees.
 	idleDone      atomic.Int64
@@ -198,6 +199,59 @@ func (s *Sweeper) WithAutoArchive(mode AutoArchiveMode, store AutoArchiveStore, 
 	}
 	s.auto = &autoArchive{mode: mode, store: store, notify: notify}
 	return s
+}
+
+// RunningChatStore says which worktrees a chat is running in.
+type RunningChatStore interface {
+	ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs []string) (map[string]bool, error)
+}
+
+type liveShed struct {
+	after time.Duration
+	store RunningChatStore
+}
+
+// WithLiveShed asks each live worktree's daemon to delete its regenerable
+// files (node_modules, build output, pinned tools, tmp/) once the worktree has
+// been left alone for after: no chat running in it (checked here), and no
+// process, commit or file change in it (checked by the daemon, which alone
+// sees the disk; worktreereclaim.Reclaimer.shedLive). Archived worktrees shed
+// the same files already; this reaches the ones still open in a sidebar. A
+// non-positive after turns it off.
+func (s *Sweeper) WithLiveShed(after time.Duration, store RunningChatStore) *Sweeper {
+	if after <= 0 || store == nil {
+		s.shed = nil
+		return s
+	}
+	s.shed = &liveShed{after: after, store: store}
+	return s
+}
+
+// shedCandidates is the live rows of cands that describe may ask to shed: not
+// the main checkout, and no chat running in it. A failed lookup sheds none.
+func (s *Sweeper) shedCandidates(ctx context.Context, cands []*core.ReclaimCandidate, keep bool) map[string]bool {
+	if s.shed == nil || keep {
+		return nil
+	}
+	var ids []string
+	for _, c := range cands {
+		if wt := c.Worktree; wt.DeletedAt == nil && !wt.IsMain {
+			ids = append(ids, wt.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	running, err := s.shed.store.ListWorktreeIDsWithRunningChat(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "[WorktreeSweep] could not check for running chats; shedding nothing this pass", "error", err)
+		return nil
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		out[id] = !running[id]
+	}
+	return out
 }
 
 // Fence is the archive token for a row: its archive time in nanoseconds.
@@ -691,6 +745,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		return repos, err == nil
 	}
 	var liveDirs []occupied // built on the first archived row
+	shed := s.shedCandidates(ctx, cands, keep)
 	for _, c := range cands {
 		wt := c.Worktree
 		state := worktreereclaim.StateActive
@@ -711,6 +766,9 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
 		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
+		if state == worktreereclaim.StateActive && w.Retire == "" && shed[wt.ID] {
+			w.ShedIdleAfterSeconds = int64(s.shed.after / time.Second)
+		}
 		repos, _ := reposOf(wt.ProjectID)
 		for _, repo := range repos {
 			w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{
@@ -858,6 +916,10 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 				m.LockedAt, m.CheckedAt, m.RetireFence = &now, &now, ""
 				m.Transient, m.Rechecks = "", 0
 			})
+		}
+		if r.StrippedBytes > 0 || len(r.Stripped) > 0 {
+			logging.InfoContext(ctx, "[WorktreeSweep] shed regenerable files from an idle live worktree",
+				"worktreeID", wt.ID, "bytes", r.StrippedBytes, "paths", r.Stripped)
 		}
 		if r.Outcome == worktreereclaim.OutcomeIdleDone {
 			s.archiveFinished(ctx, userID, wt)

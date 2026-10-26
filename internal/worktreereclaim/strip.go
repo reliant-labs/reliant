@@ -3,6 +3,8 @@ package worktreereclaim
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,26 +70,170 @@ func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) 
 		return
 	}
 	for _, c := range checkouts {
-		for _, rel := range regenerableTargets(ctx, c, sc.Repos) {
-			if ctx.Err() != nil {
-				break
-			}
-			full := filepath.Join(c, filepath.FromSlash(rel))
-			size, _ := DirSize(ctx, full)
-			if err := os.RemoveAll(full); err != nil {
-				continue
-			}
-			res.StrippedBytes += size
-			if len(res.Stripped) < maxStrippedNames {
-				res.Stripped = append(res.Stripped, strings.TrimPrefix(relTo(w.Path, c)+"/"+strings.TrimSuffix(rel, "/"), "/"))
-			}
+		r.strip(ctx, w, c, regenerableTargets(ctx, c, sc.Repos), res)
+	}
+}
+
+// strip deletes targets (regenerableTargets of checkout c) and records them on
+// res. Each removal puts its parent directory's mtime back: deleting a cache is
+// not activity, and the idle clocks (idleSince, lastActivity) read directory
+// mtimes, so a shed must not make an idle worktree look freshly touched.
+func (r *Reclaimer) strip(ctx context.Context, w Worktree, c string, targets []string, res *Result) {
+	stripped := false
+	for _, rel := range targets {
+		if ctx.Err() != nil {
+			break
+		}
+		full := filepath.Join(c, filepath.FromSlash(strings.TrimSuffix(rel, "/")))
+		parent := filepath.Dir(full)
+		pinfo, perr := os.Stat(parent)
+		size, _ := DirSize(ctx, full)
+		if err := os.RemoveAll(full); err != nil {
+			continue
+		}
+		if perr == nil {
+			_ = os.Chtimes(parent, pinfo.ModTime(), pinfo.ModTime())
+		}
+		stripped = true
+		res.StrippedBytes += size
+		if len(res.Stripped) < maxStrippedNames {
+			res.Stripped = append(res.Stripped, strings.TrimPrefix(relTo(w.Path, c)+"/"+strings.TrimSuffix(rel, "/"), "/"))
 		}
 	}
-	if res.StrippedBytes > 0 || len(res.Stripped) > 0 {
+	if stripped {
 		r.mu.Lock()
 		delete(r.sizes, w.Path) // the cached size is from before
 		r.mu.Unlock()
 	}
+}
+
+// DefaultLiveShedIdle is how long a LIVE worktree must be left alone before
+// its regenerable files are shed (Worktree.ShedIdleAfterSeconds), when the
+// server's configuration does not say otherwise.
+const DefaultLiveShedIdle = 24 * time.Hour
+
+// maxActivityWalk bounds the entries lastActivity visits in one checkout. A
+// checkout bigger than this outside its regenerable paths is not judged idle.
+const maxActivityWalk = 500_000
+
+// errActivityUnknown: the walk could not see the whole checkout.
+var errActivityUnknown = errors.New("the checkout is too large, or partly unreadable, to tell when it was last changed")
+
+// shedLive deletes the regenerable paths of a LIVE worktree that has been left
+// alone, so a worktree an agent or user stepped away from does not keep a
+// gigabyte of node_modules and pinned tools for as long as its row lives. The
+// server asks only for a worktree no chat is running in
+// (Worktree.ShedIdleAfterSeconds); the daemon then requires, over the same
+// window:
+//
+//   - no process has its working directory in the workspace (a fresh look);
+//   - no HEAD move, commit or checkout (idleSince);
+//   - no file or directory changed anywhere in a checkout outside the paths
+//     being shed, nor in the workspace outside its checkouts (lastActivity).
+//
+// Only what shed deletes is deleted: ignored paths on the allow-list, in
+// checkouts this row's lock proves are its own, never a path holding a
+// repository. Tracked files, untracked files git does not ignore, ignored data
+// and git state are never touched; the next install or generate puts the rest
+// back. A check that cannot be completed sheds nothing.
+func (r *Reclaimer) shedLive(ctx context.Context, w Worktree, res *Result) {
+	if res == nil || w.State != StateActive || w.ShedIdleAfterSeconds <= 0 || w.KeepFiles || w.Retire != "" {
+		return
+	}
+	switch res.Outcome {
+	case OutcomeLocked, OutcomeIdleDone, OutcomeProbeInconclusive:
+	default:
+		return
+	}
+	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < shedMinBudget {
+		return // asked again on the next daily re-check
+	}
+	floor := time.Duration(w.ShedIdleAfterSeconds) * time.Second
+	sc := scanWorkspace(ctx, w.Path)
+	if sc.Truncated {
+		return
+	}
+	checkouts := ownCheckouts(ctx, w, sc)
+	if len(checkouts) == 0 {
+		return
+	}
+	now := r.now()
+	if last, err := idleSince(ctx, w.Path, checkouts); err != nil || now.Sub(last) < floor {
+		return
+	}
+	for _, p := range sc.Outside {
+		if info, err := os.Lstat(p); err != nil || now.Sub(info.ModTime()) < floor {
+			return
+		}
+	}
+	plan := make(map[string][]string, len(checkouts))
+	for _, c := range checkouts {
+		targets := regenerableTargets(ctx, c, sc.Repos)
+		if len(targets) == 0 {
+			continue
+		}
+		last, err := lastActivity(ctx, c, targets)
+		if err != nil || now.Sub(last) < floor {
+			return // one checkout in use keeps the whole workspace
+		}
+		plan[c] = targets
+	}
+	if len(plan) == 0 {
+		return
+	}
+	// Last, and fresh: the decision above took a while, and a process that
+	// started in the workspace meanwhile is using it.
+	if hold := r.inUse(ctx, w, true); hold != nil {
+		return
+	}
+	for _, c := range checkouts {
+		if targets, ok := plan[c]; ok {
+			r.strip(ctx, w, c, targets, res)
+		}
+	}
+}
+
+// lastActivity is the newest modification time of anything in checkout except
+// the .git entries and the regenerable paths skip (relative, as
+// regenerableTargets returns them): when a person or an agent last changed the
+// checkout itself, as opposed to the caches a build keeps beside it. Every
+// other path counts, ignored data and untracked files included.
+func lastActivity(ctx context.Context, checkout string, skip []string) (time.Time, error) {
+	skipped := make(map[string]bool, len(skip))
+	for _, s := range skip {
+		skipped[filepath.Join(checkout, filepath.FromSlash(strings.TrimSuffix(s, "/")))] = true
+	}
+	var newest time.Time
+	entries := 0
+	err := filepath.WalkDir(checkout, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return errActivityUnknown
+		}
+		if entries++; entries > maxActivityWalk {
+			return errActivityUnknown
+		}
+		if entries%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if p != checkout && (d.Name() == ".git" || skipped[p]) {
+			if d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return errActivityUnknown
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+		return nil
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return newest, ctx.Err()
 }
 
 // ownCheckouts lists the linked, registered checkouts in the scan that this
