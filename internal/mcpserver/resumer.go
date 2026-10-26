@@ -6,9 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"strings"
 	"time"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 )

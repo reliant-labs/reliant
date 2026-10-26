@@ -4,7 +4,6 @@ package triggertools_test
 import (
 	"context"
 	"encoding/json"
-	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"log/slog"
 	"reflect"
 	"slices"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
