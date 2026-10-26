@@ -351,7 +351,7 @@ func rebuildWithout(dir string, names []string) error {
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", dir, err)
 	}
-	defer unix.Close(src)
+	defer func() { _ = unix.Close(src) }()
 	orig := "/proc/self/fd/" + strconv.Itoa(src)
 
 	entries, err := os.ReadDir(orig)
