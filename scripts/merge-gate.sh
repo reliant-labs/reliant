@@ -27,7 +27,10 @@
 #              node configs), when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
-#   lint       forge lint --scope <changed dirs> (unscoped when a pin moved)
+#   lint       forge lint --scope <changed dirs> (unscoped when a pin moved);
+#              re-run on the amended tree whenever a generator rewrote it, and
+#              that run is the verdict (lint reads generated files such as
+#              gen/forge_descriptor.json, so the first run judged a stale tree)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
@@ -249,21 +252,30 @@ run_checks() {
     phase "typecheck$sfx" npm --prefix frontends/web run --silent typecheck & pids+=($!)
   fi
 }
+# lint reads generated files (gen/forge_descriptor.json for db-grants, among
+# others), so a run beside a generator judges the tree the generator is about to
+# rewrite. Its verdict is therefore held until the generators finish: when they
+# rewrote nothing it stands; when --amend folds a rewrite in, lint runs again on
+# the amended tree and that run is the verdict.
+lint_cmd=() lint_pid= lint_deferred=0
+if echo "$files" | grep -qE '^(go\.(mod|sum)|forge\.yaml)$'; then
+  notes+=("lint: unscoped (a pin moved)")
+  lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends)
+else
+  # One awk, not a dirname per file: forking hundreds of processes on a
+  # loaded host delayed lint's start by over a minute.
+  scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+  if [ -n "$scope" ]; then
+    notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
+    lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope")
+  else
+    notes+=("lint: not run (only root files changed)")
+  fi
+fi
 if [ "$fail" = 0 ]; then
   run_checks
-  if echo "$files" | grep -qE '^(go\.(mod|sum)|forge\.yaml)$'; then
-    notes+=("lint: unscoped (a pin moved)")
-    phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends & pids+=($!)
-  else
-    # One awk, not a dirname per file: forking hundreds of processes on a
-    # loaded host delayed lint's start by over a minute.
-    scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
-    if [ -n "$scope" ]; then
-      notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
-      phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" & pids+=($!)
-    else
-      notes+=("lint: not run (only root files changed)")
-    fi
+  if [ ${#lint_cmd[@]} -gt 0 ]; then
+    phase lint "${lint_cmd[@]}" & lint_pid=$!
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
@@ -275,7 +287,19 @@ if [ "$fail" = 0 ]; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
   for p in "${pids[@]}"; do wait "$p" || fail=1; done
+  if [ -n "$lint_pid" ] && ! wait "$lint_pid"; then
+    # A failure stands unless a generator rewrote the tree lint read and
+    # --amend will fold that in: then the re-run below decides.
+    if [ "$amend" = 1 ] && ls "$L"/*.changed >/dev/null 2>&1; then lint_deferred=1; else fail=1; fi
+  fi
 fi
+lint_rerun() {
+  lint_deferred=0
+  [ ${#lint_cmd[@]} -gt 0 ] || return 0
+  [ -f "$L/lint.log" ] && mv "$L/lint.log" "$L/lint.pre-amend.log"
+  notes+=("lint: ran again on the amended tree (a generator rewrote files it reads)")
+  phase lint "${lint_cmd[@]}" & pids+=($!)
+}
 # --amend: fold what the generators rewrote (generated paths only) into HEAD.
 # build and test judged the tree before it; when the regenerated files include
 # code, run them again on the amended tree.
@@ -300,6 +324,8 @@ if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
     fi
     if [ "$fail" = 0 ]; then
       commit_amend
+      pids=()
+      lint_rerun
       if cat "$L"/*.changed 2>/dev/null | grep -qE '\.(go|ts|tsx|proto)$'; then
         notes+=("regenerated code: build and test ran again on the amended tree")
         # A regenerate that rewrote web sources (src/gen, the shortcuts
@@ -308,12 +334,16 @@ if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
           typecheck=true
           npm_install . && npm_install frontends/web || fail=1
         fi
-        pids=(); run_checks -2; for p in "${pids[@]}"; do wait "$p" || fail=1; done
+        run_checks -2
       fi
+      for p in "${pids[@]}"; do wait "$p" || fail=1; done
     fi
   fi
   [ "$fail" = 0 ] || { git reset -q --hard; git clean -fdq; }
 fi
+# A lint failure held for a re-run that never happened (nothing was amended)
+# stands: a held verdict is never a pass.
+[ "$lint_deferred" = 1 ] && fail=1
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
