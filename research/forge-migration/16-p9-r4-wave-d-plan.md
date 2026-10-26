@@ -1,12 +1,82 @@
 # 16 — P9 R4 wave D: Chat, FileSystem, Forge, Daemon/DaemonRegistry/Token, Settings stores
 
-Status: **plan.** This decides wave D, which `13-p9-frontend-plan.md` D4 left until after wave C ("decided
+Status: **complete.** Wave D is done, and with it R4. Every lane in §9 has merged (see "Status" below).
+This document decided wave D, which `13-p9-frontend-plan.md` D4 left until after wave C ("decided
 after C; staying hand-written is acceptable where streaming owns the cache"). Owner decisions are in §8.
 
 Evidence is from reliant `origin/main` at `8ea6d5b6`: wave C is complete (Run #1508, Project #1513,
 Worktree #1514, Trigger #1515, Workflow #1516), and so is the forge pin bump to `1dc4e572`
 (#1517: `<svc>Queries`, web-runtime `^0.11.0`). Paths are relative to `frontends/web/src/`
 unless they start with `proto/` or `forge/`.
+
+---
+
+## Status: R4 complete
+
+**Merged.** Wave A #1385. Wave B1 #1437, B2 #1472. Wave C: Run #1508, Project #1513, Worktree #1514,
+Trigger #1515, Workflow #1516. Wave D:
+
+| Lane | PR | What landed |
+|---|---|---|
+| D0 reconnect sweep | #1521 | one `STREAM_INVALIDATED_SCOPES` list drives both the stream handlers and the reconnect sweep |
+| D1 Daemon + Token | #1533 | DaemonRegistryService and TokenService on generated keys; one daemon-list entry |
+| D2 Forge | #1562 | ForgeService on generated keys; `forge-grpc.ts` deleted |
+| D3 Chat pull reads | #1537 | archived, search, step/workflow executions, thread inputs, queued messages on generated keys |
+| D4 Chat layering | #1544 | `chat-grpc.ts` → `hooks/chat-model.ts` + `hooks/chat-actions.ts`; `tool-call-grpc.ts`, `api.chatsV2`, `api.toolCalls` deleted |
+| D5 FileSystem | #1567 | directory picker and search on generated keys; `filesystem-grpc.ts` merged into `api/fileSystem.ts` |
+| D6 Settings stores | #1569 | owner option C: the preferences, privacy and bookmarks mirror stores (and the dead `settingsStore`) deleted; readers use the generated hooks |
+| D7 stragglers | #1576 | Inbox, Connector, Message, Account, ModelEndpoint on generated keys |
+| DZ cleanup | #1582 | `api/grpc-client.ts` and `api/daemon-grpc.ts` deleted; the leftovers below moved onto `connectClient` or the generated hooks |
+
+DZ moved the last `grpc-client` names to their owners. Base-URL readers (Terminal, ActivateTriggerDialog,
+MessageGeneratedVideos, useAuthMode) call `reliantApiBaseUrl()`. `ConfigPanel` reads `useListNodes` and
+`ToolsSelector` reads `useListTools`. `api.models`/`api.tools` left `api/client.ts`; the picker's merged
+model list is `fetchModelList()` in `hooks/catalog-models.ts`. The rest call `connectClient(<Service>)`:
+`streaming-grpc`, `process-output-streaming`, `scenarios`, `settings-grpc`, `node-metadata`,
+`cel-completion-service` and `useCatalogModelName`. It also deleted wrappers that had no callers left:
+`fileSystemAPI` and `getFileMetadata`, the scenario builders and `createScenario`, and the two stream
+factory functions. The test mocks of `grpc-client` now answer at the transport. `rg grpc-client` returns nothing.
+
+**What stayed hand-written, and why.** Each of these calls `connectClient(<Service>)` directly. The central
+factory is gone.
+
+- **Chat core** (`hooks/chat-model.ts`, `hooks/chat-actions.ts`). The stream writes these entries in place,
+  and every generated ChatService mutation invalidates `chatServiceKeys.all` (§2.2). ToolCallService's two
+  commands live here too: their effect arrives over the stream.
+- **The stream** (`api/streaming-grpc.ts`). It is the cache's writer, and a server stream gets no generated
+  hooks. `api/process-output-streaming.ts` (BackgroundService's output stream) stays for the same reason.
+- **File tree and content** (`api/fileSystem.ts`): tree, content, preview info and blob, save, create,
+  delete, copy, move and replace. Reads are routed to the chat's own machine and fetched lazily, and the
+  editor buffer is client state that a refetch must never overwrite (§3).
+- **`api/grpc-unauth.ts`**: pre-session calls for the supabase storage adapter, kept apart for the import
+  graph.
+- **DaemonService OAuth helper**, now in `lib/oauth-local.ts` (it was `api/daemon-grpc.ts`). These are one-shot
+  calls from `lib/*-oauth.ts` with no cache. The client loads lazily, so `useOAuthAvailability` doesn't pull in
+  the Connect graph.
+- **`api/settings-grpc.ts`**, shrunk by D6 (option C). It keeps the OAuth completions, Copilot device auth,
+  validate/sync, shortcuts and settings CRUD. `shortcutsStore`, `apiKeySetupStore`, `settingsSync`,
+  `settingsPersistence` and `lib/*-oauth` still read through it. `api/client.ts` keeps only the `api.settings`
+  block over it, plus the chat type re-exports.
+- **Module-level caches for code outside React**: `lib/node-metadata.ts` and `lib/cel-completion-service.ts`
+  (one-shot catalog reads for the canvas and Monaco), `hooks/useCatalogModelName.ts` (one
+  ListModelsByProvider per driver per session), and `fetchModelList` (the `globalDataStore` mirror; the
+  optional follow-up in §9).
+- **`api/scenarios.ts`**: user-triggered list/run/upload/export/delete from `ScenarioPanel`. No wave
+  scheduled ScenarioService. Moving it onto the generated hooks is an unscheduled follow-up.
+
+**Forge items delivered for R4.** All are merged and pinned:
+
+| forge PR | What it gave reliant |
+|---|---|
+| #1294 | query hooks type `data` by `select`; paged reads get `use<Rpc>Infinite`; `mockTransport` builds full messages |
+| #1312 | `forge lint --frontend-stores` reads every frontend's `src/store/` and flags clients, not enums |
+| #1316 | a hook-kind flip (NO_SIDE_EFFECTS) names its stale starter test rows in `generate` and `lint --conventions`; `forge:query-scope` keys a custom read under its entity |
+| #1318 | `<svc>Queries.<rpc>(req)` query options for code outside React; the generated hooks are built over them (web-runtime 0.11.0) |
+| #1320 | `<svc>Keys.<rpc>.all`: one prefix for every cached request of a read, plain and infinite (F-D2; web-runtime 0.12.0) |
+| #1321 | an adopted frontend's `package.json` is raised to the web-runtime floor along with its lockfile |
+
+Still open from §7: F-D1 (deferred by owner decision F), F-D3, F-D4, and F-D6. F-D6 became possible with DZ,
+since only legitimate imperative modules remain.
 
 ---
 

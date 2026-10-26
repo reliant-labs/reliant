@@ -13,20 +13,15 @@ type Request = { subscribeChatId?: string };
 const requests: Request[] = [];
 let respond: (request: Request) => AsyncIterable<unknown>;
 
-vi.mock("@connectrpc/connect", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@connectrpc/connect")>();
-  return {
-    ...actual,
-    createClient: () => ({
-      streamUserUpdates: (request: Request) => {
-        requests.push({ subscribeChatId: request.subscribeChatId });
-        return respond(request);
-      },
-    }),
-  };
-});
-
-vi.mock("../grpc-client", () => ({ getStreamingTransport: () => ({}) }));
+// StreamingService is reached through connectClient; answer its stream here.
+vi.mock("../../lib/connect", () => ({
+  connectClient: () => ({
+    streamUserUpdates: (request: Request) => {
+      requests.push({ subscribeChatId: request.subscribeChatId });
+      return respond(request);
+    },
+  }),
+}));
 
 import { UserStreamingService } from "../streaming-grpc";
 

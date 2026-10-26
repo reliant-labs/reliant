@@ -12,6 +12,8 @@
  * a successful probe IS the proof.
  */
 
+import type { StartOAuthFlowResponse } from '@/gen/reliant/v1/daemon_pb'
+
 export const OAUTH_LOCAL_SERVER_PORT = 19284
 export const OAUTH_LOCAL_SERVER_URL = `http://127.0.0.1:${OAUTH_LOCAL_SERVER_PORT}`
 
@@ -88,8 +90,6 @@ export interface OAuthStartResult {
 export async function requestOAuthHelper(
   signal?: AbortSignal,
 ): Promise<OAuthHelperHealth | null> {
-  const { openOAuthHelper, closeOAuthHelper } = await import('@/api/daemon-grpc')
-
   try {
     await openOAuthHelper(window.location.origin, signal)
   } catch {
@@ -110,7 +110,6 @@ export async function requestOAuthHelper(
 
 /** Release the helper port. Safe to call when nothing is open. */
 export async function releaseOAuthHelper(): Promise<void> {
-  const { closeOAuthHelper } = await import('@/api/daemon-grpc')
   await closeOAuthHelper()
 }
 
@@ -160,5 +159,78 @@ export async function startOAuthViaLocalServer(
     code: body.code,
     state: body.state,
     redirectUri: body.redirect_uri,
+  }
+}
+
+// ─── DaemonService: the daemon's side of the helper ───────────────────────
+
+/**
+ * DaemonService on the app's routed transport. Loaded lazily, so importing
+ * this module (useOAuthAvailability does, at startup) does not pull in the
+ * Connect client graph before a flow actually asks the daemon for something.
+ */
+async function daemonClient() {
+  const [{ connectClient }, { DaemonService }] = await Promise.all([
+    import('@/lib/connect'),
+    import('@/gen/reliant/v1/daemon_pb'),
+  ])
+  return connectClient(DaemonService)
+}
+
+/**
+ * Start an OAuth flow via the daemon. The daemon spins up a localhost callback
+ * server, opens the user's browser to the authorize URL (with the real redirect
+ * URI substituted for the `{redirect_uri}` placeholder), waits for the callback,
+ * then returns the authorization code, state, and redirect URI.
+ *
+ * ⚠️ This RPC CANNOT complete a real sign-in and is not used by the desktop
+ * app any more. It blocks one request/response RPC on a human working through
+ * a consent screen; in the packaged app that failed at ~15s with "Failed to
+ * fetch", and cancelling the request tore down the daemon's listener, so the
+ * browser's redirect hit a closed port. It is also unreachable by construction
+ * in distributed mode, where the daemon is a pod and its loopback listener is
+ * on the wrong machine entirely.
+ *
+ * Electron now uses its own local receiver (`startProviderOAuth` /
+ * `waitForProviderOAuth` in electron/src/oauth-provider-login.js), which binds
+ * the port and returns immediately, then waits over IPC that no network
+ * deadline bounds. Kept only for the non-Electron fallback path.
+ */
+export async function startOAuthViaDaemon(
+  authorizeUrlTemplate: string,
+  signal?: AbortSignal,
+): Promise<StartOAuthFlowResponse> {
+  const client = await daemonClient()
+  return client.startOAuthFlow({ authorizeUrlTemplate }, { signal })
+}
+
+/**
+ * Ask the daemon to open its localhost OAuth helper port for ONE linking
+ * session.
+ *
+ * Returns immediately — unlike `startOAuthViaDaemon` this does not block on a
+ * human at a consent screen, which is what made that RPC fail at ~15s in the
+ * packaged app.
+ *
+ * Pair every call with `closeOAuthHelper`. The daemon also closes the port
+ * after an idle timeout, but that is the backstop for a UI that never got to
+ * ask (a closed tab, a crash) — not the normal path.
+ */
+async function openOAuthHelper(webOrigin: string, signal?: AbortSignal): Promise<void> {
+  const client = await daemonClient()
+  await client.openOAuthHelper({ webOrigin }, { signal })
+}
+
+/**
+ * Release the helper port. Best-effort by design: the caller is usually in a
+ * `finally`, and a failure here must not mask the outcome of the flow itself.
+ * The daemon's idle timeout covers a missed close.
+ */
+async function closeOAuthHelper(): Promise<void> {
+  try {
+    const client = await daemonClient()
+    await client.closeOAuthHelper({})
+  } catch {
+    // Ignored: the idle timeout is the backstop.
   }
 }

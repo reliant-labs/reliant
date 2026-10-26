@@ -63,6 +63,7 @@ const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
 
 type Config = {
   serviceName: string;
+  frontend?: string;
   serviceVersion?: string;
   environment?: string;
   endpoint?: string;
@@ -102,6 +103,11 @@ afterEach(() => {
 });
 
 describe("initTelemetry: when it starts", () => {
+  it("reaches the runtime with a frontend name, never an anonymous page", async () => {
+    await initTelemetry();
+    expect(lastConfig().frontend).toBe("reliant-web");
+  });
+
   it("does not initialise when crash-reporting consent is off", async () => {
     privacy.state.crashReportingEnabled = false;
     expect(await initTelemetry()).toBe(false);
@@ -374,6 +380,13 @@ describe("user and error reporting", () => {
 });
 
 describe("buildTelemetryConfig", () => {
+  const base = { config: {}, prerelease: false, buildVersion: "1", replayRate: 1 };
+
+  it("names the forge frontend, so the SDK emits forge.frontend and the build's source maps can be found", () => {
+    expect(buildTelemetryConfig(base).frontend).toBe("reliant-web");
+    expect(buildTelemetryConfig({ ...base, desktop: true }).frontend).toBe("desktop");
+  });
+
   it("fixes the privacy options regardless of config", () => {
     const config = buildTelemetryConfig({
       config: { OTEL_REPLAY: "true" },

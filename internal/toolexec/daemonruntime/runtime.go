@@ -228,6 +228,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 	setOAuthHelperOrigins(opts.OAuthHelperOrigins)
+	// The data directory holds the daemon's identity and state; a command run
+	// with `credentials: none` does not see it (see daemonpolicy.ProtectedCredentials).
+	daemonpolicy.SetDaemonDataDir(opts.BootstrapConfig.DataDir)
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one

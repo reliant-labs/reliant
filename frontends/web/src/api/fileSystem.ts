@@ -24,7 +24,6 @@ import {
   FileNodeType,
   FileSystemService,
   FileViewerKind,
-  type FileMetadata as ProtoFileMetadata,
   type FileNode as ProtoFileNode,
   type FilePreviewInfo as ProtoFilePreviewInfo,
 } from "../gen/reliant/v1/filesystem_pb";
@@ -37,30 +36,6 @@ import { useProjectStore } from "../store/projectStore";
 import { triggerGitStatusRefresh } from "../store/gitStatusStore";
 
 const client = connectClient(FileSystemService);
-
-export interface FileSystemAPI {
-  /** See {@link getFileTree} for `depth` semantics — it defaults to one level, NOT the whole tree. */
-  getFileTree: (path?: string, showHidden?: boolean, worktreeId?: string, depth?: number) => Promise<FileNode[]>;
-  getFileContent: (path: string, worktreeId?: string) => Promise<string>;
-  saveFileContent: (path: string, content: string, worktreeId?: string) => Promise<void>;
-  getFileMetadata: (path: string, worktreeId?: string) => Promise<FileMetadata>;
-  getFilePreviewInfo: (path: string, worktreeId?: string) => Promise<FilePreviewInfo>;
-  getFilePreviewBlob: (path: string, worktreeId?: string) => Promise<Blob>;
-  createFile: (path: string, content?: string, worktreeId?: string) => Promise<void>;
-  createFolder: (path: string, worktreeId?: string) => Promise<void>;
-  deleteFileOrFolder: (path: string, worktreeId?: string) => Promise<void>;
-  copyFile: (sourcePath: string, destinationPath: string, worktreeId?: string) => Promise<void>;
-  moveFile: (sourcePath: string, destinationPath: string, worktreeId?: string) => Promise<void>;
-}
-
-export interface FileMetadata {
-  name: string;
-  path: string;
-  size: number;
-  modified: string;
-  type: "file" | "directory";
-  permissions?: string;
-}
 
 export type FileViewerKindValue = "text" | "image" | "pdf" | "audio" | "video" | "binary";
 
@@ -157,17 +132,6 @@ function protoFileNodeToFrontend(proto: ProtoFileNode): FileNode {
     hasChildren: isDir ? proto.hasChildren : undefined,
     size: proto.size !== undefined ? Number(proto.size) : undefined,
     modified: proto.modified,
-  };
-}
-
-function protoMetadataToFrontend(proto: ProtoFileMetadata): FileMetadata {
-  return {
-    name: proto.name,
-    path: proto.path,
-    size: Number(proto.size),
-    modified: proto.modified,
-    type: proto.type === FileNodeType.DIRECTORY ? "directory" : "file",
-    permissions: proto.permissions || undefined,
   };
 }
 
@@ -387,32 +351,6 @@ export async function getFileContent(path: string, worktreeId?: string): Promise
   } catch (error) {
     console.error("Failed to fetch file content:", error);
     throw error; // Re-throw to let FileViewer handle it
-  }
-}
-
-/**
- * Fetches metadata for a specific file or directory
- * @param path - Path to the file or directory
- * @param worktreeId - Optional worktree ID to scope the metadata query
- * @returns Promise resolving to FileMetadata
- */
-export async function getFileMetadata(path: string, worktreeId?: string): Promise<FileMetadata> {
-  try {
-    const projectId = requireProjectId();
-    const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    const response = await client.getFileMetadata({
-      projectId,
-      path: apiPath,
-      worktreeId,
-      chatId: await activeChatIdForAPI(),
-    });
-    if (!response.metadata) {
-      throw new Error("File metadata not found");
-    }
-    return protoMetadataToFrontend(response.metadata);
-  } catch (error) {
-    console.error("Failed to fetch file metadata:", error);
-    throw error;
   }
 }
 
@@ -705,17 +643,3 @@ export async function replaceInFiles(
   triggerGitStatusRefresh(options?.worktreeId, projectId);
   return result;
 }
-
-export const fileSystemAPI: FileSystemAPI = {
-  getFileTree,
-  getFileContent,
-  saveFileContent,
-  getFileMetadata,
-  getFilePreviewInfo,
-  getFilePreviewBlob,
-  createFile,
-  createFolder,
-  deleteFileOrFolder,
-  copyFile,
-  moveFile,
-};

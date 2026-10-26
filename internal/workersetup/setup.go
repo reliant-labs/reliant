@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -382,9 +383,27 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
 			observability.NewMetricsWorkerInterceptor(),
+			observability.NewRunScopeWorkerInterceptor(chatOwners(cfg)),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
+}
+
+// chatOwners answers whose chat an activity is working on, for the run scope
+// the worker stamps on every log line (observability.NewRunScopeWorkerInterceptor).
+// A chat's owner never changes; it is read once per chat per hour.
+func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
+	if cfg.Database == nil {
+		return nil
+	}
+	repo := cfg.Database
+	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+		chat, err := repo.GetChat(ctx, chatID)
+		if err != nil || chat == nil {
+			return "", err
+		}
+		return chat.UserID, nil
+	}, time.Hour, 10000)
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

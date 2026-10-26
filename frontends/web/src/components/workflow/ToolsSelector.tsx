@@ -16,13 +16,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { api } from "../../api/client";
+import { useListTools } from "../../hooks/catalog-service-hooks_gen";
 
 interface ToolInfo {
   name: string;
   description: string;
   category: string;
 }
+
+const NO_TOOLS: ToolInfo[] = [];
 
 interface ToolsSelectorProps {
   // Currently selected tool names and/or expressions
@@ -141,26 +143,13 @@ export function ToolsSelector({
   const [isOpen, setIsOpen] = useState(false);
   // Escape closes the list, and only the list (useEscapeLayer).
   const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
-  const [tools, setTools] = useState<ToolInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // The tool catalog, on the generated ListTools entry every selector shares.
+  const toolsQuery = useListTools({});
+  const tools: ToolInfo[] = toolsQuery.data?.tools ?? NO_TOOLS;
+  const isLoading = toolsQuery.isLoading;
   const [customToken, setCustomToken] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Fetch available tools
-  useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        const response = await api.tools.list();
-        setTools(response.tools || []);
-      } catch (error) {
-        console.error("Failed to fetch tools:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchTools();
-  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {

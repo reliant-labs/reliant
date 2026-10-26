@@ -12,22 +12,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let streams: Array<() => AsyncIterable<unknown>> = [];
 const requests: unknown[] = [];
 
-vi.mock("@connectrpc/connect", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@connectrpc/connect")>();
-  return {
-    ...actual,
-    createClient: () => ({
-      streamProcessOutput: (request: unknown) => {
-        requests.push(request);
-        const next = streams.shift();
-        if (!next) throw new Error("no stream scripted for this connection");
-        return next();
-      },
-    }),
-  };
-});
-
-vi.mock("../grpc-client", () => ({ getTransport: () => ({}) }));
+// BackgroundService is reached through connectClient; answer its stream here.
+vi.mock("../../lib/connect", () => ({
+  connectClient: () => ({
+    streamProcessOutput: (request: unknown) => {
+      requests.push(request);
+      const next = streams.shift();
+      if (!next) throw new Error("no stream scripted for this connection");
+      return next();
+    },
+  }),
+}));
 
 import { ProcessOutputStreamingService } from "../process-output-streaming";
 

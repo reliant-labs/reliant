@@ -64,6 +64,13 @@ lint:
         # fails the build. Both ship at warn; reliant has no findings left.
         forgeconv-no-handler-error-mapping: error
         forgeconv-handler-connect-error: error
+        # access_tokens' scopes and resource-kind CHECKs are declared
+        # `forge:closed-set accesstoken.*`. The rule warns until v0.1.48, so a
+        # forge bump that grew AllScopes (billing:read, forge #1566) passed the
+        # merge gate and failed the release gate's DB test instead. At error,
+        # the bump's own PR fails `forge lint --closed-sets` and is fixed with
+        # `task db:migration` + `forge db migration new --closed-set <constraint>`.
+        forge-closed-set: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them

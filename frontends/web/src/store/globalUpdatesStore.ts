@@ -43,7 +43,7 @@ import { showWorkflowCompletionNotification, showWorkflowFailedNotification, sho
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
 import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
-import { setDaemonLastSeen } from "../api/grpc-client";
+import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
 import { resolveWorktree } from "../hooks/worktree-queries";

@@ -14,13 +14,13 @@ import (
 // CredentialsNone is the shell's `credentials: none` mode: the child process
 // is handed no GitHub, git, ssh or cloud credentials.
 //
-// This is NOT containment. It removes what Reliant and the daemon's own
-// environment hand a child: tokens in the environment, the Reliant git
-// credential helper, the ssh agent socket, gh's config directory. A child run
-// as the same Unix user can still read that user's files (~/.config/gh/hosts.yml,
-// ~/.git-credentials, ~/.ssh, the daemon's own credentials file) and no
-// environment can stop it. Stopping that needs the shell to run as another user
-// or in a namespace sandbox.
+// It has two halves. This package strips the environment: tokens, the Reliant
+// git credential helper, the ssh agent socket, gh's config directory. That alone
+// is not containment: a child run as the same Unix user can read that user's
+// files (~/.config/gh/hosts.yml, ~/.git-credentials, ~/.ssh, the daemon's own
+// credentials file). The other half is internal/credsandbox, which runs the
+// child in user, mount and PID namespaces where ProtectedCredentials are absent
+// (on Linux; elsewhere only the environment half applies).
 const (
 	CredentialsInherit = ""
 	CredentialsNone    = "none"

@@ -122,6 +122,17 @@ export interface TelemetryConfigInput {
   extraApiOrigins?: Array<string | undefined>;
 }
 
+/**
+ * The forge frontend names this bundle reports as (`forge.frontend`). They are
+ * the names control-plane files the build's source maps under, and the key the
+ * issues enrichment worker looks them up by: a bundle that reports none cannot
+ * be symbolicated. The hosted SPA is the `reliant-web` frontend of the
+ * `prod-web` env; the packaged app's keyed ingest key is the `desktop`
+ * frontend (deploy/kcl/lib/env.k, reliant_desktop_ingest_keys).
+ */
+export const WEB_FRONTEND = "reliant-web";
+export const DESKTOP_FRONTEND = "desktop";
+
 /** The runtime config for this build. Pure; the privacy-relevant options are fixed here. */
 export function buildTelemetryConfig(
   input: TelemetryConfigInput,
@@ -133,6 +144,7 @@ export function buildTelemetryConfig(
     // (deploy/observability/). A literal here drifted from it once, and every
     // web alert matched nothing.
     serviceName: SERVICE_NAME,
+    frontend: input.desktop ? DESKTOP_FRONTEND : WEB_FRONTEND,
     serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
     endpoint: config.OTEL_ENDPOINT || undefined,

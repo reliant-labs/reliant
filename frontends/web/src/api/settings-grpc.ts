@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { grpcClient } from "./grpc-client";
+import { connectClient } from "../lib/connect";
 import { create } from "@bufbuild/protobuf";
 import {
   fetchProviderStatuses,
@@ -11,6 +11,7 @@ import type {
   ProviderStatus as ProtoProviderStatus,
 } from "../gen/reliant/v1/settings_pb";
 import {
+  SettingsService,
   // Sub-phase 6a: Core Settings CRUD
   ListSettingsRequestSchema,
   DeleteSettingRequestSchema,
@@ -106,7 +107,7 @@ export const settingsGrpc = {
     settings: Setting[];
     total: number;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(ListSettingsRequestSchema, { projectId });
     const response = await client.listSettings(request);
     return {
@@ -126,7 +127,7 @@ export const settingsGrpc = {
     projectId?: string
   ): Promise<Setting[]> {
     if (settings.length === 0) return [];
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(BatchUpsertSettingsRequestSchema, {
       settings: settings.map((s) => ({
         key: s.key,
@@ -146,7 +147,7 @@ export const settingsGrpc = {
     success: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(DeleteSettingRequestSchema, { key, projectId });
     const response = await client.deleteSetting(request);
     return {
@@ -160,7 +161,7 @@ export const settingsGrpc = {
   // ============================================
 
   async getShortcuts(): Promise<string> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(GetShortcutsRequestSchema, {});
     const response = await client.getShortcuts(request);
     return response.shortcuts;
@@ -170,7 +171,7 @@ export const settingsGrpc = {
     success: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(UpdateShortcutsRequestSchema, { shortcuts });
     const response = await client.updateShortcuts(request);
     return {
@@ -200,7 +201,7 @@ export const settingsGrpc = {
     valid: boolean;
     message: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(ValidateProviderAPIKeyRequestSchema, {
       provider,
       apiKey,
@@ -218,7 +219,7 @@ export const settingsGrpc = {
     redirectURI: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteCodexOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -255,7 +256,7 @@ export const settingsGrpc = {
     createdKey: boolean;
     rotatedKey: boolean;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(SyncReliantProviderRequestSchema, {
       forceRotate,
     });
@@ -278,7 +279,7 @@ export const settingsGrpc = {
     state: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteClaudeOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -310,7 +311,7 @@ export const settingsGrpc = {
     redirectURI: string,
     accountId?: string
   ): Promise<SignInOutcome> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(CompleteAntigravityOAuthRequestSchema, {
       code,
       codeVerifier,
@@ -342,7 +343,7 @@ export const settingsGrpc = {
     intervalSeconds: number;
     expiresInSeconds: number;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(StartCopilotDeviceAuthRequestSchema, {});
     const response = await client.startCopilotDeviceAuth(request);
     return {
@@ -370,7 +371,7 @@ export const settingsGrpc = {
     identityMismatch?: string;
     accountLabel?: string;
   }> {
-    const client = grpcClient.settings();
+    const client = connectClient(SettingsService);
     const request = create(PollCopilotDeviceAuthRequestSchema, {
       deviceCode,
       accountId,

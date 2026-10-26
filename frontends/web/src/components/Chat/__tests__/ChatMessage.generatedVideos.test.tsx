@@ -33,8 +33,9 @@ vi.mock("../../../api/authProvider", () => ({
     hasSession: async () => true,
   }),
 }));
-vi.mock("../../../api/grpc-client", () => ({
-  getGRPCBaseURLPublic: () => "http://api.test",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "http://api.test",
 }));
 
 vi.mock("../../../hooks/attachment-queries", () => ({

@@ -23,16 +23,11 @@ const deleteTrigger = vi.fn();
 const getWorkflow = vi.fn();
 const listWorkflows = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
-  },
-}));
-
 // TriggerService, CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
     ...serviceHandlers("TriggerService", { setTriggerEnabled, deleteTrigger, listTriggers: vi.fn(async () => ({ triggers: [] })) }),
+    ...serviceHandlers("DaemonRegistryService", { listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     // The run form lists workspaces through the generated WorktreeService hooks.
     "WorktreeService.ListWorktrees": { response: { worktrees: [] } },
     ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),

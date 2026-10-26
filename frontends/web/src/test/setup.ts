@@ -81,7 +81,7 @@ vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
   originalConsoleError(...args)
 })
 
-// Stub supabase so that importing grpc-client (which eagerly calls createClient)
+// Stub supabase so that importing the Connect transport (lib/connect)
 // doesn't throw "supabaseKey is required" in the test environment.
 vi.mock('@/lib/supabase', () => ({
   supabase: {

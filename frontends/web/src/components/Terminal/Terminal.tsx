@@ -15,7 +15,7 @@ import { DaemonWaitState } from "../DaemonWaitState";
 import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { getGRPCBaseURLPublic } from "../../api/grpc-client";
+import { reliantApiBaseUrl } from "../../lib/connect";
 import { pageActivity } from "../../lib/pageActivity";
 
 interface TerminalProps {
@@ -477,7 +477,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       shellExitedRef.current = false;
 
       // Use the main gRPC base URL for terminal WebSocket connections.
-      const baseURL = getGRPCBaseURLPublic();
+      const baseURL = reliantApiBaseUrl();
       if (!baseURL) {
         logger.error("[Terminal] No gRPC base URL configured, terminal unavailable");
         term.writeln("\r\n\x1b[91mTerminal unavailable — no base URL configured.\x1b[0m");

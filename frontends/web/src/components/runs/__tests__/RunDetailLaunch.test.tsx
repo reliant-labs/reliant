@@ -74,13 +74,6 @@ const rpc = vi.hoisted(() => ({
   listProjectDaemons: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
-  },
-  setDaemonLastSeen: vi.fn(),
-}));
-
 // PresetService, RunService, the launch event and the seed-prompt read are
 // reached through connectClient (the generated hooks), so they are answered
 // at the transport by the same fakes. Integration events are named from the
@@ -101,6 +94,7 @@ beforeEach(() => {
       ...serviceHandlers("ChatService", { listMessages: rpc.listMessages }),
       "CatalogService.SearchCatalog": { response: {} },
       ...serviceHandlers("ProjectService", { listProjectDaemons: rpc.listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: rpc.listDaemons }),
     }));
 });
 afterEach(() => {

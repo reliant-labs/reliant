@@ -1,6 +1,6 @@
 import React from "react";
 import { create } from "zustand";
-import { api } from "../api/client";
+import { fetchModelList } from "../hooks/catalog-models";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
 
@@ -95,7 +95,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
 
       const [modelsResult] =
         await Promise.allSettled([
-        api.models.list().catch((error) => {
+        fetchModelList().catch((error) => {
           logger.error("[GlobalDataStore] Failed to fetch models:", error);
           throw error;
         }),
@@ -137,7 +137,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   refetchModels: async () => {
     set({ modelsLoading: true, modelsError: null });
     try {
-      const response = await api.models.list();
+      const response = await fetchModelList();
       set({
         models: response.models || [],
         tiers: response.tiers || {},
