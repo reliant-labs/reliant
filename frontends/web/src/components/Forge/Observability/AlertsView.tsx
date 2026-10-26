@@ -35,6 +35,7 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
+import { AskReliantButton } from "./AskReliant/AskReliant";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
@@ -377,6 +378,7 @@ function FiringTab({
                   <LabelChips labels={a.labels} skip={["alertname", "severity"]} />
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <AskReliantButton subject={{ kind: "alert", rule: a.rule, fingerprint: a.fingerprint, env: environments.find((env) => env.id === a.envId)?.name ?? null }} />
                   {declared && (
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule

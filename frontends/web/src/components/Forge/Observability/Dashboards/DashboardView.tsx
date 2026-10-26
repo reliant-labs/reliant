@@ -88,6 +88,7 @@ import {
   type RefreshInterval,
 } from "./dashboardModel";
 import { AlertFromPanelDialog, CREATE_ALERT_LABEL } from "./AlertFromPanelDialog";
+import { useAskReliant } from "../AskReliant/AskReliant";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
@@ -201,6 +202,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const [layout, setLayout] = useState<Dashboard | null>(null);
   const [drawer, setDrawer] = useState<{ mode: DrawerMode; panel: Panel } | null>(null);
   const [alertPanel, setAlertPanel] = useState<Panel | null>(null);
+  const { ask: askReliant, dialog: askReliantDialog } = useAskReliant({ forgeProject: project, envChoices: environments.map((candidate) => candidate.name) });
   const [removing, setRemoving] = useState<Panel | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
@@ -293,6 +295,12 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
                 : []),
               { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
               { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              {
+                label: "Ask Reliant",
+                detail: "in a new chat",
+                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: range, env: env === ENV_ALL ? null : env }),
+                testId: `dashboard-panel-ask-${panel.id}`,
+              },
               ...(editable && !layout
                 ? [{ label: "Remove panel", onSelect: () => setRemoving(panel), separated: true, testId: `dashboard-panel-remove-${panel.id}` }]
                 : []),
@@ -582,6 +590,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           }
         />
       )}
+      {askReliantDialog}
       {alertPanel && (
         <AlertFromPanelDialog panel={alertPanel} dashboardTitle={summary.title} environments={environments} env={env} services={services} onClose={() => setAlertPanel(null)} />
       )}

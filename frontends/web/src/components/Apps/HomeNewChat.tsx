@@ -17,7 +17,7 @@ import { useCallback, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import type { ComposerPrefill } from "../Chat/ChatInput";
-import { NewChatView } from "../Chat/NewChatView";
+import { MainNewChatView } from "../Chat/MainNewChatView";
 import { HomeApps } from "./HomeApps";
 import { BUILD_APP_PROMPT, START_APP } from "./appStart";
 
@@ -61,7 +61,7 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
   );
 
   return (
-    <NewChatView
+    <MainNewChatView
       tabId="new-chat"
       onNavigateToWorktrees={onNavigateToWorktrees}
       onChatCreated={building ? () => setStart(undefined) : undefined}
