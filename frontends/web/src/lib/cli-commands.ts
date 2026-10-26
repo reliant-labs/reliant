@@ -152,9 +152,13 @@ function envPrefix(): string {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** `reliant daemon start --token` with env overrides when needed. */
+/**
+ * `reliant daemon start` with env overrides when needed. With no stored
+ * credential it pairs the machine: it prints a code the person approves in the
+ * app (components/Machines/PairMachinePanel), so nothing is pasted into it.
+ */
 export function daemonStartCommand(): string {
-  return `${envPrefix()}reliant daemon start --token`;
+  return `${envPrefix()}reliant daemon start`;
 }
 
 /**

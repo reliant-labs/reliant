@@ -1888,6 +1888,86 @@ message DeployConvergence {
   google.protobuf.Timestamp healthy_at = 15;
 }
 
+// DeployAttemptState is where one `forge env deploy` invocation stands.
+//
+// RUNNING and ABANDONED are both an OPEN attempt; which one is DERIVED on read
+// from the last heartbeat, never stored — a process that died never says so.
+// The other four are the outcome the invocation reported when it exited.
+enum DeployAttemptState {
+  DEPLOY_ATTEMPT_STATE_UNSPECIFIED = 0;
+  // Open, and heartbeating.
+  DEPLOY_ATTEMPT_STATE_RUNNING = 1;
+  // forge exited 0: the phase it was asked to reach, reached. For an apply,
+  // that means the promotion was written and forge's own rollout wait (if
+  // any) passed. Whether the release STILL runs is the promotion's and the
+  // convergences' question, never this one's.
+  DEPLOY_ATTEMPT_STATE_SUCCEEDED = 2;
+  // forge exited non-zero. failed_phase and error_message say where and why.
+  DEPLOY_ATTEMPT_STATE_FAILED = 3;
+  // The promotion was recorded and is waiting on a hold (billing). It goes
+  // out on its own when the hold clears; the promotion's rollout says when.
+  DEPLOY_ATTEMPT_STATE_QUEUED = 4;
+  // Interrupted by the operator (SIGINT, a cancelled job).
+  DEPLOY_ATTEMPT_STATE_CANCELLED = 5;
+  // Open, and silent past the heartbeat window: the process died or lost
+  // the network. What it got done is in its phases and its promotion_id.
+  DEPLOY_ATTEMPT_STATE_ABANDONED = 6;
+}
+
+// DeployAttemptPhase is one phase an attempt entered, in order:
+// preflight | build | plan | promote | rollout (forge may add more; a reader
+// renders an unknown name as-is).
+message DeployAttemptPhase {
+  string name = 1;
+  google.protobuf.Timestamp started_at = 2;
+}
+
+// DeployAttempt is one `forge env deploy` invocation: who started it, which
+// environment, which release, how far it got and how it ended.
+//
+// IT HOLDS ONLY WHAT THE LEDGER CANNOT. A deploy that broke before it cut a
+// release or wrote a promotion leaves no ledger row, and it is the deploy a
+// human most needs to find. It is NOT a claim about what is running: follow
+// promotion_id to the promotion and its rollout for that.
+message DeployAttempt {
+  string id = 1;
+  string project = 2;
+  string environment_name = 3;
+  // apply | plan | rollback. `plan` is `--plan-only`: build, push, cut and
+  // compute the plan, write no promotion.
+  string mode = 4;
+  // terminal | ci | console, as forge reported it. Display only.
+  string source = 5;
+  // The release this attempt ships, once known (a no-version deploy learns it
+  // after the cut). Empty when it failed before choosing one.
+  string release_version = 6;
+  // The promotion this attempt wrote. Empty when it wrote none.
+  string promotion_id = 7;
+  DeployRun run = 8;
+  string forge_version = 9;
+  // Server-set from the caller's credential, like promoted_by_user_id.
+  string started_by_user_id = 10;
+  // Automation label when no human pressed the button.
+  string started_by_actor = 11;
+  // The phase the attempt is in, or was in when it ended.
+  string phase = 12;
+  repeated DeployAttemptPhase phases = 13;
+  DeployAttemptState state = 14;
+  // For FAILED (and ABANDONED: the phase it went silent in).
+  string failed_phase = 15;
+  string error_message = 16;
+  // forge's exit code; unset while open.
+  optional int32 exit_code = 17;
+  google.protobuf.Timestamp started_at = 18;
+  google.protobuf.Timestamp last_heartbeat_at = 19;
+  google.protobuf.Timestamp finished_at = 20;
+  // Whether a log was captured, and whether its head was dropped to keep the
+  // tail. The log itself is on GetDeployAttempt only.
+  bool has_log = 21;
+  bool log_truncated = 22;
+  bool has_report = 23;
+}
+
 // DeployLocalSession is one `forge env up` worktree, present in Live.
 //
 // WHY A LOCAL ENVIRONMENT APPEARS AT ALL. Its workloads run on a developer's

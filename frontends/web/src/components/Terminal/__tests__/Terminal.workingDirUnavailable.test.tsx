@@ -315,8 +315,8 @@ describe("Terminal with no machine on the account", () => {
       sockets[0].fail("no_machine", NO_MACHINE);
     });
 
-    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine connected");
-    expect(screen.getByRole("button", { name: "Connect a machine" })).toBeTruthy();
+    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine yet");
+    expect(screen.getByRole("button", { name: "Add machine" })).toBeTruthy();
 
     await act(async () => {
       vi.advanceTimersByTime(LONGEST_RETRY_MS * 5);

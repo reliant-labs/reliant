@@ -64,7 +64,7 @@ interface MachineStatusProps {
 
 export function MachineStatus({ daemonId, automation, className }: MachineStatusProps) {
   const daemons = useDaemonList();
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("runs");
   // The refusal itself, not its message: its reason decides whether Billing is
   // the fix (lib/daemon-resume); the copy is shared.
   const [resumeError, setResumeError] = useState<unknown>(null);

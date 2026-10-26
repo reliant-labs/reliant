@@ -34,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n, remainingSmallDaemonSeconds: 3600n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({

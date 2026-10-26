@@ -30,8 +30,8 @@ const (
 
 type CreateDaemonRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Human-readable name for the new daemon. Used for display and for the
-	// (owner, name) idempotency check inside CreateDaemon; not a lookup key.
+	// Human-readable name for the new daemon. Unique per owner: a name the owner
+	// already uses is ALREADY_EXISTS unless refresh_existing is set.
 	Name       string        `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	DaemonType v1.DaemonType `protobuf:"varint,2,opt,name=daemon_type,json=daemonType,proto3,enum=controlplane.v1.DaemonType" json:"daemon_type,omitempty"`
 	// Managed daemon fields
@@ -44,10 +44,18 @@ type CreateDaemonRequest struct {
 	Hostname string `protobuf:"bytes,8,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Platform string `protobuf:"bytes,9,opt,name=platform,proto3" json:"platform,omitempty"`
 	// Daemon enhancements
-	Size          v1.DaemonSize `protobuf:"varint,10,opt,name=size,proto3,enum=controlplane.v1.DaemonSize" json:"size,omitempty"`
-	IdleTimeout   string        `protobuf:"bytes,11,opt,name=idle_timeout,json=idleTimeout,proto3" json:"idle_timeout,omitempty"` // duration string, e.g. "30m"
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Size        v1.DaemonSize `protobuf:"varint,10,opt,name=size,proto3,enum=controlplane.v1.DaemonSize" json:"size,omitempty"`
+	IdleTimeout string        `protobuf:"bytes,11,opt,name=idle_timeout,json=idleTimeout,proto3" json:"idle_timeout,omitempty"` // duration string, e.g. "30m"
+	// What to do when the owner already has a daemon with this name.
+	//
+	// Unset (a person pressing Create): the request fails with ALREADY_EXISTS,
+	// so a second machine is never silently folded into the first. Set: the
+	// existing managed daemon is refreshed (size, image, repo) and returned —
+	// the retry-safe commit a flow that may run twice needs (onboarding names
+	// its one machine and re-sends the create on every retry).
+	RefreshExisting bool `protobuf:"varint,12,opt,name=refresh_existing,json=refreshExisting,proto3" json:"refresh_existing,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateDaemonRequest) Reset() {
@@ -155,6 +163,13 @@ func (x *CreateDaemonRequest) GetIdleTimeout() string {
 		return x.IdleTimeout
 	}
 	return ""
+}
+
+func (x *CreateDaemonRequest) GetRefreshExisting() bool {
+	if x != nil {
+		return x.RefreshExisting
+	}
+	return false
 }
 
 type CreateDaemonResponse struct {
@@ -1340,7 +1355,7 @@ var File_services_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/daemon/v1/daemon.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\"\xab\x03\n" +
+	"\x1fservices/daemon/v1/daemon.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\"\xd6\x03\n" +
 	"\x13CreateDaemonRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\vdaemon_type\x18\x02 \x01(\x0e2\x1b.controlplane.v1.DaemonTypeR\n" +
@@ -1355,7 +1370,8 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bplatform\x18\t \x01(\tR\bplatform\x12/\n" +
 	"\x04size\x18\n" +
 	" \x01(\x0e2\x1b.controlplane.v1.DaemonSizeR\x04size\x12!\n" +
-	"\fidle_timeout\x18\v \x01(\tR\vidleTimeout\"G\n" +
+	"\fidle_timeout\x18\v \x01(\tR\vidleTimeout\x12)\n" +
+	"\x10refresh_existing\x18\f \x01(\bR\x0frefreshExisting\"G\n" +
 	"\x14CreateDaemonResponse\x12/\n" +
 	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\"/\n" +
 	"\x10GetDaemonRequest\x12\x1b\n" +

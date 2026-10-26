@@ -27,15 +27,19 @@
  *
  * ── What it never does ────────────────────────────────────────────────
  *
- * Charge anything. Arming a rule and taking money are different acts, and this
- * modal only does the first. A user with no saved card is sent to billing to
- * add one rather than being asked for card details in a modal that appeared
- * unbidden over their work.
+ * Charge anything on its own. Arming a rule and taking money are different
+ * acts. "Add credit" opens the embedded top-up checkout HERE, over the work
+ * that ran out — the user's own click, their own card — instead of sending
+ * them to the billing page and leaving them there. Setting up auto-recharge
+ * without a saved card is a settings change, so that one goes to billing,
+ * carrying the way back.
  */
 
 import { useState } from "react";
-import { AlertCircle, Wallet } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { AlertCircle, CheckCircle2, Wallet } from "lucide-react";
+
+import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { InlineCreditTopup } from "./InlineCreditTopup";
 
 import Modal from "@/components/forge-ui/modal";
 // The sizing rule is shared with the billing page's auto-recharge control.
@@ -62,7 +66,6 @@ export function OutOfCreditModal({
   onClose,
   dailySpendUsd,
 }: OutOfCreditModalProps) {
-  const navigate = useNavigate();
   const autoRechargeQ = useWalletAutoRecharge(isOpen);
   const setAutoRecharge = useSetWalletAutoRecharge();
   const [error, setError] = useState("");
@@ -71,13 +74,13 @@ export function OutOfCreditModal({
   const savedCard = autoRechargeQ.data?.paymentMethod;
   const alreadyArmed = autoRechargeQ.data?.autoRecharge?.enabled ?? false;
 
+  const openBilling = useGoToBilling("credit");
   const goToBilling = () => {
     onClose();
-    void navigate({
-      to: "/settings/$section",
-      params: { section: "billing" },
-    });
+    openBilling();
   };
+  // "pick" → the offer; "topup" → the embedded checkout; "done" → settled.
+  const [stage, setStage] = useState<"pick" | "topup" | "done">("pick");
 
   const armAutoRecharge = async () => {
     setError("");
@@ -89,8 +92,8 @@ export function OutOfCreditModal({
         maxPerMonthCents: suggestion.maxPerMonthCents,
       });
       // Arming does not add credit — the rule fires on the NEXT balance check.
-      // The user still needs a top-up now, so send them where they can do it.
-      goToBilling();
+      // The user still needs a top-up now, so open it here.
+      setStage("topup");
     } catch (err) {
       setError(
         err instanceof Error
@@ -147,17 +150,26 @@ export function OutOfCreditModal({
           </dl>
         )}
 
-        <button
-          onClick={goToBilling}
-          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          data-testid="out-of-credit-topup"
-        >
-          Add credit
-        </button>
+        {stage === "done" ? (
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" role="status">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-500" aria-hidden="true" />
+            <p className="text-sm text-foreground">Credit added. Your next request will go through.</p>
+          </div>
+        ) : stage === "topup" ? (
+          <InlineCreditTopup defaultAmountCents={suggestion.amountCents} onDone={() => setStage("done")} />
+        ) : (
+          <button
+            onClick={() => setStage("topup")}
+            className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            data-testid="out-of-credit-topup"
+          >
+            Add credit
+          </button>
+        )}
 
         {/* Auto-recharge: offered, never assumed. It is off unless the user
             presses this, and it is not offered at all when it is already on. */}
-        {!alreadyArmed && (
+        {!alreadyArmed && stage === "pick" && (
           <div className="space-y-2 rounded-lg border border-border p-4">
             <div className="flex items-start gap-2">
               <Wallet
@@ -206,7 +218,7 @@ export function OutOfCreditModal({
           onClick={onClose}
           className="w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          Not now
+          {stage === "done" ? "Continue" : "Not now"}
         </button>
       </div>
     </Modal>
