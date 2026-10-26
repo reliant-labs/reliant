@@ -150,7 +150,7 @@ func verifyGate(planPath, dir string) []string {
 			problems = append(problems, fmt.Sprintf("%s failed (rc %d)", n, rc))
 		}
 	}
-	// Any other phase that ran (npm-*, build-2, test-2, typecheck-2 ...) must be green too.
+	// Any other phase that ran (npm-* ...) must be green too.
 	var extra []string
 	for n, rc := range rows {
 		if _, ok := obliged[n]; !ok && rc != 0 {

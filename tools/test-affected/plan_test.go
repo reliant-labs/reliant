@@ -263,6 +263,9 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 		"internal/vault/doc.go", "internal/handlers/chat/rpc_send.go", "internal/vault/mock_gen.go",
 		"gen/forge_descriptor.json", "deploy/observability/x.json", ".forge/hashes.json",
 		"forge.yaml", "go.mod",
+		// Generated files outside gen/ and src/gen/: a merge with main can
+		// leave one stale, and only generate re-renders it.
+		"frontends/web/src/hooks/chat-service-hooks_gen.ts", "internal/handlers/chat/handlers_scaffold_gen_test.go",
 	} {
 		pl := classify(p)
 		if !pl.ForgeGen.Full {
