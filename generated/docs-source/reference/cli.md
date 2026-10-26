@@ -676,9 +676,11 @@ Credential resolution order:
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
      earlier 'daemon start' or 'reliant daemon register').
-  3. Otherwise a browser login of its own that mints a daemon credential.
-     This is a separate credential from 'reliant auth login', which is never
-     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+  3. Otherwise it pairs the machine: it prints a short code and a link, and
+     you approve "this machine" in the Reliant app — on the link, or by typing
+     the code into the Add machine window. Nothing has to reach back to this
+     terminal, so it works over ssh. The credential it is given is separate
+     from 'reliant auth login', which is never reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
      the daemon never opens a browser: it stays resident and idle, publishing
      "awaiting_credentials" in its runtime state (see 'reliant daemon
      status'), and polls for a credential to appear on disk. Electron spawns

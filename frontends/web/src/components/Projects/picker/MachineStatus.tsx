@@ -14,7 +14,7 @@ import { deleteDaemon } from "@/services/controlPlane/daemon";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
-import { ConnectDaemonModal } from "../ConnectDaemonModal";
+import { AddMachineSheet } from "../../Machines/AddMachineSheet";
 import { failureReason, isFailedDaemon } from "../cloneTargets";
 import { cloudDaemonStatusLabel } from "../cloudDaemonStatusLabel";
 import { isLocalDaemonType } from "../addProjectActions";
@@ -56,11 +56,10 @@ function machineKindLabel(daemonType: string | undefined): string {
   return "Machine";
 }
 
-// ConnectDaemonModal pulls eligibility and billing hooks on mount, so it is
-// only mounted while open. That also resets its step whenever it is reopened.
+// The one Add machine sheet. Kept mounted so a machine still starting after
+// "Keep working" reports when it is ready.
 function ConnectMachineModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
-  return <ConnectDaemonModal isOpen onClose={onClose} />;
+  return <AddMachineSheet open={open} onClose={onClose} />;
 }
 
 const STRIP = "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2";

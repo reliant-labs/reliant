@@ -12,12 +12,14 @@
  * same-origin completion (no Stripe redirect) reflects immediately.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import type { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
+import { hasErrorReason } from "@/lib/errorReasons";
 
 function billingClient() {
   return getControlPlaneClient(BillingService);
@@ -47,8 +49,19 @@ export class CheckoutIdentityRequiredError extends Error {
   }
 }
 
+/**
+ * Also true for the server's `billing_email_missing`: it means the account
+ * has no email to bill (the server falls back from the confirmed billing
+ * email to the user's own and then the session's), which is the same ask —
+ * so the checkout shows the same account prompt, in place, and retries.
+ */
 export function isCheckoutIdentityRequired(err: unknown): boolean {
-  return err instanceof CheckoutIdentityRequiredError;
+  if (err instanceof CheckoutIdentityRequiredError) return true;
+  return (
+    err instanceof ConnectError &&
+    err.code === Code.InvalidArgument &&
+    hasErrorReason(err, "billing_email_missing")
+  );
 }
 
 /**

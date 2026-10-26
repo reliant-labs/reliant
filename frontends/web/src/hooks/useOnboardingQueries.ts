@@ -1,3 +1,4 @@
+import { computeEligibilityQueryKey } from './computeEligibilityKey';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { DAEMON_LIST_FALLBACK_POLL_MS } from '@/hooks/useDaemonStatus';
@@ -86,7 +87,7 @@ export function useCurrentUser() {
   });
 }
 
-export const computeEligibilityQueryKey = ['onboarding', 'computeEligibility'] as const;
+export { computeEligibilityQueryKey };
 
 // Every string here names what the user can DO, not just what they lack.
 // NO_SUBSCRIPTION is the common case now that the signup auto-grant is gone —

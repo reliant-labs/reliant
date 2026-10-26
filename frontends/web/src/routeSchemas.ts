@@ -380,7 +380,11 @@ export const settingsSearchSchema = z.object({
   // mid-wizard had no way home. `forge`: an environment whose deploy is queued
   // on billing; the way back is its page. `connectors`: the retired
   // /settings/connectors redirect, so Machines can say where Connectors went.
-  from: z.enum(["onboarding", "forge", "connectors"]).optional(),
+  // Every other value is a surface that sent the user to billing
+  // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
+  from: z
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade"])
+    .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.

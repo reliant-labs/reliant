@@ -155,6 +155,7 @@ describe("addRepoProject", () => {
       size: 1,
       gitRepo: CLONE_URL,
       gitBranch: "main",
+      refreshExisting: true,
     });
   });
 

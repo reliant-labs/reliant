@@ -64,6 +64,7 @@ import {
   isPlanDetailUnavailable,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
+import type { BillingOrigin } from "@/hooks/useGoToBilling";
 import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
@@ -162,7 +163,7 @@ export function BillingSection() {
     tab?: BillingTab;
     checkout?: "success" | "cancelled";
     planId?: string;
-    from?: "onboarding" | "forge";
+    from?: BillingOrigin | "connectors";
     returnTo?: string;
   };
   // An inbound `?tab=invoices` is a real link somebody has; it resolves to the
@@ -207,6 +208,9 @@ export function BillingSection() {
       )}
       {search.from === "forge" && (
         <BackToEnvironment returnTo={search.returnTo} />
+      )}
+      {search.from && search.from !== "onboarding" && search.from !== "forge" && search.from !== "connectors" && (
+        <BackToOrigin returnTo={search.returnTo} />
       )}
 
       {search.checkout && (
@@ -435,6 +439,30 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
         leftIcon={<ArrowLeft />}
       >
         Back to environment
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The way back for every other surface that sent the user here (a chat, a
+ * machine, a run, the inbox). Payment happens in place on those surfaces, so
+ * a visit here is to compare plans or change a setting — and it must never be
+ * a dead end. `returnTo` is guarded like BackToSetup's; without a usable one
+ * there is nowhere specific to go back to and nothing renders.
+ */
+function BackToOrigin({ returnTo }: { returnTo?: string }) {
+  const navigate = useNavigate();
+  const safeReturnTo = sameOriginPath(returnTo);
+  if (!safeReturnTo) return null;
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3"
+      data-testid="billing-back-to-origin"
+    >
+      <p className="text-sm text-muted-foreground">Done here? Pick up where you left off.</p>
+      <Button size="md" variant="outline" onClick={() => void navigate({ href: safeReturnTo })} leftIcon={<ArrowLeft />}>
+        Back to where you were
       </Button>
     </div>
   );

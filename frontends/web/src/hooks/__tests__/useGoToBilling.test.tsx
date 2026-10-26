@@ -27,13 +27,14 @@ beforeEach(() => {
 
 describe("useGoToBilling", () => {
   it("sends an anonymous user straight to billing, no identity detour", () => {
-    const { result } = renderHook(() => useGoToBilling());
+    window.history.pushState({}, "", "/chat/c1");
+    const { result } = renderHook(() => useGoToBilling("chat"));
     act(() => result.current());
 
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/settings/$section",
       params: { section: "billing" },
-      search: { tab: "plans", from: undefined, returnTo: undefined },
+      search: { tab: "plans", from: "chat", returnTo: "/chat/c1" },
     });
     // The /upgrade interstitial is gone: the ask now happens at purchase.
     expect(mockNavigate).not.toHaveBeenCalledWith(
@@ -42,7 +43,7 @@ describe("useGoToBilling", () => {
   });
 
   it("deep-links to the Plans tab, not the Overview dashboard", () => {
-    const { result } = renderHook(() => useGoToBilling());
+    const { result } = renderHook(() => useGoToBilling("machines"));
     act(() => result.current());
 
     expect(mockNavigate).toHaveBeenCalledWith(
@@ -110,17 +111,18 @@ describe("useGoToBilling", () => {
     );
   });
 
-  it("does not capture a return URL when the caller is not onboarding", () => {
-    // Settings and the chat shell are already where the user wants to be; a
-    // returnTo would be noise in the URL and a needless open-redirect surface.
-    window.history.pushState({}, "", "/settings/general");
+  it("always carries the way back, from every surface", () => {
+    // Every trip to billing is a detour from something: a machine, a chat, a
+    // run. Billing offers "Back to where you were" for each (it validates the
+    // path as same-origin before navigating to it).
+    window.history.pushState({}, "", "/settings/environments/d-1");
 
-    const { result } = renderHook(() => useGoToBilling());
+    const { result } = renderHook(() => useGoToBilling("machines"));
     act(() => result.current());
 
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        search: expect.objectContaining({ returnTo: undefined }),
+        search: expect.objectContaining({ from: "machines", returnTo: "/settings/environments/d-1" }),
       }),
     );
   });
