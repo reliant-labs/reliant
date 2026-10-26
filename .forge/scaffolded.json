@@ -1271,6 +1271,12 @@
     "internal/store/workflow_scenario_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:02Z"
     },
+    "internal/store/worktree_recovery_checkout_repo_ext.go": {
+      "scaffolded_at": "2026-10-25T18:54:33Z"
+    },
+    "internal/store/worktree_recovery_repo_ext.go": {
+      "scaffolded_at": "2026-10-25T18:54:33Z"
+    },
     "internal/store/worktree_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:02Z"
     }

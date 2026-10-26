@@ -8,6 +8,60 @@ import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
+// Recovery metadata contains no credentials or file bytes. Remote branches
+// inherit repository visibility and remain until explicit deletion.
+message WorktreeRecovery {
+  string id = 1;
+  string source_worktree_id = 2;
+  string project_id = 3;
+  string daemon_id = 4;
+  string capture_id = 5;
+  string phase = 6;
+  string last_error = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  repeated WorktreeRecoveryCheckout checkouts = 10;
+  // Durable retry identity; contains no credentials or file content.
+  string operation = 11;
+  string operation_key = 12;
+  string target_daemon_id = 13;
+}
+
+message WorktreeRecoveryCheckout {
+  string repo_id = 1;
+  string rel = 2;
+  string remote_url = 3;
+  string recovery_ref = 4;
+  string commit_oid = 5;
+  string manifest_digest = 6;
+  string phase = 7;
+  string last_error = 8;
+}
+
+message ListWorktreeRecoveriesRequest {
+  optional string project_id = 1;
+  optional string source_worktree_id = 2;
+}
+message ListWorktreeRecoveriesResponse {
+  repeated WorktreeRecovery recoveries = 1;
+}
+message RestoreWorktreeRecoveryRequest {
+  string recovery_id = 1 [(buf.validate.field).string.min_len = 1];
+  string target_daemon_id = 2 [(buf.validate.field).string.min_len = 1];
+  string idempotency_key = 3 [(buf.validate.field).string.min_len = 1];
+}
+message RestoreWorktreeRecoveryResponse {
+  WorktreeRecovery recovery = 1;
+  string worktree_id = 2;
+}
+message DeleteWorktreeRecoveryRequest {
+  string recovery_id = 1 [(buf.validate.field).string.min_len = 1];
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+}
+message DeleteWorktreeRecoveryResponse {
+  WorktreeRecovery recovery = 1;
+}
+
 // WorktreeStatus tracks the lifecycle of a worktree
 enum WorktreeStatus {
   WORKTREE_STATUS_UNSPECIFIED = 0;
@@ -29,6 +83,14 @@ enum WorktreeStatus {
 
 // WorktreeService handles worktree-related operations
 service WorktreeService {
+  // Owner-scoped durable recovery catalog, independent of source row lifetime.
+  // forge:custom — owner authorization and retained catalog semantics.
+  rpc ListWorktreeRecoveries(ListWorktreeRecoveriesRequest) returns (ListWorktreeRecoveriesResponse) {}
+  // Restores into a separate worktree; never resets an existing branch.
+  rpc RestoreWorktreeRecovery(RestoreWorktreeRecoveryRequest) returns (RestoreWorktreeRecoveryResponse) {}
+  // Explicit exact-ref deletion only; not called on source removal or restore.
+  // forge:custom — journals exact remote ref deletion; never CRUD row deletion.
+  rpc DeleteWorktreeRecovery(DeleteWorktreeRecoveryRequest) returns (DeleteWorktreeRecoveryResponse) {}
   // CRUD Operations
   // CreateWorktree creates ONE workspace-level worktree for the project.
   // The daemon enumerates the project's nested repos and fans out N

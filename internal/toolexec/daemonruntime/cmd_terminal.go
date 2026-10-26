@@ -59,6 +59,11 @@ type terminalCreateResponse struct {
 }
 
 func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
+	releaseRecovery, err := beginRecoveryWork()
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	tm := terminalManager()
 	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")

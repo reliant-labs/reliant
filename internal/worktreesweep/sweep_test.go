@@ -317,29 +317,33 @@ func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
 	assert.True(t, exists(path))
 }
 
-func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
+func TestSweep_DoesNotShedFilesFromDirtyRecoveryCandidate(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
 	wt, path := e.worktree(t, "shed", true)
-	// An untracked .gitignore is both the reason it is held (dirty) and what
-	// makes node_modules ignored, so regenerable.
+	// Ignored directory naming alone is not durable eligibility proof. Dirty
+	// recovery candidates must not be stripped while preservation is held.
 	require.NoError(t, os.WriteFile(filepath.Join(path, ".gitignore"), []byte("node_modules/\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(path, "node_modules", "pkg"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(path, "node_modules", "pkg", "index.js"), []byte("module.exports = 1\n"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 
 	assert.True(t, exists(filepath.Join(path, ".gitignore")), "the work is kept")
-	assert.False(t, exists(filepath.Join(path, "node_modules")), "regenerable files are shed")
+	assert.True(t, exists(filepath.Join(path, "node_modules")), "held recovery candidates retain ignored content")
+	data, err := os.ReadFile(filepath.Join(path, "node_modules", "pkg", "index.js"))
+	require.NoError(t, err)
+	assert.Equal(t, "module.exports = 1\n", string(data))
 	meta := e.get(t, wt.ID).CleanupMetadata
 	require.NotNil(t, meta)
 	assert.Equal(t, "dirty", meta.HeldReason)
-	assert.Equal(t, []string{"node_modules"}, meta.StrippedPaths)
-	assert.Positive(t, meta.StrippedBytes)
+	assert.Empty(t, meta.StrippedPaths)
+	assert.Zero(t, meta.StrippedBytes)
+	assert.False(t, meta.DirectoryDeleted)
 }
 
-func TestSweep_SavesUnpushedCommitsThenRemovesAndRecordsTheRefs(t *testing.T) {
+func TestSweep_UnpushedCommitsRequireRemoteRecoveryProof(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
@@ -353,11 +357,14 @@ func TestSweep_SavesUnpushedCommitsThenRemovesAndRecordsTheRefs(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
-	assert.False(t, exists(path), "commits only it held are saved, so it is removed")
+	assert.True(t, exists(path), "local-only history must remain without an independent remote receipt")
 	meta := e.get(t, wt.ID).CleanupMetadata
 	require.NotNil(t, meta)
-	assert.True(t, meta.DirectoryDeleted)
-	require.Len(t, meta.SnapshotRefs, 1, "the saved commit is recorded on the row")
-	assert.Contains(t, meta.SnapshotRefs[0], "refs/reliant/wip/"+wt.ID+"/root/orphans/head-")
-	assert.Equal(t, sha, git(t, e.project.Path, "rev-parse", meta.SnapshotRefs[0]))
+	assert.False(t, meta.DirectoryDeleted)
+	assert.NotEmpty(t, meta.HeldReason)
+	assert.Empty(t, meta.SnapshotRefs, "local refs cannot claim durable preservation")
+	assert.Equal(t, sha, git(t, path, "rev-parse", "HEAD"))
+	data, err := os.ReadFile(filepath.Join(path, "only-here.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "x\n", string(data))
 }

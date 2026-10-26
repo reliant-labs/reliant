@@ -147,10 +147,11 @@ type autoArchive struct {
 
 // Sweeper settles worktree directories through their daemons.
 type Sweeper struct {
-	store  Store
-	sender Sender
-	keep   KeepFilesSetting
-	auto   *autoArchive
+	store    Store
+	sender   Sender
+	keep     KeepFilesSetting
+	auto     *autoArchive
+	recovery *recoveryEngine
 	// candidates and archived count this pass's finished active worktrees.
 	idleDone      atomic.Int64
 	blockedByChat atomic.Int64
@@ -264,6 +265,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	liveByUser := map[string][]core.WorktreePath{}
 	guardSince := map[string]time.Time{}
 	for userID, userCands := range byUser {
+		s.reconcileRecoveryJournals(ctx, userID)
 		live, err := s.store.ListLiveWorktreePathsForUser(ctx, userID)
 		if err != nil {
 			logging.WarnContext(ctx, "[WorktreeSweep] could not list live worktree paths", "userID", userID, "error", err)
@@ -551,6 +553,16 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		if c == nil {
 			continue
 		}
+		if c.Worktree.DeletedAt == nil && s.recovery != nil && s.recovery.enabled && s.auto != nil && s.auto.mode == AutoArchiveOn {
+			for _, w := range req.Worktrees {
+				if w.ID == r.ID {
+					s.recoverHeld(ctx, t, c, w)
+					break
+				}
+			}
+			// Apply the lock/probe reply normally; metadata merge checks current
+			// archive state so an enrollment cannot resurrect the source row.
+		}
 		if r.Outcome == worktreereclaim.OutcomeClaimed {
 			// Commits saved before the claim are recorded whatever happens
 			// next: the refs exist either way.
@@ -569,6 +581,18 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 					second = append(second, w)
 				}
 			}
+			continue
+		}
+		handledRecovery := false
+		if r.Outcome == worktreereclaim.OutcomeHeld && (r.Reason == worktreereclaim.ReasonDirty || r.Reason == worktreereclaim.ReasonUnpushed || r.Reason == worktreereclaim.ReasonUnreachable) {
+			for _, w := range req.Worktrees {
+				if w.ID == r.ID {
+					handledRecovery = s.recoverHeld(ctx, t, c, w)
+					break
+				}
+			}
+		}
+		if handledRecovery {
 			continue
 		}
 		s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)

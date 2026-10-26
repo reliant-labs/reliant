@@ -53,6 +53,10 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
+	m.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
 	m.ListTriggersFunc = func(ctx context.Context, _ core.TriggerFilters) ([]*core.Trigger, error) {
 		r.enter(ctx, hold)
 		return []*core.Trigger{trg}, nil

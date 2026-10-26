@@ -87,7 +87,7 @@ func TestGitProcessesPerPass(t *testing.T) {
 		setup  func(f *fixture, w Worktree)
 	}{
 		{"clean, on main", 31, func(*fixture, Worktree) {}},
-		{"unpushed commit, saved then removed", 54, func(f *fixture, w Worktree) {
+		{"unpushed commit, held for remote recovery", 54, func(f *fixture, w Worktree) {
 			commit(f.t, w.Path, "b.txt", "b\n")
 		}},
 		{"squash-merged and pruned", 40, func(f *fixture, w Worktree) {
@@ -105,7 +105,11 @@ func TestGitProcessesPerPass(t *testing.T) {
 			c := &gitCounter{}
 			got := f.oneIn(c.counting(context.Background()), w)
 			n, by := c.take()
-			if got.Outcome != OutcomeRemoved {
+			if strings.HasPrefix(tc.name, "unpushed") {
+				if got.Outcome != OutcomeHeld || !exists(w.Path) || len(got.SnapshotRefs) != 0 {
+					t.Fatalf("got %+v, want held without local snapshot fallback", got)
+				}
+			} else if got.Outcome != OutcomeRemoved {
 				t.Fatalf("got %+v, want removed", got)
 			}
 			t.Logf("%d git processes: %s", n, by)

@@ -52,6 +52,12 @@ func (r *orderRepo) write(dir, name string) {
 // timeout of the race-enabled release gate.
 func newOrderRepo(t *testing.T, onMain ...string) *orderRepo {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("creates, clones and fetches real git repositories; runs in task test, skipped under -short")
+	}
+	// Each fixture owns its origin and working trees. Let these subprocess-heavy
+	// tests overlap in the full tier instead of accumulating serial git latency.
+	t.Parallel()
 	base := t.TempDir()
 	r := &orderRepo{t: t, origin: filepath.Join(base, "origin.git"), clone: filepath.Join(base, "clone")}
 	r.git(base, "init", "-q", "--bare", "-b", "main", r.origin)
@@ -249,6 +255,9 @@ func TestFetchFailureFailsClosed(t *testing.T) {
 }
 
 func TestNoBaseRefFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("initializes a real git repository; runs in task test, skipped under -short")
+	}
 	t.Parallel()
 	dir := t.TempDir()
 	cmd := exec.Command("git", "init", "-q", "-b", "main")
@@ -309,6 +318,33 @@ func TestMigrationOrderCommandExitCodes(t *testing.T) {
 	errOut.Reset()
 	if code := runMigrationOrder([]string{"-root", r.clone}, &out, &errOut); code != 0 {
 		t.Fatalf("exit = %d, want 0\nstdout: %s\nstderr: %s", code, out.String(), errOut.String())
+	}
+}
+
+// Keep filename validation in the fast tier; the real-git order checks above
+// exercise the repository boundary only in the full tier.
+func TestParseMigration(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version uint64
+		stem    string
+		ok      bool
+	}{
+		{"20261024035148_head.up.sql", 20261024035148, "head", true},
+		{"00001_baseline.up.sql", 1, "baseline", true},
+		{"18446744073709551615_max.up.sql", ^uint64(0), "max", true},
+		{"18446744073709551616_overflow.up.sql", 0, "", false},
+		{"20261024035148_head.down.sql", 0, "", false},
+		{"20261024035148_.up.sql", 0, "", false},
+		{"head.up.sql", 0, "", false},
+		{"README.md", 0, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			version, stem, ok := parseMigration(tc.name)
+			if version != tc.version || stem != tc.stem || ok != tc.ok {
+				t.Fatalf("parseMigration(%q) = (%d, %q, %v), want (%d, %q, %v)", tc.name, version, stem, ok, tc.version, tc.stem, tc.ok)
+			}
+		})
 	}
 }
 
