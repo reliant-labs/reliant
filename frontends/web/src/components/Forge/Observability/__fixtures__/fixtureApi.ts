@@ -41,6 +41,7 @@ import type {
   PanelResult,
   SeriesIntent,
   ServiceHealth,
+  ServiceSignalsResult,
   Severity,
   Span,
   TimeWindow,
@@ -832,6 +833,12 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   empty?: boolean;
   /** Called for each RPC, with its request — tests assert on what was asked. */
   onCall?: (rpc: string, request: unknown) => void;
+  /**
+   * GetServiceSignals' answer. Unset, the RPC answers Unimplemented, as a
+   * control plane that predates it does: nothing is known of any service's
+   * signals, so every view stays offered.
+   */
+  signals?: ServiceSignalsResult;
 }
 
 export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi {
@@ -921,6 +928,11 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         availableProfileTypes: ["cpu", "alloc_space", "inuse_space", "goroutine"],
         truncated: false,
       })),
+    getServiceSignals: (req) =>
+      call("GetServiceSignals", req, () => {
+        if (!options.signals) throw new ConnectError("unknown procedure controlplane.v1.ObservabilityService/GetServiceSignals", Code.Unimplemented);
+        return options.signals;
+      }),
     getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
     ...createDashboardFixture(options, call),
     ...createAlertingFixture(options, call),

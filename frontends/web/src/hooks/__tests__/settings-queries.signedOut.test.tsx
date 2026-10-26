@@ -25,7 +25,6 @@ vi.mock("../../api/client", () => ({
   api: {
     settings: {
       getProviders: () => getProviders(),
-      getPreferences: () => getPreferences(),
     },
   },
 }));

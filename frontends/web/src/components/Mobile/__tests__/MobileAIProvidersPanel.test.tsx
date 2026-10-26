@@ -1,6 +1,6 @@
 /**
  * MobileAIProvidersPanel — pins that it writes through the exact same
- * `api.settings.*` calls, OAuth hooks, and `onboardingService` desktop
+ * `api.settings.*` calls, preferences hooks, OAuth hooks, and `onboardingService` desktop
  * `CombinedGeneralSettings` uses (a divergent write path here would be a
  * real bug, not a UI difference — see the module comment), and that no
  * interactive element falls under the 44px touch-target floor.
@@ -8,7 +8,7 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import { renderWithQuery as render } from "../../../test/renderWithQuery";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,8 +36,6 @@ vi.mock("../../../api/client", () => ({
       updateProvider: mocks.updateProvider,
       deleteProvider: mocks.deleteProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
-      getPreferences: mocks.getPreferences,
-      updatePreferences: mocks.updatePreferences,
     },
   },
 }));
@@ -83,6 +81,9 @@ vi.mock("../../../lib/events", () => ({
 }));
 
 const { MobileAIProvidersPanel } = await import("../MobileAIProvidersPanel");
+const { setTransport } = await import("../../../lib/connect");
+const { mockTransport } = await import("../../../lib/test-utils");
+const { useAuthStore } = await import("../../../store/authStore");
 
 function renderPanel(providers: Array<{
   provider: string;
@@ -109,6 +110,19 @@ beforeEach(() => {
   mocks.codexStart.mockReset();
   mocks.copilotStart.mockReset();
   mocks.copilotReset.mockReset();
+  // Preferences are SettingsService reads/writes through the generated hooks.
+  useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(
+    mockTransport({
+      "SettingsService.GetPreferences": () => mocks.getPreferences(),
+      "SettingsService.UpdatePreferences": (req) => mocks.updatePreferences(req),
+    }),
+  );
+});
+
+afterEach(() => {
+  setTransport(null);
+  useAuthStore.setState({ session: null });
 });
 
 describe("MobileAIProvidersPanel", () => {
@@ -255,8 +269,8 @@ describe("MobileAIProvidersPanel", () => {
     vi.doUnmock("../../../hooks/useOnboardingQueries");
   });
 
-  it("writes the streaming toggle through the same api.settings.updatePreferences call desktop uses", async () => {
-    mocks.getPreferences.mockResolvedValue({ streaming_enabled: false });
+  it("writes the streaming toggle through the same useUpdatePreferences write desktop uses", async () => {
+    mocks.getPreferences.mockResolvedValue({ streamingEnabled: false });
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
     renderPanel();
@@ -265,7 +279,7 @@ describe("MobileAIProvidersPanel", () => {
     await user.click(toggle);
 
     await waitFor(() =>
-      expect(mocks.updatePreferences).toHaveBeenCalledWith({ streaming_enabled: true }),
+      expect(mocks.updatePreferences).toHaveBeenCalledWith(expect.objectContaining({ streamingEnabled: true })),
     );
   });
 

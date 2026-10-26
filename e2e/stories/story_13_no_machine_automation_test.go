@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -118,14 +117,14 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 
 	launched := core.TriggerEventLaunched
 	var event *core.TriggerEvent
-	require.Eventually(t, func() bool {
+	h.eventually("the fire to launch a run", func() (bool, string) {
 		ev, err := h.Stack.Repo.GetLatestTriggerEvent(h.Ctx, trigger.GetId(), &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			event = ev
-			return true
+			return true, ""
 		}
-		return false
-	}, 60*time.Second, 100*time.Millisecond, "the fire never launched a run")
+		return false, fmt.Sprintf("latest launched event: %v (err %v)", ev, err)
+	})
 
 	chat := h.Chat(*event.ChatID)
 	assert.True(t, chat.NoMachine, "the launched chat records that it has no machine")

@@ -87,15 +87,11 @@ vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
   }),
 }))
 
-vi.mock('../../../store/preferencesStore', () => ({
-  DEFAULT_WORKFLOW: 'builtin://agent',
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      preferences: { defaultWorkflow: 'builtin://forge-one-shot' },
-      isLoading: false,
-      loadPreferences: vi.fn(),
-      isWorkflowHidden: () => false,
-    }),
+const hidden = vi.hoisted(() => ({ isWorkflowHidden: () => false, isPresetHidden: () => false }))
+vi.mock('../../../hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/settings-queries')>()),
+  useDefaultWorkflow: () => 'builtin://forge-one-shot',
+  useHiddenItems: () => hidden,
 }))
 
 vi.mock('../../../lib/analytics', () => ({ trackEvent: vi.fn() }))

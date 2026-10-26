@@ -17,8 +17,8 @@ vi.mock("@sentry/react", () => ({
   ),
 }));
 
-vi.mock("../store/privacyStore", () => ({
-  getPrivacySettings: () => ({ analyticsEnabled: true }),
+vi.mock("../hooks/privacy-queries", () => ({
+  privacyConsent: () => ({ analyticsEnabled: true }),
 }));
 
 // isDev must be false or the whole pipe is intentionally inert.
@@ -203,8 +203,8 @@ describe("ClickStack prop keys", () => {
 
   it("sends nothing when analytics consent is off", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: false }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: false }),
     }));
     vi.doMock("./constants", () => ({ isDev: false }));
     vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
@@ -218,8 +218,8 @@ describe("ClickStack prop keys", () => {
 
   it("sends nothing in dev", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: true }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: true }),
     }));
     vi.doMock("./constants", () => ({ isDev: true }));
     vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
@@ -237,8 +237,8 @@ describe("privacy and dev gating", () => {
 
   it("sends nothing when the user has disabled analytics", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: false }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: false }),
     }));
     vi.doMock("./constants", () => ({ isDev: false }));
 
@@ -251,8 +251,8 @@ describe("privacy and dev gating", () => {
 
   it("sends nothing in dev", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: true }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: true }),
     }));
     vi.doMock("./constants", () => ({ isDev: true }));
 

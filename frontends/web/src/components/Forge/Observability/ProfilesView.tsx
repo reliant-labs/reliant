@@ -59,6 +59,7 @@ export function ProfilesView({
           includeAll={false}
           onChange={(next) => navigate({ service: next }, { replace: true })}
           id="obs-profile-service"
+          signal="profiles"
         />
         <label htmlFor="obs-profile-type" className="sr-only">
           Profile type

@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { create } from "@bufbuild/protobuf";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ShieldAlert, Plus, Github } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
 import {
-  ListConnectorsRequestSchema,
-  ListAvailableToolsRequestSchema,
   AuthorizeClientRequestSchema,
   CreateConnectorRequestSchema,
   ConnectorExecMode,
@@ -13,8 +11,12 @@ import type {
   Connector,
   ConnectorTool,
 } from "../../gen/reliant/v1/connector_pb";
-import { ListDaemonsRequestSchema } from "../../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
+import {
+  connectorServiceQueries,
+  useAuthorizeClient,
+} from "../../hooks/connector-service-hooks_gen";
+import { fetchDaemonList } from "../../hooks/daemon-registry-queries";
 import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
 import Input from "../forge-ui/input";
@@ -50,14 +52,6 @@ import { machineDisplayName } from "@/lib/machineName";
  */
 function isPersonalMachine(d: DaemonInfo): boolean {
   return d.daemonType !== "managed";
-}
-
-/** The machines this user can bind a connector to, from reliant's registry. */
-async function fetchDaemons(): Promise<DaemonInfo[]> {
-  const res = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema, {}));
-  return res.daemons;
 }
 
 /**
@@ -112,6 +106,8 @@ export function ConnectorConsent({
    */
   busy?: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const authorizeClient = useAuthorizeClient();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [tools, setTools] = useState<ConnectorTool[]>([]);
   const [daemons, setDaemons] = useState<DaemonInfo[]>([]);
@@ -156,10 +152,12 @@ export function ConnectorConsent({
   const load = useCallback(async () => {
     try {
       setError(null);
-      const client = grpcClient.connector();
+      // Through the generated entries, so the Machines page's grant list and
+      // this screen share one cache. The grant list is always read fresh: the
+      // choice of which grant to bind is made from it.
       const [connectorsRes, toolsRes] = await Promise.all([
-        client.listConnectors(create(ListConnectorsRequestSchema, {})),
-        client.listAvailableTools(create(ListAvailableToolsRequestSchema, {})),
+        queryClient.fetchQuery(connectorServiceQueries.listConnectors({}, { staleTime: 0 })),
+        queryClient.fetchQuery(connectorServiceQueries.listAvailableTools({})),
       ]);
 
       const live = connectorsRes.connectors.filter((c) => !c.revokedAt);
@@ -176,8 +174,10 @@ export function ConnectorConsent({
         setMode("new");
       }
 
+      // The machines this user can bind a connector to: a fresh read of the
+      // one daemon list (hooks/daemon-registry-queries).
       try {
-        setDaemons(await fetchDaemons());
+        setDaemons(await fetchDaemonList(queryClient));
       } catch {
         setDaemons([]);
       }
@@ -187,7 +187,7 @@ export function ConnectorConsent({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     load();
@@ -267,7 +267,7 @@ export function ConnectorConsent({
 
         let current: DaemonInfo[] = [];
         try {
-          current = await fetchDaemons();
+          current = await fetchDaemonList(queryClient);
         } catch {
           // A transient list failure during provisioning is not fatal; the
           // next tick retries until the deadline.
@@ -471,7 +471,9 @@ export function ConnectorConsent({
               }),
             });
 
-      await grpcClient.connector().authorizeClient(req);
+      // A generated write: it refetches every ConnectorService read, so the
+      // Machines page shows a grant created here.
+      await authorizeClient.mutateAsync(req);
       // The grant and binding now exist. Inside the OAuth flow the caller
       // takes over from here (approve, then redirect), so the "connected"
       // screen below would be a dead end shown over a live flow — leave the

@@ -61,7 +61,6 @@ afterEach(() => {
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
-import { usePreferencesStore } from "@/store/preferencesStore";
 import { PresetConfigModal } from "../PresetConfigModal";
 import { PresetEditModal } from "../PresetEditModal";
 import { PresetList } from "../PresetList";
@@ -96,13 +95,6 @@ beforeEach(() => {
   mocks.createPreset.mockResolvedValue({ success: true });
   mocks.updatePreset.mockResolvedValue({ success: true });
   mocks.deletePreset.mockResolvedValue({ success: true });
-  // The modals read preferences; a loaded, empty set keeps them off the network.
-  usePreferencesStore.setState({
-    preferences: {} as never,
-    loadPreferences: vi.fn(async () => undefined),
-    isPresetHidden: () => false,
-    togglePresetVisibility: vi.fn(async () => undefined),
-  } as never);
 });
 
 describe("PresetConfigModal", () => {

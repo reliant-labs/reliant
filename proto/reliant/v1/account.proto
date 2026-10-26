@@ -26,7 +26,13 @@ service AccountService {
   // destroying anything. The UI shows these counts in the confirmation dialog
   // so the user sees the actual scale of what they are about to lose rather
   // than a generic warning.
-  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {}
+  //
+  // It only reads (row counts here, the wallet quote from the control plane),
+  // and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
+  // it forge generates a mutation hook for it.
+  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteAccount permanently removes every row reliant holds for the caller.
   // Irreversible: there is no soft-delete and no undo.

@@ -7861,6 +7861,16 @@ HyperDX-format file (with "tiles") is for the local HyperDX only and is not ship
 
 Errors carry the file, line and column of the offending value.
 
+--against <env> also checks every metrics panel against that env's telemetry over
+--since (default 24h): a series whose metric is stored as a different kind than
+its metricType fails the check (the panel reads the wrong table, or refuses its
+aggregation), and a series whose metric has no data at all is reported. No data
+is often a misspelt name or one the collector drops before storage, and sometimes
+a counter that only exists once something fails; --strict fails on it too.
+
+  cli forge obs dashboards check --against prod
+  cli forge obs dashboards check --against dev --since 6h --strict
+
 ```
 reliant forge obs dashboards check [flags]
 ```
@@ -7869,7 +7879,11 @@ reliant forge obs dashboards check [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--against` | `string` | - | also check every metrics panel against this env's telemetry |
+| `--backend` | `string` | - | with --against: local | cloud (default: from the env's declaration) |
 | `--output`, `-o` | `string` | `bin` | build output directory holding observability/metrics-schema.json |
+| `--since` | `duration` | `24h0m0s` | with --against: the window a metric must have data in |
+| `--strict` | `bool` | - | with --against: a metric with no data in the window fails the check too |
 
 ---
 
@@ -7957,6 +7971,7 @@ Triage needs a hosted env: a local issue is a query over logs and has no state.
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version
   by_version.affected
+  by_version.affected_unit
   by_version.events
   by_version.first_seen
   by_version.last_seen
@@ -7979,8 +7994,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.function
   frames.in_app
   frames.line
+  incident_issue_ids
   issue
   issue.affected
+  issue.affected_unit
   issue.culprit
   issue.events
   issue.exception_type
@@ -7988,11 +8005,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   issue.first_version
   issue.id
   issue.ignored_until
+  issue.incident_key
   issue.last_seen
   issue.last_version
   issue.latest_trace_id
   issue.platform
   issue.regressed_at
+  issue.related_count
   issue.resolved_at
   issue.resolved_version
   issue.service
@@ -8078,6 +8097,7 @@ The write sends the row version it read, so a change made since is refused
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version
   by_version.affected
+  by_version.affected_unit
   by_version.events
   by_version.first_seen
   by_version.last_seen
@@ -8100,8 +8120,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.function
   frames.in_app
   frames.line
+  incident_issue_ids
   issue
   issue.affected
+  issue.affected_unit
   issue.culprit
   issue.events
   issue.exception_type
@@ -8109,11 +8131,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   issue.first_version
   issue.id
   issue.ignored_until
+  issue.incident_key
   issue.last_seen
   issue.last_version
   issue.latest_trace_id
   issue.platform
   issue.regressed_at
+  issue.related_count
   issue.resolved_at
   issue.resolved_version
   issue.service
@@ -8184,6 +8208,7 @@ The write sends the row version it read, so a change made since is refused
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version
   by_version.affected
+  by_version.affected_unit
   by_version.events
   by_version.first_seen
   by_version.last_seen
@@ -8206,8 +8231,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.function
   frames.in_app
   frames.line
+  incident_issue_ids
   issue
   issue.affected
+  issue.affected_unit
   issue.culprit
   issue.events
   issue.exception_type
@@ -8215,11 +8242,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   issue.first_version
   issue.id
   issue.ignored_until
+  issue.incident_key
   issue.last_seen
   issue.last_version
   issue.latest_trace_id
   issue.platform
   issue.regressed_at
+  issue.related_count
   issue.resolved_at
   issue.resolved_version
   issue.service
@@ -8290,6 +8319,7 @@ The write sends the row version it read, so a change made since is refused
 JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version
   by_version.affected
+  by_version.affected_unit
   by_version.events
   by_version.first_seen
   by_version.last_seen
@@ -8312,8 +8342,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.function
   frames.in_app
   frames.line
+  incident_issue_ids
   issue
   issue.affected
+  issue.affected_unit
   issue.culprit
   issue.events
   issue.exception_type
@@ -8321,11 +8353,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   issue.first_version
   issue.id
   issue.ignored_until
+  issue.incident_key
   issue.last_seen
   issue.last_version
   issue.latest_trace_id
   issue.platform
   issue.regressed_at
+  issue.related_count
   issue.resolved_at
   issue.resolved_version
   issue.service
@@ -8406,10 +8440,22 @@ issue is unresolved, and the counts are those of the range.
   cli forge obs issues prod --since-release v1.4.0   # first seen in that release
   cli forge obs issues dev --service api --sort events
   cli forge obs issues prod --source llm_bug_report  # agent-filed bug reports
+  cli forge obs issues prod --expand-incidents       # every issue of an incident, not the first
+
+An INCIDENT is one cause breaking many callers: a dead database fails every
+service that touches it, and each logs from its own call site, so one outage is
+dozens of issues. Issues that share a cause (the SQLSTATE or refused connection
+target their error carries, else its normalized error class) and first fired
+within --incident-window of one another, in any service, share an incident_key.
+The list collapses them under the first, which shows "+N related"; nothing is
+merged and each keeps its own counts and triage state. forge obs issue <id>
+lists the rest of its incident.
 
 JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
+  collapsed
   issues
   issues.affected
+  issues.affected_unit
   issues.culprit
   issues.events
   issues.exception_type
@@ -8417,11 +8463,13 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues.first_version
   issues.id
   issues.ignored_until
+  issues.incident_key
   issues.last_seen
   issues.last_version
   issues.latest_trace_id
   issues.platform
   issues.regressed_at
+  issues.related_count
   issues.resolved_at
   issues.resolved_version
   issues.service
@@ -8454,10 +8502,12 @@ reliant forge obs issues [env] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--expand-incidents` | `bool` | - | list every issue of an incident instead of collapsing each incident under its first issue |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--incident-window` | `duration` | `10m0s` | issues of one cause first seen within this long of each other are one incident (max 1h0m0s) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `25` | most items to return |
 | `--page-token` | `string` | - | resume from a next_page_token |
@@ -9199,9 +9249,10 @@ reliant forge obs session <id> [env] [flags]
 
 Real-user browser sessions: who hit errors, and which have a replay
 
-List the env's browser sessions that started in the range, newest first: user,
-entry path, length, page views, interactions, browser errors and whether a
-replay was recorded. [env] defaults to dev; --since defaults to 24h (at most 30d).
+List the env's browser sessions that started in the range, newest first: the
+frontend (APP) and start time, user, entry path, length, page views,
+interactions, browser errors, whether a replay was recorded, and the session id
+(last column). [env] defaults to dev; --since defaults to 24h (at most 30d).
 
 Read one with `cli forge obs session <id>`: a text timeline of what the user did.
 
@@ -9322,6 +9373,7 @@ JSON schema forge.obs.status/v1. --fields takes dotted paths of:
   current_release.via
   issues
   issues.affected
+  issues.affected_unit
   issues.culprit
   issues.events
   issues.exception_type

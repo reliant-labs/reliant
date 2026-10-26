@@ -19,11 +19,13 @@ vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
   }),
 }));
 
-vi.mock("../../../store/preferencesStore", () => ({
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      isWorkflowHidden: (name: string) => name === "builtin://hidden-flow",
-    }),
+const hidden = vi.hoisted(() => ({
+  isWorkflowHidden: (name: string) => name === "builtin://hidden-flow",
+  isPresetHidden: () => false,
+}));
+vi.mock("../../../hooks/settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/settings-queries")>()),
+  useHiddenItems: () => hidden,
 }));
 
 const { MobileWorkflowCatalog } = await import("../MobileWorkflowCatalog");

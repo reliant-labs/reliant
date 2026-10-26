@@ -4,7 +4,7 @@
  *
  * The desktop `GlobalSearch.tsx` modal has a keyboard-nav footer and an
  * expand/collapse-per-file result tree built for a mouse; this keeps the
- * same `searchFiles` call (regex, case-sensitivity, file-pattern glob — all
+ * same content search (`useFileSearch`) (regex, case-sensitivity, file-pattern glob — all
  * server-side, same RPC) but flattens results into one scrollable list of
  * matches, since collapsing/expanding per file is a desktop density
  * optimization that doesn't help on a narrow screen. Tapping a match opens
@@ -13,7 +13,7 @@
  * than the desktop `FileViewerTab`.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ChevronLeft,
   FileSearch,
@@ -22,8 +22,7 @@ import {
   SearchX,
   Settings2,
 } from "lucide-react";
-import { searchFiles, type SearchResult } from "../../api/fileSystem";
-import { useProjectStore } from "../../store/projectStore";
+import { useFileSearch } from "../../hooks/file-system-queries";
 import { cn } from "../../lib/utils";
 import { MobileFilePreview } from "./MobileFilePreview";
 import { MobileEmptyState } from "./MobileChrome";
@@ -50,54 +49,24 @@ function highlightMatch(content: string, start: number, end: number) {
 }
 
 export function MobileFileSearchTab({ query }: { query: string }) {
-  const currentProject = useProjectStore((s) => s.currentProject);
   const worktreeId = useActiveWorktreeId();
 
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [totalMatches, setTotalMatches] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [filePattern, setFilePattern] = useState("");
   const [preview, setPreview] = useState<{ path: string } | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    const trimmed = query.trim();
-    if (!trimmed || !currentProject) {
-      setResults([]);
-      setTotalMatches(0);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await searchFiles(trimmed, {
-          worktreeId,
-          caseSensitive,
-          filePattern: filePattern || undefined,
-          maxResults: 50,
-          contextLines: 0,
-        });
-        setResults(response.results);
-        setTotalMatches(response.totalMatches);
-      } catch (err) {
-        console.error("File search failed:", err);
-        setError(err instanceof Error ? err.message : "Search failed");
-      } finally {
-        setIsLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [query, currentProject, worktreeId, caseSensitive, filePattern]);
+  // Debounced; the term and every option are the key.
+  const search = useFileSearch(query.trim(), {
+    worktreeId,
+    caseSensitive,
+    filePattern,
+    maxResults: 50,
+    contextLines: 0,
+  });
+  const { results, totalMatches } = search;
+  const isLoading = search.isSearching;
+  const error = search.error ? search.error.message || "Search failed" : null;
 
   const flatMatches: FlatMatch[] = results.flatMap((r) =>
     r.matches.map((m) => ({

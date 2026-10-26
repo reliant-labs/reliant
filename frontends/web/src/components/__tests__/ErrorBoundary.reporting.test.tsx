@@ -17,8 +17,8 @@ vi.mock("@sentry/react", () => ({
 vi.mock("../../lib/telemetry", () => ({
   reportErrorToTelemetry: mocks.reportErrorToTelemetry,
 }));
-vi.mock("../../store/privacyStore", () => ({
-  getPrivacySettings: () => ({
+vi.mock("../../hooks/privacy-queries", () => ({
+  privacyConsent: () => ({
     crashReportingEnabled: mocks.crashReportingEnabled,
     analyticsEnabled: true,
   }),

@@ -3,9 +3,7 @@
  *
  *  - useUpdatePreferences (the generated mutation) refetches every mounted
  *    usePreferences;
- *  - the zustand stores' imperative path (api/settings-grpc) reads through
- *    the same entry and invalidates it after a write, so a store's write is
- *    never invisible to a mounted hook;
+ *  - an imperative reader (readBrowserPreferences) shares the hook's entry;
  *  - a provider-credential write (an OAuth completion, a key added from the
  *    single-credential view) refetches useProviderStatuses;
  *  - settingsServiceKeys.all reaches config health.
@@ -22,7 +20,7 @@ import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
 import { useAuthStore } from "@/store/authStore";
 import { addProviderApiKey } from "../provider-account-queries";
-import { usePreferences, useProviderStatuses, useUpdatePreferences } from "../settings-queries";
+import { readBrowserPreferences, usePreferences, useProviderStatuses, useUpdatePreferences } from "../settings-queries";
 import { settingsServiceKeys, useGetConfigHealth } from "../settings-service-hooks_gen";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -96,20 +94,11 @@ describe("SettingsService keys", () => {
     expect(prefs.result.current.data.worktree.archiveMode).toBe("always_keep");
   });
 
-  it("a store's imperative write refetches the mounted preferences", async () => {
-    const prefs = renderHook(() => usePreferences(), { wrapper });
-    await waitFor(() => expect(calls.GetPreferences).toBe(1));
-
-    await settingsGrpc.updatePreferences({ worktree_archive_mode: "always_cleanup" });
-
-    await waitFor(() => expect(prefs.result.current.data.worktree.archiveMode).toBe("always_cleanup"));
-  });
-
-  it("a store's imperative read shares the hook's cache entry", async () => {
-    const [a, b] = await Promise.all([settingsGrpc.getPreferences(), settingsGrpc.getPreferences()]);
+  it("an imperative read shares the hook's cache entry", async () => {
+    const [a, b] = await Promise.all([readBrowserPreferences(), readBrowserPreferences()]);
     expect(calls.GetPreferences).toBe(1);
-    expect(a.worktree_archive_mode).toBe("ask_me");
-    expect(b.worktree_archive_mode).toBe("ask_me");
+    expect(a.openLinksInApp).toBe(true);
+    expect(b.openLinksInApp).toBe(true);
     expect(queryClient.getQueryData(settingsServiceKeys.getPreferences({}))).toBeDefined();
   });
 

@@ -51,16 +51,6 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    inbox: () => ({
-      listInbox: mocks.listInbox,
-      cleanupStorage: mocks.cleanupStorage,
-      dismissInboxItem: mocks.dismissInboxItem,
-      restoreInboxItem: mocks.restoreInboxItem,
-    }),
-  },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
@@ -109,6 +99,11 @@ beforeEach(() => {
   mocks.resolveQuestion.mockResolvedValue({});
   setTransport(
     mockTransport({
+      // The Inbox is on InboxService's generated hooks.
+      "InboxService.ListInbox": (req) => mocks.listInbox(req),
+      "InboxService.CleanupStorage": (req) => mocks.cleanupStorage(req),
+      "InboxService.DismissInboxItem": (req) => mocks.dismissInboxItem(req),
+      "InboxService.RestoreInboxItem": (req) => mocks.restoreInboxItem(req),
       "ApprovalService.Approve": (req) => {
         const { requestId, actionTaken } = req as { requestId: string; actionTaken?: string };
         return mocks.approve(requestId, actionTaken);

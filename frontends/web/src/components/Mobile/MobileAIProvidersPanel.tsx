@@ -6,8 +6,8 @@
  *
  * This is a rebuild of the presentation only. It calls the SAME functions
  * `CombinedGeneralSettings` calls — `api.settings.updateProvider`,
- * `api.settings.validateProviderAPIKey`, `api.settings.getPreferences` /
- * `updatePreferences`, `useCodexOAuth` / `useClaudeOAuth` / `useCopilotOAuth`,
+ * `api.settings.validateProviderAPIKey`, `usePreferences` /
+ * `useUpdatePreferences`, `useCodexOAuth` / `useClaudeOAuth` / `useCopilotOAuth`,
  * `onboardingService.provisionManagedKey` — and imports `providerConfigs`,
  * `VISIBLE_PROVIDERS`, and `parseErrorMessage` from `CombinedGeneralSettings`
  * itself rather than re-deriving them, so the provider list, key formats,
@@ -32,7 +32,7 @@
  * opens desktop's `ReliantAISection` data tables, which has no mobile home.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   AlertCircle,
   Check,
@@ -67,6 +67,7 @@ import {
 } from "../../lib/oauth-providers";
 import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
+import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../CopilotDevicePanel";
@@ -337,8 +338,9 @@ export function MobileAIProvidersPanel({
   // the panel may be gone by then.
   const scheduleTimeout = useUnmountSafeTimeout();
 
-  const [streamingEnabled, setStreamingEnabled] = useState(false);
-  const [loadingPreferences, setLoadingPreferences] = useState(true);
+  const { data: userPreferences, isPending: loadingPreferences } = usePreferences();
+  const streamingEnabled = userPreferences.streamingEnabled;
+  const updatePreferences = useUpdatePreferences();
 
   const selectedOAuth = addSheetProvider
     ? providerConfigs[addSheetProvider]?.usesOAuth
@@ -347,29 +349,12 @@ export function MobileAIProvidersPanel({
     enabled: isRedirectOAuthProvider(selectedOAuth),
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    api.settings
-      .getPreferences()
-      .then((data) => {
-        if (!cancelled) setStreamingEnabled((data.streaming_enabled as boolean) ?? false);
-      })
-      .catch((error) => console.error("Failed to load preferences:", error))
-      .finally(() => {
-        if (!cancelled) setLoadingPreferences(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // The switch flips at once and back if the server refuses.
   const handleStreamingToggle = async (enabled: boolean) => {
-    setStreamingEnabled(enabled);
     try {
-      await api.settings.updatePreferences({ streaming_enabled: enabled });
+      await updatePreferences.mutateAsync({ streamingEnabled: enabled });
     } catch (error) {
       console.error("Failed to update streaming preference:", error);
-      setStreamingEnabled(!enabled);
     }
   };
 

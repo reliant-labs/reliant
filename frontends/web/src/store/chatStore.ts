@@ -137,7 +137,7 @@ import {
 } from "../hooks/message-queries";
 import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
 import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
-import { DEFAULT_WORKFLOW } from "./preferencesStore";
+import { DEFAULT_WORKFLOW } from "../hooks/settings-queries";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
   STREAMING_FLUSH_FALLBACK_MS,

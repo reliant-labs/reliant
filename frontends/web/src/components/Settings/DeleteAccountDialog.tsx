@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import Modal from '../forge-ui/modal'
 import Input from '../forge-ui/input'
 import Button from '@/components/forge-ui/button';
-import { createAccountClient } from '../../api/grpc-client'
 import type {
   AccountDeletionWalletQuote,
   DeleteAccountResponse,
-  PreviewAccountDeletionResponse,
   RefundDestination,
 } from '../../gen/reliant/v1/account_pb'
+import {
+  accountServiceKeys,
+  useDeleteAccount,
+  usePreviewAccountDeletion,
+} from '../../hooks/account-service-hooks_gen'
 import { logger } from '../../lib/logger'
 import { formatCentsAsDollars } from './cloud/billingUtils'
 
@@ -45,45 +49,49 @@ interface DeleteAccountDialogProps {
  * one.
  */
 export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccountDialogProps) {
-  const [preview, setPreview] = useState<PreviewAccountDeletionResponse | null>(null)
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const queryClient = useQueryClient()
+  const deleteAccount = useDeleteAccount()
+  // Read on every open, never retried silently: a failed preview says so and
+  // the user reopens. Its entry is dropped on close (below), so a reopen shows
+  // the loading state rather than a previous count. It is off while a delete
+  // runs and after one succeeds, so the delete's invalidation does not re-read
+  // an account that no longer exists.
+  const previewQuery = usePreviewAccountDeletion(
+    {},
+    {
+      enabled: isOpen && !deleteAccount.isPending && !deleteAccount.isSuccess,
+      staleTime: 0,
+      retry: false,
+    }
+  )
+  const preview = previewQuery.data ?? null
+  const isLoadingPreview = previewQuery.isFetching && !preview
   const [typedConfirmation, setTypedConfirmation] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Set when the account was deleted but a refund still needs support. The
   // user is told before they are signed out, rather than left to wonder.
   const [pendingRefund, setPendingRefund] = useState<DeleteAccountResponse | null>(null)
+  const resetDelete = deleteAccount.reset
 
   useEffect(() => {
     if (!isOpen) {
       // Reset on close so reopening never shows a stale count or a
       // half-typed confirmation from a previous attempt.
-      setPreview(null)
+      queryClient.removeQueries({ queryKey: accountServiceKeys.previewAccountDeletion.all })
+      resetDelete()
       setTypedConfirmation('')
       setError(null)
       setPendingRefund(null)
-      return
     }
+  }, [isOpen, queryClient, resetDelete])
 
-    let cancelled = false
-    setIsLoadingPreview(true)
-    createAccountClient()
-      .previewAccountDeletion({})
-      .then((resp) => {
-        if (!cancelled) setPreview(resp)
-      })
-      .catch((err) => {
-        logger.error('[DeleteAccount] preview failed', err)
-        if (!cancelled) setError('Could not load your account details. Please try again.')
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingPreview(false)
-      })
-
-    return () => {
-      cancelled = true
+  useEffect(() => {
+    if (previewQuery.error) {
+      logger.error('[DeleteAccount] preview failed', previewQuery.error)
+      setError('Could not load your account details. Please try again.')
     }
-  }, [isOpen])
+  }, [previewQuery.error])
 
   // An anonymous session has no email to type, so there is nothing to
   // confirm — the dialog itself is the confirmation.
@@ -97,7 +105,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
     setIsDeleting(true)
     setError(null)
     try {
-      const resp = await createAccountClient().deleteAccount({ confirmEmail: typedConfirmation })
+      const resp = await deleteAccount.mutateAsync({ confirmEmail: typedConfirmation })
       if (resp.refundPending) {
         setPendingRefund(resp)
         setIsDeleting(false)

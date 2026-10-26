@@ -14,12 +14,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.PreviewAccountDeletionRequest",
           "OutputTypeFQ": "reliant.v1.PreviewAccountDeletionResponse",
           "InputProtoFile": "reliant/v1/account.proto",
           "OutputProtoFile": "reliant/v1/account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -40329,7 +40330,7 @@
     "reliant/config/v1/vault_config.proto": "e0c1e732880cc444791cb314c802fb5af73ee007c6a37c6333f6f4367a45d192",
     "reliant/config/v1/web_config.proto": "cb909dc9c05caa85bc3ab3689f22ac7322965aeea013ead4d812976e6b69c230",
     "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
-    "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
+    "reliant/v1/account.proto": "5ac0387f3f00fe31139db27af006c500337d0441ce9785208411893901a00ab6",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",

@@ -118,10 +118,13 @@ func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
 
 	executor := newWaitingExecutor(20 * time.Second)
 	call := waitCall()
-	var messageID string
+	// The id comes back on a channel: the batch sees the queued message
+	// through the database, which gives the race detector no happens-before
+	// edge to the goroutine's write.
+	messageIDs := make(chan string, 1)
 	go func() {
 		<-executor.started
-		messageID = f.queueMessage(t)
+		messageIDs <- f.queueMessage(t)
 	}()
 
 	start := time.Now()
@@ -142,7 +145,7 @@ func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, got.GetContent(), result.Content, "the durable result is what the agent saw")
 
-	msg, err := f.h.Repo().GetAgentMessage(ctx, messageID)
+	msg, err := f.h.Repo().GetAgentMessage(ctx, <-messageIDs)
 	require.NoError(t, err)
 	assert.Equal(t, core.AgentMessageStatusQueued, msg.Status, "preemption must not consume the message; the next turn delivers it")
 }

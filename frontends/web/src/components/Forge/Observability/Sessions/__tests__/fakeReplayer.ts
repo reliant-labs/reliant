@@ -18,6 +18,14 @@ interface Event {
   timestamp: number;
 }
 
+interface SnapshotNode {
+  type: number;
+  tagName?: string;
+  textContent?: string;
+  attributes?: Record<string, unknown>;
+  childNodes?: SnapshotNode[];
+}
+
 export class FakeReplayer {
   static instances: FakeReplayer[] = [];
   events: Event[];
@@ -25,6 +33,10 @@ export class FakeReplayer {
   wrapper: HTMLDivElement;
   iframe: HTMLIFrameElement;
   calls: string[] = [];
+  /** Remote URLs the browser would fetch while building the recording. */
+  requested: string[] = [];
+  /** Remote URLs the document's CSP meta stopped. */
+  blocked: string[] = [];
   current = 0;
   private handlers = new Map<string, (payload?: unknown) => void>();
 
@@ -38,6 +50,40 @@ export class FakeReplayer {
     this.wrapper.appendChild(this.iframe);
     (config.root as HTMLElement).appendChild(this.wrapper);
     FakeReplayer.instances.push(this);
+    // Like rrweb: the first snapshot is built after the constructor returns.
+    setTimeout(() => this.rebuildFullSnapshots(), 0);
+  }
+
+  /** Build every full snapshot recorded so far into the iframe, as rrweb does. */
+  rebuildFullSnapshots() {
+    for (const event of this.events as { type: number; data?: { node?: SnapshotNode } }[]) {
+      if (event.type === 2 && event.data?.node) this.build(event.data.node);
+    }
+    this.emit("fullsnapshot-rebuilded");
+  }
+
+  private build(node: SnapshotNode) {
+    const attrs = node.attributes ?? {};
+    for (const [name, value] of Object.entries(attrs)) {
+      if (typeof value !== "string") continue;
+      if ((node.tagName === "img" && name === "src") || (node.tagName === "link" && name === "href")) this.fetchResource(node.tagName === "img" ? "img-src" : "style-src", value);
+      for (const m of value.matchAll(/url\(([^)]+)\)/g)) this.fetchResource("img-src", m[1]);
+    }
+    for (const child of node.childNodes ?? []) {
+      if (child.type === 3 && node.tagName === "style") for (const m of (child.textContent ?? "").matchAll(/url\(([^)]+)\)/g)) this.fetchResource("img-src", m[1]);
+      this.build(child);
+    }
+  }
+
+  private fetchResource(directive: "img-src" | "style-src", url: string) {
+    if (!/^https?:\/\//.test(url)) return;
+    const policies = Array.from(this.iframe.contentDocument?.querySelectorAll('meta[http-equiv="Content-Security-Policy"]') ?? []).map((m) => m.getAttribute("content") ?? "");
+    const allowed = policies.every((policy) => {
+      const rules = new Map(policy.split(";").map((d) => d.trim().split(/\s+/)).filter((d) => d[0]).map(([name, ...sources]) => [name, sources] as const));
+      const sources = rules.get(directive) ?? rules.get("default-src");
+      return !sources || sources.some((src) => src === "*" || src === "https:" || src === "http:");
+    });
+    (allowed ? this.requested : this.blocked).push(url);
   }
 
   static reset() {

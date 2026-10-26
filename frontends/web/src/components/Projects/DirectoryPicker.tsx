@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   Folder,
   FolderPlus,
@@ -12,11 +13,11 @@ import {
   X,
 } from "lucide-react";
 import Modal from "../forge-ui/modal";
+import type { DirectoryEntry } from "../../gen/reliant/v1/filesystem_pb";
 import {
-  listDirectory,
-  createDirectory,
-  type DirectoryEntry,
-} from "../../api/filesystem-grpc";
+  useCreateDirectory,
+  useListDirectory,
+} from "../../hooks/file-system-service-hooks_gen";
 import { cn } from "../../lib/utils";
 import {
   containsSeparator,
@@ -32,61 +33,63 @@ interface DirectoryPickerProps {
   onSelect: (path: string) => void;
 }
 
+const NO_ENTRIES: DirectoryEntry[] = [];
+
 export function DirectoryPicker({
   isOpen,
   onClose,
   onSelect,
 }: DirectoryPickerProps) {
-  const [, setCurrentPath] = useState("");
-  const [resolvedPath, setResolvedPath] = useState("");
-  const [entries, setEntries] = useState<DirectoryEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The directory asked for; "" is the machine's home directory.
+  const [requestedPath, setRequestedPath] = useState("");
+  // The last directory that listed, so a failed navigation still leaves the
+  // breadcrumbs and "Up" to get back with.
+  const [lastListedPath, setLastListedPath] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   // "New folder" inline-create state.
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
-  const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
 
-  const loadDirectory = useCallback(async (path: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await listDirectory(path);
-      setResolvedPath(result.path);
-      setEntries(result.entries);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to list directory"
-      );
-      setEntries([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Re-read on every open and every visit (`staleTime: 0`), showing the
+  // cached listing meanwhile. While a new directory loads, the one being left
+  // stays on screen.
+  const listing = useListDirectory(
+    { path: requestedPath },
+    { enabled: isOpen, staleTime: 0, retry: false, placeholderData: keepPreviousData },
+  );
+  // A successful create invalidates every FileSystemService read, which
+  // refetches this listing, so the new folder appears and is selectable.
+  const createDirectory = useCreateDirectory({ meta: { silenceErrorToast: true } });
 
-  // Load home directory on open
+  useEffect(() => {
+    if (listing.data) setLastListedPath(listing.data.path);
+  }, [listing.data]);
+
+  const resolvedPath = listing.data?.path ?? lastListedPath;
+  const entries = listing.data?.entries ?? NO_ENTRIES;
+  const isLoading = listing.isFetching && (listing.isPlaceholderData || !listing.data);
+  const error = listing.error
+    ? listing.error.message || "Failed to list directory"
+    : null;
+  const isSubmittingFolder = createDirectory.isPending;
+
+  // Start at the home directory on open
   useEffect(() => {
     if (isOpen) {
-      setCurrentPath("");
-      setResolvedPath("");
-      setEntries([]);
-      setError(null);
+      setRequestedPath("");
       setShowHidden(false);
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateError(null);
-      loadDirectory("");
     }
-  }, [isOpen, loadDirectory]);
+  }, [isOpen]);
 
   const navigateTo = (path: string) => {
     setIsCreatingFolder(false);
     setNewFolderName("");
     setCreateError(null);
-    setCurrentPath(path);
-    loadDirectory(path);
+    setRequestedPath(path);
   };
 
   const handleCreateFolder = async () => {
@@ -106,22 +109,16 @@ export function DirectoryPicker({
     // joinPath keeps the daemon's own separator style, so a Windows daemon
     // gets `C:\a\new` rather than the mixed `C:\a/new` a template literal
     // would have produced.
-    const parent = resolvedPath;
-    const targetPath = joinPath(parent, name);
-    setIsSubmittingFolder(true);
+    const targetPath = joinPath(resolvedPath, name);
     setCreateError(null);
     try {
-      await createDirectory(targetPath);
+      await createDirectory.mutateAsync({ path: targetPath });
       setIsCreatingFolder(false);
       setNewFolderName("");
-      // Refresh so the new folder appears and is selectable.
-      await loadDirectory(parent);
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create folder"
       );
-    } finally {
-      setIsSubmittingFolder(false);
     }
   };
 
