@@ -45,6 +45,10 @@ type flakyStarter struct {
 	down    bool
 	starts  int
 	running map[string]string // workflow id -> run id
+	// hold, when set, parks the next root start before Temporal answers: it
+	// is handed a channel the test closes to let that start through, which
+	// is how a test holds a fire inside its start window.
+	hold chan chan struct{}
 }
 
 func (s *flakyStarter) setDown(down bool) {
@@ -53,9 +57,38 @@ func (s *flakyStarter) setDown(down bool) {
 	s.down = down
 }
 
+// holdNextStart parks the next root start; it returns once that start is
+// parked, with the function that lets it through.
+func (s *flakyStarter) holdNextStart(t *testing.T, fire func()) (release func()) {
+	t.Helper()
+	s.mu.Lock()
+	s.hold = make(chan chan struct{})
+	hold := s.hold
+	s.mu.Unlock()
+	go fire()
+	select {
+	case gate := <-hold:
+		return func() { close(gate) }
+	case <-time.After(30 * time.Second):
+		t.Fatal("the held fire never reached its Temporal start")
+		return nil
+	}
+}
+
 func (s *flakyStarter) ExecuteWorkflow(
 	_ context.Context, options client.StartWorkflowOptions, _ interface{}, args ...interface{},
 ) (client.WorkflowRun, error) {
+	if _, isRoot := args[0].(v2.WorkflowInput); isRoot {
+		s.mu.Lock()
+		hold := s.hold
+		s.hold = nil
+		s.mu.Unlock()
+		if hold != nil {
+			gate := make(chan struct{})
+			hold <- gate
+			<-gate
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, isRoot := args[0].(v2.WorkflowInput); isRoot {
@@ -166,6 +199,24 @@ func (f *fireFixture) rootStatus(t *testing.T, chatID string) core.WorkflowStatu
 	return statuses[chatID]
 }
 
+// root is the chat's root workflow row, failed-start stamp included.
+func (f *fireFixture) root(t *testing.T, chatID string) *core.Workflow {
+	t.Helper()
+	roots, err := f.repo.ListRootWorkflows(context.Background(), chatID)
+	require.NoError(t, err)
+	require.NotEmpty(t, roots, "chat %s has no root workflow", chatID)
+	return roots[0]
+}
+
+// chatOfFire is the chat a fire's event row launched.
+func (f *fireFixture) chatOfFire(t *testing.T, req FireRequest) string {
+	t.Helper()
+	ev, err := f.repo.GetTriggerEventByDedupe(context.Background(), core.TriggerEventKindSchedule, req.FireWorkflowID)
+	require.NoError(t, err)
+	require.NotNil(t, ev.ChatID)
+	return *ev.ChatID
+}
+
 // B1: Temporal fails after the launch committed, the activity retries, and the
 // retry must RESUME its own half-launched fire. Before the fix the retry ran
 // overlap against its own PENDING chat, skipped itself, and the next fire was
@@ -222,6 +273,101 @@ func TestFireIsNotBlockedByAPreviousFiresNeverStartedChat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(core.TriggerEventLaunched), out.Outcome,
 		"a stranded PENDING predecessor must not wedge the trigger: %+v", out)
+}
+
+// A failed start is recorded as one, and the next fire launches over it and
+// abandons it, so a late retry of the failed fire cannot start a second run
+// beside the one that replaced it.
+func TestAFailedStartIsFollowedByAFireThatLaunches(t *testing.T) {
+	f := newFireFixture(t, nil)
+	ctx := context.Background()
+	failed := f.fireAt(2)
+
+	f.starter.setDown(true)
+	_, err := f.firer.Fire(ctx, failed)
+	require.Error(t, err)
+	stranded := f.chatOfFire(t, failed)
+	root := f.root(t, stranded)
+	require.Equal(t, core.Pending(), root.Status)
+	require.NotNil(t, root.StartFailedAt, "the launcher's error branch must record the failed start")
+
+	f.starter.setDown(false)
+	next, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), next.Outcome, "%+v", next)
+	assert.Equal(t, core.Active(), f.rootStatus(t, next.ChatID))
+	assert.Equal(t, core.Failed(), f.root(t, stranded).Status,
+		"the fire that launched over the stranded one must abandon it")
+
+	// The failed fire's activity retries after all: its slot is spent.
+	retry, err := f.firer.Fire(ctx, failed)
+	require.NoError(t, err)
+	assert.Equal(t, string(core.TriggerEventLaunched), retry.Outcome)
+	assert.Equal(t, 1, f.starter.startCount(), "the abandoned fire must not start a run beside its replacement")
+	assert.Equal(t, core.Failed(), f.root(t, stranded).Status)
+}
+
+// The race TestConcurrentFiresRespectOverlapSkip catches intermittently, made
+// deterministic: a fire that has committed and is inside its Temporal start is
+// PENDING with no failed start, and the next fire must skip behind it.
+func TestAFireSkipsBehindAStartInFlight(t *testing.T) {
+	f := newFireFixture(t, nil)
+	ctx := context.Background()
+
+	var firstErr error
+	var first *FireOutput
+	done := make(chan struct{})
+	release := f.starter.holdNextStart(t, func() {
+		defer close(done)
+		first, firstErr = f.firer.Fire(ctx, f.fireAt(2))
+	})
+
+	second, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	assert.Equal(t, string(core.TriggerEventSkipped), second.Outcome,
+		"a predecessor whose start is in flight is running, not stranded: %+v", second)
+	assert.Contains(t, second.Reason, "starting")
+
+	release()
+	<-done
+	require.NoError(t, firstErr)
+	assert.Equal(t, string(core.TriggerEventLaunched), first.Outcome)
+	assert.Equal(t, 1, f.starter.startCount())
+}
+
+// A retry of a failed start claims it again (clears the stamp) before it calls
+// Temporal, so a fire that arrives while that retry is in flight skips behind
+// it rather than abandoning a start that is about to succeed.
+func TestARetriedStartInFlightIsNotAbandoned(t *testing.T) {
+	f := newFireFixture(t, nil)
+	ctx := context.Background()
+	failed := f.fireAt(2)
+
+	f.starter.setDown(true)
+	_, err := f.firer.Fire(ctx, failed)
+	require.Error(t, err)
+	f.starter.setDown(false)
+
+	var retryErr error
+	var retry *FireOutput
+	done := make(chan struct{})
+	release := f.starter.holdNextStart(t, func() {
+		defer close(done)
+		retry, retryErr = f.firer.Fire(ctx, failed)
+	})
+	stranded := f.chatOfFire(t, failed)
+	assert.Nil(t, f.root(t, stranded).StartFailedAt, "a retry in flight must have cleared the failed-start stamp")
+
+	next, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	assert.Equal(t, string(core.TriggerEventSkipped), next.Outcome, "%+v", next)
+
+	release()
+	<-done
+	require.NoError(t, retryErr)
+	assert.Equal(t, string(core.TriggerEventLaunched), retry.Outcome)
+	assert.Equal(t, core.Active(), f.rootStatus(t, stranded))
+	assert.Equal(t, 1, f.starter.startCount())
 }
 
 // B1: a retry of a fire that already recorded a skip returns that recorded

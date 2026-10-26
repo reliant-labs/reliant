@@ -314,6 +314,14 @@ var (
 	//                              outright (terminate, timeout), or the failure
 	//                              that ended it is the user's to act on.
 	//                              Expected; logged at INFO
+	//   stranded_start_failed    - PENDING root whose launch committed but
+	//                              whose run never reached Temporal within the
+	//                              bound, with no failed start recorded (the
+	//                              launcher died or lost the write); recorded
+	//                              as a failed start
+	//   stranded_start_repaired  - the same PENDING root, but Temporal has its
+	//                              run: the launch's mark-active was lost;
+	//                              moved to ACTIVE
 	// Every increment of the fault classes is paired with an ERROR log (an
 	// issue); alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
@@ -321,7 +329,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed, stranded_start_failed, stranded_start_repaired).",
 		},
 		[]string{"class"},
 	)

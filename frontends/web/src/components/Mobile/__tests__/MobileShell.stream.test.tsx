@@ -197,7 +197,7 @@ describe("MobileShell initial project", () => {
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-2"));
     expect(selectProject).toHaveBeenCalledTimes(1);
-    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-2" }), { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-2" }), { skipWorkspaceStateSave: true, restoreWorkspace: false });
   });
 
   it("falls back to the first project without remembering it as the user's choice", async () => {
@@ -209,6 +209,6 @@ describe("MobileShell initial project", () => {
     });
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-1"));
-    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-1" }), { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-1" }), { skipWorkspaceStateSave: true, restoreWorkspace: false });
   });
 });

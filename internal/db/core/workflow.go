@@ -19,6 +19,14 @@ type Workflow struct {
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	WorkerStartedAt *time.Time     `json:"worker_started_at,omitempty"`
 	WorkerStoppedAt *time.Time     `json:"worker_stopped_at,omitempty"`
+	// StartFailedAt is when the last attempt to start this PENDING run in
+	// Temporal failed, and nil while no failed attempt is outstanding. It is
+	// what tells a stranded launch (PENDING, set) from a start in flight
+	// (PENDING, nil): the launcher sets it on a failed start and clears it
+	// when a retry of that start begins, and the reconciler sets it on a
+	// PENDING root whose run never reached Temporal within its bound. It means
+	// nothing once the run has left PENDING.
+	StartFailedAt *time.Time `json:"start_failed_at,omitempty"`
 	// OwnerUserID is who this run belongs to.
 	//
 	// A run has to know its own owner: activities need an identity to load API

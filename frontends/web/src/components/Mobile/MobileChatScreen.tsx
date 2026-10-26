@@ -33,7 +33,8 @@ export function MobileChatScreen() {
   // "Could not find an active match" and took down the whole screen.
   const { chatId } = useParams({ strict: false });
   const chat = useChat(chatId);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const currentProjectId = useProjectStore((s) => s.currentProject?.id);
+  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
@@ -53,7 +54,10 @@ export function MobileChatScreen() {
         project = (await fetchProjects()).find((p) => p.id === chatProjectId);
       }
       if (!project) return;
-      await useProjectStore.getState().selectProject(project);
+      // Not the desktop workspace restore: it would select the project's
+      // remembered chat — not this one — mark it read and move the update
+      // stream's single chat subscription off the chat on screen.
+      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false });
     })();
   }, [chatId, chatProjectId]);
 
@@ -61,12 +65,12 @@ export function MobileChatScreen() {
   // same default MobileNewChat resolves to when creating a chat. Without
   // loading the main workspace here, that fallback has nothing to resolve
   // against. Only that one row: the screen never lists workspaces.
-  const main = useMainWorktree(currentProject?.id);
+  const main = useMainWorktree(currentProjectId);
   const mainWorktree = main && !main.deleted_at ? main : undefined;
   useEffect(() => {
     // Selects main when nothing is selected yet; the row is already cached.
-    if (currentProject) void loadMainWorktree(currentProject.id);
-  }, [currentProject]);
+    if (currentProjectId) void loadMainWorktree(currentProjectId);
+  }, [currentProjectId]);
 
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;
 
@@ -124,7 +128,7 @@ export function MobileChatScreen() {
           onClose={() => setShowWorkspace(false)}
           chatId={chatId}
           worktreeId={effectiveWorktreeId}
-          projectPath={currentProject?.path}
+          projectPath={currentProjectPath}
         />
       )}
 

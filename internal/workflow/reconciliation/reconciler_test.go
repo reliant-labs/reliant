@@ -245,6 +245,26 @@ type mockRepo struct {
 	cascadedInTx           []bool
 	inTx                   bool
 	deletedCheckpoints     []string
+
+	// Stranded-start sweep: the roots the query reports, the cutoff it was
+	// asked for, and the roots it recorded as failed starts.
+	strandedStarts       []*db.Workflow
+	strandedStartsCutoff time.Time
+	markedStartFailed    []string
+}
+
+func (m *mockRepo) ListStrandedWorkflowStarts(_ context.Context, cutoff time.Time, _ int) ([]*db.Workflow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.strandedStartsCutoff = cutoff
+	return m.strandedStarts, nil
+}
+
+func (m *mockRepo) MarkWorkflowStartFailed(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.markedStartFailed = append(m.markedStartFailed, id)
+	return true, nil
 }
 
 // The fake keeps state (rows by id, call order), so it stays a fake rather
