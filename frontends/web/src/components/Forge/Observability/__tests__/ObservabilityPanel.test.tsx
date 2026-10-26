@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
@@ -47,12 +47,18 @@ describe("ObservabilityPanel", () => {
   });
 
   it("opens a service in place, with ways into its logs, traces and dashboard", async () => {
-    const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi());
-    await user.click(await screen.findByRole("button", { name: "api" }));
-    expect(await screen.findByTestId("obs-service-detail")).toBeInTheDocument();
-    expect(screen.getByTestId("obs-service-latency")).toHaveTextContent(/p50.*p95.*p99/);
-    await user.click(screen.getByRole("button", { name: "Traces" }));
+    const service = await screen.findByTestId("obs-service-api");
+    // This tests navigation, not pointer sequencing. Dispatch clicks directly:
+    // user-event's synthetic timer gaps consumed the whole test budget when
+    // the shared host was busy, despite the fixture API resolving immediately.
+    fireEvent.click(within(service).getByRole("button", { name: "api" }));
+    const detail = await screen.findByTestId("obs-service-detail");
+    expect(detail).toBeInTheDocument();
+    expect(harness.current()).toMatchObject({ service: "api" });
+    expect(within(detail).getByTestId("obs-service-latency")).toHaveTextContent(/p50.*p95.*p99/);
+    expect(within(detail).getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Traces" }));
     expect(harness.current()).toMatchObject({ view: "traces", service: "api" });
   });
 
