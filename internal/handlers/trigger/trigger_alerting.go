@@ -33,6 +33,11 @@ func (s *Service) managed(t *core.Trigger) bool {
 
 // provisionAlerting connects an enabled managed trigger to its org's alerts.
 func (s *Service) provisionAlerting(ctx context.Context, t *core.Trigger) error {
+	// Only a managed trigger reaches here, and managed needs Alerting; the
+	// guard keeps that true for a caller that forgets to ask.
+	if s.deps.Alerting == nil {
+		return nil
+	}
 	// Provision's error is already what the person enabling is told; its
 	// control-plane cause stays server-side.
 	return svcerr.Wrap(s.deps.Alerting.Provision(ctx, t))
@@ -42,6 +47,9 @@ func (s *Service) provisionAlerting(ctx context.Context, t *core.Trigger) error 
 // already paused or gone, so a delivery the control plane still makes is
 // refused, and the sweep removes the receiver on its next pass.
 func (s *Service) retireAlerting(ctx context.Context, triggerID string) {
+	if s.deps.Alerting == nil {
+		return
+	}
 	if err := s.deps.Alerting.Retire(ctx, triggerID); err != nil {
 		logging.WarnContext(ctx, "could not remove a trigger's alert receiver; the reconcile sweep removes it",
 			"trigger_id", triggerID, "error", err)

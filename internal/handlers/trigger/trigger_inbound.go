@@ -269,7 +269,7 @@ func (s *Service) issueWebhookToken(ctx context.Context, triggerID string) (*rel
 	}
 	return &reliantv1.WebhookCredential{
 		Token: token,
-		Url:   triggers.WebhookURL(s.deps.PublicURL, triggerID) + "/" + token,
+		Url:   triggers.WebhookURL(s.publicURL, triggerID) + "/" + token,
 	}, nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -68,7 +70,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo,
-		PublicURL: publicURL, Catalog: registry, Intake: intake,
+		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	}))
 
 	userID := uuid.NewString()

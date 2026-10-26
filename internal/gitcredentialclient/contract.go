@@ -35,6 +35,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
 // Token is a provider access token and when it stops working.
@@ -117,8 +119,9 @@ type Signer func() (string, error)
 
 // Deps are the adapter's collaborators.
 type Deps struct {
-	// BaseURL is the control-plane origin serving GitCredentialInternalService.
-	BaseURL string
+	// ControlPlane is where the control plane serving
+	// GitCredentialInternalService is: its url (RELIANT_CONTROL_PLANE_URL).
+	ControlPlane *configv1.ControlPlaneConfig
 	// Sign supplies a fresh internal-service token per call.
 	Sign Signer
 	// HTTPClient performs the calls. nil uses a client with a 10s timeout.

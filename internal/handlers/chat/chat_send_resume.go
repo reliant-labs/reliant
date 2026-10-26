@@ -189,7 +189,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Step 1: Build workflow options - same ID, fresh execution
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                s.deps.TaskQueue,
+		TaskQueue:                workflow.SharedTaskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,

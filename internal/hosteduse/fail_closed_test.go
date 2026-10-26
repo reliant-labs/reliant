@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -35,7 +37,7 @@ func TestPersistenceErrorsAreMetadataOnly(t *testing.T) {
 
 func TestSignerFailureNeverPersistsAuthority(t *testing.T) {
 	store := &memoryStore{}
-	service, err := New(Deps{Store: store, BaseURL: "https://controller.example", Sign: func() (string, error) { return "", errors.New("synthetic-sensitive-signing-error") }})
+	service, err := New(Deps{Store: store, Worker: &configv1.WorkerConfig{HostedActionsUrl: "https://controller.example"}, Sign: func() (string, error) { return "", errors.New("synthetic-sensitive-signing-error") }})
 	require.NoError(t, err)
 	actionTest(t, "Action", func(ctx context.Context) error {
 		_, err := service.ExecuteAction(ctx, activity.GetInfo(ctx).WorkflowExecution.ID, "node", "grant", sampleRequest)

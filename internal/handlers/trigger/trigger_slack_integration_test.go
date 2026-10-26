@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
@@ -112,7 +114,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, PublicURL: publicURL, Catalog: registry, Intake: intake}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake}))
 
 	// --- two users, two workspaces ---------------------------------------
 	type tenant struct {

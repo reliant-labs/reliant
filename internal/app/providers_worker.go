@@ -88,7 +88,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
-		cpDeps := controlplane.Deps{BaseURL: cp.URL}
+		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
 		}
@@ -138,7 +138,7 @@ func NewWorkerIntegrationCredentials(d WorkerIntegrationCredentialsDeps) (*Worke
 	if err := checkExecutors(); err != nil {
 		return nil, err
 	}
-	src, err := newWorkerIntegrationCredentials(resolver, ControlPlaneEndpoint(d.ControlPlane))
+	src, err := newWorkerIntegrationCredentials(resolver, d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func newWorkerConnectionResolver(repo *db.Repo, keys vault.Service, clients conn
 // newWorkerIntegrationCredentials is the credential source integration
 // actions authenticate with: saved connections plus the delegated brokers
 // this deployment registers (see credwire).
-func newWorkerIntegrationCredentials(resolver *connections.Resolver, cp controlplane.Endpoint) (httpaction.CredentialSource, error) {
+func newWorkerIntegrationCredentials(resolver *connections.Resolver, cp *configv1.ControlPlaneConfig) (httpaction.CredentialSource, error) {
 	return credwire.New(resolver, cp)
 }
 
@@ -312,7 +312,6 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Repo:        d.DB,
 		Temporal:    d.Temporal.Client,
 		Pause:       d.Pause,
-		TaskQueue:   v2workflow.SharedTaskQueue,
 		Router:      d.Router,
 		LocalModels: local.NewRepoDirectory(d.DB),
 	})
@@ -390,14 +389,14 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
 	svc, err := trigger.New(trigger.Deps{
-		Logger:    d.Logger,
-		Config:    d.Config,
-		Repo:      repo,
-		Syncer:    syncer,
-		Fires:     fires,
-		PublicURL: d.Integrations.PublicURL,
-		Sealer:    d.Vault,
-		Catalog:   d.Pollers,
+		Logger:       d.Logger,
+		Config:       d.Config,
+		Repo:         repo,
+		Syncer:       syncer,
+		Fires:        fires,
+		Integrations: d.Integrations.Config,
+		Sealer:       d.Vault,
+		Catalog:      d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
@@ -579,8 +578,9 @@ type TemporalWorkerDeps struct {
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
 	WorkflowTaskSlots   int32
 	WorkflowTaskPollers int32
-	HostedActionsURL    string
-	HostedActionsCAFile string
+	// Worker carries the hosted-action controller's endpoint and trust
+	// bundle (hosted_actions_url, hosted_actions_ca_file); see HostedActions.
+	Worker *configv1.WorkerConfig
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -591,17 +591,18 @@ type TemporalWorkerDeps struct {
 // The dedicated hosted-action URL requires verified TLS outside loopback.
 // It never falls back to the unrelated general control-plane API URL. A bad
 // optional executor degrades explicitly without stopping ordinary chats.
-func HostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint, url, caFile string) handlers.HostedActionExecutor {
-	if url == "" {
+func HostedActions(log *slog.Logger, store hosteduse.Store, cfg *configv1.ControlPlaneConfig, worker *configv1.WorkerConfig) handlers.HostedActionExecutor {
+	if worker.GetHostedActionsUrl() == "" {
 		return nil
 	}
+	cp := ControlPlaneEndpoint(cfg)
 	if cp.InternalServiceSecret == "" {
 		log.Warn("hosted HTTP actions are DISABLED: internal service signer is missing")
 		return disabledHostedActions{reason: "internal service signer is missing"}
 	}
 	secret := cp.InternalServiceSecret
 	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
-		Store: store, BaseURL: url, CAFile: caFile,
+		Store: store, Worker: worker,
 		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	if err != nil {
@@ -628,7 +629,7 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	hostedActions := HostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane), d.HostedActionsURL, d.HostedActionsCAFile)
+	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,

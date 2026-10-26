@@ -21,7 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// defaultMaxFileSize is the largest upload accepted when Deps.MaxFileSize
+// defaultMaxFileSize is the largest upload accepted when Deps.API
 // does not say otherwise: 10 MB.
 const defaultMaxFileSize = int64(10 * 1024 * 1024)
 
@@ -82,8 +82,8 @@ func (s *Service) UploadAttachment(
 	}
 
 	// Check file size
-	if int64(len(content)) > s.deps.MaxFileSize {
-		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: maximum size is %d bytes", s.deps.MaxFileSize))
+	if int64(len(content)) > s.maxFileSize {
+		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: maximum size is %d bytes", s.maxFileSize))
 	}
 
 	// Default MIME type
@@ -251,8 +251,8 @@ func (s *Service) CreateFileReference(
 	}
 
 	// Check file size
-	if int64(len(content)) > s.deps.MaxFileSize {
-		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.deps.MaxFileSize))
+	if int64(len(content)) > s.maxFileSize {
+		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.maxFileSize))
 	}
 
 	// Get MIME type

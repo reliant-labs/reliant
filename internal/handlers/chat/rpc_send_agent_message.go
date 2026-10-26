@@ -454,7 +454,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 func (s *Service) newRunOptions(workflowID string) client.StartWorkflowOptions {
 	return client.StartWorkflowOptions{
 		ID:                       workflowID,
-		TaskQueue:                s.deps.TaskQueue,
+		TaskQueue:                workflow.SharedTaskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,

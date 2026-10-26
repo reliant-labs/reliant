@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
@@ -144,7 +146,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	syncer, fires := TemporalBackend(temporalClient, repo, taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
 		Repo: repo, Syncer: syncer, Fires: fires,
-		PublicURL: "https://reliant.example", Catalog: registry, Intake: intake,
+		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
 	// --- the worker: poll workflow + activity, event fire, launcher -------

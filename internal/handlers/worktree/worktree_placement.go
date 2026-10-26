@@ -3,6 +3,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -81,8 +82,11 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 // defaultMachine is the project-aware default (daemonplacement.
 // ProjectDefaultDaemonID) when the router can place a machine, and plain
 // default resolution when it cannot (a test double, or a router with no
-// registry).
+// registry). Without a router there is no machine to resolve.
 func (s *Service) defaultMachine(ctx context.Context, userID, projectID string) (string, error) {
+	if s.deps.Router == nil {
+		return "", errors.New("no daemon router")
+	}
 	machines, ok := s.deps.Router.(daemonplacement.Machines)
 	if !ok {
 		return s.deps.Router.ResolveDaemonID(ctx, userID)

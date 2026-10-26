@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/observe"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
@@ -124,11 +126,11 @@ type client struct {
 	daemons        daemonv1connect.DaemonServiceClient
 }
 
-// New returns the adapter for the control plane at deps.BaseURL.
+// New returns the adapter for the control plane deps.ControlPlane names.
 //
 // forge:constructor
 func New(deps Deps) Service {
-	baseURL := strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/")
+	baseURL := strings.TrimRight(EndpointFrom(deps.ControlPlane).URL, "/")
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
@@ -168,6 +170,16 @@ type Endpoint struct {
 	// InternalServiceSecret signs internal-service calls to it
 	// (INTERNAL_SERVICE_SECRET). Every consumer refuses a URL without one.
 	InternalServiceSecret string
+}
+
+// EndpointFrom is cfg (ServerProcessConfig's ControlPlaneConfig) as an
+// Endpoint, trimmed as every reader of these variables trimmed them. A nil cfg
+// is the zero Endpoint: self-hosted.
+func EndpointFrom(cfg *configv1.ControlPlaneConfig) Endpoint {
+	return Endpoint{
+		URL:                   strings.TrimSpace(cfg.GetUrl()),
+		InternalServiceSecret: strings.TrimSpace(cfg.GetInternalServiceSecret()),
+	}
 }
 
 // Hosted reports whether a control plane is configured.

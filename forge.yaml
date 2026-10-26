@@ -76,6 +76,14 @@ lint:
         # the bump's own PR fails `forge lint --closed-sets` and is fixed with
         # `task db:migration` + `forge db migration new --closed-set <constraint>`.
         forge-closed-set: error
+        # P7b A5 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.3,
+        # §2.4): no component reads the process environment, no component's
+        # Deps carries a naked scalar (each takes its config block), and every
+        # optional dep is nil-checked where it is dereferenced. reliant has no
+        # findings left; at error a regression fails `forge lint`.
+        forgeconv-no-getenv: error
+        forge-config-deps: error
+        forge-optional-deps-guard: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
