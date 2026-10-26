@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -6819,7 +6820,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\x8e\f\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\x8e\f\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -7510,46 +7511,74 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x1bRECOVERY_TYPE_WORKFLOW_LOST\x10\x02*\\\n" +
 	"\x15WorkflowExecutionView\x12!\n" +
 	"\x1dWORKFLOW_EXECUTION_VIEW_BASIC\x10\x00\x12 \n" +
-	"\x1cWORKFLOW_EXECUTION_VIEW_FULL\x10\x012\x91\x18\n" +
-	"\vChatService\x12J\n" +
-	"\tStartChat\x12\x1c.reliant.v1.StartChatRequest\x1a\x1d.reliant.v1.StartChatResponse\"\x00\x12A\n" +
-	"\x06RunNow\x12\x19.reliant.v1.RunNowRequest\x1a\x1a.reliant.v1.RunNowResponse\"\x00\x12J\n" +
-	"\tAdoptChat\x12\x1c.reliant.v1.AdoptChatRequest\x1a\x1d.reliant.v1.AdoptChatResponse\"\x00\x12P\n" +
-	"\vUnadoptChat\x12\x1e.reliant.v1.UnadoptChatRequest\x1a\x1f.reliant.v1.UnadoptChatResponse\"\x00\x12J\n" +
+	"\x1cWORKFLOW_EXECUTION_VIEW_FULL\x10\x012\xea$\n" +
+	"\vChatService\x12\x90\x01\n" +
+	"\tStartChat\x12\x1c.reliant.v1.StartChatRequest\x1a\x1d.reliant.v1.StartChatResponse\"F\xa2\xbb\x18B:@\n" +
+	"\x05start\x12-\n" +
+	"\x04chat\x12\x10response.chat.id\x1a\x13response.chat.title*\bworkflow\x12\x85\x01\n" +
+	"\x06RunNow\x12\x19.reliant.v1.RunNowRequest\x1a\x1a.reliant.v1.RunNowResponse\"D\xa2\xbb\x18@:>\n" +
+	"\x03run\x12-\n" +
+	"\x04chat\x12\x10response.chat.id\x1a\x13response.chat.title*\bworkflow\x12}\n" +
+	"\tAdoptChat\x12\x1c.reliant.v1.AdoptChatRequest\x1a\x1d.reliant.v1.AdoptChatResponse\"3\xa2\xbb\x18/:-\n" +
+	"\x05adopt\x12$\n" +
+	"\x04chat\x12\achat_id\x1a\x13response.chat.title\x12\x85\x01\n" +
+	"\vUnadoptChat\x12\x1e.reliant.v1.UnadoptChatRequest\x1a\x1f.reliant.v1.UnadoptChatResponse\"5\xa2\xbb\x181:/\n" +
+	"\aunadopt\x12$\n" +
+	"\x04chat\x12\achat_id\x1a\x13response.chat.title\x12J\n" +
 	"\tListChats\x12\x1c.reliant.v1.ListChatsRequest\x1a\x1d.reliant.v1.ListChatsResponse\"\x00\x12D\n" +
-	"\aGetChat\x12\x1a.reliant.v1.GetChatRequest\x1a\x1b.reliant.v1.GetChatResponse\"\x00\x12M\n" +
+	"\aGetChat\x12\x1a.reliant.v1.GetChatRequest\x1a\x1b.reliant.v1.GetChatResponse\"\x00\x12\x81\x01\n" +
 	"\n" +
-	"UpdateChat\x12\x1d.reliant.v1.UpdateChatRequest\x1a\x1e.reliant.v1.UpdateChatResponse\"\x00\x12M\n" +
+	"UpdateChat\x12\x1d.reliant.v1.UpdateChatRequest\x1a\x1e.reliant.v1.UpdateChatResponse\"4\xa2\xbb\x180:.\n" +
+	"\x06update\x12$\n" +
+	"\x04chat\x12\achat_id\x1a\x13response.chat.title\x12\x8a\x01\n" +
 	"\n" +
-	"DeleteChat\x12\x1d.reliant.v1.DeleteChatRequest\x1a\x1e.reliant.v1.DeleteChatResponse\"\x00\x12P\n" +
+	"DeleteChat\x12\x1d.reliant.v1.DeleteChatRequest\x1a\x1e.reliant.v1.DeleteChatResponse\"=\xa2\xbb\x189:7\n" +
+	"\x06delete\x12\x0f\n" +
+	"\x04chat\x12\achat_id*\x1cresponse.permanently_deleted\x12P\n" +
 	"\vSearchChats\x12\x1e.reliant.v1.SearchChatsRequest\x1a\x1f.reliant.v1.SearchChatsResponse\"\x00\x12b\n" +
-	"\x11ListArchivedChats\x12$.reliant.v1.ListArchivedChatsRequest\x1a%.reliant.v1.ListArchivedChatsResponse\"\x00\x12P\n" +
-	"\vSendMessage\x12\x1e.reliant.v1.SendMessageRequest\x1a\x1f.reliant.v1.SendMessageResponse\"\x00\x12_\n" +
-	"\x10SendAgentMessage\x12#.reliant.v1.SendAgentMessageRequest\x1a$.reliant.v1.SendAgentMessageResponse\"\x00\x12t\n" +
-	"\x17ListQueuedAgentMessages\x12*.reliant.v1.ListQueuedAgentMessagesRequest\x1a+.reliant.v1.ListQueuedAgentMessagesResponse\"\x00\x12w\n" +
-	"\x18CancelQueuedAgentMessage\x12+.reliant.v1.CancelQueuedAgentMessageRequest\x1a,.reliant.v1.CancelQueuedAgentMessageResponse\"\x00\x12\\\n" +
-	"\x0fInterruptThread\x12\".reliant.v1.InterruptThreadRequest\x1a#.reliant.v1.InterruptThreadResponse\"\x00\x12S\n" +
-	"\fListMessages\x12\x1f.reliant.v1.ListMessagesRequest\x1a .reliant.v1.ListMessagesResponse\"\x00\x12\\\n" +
-	"\x0fUpdateChatState\x12\".reliant.v1.UpdateChatStateRequest\x1a#.reliant.v1.UpdateChatStateResponse\"\x00\x12V\n" +
-	"\rTerminateChat\x12 .reliant.v1.TerminateChatRequest\x1a!.reliant.v1.TerminateChatResponse\"\x00\x12J\n" +
-	"\tPauseChat\x12\x1c.reliant.v1.PauseChatRequest\x1a\x1d.reliant.v1.PauseChatResponse\"\x00\x12M\n" +
+	"\x11ListArchivedChats\x12$.reliant.v1.ListArchivedChatsRequest\x1a%.reliant.v1.ListArchivedChatsResponse\"\x00\x12\xa8\x01\n" +
+	"\vSendMessage\x12\x1e.reliant.v1.SendMessageRequest\x1a\x1f.reliant.v1.SendMessageResponse\"X\xa2\xbb\x18T:R:Pper-turn conversation traffic: the chat's own message history records every send\x12\xcc\x01\n" +
+	"\x10SendAgentMessage\x12#.reliant.v1.SendAgentMessageRequest\x1a$.reliant.v1.SendAgentMessageResponse\"m\xa2\xbb\x18i:g:equeues a message for a running thread: per-turn agent traffic the thread's mailbox and history record\x12t\n" +
+	"\x17ListQueuedAgentMessages\x12*.reliant.v1.ListQueuedAgentMessagesRequest\x1a+.reliant.v1.ListQueuedAgentMessagesResponse\"\x00\x12\xc9\x01\n" +
+	"\x18CancelQueuedAgentMessage\x12+.reliant.v1.CancelQueuedAgentMessageRequest\x1a,.reliant.v1.CancelQueuedAgentMessageResponse\"R\xa2\xbb\x18N:L:Jwithdraws a queued mailbox message before delivery: per-turn agent traffic\x12\xbc\x01\n" +
+	"\x0fInterruptThread\x12\".reliant.v1.InterruptThreadRequest\x1a#.reliant.v1.InterruptThreadResponse\"`\xa2\xbb\x18\\:Z:Xper-turn steering of a running thread; each tool call it cancels records its own outcome\x12S\n" +
+	"\fListMessages\x12\x1f.reliant.v1.ListMessagesRequest\x1a .reliant.v1.ListMessagesResponse\"\x00\x12\x9e\x01\n" +
+	"\x0fUpdateChatState\x12\".reliant.v1.UpdateChatStateRequest\x1a#.reliant.v1.UpdateChatStateResponse\"B\xa2\xbb\x18>:<\n" +
+	"\tset_state\x12\x0f\n" +
+	"\x04chat\x12\achat_id*\x05state*\x17response.previous_state\x12x\n" +
+	"\rTerminateChat\x12 .reliant.v1.TerminateChatRequest\x1a!.reliant.v1.TerminateChatResponse\"\"\xa2\xbb\x18\x1e:\x1c\n" +
+	"\tterminate\x12\x0f\n" +
+	"\x04chat\x12\achat_id\x12h\n" +
+	"\tPauseChat\x12\x1c.reliant.v1.PauseChatRequest\x1a\x1d.reliant.v1.PauseChatResponse\"\x1e\xa2\xbb\x18\x1a:\x18\n" +
+	"\x05pause\x12\x0f\n" +
+	"\x04chat\x12\achat_id\x12l\n" +
 	"\n" +
-	"ResumeChat\x12\x1d.reliant.v1.ResumeChatRequest\x1a\x1e.reliant.v1.ResumeChatResponse\"\x00\x12h\n" +
-	"\x13RetryUsageLimitWait\x12&.reliant.v1.RetryUsageLimitWaitRequest\x1a'.reliant.v1.RetryUsageLimitWaitResponse\"\x00\x12P\n" +
-	"\vDismissChat\x12\x1e.reliant.v1.DismissChatRequest\x1a\x1f.reliant.v1.DismissChatResponse\"\x00\x12Y\n" +
-	"\x0eMarkUnreadChat\x12!.reliant.v1.MarkUnreadChatRequest\x1a\".reliant.v1.MarkUnreadChatResponse\"\x00\x12P\n" +
-	"\vCompactChat\x12\x1e.reliant.v1.CompactChatRequest\x1a\x1f.reliant.v1.CompactChatResponse\"\x00\x12M\n" +
+	"ResumeChat\x12\x1d.reliant.v1.ResumeChatRequest\x1a\x1e.reliant.v1.ResumeChatResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
+	"\x06resume\x12\x0f\n" +
+	"\x04chat\x12\achat_id\x12\xda\x01\n" +
+	"\x13RetryUsageLimitWait\x12&.reliant.v1.RetryUsageLimitWaitRequest\x1a'.reliant.v1.RetryUsageLimitWaitResponse\"r\xa2\xbb\x18n:l:jwakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway\x12\x9b\x01\n" +
+	"\vDismissChat\x12\x1e.reliant.v1.DismissChatRequest\x1a\x1f.reliant.v1.DismissChatResponse\"K\xa2\xbb\x18G:E:Cper-user read state: clears needs-attention when the chat is viewed\x12\x8b\x01\n" +
+	"\x0eMarkUnreadChat\x12!.reliant.v1.MarkUnreadChatRequest\x1a\".reliant.v1.MarkUnreadChatResponse\"2\xa2\xbb\x18.:,:*per-user read state: marks the chat unread\x12{\n" +
+	"\vCompactChat\x12\x1e.reliant.v1.CompactChatRequest\x1a\x1f.reliant.v1.CompactChatResponse\"+\xa2\xbb\x18':%\n" +
+	"\acompact\x12\x0f\n" +
+	"\x04chat\x12\achat_id*\tthread_id\x12\x9f\x01\n" +
 	"\n" +
-	"BranchChat\x12\x1d.reliant.v1.BranchChatRequest\x1a\x1e.reliant.v1.BranchChatResponse\"\x00\x12S\n" +
-	"\fListBranches\x12\x1f.reliant.v1.ListBranchesRequest\x1a .reliant.v1.ListBranchesResponse\"\x00\x12k\n" +
-	"\x14UpdateWorkflowParams\x12'.reliant.v1.UpdateWorkflowParamsRequest\x1a(.reliant.v1.UpdateWorkflowParamsResponse\"\x00\x12w\n" +
-	"\x18UpdateChatProviderPolicy\x12+.reliant.v1.UpdateChatProviderPolicyRequest\x1a,.reliant.v1.UpdateChatProviderPolicyResponse\"\x00\x12Y\n" +
+	"BranchChat\x12\x1d.reliant.v1.BranchChatRequest\x1a\x1e.reliant.v1.BranchChatResponse\"R\xa2\xbb\x18N:L\n" +
+	"\x06branch\x12-\n" +
+	"\x04chat\x12\x10response.chat.id\x1a\x13response.chat.title*\achat_id*\n" +
+	"message_id\x12S\n" +
+	"\fListBranches\x12\x1f.reliant.v1.ListBranchesRequest\x1a .reliant.v1.ListBranchesResponse\"\x00\x12\xf7\x01\n" +
+	"\x14UpdateWorkflowParams\x12'.reliant.v1.UpdateWorkflowParamsRequest\x1a(.reliant.v1.UpdateWorkflowParamsResponse\"\x8b\x01\xa2\xbb\x18\x86\x01:\x83\x01:\x80\x01syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection\x12\x89\x02\n" +
+	"\x18UpdateChatProviderPolicy\x12+.reliant.v1.UpdateChatProviderPolicyRequest\x1a,.reliant.v1.UpdateChatProviderPolicyResponse\"\x91\x01\xa2\xbb\x18\x8c\x01:\x89\x01:\x86\x01per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams\x12Y\n" +
 	"\x0eGetChatUpdates\x12!.reliant.v1.GetChatUpdatesRequest\x1a\".reliant.v1.GetChatUpdatesResponse\"\x00\x12V\n" +
 	"\rListChatPlans\x12 .reliant.v1.ListChatPlansRequest\x1a!.reliant.v1.ListChatPlansResponse\"\x00\x12n\n" +
 	"\x15GetWorkflowExecutions\x12(.reliant.v1.GetWorkflowExecutionsRequest\x1a).reliant.v1.GetWorkflowExecutionsResponse\"\x00\x12e\n" +
 	"\x12ListStepExecutions\x12%.reliant.v1.ListStepExecutionsRequest\x1a&.reliant.v1.ListStepExecutionsResponse\"\x00\x12t\n" +
-	"\x17GetThreadWorkflowInputs\x12*.reliant.v1.GetThreadWorkflowInputsRequest\x1a+.reliant.v1.GetThreadWorkflowInputsResponse\"\x00\x12V\n" +
-	"\rSetChatDaemon\x12 .reliant.v1.SetChatDaemonRequest\x1a!.reliant.v1.SetChatDaemonResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x17GetThreadWorkflowInputs\x12*.reliant.v1.GetThreadWorkflowInputsRequest\x1a+.reliant.v1.GetThreadWorkflowInputsResponse\"\x00\x12\x99\x01\n" +
+	"\rSetChatDaemon\x12 .reliant.v1.SetChatDaemonRequest\x1a!.reliant.v1.SetChatDaemonResponse\"C\xa2\xbb\x18?:=\n" +
+	"\n" +
+	"set_daemon\x12$\n" +
+	"\x04chat\x12\achat_id\x1a\x13response.chat.title*\tdaemon_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_chat_proto_rawDescOnce sync.Once

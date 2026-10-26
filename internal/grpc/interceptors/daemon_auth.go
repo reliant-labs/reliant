@@ -60,8 +60,11 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 		}
 		// The authority is unreachable: our outage, not the daemon's bad
 		// credential. Unavailable makes the daemon retry instead of
-		// discarding a good token.
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon credential verification unavailable: %w", err))
+		// discarding a good token. The daemon reads only the fixed text;
+		// the authority's own error stays server-side as the cause, which
+		// the "rpc failed" record logs.
+		return nil, svcerr.ToConnect(svcerr.WithCause(
+			svcerr.Unavailable("daemon credential verification unavailable"), err))
 	}
 	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.ActingUserID == "" {
 		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token does not grant daemon:connect"))

@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -22,17 +23,46 @@ service ScenarioService {
   rpc CreateScenario(CreateScenarioRequest) returns (CreateScenarioResponse) {}
 
   // RunScenario runs a scenario against a workflow
-  rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse) {}
+  rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "a simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result"}
+    };
+  }
 
   // DeleteScenario deletes a scenario
   // forge:custom — only the scenario's owner may delete it
-  rpc DeleteScenario(DeleteScenarioRequest) returns (DeleteScenarioResponse) {}
+  rpc DeleteScenario(DeleteScenarioRequest) returns (DeleteScenarioResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "scenario"
+          id: "scenario_id"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 
   // UploadScenario saves a scenario YAML file to the project directory
-  rpc UploadScenario(UploadScenarioRequest) returns (UploadScenarioResponse) {}
+  rpc UploadScenario(UploadScenarioRequest) returns (UploadScenarioResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "upload"
+        target: {
+          kind: "scenario"
+          id: "response.scenario.id"
+          label: "response.scenario.name"
+        }
+        detail: ["workflow_slug"]
+      }
+    };
+  }
 
   // ExportScenario exports a scenario to YAML format
-  rpc ExportScenario(ExportScenarioRequest) returns (ExportScenarioResponse) {}
+  rpc ExportScenario(ExportScenarioRequest) returns (ExportScenarioResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // SimulatedEvent represents a single event in the simulation.

@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -505,7 +506,7 @@ var File_reliant_v1_question_proto protoreflect.FileDescriptor
 const file_reliant_v1_question_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/question.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x8d\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8d\x01\n" +
 	"\x16ResolveQuestionRequest\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x16\n" +
@@ -548,9 +549,11 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17QUESTION_STATUS_PENDING\x10\x01\x12\x1c\n" +
-	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xc3\x02\n" +
-	"\x0fQuestionService\x12\\\n" +
-	"\x0fResolveQuestion\x12\".reliant.v1.ResolveQuestionRequest\x1a#.reliant.v1.ResolveQuestionResponse\"\x00\x12k\n" +
+	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xf4\x02\n" +
+	"\x0fQuestionService\x12\x8c\x01\n" +
+	"\x0fResolveQuestion\x12\".reliant.v1.ResolveQuestionRequest\x1a#.reliant.v1.ResolveQuestionResponse\"0\xa2\xbb\x18,:*\n" +
+	"\aresolve\x12\x17\n" +
+	"\bquestion\x12\vquestion_id*\x06action\x12k\n" +
 	"\x14ListPendingQuestions\x12'.reliant.v1.ListPendingQuestionsRequest\x1a(.reliant.v1.ListPendingQuestionsResponse\"\x00\x12e\n" +
 	"\x12ListAsyncQuestions\x12%.reliant.v1.ListAsyncQuestionsRequest\x1a&.reliant.v1.ListAsyncQuestionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -32,16 +33,66 @@ service ApprovalService {
   rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
   
   // Approve approves a pending approval request (signals workflow to continue).
-  rpc Approve(ApproveRequest) returns (ApproveResponse) {}
+  rpc Approve(ApproveRequest) returns (ApproveResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "approve"
+        target: {
+          kind: "approval"
+          id: "request_id"
+        }
+        detail: ["action_taken"]
+      }
+    };
+  }
   
   // Deny denies a pending approval request (cancels workflow)
-  rpc Deny(DenyRequest) returns (DenyResponse) {}
+  rpc Deny(DenyRequest) returns (DenyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "deny"
+        target: {
+          kind: "approval"
+          id: "request_id"
+        }
+        detail: ["action_taken"]
+      }
+    };
+  }
   
   // BatchApprove approves multiple pending approval requests at once
-  rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {}
+  rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "batch_approve"
+        target: {
+          kind: "chat"
+          id: "response.chat_id"
+        }
+        detail: [
+          "response.approved",
+          "action_taken"
+        ]
+      }
+    };
+  }
   
   // BatchDeny denies multiple pending approval requests at once
-  rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {}
+  rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "batch_deny"
+        target: {
+          kind: "chat"
+          id: "response.chat_id"
+        }
+        detail: [
+          "response.denied",
+          "action_taken"
+        ]
+      }
+    };
+  }
 }
 
 // Approval represents a workflow approval request.
@@ -116,6 +167,9 @@ message BatchApproveResponse {
   bool success = 1;
   int32 approved = 2;
   string message = 3;
+  // The chat every approval in the batch belongs to (the handler refuses a
+  // batch that spans chats). It is the target of the batch's activity event.
+  string chat_id = 4;
 }
 
 // BatchDenyRequest denies multiple approvals at once
@@ -130,4 +184,7 @@ message BatchDenyResponse {
   bool success = 1;
   int32 denied = 2;
   string message = 3;
+  // The chat every approval in the batch belongs to, as in
+  // BatchApproveResponse.chat_id.
+  string chat_id = 4;
 }

@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/chat.proto";
 import "reliant/v1/run.proto";
@@ -45,7 +46,18 @@ service TriggerService {
   // UpdateTrigger replaces a trigger's definition and reconverges its
   // schedule. The owner and kind are not updatable.
   // forge:custom — replaces an owned trigger's definition and reconverges its schedule
-  rpc UpdateTrigger(UpdateTriggerRequest) returns (UpdateTriggerResponse) {}
+  rpc UpdateTrigger(UpdateTriggerRequest) returns (UpdateTriggerResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "trigger"
+          id: "id"
+          label: "response.trigger.name"
+        }
+      }
+    };
+  }
 
   // DeleteTrigger removes a trigger and its schedule. Its firing history
   // survives, with trigger_id cleared — the runs it started still exist.
@@ -54,12 +66,35 @@ service TriggerService {
 
   // SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
   // schedule rather than deleting it, so re-enabling needs no re-derivation.
-  rpc SetTriggerEnabled(SetTriggerEnabledRequest) returns (SetTriggerEnabledResponse) {}
+  rpc SetTriggerEnabled(SetTriggerEnabledRequest) returns (SetTriggerEnabledResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_enabled"
+        target: {
+          kind: "trigger"
+          id: "id"
+          label: "response.trigger.name"
+        }
+        detail: ["enabled"]
+      }
+    };
+  }
 
   // FireTrigger runs a trigger now, out of band with its schedule. A manual
   // fire skips the enabled and overlap checks: the human asking for it has
   // already made that decision.
-  rpc FireTrigger(FireTriggerRequest) returns (FireTriggerResponse) {}
+  rpc FireTrigger(FireTriggerRequest) returns (FireTriggerResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "fire"
+        target: {
+          kind: "trigger"
+          id: "id"
+        }
+        detail: ["response.fire_workflow_id"]
+      }
+    };
+  }
 
   // ListTriggerEvents returns a trigger's firings, newest first, paged by a
   // keyset cursor. Each launched firing carries the state of the run it started.
@@ -77,7 +112,18 @@ service TriggerService {
 
   // RotateWebhookToken replaces a webhook trigger's token. The old token
   // stops working immediately; the new one is returned once and never again.
-  rpc RotateWebhookToken(RotateWebhookTokenRequest) returns (RotateWebhookTokenResponse) {}
+  rpc RotateWebhookToken(RotateWebhookTokenRequest) returns (RotateWebhookTokenResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "rotate_webhook_token"
+        target: {
+          kind: "trigger"
+          id: "id"
+          label: "response.trigger.name"
+        }
+      }
+    };
+  }
 
   // EnableWorkflow turns on every trigger a workflow declares, as one act:
   // the user's choice of project, machine and connected accounts, applied to
@@ -97,12 +143,34 @@ service TriggerService {
   // activation's name, an unnamed connection and an unspecified acting
   // identity are kept from what it had. A failed write puts every changed
   // activation back as it was.
-  rpc EnableWorkflow(EnableWorkflowRequest) returns (EnableWorkflowResponse) {}
+  rpc EnableWorkflow(EnableWorkflowRequest) returns (EnableWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "enable"
+        target: {
+          kind: "workflow"
+          id: "workflow"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 
   // DisableWorkflow pauses every activation of a workflow. Unlike enabling it
   // is not all-or-nothing: a pause that fails must not stop the others from
   // pausing, so it reports each failure and pauses the rest.
-  rpc DisableWorkflow(DisableWorkflowRequest) returns (DisableWorkflowResponse) {}
+  rpc DisableWorkflow(DisableWorkflowRequest) returns (DisableWorkflowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "disable"
+        target: {
+          kind: "workflow"
+          id: "workflow"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 
   // ResolveTriggerSenders looks people up for a trigger's "Only from": a
   // handle (a GitHub login) to the id trigger.sender.id carries, and an id

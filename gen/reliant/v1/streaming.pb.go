@@ -2204,9 +2204,9 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x19EXECUTION_LOG_LEVEL_DEBUG\x10\x01\x12\x1c\n" +
 	"\x18EXECUTION_LOG_LEVEL_INFO\x10\x02\x12\x1c\n" +
 	"\x18EXECUTION_LOG_LEVEL_WARN\x10\x03\x12\x1d\n" +
-	"\x19EXECUTION_LOG_LEVEL_ERROR\x10\x042n\n" +
-	"\x10StreamingService\x12Z\n" +
-	"\x11StreamUserUpdates\x12$.reliant.v1.StreamUserUpdatesRequest\x1a\x1b.reliant.v1.UserStreamEvent\"\x000\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x19EXECUTION_LOG_LEVEL_ERROR\x10\x042q\n" +
+	"\x10StreamingService\x12]\n" +
+	"\x11StreamUserUpdates\x12$.reliant.v1.StreamUserUpdatesRequest\x1a\x1b.reliant.v1.UserStreamEvent\"\x03\x90\x02\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_streaming_proto_rawDescOnce sync.Once

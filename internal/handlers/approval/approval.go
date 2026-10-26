@@ -413,6 +413,7 @@ func (s *Service) BatchApprove(
 		Success:  true,
 		Approved: int32(len(req.Msg.RequestIds)),
 		Message:  fmt.Sprintf("Approved %d requests", len(req.Msg.RequestIds)),
+		ChatId:   chatID,
 	}), nil
 }
 
@@ -533,6 +534,7 @@ func (s *Service) BatchDeny(
 		Success: true,
 		Denied:  int32(len(req.Msg.RequestIds)),
 		Message: fmt.Sprintf("Denied %d requests", len(req.Msg.RequestIds)),
+		ChatId:  chatID,
 	}), nil
 }
 

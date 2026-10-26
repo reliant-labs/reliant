@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -160,6 +161,8 @@ func (s *Service) EnableWorkflow(
 				r.Message = "Not enabled because another trigger of this workflow could not be."
 			}
 		}
+		// All or nothing, and it was nothing: no "enable" event.
+		activity.Skip(ctx)
 		return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
 	}
 
@@ -173,6 +176,7 @@ func (s *Service) EnableWorkflow(
 			results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED
 			results[i].Message = connectMessage(err)
 			s.undoEnable(ctx, steps, results, undo)
+			activity.Skip(ctx) // every write was undone: no "enable" event
 			return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
 		}
 	}

@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/task.proto";
 
@@ -32,11 +33,32 @@ service PlanService {
   
   // UpdatePlan updates an existing plan
   // forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
-  rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {}
+  rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "plan"
+          id: "plan_id"
+          label: "response.plan.title"
+        }
+      }
+    };
+  }
   
   // DeletePlan deletes a plan
   // forge:custom — authorized through the plan's chat, which it notifies to refetch
-  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse) {}
+  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "plan"
+          id: "plan_id"
+        }
+      }
+    };
+  }
   
   // ListPlanTasks lists all tasks for a plan
   rpc ListPlanTasks(ListPlanTasksRequest) returns (ListPlanTasksResponse) {}

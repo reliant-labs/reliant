@@ -280,7 +280,11 @@
           "InputProtoFile": "reliant/v1/approval.proto",
           "OutputProtoFile": "reliant/v1/approval.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "approve",
+            "TargetKind": "approval",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -296,7 +300,11 @@
           "InputProtoFile": "reliant/v1/approval.proto",
           "OutputProtoFile": "reliant/v1/approval.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "deny",
+            "TargetKind": "approval",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -312,7 +320,11 @@
           "InputProtoFile": "reliant/v1/approval.proto",
           "OutputProtoFile": "reliant/v1/approval.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "batch_approve",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -328,7 +340,11 @@
           "InputProtoFile": "reliant/v1/approval.proto",
           "OutputProtoFile": "reliant/v1/approval.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "batch_deny",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -386,6 +402,11 @@
             "Name": "message",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
           }
         ],
         "BatchDenyRequest": [
@@ -418,6 +439,11 @@
           },
           {
             "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -586,6 +612,10 @@
           {
             "name": "message",
             "kind": "string"
+          },
+          {
+            "name": "chat_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.BatchDenyRequest": [
@@ -616,6 +646,10 @@
           },
           {
             "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "chat_id",
             "kind": "string"
           }
         ],
@@ -1060,7 +1094,9 @@
           "InputProtoFile": "reliant/v1/background.proto",
           "OutputProtoFile": "reliant/v1/background.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stops a background process on the daemon; process lifecycle, not project history"
           }
         },
         {
@@ -1071,12 +1107,13 @@
           "ServerStreaming": true,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.StreamProcessOutputRequest",
           "OutputTypeFQ": "reliant.v1.ProcessOutputEvent",
           "InputProtoFile": "reliant/v1/background.proto",
           "OutputProtoFile": "reliant/v1/background.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         }
       ],
@@ -4939,7 +4976,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "start",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -4955,7 +4996,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "run",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -4971,7 +5016,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "adopt",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -4987,7 +5036,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "unadopt",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5038,7 +5091,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5055,7 +5112,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5103,7 +5164,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-turn conversation traffic: the chat's own message history records every send"
           }
         },
         {
@@ -5119,7 +5182,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"
           }
         },
         {
@@ -5151,7 +5216,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "withdraws a queued mailbox message before delivery: per-turn agent traffic"
           }
         },
         {
@@ -5167,7 +5234,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-turn steering of a running thread; each tool call it cancels records its own outcome"
           }
         },
         {
@@ -5200,7 +5269,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_state",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5216,7 +5289,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "terminate",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5232,7 +5309,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pause",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5248,7 +5329,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "resume",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5264,7 +5349,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"
           }
         },
         {
@@ -5280,7 +5367,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user read state: clears needs-attention when the chat is viewed"
           }
         },
         {
@@ -5296,7 +5385,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user read state: marks the chat unread"
           }
         },
         {
@@ -5312,7 +5403,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "compact",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5328,7 +5423,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "branch",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -5360,7 +5459,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"
           }
         },
         {
@@ -5376,7 +5477,9 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"
           }
         },
         {
@@ -5473,7 +5576,11 @@
           "InputProtoFile": "reliant/v1/chat.proto",
           "OutputProtoFile": "reliant/v1/chat.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_daemon",
+            "TargetKind": "chat",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -8704,7 +8811,11 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "start",
+            "TargetKind": "run",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -8720,7 +8831,9 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "delivers messages into a live run: per-turn agent traffic the run's history records"
           }
         },
         {
@@ -8785,7 +8898,11 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pause",
+            "TargetKind": "run",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -8801,7 +8918,11 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "resume",
+            "TargetKind": "run",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -8817,7 +8938,11 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "cancel",
+            "TargetKind": "run",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -8833,7 +8958,9 @@
           "InputProtoFile": "reliant/v1/run.proto",
           "OutputProtoFile": "reliant/v1/run.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcome"
           }
         }
       ],
@@ -9744,7 +9871,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "trigger",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -9782,7 +9913,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_enabled",
+            "TargetKind": "trigger",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -9798,7 +9933,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "fire",
+            "TargetKind": "trigger",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -9847,7 +9986,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "rotate_webhook_token",
+            "TargetKind": "trigger",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -9863,7 +10006,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "enable",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -9879,7 +10026,11 @@
           "InputProtoFile": "reliant/v1/trigger.proto",
           "OutputProtoFile": "reliant/v1/trigger.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "disable",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -21668,7 +21819,9 @@
           "InputProtoFile": "reliant/v1/package_commands.proto",
           "OutputProtoFile": "reliant/v1/package_commands.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "runs a package script on the daemon: dev-loop process control, high volume"
           }
         },
         {
@@ -21732,7 +21885,9 @@
           "InputProtoFile": "reliant/v1/package_commands.proto",
           "OutputProtoFile": "reliant/v1/package_commands.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stops a package command's process on the daemon: dev-loop process control"
           }
         },
         {
@@ -21764,7 +21919,9 @@
           "InputProtoFile": "reliant/v1/package_commands.proto",
           "OutputProtoFile": "reliant/v1/package_commands.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user UI preference: a favorited command"
           }
         }
       ],
@@ -22386,7 +22543,11 @@
           "InputProtoFile": "reliant/v1/task.proto",
           "OutputProtoFile": "reliant/v1/task.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "task",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -22403,7 +22564,11 @@
           "InputProtoFile": "reliant/v1/task.proto",
           "OutputProtoFile": "reliant/v1/task.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "task",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -22419,7 +22584,11 @@
           "InputProtoFile": "reliant/v1/task.proto",
           "OutputProtoFile": "reliant/v1/task.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "add_dependency",
+            "TargetKind": "task",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -22435,7 +22604,11 @@
           "InputProtoFile": "reliant/v1/task.proto",
           "OutputProtoFile": "reliant/v1/task.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "remove_dependency",
+            "TargetKind": "task",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -23088,7 +23261,11 @@
           "InputProtoFile": "reliant/v1/plan.proto",
           "OutputProtoFile": "reliant/v1/plan.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "plan",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -23105,7 +23282,11 @@
           "InputProtoFile": "reliant/v1/plan.proto",
           "OutputProtoFile": "reliant/v1/plan.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "plan",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -26949,7 +27130,11 @@
           "InputProtoFile": "reliant/v1/question.proto",
           "OutputProtoFile": "reliant/v1/question.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "resolve",
+            "TargetKind": "question",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -27612,7 +27797,9 @@
           "InputProtoFile": "reliant/v1/scenario.proto",
           "OutputProtoFile": "reliant/v1/scenario.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "a simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result"
           }
         },
         {
@@ -27629,7 +27816,11 @@
           "InputProtoFile": "reliant/v1/scenario.proto",
           "OutputProtoFile": "reliant/v1/scenario.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "scenario",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -27645,7 +27836,11 @@
           "InputProtoFile": "reliant/v1/scenario.proto",
           "OutputProtoFile": "reliant/v1/scenario.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "upload",
+            "TargetKind": "scenario",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -27656,12 +27851,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ExportScenarioRequest",
           "OutputTypeFQ": "reliant.v1.ExportScenarioResponse",
           "InputProtoFile": "reliant/v1/scenario.proto",
           "OutputProtoFile": "reliant/v1/scenario.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         }
       ],
@@ -31487,12 +31683,13 @@
           "ServerStreaming": true,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.StreamUserUpdatesRequest",
           "OutputTypeFQ": "reliant.v1.UserStreamEvent",
           "InputProtoFile": "reliant/v1/streaming.proto",
           "OutputProtoFile": "reliant/v1/streaming.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         }
       ],
@@ -33059,7 +33256,9 @@
           "InputProtoFile": "reliant/v1/terminal.proto",
           "OutputProtoFile": "reliant/v1/terminal.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "closes a terminal session on the daemon: interactive transport, not project history"
           }
         },
         {
@@ -33075,7 +33274,9 @@
           "InputProtoFile": "reliant/v1/terminal.proto",
           "OutputProtoFile": "reliant/v1/terminal.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "terminal I/O to and from the daemon: interactive transport, not project history"
           }
         }
       ],
@@ -33837,7 +34038,9 @@
           "InputProtoFile": "reliant/v1/tool_call.proto",
           "OutputProtoFile": "reliant/v1/tool_call.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-turn agent control: the cancelled call records its own outcome"
           }
         },
         {
@@ -33853,7 +34056,9 @@
           "InputProtoFile": "reliant/v1/tool_call.proto",
           "OutputProtoFile": "reliant/v1/tool_call.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-turn agent control: moves an in-flight tool call to a background process"
           }
         }
       ],
@@ -34040,7 +34245,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "save",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34074,7 +34283,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34107,7 +34320,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "import",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34140,7 +34357,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_visibility",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34156,7 +34377,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "copy",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34172,7 +34397,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -34188,7 +34417,11 @@
           "InputProtoFile": "reliant/v1/workflow.proto",
           "OutputProtoFile": "reliant/v1/workflow.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_status",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -34319,6 +34552,11 @@
           },
           {
             "Name": "message",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "slug",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -34705,6 +34943,11 @@
           {
             "Name": "version",
             "ProtoType": "int64",
+            "IsOptional": false
+          },
+          {
+            "Name": "slug",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -35242,6 +35485,10 @@
           },
           {
             "name": "message",
+            "kind": "string"
+          },
+          {
+            "name": "slug",
             "kind": "string"
           }
         ],
@@ -36733,6 +36980,10 @@
           {
             "name": "version",
             "kind": "int64"
+          },
+          {
+            "name": "slug",
+            "kind": "string"
           }
         ],
         "reliant.v1.SetWorkflowVisibilityRequest": [
@@ -40682,11 +40933,11 @@
     "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
     "reliant/v1/account.proto": "5ac0387f3f00fe31139db27af006c500337d0441ce9785208411893901a00ab6",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
-    "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
+    "reliant/v1/approval.proto": "4d455295dc786a51bb13f302b34a6b60ac70d131b5b6c1bd91967f17f37c7d72",
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
-    "reliant/v1/background.proto": "84c4c5ccc39bbf99e46126262da13cb89b19337af1fe573b63f56d6d0e8e7eba",
+    "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "3087be1887db21683dfdc1b5d55914aa7e1743a5df5754009cd060f1ae2249b7",
+    "reliant/v1/chat.proto": "4b78eab5552a9d6007156033f9971c309f48ee0203e95c0b2c383c89e494920b",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
     "reliant/v1/connector.proto": "604b069c652292d84d3c220ad54815a01b9d28670accd4fc75b042ffae8efcfe",
@@ -40699,25 +40950,25 @@
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
     "reliant/v1/model_endpoint.proto": "2fb5bd0a5d3a2bda68df02bfb6658b210ea7eb021999816d2ec8e3cf3705b890",
-    "reliant/v1/package_commands.proto": "db9c88ccae1dc9dc128cbb4d9bb3098db07db1724213de8ee55f545bff3bdd30",
-    "reliant/v1/plan.proto": "8e2be7bb319c41bdde84e07b508328d6604b836cb8b6006f68414bd44bc22aee",
+    "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
+    "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
     "reliant/v1/preset.proto": "27acb3ba272869868343c82279adc59b24a15bdc22f500ea36e5aa73a709dae8",
     "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
-    "reliant/v1/question.proto": "b7bed3249ce684a4191444c9bb404bcee80fc346093493b91a4430173205c87c",
+    "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
-    "reliant/v1/run.proto": "715924a2fc954fed3959c79a632c7c621ff043db27f5ed6a1dbff7b85ab47e10",
-    "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",
+    "reliant/v1/run.proto": "40df7416b308111e1627565d8498943ad1ceeaefb0adf22c3e2c212f518762a7",
+    "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
-    "reliant/v1/streaming.proto": "d2cd468dc58d6482db006c4c49c80c11302cc79f02f375461fd3c850d60cd3fa",
+    "reliant/v1/streaming.proto": "e75666fc99eae37e14188b9a98efdf06699d92ad922db89abf5dc9190ae8d2bc",
     "reliant/v1/system.proto": "7a9eb1bc4d6a322cbb907ec1843f74815c9a10d01b3d2ee305aa945b4c48d666",
-    "reliant/v1/task.proto": "9f4ad68ce4b0959f5f0028e98402bb86695b3a2c61cba037c478586d1c0aef5a",
-    "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
+    "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
+    "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
-    "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
+    "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
-    "reliant/v1/trigger.proto": "bf4b9bf002405448a9d185e3a16daaff0b61379d7352290130314d0a1d3011ec",
-    "reliant/v1/workflow.proto": "ebbec9e5dfa96c5f3dcbf59f3e939ea7b3348309794fdc624f4b1dae582cb30e",
+    "reliant/v1/trigger.proto": "865ce2ff003ba8acd15c4f2e664e149a00e7e6c840e4fcae5a5503b93f4a411a",
+    "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
     "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
   }

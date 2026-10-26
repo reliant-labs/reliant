@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -917,7 +918,7 @@ var File_reliant_v1_plan_proto protoreflect.FileDescriptor
 const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/plan.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xc4\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x15reliant/v1/task.proto\"\xc4\x02\n" +
 	"\x04Plan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x14\n" +
@@ -989,16 +990,20 @@ const file_reliant_v1_plan_proto_rawDesc = "" +
 	"\x1bPLAN_COMPLEXITY_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PLAN_COMPLEXITY_SIMPLE\x10\x01\x12\x1c\n" +
 	"\x18PLAN_COMPLEXITY_MODERATE\x10\x02\x12\x1b\n" +
-	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xdd\x04\n" +
+	"\x17PLAN_COMPLEXITY_COMPLEX\x10\x032\xb1\x05\n" +
 	"\vPlanService\x12M\n" +
 	"\n" +
 	"CreatePlan\x12\x1d.reliant.v1.CreatePlanRequest\x1a\x1e.reliant.v1.CreatePlanResponse\"\x00\x12D\n" +
 	"\aGetPlan\x12\x1a.reliant.v1.GetPlanRequest\x1a\x1b.reliant.v1.GetPlanResponse\"\x00\x12\\\n" +
-	"\x0fGetPlanByChatId\x12\".reliant.v1.GetPlanByChatIdRequest\x1a#.reliant.v1.GetPlanByChatIdResponse\"\x00\x12M\n" +
+	"\x0fGetPlanByChatId\x12\".reliant.v1.GetPlanByChatIdRequest\x1a#.reliant.v1.GetPlanByChatIdResponse\"\x00\x12\x81\x01\n" +
 	"\n" +
-	"UpdatePlan\x12\x1d.reliant.v1.UpdatePlanRequest\x1a\x1e.reliant.v1.UpdatePlanResponse\"\x00\x12M\n" +
+	"UpdatePlan\x12\x1d.reliant.v1.UpdatePlanRequest\x1a\x1e.reliant.v1.UpdatePlanResponse\"4\xa2\xbb\x180:.\n" +
+	"\x06update\x12$\n" +
+	"\x04plan\x12\aplan_id\x1a\x13response.plan.title\x12l\n" +
 	"\n" +
-	"DeletePlan\x12\x1d.reliant.v1.DeletePlanRequest\x1a\x1e.reliant.v1.DeletePlanResponse\"\x00\x12V\n" +
+	"DeletePlan\x12\x1d.reliant.v1.DeletePlanRequest\x1a\x1e.reliant.v1.DeletePlanResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
+	"\x06delete\x12\x0f\n" +
+	"\x04plan\x12\aplan_id\x12V\n" +
 	"\rListPlanTasks\x12 .reliant.v1.ListPlanTasksRequest\x1a!.reliant.v1.ListPlanTasksResponse\"\x00\x12e\n" +
 	"\x12ListPlansByProject\x12%.reliant.v1.ListPlansByProjectRequest\x1a&.reliant.v1.ListPlansByProjectResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

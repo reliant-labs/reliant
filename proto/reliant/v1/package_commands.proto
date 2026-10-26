@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -21,7 +22,11 @@ service PackageCommandsService {
   rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {}
   
   // RunCommand executes a package command
-  rpc RunCommand(RunPackageCommandRequest) returns (RunPackageCommandResponse) {}
+  rpc RunCommand(RunPackageCommandRequest) returns (RunPackageCommandResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "runs a package script on the daemon: dev-loop process control, high volume"}
+    };
+  }
   
   // ListProcesses returns processes for a worktree
   rpc ListProcesses(ListPackageProcessesRequest) returns (ListPackageProcessesResponse) {}
@@ -33,13 +38,21 @@ service PackageCommandsService {
   rpc GetProcessLogs(GetPackageProcessLogsRequest) returns (GetPackageProcessLogsResponse) {}
   
   // KillProcess terminates a process
-  rpc KillProcess(KillPackageProcessRequest) returns (KillPackageProcessResponse) {}
+  rpc KillProcess(KillPackageProcessRequest) returns (KillPackageProcessResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "stops a package command's process on the daemon: dev-loop process control"}
+    };
+  }
   
   // GetCommandFavorites returns the list of favorited command keys for a project
   rpc GetCommandFavorites(GetCommandFavoritesRequest) returns (GetCommandFavoritesResponse) {}
   
   // SetCommandFavorite adds or removes a command from favorites
-  rpc SetCommandFavorite(SetCommandFavoriteRequest) returns (SetCommandFavoriteResponse) {}
+  rpc SetCommandFavorite(SetCommandFavoriteRequest) returns (SetCommandFavoriteResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-user UI preference: a favorited command"}
+    };
+  }
 }
 
 // ============================================

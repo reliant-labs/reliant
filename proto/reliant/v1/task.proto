@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -46,17 +47,66 @@ service TaskService {
   
   // UpdateTask updates an existing task
   // forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
-  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {}
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "task"
+          id: "task_id"
+          label: "response.task.title"
+        }
+      }
+    };
+  }
   
   // DeleteTask deletes a task
   // forge:custom — authorized through the task's chat, which it notifies to refetch
-  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {}
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "task"
+          id: "task_id"
+        }
+      }
+    };
+  }
 
   // AddTaskDependency creates a dependency between two tasks
-  rpc AddTaskDependency(AddTaskDependencyRequest) returns (AddTaskDependencyResponse) {}
+  rpc AddTaskDependency(AddTaskDependencyRequest) returns (AddTaskDependencyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "add_dependency"
+        target: {
+          kind: "task"
+          id: "from_task_id"
+        }
+        detail: [
+          "to_task_id",
+          "dependency_type"
+        ]
+      }
+    };
+  }
 
   // RemoveTaskDependency removes a dependency between two tasks
-  rpc RemoveTaskDependency(RemoveTaskDependencyRequest) returns (RemoveTaskDependencyResponse) {}
+  rpc RemoveTaskDependency(RemoveTaskDependencyRequest) returns (RemoveTaskDependencyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "remove_dependency"
+        target: {
+          kind: "task"
+          id: "from_task_id"
+        }
+        detail: [
+          "to_task_id",
+          "dependency_type"
+        ]
+      }
+    };
+  }
 
   // ListReadyTasks lists tasks that are ready to work on (no unresolved blockers)
   rpc ListReadyTasks(ListReadyTasksRequest) returns (ListReadyTasksResponse) {}

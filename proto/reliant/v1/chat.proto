@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/worktree.proto";
@@ -149,7 +150,19 @@ service ChatService {
   // start records a trigger_events row whose dedupe key is the chat id, so
   // "a chat starts exactly once" is a database invariant rather than client
   // discipline. See research/TRIGGERS.md.
-  rpc StartChat(StartChatRequest) returns (StartChatResponse) {}
+  rpc StartChat(StartChatRequest) returns (StartChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "start"
+        target: {
+          kind: "chat"
+          id: "response.chat.id"
+          label: "response.chat.title"
+        }
+        detail: ["workflow"]
+      }
+    };
+  }
 
   // RunNow starts a workflow by hand, from its detail page's "Run now". It is
   // StartChat's attended start with its own launch kind (manual.run), and it
@@ -159,16 +172,50 @@ service ChatService {
   // Owner-only by construction: the run is the caller's, resolved against the
   // caller's workflows. It is not an agent tool, and manual.run is not a launch
   // kind StartChat can be asked for.
-  rpc RunNow(RunNowRequest) returns (RunNowResponse) {}
+  rpc RunNow(RunNowRequest) returns (RunNowResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "run"
+        target: {
+          kind: "chat"
+          id: "response.chat.id"
+          label: "response.chat.title"
+        }
+        detail: ["workflow"]
+      }
+    };
+  }
 
   // AdoptChat takes a run (typically an automation's) into the caller's own
   // chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
   // root run started by SendMessage attended. Idempotent; owner-only.
-  rpc AdoptChat(AdoptChatRequest) returns (AdoptChatResponse) {}
+  rpc AdoptChat(AdoptChatRequest) returns (AdoptChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "adopt"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+      }
+    };
+  }
 
   // UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
   // Idempotent; owner-only.
-  rpc UnadoptChat(UnadoptChatRequest) returns (UnadoptChatResponse) {}
+  rpc UnadoptChat(UnadoptChatRequest) returns (UnadoptChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "unadopt"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+      }
+    };
+  }
 
   // ListChats lists all non-archived chats for a project
   // forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
@@ -180,11 +227,33 @@ service ChatService {
   
   // UpdateChat updates chat metadata (title, temperature, etc.)
   // forge:custom — a partial update that resolves the worktree and emits title/config change events
-  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse) {}
+  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+      }
+    };
+  }
   
   // DeleteChat archives or permanently deletes a chat
   // forge:custom — archives first (cancelling the run), and only an already-archived chat is permanently deleted
-  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse) {}
+  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: ["response.permanently_deleted"]
+      }
+    };
+  }
   
   // SearchChats searches chats by title and message content
   rpc SearchChats(SearchChatsRequest) returns (SearchChatsResponse) {}
@@ -193,7 +262,11 @@ service ChatService {
   rpc ListArchivedChats(ListArchivedChatsRequest) returns (ListArchivedChatsResponse) {}
   
   // SendMessage sends a user message to a chat and continues workflow
-  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-turn conversation traffic: the chat's own message history records every send"}
+    };
+  }
 
   // SendAgentMessage lets a human queue a message into a SPECIFIC running
   // thread's mailbox (the agent_messages table) without pausing or otherwise
@@ -203,7 +276,11 @@ service ChatService {
   //
   // The message is delivered at the target thread's next agent-loop step
   // boundary, same as spawn_send. It is queued, not delivered synchronously.
-  rpc SendAgentMessage(SendAgentMessageRequest) returns (SendAgentMessageResponse) {}
+  rpc SendAgentMessage(SendAgentMessageRequest) returns (SendAgentMessageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "queues a message for a running thread: per-turn agent traffic the thread's mailbox and history record"}
+    };
+  }
 
   // ListQueuedAgentMessages returns the messages currently sitting in a
   // thread's mailbox (agent_messages) with status = queued -- i.e. sent via
@@ -216,7 +293,11 @@ service ChatService {
   // the target agent drains it. This is a race against the agent's own loop
   // boundary -- see CancelQueuedAgentMessageResponse for the honesty
   // contract when the message was already delivered.
-  rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {}
+  rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "withdraws a queued mailbox message before delivery: per-turn agent traffic"}
+    };
+  }
 
   // InterruptThread stops what a thread is doing right now so it reads its
   // mailbox at once, instead of at the end of the work already in flight.
@@ -236,28 +317,80 @@ service ChatService {
   // the delivery -- there is no row to update and no window to lose.
   //
   // Queue the message first (SendAgentMessage), then interrupt.
-  rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {}
+  rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-turn steering of a running thread; each tool call it cancels records its own outcome"}
+    };
+  }
   
   // ListMessages lists messages for a chat with content blocks
   // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
-  rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {}
+  rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_state"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: [
+          "state",
+          "response.previous_state"
+        ]
+      }
+    };
+  }
   
   // TerminateChat forcefully terminates the running workflow for a chat
-  rpc TerminateChat(TerminateChatRequest) returns (TerminateChatResponse) {}
+  rpc TerminateChat(TerminateChatRequest) returns (TerminateChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "terminate"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+      }
+    };
+  }
 
   // PauseChat pauses the running workflow (keeps it resumable)
-  rpc PauseChat(PauseChatRequest) returns (PauseChatResponse) {}
+  rpc PauseChat(PauseChatRequest) returns (PauseChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "pause"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+      }
+    };
+  }
 
   // ResumeChat resumes a paused or expired workflow
-  rpc ResumeChat(ResumeChatRequest) returns (ResumeChatResponse) {}
+  rpc ResumeChat(ResumeChatRequest) returns (ResumeChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "resume"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+      }
+    };
+  }
 
   // RetryUsageLimitWait wakes a run parked until a provider's usage limit
   // resets ("Retry now"): it retries the step immediately instead of waiting
   // for the reset. A run that is not waiting is left alone (woken = false).
-  rpc RetryUsageLimitWait(RetryUsageLimitWaitRequest) returns (RetryUsageLimitWaitResponse) {}
+  rpc RetryUsageLimitWait(RetryUsageLimitWaitRequest) returns (RetryUsageLimitWaitResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "wakes a run parked on a provider usage limit early; it retries the step it would retry at the reset anyway"}
+    };
+  }
 
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
   
@@ -266,26 +399,68 @@ service ChatService {
   // ============================================
   
   // DismissChat clears needs_attention state when user views a chat
-  rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {}
+  rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-user read state: clears needs-attention when the chat is viewed"}
+    };
+  }
   
   // MarkUnreadChat marks a chat as needing attention (mark as unread)
-  rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {}
+  rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-user read state: marks the chat unread"}
+    };
+  }
   
   // CompactChat triggers manual context compaction for a chat
-  rpc CompactChat(CompactChatRequest) returns (CompactChatResponse) {}
+  rpc CompactChat(CompactChatRequest) returns (CompactChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "compact"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+        }
+        detail: ["thread_id"]
+      }
+    };
+  }
   
   // BranchChat creates a new chat branched from a specific message ordinal
-  rpc BranchChat(BranchChatRequest) returns (BranchChatResponse) {}
+  rpc BranchChat(BranchChatRequest) returns (BranchChatResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "branch"
+        target: {
+          kind: "chat"
+          id: "response.chat.id"
+          label: "response.chat.title"
+        }
+        detail: [
+          "chat_id",
+          "message_id"
+        ]
+      }
+    };
+  }
   
   // ListBranches lists all chats branched from a parent chat
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
   
   // UpdateWorkflowParams updates workflow parameters for a running chat
   // This signals the running workflow to update its inputs (e.g., mode, temperature)
-  rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {}
+  rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "syncs the composer's model, mode and params for the chat's next turns: per-turn configuration, versioned on the chat's selection"}
+    };
+  }
 
   // UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
-  rpc UpdateChatProviderPolicy(UpdateChatProviderPolicyRequest) returns (UpdateChatProviderPolicyResponse) {}
+  rpc UpdateChatProviderPolicy(UpdateChatProviderPolicyRequest) returns (UpdateChatProviderPolicyResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-chat runtime selection (what to do when the provider is rate-limited), versioned on the chat's selection like UpdateWorkflowParams"}
+    };
+  }
   
   // GetChatUpdates fetches chat updates since a sequence number
   rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {}
@@ -311,7 +486,19 @@ service ChatService {
   // Setting a daemon on a chat with no machine ("Connect a machine") clears
   // no_machine in the same write; the next turn is offered the full tool set.
   // The reverse never happens: clearing the daemon leaves no_machine false.
-  rpc SetChatDaemon(SetChatDaemonRequest) returns (SetChatDaemonResponse) {}
+  rpc SetChatDaemon(SetChatDaemonRequest) returns (SetChatDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_daemon"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+        detail: ["daemon_id"]
+      }
+    };
+  }
 }
 
 // Chat represents a conversation

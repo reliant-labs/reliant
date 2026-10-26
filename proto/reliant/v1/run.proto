@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "reliant/v1/chat.proto";
@@ -36,7 +37,19 @@ service RunService {
   // engine invariant: WorkflowInput carries no message field, and the start
   // event is emitted with no content. A message reaches the agent as thread
   // history, which is a property of running WITH a session.
-  rpc StartRun(StartRunRequest) returns (StartRunResponse) {}
+  rpc StartRun(StartRunRequest) returns (StartRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "start"
+        target: {
+          kind: "run"
+          id: "response.run.id"
+          label: "response.run.title"
+        }
+        detail: ["workflow"]
+      }
+    };
+  }
 
   // SignalRun delivers an event to a run that is already going. It never
   // starts one.
@@ -44,7 +57,11 @@ service RunService {
   // This is the half of ChatService.SendMessage that is not "start": that RPC
   // means both, disambiguated by the run's status rather than by anything in
   // the request, which is why callers cannot express which they intended.
-  rpc SignalRun(SignalRunRequest) returns (SignalRunResponse) {}
+  rpc SignalRun(SignalRunRequest) returns (SignalRunResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "delivers messages into a live run: per-turn agent traffic the run's history records"}
+    };
+  }
 
   // GetRun returns one run's current state.
   rpc GetRun(GetRunRequest) returns (GetRunResponse) {}
@@ -74,19 +91,54 @@ service RunService {
 
   // PauseRun parks a run. It stays live and resumable — see
   // WORKFLOW_STOP_REASON_PAUSED.
-  rpc PauseRun(PauseRunRequest) returns (PauseRunResponse) {}
+  rpc PauseRun(PauseRunRequest) returns (PauseRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "pause"
+        target: {
+          kind: "run"
+          id: "run_id"
+        }
+      }
+    };
+  }
 
   // ResumeRun continues a paused run from its recorded position.
-  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse) {}
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "resume"
+        target: {
+          kind: "run"
+          id: "run_id"
+          label: "response.run.title"
+        }
+      }
+    };
+  }
 
   // CancelRun hard-stops a run. Terminal by intent: the position checkpoint is
   // dropped, so there is nothing to resume.
-  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse) {}
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "cancel"
+        target: {
+          kind: "run"
+          id: "run_id"
+        }
+      }
+    };
+  }
 
   // InterruptRun stops what the run is doing now without ending it — the
   // in-flight LLM call and any executing tools are cancelled, and the run
   // parks. Distinct from Cancel, which ends it.
-  rpc InterruptRun(InterruptRunRequest) returns (InterruptRunResponse) {}
+  rpc InterruptRun(InterruptRunRequest) returns (InterruptRunResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcome"}
+    };
+  }
 }
 
 // Run is one workflow execution.
