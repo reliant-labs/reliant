@@ -119,6 +119,7 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			httpClient,
 			baseURL+DaemonRegistryServiceResolveDaemonProcedure,
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("ResolveDaemon")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		resumeDaemon: connect.NewClient[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse](
@@ -252,6 +253,7 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		DaemonRegistryServiceResolveDaemonProcedure,
 		svc.ResolveDaemon,
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("ResolveDaemon")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonRegistryServiceResumeDaemonHandler := connect.NewUnaryHandler(

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1688,7 +1689,7 @@ var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
 	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
 	"\n" +
@@ -1823,12 +1824,14 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
-	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\xf7\x02\n" +
+	"\x1fCLEANUP_STORAGE_OUTCOME_SKIPPED\x10\x022\x9e\x04\n" +
 	"\fInboxService\x12J\n" +
-	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12Y\n" +
-	"\x0eCleanupStorage\x12!.reliant.v1.CleanupStorageRequest\x1a\".reliant.v1.CleanupStorageResponse\"\x00\x12_\n" +
-	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"\x00\x12_\n" +
-	"\x10RestoreInboxItem\x12#.reliant.v1.RestoreInboxItemRequest\x1a$.reliant.v1.RestoreInboxItemResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12\x85\x01\n" +
+	"\x0eCleanupStorage\x12!.reliant.v1.CleanupStorageRequest\x1a\".reliant.v1.CleanupStorageResponse\",\xa2\xbb\x18(:&\n" +
+	"\x0fcleanup_storage\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_id\x12\xa4\x01\n" +
+	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"E\xa2\xbb\x18A:?:=per-user inbox read state: hides items without resolving them\x12\x92\x01\n" +
+	"\x10RestoreInboxItem\x12#.reliant.v1.RestoreInboxItemRequest\x1a$.reliant.v1.RestoreInboxItemResponse\"3\xa2\xbb\x18/:-:+per-user inbox read state: undoes a dismissB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_inbox_proto_rawDescOnce sync.Once

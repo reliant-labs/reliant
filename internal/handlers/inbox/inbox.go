@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -821,6 +822,9 @@ func (s *Service) CleanupStorage(
 		resp.Results = append(resp.Results, &reliantv1.CleanupStorageResult{
 			WorktreeId: r.WorktreeID, Outcome: reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_SKIPPED, Message: r.Message,
 		})
+	}
+	if len(accepted) == 0 {
+		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
 	return connect.NewResponse(resp), nil
 }

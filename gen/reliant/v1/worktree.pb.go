@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -4446,7 +4447,7 @@ var File_reliant_v1_worktree_proto protoreflect.FileDescriptor
 const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/worktree.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xcf\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\xcf\x03\n" +
 	"\x10WorktreeRecovery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
 	"\x12source_worktree_id\x18\x02 \x01(\tR\x10sourceWorktreeId\x12\x1d\n" +
@@ -4850,36 +4851,69 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x19WORKTREE_STATUS_ABANDONED\x10\x03\x12\x1b\n" +
 	"\x17WORKTREE_STATUS_MERGING\x10\x04\x12\x1c\n" +
 	"\x18WORKTREE_STATUS_CREATING\x10\x05\x12\x1a\n" +
-	"\x16WORKTREE_STATUS_FAILED\x10\x062\xc0\x14\n" +
+	"\x16WORKTREE_STATUS_FAILED\x10\x062\xfc\x1d\n" +
 	"\x0fWorktreeService\x12q\n" +
-	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x00\x12t\n" +
-	"\x17RestoreWorktreeRecovery\x12*.reliant.v1.RestoreWorktreeRecoveryRequest\x1a+.reliant.v1.RestoreWorktreeRecoveryResponse\"\x00\x12q\n" +
-	"\x16DeleteWorktreeRecovery\x12).reliant.v1.DeleteWorktreeRecoveryRequest\x1a*.reliant.v1.DeleteWorktreeRecoveryResponse\"\x00\x12Y\n" +
-	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"\x00\x12V\n" +
+	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x00\x12\xcd\x01\n" +
+	"\x17RestoreWorktreeRecovery\x12*.reliant.v1.RestoreWorktreeRecoveryRequest\x1a+.reliant.v1.RestoreWorktreeRecoveryResponse\"Y\xa2\xbb\x18U:S\n" +
+	"\arestore\x12 \n" +
+	"\x11worktree_recovery\x12\vrecovery_id*\x14response.worktree_id*\x10target_daemon_id\x12\xba\x01\n" +
+	"\x16DeleteWorktreeRecovery\x12).reliant.v1.DeleteWorktreeRecoveryRequest\x1a*.reliant.v1.DeleteWorktreeRecoveryResponse\"I\xa2\xbb\x18E:C\n" +
+	"\x06delete\x12 \n" +
+	"\x11worktree_recovery\x12\vrecovery_id*\x17response.recovery.phase\x12\xc7\x01\n" +
+	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"n\xa2\xbb\x18j:h\n" +
+	"\x06create\x128\n" +
+	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
+	"project_id*\x18response.worktree.branch\x12V\n" +
 	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12n\n" +
 	"\x15ListArchivedWorktrees\x12(.reliant.v1.ListArchivedWorktreesRequest\x1a).reliant.v1.ListArchivedWorktreesResponse\"\x00\x12P\n" +
-	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eDeleteWorktree\x12!.reliant.v1.DeleteWorktreeRequest\x1a\".reliant.v1.DeleteWorktreeResponse\"\x00\x12\\\n" +
-	"\x0fArchiveWorktree\x12\".reliant.v1.ArchiveWorktreeRequest\x1a#.reliant.v1.ArchiveWorktreeResponse\"\x00\x12b\n" +
-	"\x11UnarchiveWorktree\x12$.reliant.v1.UnarchiveWorktreeRequest\x1a%.reliant.v1.UnarchiveWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"\x00\x12e\n" +
-	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x03\x90\x02\x01\x12Y\n" +
-	"\x0ePruneWorktrees\x12!.reliant.v1.PruneWorktreesRequest\x1a\".reliant.v1.PruneWorktreesResponse\"\x00\x12_\n" +
-	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\"\x00\x12e\n" +
+	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x00\x12\x98\x01\n" +
+	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"?\xa2\xbb\x18;:9\n" +
+	"\x06update\x12/\n" +
+	"\bworktree\x12\vworktree_id\x1a\x16response.worktree.name\x12\xb7\x01\n" +
+	"\x0eDeleteWorktree\x12!.reliant.v1.DeleteWorktreeRequest\x1a\".reliant.v1.DeleteWorktreeResponse\"^\xa2\xbb\x18Z:X\n" +
+	"\x06delete\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x1cresponse.is_permanent_delete*\x17response.deleted_branch\x12\x9d\x01\n" +
+	"\x0fArchiveWorktree\x12\".reliant.v1.ArchiveWorktreeRequest\x1a#.reliant.v1.ArchiveWorktreeResponse\"A\xa2\xbb\x18=:;\n" +
+	"\aarchive\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x17response.deleted_branch\x12\x8c\x01\n" +
+	"\x11UnarchiveWorktree\x12$.reliant.v1.UnarchiveWorktreeRequest\x1a%.reliant.v1.UnarchiveWorktreeResponse\"*\xa2\xbb\x18&:$\n" +
+	"\tunarchive\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\xb6\x01\n" +
+	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"]\xa2\xbb\x18Y:W\n" +
+	"\x06import\x128\n" +
+	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
+	"project_id*\arepo_id\x12e\n" +
+	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x03\x90\x02\x01\x12\x87\x01\n" +
+	"\x0ePruneWorktrees\x12!.reliant.v1.PruneWorktreesRequest\x1a\".reliant.v1.PruneWorktreesResponse\".\xa2\xbb\x18*:(\n" +
+	"\x0fprune_worktrees\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id\x12\x99\x01\n" +
+	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\":\xa2\xbb\x186:4\n" +
+	"\brecreate\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x0fresponse.branch\x12e\n" +
 	"\x12GetWorktreeChanges\x12%.reliant.v1.GetWorktreeChangesRequest\x1a&.reliant.v1.GetWorktreeChangesResponse\"\x00\x12k\n" +
 	"\x14GetWorktreeGitStatus\x12'.reliant.v1.GetWorktreeGitStatusRequest\x1a(.reliant.v1.GetWorktreeGitStatusResponse\"\x00\x12e\n" +
 	"\x12GetWorktreeCommits\x12%.reliant.v1.GetWorktreeCommitsRequest\x1a&.reliant.v1.GetWorktreeCommitsResponse\"\x00\x12w\n" +
-	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x00\x12M\n" +
+	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x00\x12\xb0\x01\n" +
 	"\n" +
-	"StageFiles\x12\x1d.reliant.v1.StageFilesRequest\x1a\x1e.reliant.v1.StageFilesResponse\"\x00\x12S\n" +
-	"\fUnstageFiles\x12\x1f.reliant.v1.UnstageFilesRequest\x1a .reliant.v1.UnstageFilesResponse\"\x00\x12P\n" +
-	"\vRevertFiles\x12\x1e.reliant.v1.RevertFilesRequest\x1a\x1f.reliant.v1.RevertFilesResponse\"\x00\x12Y\n" +
-	"\x0eCommitWorktree\x12!.reliant.v1.CommitWorktreeRequest\x1a\".reliant.v1.CommitWorktreeResponse\"\x00\x12S\n" +
-	"\fPushWorktree\x12\x1f.reliant.v1.PushWorktreeRequest\x1a .reliant.v1.PushWorktreeResponse\"\x00\x12S\n" +
-	"\fPullWorktree\x12\x1f.reliant.v1.PullWorktreeRequest\x1a .reliant.v1.PullWorktreeResponse\"\x00\x12V\n" +
-	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x00\x12_\n" +
-	"\x10CreateWorktreePR\x12#.reliant.v1.CreateWorktreePRRequest\x1a$.reliant.v1.CreateWorktreePRResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"StageFiles\x12\x1d.reliant.v1.StageFilesRequest\x1a\x1e.reliant.v1.StageFilesResponse\"c\xa2\xbb\x18_:]:[git index edit through the daemon: the commit that follows is the event, and git records it\x12\xb8\x01\n" +
+	"\fUnstageFiles\x12\x1f.reliant.v1.UnstageFilesRequest\x1a .reliant.v1.UnstageFilesResponse\"e\xa2\xbb\x18a:_:]git index edit through the daemon: undoes a stage, and the repository's history never sees it\x12\x86\x01\n" +
+	"\vRevertFiles\x12\x1e.reliant.v1.RevertFilesRequest\x1a\x1f.reliant.v1.RevertFilesResponse\"6\xa2\xbb\x182:0\n" +
+	"\frevert_files\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x89\x01\n" +
+	"\x0eCommitWorktree\x12!.reliant.v1.CommitWorktreeRequest\x1a\".reliant.v1.CommitWorktreeResponse\"0\xa2\xbb\x18,:*\n" +
+	"\x06commit\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x81\x01\n" +
+	"\fPushWorktree\x12\x1f.reliant.v1.PushWorktreeRequest\x1a .reliant.v1.PushWorktreeResponse\".\xa2\xbb\x18*:(\n" +
+	"\x04push\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x81\x01\n" +
+	"\fPullWorktree\x12\x1f.reliant.v1.PullWorktreeRequest\x1a .reliant.v1.PullWorktreeResponse\".\xa2\xbb\x18*:(\n" +
+	"\x04pull\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12V\n" +
+	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x00\x12\xa3\x01\n" +
+	"\x10CreateWorktreePR\x12#.reliant.v1.CreateWorktreePRRequest\x1a$.reliant.v1.CreateWorktreePRResponse\"D\xa2\xbb\x18@:>\n" +
+	"\tcreate_pr\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id*\x0fresponse.pr_urlB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_worktree_proto_rawDescOnce sync.Once

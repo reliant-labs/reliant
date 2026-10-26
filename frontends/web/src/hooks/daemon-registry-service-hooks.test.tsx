@@ -99,13 +99,10 @@ describe("DaemonRegistryService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useResolveDaemon(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    // ResolveDaemon declares NO_SIDE_EFFECTS, so it is a query.
+    const { result } = renderHook(() => useResolveDaemon({} as never), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useResumeDaemon resolves a happy-path response", async () => {

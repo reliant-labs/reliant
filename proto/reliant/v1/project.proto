@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -12,7 +13,18 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service ProjectService {
   // CreateProject creates a new project
   // forge:custom — find-or-create by path that provisions the directory, repos and main worktree on the caller's daemon
-  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "project"
+          id: "response.project.id"
+          label: "response.project.name"
+        }
+      }
+    };
+  }
   
   // ListProjects lists all projects for the current user
   // forge:custom — scoped to the calling user's projects
@@ -24,20 +36,56 @@ service ProjectService {
   
   // UpdateProject updates an existing project
   // forge:custom — a partial update the caller's ownership check gates
-  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "project"
+          id: "project_id"
+          label: "response.project.name"
+        }
+      }
+    };
+  }
   
   // DeleteProject deletes a project
   // forge:custom — the caller's ownership check gates the delete
-  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {}
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+      }
+    };
+  }
   
   // TouchProject updates the project's last_active timestamp
-  rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {}
+  rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "bumps last_active when the project is opened: recency for sorting, not a change to the project"}
+    };
+  }
   
   // GetProjectMetadata returns detailed project metadata
   rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {}
   
   // UpdateProjectMetadata updates project metadata
-  rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {}
+  rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update_metadata"
+        target: {
+          kind: "project"
+          id: "project_id"
+          label: "response.project.name"
+        }
+      }
+    };
+  }
   
   // GetProjectGitInfo returns git repository information for a project
   rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {}
@@ -49,7 +97,11 @@ service ProjectService {
   rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {}
   
   // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
-  rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {}
+  rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"}
+    };
+  }
   
   // GetProjectChanges returns recent git changes for a project
   rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {}
@@ -58,10 +110,31 @@ service ProjectService {
   rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {}
   
   // SaveProjectPrompts saves project-scoped prompts
-  rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {}
+  rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "save_prompts"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+      }
+    };
+  }
   
   // InitializeGitRepo initializes a git repository for a project
-  rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {}
+  rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "init_git"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["response.default_branch"]
+      }
+    };
+  }
 
   // ListProjectDaemonsForDaemon returns the project_daemons rows installed on
   // the given daemon. The ProjectPicker uses this to mark projects that are
@@ -83,7 +156,11 @@ service ProjectService {
   // Prefer CreateProjectFromRepo for the add-a-project-from-GitHub flow; this
   // remains for callers that cloned by some other route and only need to
   // record the result.
-  rpc MarkProjectInstalled(MarkProjectInstalledRequest) returns (MarkProjectInstalledResponse) {}
+  rpc MarkProjectInstalled(MarkProjectInstalledRequest) returns (MarkProjectInstalledResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs"}
+    };
+  }
 
   // CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
   // it starts the clone, creates the project row, and records where the
@@ -100,7 +177,19 @@ service ProjectService {
   // good target, and the response says `queued` with the project in its
   // `installing` state. The real outcome arrives later, when the daemon runs
   // the command, and moves the project to `installed` or `failed`.
-  rpc CreateProjectFromRepo(CreateProjectFromRepoRequest) returns (CreateProjectFromRepoResponse) {}
+  rpc CreateProjectFromRepo(CreateProjectFromRepoRequest) returns (CreateProjectFromRepoResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "project"
+          id: "response.project.id"
+          label: "response.project.name"
+        }
+        detail: ["daemon_id", "response.queued"]
+      }
+    };
+  }
 
   // ListRepositoriesForDaemon returns the projects cloned on the given daemon,
   // denormalized with project metadata (name, remote_url) so admin callers
@@ -111,19 +200,52 @@ service ProjectService {
   // PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
   // The daemon must currently host the project (project_daemons row must
   // exist). Fails if the daemon is offline.
-  rpc PullProjectOnDaemon(PullProjectOnDaemonRequest) returns (PullProjectOnDaemonResponse) {}
+  rpc PullProjectOnDaemon(PullProjectOnDaemonRequest) returns (PullProjectOnDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "pull"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["daemon_id"]
+      }
+    };
+  }
 
   // RemoveProjectFromDaemon deletes the on-disk clone AND the
   // project_daemons row for (project_id, daemon_id). Project itself is NOT
   // deleted — other daemons may still host clones. Idempotent: succeeds even
   // if the row was already absent (the on-disk delete is best-effort).
-  rpc RemoveProjectFromDaemon(RemoveProjectFromDaemonRequest) returns (RemoveProjectFromDaemonResponse) {}
+  rpc RemoveProjectFromDaemon(RemoveProjectFromDaemonRequest) returns (RemoveProjectFromDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "remove_from_daemon"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["daemon_id"]
+      }
+    };
+  }
 
   // RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
   // it from the project's remote_url at the recorded default branch. Any
   // local-only changes are lost; UI must confirm before calling. The
   // project_daemons row is updated with the new cloned_at.
-  rpc RecloneProjectOnDaemon(RecloneProjectOnDaemonRequest) returns (RecloneProjectOnDaemonResponse) {}
+  rpc RecloneProjectOnDaemon(RecloneProjectOnDaemonRequest) returns (RecloneProjectOnDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "reclone"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["daemon_id"]
+      }
+    };
+  }
 }
 
 // Project represents a project in the system

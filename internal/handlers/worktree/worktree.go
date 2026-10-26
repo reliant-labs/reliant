@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -504,6 +505,7 @@ func (s *Service) CreateWorktree(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create worktree"))
 		}
 		if existing != nil {
+			activity.Skip(ctx) // a retry of a create already recorded: no second "create" event
 			return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
 				Worktree: worktreeToProto(existing),
 			}), nil
@@ -1585,6 +1587,9 @@ func (s *Service) PruneWorktrees(
 	out := &reliantv1.PruneWorktreesResponse{}
 	for _, e := range resp.Pruned {
 		out.Pruned = append(out.Pruned, staleToProto(e, byID))
+	}
+	if len(out.Pruned) == 0 {
+		activity.Skip(ctx) // git had no stale records: nothing was pruned
 	}
 	return connect.NewResponse(out), nil
 }

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -168,6 +169,9 @@ func (s *Service) ClearMachineCaches(
 	resp := &reliantv1.ClearMachineCachesResponse{Started: out.Started}
 	for _, sk := range out.Skipped {
 		resp.Skipped = append(resp.Skipped, &reliantv1.ClearMachineCachesSkip{Kind: sk.Kind, Reason: sk.Reason})
+	}
+	if len(resp.Started) == 0 {
+		activity.Skip(ctx) // the machine refused every kind: nothing is being cleared
 	}
 	return connect.NewResponse(resp), nil
 }

@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -914,6 +915,7 @@ func (s *Service) InstallServer(
 			"phase", "preflight",
 			"error", err,
 		)
+		activity.Skip(ctx) // refused before any config was written: nothing was installed
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Preflight failed: %v", err),
@@ -963,6 +965,7 @@ func (s *Service) InstallServer(
 			"phase", "skill_bundle",
 			"error", bundleErr,
 		)
+		activity.Skip(ctx) // the config write was rolled back: nothing was installed
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Skill bundle installation failed; MCP install rolled back. Error: %v", bundleErr),
@@ -1722,6 +1725,7 @@ func (s *Service) MoveServerScope(
 	sourceScope := normalizeScope(scoped.Scope)
 
 	if scoped.Scope == targetScope {
+		activity.Skip(ctx) // already stored there: nothing moved
 		return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
 			Success: true,
 			Message: "Server is already stored in the requested scope",

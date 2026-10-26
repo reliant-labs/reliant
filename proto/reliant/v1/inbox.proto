@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "reliant/v1/approval.proto";
 import "reliant/v1/tools_daemon.proto"; // for DiskVolume
 import "reliant/v1/trigger.proto";
@@ -30,18 +31,36 @@ service InboxService {
   // pushed and no branch is deleted. Worktrees holding data, another
   // repository, or files outside their checkouts are never removed: they come
   // back SKIPPED and are listed for manual removal.
-  rpc CleanupStorage(CleanupStorageRequest) returns (CleanupStorageResponse) {}
+  rpc CleanupStorage(CleanupStorageRequest) returns (CleanupStorageResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "cleanup_storage"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
 
   // DismissInboxItem hides items from the caller's inbox. Every kind can be
   // dismissed. Hiding an approval or a question does not resolve it: the run
   // still waits, and the chat still shows it. A newer failure of the same
   // automation, or a new block on the same machine, has a new item_id and so
   // appears again. Unknown ids are rejected with INVALID_ARGUMENT.
-  rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {}
+  rpc DismissInboxItem(DismissInboxItemRequest) returns (DismissInboxItemResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-user inbox read state: hides items without resolving them"}
+    };
+  }
 
   // RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
   // dismissed is a no-op.
-  rpc RestoreInboxItem(RestoreInboxItemRequest) returns (RestoreInboxItemResponse) {}
+  rpc RestoreInboxItem(RestoreInboxItemRequest) returns (RestoreInboxItemResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "per-user inbox read state: undoes a dismiss"}
+    };
+  }
 }
 
 // InboxItemKind is declared in priority order: lower values sort first. The
