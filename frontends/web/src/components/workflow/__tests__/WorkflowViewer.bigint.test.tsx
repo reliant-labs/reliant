@@ -15,11 +15,6 @@ import { WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import type { Workflow } from "@/types/workflow";
 import type { StepExecution, WorkflowExecution } from "../../Chat/ExecutionSidebar/types";
 
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  getMessageClient: () => ({ getMessage: vi.fn() }),
-}));
-
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => vi.fn(),

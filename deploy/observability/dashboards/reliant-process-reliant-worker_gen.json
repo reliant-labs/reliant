@@ -1,0 +1,237 @@
+{
+  "name": "reliant: reliant-worker",
+  "tags": [
+    "forge",
+    "generated"
+  ],
+  "tiles": [
+    {
+      "id": "t-go-memory",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Go memory used",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "used",
+            "metricName": "go.memory.used",
+            "metricType": "sum"
+          },
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "gc goal",
+            "metricName": "go.memory.gc.goal",
+            "metricType": "sum"
+          }
+        ],
+        "where": "ServiceName IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-go-goroutines",
+      "x": 12,
+      "y": 0,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Goroutines",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "goroutines",
+            "metricName": "go.goroutine.count",
+            "metricType": "sum"
+          }
+        ],
+        "where": "ServiceName IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-go-alloc",
+      "x": 0,
+      "y": 7,
+      "w": 24,
+      "h": 7,
+      "config": {
+        "name": "Heap allocation",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "sum",
+            "valueExpression": "",
+            "alias": "allocated",
+            "metricName": "go.memory.allocated",
+            "metricType": "sum"
+          }
+        ],
+        "where": "ServiceName IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-error-logs",
+      "x": 0,
+      "y": 14,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Error logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "ServiceName IN ('reliant-temporal-worker') AND lower(SeverityText) = 'error'",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-logs",
+      "x": 0,
+      "y": 22,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Process logs",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SeverityText, Body",
+        "where": "ServiceName IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-cpu-vs-limit",
+      "x": 0,
+      "y": 30,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "CPU against its limit",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of limit",
+            "metricName": "k8s.container.cpu_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-memory-vs-limit",
+      "x": 12,
+      "y": 30,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Memory against its limit",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of limit",
+            "metricName": "k8s.container.memory_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-restarts",
+      "x": 0,
+      "y": 37,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Container restarts",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "restarts",
+            "metricName": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('reliant-temporal-worker')",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "filter-service",
+      "type": "QUERY_EXPRESSION",
+      "name": "service.name",
+      "expression": "ServiceName",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-env",
+      "type": "QUERY_EXPRESSION",
+      "name": "deployment.environment.name",
+      "expression": "ResourceAttributes['deployment.environment.name']",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    }
+  ]
+}

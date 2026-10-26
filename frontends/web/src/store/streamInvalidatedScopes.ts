@@ -38,7 +38,7 @@ import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { daemonRegistryServiceKeys } from "../hooks/daemon-registry-service-hooks_gen";
 import { runServiceKeys } from "../hooks/run-service-hooks_gen";
 import { triggerServiceKeys } from "../hooks/trigger-service-hooks_gen";
-import { inboxKeys } from "../hooks/inbox-queries";
+import { inboxServiceKeys } from "../hooks/inbox-service-hooks_gen";
 import { workflowServiceKeys } from "../hooks/workflow-service-hooks_gen";
 import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import { projectServiceKeys } from "../hooks/project-service-hooks_gen";
@@ -64,7 +64,7 @@ export const STREAM_INVALIDATED_SCOPES = {
   daemonRegistry: daemonRegistryServiceKeys.all,
   runs: runServiceKeys.all,
   triggers: triggerServiceKeys.all,
-  inbox: inboxKeys.all,
+  inbox: inboxServiceKeys.all,
   // Workflow drafts, and the preset lists matched against their inputs.
   workflows: workflowServiceKeys.all,
   presets: presetServiceKeys.all,

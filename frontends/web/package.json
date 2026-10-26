@@ -6,6 +6,7 @@
   "forge": {
     "components_dir": "src/components/forge-ui",
     "hooks": [
+      "AccountService",
       "ApprovalService",
       "AttachmentService",
       "BackgroundService",

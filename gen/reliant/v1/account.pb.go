@@ -487,9 +487,9 @@ const file_reliant_v1_account_proto_rawDesc = "" +
 	"\x13refund_destinations\x18\x03 \x03(\v2\x1d.reliant.v1.RefundDestinationR\x12refundDestinations\x122\n" +
 	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x12%\n" +
 	"\x0erefund_pending\x18\x05 \x01(\bR\rrefundPending\x12*\n" +
-	"\x11refund_owed_cents\x18\x06 \x01(\x03R\x0frefundOwedCents2\xdb\x01\n" +
-	"\x0eAccountService\x12q\n" +
-	"\x16PreviewAccountDeletion\x12).reliant.v1.PreviewAccountDeletionRequest\x1a*.reliant.v1.PreviewAccountDeletionResponse\"\x00\x12V\n" +
+	"\x11refund_owed_cents\x18\x06 \x01(\x03R\x0frefundOwedCents2\xde\x01\n" +
+	"\x0eAccountService\x12t\n" +
+	"\x16PreviewAccountDeletion\x12).reliant.v1.PreviewAccountDeletionRequest\x1a*.reliant.v1.PreviewAccountDeletionResponse\"\x03\x90\x02\x01\x12V\n" +
 	"\rDeleteAccount\x12 .reliant.v1.DeleteAccountRequest\x1a!.reliant.v1.DeleteAccountResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

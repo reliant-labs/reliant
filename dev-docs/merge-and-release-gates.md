@@ -15,8 +15,8 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`) of the changed packages and their **direct** importers, `go build ./...`, `forge lint --scope <changed dirs>`, migration-safety when a migration changed, and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`) of the changed packages and their **direct** importers, `go build ./...`, the web `tsc -b` when a web file changed, `forge lint --scope <changed dirs>`, migration-safety when a migration changed, and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -65,11 +65,18 @@ The phases:
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **lint** and **migsafety** run alongside them:
+4. **build**, **test**, **typecheck**, **lint** and **migsafety** run alongside them:
    - **build** is `go build ./...`.
    - **test** is `tools/test-affected run -reach direct -lanes go,web,electron`.
      It runs the changed packages and the packages that import one by name,
      not the whole reverse-dependency closure (below).
+   - **typecheck** is frontends/web's `npm run typecheck` (`tsc -b`, which
+     includes `tsconfig.test.json`, so test files are type-checked). It runs
+     when the plan selects the web lane or the diff touches anything under
+     `frontends/web/`, and again on the amended tree when a regenerate rewrote
+     a web file. The web test lane cannot stand in for it: vitest strips types
+     without checking them, and a changed module no test imports selects no
+     test. #1556 merged a test type error because the gate had no such phase.
    - **lint** is `forge lint --scope <every changed directory>`, or unscoped
      when `go.mod`, `go.sum` or `forge.yaml` changed (a pin bump moves every
      package).

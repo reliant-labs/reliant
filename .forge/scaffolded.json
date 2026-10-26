@@ -32,6 +32,9 @@
     "deploy/kcl/dev/config.k": {
       "scaffolded_at": "2026-10-22T23:48:18Z"
     },
+    "frontends/web/src/hooks/account-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-25T18:02:36Z"
+    },
     "frontends/web/src/hooks/approval-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },

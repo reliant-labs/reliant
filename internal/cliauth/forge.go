@@ -33,11 +33,15 @@ import (
 // intersects the parent's scopes. Session and resource-specialized capabilities
 // never reach forge. Keep this explicit: a new registry entry is not implicitly
 // safe to delegate.
+//
+// token:read and token:write are deliberately absent. They administer member
+// permissions and tokens, which the control plane reserves to a signed-in
+// person (every token RPC refuses a machine caller), so on a long-lived daemon
+// or CLI credential they are dead authority and a latent escalation path.
 func ForgeScopes() []string {
 	return []string{
 		string(fat.ScopeDeployRead), string(fat.ScopeDeployWrite),
 		string(fat.ScopeClusterManage),
-		string(fat.ScopeTokenRead), string(fat.ScopeTokenWrite),
 		string(fat.ScopeSecretRead), string(fat.ScopeSecretWrite),
 		string(fat.ScopeDomainRead), string(fat.ScopeDomainWrite),
 		string(fat.ScopeIdentityRead), string(fat.ScopeIdentityManage),
