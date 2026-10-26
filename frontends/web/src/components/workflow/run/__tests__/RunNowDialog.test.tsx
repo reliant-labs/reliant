@@ -194,7 +194,7 @@ describe("RunNowDialog", () => {
     expect(strictness.tagName).toBe("SELECT");
 
     // `label` has no default: Run now is refused with a reason, and nothing is sent.
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     expect(await screen.findByText("Fill in the required input: Label.")).toBeInTheDocument();
     expect(runNow).not.toHaveBeenCalled();
 
@@ -204,7 +204,7 @@ describe("RunNowDialog", () => {
     const workspace = await screen.findByLabelText("Workspace");
     await screen.findByRole("option", { name: "feature (feat/x)" });
     await user.selectOptions(workspace, "wt-1");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     const request = runNow.mock.calls[0]![0];
@@ -231,7 +231,7 @@ describe("RunNowDialog", () => {
     fill(await screen.findByLabelText("Label"), "bug");
     const message = screen.getByLabelText("Message");
     expect(message).toHaveAttribute("placeholder", expect.stringMatching(/Optional/));
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0].workflow).toBe("triage");
@@ -242,7 +242,7 @@ describe("RunNowDialog", () => {
     renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
     fill(await screen.findByLabelText("Label"), "bug");
     fill(screen.getByLabelText("Message"), "  look at the backlog  ");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0].message).toBe("look at the backlog");
   });
@@ -257,7 +257,7 @@ describe("RunNowDialog", () => {
     fill(await screen.findByLabelText("Label"), "bug");
 
     await user.selectOptions(machine, "daemon-1");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0]).toMatchObject({ daemonId: "daemon-1", noMachine: false });
   });
@@ -273,7 +273,7 @@ describe("RunNowDialog", () => {
     expect(option).not.toBeDisabled();
     await user.selectOptions(machine, option);
     expect(screen.getByText(/nothing touches files/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     const request = runNow.mock.calls[0]![0];
@@ -293,7 +293,7 @@ describe("RunNowDialog", () => {
     const onClose = vi.fn();
     renderDialog(<RunNowDialog open onClose={onClose} projectId="proj-1" workflowRef="triage" />);
     fill(await screen.findByLabelText("Label"), "bug");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("input 'label': model gpt-x is not available");
     expect(onClose).not.toHaveBeenCalled();
@@ -352,7 +352,7 @@ describe("RunNowDialog", () => {
         }),
       );
 
-      await user.click(screen.getByRole("button", { name: "Run now" }));
+      await user.click(screen.getByRole("button", { name: "Start run" }));
       await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
       const request = runNow.mock.calls[0]![0];
       expect(request.message).toBe("Triage #7.");
@@ -380,7 +380,7 @@ describe("RunNowDialog", () => {
       await waitFor(() => expect(previewReplay.mock.calls.length).toBeGreaterThan(before));
       await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue('n="set"'));
 
-      await user.click(screen.getByRole("button", { name: "Run now" }));
+      await user.click(screen.getByRole("button", { name: "Start run" }));
       await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
       expect(runNow.mock.calls[0]![0].replay.payload).toEqual({ number: 99 });
       // A hand-written event has no recorded id.
@@ -396,7 +396,7 @@ describe("RunNowDialog", () => {
       fill(screen.getByLabelText("Event payload (JSON)"), "[1, 2");
       expect(await screen.findByText(/Not valid JSON/)).toBeInTheDocument();
       expect(screen.getByLabelText("Event payload (JSON)")).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
       expect(runNow).not.toHaveBeenCalled();
 
       fill(screen.getByLabelText("Event payload (JSON)"), "[1, 2]");
@@ -411,7 +411,7 @@ describe("RunNowDialog", () => {
       await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       expect(await screen.findByText(/could not read its inputs from this event/)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
     });
 
     it("says so when the workflow has collected no events yet, and still lets one be written", async () => {

@@ -20,6 +20,7 @@ type Repository interface {
 	ListChildWorkflows(ctx context.Context, parentID string) ([]*db.Workflow, error)
 	ListRootWorkflows(ctx context.Context, chatID string) ([]*db.Workflow, error)
 	ListRuns(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, bool, error)
+	ListUnlaunchedTriggerEvents(ctx context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error)
 	LastRunPerWorkflow(ctx context.Context, f db.RunListFilters) ([]*db.RunListItem, error)
 }
 

@@ -37,10 +37,12 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
   ListRunsRequestSchema,
   RunDisplayState,
+  UnlaunchedTriggerEventOutcome,
   type LastRunPerWorkflowResponse,
   type ListRunsRequest,
   type ListRunsResponse,
   type Run as ProtoRun,
+  type UnlaunchedTriggerEvent as ProtoUnlaunchedTriggerEvent,
 } from "../gen/reliant/v1/run_pb";
 import {
   ContentBlockType,
@@ -142,6 +144,42 @@ export function runFromProto(run: ProtoRun): RunSummary {
   };
 }
 
+/**
+ * A trigger event that started no run — Skipped, or Couldn't start — listed
+ * in the run log beside the runs, so "why didn't last night's run happen" is
+ * answered where runs are.
+ */
+export interface UnlaunchedEventSummary {
+  id: string;
+  triggerId: string;
+  triggerName: string;
+  /** The workflow the trigger runs, as stored on it. */
+  workflowName: string;
+  /** The declared trigger it activates; empty for a hand-made one. */
+  workflowTrigger: string;
+  projectId: string;
+  launchKind: string;
+  /** Epoch ms: the time the firing was for. */
+  occurredAt: number;
+  outcome: "skipped" | "failed";
+  outcomeDetail: string;
+}
+
+export function unlaunchedEventFromProto(event: ProtoUnlaunchedTriggerEvent): UnlaunchedEventSummary {
+  return {
+    id: event.id,
+    triggerId: event.triggerId,
+    triggerName: event.triggerName,
+    workflowName: event.workflowName,
+    workflowTrigger: event.workflowTrigger,
+    projectId: event.projectId,
+    launchKind: event.launchKind,
+    occurredAt: Number(event.occurredAtMs),
+    outcome: event.outcome === UnlaunchedTriggerEventOutcome.SKIPPED ? "skipped" : "failed",
+    outcomeDetail: event.outcomeDetail,
+  };
+}
+
 // ============================================
 // Filters → request
 // ============================================
@@ -193,6 +231,12 @@ export type RunListFilters = Omit<RunsSearch, "allProjects" | "group" | "parent"
   parentChatId?: string;
   /** Set to scope to one project; unset lists every project. */
   projectId?: string;
+  /**
+   * Also list the trigger events that started no run, in the same pages. Only
+   * with no state filter and no parent: an event has neither (the server
+   * returns none then anyway).
+   */
+  includeUnlaunched?: boolean;
 };
 
 /**
@@ -225,6 +269,8 @@ export function buildListRunsRequest(
     // Runs is history: an automation archives each run it finishes
     // successfully, and those must still be found here. Rows say so.
     includeArchived: true,
+    includeUnlaunchedEvents:
+      filters.includeUnlaunched && displayStates.size === 0 && !filters.parentChatId ? true : undefined,
   });
 }
 
@@ -444,9 +490,19 @@ function windowAnchor(filterKey: string): number {
 
 const NO_RUNS: RunSummary[] = [];
 
-function runsOfPages(data: InfiniteData<ListRunsResponse, string>): RunSummary[] {
-  return data.pages.flatMap((page) => page.runs.map(runFromProto));
+interface RunLog {
+  runs: RunSummary[];
+  events: UnlaunchedEventSummary[];
 }
+
+function runLogOfPages(data: InfiniteData<ListRunsResponse, string>): RunLog {
+  return {
+    runs: data.pages.flatMap((page) => page.runs.map(runFromProto)),
+    events: data.pages.flatMap((page) => page.unlaunchedEvents.map(unlaunchedEventFromProto)),
+  };
+}
+
+const NO_EVENTS: UnlaunchedEventSummary[] = [];
 
 /**
  * The cross-cutting run list, paged by the server's keyset token. Pages
@@ -464,11 +520,13 @@ export function useRunList(filters: RunListFilters) {
   const now = anchor.key === filterKey ? anchor.now : windowAnchor(filterKey);
 
   const query = useListRunsInfinite(buildListRunsRequest(filters, { now, limit: RUNS_PAGE_SIZE }), {
-    select: runsOfPages,
+    select: runLogOfPages,
   });
 
   return {
-    runs: query.data ?? NO_RUNS,
+    runs: query.data?.runs ?? NO_RUNS,
+    /** Trigger events that started no run (with includeUnlaunched), newest first. */
+    events: query.data?.events ?? NO_EVENTS,
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
@@ -548,13 +606,17 @@ function lastRunsByWorkflow(response: LastRunPerWorkflowResponse): Map<string, R
 }
 
 /**
- * The newest run of every workflow, for the Library's "Last run" column and
+ * The newest run of every workflow, in one project or (allProjects) in every
+ * one, for the Workflows list's "Last run" column and
  * workflow detail, keyed by workflow name (the stored ref, e.g.
  * `builtin://agent`). One request for the whole list (LastRunPerWorkflow),
  * never one per row.
  */
-export function useLastRunPerWorkflow(projectId: string | undefined) {
-  return useLastRunPerWorkflowRpc({ projectId }, { enabled: !!projectId, select: lastRunsByWorkflow });
+export function useLastRunPerWorkflow(projectId: string | undefined, allProjects = false) {
+  return useLastRunPerWorkflowRpc(
+    { projectId: allProjects ? undefined : projectId },
+    { enabled: allProjects || !!projectId, select: lastRunsByWorkflow },
+  );
 }
 
 // ============================================
@@ -640,7 +702,6 @@ export const LIVE_AUTOMATION_LIMIT = 100;
 
 export interface LiveAutomationSummary {
   running: number;
-  needsYou: number;
   /** True when the server had more than one page: the counts are a floor. */
   truncated: boolean;
 }
@@ -658,15 +719,13 @@ export function summarizeLiveAutomations(
   truncated = false,
 ): LiveAutomationSummary {
   let running = 0;
-  let needsYou = 0;
   for (const run of runs) {
     if (!run.launchKind || run.launchKind === "chat.start") continue;
     if (excludeChatIds.has(run.chatId)) continue;
     if (!LIVE_AUTOMATION_STATES.includes(run.displayState)) continue;
     running += 1;
-    if (run.displayState === RunDisplayState.NEEDS_INPUT) needsYou += 1;
   }
-  return { running, needsYou, truncated };
+  return { running, truncated };
 }
 
 /**

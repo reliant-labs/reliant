@@ -10,14 +10,50 @@ import { describe, expect, it } from "vitest";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { buildListRunsRequest, runFromProto, RUN_STATE_FILTERS } from "../run-queries";
+import { buildListRunsRequest, runFromProto, RUN_STATE_FILTERS, unlaunchedEventFromProto } from "../run-queries";
 import { create } from "@bufbuild/protobuf";
-import { RunSchema } from "@/gen/reliant/v1/run_pb";
+import { RunSchema, UnlaunchedTriggerEventOutcome, UnlaunchedTriggerEventSchema } from "@/gen/reliant/v1/run_pb";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 
 const NOW = Date.parse("2026-10-04T12:00:00Z");
 
 describe("buildListRunsRequest", () => {
+  it("asks for the trigger events that started no run only when no state or parent narrows the list", () => {
+    expect(buildListRunsRequest({ includeUnlaunched: true }, { now: NOW }).includeUnlaunchedEvents).toBe(true);
+    expect(buildListRunsRequest({}, { now: NOW }).includeUnlaunchedEvents).toBeUndefined();
+    // An event has no state and no parent: the server would return none.
+    expect(buildListRunsRequest({ includeUnlaunched: true, state: ["failed"] }, { now: NOW }).includeUnlaunchedEvents).toBeUndefined();
+    expect(buildListRunsRequest({ includeUnlaunched: true, parentChatId: "c" }, { now: NOW }).includeUnlaunchedEvents).toBeUndefined();
+  });
+
+  it("maps an unlaunched event from the wire", () => {
+    const event = unlaunchedEventFromProto(
+      create(UnlaunchedTriggerEventSchema, {
+        id: "e1",
+        triggerId: "t1",
+        triggerName: "nightly",
+        workflowName: "triage",
+        projectId: "p1",
+        launchKind: "schedule",
+        occurredAtMs: BigInt(1_000),
+        outcome: UnlaunchedTriggerEventOutcome.SKIPPED,
+        outcomeDetail: "previous run still going",
+      }),
+    );
+    expect(event).toEqual({
+      id: "e1",
+      triggerId: "t1",
+      triggerName: "nightly",
+      workflowName: "triage",
+      workflowTrigger: "",
+      projectId: "p1",
+      launchKind: "schedule",
+      occurredAt: 1_000,
+      outcome: "skipped",
+      outcomeDetail: "previous run still going",
+    });
+  });
+
   it("defaults to the last 24 hours, every kind, archived runs included", () => {
     const request = buildListRunsRequest({}, { now: NOW });
     expect(timestampDate(request.startedAfter!).toISOString()).toBe("2026-10-03T12:00:00.000Z");

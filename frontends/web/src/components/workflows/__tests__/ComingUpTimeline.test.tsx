@@ -10,9 +10,9 @@ import { describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 
 import type { Trigger } from "@/hooks/trigger-model";
-import { ComingUpTimeline, tickLabel } from "../ComingUpTimeline";
-import { laneTicks, timelineModel } from "../comingUp";
-import { renderAtRoute } from "./automationTestUtils";
+import { ComingUpTimeline, tickLabel } from "../list/ComingUpTimeline";
+import { laneTicks, timelineModel } from "../list/comingUp";
+import { renderAtRoute } from "../../Automations/__tests__/automationTestUtils";
 
 const NOW = Date.parse("2026-10-02T06:30:00Z");
 const HOUR = 60 * 60 * 1000;

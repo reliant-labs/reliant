@@ -1,14 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Run now — start a workflow by hand, with its inputs, on a machine of your
- * choosing, optionally replaying a past event.
+ * Run… — start a workflow by hand, with its inputs, on a machine of your
+ * choosing, optionally replaying a past event. Attended: it opens the run.
+ * (Firing a trigger by hand, unattended under its settings, is "Fire trigger
+ * now" on the trigger, a different thing with a different name.)
  *
  * A thin host for RunWorkflowForm, like RunWorkflowDialog, but it starts the run
  * with ChatService.RunNow: the launch is recorded as manual.run, it works
  * for a workflow whose Chat trigger is off (pressing the button is how such a
  * workflow is run by hand), the message is optional, and "No machine" is a
- * choice. A manual run is attended: it opens as a chat.
+ * choice. A manual run is attended: it opens as a chat — or, from the
+ * Workflows area, on its run page there (`opensIn: "run"`), so the person
+ * stays in the area and Back returns to it.
  *
  * Replay: a workflow that declares triggers can be run against an event one of
  * them received ("Start from: A recent event"). The trigger's own inputs and
@@ -18,8 +22,8 @@
  * only runs on integration events, a recent event is the default: it is the
  * only meaningful hand run of it.
  *
- * Same frame as the setup dialog (automation-ux-spec.md §3.6): numbered
- * sections and the actions pinned in the footer. Typed inputs get the picker
+ * Same frame as the setup dialog: numbered sections and the actions pinned in
+ * the footer. Typed inputs get the picker
  * through RunWorkflowForm, like every other form.
  */
 
@@ -50,6 +54,8 @@ export interface RunNowDialogProps {
   onClose: () => void;
   projectId: string;
   workflowRef: string;
+  /** Where the started run opens: the project's chat view (default), or its run page in the Workflows area. */
+  opensIn?: "chat" | "run";
 }
 
 const HAND_WRITTEN = "";
@@ -71,7 +77,7 @@ interface Mapping {
   prompt: string;
 }
 
-function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps) {
+function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }: RunNowDialogProps) {
   const navigate = useNavigate();
   const ids = useId();
   const id = (name: string) => `${ids}-${name}`;
@@ -186,6 +192,10 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
   const title = `Run ${getWorkflowDisplayName(workflowRef, true)}`;
 
   const openChat = async (chatId: string, chatProjectId: string) => {
+    if (opensIn === "run") {
+      await navigate({ to: "/workflows/runs/$runId", params: { runId: chatId }, search: { project: chatProjectId } });
+      return;
+    }
     await loadRunContext(chatId);
     await navigate({ to: "/project/$projectId", params: { projectId: chatProjectId }, search: {} });
   };
@@ -251,7 +261,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
             Cancel
           </Button>
           <Button type="submit" form={id("form")} variant="primary" loading={starting} disabled={blocked} className="max-sm:w-full">
-            Run now
+            Start run
           </Button>
         </div>
       }
@@ -433,7 +443,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
           <p id={id("message-hint")} className={hintClass}>
             {replaying
               ? "The event is added after this message, as it would be for a real fire."
-              : "Leave it blank to start the run from “Run now.” The run opens as a chat you can answer."}
+              : "Leave it blank to start the run with no prompt. The run opens as a chat you can answer."}
           </p>
         </div>
         </SetupSection>

@@ -118,14 +118,21 @@ describe('mobilePathFor', () => {
     // A run is a chat.
     expect(mobilePathFor('/workflows/runs/chat_123')).toBe('/m/chats/chat_123')
     expect(mobilePathFor('/workflows')).toBe('/m/workflows')
-    expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows')
+    expect(mobilePathFor('/workflows/library')).toBe('/m/workflows')
+    // A workflow's page — where an automation link lands — is its viewer.
+    expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows/builtin%3A%2F%2Fagent')
+    // The run log has a phone twin; an automation id is resolved to its workflow.
+    expect(mobilePathFor('/workflows/runs')).toBe('/m/runs')
+    expect(mobilePathFor('/workflows/automations/t1')).toBe('/m/automations/t1')
+    expect(mobilePathFor('/automations/t1')).toBe('/m/automations/t1')
+    expect(mobilePathFor('/workflows/automations')).toBe('/m/workflows')
     expect(mobilePathFor('/settings')).toBe('/m/settings')
     expect(mobilePathFor('/settings/ai')).toBe('/m/settings')
     expect(mobilePathFor('/settings/environments/m_1')).toBe('/m/daemons')
   })
 
   it('lands everything without a twin on the chat list', () => {
-    for (const pathname of ['/', '/project/abc', '/workflows/runs', '/workflows/automations/t1', '/workflow/new']) {
+    for (const pathname of ['/', '/project/abc', '/workflow/new']) {
       expect(mobilePathFor(pathname), pathname).toBe('/m/chats')
     }
   })

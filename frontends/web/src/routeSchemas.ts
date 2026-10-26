@@ -710,36 +710,46 @@ export const forgeLegacySearchSchema = z.object({
  * be able to read the project from the URL (WorkflowsShell resolves it).
  * Absent means "resolve it the normal way", not "no project".
  *
+ * `allProjects` is the area's ONE scope: the header's project menu sets it,
+ * every tab honours it (the Workflows list, a workflow's Triggers and Recent
+ * runs, Runs), and it rides along between tabs with `project`. Absent means
+ * the current project — or every project, when there is none.
+ *
  * `tour` is here because the onboarding tour's hub step spotlights the
- * Library, and strict search validation would otherwise strip it.
+ * Workflows list, and strict search validation would otherwise strip it.
  */
 export const workflowsAreaSearchSchema = z.object({
   project: z.string().optional().catch(undefined),
+  allProjects: z.boolean().optional().catch(undefined),
   tour: tourParam.catch(undefined),
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
 
-// ── /workflows/library ──────────────────────────────────────────────────────
-
-/** The Library's source filter. Absent means every source. */
-export const LIBRARY_SOURCE_KEYS = ["yours", "builtin", "failed"] as const;
-export type LibrarySourceKey = (typeof LIBRARY_SOURCE_KEYS)[number];
+// ── /workflows/library (the Workflows tab) ──────────────────────────────────
 
 /**
- * The Library's sort. Absent means by name: a list that reorders itself when
+ * The Workflows list's filter chips. Absent means All. "on" is what runs by
+ * itself (what the Automations tab used to list); "needs-you" is what the
+ * Inbox would raise about it; the rest narrow by where the definition lives.
+ */
+export const WORKFLOWS_SHOW_KEYS = ["on", "needs-you", "yours", "builtin", "failed"] as const;
+export type WorkflowsShowKey = (typeof WORKFLOWS_SHOW_KEYS)[number];
+
+/**
+ * The list's sort. Absent means by name: a list that reorders itself when
  * the last-run data arrives would move rows under the pointer.
  */
 export const LIBRARY_SORT_KEYS = ["name", "recent"] as const;
 export type LibrarySortKey = (typeof LIBRARY_SORT_KEYS)[number];
 
 /**
- * /workflows/library (§2.2). The search, source and sort live in the URL like
- * the Runs filters, so a narrowed library is a link and Back restores it. An
+ * /workflows/library (§2.2). The search, filter and sort live in the URL like
+ * the Runs filters, so a narrowed list is a link and Back restores it. An
  * unknown value is dropped rather than failing the route.
  */
 export const librarySearchSchema = workflowsAreaSearchSchema.extend({
   q: z.string().optional().catch(undefined),
-  source: z.enum(LIBRARY_SOURCE_KEYS).optional().catch(undefined),
+  show: z.enum(WORKFLOWS_SHOW_KEYS).optional().catch(undefined),
   sort: z.enum(LIBRARY_SORT_KEYS).optional().catch(undefined),
 });
 /** Every key optional: absent is the default, which is what links omit. */
@@ -756,11 +766,21 @@ export const RUN_STATE_FILTER_KEYS = ["needs_you", "live", "failed", "completed"
 export type RunStateFilterKey = (typeof RUN_STATE_FILTER_KEYS)[number];
 
 /**
- * Launch kinds the kind chips offer. The server matches any string. With no
- * kind chip pressed it leaves builder.test out: a test run from the workflow
- * builder is scratch work, listed only under the "Tests" chip.
+ * Launch kinds the "Started by" filter offers — every kind a run can carry,
+ * attended and unattended (runStatus.ts LaunchKind). The server matches any
+ * string. With no kind picked it leaves builder.test out: a test run from the
+ * workflow builder is scratch work, listed only under "Tests".
  */
-export const RUN_KIND_FILTER_KEYS = ["chat.start", "manual.run", "schedule", "agent.start_run", "builder.test"] as const;
+export const RUN_KIND_FILTER_KEYS = [
+  "chat.start",
+  "manual.run",
+  "schedule",
+  "webhook",
+  "integration",
+  "workflow_event",
+  "agent.start_run",
+  "builder.test",
+] as const;
 
 export const RUN_RANGE_KEYS = ["24h", "7d", "30d", "all"] as const;
 export type RunRangeKey = (typeof RUN_RANGE_KEYS)[number];
@@ -801,7 +821,7 @@ export const runsSearchSchema = z.object({
   trigger: z.string().optional().catch(undefined),
   range: z.enum(RUN_RANGE_KEYS).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
-  /** Widen past the current project (decision 10: Runs defaults to it). */
+  /** The area's scope (workflowsAreaSearchSchema): every project, not the current one. */
   allProjects: z.boolean().optional().catch(undefined),
   /** False turns off grouping of repeated automation runs (on by default). */
   group: z.boolean().optional().catch(undefined),

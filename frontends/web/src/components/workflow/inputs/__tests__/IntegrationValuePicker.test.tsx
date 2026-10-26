@@ -2,7 +2,7 @@
 
 /**
  * IntegrationValuePicker: the nine states, the keyboard model and what it
- * announces (automation-ux-spec.md §3.5). ListInputOptions is the only mock,
+ * announces. ListInputOptions is the only mock,
  * answering with the real generated messages; until the server implements it
  * (T6) these are the options the picker is exercised against.
  */

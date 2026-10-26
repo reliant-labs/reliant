@@ -101,7 +101,14 @@ export function mobilePathFor(pathname: string): string {
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
   if (run) return `/m/chats/${run[1]}`;
-  if (path === "/workflows" || path.startsWith("/workflows/library")) return "/m/workflows";
+  if (path === "/workflows/runs") return "/m/runs";
+  // A workflow's page (where its triggers are — what an automation link
+  // opens) is its read-only viewer; an automation id is resolved first.
+  const workflow = /^\/workflows\/library\/([^/]+)/.exec(path);
+  if (workflow) return `/m/workflows/${workflow[1]}`;
+  const automation = /^\/(?:workflows\/)?automations\/([^/]+)/.exec(path);
+  if (automation) return `/m/automations/${automation[1]}`;
+  if (path === "/workflows" || path.startsWith("/workflows/")) return "/m/workflows";
 
   if (path.startsWith("/settings/environments")) return "/m/daemons";
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";

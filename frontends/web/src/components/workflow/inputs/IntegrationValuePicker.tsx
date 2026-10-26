@@ -4,8 +4,7 @@
  * IntegrationValuePicker — one control for every typed input
  * (`github.repository`, `github.label`, `github.user`, and every type an
  * integration adds later). It renders from CatalogService.ListInputOptions
- * and nothing else, so nothing in it is per integration
- * (research/autopilot/automation-ux-spec.md §3.5).
+ * and nothing else, so nothing in it is per integration.
  *
  * A WAI-ARIA 1.2 combobox with a listbox popup: the field shows the selected
  * values as chips (multi) or one value (single); opening it moves focus to a

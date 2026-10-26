@@ -31,6 +31,23 @@ type RunCursor struct {
 	ChatID    string
 }
 
+// UnlaunchedTriggerEvent is one firing of a stored trigger that started no
+// run (outcome skipped or failed), with the trigger columns the run log
+// shows beside it.
+type UnlaunchedTriggerEvent struct {
+	ID              string
+	TriggerID       string
+	TriggerName     string
+	WorkflowName    string
+	WorkflowTrigger string
+	ProjectID       string
+	// Kind is the event kind, in the launch-kind vocabulary.
+	Kind          string
+	OccurredAt    time.Time
+	Outcome       TriggerEventOutcome
+	OutcomeDetail string
+}
+
 // RunListFilters narrows the cross-cutting run list. UserID is mandatory and
 // is the only scoping: it is never taken from a request.
 //

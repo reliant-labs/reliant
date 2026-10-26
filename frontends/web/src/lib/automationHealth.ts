@@ -3,10 +3,9 @@
 /**
  * The health vocabulary for an automation: what its state is called, in which
  * colour, the one-line reason, whether it belongs under "Needs you", and the
- * ONE thing to do about it. Every surface — the Library, the workflow page,
- * Automations, the Inbox, the sidebar badge — reads its words from here, so a
- * state is called the same thing everywhere
- * (research/autopilot/automation-ux-spec.md §4.1).
+ * ONE thing to do about it. Every surface — the Workflows list, the workflow
+ * page's Triggers card, the Inbox — reads its words from here, so a state is
+ * called the same thing everywhere.
  *
  * The SERVER decides health (TriggerHealth, from the last 10 firings and the
  * declaration; rules on TriggerHealthStatus in proto/reliant/v1/trigger.proto).
@@ -16,8 +15,8 @@
  *   Broken               BROKEN: the workflow no longer declares the trigger
  *                        this activates. Resuming would not make it fire.
  *   Needs setup          NEEDS_SETUP: a setting the workflow now requires is
- *                        missing. Outranks Paused: Finish setup also resumes.
- *   Paused               disabled. Not firing, so not failing either.
+ *                        missing. Outranks Off: Finish setup also turns it on.
+ *   Off                  disabled ("paused" in code). Not firing, so not failing either.
  *   Can't start          the newest firing failed to launch (no run started).
  *   Failing              FAILING, "N failed in a row".
  *   Waiting for machine  the last run is blocked on its machine.
@@ -111,7 +110,7 @@ const ROWS: Record<AutomationHealthKey, Row> = {
     severity: 5,
   },
   healthy: { key: "healthy", label: "Healthy", dotVariant: "success", badgeVariant: "success", needsAttention: false, severity: 6 },
-  paused: { key: "paused", label: "Paused", dotVariant: "neutral", badgeVariant: "neutral", needsAttention: false, severity: 7 },
+  paused: { key: "paused", label: "Off", dotVariant: "neutral", badgeVariant: "neutral", needsAttention: false, severity: 7 },
 };
 
 export interface AutomationHealthInput {
@@ -142,7 +141,7 @@ export function automationHealth({ enabled, health, lastEvent, source, nextFireA
     const builtin = workflow?.startsWith("builtin://") ?? false;
     return {
       ...ROWS.broken,
-      detail: enabled ? reason : `Paused. ${reason}`,
+      detail: enabled ? reason : `Off. ${reason}`,
       cta: builtin ? { kind: "remove_trigger", label: "Remove trigger" } : { kind: "open_workflow", label: "Open workflow" },
     };
   }
@@ -201,7 +200,7 @@ export function automationHealth({ enabled, health, lastEvent, source, nextFireA
       if (lastEvent) return { ...ROWS.no_result, detail: "The last run is still going.", cta: { kind: "open_run", label: "Open run" } };
       if (source && triggerSchedule({ source })) {
         const when = nextFireAt ? shortWhen(nextFireAt) : "";
-        return { ...ROWS.scheduled, label: when ? `Next run ${when}` : "Scheduled", cta: { kind: "run_now", label: "Run now" } };
+        return { ...ROWS.scheduled, label: when ? `Next run ${when}` : "Scheduled", cta: { kind: "run_now", label: "Run…" } };
       }
       return { ...ROWS.waiting_first_event, cta: { kind: "try_now", label: "Try it now" } };
   }

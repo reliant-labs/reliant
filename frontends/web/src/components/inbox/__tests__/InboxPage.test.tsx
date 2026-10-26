@@ -213,14 +213,14 @@ describe("InboxPage item kinds", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
   });
 
-  it("a failed launch shows the reason, a single failure no count, and Edit automation", async () => {
+  it("a failed launch shows the reason, a single failure no count, and opens the trigger", async () => {
     respond([launchFailedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
+    renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
     expect(within(row).getByText("Machine was deleted")).toBeInTheDocument();
     expect(within(row).queryByText(/in a row/)).toBeNull();
-    await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
+    // Until the trigger is known, the link resolves through the automation redirect.
+    expect(within(row).getByRole("link", { name: "Open trigger" })).toHaveAttribute("href", "/workflows/automations/trg-2");
   });
 
   it("an automation that needs setup names what is missing and links to Finish setup on its workflow page", async () => {
@@ -290,7 +290,7 @@ describe("InboxPage layout", () => {
     expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
   });
 
-  it("an automation item without a run links to the automation", async () => {
+  it("an automation item without a run links to the trigger", async () => {
     respond([launchFailedItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");

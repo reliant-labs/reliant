@@ -103,18 +103,16 @@ const ConnectorConsentPage = lazyRoute(
   () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
 const WorkflowPage = lazyRoute(
   () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
-const AutomationsListPage = lazyRoute(
-  () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
-const AutomationDetailPage = lazyRoute(
-  () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
+const AutomationRedirectPage = lazyRoute(
+  () => import('./components/workflows/AutomationRedirectPage'), 'AutomationRedirectPage')
 const RunsPage = lazyRoute(
   () => import('./components/runs/RunsPage'), 'RunsPage')
 const RunDetailPage = lazyRoute(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
 const WorkflowsLayout = lazyRoute(
   () => import('./components/workflows/WorkflowsShell'), 'WorkflowsLayout')
-const LibraryPage = lazyRoute(
-  () => import('./components/workflows/library/LibraryPage'), 'LibraryPage')
+const WorkflowsListPage = lazyRoute(
+  () => import('./components/workflows/list/WorkflowsListPage'), 'WorkflowsListPage')
 const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
@@ -145,6 +143,10 @@ const MobileWorkflowCatalog = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
 const MobileInboxScreen = lazyRoute(
   () => import('./components/Mobile/MobileInboxScreen'), 'MobileInboxScreen')
+const MobileRunsScreen = lazyRoute(
+  () => import('./components/Mobile/MobileRunsScreen'), 'MobileRunsScreen')
+const MobileAutomationRedirect = lazyRoute(
+  () => import('./components/Mobile/MobileAutomationRedirect'), 'MobileAutomationRedirect')
 const MobileDiagnosticsRoute = lazyRoute(
   () => import('./components/Mobile/MobileDiagnosticsRoute'), 'MobileDiagnosticsRoute')
 const MobileSettingsScreen = lazyRoute(
@@ -628,17 +630,16 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
-// The Workflows area — Library, Runs, Automations — and the redirects from
+// The Workflows area — Workflows and Runs — and the redirects from
 // the paths it replaced. Defined in workflowsAreaRoutes.tsx so the route tests
 // mount the same definitions.
 const workflowsAreaRoutes = createWorkflowsAreaRoutes(() => authenticatedLayoutRoute, {
   layout: WorkflowsLayout,
-  library: LibraryPage,
+  library: WorkflowsListPage,
   workflowDetail: WorkflowDetailPage,
   runs: RunsPage,
   runDetail: RunDetailPage,
-  automations: AutomationsListPage,
-  automationDetail: AutomationDetailPage,
+  automationRedirect: AutomationRedirectPage,
 })
 
 // Inbox: everything waiting on the user, across every chat and project
@@ -826,6 +827,21 @@ const mobileInboxRoute = createRoute({
   component: MobileInboxScreen,
 })
 
+// The run log, and an automation link resolved to its workflow: so a desktop
+// /workflows/runs or automation link opened on a phone lands on its target
+// (lib/mobileRedirect.ts, mobilePathFor) instead of the chat list.
+const mobileRunsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/runs',
+  component: MobileRunsScreen,
+})
+
+const mobileAutomationRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/automations/$triggerId',
+  component: MobileAutomationRedirect,
+})
+
 // Settings → Diagnostics at its own URL, for a support link.
 const mobileDiagnosticsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
@@ -905,6 +921,8 @@ const routeTree = rootRoute.addChildren([
       mobileSettingsRoute,
       mobileGitHubRoute,
       mobileInboxRoute,
+      mobileRunsRoute,
+      mobileAutomationRoute,
       mobileDiagnosticsRoute,
     ]),
     onboardingRoute,

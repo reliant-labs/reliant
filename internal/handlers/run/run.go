@@ -406,16 +406,103 @@ func (s *Service) listAllRuns(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
 	}
+	var next *db.RunCursor
+	if hasMore && len(items) > 0 {
+		last := items[len(items)-1]
+		next = &db.RunCursor{CreatedAt: last.CreatedAt, ChatID: last.ChatID}
+	}
+	var events []*db.UnlaunchedTriggerEvent
+	if req.GetIncludeUnlaunchedEvents() {
+		var eventsMore bool
+		events, eventsMore, err = s.deps.Repo.ListUnlaunchedTriggerEvents(ctx, filters)
+		if err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
+		}
+		items, events, next = mergeRunLog(items, hasMore, events, eventsMore, limit)
+	}
 
+	resp := runLogResponse(items, events)
+	if next != nil {
+		resp.NextPageToken = encodeRunCursor(*next)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func runLogResponse(items []*db.RunListItem, events []*db.UnlaunchedTriggerEvent) *reliantv1.ListRunsResponse {
 	resp := &reliantv1.ListRunsResponse{Runs: make([]*reliantv1.Run, 0, len(items))}
 	for _, item := range items {
 		resp.Runs = append(resp.Runs, runItemToProto(item))
 	}
-	if hasMore && len(items) > 0 {
-		last := items[len(items)-1]
-		resp.NextPageToken = encodeRunCursor(db.RunCursor{CreatedAt: last.CreatedAt, ChatID: last.ChatID})
+	for _, event := range events {
+		resp.UnlaunchedEvents = append(resp.UnlaunchedEvents, unlaunchedEventToProto(event))
 	}
-	return connect.NewResponse(resp), nil
+	return resp
+}
+
+// mergeRunLog makes one page of the run log from a page of runs and a page
+// of unlaunched trigger events, each fetched with the same keyset cursor and
+// up to limit rows: the newest limit of the two together, by (time, id)
+// descending, and the cursor the next page continues from — nil on the last
+// page. A run's time is its start, an event's the time its firing was for.
+//
+// Either source having more rows than it returned means the page may be cut
+// short; so does the merge dropping rows past limit. In both cases the
+// cursor is the last row KEPT, so the next page resumes exactly where this
+// one stopped and nothing either source returned past it is lost: it comes
+// back on the next page.
+func mergeRunLog(
+	runs []*db.RunListItem, runsMore bool,
+	events []*db.UnlaunchedTriggerEvent, eventsMore bool,
+	limit int,
+) ([]*db.RunListItem, []*db.UnlaunchedTriggerEvent, *db.RunCursor) {
+	keptRuns := make([]*db.RunListItem, 0, len(runs))
+	keptEvents := make([]*db.UnlaunchedTriggerEvent, 0, len(events))
+	var last *db.RunCursor
+	i, j := 0, 0
+	for len(keptRuns)+len(keptEvents) < limit && (i < len(runs) || j < len(events)) {
+		takeRun := j >= len(events)
+		if i < len(runs) && j < len(events) {
+			run, event := runs[i], events[j]
+			takeRun = run.CreatedAt.After(event.OccurredAt) ||
+				(run.CreatedAt.Equal(event.OccurredAt) && run.ChatID > event.ID)
+		}
+		if takeRun {
+			keptRuns = append(keptRuns, runs[i])
+			last = &db.RunCursor{CreatedAt: runs[i].CreatedAt, ChatID: runs[i].ChatID}
+			i++
+		} else {
+			keptEvents = append(keptEvents, events[j])
+			last = &db.RunCursor{CreatedAt: events[j].OccurredAt, ChatID: events[j].ID}
+			j++
+		}
+	}
+	more := runsMore || eventsMore || i < len(runs) || j < len(events)
+	if !more || last == nil {
+		return keptRuns, keptEvents, nil
+	}
+	return keptRuns, keptEvents, last
+}
+
+func unlaunchedEventToProto(event *db.UnlaunchedTriggerEvent) *reliantv1.UnlaunchedTriggerEvent {
+	outcome := reliantv1.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED
+	switch event.Outcome {
+	case core.TriggerEventSkipped:
+		outcome = reliantv1.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED
+	case core.TriggerEventFailed:
+		outcome = reliantv1.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED
+	}
+	return &reliantv1.UnlaunchedTriggerEvent{
+		Id:              event.ID,
+		TriggerId:       event.TriggerID,
+		TriggerName:     event.TriggerName,
+		WorkflowName:    event.WorkflowName,
+		WorkflowTrigger: event.WorkflowTrigger,
+		ProjectId:       event.ProjectID,
+		LaunchKind:      event.Kind,
+		OccurredAtMs:    event.OccurredAt.UnixMilli(),
+		Outcome:         outcome,
+		OutcomeDetail:   event.OutcomeDetail,
+	}
 }
 
 // LastRunPerWorkflow returns the newest run of each workflow the caller has run.

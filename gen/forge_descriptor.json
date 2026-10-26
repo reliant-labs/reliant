@@ -9155,6 +9155,11 @@
             "Name": "parent_chat_id",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "include_unlaunched_events",
+            "ProtoType": "bool",
+            "IsOptional": true
           }
         ],
         "ListRunsResponse": [
@@ -9173,6 +9178,12 @@
             "Name": "next_page_token",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "unlaunched_events",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.UnlaunchedTriggerEvent"
           }
         ],
         "PauseRunRequest": [
@@ -9456,6 +9467,11 @@
             "name": "parent_chat_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "include_unlaunched_events",
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListRunsResponse": [
@@ -9472,6 +9488,12 @@
           {
             "name": "next_page_token",
             "kind": "string"
+          },
+          {
+            "name": "unlaunched_events",
+            "kind": "message",
+            "type_name": "reliant.v1.UnlaunchedTriggerEvent",
+            "repeated": true
           }
         ],
         "reliant.v1.PauseRunRequest": [
@@ -9677,6 +9699,49 @@
             "kind": "message",
             "type_name": "reliant.v1.Run"
           }
+        ],
+        "reliant.v1.UnlaunchedTriggerEvent": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "trigger_id",
+            "kind": "string"
+          },
+          {
+            "name": "trigger_name",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_name",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "launch_kind",
+            "kind": "string"
+          },
+          {
+            "name": "occurred_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "outcome",
+            "kind": "enum",
+            "type_name": "reliant.v1.UnlaunchedTriggerEventOutcome"
+          },
+          {
+            "name": "outcome_detail",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_trigger",
+            "kind": "string"
+          }
         ]
       },
       "SchemaFiles": {
@@ -9699,7 +9764,8 @@
         "reliant.v1.SignalRunRequest": "reliant/v1/run.proto",
         "reliant.v1.SignalRunResponse": "reliant/v1/run.proto",
         "reliant.v1.StartRunRequest": "reliant/v1/run.proto",
-        "reliant.v1.StartRunResponse": "reliant/v1/run.proto"
+        "reliant.v1.StartRunResponse": "reliant/v1/run.proto",
+        "reliant.v1.UnlaunchedTriggerEvent": "reliant/v1/run.proto"
       },
       "Enums": {
         "reliant.v1.ChatActivity": [
@@ -9736,6 +9802,11 @@
           "RUN_DISPLAY_STATE_FAILED",
           "RUN_DISPLAY_STATE_CANCELLED",
           "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
+        ],
+        "reliant.v1.UnlaunchedTriggerEventOutcome": [
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED",
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED"
         ],
         "reliant.v1.WorkflowState": [
           "WORKFLOW_STATE_UNSPECIFIED",
@@ -9787,6 +9858,11 @@
           7,
           8
         ],
+        "reliant.v1.UnlaunchedTriggerEventOutcome": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.WorkflowState": [
           0,
           1,
@@ -9817,6 +9893,10 @@
         "reliant.v1.RunDisplayState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "RunDisplayState"
+        },
+        "reliant.v1.UnlaunchedTriggerEventOutcome": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "UnlaunchedTriggerEventOutcome"
         },
         "reliant.v1.WorkflowState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -41116,7 +41196,7 @@
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
-    "reliant/v1/run.proto": "40df7416b308111e1627565d8498943ad1ceeaefb0adf22c3e2c212f518762a7",
+    "reliant/v1/run.proto": "ff1e13e126cc3364723a2e6b1bdd94df434f1c0693afd96504e45bcb27c58bb3",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
     "reliant/v1/streaming.proto": "e75666fc99eae37e14188b9a98efdf06699d92ad922db89abf5dc9190ae8d2bc",

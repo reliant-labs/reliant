@@ -1,11 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The one thing to do about an automation's state (automation-ux-spec.md
- * §4.1), as a button, wired. The health vocabulary (lib/automationHealth.ts)
- * names the action; this is the only place that knows what each one does, so
- * the Automations list, the workflow page, the Inbox and the trigger page
- * all act the same way on the same words.
+ * The one thing to do about a trigger's state, as a button, wired. The health
+ * vocabulary (lib/automationHealth.ts) names the action; this is the only
+ * place that knows what each one does, so the Workflows list, the workflow
+ * page's Triggers card and the Inbox all act the same way on the same words.
  */
 
 import { useState } from "react";
@@ -15,7 +14,7 @@ import { toast } from "sonner";
 import { triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
 import { useDeleteTrigger, useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import type { AutomationCtaKind, AutomationCtaSpec } from "@/lib/automationHealth";
-import { workflowEditHref } from "@/lib/workflowsArea";
+import { automationHref, workflowEditHref } from "@/lib/workflowsArea";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
@@ -80,12 +79,12 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
       case "open_run": {
         const chatId = newestRunChat(triggers);
         if (chatId) void navigate({ to: "/workflows/runs/$runId", params: { runId: chatId } });
-        else void navigate({ to: "/workflows/automations/$triggerId", params: { triggerId: triggers[0]!.id } });
+        else void navigate({ href: automationHref(triggers[0]!) });
         return;
       }
       case "see_why": {
         const t = subjectTrigger(triggers, cta.kind);
-        if (t) void navigate({ to: "/workflows/automations/$triggerId", params: { triggerId: t.id } });
+        if (t) void navigate({ href: automationHref(t) });
         return;
       }
       case "resume":

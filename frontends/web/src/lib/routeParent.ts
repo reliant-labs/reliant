@@ -7,7 +7,9 @@
  * this helper.
  *
  * Hierarchy:
- *   /workflow/$workflowName           → /workflows/library (the builder)
+ *   /workflow/$workflowName           → /workflows/library/$workflowName
+ *                                       (the builder steps back to the workflow's page)
+ *   /workflow/new                     → /workflows/library
  *   /workflows/<tab>/<id>             → /workflows/<tab>   (a detail page)
  *   /workflows, /workflows/<tab>      → /
  *   /settings, /settings/*            → /
@@ -25,8 +27,8 @@
  * The Workflows area (lib/workflowsArea.ts) is the opposite of forge: each
  * tab's list is a real hub with its own actions, so a detail page — a
  * workflow, a run, an automation — steps back into its tab's list, and the
- * list exits to the app. The builder steps back to the Library, where the
- * workflow it was opened from lives.
+ * list exits to the app. The builder steps back to the workflow's page, where
+ * it is usually opened from (Edit); a new, unsaved one to the list.
  *
  * Settings is deliberately flat. Unlike the Workflows area, /settings and
  * /settings/$section render the same SettingsPage — the bare path just falls
@@ -54,7 +56,9 @@ export function getParentRouteNavigateOptions(
   pathname: string,
 ): RouteParentNavigateOptions {
   if (isWorkflowBuilderPath(pathname)) {
-    return { to: WORKFLOWS_LIBRARY_PATH };
+    const name = pathname.slice("/workflow/".length).split("/")[0] ?? "";
+    if (!name || name === "new") return { to: WORKFLOWS_LIBRARY_PATH };
+    return { to: `${WORKFLOWS_LIBRARY_PATH}/${name}` };
   }
   if (pathname === "/forge" || pathname.startsWith("/forge/")) {
     return { to: "/", search: {} };

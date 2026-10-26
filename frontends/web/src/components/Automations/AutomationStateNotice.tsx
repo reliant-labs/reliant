@@ -2,7 +2,7 @@
 
 /**
  * A callout for an automation that needs the user: what is wrong, in one
- * line, and the one thing to do about it (automation-ux-spec.md §4). It
+ * line, and the one thing to do about it. It
  * replaces BrokenActivationNotice and covers every attention state — Broken,
  * Needs setup, Can't start, Failing, Waiting for machine, Skipping — with the
  * same words the Automations list and the Inbox use.

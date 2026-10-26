@@ -10,9 +10,9 @@
  *
  * Two things this module is deliberately NOT:
  *
- *   - Trigger-event outcomes. "Launched", "Skipped" and "Failed to launch"
+ *   - Trigger-event outcomes. "Started a run", "Skipped" and "Couldn't start"
  *     describe a FIRING, not a run. A launched event points at a run, and that
- *     run has its own status here. Showing "Launched" as a result is how a run
+ *     run has its own status here. Showing "Started a run" as a result is how a run
  *     that launched and then failed came to read as green on /automations.
  *   - Tool-call display state (ToolExecution's executing/completed/...), which
  *     describes a single call, not a run.
@@ -312,14 +312,14 @@ export interface TriggerEventOutcomeDisplay {
 }
 
 /**
- * The words for a firing. "Launched" is neutral on purpose: it says a run
- * started, nothing about how that run went, so it must never borrow the
- * success color. The run's own status comes from `runStatus`.
+ * The words for a trigger event. "Started a run" is neutral on purpose: it
+ * says a run started, nothing about how that run went, so it must never
+ * borrow the success color. The run's own status comes from `runStatus`.
  */
 const TRIGGER_EVENT_OUTCOMES: Record<TriggerEventOutcomeKey, TriggerEventOutcomeDisplay> = {
-  launched: { label: "Launched", badgeVariant: "neutral" },
+  launched: { label: "Started a run", badgeVariant: "neutral" },
   skipped: { label: "Skipped", badgeVariant: "warning" },
-  failed: { label: "Failed to launch", badgeVariant: "error" },
+  failed: { label: "Couldn't start", badgeVariant: "error" },
   unknown: { label: "Unknown", badgeVariant: "neutral" },
 };
 
@@ -433,11 +433,13 @@ export function launchKindDisplay(
       return { kind, shortLabel: "Chat", startedByLine: "Started by you" };
     case "schedule": {
       const name = context.triggerName;
+      // Fire trigger now: the trigger fired by hand, unattended, under its
+      // own settings — not an attended Run… (manual.run).
       if (context.manual) {
         return {
           kind,
-          shortLabel: "Run now",
-          ...(name ? naming("Started by Run now on ", name) : { startedByLine: "Started by Run now" }),
+          shortLabel: "Fired by hand",
+          ...(name ? naming("Fired by hand: ", name) : { startedByLine: "Fired by hand" }),
         };
       }
       const slot = context.scheduledFor ? ` for ${context.scheduledFor}` : "";
@@ -460,8 +462,8 @@ export function launchKindDisplay(
     case "manual.run":
       return {
         kind,
-        shortLabel: "Run now",
-        startedByLine: context.replayedEvent ? "Started by you with Run now, replaying a past event" : "Started by you with Run now",
+        shortLabel: "Run by hand",
+        startedByLine: context.replayedEvent ? "Run by you, replaying a past event" : "Run by you",
       };
     case "webhook": {
       // A webhook trigger's name is the webhook's name.
@@ -479,10 +481,10 @@ export function launchKindDisplay(
       const source = provider ? (context.providerEvent ? `${provider}: ${context.providerEvent}` : provider) : "";
       return {
         kind,
-        shortLabel: provider || "Integration",
+        shortLabel: provider || "App event",
         ...(context.triggerName
           ? naming("Started by ", context.triggerName, source ? ` on ${source}` : "")
-          : { startedByLine: source ? `Started by ${source}` : "Started by an integration" }),
+          : { startedByLine: source ? `Started by ${source}` : "Started by an app event" }),
       };
     }
     case "workflow_event": {

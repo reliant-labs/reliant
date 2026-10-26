@@ -117,6 +117,8 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
           <TriggerCard
             launchKind={chat.launchKind}
             triggerId={chat.triggerId}
+            workflowName={chat.workflowName}
+            projectId={chat.projectId}
             triggerName={triggerName}
             timezone={launch.timezone}
             parent={launch.parent}

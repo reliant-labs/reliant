@@ -3,7 +3,10 @@
 /**
  * The Runs list body (WORKFLOW_UI.md §5.3): Needs you, Live, then Finished,
  * each a section label over one divided list. Finished collapses repeats of
- * one automation into a group row unless grouping is turned off.
+ * one automation into a group row unless grouping is turned off, and
+ * interleaves — in time order, as muted rows — the trigger events that
+ * started no run (Skipped, Couldn't start), so a run that never happened
+ * is in the log too.
  *
  * One Card for the whole list, never a card per section: sections are rows
  * inside one surface, separated by the section-label rung of the heading
@@ -13,15 +16,17 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
-import type { RunSummary } from "@/hooks/run-queries";
+import type { RunSummary, UnlaunchedEventSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import Card from "../forge-ui/card";
-import { LaunchKindIcon, RunListHeader, RunRow } from "./RunRow";
+import { LaunchKindIcon, RunListHeader, RunRow, UnlaunchedEventRow } from "./RunRow";
 import { groupRuns, sectionRuns, type RunListItem } from "./runSections";
 
 interface RunListProps {
   runs: RunSummary[];
+  /** Trigger events that started no run, newest first; shown among Finished. */
+  events?: UnlaunchedEventSummary[];
   /** Collapse repeated automation runs in Finished. */
   groupRepeats: boolean;
   /** Project names by id; when set, each row names its project. */
@@ -36,14 +41,37 @@ interface RunListProps {
   bare?: boolean;
 }
 
-export function RunList({ runs, groupRepeats, projectNames, footer, bare = false }: RunListProps) {
+type FinishedItem = RunListItem | { kind: "event"; event: UnlaunchedEventSummary };
+
+function itemTime(item: FinishedItem): number {
+  if (item.kind === "event") return item.event.occurredAt;
+  return item.kind === "run" ? item.run.createdAt : item.runs[0]!.createdAt;
+}
+
+/** Interleave events (newest first) into finished items (newest first), keeping both orders. */
+export function interleaveEvents(items: RunListItem[], events: readonly UnlaunchedEventSummary[]): FinishedItem[] {
+  if (events.length === 0) return items;
+  const out: FinishedItem[] = [];
+  let j = 0;
+  for (const item of items) {
+    while (j < events.length && events[j]!.occurredAt > itemTime(item)) out.push({ kind: "event", event: events[j++]! });
+    out.push(item);
+  }
+  while (j < events.length) out.push({ kind: "event", event: events[j++]! });
+  return out;
+}
+
+const NO_EVENTS: UnlaunchedEventSummary[] = [];
+
+export function RunList({ runs, events = NO_EVENTS, groupRepeats, projectNames, footer, bare = false }: RunListProps) {
   const sections = useMemo(() => sectionRuns(runs), [runs]);
-  const finishedItems = useMemo<RunListItem[]>(
+  const finishedItems = useMemo<FinishedItem[]>(
     () =>
-      groupRepeats
-        ? groupRuns(sections.finished)
-        : sections.finished.map((run) => ({ kind: "run" as const, run })),
-    [groupRepeats, sections.finished],
+      interleaveEvents(
+        groupRepeats ? groupRuns(sections.finished) : sections.finished.map((run) => ({ kind: "run" as const, run })),
+        events,
+      ),
+    [groupRepeats, sections.finished, events],
   );
   const projectName = (run: RunSummary) => projectNames?.get(run.projectId);
 
@@ -67,7 +95,9 @@ export function RunList({ runs, groupRepeats, projectNames, footer, bare = false
       {finishedItems.length > 0 && (
         <RunSection label="Finished" id="runs-finished">
           {finishedItems.map((item) =>
-            item.kind === "run" ? (
+            item.kind === "event" ? (
+              <UnlaunchedEventRow key={`event-${item.event.id}`} event={item.event} projectName={projectNames?.get(item.event.projectId)} />
+            ) : item.kind === "run" ? (
               <RunRow key={item.run.chatId} run={item.run} projectName={projectName(item.run)} />
             ) : (
               <RepeatGroup key={`group-${item.triggerId}`} item={item} projectName={projectName} />

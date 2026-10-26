@@ -52,7 +52,7 @@ beforeEach(() => {
 afterEach(() => setTransport(null));
 
 describe("summarizeLiveAutomations", () => {
-  it("counts live automation runs, separating the ones that need you", () => {
+  it("counts live automation runs, the ones that need you included", () => {
     const summary = summarizeLiveAutomations(
       [
         run("a", "schedule", RunDisplayState.RUNNING),
@@ -61,7 +61,7 @@ describe("summarizeLiveAutomations", () => {
       ],
       new Set(),
     );
-    expect(summary).toEqual({ running: 3, needsYou: 1, truncated: false });
+    expect(summary).toEqual({ running: 3, truncated: false });
   });
 
   it("skips interactive chats, runs already in the sidebar, and runs that are not live", () => {
@@ -75,7 +75,7 @@ describe("summarizeLiveAutomations", () => {
       ],
       new Set(["adopted"]),
     );
-    expect(summary).toEqual({ running: 0, needsYou: 0, truncated: false });
+    expect(summary).toEqual({ running: 0, truncated: false });
   });
 });
 
@@ -115,25 +115,18 @@ describe("AutomationActivityPill", () => {
     expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], allProjects: true, range: "all" });
   });
 
-  // "Needs you" is the Inbox's job (§8, §14.1 decision 1): the Inbox is where
-  // the question or approval can be ANSWERED, while a filtered run list only
-  // points at it. So the pill opens the Inbox, not Runs.
-  it("shows how many need you, and opens the Inbox", async () => {
+  // "Needs you" is the Inbox's job (§8): its sidebar badge is the one count,
+  // so the pill says nothing about it — not a second, different number.
+  it("says nothing about what needs you; the Inbox badge does", async () => {
     listRuns.mockResolvedValue({
       runs: [protoRun("a", "schedule", RunDisplayState.RUNNING), protoRun("b", "agent.start_run", RunDisplayState.NEEDS_INPUT)],
       nextPageToken: "",
     });
-    const onOpenRuns = vi.fn();
-    const onOpenInbox = vi.fn();
-    renderWithQuery(
-      <AutomationActivityPill listedChatIds={new Set()} onOpenRuns={onOpenRuns} onOpenInbox={onOpenInbox} />,
-    );
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} onOpenRuns={vi.fn()} />);
 
-    const needsYou = await screen.findByTestId("automation-activity-pill-needs-you");
-    expect(needsYou).toHaveTextContent("1 needs you");
-    fireEvent.click(needsYou);
-    expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onOpenRuns).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("automation-activity-pill-running")).toHaveTextContent("2 automations running");
+    expect(screen.queryByTestId("automation-activity-pill-needs-you")).toBeNull();
+    expect(screen.queryByText(/need/)).toBeNull();
   });
 
   it("says the count is a floor when the server has more", async () => {

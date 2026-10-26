@@ -2,18 +2,19 @@ import { describe, it, expect } from "vitest";
 import { getParentRouteNavigateOptions } from "../routeParent";
 
 describe("getParentRouteNavigateOptions", () => {
-  // The builder's parent is the Library — the hub it used to step back to is
-  // gone (WORKFLOW_UI.md §1.3).
-  it("returns the Library as parent of /workflow/$workflowName", () => {
+  // The builder steps back to the workflow's page, where Edit opened it; a
+  // new one, to the Workflows list.
+  it("returns the workflow's page as parent of /workflow/$workflowName", () => {
     expect(getParentRouteNavigateOptions("/workflow/my-flow")).toEqual({
-      to: "/workflows/library",
+      to: "/workflows/library/my-flow",
     });
+    expect(getParentRouteNavigateOptions("/workflow/new")).toEqual({ to: "/workflows/library" });
   });
 
   it("handles URL-encoded workflow names (e.g. builtin://...)", () => {
     expect(
       getParentRouteNavigateOptions("/workflow/builtin%3A%2F%2Fchat"),
-    ).toEqual({ to: "/workflows/library" });
+    ).toEqual({ to: "/workflows/library/builtin%3A%2F%2Fchat" });
   });
 
   // /settings and /settings/$section render the same SettingsPage, so there is
@@ -63,17 +64,10 @@ describe("getParentRouteNavigateOptions", () => {
   });
 
   // The Workflows area (WORKFLOW_UI.md §1.3): a detail page steps back to its
-  // tab's list; a tab's list exits to the app. A workflow's detail page is a
-  // step into the Library, and the builder opened from it returns there too.
-  it("a workflow's detail page steps back to the Library", () => {
+  // tab's list; a tab's list exits to the app.
+  it("a workflow's detail page steps back to the Workflows list", () => {
     expect(getParentRouteNavigateOptions("/workflows/library/builtin%3A%2F%2Fagent")).toEqual({
       to: "/workflows/library",
-    });
-  });
-
-  it("an automation's page steps back to the Automations tab", () => {
-    expect(getParentRouteNavigateOptions("/workflows/automations/trig-1")).toEqual({
-      to: "/workflows/automations",
     });
   });
 
@@ -82,7 +76,7 @@ describe("getParentRouteNavigateOptions", () => {
   });
 
   it("every tab's list exits to the app", () => {
-    for (const path of ["/workflows", "/workflows/library", "/workflows/runs", "/workflows/automations"]) {
+    for (const path of ["/workflows", "/workflows/library", "/workflows/runs"]) {
       expect(getParentRouteNavigateOptions(path), path).toEqual({ to: "/", search: {} });
     }
   });

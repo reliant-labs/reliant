@@ -99,7 +99,7 @@ describe("RunHeader", () => {
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by an agent");
   });
 
-  it("a scheduled run links to its automation", async () => {
+  it("a scheduled run links to its trigger, on its workflow's page", async () => {
     renderRunsAt(
       <RunHeader
         chat={chat({ launchKind: "schedule", triggerId: "trig-1" })}
@@ -109,7 +109,7 @@ describe("RunHeader", () => {
       "/workflows/runs/chat-1",
     );
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by schedule Hourly sweep");
-    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-1");
   });
 
   // Every kind an automation fires names that automation and links to it, with
@@ -142,10 +142,10 @@ describe("RunHeader", () => {
     );
     const startedBy = await screen.findByTestId("run-started-by");
     await waitFor(() => expect(startedBy.textContent).toMatch(line));
-    expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/automations/trig-2");
+    expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-2");
   });
 
-  it("a Run now of a schedule says so and still links the automation", async () => {
+  it("a schedule fired by hand says so and still links the trigger", async () => {
     renderRunsAt(
       <RunHeader
         chat={chat({ launchKind: "schedule", triggerId: "trig-1" })}
@@ -155,8 +155,8 @@ describe("RunHeader", () => {
       />,
       "/workflows/runs/chat-1",
     );
-    expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by Run now on Hourly sweep");
-    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+    expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Fired by hand: Hourly sweep");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-1");
   });
 
   it("a webhook run whose automation is gone says what it can, unlinked", async () => {

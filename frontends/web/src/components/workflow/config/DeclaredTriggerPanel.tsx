@@ -39,7 +39,7 @@ import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { Section, SectionFields, SectionLabel } from "./primitives";
 import { ScheduleFields } from "../../Automations/AutomationFormDialog";
 import { formFromSchedule, scheduleFromForm, validateScheduleForm, type ScheduleFormState } from "../../Automations/scheduleForm";
-import { HealthIndicator } from "../../Automations/AutomationRow";
+import { HealthIndicator } from "../../workflows/automationStatus";
 import { automationHealth } from "../../../lib/automationHealth";
 import { describeSchedule } from "../../../lib/cronText";
 import {

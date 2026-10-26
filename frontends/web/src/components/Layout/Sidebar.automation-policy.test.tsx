@@ -67,7 +67,7 @@ vi.mock("../../hooks/run-queries", () => ({
   useAdoptRun: () => ({ mutate: fixtures.adopt }),
   useUnadoptRun: () => ({ mutate: fixtures.unadopt }),
   useLiveRuns: () => ({ data: undefined }),
-  summarizeLiveAutomations: () => ({ running: 0, needsYou: 0, truncated: false }),
+  summarizeLiveAutomations: () => ({ running: 0, truncated: false }),
 }));
 
 vi.mock("../../hooks/trigger-queries", () => ({

@@ -6,8 +6,10 @@
  *
  * The one place an hourly automation and an agent-started run are MEANT to be
  * seen, which is why the default is every kind: the chat list hides them, and
- * filtering them out here too would leave them nowhere. Scoped to the current
- * project by default with an "All projects" chip (decision 10).
+ * filtering them out here too would leave them nowhere. It is the log of
+ * trigger events that started no run too (Skipped, Couldn't start), shown
+ * among the finished runs while no state filter is set. Scoped like every
+ * page of the area by the header's project menu (useWorkflowsScope).
  */
 
 import { useMemo } from "react";
@@ -18,12 +20,13 @@ import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
-import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
-import { WORKFLOWS_AUTOMATIONS_PATH, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
+import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
+import { openAutomationDialog } from "../Automations/automationDialog";
+import { useWorkflowsScope } from "../workflows/useWorkflowsScope";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";
 import { clearRunFilters, hasActiveRunFilters } from "./runFilterState";
@@ -34,14 +37,14 @@ export function RunsPage() {
 
 export function RunsView() {
   const [search] = useRunsSearch();
-  const currentProject = useProjectStore((state) => state.currentProject);
+  const scope = useWorkflowsScope();
   const { projects } = useProjects();
 
   // A chat's children (?parent=) are listed wherever and whenever they ran:
   // the parent chat's header promised "N runs started here", and a project
   // scope or the 24-hour default would silently drop some of them.
   const parent = search.parent;
-  const scopeProjectId = search.allProjects || parent ? undefined : currentProject?.id;
+  const scopeProjectId = parent ? undefined : scope.projectId;
   const filters = useMemo(
     () => ({
       projectId: scopeProjectId,
@@ -52,14 +55,15 @@ export function RunsView() {
       trigger: search.trigger,
       range: parent && !search.range ? ("all" as const) : search.range,
       q: search.q,
+      includeUnlaunched: true,
     }),
     [scopeProjectId, parent, search.state, search.kind, search.workflow, search.trigger, search.range, search.q],
   );
   const parentTitle = useChat(parent).data?.title;
   const list = useRunList(filters);
 
-  // Name the automation a ?trigger= link filters by. Automations are few, and
-  // the list query is already cached by the Automations page.
+  // Name the trigger a ?trigger= link filters by. Triggers are few, and the
+  // every-project list is already cached by the Workflows tab.
   const triggers = useTriggers();
   const triggerName = search.trigger
     ? triggers.data?.find((trigger) => trigger.id === search.trigger)?.name
@@ -82,11 +86,7 @@ export function RunsView() {
         />
       </div>
 
-      <RunFilters
-        currentProjectName={currentProject?.name}
-        triggerName={triggerName}
-        parentTitle={parentTitle}
-      />
+      <RunFilters triggerName={triggerName} parentTitle={parentTitle} />
 
       {list.isLoading ? (
         <RunListSkeleton />
@@ -98,7 +98,7 @@ export function RunsView() {
             Try again
           </Button>
         </Card>
-      ) : list.runs.length === 0 ? (
+      ) : list.runs.length === 0 && list.events.length === 0 ? (
         filtered ? (
           <NoMatchingRuns />
         ) : (
@@ -107,6 +107,7 @@ export function RunsView() {
       ) : (
         <RunList
           runs={list.runs}
+          events={list.events}
           groupRepeats={groupRepeats}
           projectNames={projectNames}
           footer={
@@ -168,14 +169,14 @@ function NoRuns() {
       </div>
       <h2 className="mt-4 text-base font-semibold text-foreground">No runs yet</h2>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Runs appear here when you start a chat, run a workflow, or an automation fires.
+        Runs appear here when you start a chat, run a workflow, or a trigger fires.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: WORKFLOWS_LIBRARY_PATH })}>
           Run a workflow
         </Button>
-        <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => void navigate({ to: WORKFLOWS_AUTOMATIONS_PATH })}>
-          Create an automation
+        <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => openAutomationDialog({})}>
+          Make one run by itself
         </Button>
       </div>
     </Card>

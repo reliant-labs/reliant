@@ -10,6 +10,9 @@
  *
  * It counts runs NOT already in the sidebar (an adopted live run has its own
  * row and activity dot) and does not poll: see useLiveRuns.
+ *
+ * It says nothing about what needs you: the Inbox is the one place that does,
+ * and its sidebar badge is the one count (WORKFLOW_UI.md §8).
  */
 
 import { useMemo } from "react";
@@ -26,11 +29,6 @@ interface AutomationActivityPillProps {
   listedChatIds: ReadonlySet<string>;
   /** Open the Runs list with these filters. */
   onOpenRuns?: (search: RunsSearch) => void;
-  /**
-   * Open the Inbox. "Needs you" goes there rather than to a filtered run list:
-   * the Inbox is where the question or approval can be answered (§8).
-   */
-  onOpenInbox?: () => void;
 }
 
 /**
@@ -41,9 +39,8 @@ interface AutomationActivityPillProps {
 const LIVE_SEARCH: RunsSearch = { state: ["live"], allProjects: true, range: "all" };
 
 const RUNNING_STATUS = runStatusFromDisplayState(RunDisplayState.RUNNING);
-const NEEDS_YOU_STATUS = runStatusFromDisplayState(RunDisplayState.NEEDS_INPUT);
 
-export function AutomationActivityPill({ listedChatIds, onOpenRuns, onOpenInbox }: AutomationActivityPillProps) {
+export function AutomationActivityPill({ listedChatIds, onOpenRuns }: AutomationActivityPillProps) {
   const { data } = useLiveRuns();
 
   const summary = useMemo(
@@ -55,7 +52,6 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns, onOpenInbox 
 
   const more = summary.truncated ? "+" : "";
   const runningLabel = `${summary.running}${more} ${summary.running === 1 ? "automation" : "automations"} running`;
-  const needsYouLabel = `${summary.needsYou} ${summary.needsYou === 1 ? "needs" : "need"} you`;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5 px-1 pb-1.5" data-testid="automation-activity-pill">
@@ -74,23 +70,6 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns, onOpenInbox 
         <RunStatusDot status={RUNNING_STATUS} size="sm" />
         <span className="truncate">{runningLabel}</span>
       </button>
-      {summary.needsYou > 0 && (
-        <button
-          type="button"
-          onClick={() => onOpenInbox?.()}
-          disabled={!onOpenInbox}
-          className={cn(
-            "inline-flex h-6 items-center gap-1.5 rounded-full border border-warning/40 bg-warning/10 px-2.5 text-2xs font-medium text-warning-ink",
-            "transition-colors hover:bg-warning/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-            "disabled:cursor-default",
-          )}
-          aria-label={`${needsYouLabel}. Open the Inbox`}
-          data-testid="automation-activity-pill-needs-you"
-        >
-          <RunStatusDot status={NEEDS_YOU_STATUS} size="sm" />
-          <span>{needsYouLabel}</span>
-        </button>
-      )}
     </div>
   );
 }

@@ -52,7 +52,7 @@ describe("RunRow", () => {
   it("names the automation for a scheduled run, linked to it", async () => {
     renderRow({ launchKind: "schedule", triggerId: "trig-1", triggerName: "Hourly sweep" });
     const link = await screen.findByRole("link", { name: "Hourly sweep" });
-    expect(link).toHaveAttribute("href", "/workflows/automations/trig-1");
+    expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-1");
   });
 
   it.each(["webhook", "integration", "workflow_event"])(
@@ -60,7 +60,7 @@ describe("RunRow", () => {
     async (launchKind) => {
       renderRow({ launchKind, triggerId: "trig-2", triggerName: "On push" });
       const link = await screen.findByRole("link", { name: "On push" });
-      expect(link).toHaveAttribute("href", "/workflows/automations/trig-2");
+      expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-2");
     },
   );
 

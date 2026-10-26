@@ -273,3 +273,109 @@ func TestListRuns_ArchivedRunsAreListedOnRequestAndMarked(t *testing.T) {
 	require.Equal(t, []string{"archived"}, runIDs(last.Msg.Runs), "an archived run is still the workflow's last run")
 	assert.True(t, last.Msg.Runs[0].Archived)
 }
+
+// The run log: a trigger firing that started no run is listed beside the
+// runs, in one time order, and paging walks both without losing or
+// repeating a row (WORKFLOW_UI.md §5, "why didn't last night's run happen").
+func TestListRuns_UnlaunchedEventsInterleaveAndPage(t *testing.T) {
+	f := newRunListFixture(t)
+	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	triggerID := "trg-nightly"
+	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+		ID: triggerID, UserID: f.userID, ProjectID: f.project(),
+		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "wf-a",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: base, UpdatedAt: base,
+	}))
+	event := func(id string, outcome core.TriggerEventOutcome, at time.Time, chatID *string) {
+		t.Helper()
+		_, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
+			ID: id, TriggerID: &triggerID, UserID: f.userID, Kind: core.TriggerEventKindSchedule,
+			DedupeKey: id, OccurredAt: at, Outcome: outcome, OutcomeDetail: "detail " + id, ChatID: chatID, CreatedAt: at,
+		})
+		require.NoError(t, err)
+	}
+	f.seed(t, "run-1", "wf-a", db.Completed(), base)
+	event("evt-skip", core.TriggerEventSkipped, base.Add(1*time.Minute), nil)
+	f.seed(t, "run-2", "wf-a", db.Completed(), base.Add(2*time.Minute))
+	event("evt-fail", core.TriggerEventFailed, base.Add(3*time.Minute), nil)
+	event("evt-launched", core.TriggerEventLaunched, base.Add(4*time.Minute), ptr.Of("run-2"))
+
+	include := ptr.Of(true)
+	without := f.list(t, &reliantv1.ListRunsRequest{})
+	assert.Empty(t, without.UnlaunchedEvents, "events only on request")
+
+	all := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include})
+	assert.Equal(t, []string{"run-2", "run-1"}, runIDs(all.Runs))
+	require.Len(t, all.UnlaunchedEvents, 2, "a launched firing is its run, not an extra row")
+	assert.Equal(t, "evt-fail", all.UnlaunchedEvents[0].Id)
+	assert.Equal(t, reliantv1.UnlaunchedTriggerEventOutcome_UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED, all.UnlaunchedEvents[0].Outcome)
+	assert.Equal(t, "nightly", all.UnlaunchedEvents[0].TriggerName)
+	assert.Equal(t, "wf-a", all.UnlaunchedEvents[0].WorkflowName)
+	assert.Equal(t, f.project(), all.UnlaunchedEvents[0].ProjectId)
+	assert.Equal(t, "schedule", all.UnlaunchedEvents[0].LaunchKind)
+	assert.Equal(t, "detail evt-fail", all.UnlaunchedEvents[0].OutcomeDetail)
+	assert.Equal(t, "evt-skip", all.UnlaunchedEvents[1].Id)
+	assert.Empty(t, all.NextPageToken)
+
+	// Two rows a page: fail+run-2, then skip+run-1 — in time order, no gaps.
+	var seen []string
+	var token *string
+	for page := 0; page < 4; page++ {
+		resp := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include, Limit: 2, PageToken: token})
+		require.LessOrEqual(t, len(resp.Runs)+len(resp.UnlaunchedEvents), 2)
+		for _, e := range resp.UnlaunchedEvents {
+			seen = append(seen, e.Id)
+		}
+		seen = append(seen, runIDs(resp.Runs)...)
+		if resp.NextPageToken == "" {
+			break
+		}
+		token = ptr.Of(resp.NextPageToken)
+	}
+	assert.ElementsMatch(t, []string{"evt-fail", "run-2", "evt-skip", "run-1"}, seen)
+	assert.Len(t, seen, 4, "no row repeats across pages")
+
+	// A state or parent filter cannot match an event; the others narrow it.
+	failed := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include,
+		DisplayStates: []reliantv1.RunDisplayState{reliantv1.RunDisplayState_RUN_DISPLAY_STATE_FAILED}})
+	assert.Empty(t, failed.UnlaunchedEvents)
+	other := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include, LaunchKind: []string{"webhook"}})
+	assert.Empty(t, other.UnlaunchedEvents)
+	byTrigger := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include, TriggerId: &triggerID})
+	assert.Len(t, byTrigger.UnlaunchedEvents, 2)
+	byName := f.list(t, &reliantv1.ListRunsRequest{IncludeUnlaunchedEvents: include, Query: ptr.Of("NIGHT")})
+	assert.Len(t, byName.UnlaunchedEvents, 2)
+}
+
+func TestMergeRunLog(t *testing.T) {
+	at := func(m int) time.Time { return time.Date(2026, 1, 1, 0, m, 0, 0, time.UTC) }
+	run := func(id string, m int) *db.RunListItem { return &db.RunListItem{ChatID: id, CreatedAt: at(m)} }
+	ev := func(id string, m int) *db.UnlaunchedTriggerEvent {
+		return &db.UnlaunchedTriggerEvent{ID: id, OccurredAt: at(m)}
+	}
+
+	t.Run("everything fits: no cursor", func(t *testing.T) {
+		runs, events, next := mergeRunLog([]*db.RunListItem{run("r2", 4), run("r1", 1)}, false, []*db.UnlaunchedTriggerEvent{ev("e1", 3)}, false, 5)
+		assert.Len(t, runs, 2)
+		assert.Len(t, events, 1)
+		assert.Nil(t, next)
+	})
+	t.Run("cut at limit: cursor is the last row kept", func(t *testing.T) {
+		runs, events, next := mergeRunLog([]*db.RunListItem{run("r2", 4), run("r1", 1)}, false, []*db.UnlaunchedTriggerEvent{ev("e1", 3)}, false, 2)
+		require.Len(t, runs, 1)
+		require.Len(t, events, 1)
+		require.NotNil(t, next)
+		assert.Equal(t, db.RunCursor{CreatedAt: at(3), ChatID: "e1"}, *next)
+	})
+	t.Run("a source with more rows keeps the page open", func(t *testing.T) {
+		_, _, next := mergeRunLog([]*db.RunListItem{run("r1", 4)}, true, nil, false, 5)
+		require.NotNil(t, next)
+		assert.Equal(t, "r1", next.ChatID)
+	})
+	t.Run("equal times order by id, as both queries do", func(t *testing.T) {
+		runs, events, _ := mergeRunLog([]*db.RunListItem{run("b", 2)}, false, []*db.UnlaunchedTriggerEvent{ev("c", 2), ev("a", 2)}, false, 1)
+		assert.Empty(t, runs)
+		require.Len(t, events, 1)
+		assert.Equal(t, "c", events[0].ID)
+	})
+}

@@ -2,7 +2,7 @@
 
 /**
  * The picker's full-screen sheet, used below `sm` or on a coarse pointer
- * instead of a popover (automation-ux-spec.md §3.7): Back on the left, the
+ * instead of a popover: Back on the left, the
  * field's label as the title, Done with the count on the right, and the search
  * pinned at the top. It sits ABOVE the setup dialog's own sheet — one sheet
  * per level, never a popover inside a sheet.

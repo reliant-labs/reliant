@@ -2,7 +2,7 @@
 
 /**
  * The trigger card says what fired a non-interactive run, from its launch
- * event: the scheduled slot (in the automation's timezone), "Run now" for a
+ * event: the scheduled slot (in the automation's timezone), "Fired by hand" for a
  * manual fire, the automation, and — expanded — the prompt and inputs it was
  * started with, read-only. It renders nothing for a run a person started, and
  * an older run with no launch event still says what it can.
@@ -91,7 +91,7 @@ describe("TriggerCard", () => {
     expect(screen.queryByTestId("trigger-card-late")).not.toBeInTheDocument();
   });
 
-  it("a manual fire says Run now, not a schedule slot", async () => {
+  it("a fire by hand says so, not a schedule slot", async () => {
     renderRunsAt(
       <TriggerCard
         launchKind="schedule"
@@ -102,7 +102,7 @@ describe("TriggerCard", () => {
       "/workflows/runs/chat-1",
     );
     const card = await screen.findByTestId("trigger-card");
-    expect(card).toHaveTextContent("Run now on Nightly triage");
+    expect(card).toHaveTextContent("Fired by hand: Nightly triage");
     expect(card).not.toHaveTextContent("Scheduled for");
   });
 

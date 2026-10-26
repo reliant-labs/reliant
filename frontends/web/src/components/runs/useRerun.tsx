@@ -1,19 +1,20 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Re-run and "Run automation now", for run detail.
+ * Re-run and "Fire trigger now", for run detail.
  *
  * Re-run (current definition) opens the Run… dialog prefilled with what the
  * original run was started with — the recorded workflow, presets and inputs,
  * its workspace, its machine, and its prompt — so the user can adjust any of
  * it before starting. It goes through the same dialog and StartChat request
  * as any manual run, so it is ATTENDED (§14.1 decision 11) and opens as a
- * chat. The workflow definition is the current one (decision 3); the label
- * says so. A failed run's Retry is this same action.
+ * chat. The workflow definition is the current one (decision 3); the
+ * button's tooltip and the dialog's title say so. A failed run's Retry is
+ * this same action.
  *
- * "Run automation now" fires the run's automation (FireTrigger), which is a
- * different thing: the run it starts is the automation's, unattended under
- * its policy, and lands in Runs rather than opening.
+ * "Fire trigger now" fires the run's trigger (FireTrigger), which is a
+ * different thing: the run it starts is the trigger's, unattended under its
+ * settings, and lands in Runs rather than opening.
  */
 
 import { useState, type ReactNode } from "react";
@@ -55,10 +56,10 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
     ? () =>
         fire.mutate({ id: automationId }, {
           onSuccess: () =>
-            toast.success("Automation started", {
-              description: `${triggerName ?? "It"} runs now, unattended. The new run appears in Runs.`,
+            toast.success(`Fired ${triggerName ?? "the trigger"}`, {
+              description: "It runs now, unattended. What it did appears in Runs.",
             }),
-          onError: (error) => toast.error("Could not run the automation", { description: runErrorMessage(error) }),
+          onError: (error) => toast.error(`Couldn't fire ${triggerName ?? "the trigger"}`, { description: runErrorMessage(error) }),
         })
     : undefined;
 

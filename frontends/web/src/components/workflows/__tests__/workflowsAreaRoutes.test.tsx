@@ -4,10 +4,12 @@
  * The Workflows area's routes (WORKFLOW_UI.md §1.3), mounted from the SAME
  * definitions routes.tsx uses (createWorkflowsAreaRoutes) with stub pages:
  *
- *   - every area route renders inside the shell, with the right tab active;
- *   - /workflows lands on the Library;
- *   - every retired path (/workflow, /runs*, /automations*) redirects to its
- *     new home and keeps its search params;
+ *   - every area route renders inside the shell, with the right tab active,
+ *     and the shell has two tabs (Workflows, Runs) and no badge;
+ *   - /workflows lands on the Workflows list;
+ *   - every retired path (/workflow, /runs*, /automations*,
+ *     /workflows/automations) redirects to its new home and keeps its search
+ *     params; an automation id resolves through the automation redirect;
  *   - the builder's /workflow/$workflowName is NOT swallowed by the hub
  *     redirect.
  */
@@ -33,10 +35,6 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
     noDragRegionStyle: {},
   }),
 }));
-
-// The Automations badge counts what needs the user; by default nothing does.
-const badge = vi.hoisted(() => ({ triggers: [] as unknown[] }));
-vi.mock("@/hooks/trigger-queries", () => ({ useTriggers: () => ({ data: badge.triggers }) }));
 
 // The shell resolves a project on mount; here one is already current.
 vi.mock("@/store/projectStore", () => {
@@ -81,8 +79,7 @@ function renderAt(path: string) {
     workflowDetail: stub("workflow-detail"),
     runs: stub("runs"),
     runDetail: stub("run-detail"),
-    automations: stub("automations"),
-    automationDetail: stub("automation-detail"),
+    automationRedirect: stub("automation-redirect"),
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([home, authed.addChildren([builder, ...areaRoutes])]),
@@ -106,42 +103,31 @@ function activeTab(): string | null {
 
 describe("Workflows area routes render inside the shell with the right tab", () => {
   it.each([
-    ["/workflows/library", "library", "Library"],
-    ["/workflows/library/builtin%3A%2F%2Fagent", "workflow-detail", "Library"],
+    ["/workflows/library", "library", "Workflows"],
+    ["/workflows/library/builtin%3A%2F%2Fagent", "workflow-detail", "Workflows"],
     ["/workflows/runs", "runs", "Runs"],
     ["/workflows/runs/chat-1", "run-detail", "Runs"],
-    ["/workflows/automations", "automations", "Automations"],
-    ["/workflows/automations/trig-1", "automation-detail", "Automations"],
   ])("%s → %s, %s tab active", async (path, page, tab) => {
     renderAt(path);
     expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
     expect(activeTab()).toBe(tab);
-    // The three tabs, in the order of the jobs: find it, turn it on, watch it (O9).
+    // Two tabs: the workflows (with what runs by itself, inline) and the log.
     const nav = screen.getByRole("navigation", { name: "Workflows" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "Library",
-      "Automations",
-      "Runs",
-    ]);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Workflows", "Runs"]);
   });
 
-  it("badges Automations with how many automations need you", async () => {
-    const health = (status: string) => ({ status, consecutiveFailures: 0, consecutiveSkips: 0, lastFailureDetail: "" });
-    const base = { name: "x", projectId: "proj-1", enabled: true, workflow: "triage", presets: {}, params: {}, message: "", daemonId: "", noMachine: true, notifyOnComplete: false, actingIdentity: "owner", createdAt: "", updatedAt: "", source: { kind: "unknown" } };
-    badge.triggers = [
-      { ...base, id: "a", workflowTrigger: "nightly", health: health("needs_setup") },
-      { ...base, id: "b", workflowTrigger: "evening", health: health("healthy") },
-      { ...base, id: "c", workflow: "other", health: health("broken") },
-    ];
+  it("an automation id renders the resolving redirect inside the shell", async () => {
+    renderAt("/workflows/automations/trig-1");
+    expect(await screen.findByTestId("page-automation-redirect")).toBeInTheDocument();
+  });
+
+  it("no tab carries a badge: the Inbox is the one count of what needs you", async () => {
     renderAt("/workflows/library");
     const nav = await screen.findByRole("navigation", { name: "Workflows" });
-    const automations = within(nav).getByRole("link", { name: /Automations/ });
-    // Two automations: the triage one (its worst trigger needs setup) and the broken custom one.
-    expect(automations).toHaveTextContent("2");
-    badge.triggers = [];
+    for (const link of within(nav).getAllByRole("link")) expect(link.textContent).toMatch(/^(Workflows|Runs)$/);
   });
 
-  it("/workflows lands on the Library and keeps ?project", async () => {
+  it("/workflows lands on the Workflows list and keeps ?project", async () => {
     const router = renderAt("/workflows?project=%22proj-1%22");
     expect(await screen.findByTestId("page-library")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/workflows/library");
@@ -159,10 +145,17 @@ describe("Workflows area routes render inside the shell with the right tab", () 
   });
 
   it("Escape on a detail page steps back to its list", async () => {
-    const router = renderAt("/workflows/automations/trig-1");
-    await screen.findByTestId("page-automation-detail");
+    const router = renderAt("/workflows/runs/chat-1");
+    await screen.findByTestId("page-run-detail");
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs"));
+  });
+
+  it("the tabs carry the scope along with the project", async () => {
+    renderAt("/workflows/library?project=%22proj-1%22&allProjects=true");
+    await screen.findByTestId("page-library");
+    const runs = within(screen.getByRole("navigation", { name: "Workflows" })).getByRole("link", { name: "Runs" });
+    expect(runs).toHaveAttribute("href", "/workflows/runs?project=proj-1&allProjects=true");
   });
 
   // A regression guard, NOT a reproduction: the original bug needs a real
@@ -182,9 +175,15 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     expect(router.state.location.pathname).toBe("/workflows/library");
   });
 
-  it("the project switcher is in the header for Library and Runs, not Automations", async () => {
-    renderAt("/workflows/library");
-    expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("Reliant");
+  it("the project menu is in the header on every page, and offers All projects", async () => {
+    const router = renderAt("/workflows/runs");
+    const switcher = await screen.findByTestId("workflows-project-switcher");
+    expect(switcher).toHaveTextContent("Reliant");
+    switcher.click();
+    const menu = await screen.findByRole("menu", { name: "Projects" });
+    within(menu).getByRole("menuitemradio", { name: /All projects/ }).click();
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ allProjects: true }));
+    expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("All projects");
   });
 });
 
@@ -193,8 +192,9 @@ describe("Retired paths redirect and keep their search params", () => {
     ["/workflow", "/workflows/library", "library"],
     ["/runs", "/workflows/runs", "runs"],
     ["/runs/chat-7", "/workflows/runs/chat-7", "run-detail"],
-    ["/automations", "/workflows/automations", "automations"],
-    ["/automations/trig-3", "/workflows/automations/trig-3", "automation-detail"],
+    ["/automations", "/workflows/library", "library"],
+    ["/workflows/automations", "/workflows/library", "library"],
+    ["/automations/trig-3", "/workflows/automations/trig-3", "automation-redirect"],
   ])("%s → %s", async (from, to, page) => {
     const router = renderAt(from);
     expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
@@ -212,6 +212,12 @@ describe("Retired paths redirect and keep their search params", () => {
     });
   });
 
+  it("the Automations tab lands on what runs by itself, in every project", async () => {
+    const router = renderAt("/workflows/automations?project=%22proj-1%22");
+    await screen.findByTestId("page-library");
+    expect(router.state.location.search).toMatchObject({ show: "on", allProjects: true, project: "proj-1" });
+  });
+
   it("carries ?tour across the hub redirect", async () => {
     const router = renderAt("/workflow?tour=%22workflow-hub%22");
     await screen.findByTestId("page-library");
@@ -220,7 +226,7 @@ describe("Retired paths redirect and keep their search params", () => {
 
   it("replaces history, so Back does not bounce through the old path", async () => {
     const router = renderAt("/automations/trig-3");
-    await screen.findByTestId("page-automation-detail");
+    await screen.findByTestId("page-automation-redirect");
     expect(router.history.length).toBe(1);
   });
 

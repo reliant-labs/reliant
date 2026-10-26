@@ -11,9 +11,10 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Archive } from "lucide-react";
 
-import type { RunSummary } from "@/hooks/run-queries";
+import type { RunSummary, UnlaunchedEventSummary } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { isLiveRunStatus, launchKindDisplay, runStatusFromDisplayState } from "@/lib/runStatus";
+import { isLiveRunStatus, launchKindDisplay, runStatusFromDisplayState, triggerEventOutcomeDisplay } from "@/lib/runStatus";
+import { automationHref } from "@/lib/workflowsArea";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
@@ -103,13 +104,12 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         <LaunchKindIcon kind={launch.kind} />
         {/* Any automation's run names and links it; only automations set a trigger. */}
         {run.triggerId && run.triggerName ? (
-          <Link
-            to="/workflows/automations/$triggerId"
-            params={{ triggerId: run.triggerId }}
+          <a
+            href={automationHref({ id: run.triggerId, workflow: run.workflowName, projectId: run.projectId })}
             className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             {run.triggerName}
-          </Link>
+          </a>
         ) : (
           <span className="truncate">{launch.shortLabel}</span>
         )}
@@ -125,6 +125,76 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
       <div className="col-start-3 row-start-2 text-right text-xs tabular-nums text-muted-foreground md:col-start-auto md:row-start-auto">
         <span className="sr-only">Duration </span>
         <RunDuration startedAt={run.createdAt} completedAt={run.completedAt} live={live} />
+      </div>
+    </li>
+  );
+}
+
+/**
+ * A trigger event that started no run, as a muted row of the run log: what
+ * happened (Skipped / Couldn't start) and why, which trigger, and when. It
+ * has no run to open, so its title links to the trigger on its workflow's
+ * page, where its settings and history are.
+ */
+export function UnlaunchedEventRow({ event, projectName, className }: { event: UnlaunchedEventSummary; projectName?: string; className?: string }) {
+  const outcome = triggerEventOutcomeDisplay(event.outcome);
+  const launch = launchKindDisplay(event.launchKind);
+  const atIso = new Date(event.occurredAt).toISOString();
+  const href = automationHref({ id: event.triggerId, workflow: event.workflowName, projectId: event.projectId });
+  const detail = [
+    event.workflowName ? getWorkflowDisplayName(event.workflowName, true) : undefined,
+    projectName,
+  ].filter(Boolean);
+
+  return (
+    <li
+      className={cn(RUN_ROW_GRID, "py-2.5 text-muted-foreground transition-colors hover:bg-muted/40", className)}
+      data-testid={`run-event-row-${event.id}`}
+      data-event-outcome={event.outcome}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "h-2.5 w-2.5 rounded-full border-2",
+          event.outcome === "failed" ? "border-destructive" : "border-warning",
+        )}
+      />
+
+      <div className="min-w-0">
+        <a
+          href={href}
+          className="block truncate rounded-sm text-sm text-foreground/80 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={event.outcomeDetail || undefined}
+        >
+          {outcome.label}
+          {event.outcomeDetail ? `: ${event.outcomeDetail}` : ""}
+        </a>
+        <p className="mt-0.5 truncate text-xs">
+          <span>No run</span>
+          {detail.length > 0 && ` · ${detail.join(" · ")}`}
+        </p>
+      </div>
+
+      <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-xs md:col-start-auto md:row-start-auto">
+        <span className="sr-only">Started by: </span>
+        <LaunchKindIcon kind={launch.kind} />
+        <a
+          href={href}
+          className="truncate rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {event.triggerName || launch.shortLabel}
+        </a>
+      </div>
+
+      <div className="col-start-3 row-start-1 truncate text-right text-xs md:col-start-auto md:row-start-auto md:text-left">
+        <span className="sr-only">At </span>
+        <time dateTime={atIso} title={formatAbsoluteTime(atIso)}>
+          {formatRelativeTime(atIso)}
+        </time>
+      </div>
+
+      <div className="col-start-3 row-start-2 text-right text-xs md:col-start-auto md:row-start-auto">
+        <span aria-hidden="true">—</span>
       </div>
     </li>
   );

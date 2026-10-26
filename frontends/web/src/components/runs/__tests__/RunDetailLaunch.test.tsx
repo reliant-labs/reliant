@@ -5,10 +5,10 @@
  *
  *  - an agent-started run names and links its parent chat, and falls back to
  *    "Started by an agent" when the parent is gone or not the caller's;
- *  - "Re-run (current definition)" opens the Run… dialog prefilled with what
+ *  - "Re-run" (it uses the current definition) opens the Run… dialog prefilled with what
  *    the run was started with, and submitting it calls StartChat with those
  *    inputs, then opens the new (attended) chat in its project;
- *  - "Run automation now" fires the run's automation;
+ *  - "Fire trigger now" fires the run's automation;
  *  - a chat from before launch events renders without errors, and offers no
  *    re-run it could not fill in.
  *
@@ -284,7 +284,7 @@ describe("run detail: launch event", () => {
     rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch("The recorded prompt"));
     renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
-    await user.click(await screen.findByRole("button", { name: "Re-run (current definition)" }));
+    await user.click(await screen.findByRole("button", { name: "Re-run" }));
     await screen.findByRole("form", { name: "Re-run (current definition)" });
     expect(screen.getByLabelText("Message")).toHaveValue("The recorded prompt");
   });
@@ -300,7 +300,7 @@ describe("run detail: launch event", () => {
       "Scheduled for Tue 6 Oct, 09:00 (Europe/London) by Nightly triage",
     );
 
-    const rerun = await screen.findByRole("button", { name: "Re-run (current definition)" });
+    const rerun = await screen.findByRole("button", { name: "Re-run" });
     await user.click(rerun);
 
     const dialog = await screen.findByRole("form", { name: "Re-run (current definition)" });
@@ -312,7 +312,8 @@ describe("run detail: launch event", () => {
     await waitFor(() => expect(screen.getByLabelText("Workspace")).toHaveValue("wt-1"));
     await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
 
-    await user.click(screen.getByRole("button", { name: "Re-run" }));
+    // The dialog's own Re-run, not the header's that opened it.
+    await user.click(screen.getAllByRole("button", { name: "Re-run" }).at(-1)!);
 
     await waitFor(() => expect(rpc.startChat).toHaveBeenCalledTimes(1));
     const request = rpc.startChat.mock.calls[0]![0];
@@ -336,38 +337,38 @@ describe("run detail: launch event", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/project/proj-1"));
   });
 
-  it("Run automation now fires the run's automation", async () => {
+  it("Fire trigger now fires the run's automation", async () => {
     const user = userEvent.setup();
     useChat(protoChat());
     rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch());
     renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
-    await user.click(await screen.findByRole("button", { name: "Run automation now" }));
+    await user.click(await screen.findByRole("button", { name: "Fire trigger now" }));
     await waitFor(() => expect(rpc.fireTrigger).toHaveBeenCalledTimes(1));
     expect(rpc.fireTrigger.mock.calls[0]![0]).toMatchObject({ id: "trig-1" });
     expect(rpc.startChat).not.toHaveBeenCalled();
   });
 
   // FireTrigger fires every kind of automation, so a webhook's run offers the
-  // same "Run automation now" a schedule's does.
-  it("Run automation now fires a webhook-launched run's automation too", async () => {
+  // same "Fire trigger now" a schedule's does.
+  it("Fire trigger now fires a webhook-launched run's automation too", async () => {
     const user = userEvent.setup();
     useChat(protoChat({ launchKind: "webhook" }));
     rpc.getLaunchEvent.mockResolvedValue(create(GetLaunchEventResponseSchema, {}));
     renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
-    await user.click(await screen.findByRole("button", { name: "Run automation now" }));
+    await user.click(await screen.findByRole("button", { name: "Fire trigger now" }));
     await waitFor(() => expect(rpc.fireTrigger).toHaveBeenCalledTimes(1));
     expect(rpc.fireTrigger.mock.calls[0]![0]).toMatchObject({ id: "trig-1" });
   });
 
-  it("an attended run offers no Run automation now", async () => {
+  it("an attended run offers no Fire trigger now", async () => {
     useChat(protoChat({ launchKind: "chat.start", triggerId: undefined }));
     rpc.getLaunchEvent.mockResolvedValue(create(GetLaunchEventResponseSchema, {}));
     renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
 
     await screen.findByTestId("transcript");
-    expect(screen.queryByRole("button", { name: "Run automation now" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Fire trigger now" })).not.toBeInTheDocument();
   });
 
   it("an old chat with no launch event renders without errors and offers no re-run", async () => {
@@ -380,7 +381,7 @@ describe("run detail: launch event", () => {
     const card = await screen.findByTestId("trigger-card");
     expect(card).toHaveTextContent("Scheduled by Nightly triage");
     expect(card).not.toHaveTextContent("Scheduled for");
-    expect(screen.queryByRole("button", { name: "Re-run (current definition)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Re-run" })).not.toBeInTheDocument();
     // Nothing it cannot fill in is fetched.
     expect(rpc.listMessages).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();

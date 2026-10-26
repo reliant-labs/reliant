@@ -6,7 +6,7 @@
  * exists before they read it.
  *
  * The facts come from the run's launch event (TriggerService.GetLaunchEvent):
- * the slot a schedule fired for, whether it was a "Run now", and what the run
+ * the slot a schedule fired for, whether it was fired by hand, and what the run
  * was started with. Collapsed it is one line; expanded it shows the prompt as
  * sent and the workflow, presets and inputs, read-only.
  *
@@ -23,6 +23,7 @@ import { ChevronDown } from "lucide-react";
 import type { LaunchEvent } from "@/hooks/run-queries";
 import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
+import { automationHref } from "@/lib/workflowsArea";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
@@ -32,6 +33,9 @@ import { LaunchKindIcon } from "./LaunchKindIcon";
 interface TriggerCardProps {
   launchKind?: string | null;
   triggerId?: string;
+  /** The run's workflow and project: where its trigger is configured (automationHref). */
+  workflowName?: string;
+  projectId?: string;
   /** The automation's current name; unset when it has been deleted. */
   triggerName?: string;
   /** The automation's schedule timezone, when it still exists. */
@@ -93,6 +97,8 @@ export function lateBy(scheduledFor?: string, firedAt?: string): string | undefi
 export function TriggerCard({
   launchKind,
   triggerId,
+  workflowName,
+  projectId,
   triggerName,
   timezone,
   parent,
@@ -112,9 +118,9 @@ export function TriggerCard({
   // The live automation links; one deleted since keeps the name it fired under.
   const automation =
     triggerId && triggerName ? (
-      <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={linkClass}>
+      <a href={automationHref({ id: triggerId, workflow: workflowName, projectId })} className={linkClass}>
         {triggerName}
-      </Link>
+      </a>
     ) : event?.triggerName ? (
       <span className="font-medium">{event.triggerName} (since deleted)</span>
     ) : (
@@ -138,7 +144,7 @@ export function TriggerCard({
           {kind === "schedule" ? (
             event?.manual ? (
               <>
-                Run now on {automation}
+                Fired by hand: {automation}
                 <span className="text-muted-foreground"> · by you at {formatClock(event.occurredAt)}</span>
               </>
             ) : event?.scheduledFor ? (

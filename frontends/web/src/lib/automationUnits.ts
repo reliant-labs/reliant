@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The unit a person means by "an automation" (automation-ux-spec.md §2.1).
+ * The unit a person means by "an automation": a workflow's triggers in one
+ * project, or one hand-made trigger.
  *
  *   - A WORKFLOW AUTOMATION is one workflow turned on in one project. The
  *     server stores one activation row per declared trigger, keyed by (user,
@@ -149,4 +150,27 @@ export function unitLastEvent(unit: AutomationUnit): Trigger["lastEvent"] {
     if (!best || Date.parse(t.lastEvent.occurredAt) > Date.parse(best.occurredAt)) best = t.lastEvent;
   }
   return best;
+}
+
+/** The counts strip over what is on: how many need you, are on and healthy, are off, and when the next run is. */
+export interface AutomationCounts {
+  needYou: number;
+  healthyOn: number;
+  paused: number;
+  /** The soonest scheduled run across everything that is on. */
+  nextRunAt?: string;
+}
+
+export function automationCounts(units: readonly AutomationUnit[]): AutomationCounts {
+  let nextRunAt: string | undefined;
+  for (const unit of units) {
+    const at = unitNextFireAt(unit);
+    if (at && (!nextRunAt || Date.parse(at) < Date.parse(nextRunAt))) nextRunAt = at;
+  }
+  return {
+    needYou: unitsNeedingYou(units).length,
+    healthyOn: units.filter((u) => !u.health.needsAttention && u.health.key !== "paused").length,
+    paused: units.filter((u) => u.health.key === "paused").length,
+    nextRunAt,
+  };
 }

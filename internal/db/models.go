@@ -26,10 +26,12 @@ const ProviderOAuthMarker = core.ProviderOAuthMarker
 
 // Run-list types.
 type (
-	RunListFilters  = core.RunListFilters
-	RunListItem     = core.RunListItem
-	RunCursor       = core.RunCursor
-	RunDisplayState = core.RunDisplayState
+	RunListFilters = core.RunListFilters
+	RunListItem    = core.RunListItem
+	RunCursor      = core.RunCursor
+
+	UnlaunchedTriggerEvent = core.UnlaunchedTriggerEvent
+	RunDisplayState        = core.RunDisplayState
 )
 
 const (

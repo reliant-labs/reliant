@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
+import { ON_WORKFLOWS_HREF } from "../../lib/workflowsArea";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
@@ -144,12 +145,12 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
       {
         id: "automations",
         title: "Automations",
-        description: "Workflows that run on a schedule",
+        description: "Workflows that run by themselves, in every project",
         icon: <CalendarClock className="w-4 h-4" />,
         category: "navigation",
         keywords: ["schedule", "trigger", "cron", "automation"],
-        available: !isAt("/workflows/automations"),
-        action: () => navigate({ to: '/workflows/automations' }),
+        available: true,
+        action: () => navigate({ href: ON_WORKFLOWS_HREF }),
       },
       {
         id: "inbox",

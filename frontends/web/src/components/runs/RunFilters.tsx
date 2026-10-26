@@ -4,12 +4,14 @@
  * The Runs filter bar (WORKFLOW_UI.md §5.2). Every filter is a search param,
  * so a filtered list is a link and the back button restores it.
  *
- * One compact row: search, then one menu per filter — Project, Started,
- * State, Started by — each a button that says its value ("State: Failed,
- * Live"), so an applied filter is always visible without a row of chips per
- * option. Filters that arrive on a link (a workflow, an automation, a parent
- * chat) show as removable badges in the same row, then Clear and the
- * grouping switch. The state ↔ URL mapping is runFilterState.ts.
+ * One compact row: search, then one menu per filter — Started, State,
+ * Started by — each a button that says its value ("State: Failed, Live"), so
+ * an applied filter is always visible without a row of chips per option.
+ * Filters that arrive on a link (a workflow, a trigger, a parent chat) show
+ * as removable badges in the same row, then Clear and the grouping switch.
+ * The project scope is not here: it is the area's, in the header's project
+ * menu, so every tab reads it the same way. The state ↔ URL mapping is
+ * runFilterState.ts.
  */
 
 import { useEffect, useState } from "react";
@@ -29,17 +31,12 @@ import {
   applyRunFilter,
   clearRunFilters,
   hasActiveRunFilters,
-  runProjectScope,
-  scopePatch,
-  type RunProjectScope,
 } from "./runFilterState";
 
 export { hasActiveRunFilters } from "./runFilterState";
 
 interface RunFiltersProps {
-  /** The project Runs is scoped to by default; unset when none is selected. */
-  currentProjectName?: string;
-  /** The automation named by `trigger`, when the list has resolved it. */
+  /** The trigger named by `trigger`, when the list has resolved it. */
   triggerName?: string;
   /** The chat named by `parent`, when it has loaded. */
   parentTitle?: string;
@@ -59,7 +56,7 @@ export function useRunsSearch(): [RunsSearch, (next: RunsSearch) => void] {
   return [search, set];
 }
 
-export function RunFilters({ currentProjectName, triggerName, parentTitle }: RunFiltersProps) {
+export function RunFilters({ triggerName, parentTitle }: RunFiltersProps) {
   const [search, setSearch] = useRunsSearch();
   const update = (patch: Partial<RunsSearch>) => setSearch(applyRunFilter(search, patch));
 
@@ -76,27 +73,12 @@ export function RunFilters({ currentProjectName, triggerName, parentTitle }: Run
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only the URL drives this
   }, [search.q]);
 
-  const scope = runProjectScope(search, Boolean(currentProjectName));
-  const scopeOptions: Array<{ value: RunProjectScope; label: string }> = [
-    ...(currentProjectName ? [{ value: "current" as const, label: currentProjectName }] : []),
-    { value: "all", label: "All projects" },
-  ];
   const groupRepeats = search.group !== false;
 
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter runs">
       <FilterSearch value={query} onChange={setQuery} placeholder="Search titles" label="Search run titles" />
 
-      {/* No scope to offer before a project is selected: the list spans them all. */}
-      {currentProjectName && (
-        <SelectFilter
-          label="Project"
-          options={scopeOptions}
-          value={scope}
-          defaultValue="current"
-          onChange={(next) => update(scopePatch(next))}
-        />
-      )}
       <SelectFilter<RunRangeKey>
         label="Started"
         options={RUN_RANGE_OPTIONS}
@@ -123,7 +105,7 @@ export function RunFilters({ currentProjectName, triggerName, parentTitle }: Run
       )}
       {search.trigger && (
         <RemovableFilter
-          label={`Automation: ${triggerName ?? "selected automation"}`}
+          label={`Trigger: ${triggerName ?? "selected trigger"}`}
           onRemove={() => update({ trigger: undefined })}
         />
       )}

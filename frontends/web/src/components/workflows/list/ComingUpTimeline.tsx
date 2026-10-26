@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * "Coming up": the next 24 hours as a horizontal strip, one lane per enabled
- * schedule automation, a tick at each fire (research/WORKFLOW_UI.md §7.2). It
+ * "Coming up": the next 24 hours as a horizontal strip, one lane per
+ * schedule trigger that is on, a tick at each fire (research/WORKFLOW_UI.md §7.2). It
  * answers "what happens overnight", which a list sorted by next fire cannot.
  *
  * What is drawn is decided in comingUp.ts. Ticks are decoration for sighted
@@ -10,11 +10,11 @@
  */
 
 import { useEffect, useId, useState } from "react";
-import { Link } from "@tanstack/react-router";
 
-import Card from "../forge-ui/card";
+import Card from "../../forge-ui/card";
 import type { Trigger } from "@/hooks/trigger-model";
 import { formatZonedClock } from "@/lib/cronSchedule";
+import { automationHref } from "@/lib/workflowsArea";
 import { timelineModel, type TimelineLane } from "./comingUp";
 
 /** Re-render on the minute so the strip slides with time. */
@@ -127,14 +127,9 @@ function Lane({
 }) {
   return (
     <>
-      <Link
-        to="/workflows/automations/$triggerId"
-        params={{ triggerId: lane.trigger.id }}
-        tabIndex={-1}
-        className="truncate text-xs text-foreground hover:underline"
-      >
+      <a href={automationHref(lane.trigger)} tabIndex={-1} className="truncate text-xs text-foreground hover:underline">
         {lane.trigger.name}
-      </Link>
+      </a>
       <div
         className="relative h-5 rounded-sm border border-border/60 bg-background"
         data-testid={`coming-up-lane-${lane.trigger.id}`}

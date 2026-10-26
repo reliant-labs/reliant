@@ -2,27 +2,27 @@
 
 /**
  * /workflows/library/$workflowRef — one workflow: what it does, how it is
- * used, and Run now (WORKFLOW_UI.md §2.3). Every surface that names a workflow
- * can link here.
+ * used, and Run… (WORKFLOW_UI.md §2.3). Every surface that names a workflow
+ * can link here, and every link to an automation lands here, on its trigger.
  *
- * It is also the ONE place the workflow is configured to run by itself
- * (automation-ux-spec.md §2.1): the "Turned on" card lists it per project,
- * with Settings, Pause and the state's call to action, and a callout under
- * the header names the worst automation that needs the user.
+ * It is the ONE place the workflow is configured to run by itself: the
+ * Triggers card lists every trigger — declared in the workflow file or added
+ * by hand — per project, with its switch, Settings or Edit, Fire trigger now
+ * and its history; a callout under the header names the worst one that needs
+ * the user.
  *
- * Main column: Turned on, recent runs (the Runs tab's own RunList, so the two
- * cannot drift), and the definition — its diagram, read-only, and its typed
- * inputs. Side rail: About (with what starts it and whether it needs a
- * machine), this workflow's Presets, and Used by: the workflows that call this
- * one through `ref:`.
+ * Main column: Triggers, recent runs (the Runs tab's own RunList and run log,
+ * so the two cannot drift — trigger events that started no run included),
+ * and the definition — its diagram, read-only, and its typed inputs. Side
+ * rail: About, this workflow's Presets, and Used by: the workflows that call
+ * this one through `ref:`.
  *
- * The header holds Run now and Edit only. Turning it on, changing how it runs
- * and adding a custom automation live in Turned on, so the header no longer
- * offers two ways to make the workflow run by itself.
+ * Both cards honour the area's scope (one project, or every project). The
+ * header holds Run… (attended: the run form) and Edit only.
  */
 
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Pencil, Play } from "lucide-react";
 
 import type { WorkflowResponse } from "@/hooks/workflow-queries";
@@ -39,8 +39,8 @@ import { useProjects } from "@/hooks/project-queries";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
 import PageHeader from "../../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
-import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
 import { AutomationStateNotice } from "../../Automations/AutomationStateNotice";
+import { openAutomationDialog } from "../../Automations/automationDialog";
 import { RunList } from "../../runs/RunList";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";
@@ -51,12 +51,14 @@ import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
 import { declaredTriggers, describeDeclaredSource } from "@/lib/declaredTriggers";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
-import { workflowAutomationsFor } from "@/lib/automationUnits";
+import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
 import { describeSchedule } from "@/lib/cronText";
-import { TurnedOnCard } from "./TurnedOnCard";
+import { triggerRunsWorkflow } from "@/lib/triggerRail";
+import { useWorkflowsScope } from "../useWorkflowsScope";
+import { TriggersCard } from "./TriggersCard";
 import { workflowsUsing } from "./workflowUsedBy";
 
-/** How many runs the Recent runs card shows; "View all" opens the Runs tab. */
+/** How many runs (and trigger events that started none) Recent runs shows; "View all" opens the Runs tab. */
 export const RECENT_RUNS_LIMIT = 10;
 
 export function WorkflowDetailPage() {
@@ -70,16 +72,28 @@ export function WorkflowDetailPage() {
   return <WorkflowDetail projectId={projectId} workflowRef={workflowRef} />;
 }
 
+/** The area's scope as this page reads it, and the way to widen it. */
+function useDetailScope() {
+  const scope = useWorkflowsScope();
+  const navigate = useNavigate();
+  const showAllProjects = () =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, allProjects: true }),
+      replace: true,
+    } as never);
+  return { scopeProjectId: scope.projectId, showAllProjects };
+}
+
 export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; workflowRef: string }) {
   const navigate = useNavigate();
-  const { project } = useSearch({ strict: false }) as { project?: string };
+  const { scopeProjectId, showAllProjects } = useDetailScope();
   const library = useWorkflowLibrary(projectId);
   const definition = useWorkflowDefinition(projectId, workflowRef);
   const scopePreferences = useScopePreferences();
   // Unknown until the answer arrives: no "default" badge rather than a guess.
   const defaultWorkflow = scopePreferences.isPending ? undefined : scopePreferences.data.defaultWorkflow;
   const [running, setRunning] = useState(false);
-  const [creatingAutomation, setCreatingAutomation] = useState(false);
   const allTriggers = useTriggers();
   const naming = useIntegrationEventNaming();
 
@@ -87,7 +101,9 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
   const invalid = library.data?.invalidWorkflows.find((w) => w.name === workflowRef);
 
   if (library.isLoading) return <DetailSkeleton />;
-  if (library.data && !listing && !invalid) return <WorkflowNotFound workflowRef={workflowRef} />;
+  if (library.data && !listing && !invalid) {
+    return <WorkflowNotFound workflowRef={workflowRef} projectId={projectId} scopeProjectId={scopeProjectId} />;
+  }
 
   const displayName = workflowDisplayName({ name: workflowRef, title: listing?.title });
   const isDraft = listing?.status === "draft";
@@ -106,20 +122,26 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
     : isDraft
       ? "This workflow is a draft. Open it in the editor to publish it, then set it up."
       : null;
-  // The callout names the worst automation of this workflow that needs the user, in any project.
-  const needsYou = workflowAutomationsFor(allTriggers.data ?? [], workflowRef).find((unit) => unit.health.needsAttention && unit.health.cta);
+  // The callout names the worst of its triggers that needs the user, in any
+  // project: the same "needs you" the Workflows list pins on top.
+  const needsYou = unitsNeedingYou(automationUnits((allTriggers.data ?? []).filter((t) => triggerRunsWorkflow(t, workflowRef)))).find(
+    (unit) => unit.health.cta,
+  );
   const startsFrom = [
     ...(listing && isChatLaunchable(listing) ? ["Chat"] : []),
     ...declared.map((d) => describeDeclaredSource(d, describeSchedule, naming)),
   ];
-  const libraryHref = project ? `${WORKFLOWS_LIBRARY_PATH}?project=${encodeURIComponent(project)}` : WORKFLOWS_LIBRARY_PATH;
+  const needsYouProject = needsYou ? (needsYou.kind === "workflow" ? needsYou.projectId : needsYou.trigger.projectId) : "";
+  const needsYouProjectName = needsYou
+    ? (needsYou.kind === "workflow" ? needsYou.projectName : needsYou.trigger.projectName) ?? "a deleted project"
+    : "";
 
   return (
     <div className="space-y-4" data-testid="workflow-detail">
       <div className="forge-ui">
         <PageHeader
           className=""
-          breadcrumbs={[{ label: "Library", href: libraryHref }, { label: displayName }]}
+          breadcrumbs={[{ label: "Workflows", href: WORKFLOWS_LIBRARY_PATH }, { label: displayName }]}
           title={displayName}
           titleAccessory={
             <>
@@ -140,7 +162,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
           actions={[
             { label: "Edit", variant: "secondary", icon: <Pencil className="h-4 w-4" aria-hidden="true" />, onClick: openBuilder },
             {
-              label: "Run now",
+              label: "Run…",
               variant: "primary",
               icon: <Play className="h-4 w-4" aria-hidden="true" />,
               onClick: () => setRunning(true),
@@ -153,28 +175,29 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
       {needsYou && (
         <AutomationStateNotice
           health={needsYou.health}
-          triggers={needsYou.triggers}
+          triggers={needsYou.kind === "workflow" ? needsYou.triggers : [needsYou.trigger]}
           workflowRef={workflowRef}
-          projectId={needsYou.projectId}
-          subject={`${displayName} in ${needsYou.projectName ?? "a deleted project"}`}
+          projectId={needsYouProject}
+          subject={`${displayName} in ${needsYouProjectName}`}
         />
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="min-w-0 space-y-4">
-          <TurnedOnCard
+          <TriggersCard
             workflowRef={workflowRef}
             workflowTitle={displayName}
             declared={declared}
             projectId={projectId}
+            scopeProjectId={scopeProjectId}
             setupBlockedReason={setupBlockedReason}
-            onAddCustom={() => setCreatingAutomation(true)}
+            onShowAllProjects={showAllProjects}
           />
           <RecentRunsCard
-            projectId={projectId}
+            projectId={scopeProjectId}
             workflowRef={workflowRef}
             onRun={runBlockedReason ? undefined : () => setRunning(true)}
-            onSchedule={() => setCreatingAutomation(true)}
+            onAddTrigger={setupBlockedReason ? undefined : () => openAutomationDialog({ workflowRef, projectId, custom: true })}
           />
           <DefinitionCard
             projectId={projectId}
@@ -202,13 +225,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         </aside>
       </div>
 
-      <RunNowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} />
-      <AutomationFormDialog
-        open={creatingAutomation}
-        onClose={() => setCreatingAutomation(false)}
-        prefill={{ workflow: workflowRef, projectId, name: displayName }}
-        defaultProjectId={projectId}
-      />
+      <RunNowDialog open={running} onClose={() => setRunning(false)} projectId={projectId} workflowRef={workflowRef} opensIn="run" />
     </div>
   );
 }
@@ -263,21 +280,24 @@ function RecentRunsCard({
   projectId,
   workflowRef,
   onRun,
-  onSchedule,
+  onAddTrigger,
 }: {
-  projectId: string;
+  /** The project in scope; undefined for every project. */
+  projectId?: string;
   workflowRef: string;
   onRun?: () => void;
-  onSchedule: () => void;
+  onAddTrigger?: () => void;
 }) {
-  // Every run of this workflow in this project, whenever it ran and whatever
-  // started it — including builder test runs, which are runs of it too.
+  // Every run of this workflow in scope, whenever it ran and whatever started
+  // it — and every trigger event of it that started no run.
   const filters = useMemo(
-    () => ({ projectId, workflow: [workflowRef], range: "all" as const }),
+    () => ({ projectId, workflow: [workflowRef], range: "all" as const, includeUnlaunched: true }),
     [projectId, workflowRef],
   );
   const list = useRunList(filters);
   const runs = list.runs.slice(0, RECENT_RUNS_LIMIT);
+  const oldestRun = runs.length === RECENT_RUNS_LIMIT ? runs[runs.length - 1]!.createdAt : 0;
+  const events = list.events.filter((e) => e.occurredAt >= oldestRun).slice(0, RECENT_RUNS_LIMIT);
 
   return (
     <section aria-label="Recent runs">
@@ -286,7 +306,7 @@ function RecentRunsCard({
           <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
           <Link
             to="/workflows/runs"
-            search={{ workflow: [workflowRef], range: "all" }}
+            search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
             className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             View all
@@ -296,21 +316,23 @@ function RecentRunsCard({
           <p className="px-4 py-3 text-sm text-muted-foreground" aria-busy="true">Loading runs…</p>
         ) : list.isError ? (
           <p className="px-4 py-3 text-sm text-muted-foreground" role="alert">Runs could not be loaded.</p>
-        ) : runs.length === 0 ? (
+        ) : runs.length === 0 && events.length === 0 ? (
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
             <span>Not run yet.</span>
             {onRun && (
               <Button variant="ghost" size="sm" onClick={onRun}>
-                Run it now
+                Run…
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={onSchedule}>
-              Add a schedule
-            </Button>
+            {onAddTrigger && (
+              <Button variant="ghost" size="sm" onClick={onAddTrigger}>
+                Add trigger…
+              </Button>
+            )}
           </div>
         ) : (
           <div data-testid="workflow-detail-runs">
-            <RunList runs={runs} groupRepeats={false} bare />
+            <RunList runs={runs} events={events} groupRepeats={false} bare />
           </div>
         )}
       </Card>
@@ -412,8 +434,9 @@ function DefinitionCard({
   );
 }
 
-function WorkflowNotFound({ workflowRef }: { workflowRef?: string }) {
+function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflowRef?: string; projectId?: string; scopeProjectId?: string }) {
   return (
+    <div className="space-y-4">
     <Card padding="lg" role="alert">
       <p className="text-sm font-medium text-foreground">This workflow no longer exists.</p>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -436,9 +459,22 @@ function WorkflowNotFound({ workflowRef }: { workflowRef?: string }) {
         to="/workflows/library"
         className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       >
-        Back to library
+        Back to workflows
       </Link>
     </Card>
+    {/* Triggers can outlive the file they run (a workflow removed from the
+        repository): list them, so they can be turned off or removed. */}
+    {workflowRef && projectId && (
+      <TriggersCard
+        workflowRef={workflowRef}
+        workflowTitle={workflowRef}
+        declared={[]}
+        projectId={projectId}
+        scopeProjectId={scopeProjectId}
+        setupBlockedReason="This workflow no longer exists, so no trigger can be added."
+      />
+    )}
+    </div>
   );
 }
 

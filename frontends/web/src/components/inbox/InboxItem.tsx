@@ -43,7 +43,7 @@ import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
-import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
+import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/workflowsArea";
 import { SetupDialogFor } from "../Automations/SetupDialogFor";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
@@ -308,30 +308,24 @@ function SubjectLink({ item }: { item: InboxItemData }) {
 }
 
 /**
- * An automation item names the automation: a workflow automation opens on its
- * workflow's page, scrolled to it (where it is configured); a custom one on
- * its own page. The trigger is read from the list cache to know which.
+ * An automation item names the trigger, and opens it on its workflow's page
+ * (where every trigger is configured). The trigger is read from the list
+ * cache for its workflow and project; until it has loaded, the link resolves
+ * through the automation redirect, which looks it up.
  */
 function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: string }) {
   const trigger = useTriggerById(triggerId);
   // Automations are configured on desktop only; on a phone the name is a label.
   const mobile = useSurface() === "mobile";
   if (mobile) return <span className={subjectClass} title={name}>{name}</span>;
-  if (trigger?.workflowTrigger) {
-    return (
-      <a href={automationHref(trigger)} className={subjectClass} title={name}>
-        {name}
-      </a>
-    );
-  }
   return (
-    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={subjectClass} title={name}>
+    <a href={trigger ? automationHref(trigger) : automationRedirectPath(triggerId)} className={subjectClass} title={name}>
       {name}
-    </Link>
+    </a>
   );
 }
 
-/** "Open settings" for a workflow automation that can't start; its own page for a custom one. */
+/** "Open settings" for a declared trigger that can't start; a hand-made one opens on its workflow's page. */
 function LaunchFailedAction({ triggerId }: { triggerId: string }) {
   const trigger = useTriggerById(triggerId);
   const [open, setOpen] = useState(false);
@@ -348,9 +342,9 @@ function LaunchFailedAction({ triggerId }: { triggerId: string }) {
     );
   }
   return (
-    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={actionButtonClass}>
-      Edit automation
-    </Link>
+    <a href={trigger ? automationHref(trigger) : automationRedirectPath(triggerId)} className={actionButtonClass}>
+      Open trigger
+    </a>
   );
 }
 

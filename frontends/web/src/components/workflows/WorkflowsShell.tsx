@@ -2,11 +2,17 @@
 
 /**
  * The Workflows area's chrome (WORKFLOW_UI.md §1.2): a left sidebar —
- * Library · Automations · Runs, Automations badged with how many need you —
- * a header bar with the project scope and the
- * exit, and project resolution. It is the layout route every `/workflows/*`
- * page renders inside, so a cross-link between sections (workflow → its runs,
- * run → its automation, automation → its workflow) stays inside one shell.
+ * Workflows · Runs — a header bar with the project scope and the exit, and
+ * project resolution. It is the layout route every `/workflows/*` page
+ * renders inside, so a cross-link between sections (workflow → its runs, run
+ * → its workflow's trigger) stays inside one shell.
+ *
+ * No badge on the nav: the Inbox is the ONE place that says something needs
+ * you (WORKFLOW_UI.md §8), and its sidebar badge is the one count. The
+ * Workflows list pins what needs you on top instead.
+ *
+ * It also hosts the automation dialog (AutomationDialogHost): every page in
+ * the area opens it through openAutomationDialog().
  *
  * WHY A SIDEBAR. The sections used to be tab links squeezed into the title
  * bar beside "Close", where they read as window chrome rather than as the
@@ -24,20 +30,18 @@
  *   a. currentProject is set       → reflect it into `?project=`.
  *   b. `?project=` is set          → load projects, select that one.
  *   c. neither                     → restoreLastProject(), as the app shell does.
- *   d. still nothing               → the content renders its own empty state
- *                                    (Runs and Automations span projects and
- *                                    work without one; the Library offers the
- *                                    project switcher in the header).
+ *   d. still nothing               → every page reads every project (the
+ *                                    scope falls back to All projects).
  *
  * The URL is reflected with `replace`, so it never adds a history entry. A
- * project is background context here — Runs can widen to every project and
- * Automations always lists every one (decision 10) — so a missing project is
- * never a dead end.
+ * project is background context here — the header's project menu also offers
+ * All projects, which every page honours (useWorkflowsScope) — so a missing
+ * project is never a dead end.
  */
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
-import { Activity, ArrowLeft, CalendarClock, ChevronDown, Library, X } from "lucide-react";
+import { Activity, ArrowLeft, ChevronDown, Workflow, X } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 import { useRouteProjectResolution } from "@/hooks/useRouteProjectResolution";
@@ -52,15 +56,14 @@ import {
 } from "@/lib/workflowsArea";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
-import { useTriggers } from "@/hooks/trigger-queries";
-import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
 import DropdownMenu from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
+import { AutomationDialogHost } from "../Automations/automationDialog";
+import { useWorkflowsScope } from "./useWorkflowsScope";
 
-const TAB_ICONS: Record<WorkflowsTab, typeof Library> = {
-  library: Library,
+const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
+  workflows: Workflow,
   runs: Activity,
-  automations: CalendarClock,
 };
 
 /** Pages that host a transcript own their height and scrolling. */
@@ -85,8 +88,8 @@ export function WorkflowsLayout() {
 export function WorkflowsShell({ pathname, children }: { pathname: string; children: ReactNode }) {
   const navigate = useNavigate();
   const activeTab = workflowsTabForPath(pathname);
-  // The project rides along between sections, so switching keeps context.
-  const search = useSearch({ strict: false }) as { project?: string };
+  // The project and the scope ride along between sections, so switching keeps context.
+  const search = useSearch({ strict: false }) as { project?: string; allProjects?: boolean };
   const { trafficLightPadding } = useTitleBarChrome({ collapsedPadding: "0px" });
   const [collapsed, setCollapsed] = useNarrowRail();
 
@@ -96,13 +99,11 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
   useEscapeToLeave(stepBack);
 
-  // Automations carries how many automations need the user, in every project:
-  // the same set its "Needs you" lists.
-  const triggers = useTriggers();
-  const needYou = useMemo(() => unitsNeedingYou(automationUnits(triggers.data ?? [])).length, [triggers.data]);
-
   const navItems = useMemo(() => {
-    const query = search.project ? `?${new URLSearchParams({ project: search.project }).toString()}` : "";
+    const params = new URLSearchParams();
+    if (search.project) params.set("project", search.project);
+    if (search.allProjects) params.set("allProjects", "true");
+    const query = params.size > 0 ? `?${params.toString()}` : "";
     return WORKFLOWS_TABS.map((tab) => {
       const Icon = TAB_ICONS[tab.key];
       return {
@@ -110,13 +111,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         href: `${tab.path}${query}`,
         active: tab.key === activeTab,
         icon: <Icon className="h-4 w-4" aria-hidden="true" />,
-        badge:
-          tab.key === "automations" && needYou > 0
-            ? ({ type: "count", value: needYou, tone: "danger", label: `${needYou} ${needYou === 1 ? "automation needs" : "automations need"} you` } as const)
-            : undefined,
       };
     });
-  }, [activeTab, search.project, needYou]);
+  }, [activeTab, search.project, search.allProjects]);
 
   return (
     <div className="h-screen w-full" data-testid="workflows-shell">
@@ -137,13 +134,12 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         navItems={navItems}
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
-        // Automations always span every project, so a project scope there
-        // would claim a filter that is not applied.
-        headerContent={<WorkflowsHeader onClose={leave} showProject={activeTab !== "automations"} />}
+        headerContent={<WorkflowsHeader onClose={leave} />}
         contentLayout={isFillLayout(pathname) ? "fill" : "padded"}
       >
         {isFillLayout(pathname) ? children : <div className="mx-auto w-full max-w-6xl">{children}</div>}
       </SidebarLayout>
+      <AutomationDialogHost />
     </div>
   );
 }
@@ -212,16 +208,14 @@ function useEscapeToLeave(onLeave: () => void) {
  * The header bar: the project everything below is read in, and the exit — the
  * same arrangement as Deployments' ForgeHeader, so the two areas match.
  */
-function WorkflowsHeader({ onClose, showProject }: { onClose: () => void; showProject: boolean }) {
+function WorkflowsHeader({ onClose }: { onClose: () => void }) {
   const { isElectron, dragRegionStyle, noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
   const exitLabel = isElectron ? "Close workflows" : "Back to app";
   return (
     <div className={cn("flex w-full items-center gap-3", isElectron && "cursor-move")} style={dragRegionStyle}>
-      {showProject && (
-        <div className="flex cursor-default items-center" style={noDragRegionStyle}>
-          <ProjectSwitcher />
-        </div>
-      )}
+      <div className="flex cursor-default items-center" style={noDragRegionStyle}>
+        <ProjectSwitcher />
+      </div>
       <div className="flex-1 self-stretch" style={dragRegionStyle} />
       <div className="flex cursor-default items-center" style={noDragRegionStyle}>
         <Tooltip content={`${exitLabel} (Esc)`} side="bottom" delay={300}>
@@ -241,25 +235,34 @@ function WorkflowsHeader({ onClose, showProject }: { onClose: () => void; showPr
   );
 }
 
-/** Which project the Library and Runs read. Selecting one updates `?project=` (the layout's sync effect). */
+/**
+ * The area's scope: one project, or All projects. Every page honours it
+ * (useWorkflowsScope). Choosing a project makes it current and narrows to it;
+ * All projects keeps the current project as background (`?project=`) and sets
+ * `?allProjects=true`.
+ */
 function ProjectSwitcher() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { projects } = useProjects();
   const selectProject = useProjectStore((state) => state.selectProject);
+  const navigate = useNavigate();
+  const scope = useWorkflowsScope();
   const [open, setOpen] = useState(false);
 
-  const onOpenChange = (next: boolean) => {
-    setOpen(next);
-  };
+  const setAllProjects = (allProjects: boolean) =>
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, allProjects: allProjects || undefined }),
+      replace: true,
+    } as never);
 
   return (
     <DropdownMenu
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={setOpen}
       align="left"
       label="Projects"
       menuClassName="max-h-80 w-72 overflow-y-auto"
-      emptyMessage="No projects yet."
       trigger={(props) => (
         <button
           type="button"
@@ -268,23 +271,34 @@ function ProjectSwitcher() {
           className="inline-flex h-8 max-w-[18rem] items-center gap-2 rounded-md border border-border px-2.5 text-sm text-foreground transition-colors hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <span className="text-muted-foreground">Project</span>
-          <span className="truncate font-medium">{currentProject?.name ?? "Choose…"}</span>
+          <span className="truncate font-medium">{scope.allProjects ? "All projects" : (currentProject?.name ?? "All projects")}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       )}
       groups={[
         {
           selection: "single",
-          items: projects.map((project) => {
-            const active = project.id === currentProject?.id;
-            return {
-              label: project.name,
-              checked: active,
+          items: [
+            {
+              label: "All projects",
+              checked: scope.allProjects,
               onClick: () => {
-                if (!active) void selectProject(project);
+                if (!scope.allProjects) setAllProjects(true);
               },
-            };
-          }),
+            },
+            ...projects.map((project) => {
+              const active = !scope.allProjects && project.id === currentProject?.id;
+              return {
+                label: project.name,
+                checked: active,
+                onClick: () => {
+                  if (active) return;
+                  if (scope.allProjects) setAllProjects(false);
+                  if (project.id !== currentProject?.id) void selectProject(project);
+                },
+              };
+            }),
+          ],
         },
       ]}
     />

@@ -91,6 +91,12 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
+// ListUnlaunchedTriggerEvents is the run log's other half: the trigger
+// events that started no run, under the same filters and keyset as ListRuns.
+func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
+	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
+}
+
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }

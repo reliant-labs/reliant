@@ -1,11 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Library (WORKFLOW_UI.md §2.2), against the real data layer with only the
- * RPC client mocked: sections kept from the hub (Your workflows, Built-in,
- * Failed to load), each row's "last run" from LastRunPerWorkflow and its
- * automations count from ListTriggers, the name linking to DETAIL (not the
- * builder), and Run… opening RunWorkflowDialog.
+ * The Workflows tab (WORKFLOW_UI.md §2.2), against the real data layer with
+ * only the RPC client mocked: one table of every workflow with, inline, what
+ * runs it by itself (its triggers, health, next run and On switch) — there is
+ * no Automations list any more — sections kept from the hub (Your workflows,
+ * Built-in, Failed to load), each row's "last run" from LastRunPerWorkflow,
+ * the filter chips, the All projects scope, the name linking to the
+ * workflow's page, and Run… opening the run dialog.
  */
 
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
@@ -34,6 +36,9 @@ const mocks = vi.hoisted(() => ({
   listDaemons: vi.fn(),
   listProjectDaemons: vi.fn(),
   deleteWorkflow: vi.fn(),
+  setTriggerEnabled: vi.fn(),
+  disableWorkflow: vi.fn(),
+  listProjects: vi.fn(),
 }));
 
 // PresetService and RunService are reached through connectClient (the
@@ -41,7 +46,11 @@ const mocks = vi.hoisted(() => ({
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
-      ...serviceHandlers("TriggerService", { listTriggers: mocks.listTriggers }),
+      ...serviceHandlers("TriggerService", {
+        listTriggers: mocks.listTriggers,
+        setTriggerEnabled: mocks.setTriggerEnabled,
+        disableWorkflow: mocks.disableWorkflow,
+      }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees: mocks.listWorktrees }),
       ...serviceHandlers("WorkflowService", { listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow, deleteWorkflow: mocks.deleteWorkflow }),
@@ -51,7 +60,7 @@ beforeEach(() => {
     }),
       ...serviceHandlers("RunService", { lastRunPerWorkflow: mocks.lastRunPerWorkflow }),
       "CatalogService.SearchCatalog": { response: {} },
-      ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons, listProjects: mocks.listProjects }),
       ...serviceHandlers("DaemonRegistryService", { listDaemons: mocks.listDaemons }),
     }));
 });
@@ -62,6 +71,13 @@ afterEach(() => {
   presetQueryClient.clear();
 });
 
+// The project list needs a session; here it is answered directly.
+const projectList = vi.hoisted(() => ({ projects: [{ id: "proj-1", name: "Reliant" }] as Array<{ id: string; name: string }> }));
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({ projects: projectList.projects, isLoading: false, error: null, refetch: () => undefined }),
+}));
+
 vi.mock("@/store/projectStore", () => {
   const state = { currentProject: { id: "proj-1", name: "Reliant" }, projects: [], isLoading: false };
   const useProjectStore = Object.assign(
@@ -71,7 +87,8 @@ vi.mock("@/store/projectStore", () => {
   return { useProjectStore };
 });
 
-import { LibraryPage } from "../library/LibraryPage";
+import { WorkflowsListPage } from "../list/WorkflowsListPage";
+import { AutomationDialogHost, closeAutomationDialog } from "../../Automations/automationDialog";
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
@@ -88,21 +105,40 @@ beforeEach(() => {
   mocks.listWorktrees.mockResolvedValue({ worktrees: [], total: 0 });
   mocks.listDaemons.mockResolvedValue({ daemons: [] });
   mocks.listProjectDaemons.mockResolvedValue({ projectDaemons: [] });
+  mocks.listProjects.mockResolvedValue({ projects: [{ id: "proj-1", name: "Reliant" }] });
+  projectList.projects = [{ id: "proj-1", name: "Reliant" }];
+  mocks.setTriggerEnabled.mockImplementation(async (req: { id: string; enabled: boolean }) => ({
+    trigger: create(TriggerSchema, { ...protoTrigger(req.id, "triage"), enabled: req.enabled }),
+  }));
+  mocks.disableWorkflow.mockResolvedValue({ disabled: [], failed: [] });
+  closeAutomationDialog();
 });
 
-function renderLibrary() {
-  return renderWorkflowsPage(<LibraryPage />, "/workflows/library", "/workflows/library");
+/** The page and the dialog host its shell mounts, so Set up… and Add trigger… open something. */
+function Page() {
+  return (
+    <>
+      <WorkflowsListPage />
+      <AutomationDialogHost />
+    </>
+  );
 }
 
-describe("LibraryPage", () => {
+function renderLibrary(path = "/workflows/library") {
+  return renderWorkflowsPage(<Page />, path, "/workflows/library");
+}
+
+describe("WorkflowsListPage", () => {
   it("is one table with labelled columns: yours first, then built-in; broken files below", async () => {
     renderLibrary();
     const table = await screen.findByRole("table", { name: "Workflows" });
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
       "Name",
-      "Source",
-      "Turned on",
+      "Runs by itself",
+      "Health",
       "Last run",
+      "Next run",
+      "On",
       "Actions",
     ]);
     const order = within(table)
@@ -110,7 +146,7 @@ describe("LibraryPage", () => {
       .slice(1)
       .map((row) => row.getAttribute("data-testid"));
     expect(order).toEqual(["workflow-row-my-draft", "workflow-row-triage", "workflow-row-builtin://agent"]);
-    // The section survives as the Source column.
+    // The section survives as each row's source badge.
     expect(within(screen.getByTestId("workflow-row-builtin://agent")).getByText("Built-in")).toBeInTheDocument();
     expect(within(screen.getByTestId("workflow-row-triage")).getByText("Project")).toBeInTheDocument();
     const broken = screen.getByRole("list", { name: "Failed to load" });
@@ -119,16 +155,40 @@ describe("LibraryPage", () => {
     expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", includeHidden: true }));
   });
 
-  it("a workflow that nothing runs and declares no triggers shows a dash under Turned on, named for screen readers", async () => {
+  it("a workflow that nothing runs and declares no triggers says it runs only when started, and has no switch", async () => {
     mocks.listTriggers.mockResolvedValue({ triggers: [] });
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
-    const cell = within(triage).getByTestId("workflow-row-turned-on");
-    await waitFor(() => expect(cell).toHaveTextContent("—"));
-    expect(within(cell).getByText("Not applicable")).toHaveClass("sr-only");
+    await waitFor(() => expect(within(triage).getByTestId("workflow-row-starts-on")).toHaveTextContent("Only when started"));
+    expect(within(triage).queryByRole("switch")).toBeNull();
+    // Its scheduling affordance is the row menu's Add trigger….
+    await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage (project, triage)" }));
+    expect(await screen.findByRole("menuitem", { name: "Add trigger…" })).toBeInTheDocument();
   });
 
-  it("shows each row's last run and whether it is on here", async () => {
+  it("shows inline what runs it: its triggers, health, next run and its switch", async () => {
+    renderLibrary();
+    const triage = await screen.findByTestId("workflow-row-triage");
+    await waitFor(() => expect(within(triage).getByTestId("workflow-row-starts-on")).toHaveTextContent(/2 triggers/));
+    expect(within(triage).getByTestId("workflow-row-health")).toHaveTextContent(/Healthy|On/);
+    expect(within(triage).getByRole("switch", { name: "Triage on (project, triage)" })).toBeChecked();
+  });
+
+  it("the switch turns every trigger of the row off, and back on", async () => {
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [protoTrigger("t1", "triage"), create(TriggerSchema, { ...protoTrigger("t2", "triage"), enabled: false })],
+    });
+    renderLibrary();
+    const triage = await screen.findByTestId("workflow-row-triage");
+    const toggle = await within(triage).findByRole("switch", { name: "Triage on (project, triage)" });
+    // Partly on reads as on; turning it off turns off what is on.
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(mocks.setTriggerEnabled).toHaveBeenCalledWith(expect.objectContaining({ id: "t1", enabled: false })));
+    expect(mocks.setTriggerEnabled).not.toHaveBeenCalledWith(expect.objectContaining({ id: "t2" }));
+  });
+
+  it("shows each row's last run", async () => {
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
     await waitFor(() =>
@@ -138,11 +198,10 @@ describe("LibraryPage", () => {
       "href",
       "/workflows/runs/chat-tri",
     );
-    expect(within(triage).getByTestId("workflow-row-turned-on")).toHaveTextContent("On");
 
-    // A builtin's automations match on its stored ref.
+    // A builtin's triggers match on its stored ref.
     const agent = screen.getByTestId("workflow-row-builtin://agent");
-    await waitFor(() => expect(within(agent).getByTestId("workflow-row-turned-on")).toHaveTextContent("On"));
+    await waitFor(() => expect(within(agent).getByRole("switch")).toBeChecked());
     expect(within(agent).getByTestId("workflow-row-last-run")).toHaveTextContent("Not run yet");
     // One request for every row, never one per workflow.
     expect(mocks.lastRunPerWorkflow).toHaveBeenCalledTimes(1);
@@ -225,28 +284,80 @@ describe("LibraryPage", () => {
     expect(router.state.location.search).not.toHaveProperty("q");
   });
 
-  it("reads source and sort from the URL: Built-in only, recently run first", async () => {
+  it("reads the filter and sort from the URL: Built-in only, recently run first", async () => {
     mocks.lastRunPerWorkflow.mockResolvedValue({ runs: [protoRun("builtin://agent", "chat-a")] });
-    renderWorkflowsPage(<LibraryPage />, "/workflows/library?source=%22builtin%22&sort=%22recent%22", "/workflows/library");
+    renderLibrary("/workflows/library?show=%22builtin%22&sort=%22recent%22");
     expect(await screen.findByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
     expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
     expect(screen.queryByRole("list", { name: "Failed to load" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Source: Built-in" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Built-in" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Sort: Recently run" })).toBeInTheDocument();
   });
 
-  it("the Source menu writes the URL", async () => {
+  it("the filter chips write the URL", async () => {
     const { router } = renderLibrary();
     await screen.findByTestId("workflow-row-triage");
-    await userEvent.click(screen.getByRole("button", { name: "Source: All" }));
-    const menu = await screen.findByRole("menu", { name: "Source" });
-    await userEvent.click(within(menu).getByRole("menuitemradio", { name: "Failed to load" }));
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ source: "failed" }));
+    const chips = screen.getByRole("group", { name: "Show" });
+    expect(within(chips).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "All",
+      "On",
+      "Needs you",
+      "Yours",
+      "Built-in",
+      "Failed to load",
+    ]);
+    await userEvent.click(within(chips).getByRole("button", { name: "Failed to load" }));
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ show: "failed" }));
     expect(screen.queryByTestId("workflow-row-triage")).toBeNull();
     expect(screen.getByRole("list", { name: "Failed to load" })).toBeInTheDocument();
   });
 
-  it("pins a workflow whose automation is failing to the top, flagged", async () => {
+  it("On lists only what runs by itself — what the Automations tab used to", async () => {
+    mocks.listTriggers.mockResolvedValue({ triggers: [protoTrigger("t1", "triage")] });
+    renderLibrary("/workflows/library?show=%22on%22");
+    expect(await screen.findByTestId("workflow-row-triage")).toBeInTheDocument();
+    expect(screen.queryByTestId("workflow-row-builtin://agent")).toBeNull();
+    expect(screen.queryByTestId("workflow-row-my-draft")).toBeNull();
+  });
+
+  it("sums up what runs by itself above the table", async () => {
+    renderLibrary();
+    const counts = await screen.findByTestId("automation-counts");
+    // Three hand-made triggers (two for triage, one for agent), each its own automation; all healthy.
+    await waitFor(() => expect(counts).toHaveTextContent(/3\s*on and healthy/));
+  });
+
+  it("across every project, a project's own workflow is a row per project, named with it", async () => {
+    projectList.projects = [{ id: "proj-1", name: "Reliant" }, { id: "proj-2", name: "Website" }];
+    mocks.listWorkflows.mockImplementation(async (req: { projectId: string }) => {
+      const response = libraryResponse();
+      return req.projectId === "proj-2" ? { ...response, invalidWorkflows: [] } : response;
+    });
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [protoTrigger("t1", "triage"), create(TriggerSchema, { ...protoTrigger("t9", "triage"), projectId: "proj-2", projectName: "Website" })],
+    });
+    renderLibrary("/workflows/library?allProjects=true");
+    const reliant = await screen.findByTestId("workflow-row-triage-proj-1");
+    const website = await screen.findByTestId("workflow-row-triage-proj-2");
+    expect(reliant).toHaveTextContent("Reliant");
+    expect(website).toHaveTextContent("Website");
+    // A built-in is one row whatever the project count.
+    expect(await screen.findAllByTestId("workflow-row-builtin://agent")).toHaveLength(1);
+    expect(screen.queryByTestId("workflow-missing-badge")).toBeNull();
+    // Every project's list was read; triggers from every project.
+    await waitFor(() => expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-2" })));
+    expect(mocks.listTriggers).toHaveBeenCalledWith(expect.not.objectContaining({ projectId: expect.anything() }));
+  });
+
+  it("a trigger whose workflow is listed nowhere still gets a row, so it can be turned off", async () => {
+    mocks.listTriggers.mockResolvedValue({ triggers: [protoTrigger("t1", "gone-flow")] });
+    renderLibrary();
+    const orphan = await screen.findByTestId("workflow-row-gone-flow-proj-1");
+    expect(within(orphan).getByTestId("workflow-missing-badge")).toHaveTextContent("Workflow not found");
+    expect(within(orphan).getByRole("switch")).toBeChecked();
+  });
+
+  it("pins a workflow whose trigger is failing to the top, flagged", async () => {
     mocks.listTriggers.mockResolvedValue({
       triggers: [
         protoTrigger("t1", "triage"),
@@ -263,14 +374,14 @@ describe("LibraryPage", () => {
     // First, and listed once.
     expect(rows[0]).toHaveAttribute("data-testid", "workflow-row-triage");
     expect(rows.filter((row) => row.getAttribute("data-testid") === "workflow-row-triage")).toHaveLength(1);
-    expect(within(rows[0]!).getByTestId("workflow-row-turned-on")).toHaveTextContent("3 failed in a row");
-    expect(within(rows[0]!).getByLabelText("Needs attention")).toBeInTheDocument();
+    expect(within(rows[0]!).getByTestId("workflow-row-health")).toHaveTextContent("3 failed in a row");
+    expect(within(rows[0]!).getByLabelText("Needs you")).toBeInTheDocument();
     // The state's one call to action sits on the row.
     expect(within(rows[0]!).getByRole("button", { name: "Open last run for Triage" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(/1 workflow needs you/);
   });
 
-  it("offers Set up on a workflow that could run by itself and is not on here, and says Off", async () => {
+  it("offers Set up… on a workflow that could run by itself and is not on here, and says Off", async () => {
     const library = libraryResponse();
     library.workflows[1] = {
       ...library.workflows[1]!,
@@ -280,7 +391,7 @@ describe("LibraryPage", () => {
     mocks.listTriggers.mockResolvedValue({ triggers: [] });
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
-    await waitFor(() => expect(within(triage).getByTestId("workflow-row-turned-on")).toHaveTextContent("Off"));
+    await waitFor(() => expect(within(triage).getByTestId("workflow-row-starts-on")).toHaveTextContent(/^Off · /));
     await userEvent.click(within(triage).getByRole("button", { name: "Set up Triage (project, triage)" }));
     expect(await screen.findByRole("form", { name: "Set up Triage" })).toBeInTheDocument();
     // A workflow that declares nothing has no Set up.
@@ -305,7 +416,7 @@ describe("LibraryPage", () => {
     expect(within(builtinMenu).getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
   });
 
-  it("Delete lists the automations it takes with the workflow, in any project", async () => {
+  it("Delete lists the triggers it takes with the workflow, in any project", async () => {
     mocks.deleteWorkflow.mockResolvedValue({});
     mocks.listTriggers.mockResolvedValue({
       triggers: [
@@ -321,21 +432,21 @@ describe("LibraryPage", () => {
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
-    await waitFor(() => expect(dialog).toHaveTextContent("Also deletes its 2 automations"));
+    await waitFor(() => expect(dialog).toHaveTextContent("Also deletes its 2 triggers"));
     expect(dialog).toHaveTextContent("Autopilot · PR review · pr-opened");
     expect(dialog).toHaveTextContent("Autopilot · PR review · push");
     expect(dialog).not.toHaveTextContent("Automation t3");
     expect(dialog).not.toHaveTextContent("Built-in one");
   });
 
-  it("Delete says nothing about automations when none run the workflow", async () => {
+  it("Delete says nothing about triggers when none run the workflow", async () => {
     renderLibrary();
     const draft = await screen.findByTestId("workflow-row-my-draft");
     await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
-    expect(dialog).not.toHaveTextContent("automation");
+    expect(dialog).not.toHaveTextContent("trigger");
   });
 
   it("Delete asks in the app, naming the title, slug and source — never a native confirm", async () => {

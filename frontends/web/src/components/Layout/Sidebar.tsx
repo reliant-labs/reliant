@@ -129,7 +129,7 @@ const SORT_OPTIONS: {
 interface SidebarProps {
   paddingClass?: string;
   onNavigateToProjectPicker?: () => void;
-  /** Open the Workflows area (Library · Runs · Automations). */
+  /** Open the Workflows area (Workflows · Runs). */
   onOpenWorkflows?: () => void;
   /** Open the Runs tab with filters; the footer pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
@@ -1587,7 +1587,7 @@ function SidebarComponent({
             />
           )}
           <InboxNavItem onOpen={onOpenInbox} />
-          {/* One entry for the whole area: Library, Runs and Automations are
+          {/* One entry for the whole area: Workflows and Runs are
               its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}
           <SidebarNavButton
             icon={<Workflow className="h-4 w-4" />}
@@ -1815,7 +1815,7 @@ function SidebarComponent({
       </div>
 
       <div className="border-t border-border/40 bg-card px-3 py-2">
-        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} onOpenInbox={onOpenInbox} />
+        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
         <SidebarNavButton
           icon={<Settings className="h-4 w-4" />}
           label="Settings"

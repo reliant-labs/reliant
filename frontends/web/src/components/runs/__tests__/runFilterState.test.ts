@@ -8,8 +8,7 @@ import {
   applyRunFilter,
   clearRunFilters,
   hasActiveRunFilters,
-  runProjectScope,
-  scopePatch,
+  RUN_KIND_OPTIONS,
 } from "../runFilterState";
 
 describe("runFilterState", () => {
@@ -18,7 +17,7 @@ describe("runFilterState", () => {
     expect(applyRunFilter({ range: "7d" }, { range: "24h" })).toEqual({});
     expect(applyRunFilter({}, { state: [] })).toEqual({});
     expect(applyRunFilter({}, { q: "" })).toEqual({});
-    expect(applyRunFilter({}, scopePatch("current"))).toEqual({});
+    expect(applyRunFilter({}, { allProjects: false })).toEqual({});
   });
 
   it("keeps what narrows the list", () => {
@@ -27,13 +26,30 @@ describe("runFilterState", () => {
       state: ["failed", "live"],
       range: "30d",
     });
-    expect(applyRunFilter({}, scopePatch("all"))).toEqual({ allProjects: true });
+    expect(applyRunFilter({}, { allProjects: true })).toEqual({ allProjects: true });
   });
 
-  it("reads the project scope, which is 'all' when there is no current project", () => {
-    expect(runProjectScope({}, true)).toBe("current");
-    expect(runProjectScope({ allProjects: true }, true)).toBe("all");
-    expect(runProjectScope({}, false)).toBe("all");
+  it("Started by offers every launch kind, the unattended ones included", () => {
+    expect(RUN_KIND_OPTIONS.map((option) => option.value)).toEqual([
+      "chat.start",
+      "manual.run",
+      "schedule",
+      "webhook",
+      "integration",
+      "workflow_event",
+      "agent.start_run",
+      "builder.test",
+    ]);
+    expect(RUN_KIND_OPTIONS.map((option) => option.label)).toEqual([
+      "Chat",
+      "Run by hand",
+      "Schedule",
+      "Webhook",
+      "App event",
+      "Workflow event",
+      "Agent",
+      "Tests",
+    ]);
   });
 
   it("an active filter is anything but the defaults and view settings", () => {

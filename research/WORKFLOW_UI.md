@@ -162,6 +162,25 @@ finishes and is never part of the automation's failure streak (§6.4).
 
 ### 1.2 Proposal: one "Workflows" area with three tabs, plus an Inbox
 
+> **Superseded (2026-10-26): two tabs, Workflows and Runs.** The Automations
+> tab was a second rendering of "workflows that are turned on": its rows were
+> workflows, clicking one opened the workflow's page, and its columns were the
+> Library's plus three. So it is folded into the workflow list
+> (`ui-review/02-workflows-ia.md`, option B). The **Workflows** tab (the old
+> Library, same `/workflows/library` path) lists every workflow with, inline,
+> whether it runs by itself: what starts it, health, last and next run, an
+> On/Off switch, filter chips All · On · Needs you · Yours · Built-in, and the
+> counts strip and Coming up above the table. A workflow's page has ONE
+> **Triggers** card for declared and hand-made triggers alike; a trigger's
+> history is the run log filtered to it. **Runs** also lists the trigger
+> events that started no run (Skipped, Couldn't start). The project scope is
+> one header control, honoured by every page (`?allProjects=true`). The
+> Workflows nav badge is gone: the Inbox is the one count of what needs you.
+> `/workflows/automations` redirects to `/workflows/library?show=on&allProjects=true`;
+> `/workflows/automations/$triggerId` resolves the trigger and opens its row
+> on its workflow's page. The rest of this section, and §7, describe the
+> three-tab design that shipped first.
+
 Top-level sidebar nav becomes:
 
 ```
@@ -223,8 +242,8 @@ Why **Runs** is its own surface, not a filter on the chat list:
 | `/workflow/new` | Builder, new | unchanged |
 | `/workflows/runs` | Runs list (§5); search params carry the filters | net-new |
 | `/workflows/runs/$runId` | Run detail (§4), standalone | net-new (the chat view inside the shell) |
-| `/workflows/automations` | Automations (§7) | `/automations` (redirect) |
-| `/workflows/automations/$triggerId` | Automation detail | `/automations/$triggerId` (redirect) |
+| `/workflows/automations` | redirect to `/workflows/library?show=on&allProjects=true` (superseded, §1.2) | `/automations` (redirect) |
+| `/workflows/automations/$triggerId` | resolves the trigger, redirects to its row on its workflow's page (superseded, §1.2) | `/automations/$triggerId` (redirect) |
 | `/inbox` | Inbox (§8) | net-new |
 
 All `/workflows/*` routes sit under `authenticatedLayoutRoute`, like
@@ -938,6 +957,12 @@ pre-scoped.
 
 ## 7. The active-triggers view (Automations, grown up)
 
+> **Superseded (2026-10-26).** There is no Automations tab or automation
+> page any more; see the note in §1.2. What this section put on the
+> Automations tab — the counts, Coming up, health, next run, the switch —
+> now sits on the Workflows tab's rows and above its table, and an
+> automation's page is its trigger's row on the workflow page.
+
 ### 7.1 What #398 shipped
 
 `/automations` (`AutomationsListPage.tsx`) lists one row per trigger across
@@ -1566,14 +1591,14 @@ build; revisit only with a concrete reason.
 |---|---|---|
 | 1 | **Inbox is a top-level nav item** with a count badge. | It is the only interruption automations get (decision 9), so it must be visible without opening anything. |
 | 2 | **The Inbox includes interactive chats awaiting approval or an answer.** It is "everything waiting on me". The sidebar badge stays too. | One place to clear; a user should not have to know which surface a pending item came from. |
-| 3 | **Re-run uses the current definition**, labelled "Re-run (current definition)". There is no definition snapshot in v1. | Snapshotting needs a launch-time YAML/hash record and a loader for historical definitions. That is not worth it until someone asks. |
+| 3 | **Re-run uses the current definition**, labelled "Re-run" with a tooltip that says so (was "Re-run (current definition)"). There is no definition snapshot in v1. | Snapshotting needs a launch-time YAML/hash record and a loader for historical definitions. That is not worth it until someone asks. |
 | 4 | **Agent-started runs are never listed in the sidebar.** They show in Runs, and as a linked child-runs strip in the parent chat's header. | Nesting rules with time windows are hard to predict. Runs is the home for runs; the parent link covers discovery. |
 | 5 | **Keep the "awaiting input" exception in `exclude_automations` until the Inbox ships**, then remove it in the same PR that adds the Inbox. | Removing it first would make an automation's question invisible. |
 | 6 | **No "continue on another machine" in v1.** Offer "Re-run on…" only. | The worktree lives on the original daemon. |
 | 7 | **Presets move to workflow detail plus a Settings section.** There is no fourth hub tab. | Presets belong to a workflow's inputs. |
 | 8 | **Mobile is out of scope this round, except** that `/m` must not break. | Desktop first; mobile already has a run-scoped viewer. |
 | 9 | **Notifications for non-interactive runs:** completions are silent (#411); failures notify. A failure is a `failed` status **or** a declared failure outcome. | An hourly automation must not notify 24×/day, and a broken one must not be silent. |
-| 10 | **Defaults:** Automations lists all projects; Runs lists the current project, with an "All projects" chip. | Automations are few; runs are many. |
+| 10 | **Defaults:** ~~Automations lists all projects; Runs lists the current project, with an "All projects" chip.~~ Superseded 2026-10-26: one scope for the whole area, in the header (current project, or All projects), honoured by every page. | Switching tabs must not silently change what "everything" means. |
 | 11 | **Manual "Run…" is attended.** There is no "run without me" toggle in v1. | A human pressed the button. |
 
 ## 15. Build next, ranked
