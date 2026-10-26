@@ -58,7 +58,6 @@ function assistantAskingForAMachine(): Message {
         toolCallId: "call-1",
         toolName: "request_machine",
         input: JSON.stringify({ reason: "Fixing the failing test needs a checkout of the repository." }),
-        matchedResult: { toolCallId: "call-1", content: "The user has been shown your reason.", isError: false },
       },
     ],
     createdAt: "2024-01-01T00:00:00.000Z",

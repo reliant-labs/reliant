@@ -64,6 +64,20 @@ func FindToolBlock(ctx context.Context, db orm.Context, toolCallID string, block
 	return contentBlockFromRow(rows[0]), nil
 }
 
+// ListToolBlocks reads every block of blockType that carries toolCallID. A
+// tool call id is chosen by the model provider and is not unique across
+// chats (a local server can answer call_0 in every conversation), so a
+// caller that must find ONE chat's block filters these by their message.
+func ListToolBlocks(ctx context.Context, db orm.Context, toolCallID string, blockType reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error) {
+	rows, err := ListMessageContentBlock(ctx, db,
+		orm.WhereEq(MessageContentBlockFieldToolCallID, toolCallID),
+		orm.WhereEq(MessageContentBlockFieldBlockType, blockType))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tool blocks: %w", err)
+	}
+	return contentBlocksFromRows(rows), nil
+}
+
 // ListContentBlocks is one message's blocks in position order.
 func ListContentBlocks(ctx context.Context, db orm.Context, messageID string) ([]*core.MessageContentBlock, error) {
 	rows, err := ListMessageContentBlock(ctx, db,

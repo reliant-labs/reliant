@@ -24,7 +24,6 @@ export type {
   Chat,
   ArchivedChat,
   ContentBlock,
-  MatchedToolResult,
   Attachment,
   Message,
   WorkflowExecutionData,
@@ -56,13 +55,8 @@ import type {
 // nested proto types.
 
 function convertProtoContentBlock(b: ProtoContentBlock): ContentBlock {
-  const { $typeName: _, matchedResult, ...rest } = b;
-  return {
-    ...rest,
-    matchedResult: matchedResult
-      ? (() => { const { $typeName: _t, ...mr } = matchedResult; return mr; })()
-      : undefined,
-  };
+  const { $typeName: _, ...rest } = b;
+  return rest;
 }
 
 export function convertProtoMessage(m: ProtoMessage): Message {

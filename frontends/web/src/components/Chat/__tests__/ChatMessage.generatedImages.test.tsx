@@ -128,11 +128,6 @@ function buildAssistantMessage(): Message {
         toolCallId: "call-1",
         toolName: "generate_image",
         input: JSON.stringify({ prompt: "a cat" }),
-        matchedResult: {
-          toolCallId: "call-1",
-          content: "Image generated.",
-          isError: false,
-        },
       },
       {
         id: "block-2",

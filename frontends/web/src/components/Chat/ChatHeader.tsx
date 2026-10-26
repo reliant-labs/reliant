@@ -25,6 +25,7 @@ import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries"
 import { NoMachinePill } from "./NoMachine";
 import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
+import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import Tooltip from "../forge-ui/tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
@@ -228,7 +229,7 @@ export function ChatHeader({
     }
   };
 
-  const handleExportChat = () => {
+  const handleExportChat = async () => {
     setIsMenuOpen(false);
     
     if (!chatId || !chat) {
@@ -237,6 +238,18 @@ export function ChatHeader({
     }
 
     try {
+      // Large tool results are held as previews; the export gets them whole.
+      const fullResults = new Map<string, string>();
+      await Promise.all(
+        messages.flatMap((message) =>
+          (message.contentBlocks || [])
+            .filter((block) => block.type === ContentBlockType.TOOL_RESULT && block.truncated && block.toolCallId)
+            .map(async (block) => {
+              fullResults.set(block.toolCallId!, await fetchFullToolResult(chatId, block.toolCallId!));
+            }),
+        ),
+      );
+
       // Build markdown export
       let markdown = `# ${chat.title || 'Chat Export'}\n\n`;
       markdown += `Exported: ${new Date().toLocaleString()}\n`;
@@ -268,8 +281,9 @@ export function ChatHeader({
             }
           } else if (block.type === ContentBlockType.TOOL_RESULT) {
             markdown += `**Tool Result:** ${block.toolName || 'Unknown'}\n\n`;
-            if (block.content) {
-              markdown += `${block.content}\n\n`;
+            const content = (block.toolCallId && fullResults.get(block.toolCallId)) || block.content;
+            if (content) {
+              markdown += `${content}\n\n`;
             }
           }
         });
@@ -446,7 +460,7 @@ export function ChatHeader({
                       )}
                       
                       <button
-                        onClick={handleExportChat}
+                        onClick={() => void handleExportChat()}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                       >
                         <Download className="h-4 w-4" />
