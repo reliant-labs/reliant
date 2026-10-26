@@ -12,7 +12,7 @@ import {
   localProviderRef,
 } from "../../Settings/localModels";
 import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../../../hooks/useThinkingCapability";
-import { api } from "../../../api/client";
+import { driverDisplayName } from "../../../hooks/catalog-models";
 import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
 import { OnLimitRow } from "./OnLimitRow";
 
@@ -515,7 +515,7 @@ export function ModelSettingsPage({
           primaryDriver={primaryDriverOfSelection(value, tiers)}
           selectedModel={selectedModel}
           models={models}
-          providerName={api.models._driverDisplayName}
+          providerName={driverDisplayName}
         />
       )}
 

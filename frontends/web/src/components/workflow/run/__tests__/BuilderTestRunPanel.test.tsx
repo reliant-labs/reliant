@@ -44,12 +44,6 @@ const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 const getChat = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
-
 // PresetService is reached through connectClient (hooks/preset-queries), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {
@@ -60,6 +54,7 @@ beforeEach(() => {
       ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
       ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
       ...serviceHandlers("ProjectService", { listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees }),
     }),

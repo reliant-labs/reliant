@@ -36,11 +36,6 @@ const mocks = vi.hoisted(() => ({
   deletePreset: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-  },
-}));
-
 // PresetService is reached through connectClient (hooks/preset-queries), so
 // it is answered at the transport by the same fakes.
 beforeEach(() => {

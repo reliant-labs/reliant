@@ -6,12 +6,13 @@ vi.mock("@/api/settings-grpc", () => ({
   },
 }));
 
-vi.mock("@/api/daemon-grpc", () => ({
+vi.mock("@/lib/oauth-local", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/oauth-local")>()),
   startOAuthViaDaemon: vi.fn(),
 }));
 
 import { settingsGrpc } from "@/api/settings-grpc";
-import { startOAuthViaDaemon } from "@/api/daemon-grpc";
+import { startOAuthViaDaemon } from "@/lib/oauth-local";
 import { CODEX_OAUTH_STATE_PREFIX, runCodexOAuthFlow } from "@/lib/codex-oauth";
 
 const setCryptoMock = () => {

@@ -66,6 +66,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
   [InboxItemKind.RUN_FINISHED]: "Finished runs",
   [InboxItemKind.STORAGE]: "Storage",
+  [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
 };
 

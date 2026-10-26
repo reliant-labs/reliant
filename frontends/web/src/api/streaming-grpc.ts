@@ -2,9 +2,9 @@
 // Unified gRPC streaming client for user and chat updates
 // A single stream handles BOTH global user-level events and per-chat detail events.
 
-import { Code, ConnectError, createClient } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { create, fromJsonString } from "@bufbuild/protobuf";
-import { getStreamingTransport } from "./grpc-client";
+import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { pageActivity } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
@@ -991,7 +991,7 @@ export class UserStreamingService {
     let delivered = false;
 
     try {
-      const client = createClient(StreamingService, getStreamingTransport());
+      const client = connectClient(StreamingService);
 
       const request = create(StreamUserUpdatesRequestSchema, {
         sinceSeq: this.lastSequence,
@@ -1370,16 +1370,6 @@ export class UserStreamingService {
   getSubscribedChatId(): string | undefined {
     return this.subscribedChatId;
   }
-}
-
-// ============================================================================
-// Factory Functions
-// ============================================================================
-
-export function createUserStreamingService(
-  callbacks: GlobalWebSocketCallbacks,
-): UserStreamingService {
-  return new UserStreamingService(callbacks);
 }
 
 // Re-export types for convenience

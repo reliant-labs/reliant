@@ -9,9 +9,9 @@
  * "reliant-unauth" transport whoever calls them, which still runs the rest of
  * the shared chain (deadline, tracing, error reporting, upgrade modal).
  *
- * Kept apart from grpc-client.ts for the import graph: supabase.ts imports
- * this module for its session storage, so it must not pull in the wrappers
- * (and through them the stores) that grpc-client's importers bring.
+ * Kept apart from the authenticated wrappers for the import graph: supabase.ts
+ * imports this module for its session storage, so it must not pull in the
+ * wrappers (and through them the stores) that those wrappers bring.
  */
 
 import { create } from "@bufbuild/protobuf";

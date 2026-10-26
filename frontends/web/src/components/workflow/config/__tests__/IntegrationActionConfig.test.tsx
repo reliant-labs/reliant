@@ -36,12 +36,6 @@ import type { Step } from "@/types/workflow";
 const getCatalogEntry = vi.fn();
 const listConnections = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-  },
-  getGRPCBaseURLPublic: () => null,
-}));
-
 // CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({

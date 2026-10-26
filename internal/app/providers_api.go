@@ -883,25 +883,33 @@ func (c *DaemonEventsConsumer) Run(ctx context.Context) error {
 // WorktreeSweepDeps is the database, the router the daemons are asked
 // through, and what the sweep does with finished worktrees.
 type WorktreeSweepDeps struct {
-	DB       *db.Repo
-	Router   *APIDaemonRouter
-	Settings *APISettings
+	ControlPlane *configv1.ControlPlaneConfig
+	DB           *db.Repo
+	Router       *APIDaemonRouter
+	Settings     *APISettings
 }
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
 // and the WorktreeSweeper loop sweeps them all.
 //
-// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
-// worktrees its daemon reports finished (clean, merged or pushed, idle over
-// 24h, not in use) and archives nothing; read the finished= count in the
-// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
-// ordinary removal reaches them; "off" never asks.
+// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) observes candidates but
+// does not enroll dirty/unpushed work in Git recovery; "on" admits the Git-only
+// preservation/finalization pipeline after seven days of complete inactivity
+// evidence. Every capture still requires its own eligibility/secret gates and
+// independent remote proof. "off" disables automatic enrollment.
 //
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	database := d.DB
+	credentials, err := gitTokens(d.ControlPlane)
+	if err != nil {
+		return nil, err
+	}
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+		// The existing explicit rollout setting gates Git recovery too. The
+		// gate does not bypass any per-workspace or remote verification check.
+		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
@@ -1225,6 +1233,17 @@ func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 
 // gitTokens is where TokenService gets a hosted user's git tokens: the
 // control plane, as the internal service. nil self-hosted.
+// recoveryCredentials fails closed on self-hosted deployments without the
+// existing credential authority, without preventing ordinary worktree RPCs.
+type recoveryCredentials struct{ client gitcredentialclient.Service }
+
+func (c recoveryCredentials) UserAccessToken(ctx context.Context, userID, provider string) (gitcredentialclient.Token, error) {
+	if c.client == nil {
+		return gitcredentialclient.Token{}, gitcredentialclient.ErrNotConnected
+	}
+	return c.client.UserAccessToken(ctx, userID, provider)
+}
+
 func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, error) {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {

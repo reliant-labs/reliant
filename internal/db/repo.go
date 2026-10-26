@@ -1171,9 +1171,9 @@ func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq 
 // UpdateChatState updates a chat's state and emits a user update
 func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error {
 	var chat *Chat
-	// The chat and worktree move together or neither moves. Serializable also
-	// protects the shared-binding read/check/write against concurrent changes.
-	err := r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+	// Admission and reclamation share the parent worktree row lock. The store
+	// takes it before changing a chat binding/state; no transaction spans I/O.
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		var err error
 		chat, err = r.GetChat(ctx, chatID)
 		if err != nil {

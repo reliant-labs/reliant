@@ -16,6 +16,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
@@ -63,11 +64,17 @@ func (c *LocalClient) WithHeavyGate(g *heavyjob.Gate) *LocalClient {
 
 // ReadFile reads a file and returns the requested line window, byte for byte.
 func (c *LocalClient) ReadFile(ctx context.Context, path string, opts *ReadFileOpts) (*FileContent, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	return ReadFileContent(path, opts)
 }
 
 // ReadBinaryFile reads a file's raw bytes up to maxBytes.
 func (c *LocalClient) ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", path, err)
@@ -106,6 +113,9 @@ func (c *LocalClient) ReadPDFPages(ctx context.Context, path string, pages strin
 
 // WriteFile writes content to a file, creating parent directories as needed.
 func (c *LocalClient) WriteFile(ctx context.Context, path string, content string) (*WriteResult, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	var oldContent string
 	created := true
 
@@ -172,6 +182,9 @@ func (c *LocalClient) WriteBinaryFile(ctx context.Context, path string, content 
 
 // PatchFile applies a set of edits to a file.
 func (c *LocalClient) PatchFile(ctx context.Context, path string, edits []PatchEdit) (*PatchResult, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %s: %w", path, err)
@@ -678,6 +691,9 @@ func (c *LocalClient) FindReplace(ctx context.Context, pattern string, replaceme
 
 	var changes []FindReplaceChange
 	for _, filePath := range filesToProcess {
+		if daemonpolicy.IsReliantCredentialFile(filePath) {
+			continue
+		}
 		info, err := os.Stat(filePath)
 		if err != nil || info.IsDir() {
 			continue
@@ -808,6 +824,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	if err != nil {
 		// Refused (a nearly full disk): it never starts, and says why.
 		return &CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()}, nil
+	}
+	// credentials: none runs where the daemon's credential files are absent; see
+	// credsandbox. Outside the heavy-slot rewrite above.
+	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer

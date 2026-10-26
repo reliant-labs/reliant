@@ -220,7 +220,7 @@ func ReplaceWorktree(ctx context.Context, db orm.Context, w *core.Worktree) erro
 		Set("updated_at = NOW()").
 		Where("id = ?", w.ID).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // SetWorktreeCleanupMetadata replaces a worktree's cleanup metadata (nil
@@ -395,7 +395,7 @@ func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
 	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // ArchiveWorktree stamps the worktree archived as of now.
@@ -405,7 +405,7 @@ func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // UnarchiveWorktree makes the worktree live again; a live worktree that
@@ -416,7 +416,7 @@ func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return nameTakenOr(err)
+	return nameTakenOr(recoveryAdmissionError(err))
 }
 
 // firstWorktree returns the first worktree, archived or not, the filter
@@ -467,24 +467,26 @@ func worktreeToCore(row *Worktree) *core.Worktree {
 		status = int32(*row.Status)
 	}
 	return &core.Worktree{
-		ID:              row.ID,
-		Name:            row.Name,
-		Path:            row.Path,
-		Branch:          row.Branch,
-		BaseBranch:      row.BaseBranch,
-		BaseBranches:    decodeBaseBranches(row.BaseBranches),
-		ProjectID:       row.ProjectID,
-		ChatID:          row.ChatID,
-		DaemonID:        row.DaemonID,
-		Status:          status,
-		IdempotencyKey:  row.IdempotencyKey,
-		IsMain:          row.IsMain,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		LastActive:      row.LastActive,
-		DeletedAt:       row.DeletedAt,
-		CleanupMetadata: cleanupMetadata,
-		FailureReason:   row.FailureReason,
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Path:                 row.Path,
+		Branch:               row.Branch,
+		BaseBranch:           row.BaseBranch,
+		BaseBranches:         decodeBaseBranches(row.BaseBranches),
+		ProjectID:            row.ProjectID,
+		ChatID:               row.ChatID,
+		DaemonID:             row.DaemonID,
+		Status:               status,
+		IdempotencyKey:       row.IdempotencyKey,
+		IsMain:               row.IsMain,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+		LastActive:           row.LastActive,
+		DeletedAt:            row.DeletedAt,
+		CleanupMetadata:      cleanupMetadata,
+		FailureReason:        row.FailureReason,
+		ActivityGeneration:   row.ActivityGeneration,
+		RecoveryFinalizingID: row.RecoveryFinalizingID,
 	}
 }
 

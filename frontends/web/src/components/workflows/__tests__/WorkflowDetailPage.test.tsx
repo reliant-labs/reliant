@@ -40,12 +40,6 @@ const mocks = vi.hoisted(() => ({
   listProjectDaemons: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
-  },
-}));
-
 // PresetService and RunService are reached through connectClient (the
 // generated hooks), so they are answered at the transport by the same fakes. Integration events are
 // named from the catalog's trigger types; none here.
@@ -63,6 +57,7 @@ beforeEach(() => {
       ...serviceHandlers("RunService", { listRuns: mocks.listRuns }),
       "CatalogService.SearchCatalog": { response: {} },
       ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: mocks.listDaemons }),
     }));
 });
 afterEach(() => {

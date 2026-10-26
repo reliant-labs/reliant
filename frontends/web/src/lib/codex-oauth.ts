@@ -1,7 +1,6 @@
 import * as Sentry from '@sentry/react'
 import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
-import { startOAuthViaDaemon } from '@/api/daemon-grpc'
-import { startOAuthViaLocalServer } from '@/lib/oauth-local'
+import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
 import { isAbort } from '@/lib/oauth-abort'
 import {

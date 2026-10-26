@@ -21,18 +21,25 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+type noRecoveryCredentials struct{}
+
+func (noRecoveryCredentials) UserAccessToken(context.Context, string, string) (gitcredentialclient.Token, error) {
+	return gitcredentialclient.Token{}, gitcredentialclient.ErrNotConnected
+}
+
 // newWorktreeService builds the Service these tests drive, as server.go
 // does but without Temporal. A settler, when given, settles archived
 // directories (worktreesweep); without one archiving leaves them.
 func newWorktreeService(t testing.TB, repo Repository, router Router, settler ...Settler) *Service {
 	t.Helper()
-	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Router: router}
+	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Router: router, GitCredentials: noRecoveryCredentials{}}
 	if len(settler) > 0 {
 		deps.Settler = settler[0]
 	}

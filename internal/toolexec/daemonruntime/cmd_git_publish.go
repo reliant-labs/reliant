@@ -373,34 +373,15 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	// The credential rides a pipe the push inherits as fd 3. Written and closed
 	// here, before the process exists: a pipe buffers it, so there is no writer
 	// to race, and nothing to leave behind.
-	r, w, err := os.Pipe()
+	r, err := credentialPipe(token)
 	if err != nil {
-		return refuse("could not open a private channel for the credential")
-	}
-	defer r.Close()
-	_, werr := w.WriteString(token)
-	_ = w.Close()
-	if werr != nil {
 		return refuse("could not stage the credential for the push")
 	}
-
-	helper := `!f() { [ "$1" = get ] || return 0; h=; ` +
-		`while IFS== read -r k v; do [ -z "$k" ] && break; [ "$k" = host ] && h=$v; done; ` +
-		`[ "$h" = "` + u.Host + `" ] || return 0; ` +
-		`echo username=x-access-token; printf 'password=%s\n' "$(cat <&3)"; }; f`
-	args := []string{
-		"-c", "core.hooksPath=" + os.DevNull,
-		"-c", "credential.helper=",
-		"-c", "credential.helper=" + helper,
-		"-c", "credential.useHttpPath=false",
-		"-c", "http.followRedirects=false",
-		"-c", "http.proxy=",
-		"-c", "http.extraHeader=",
-		"-c", "http.sslVerify=true",
-		"-c", "push.recurseSubmodules=no",
+	defer r.Close()
+	args := append(privateGitCredentialArgs(u.Host, ""),
 		"push", "--no-verify", "--no-recurse-submodules", "--porcelain",
-		req.RemoteURL, req.ExpectSHA + ":refs/heads/" + req.Branch,
-	}
+		req.RemoteURL, req.ExpectSHA+":refs/heads/"+req.Branch,
+	)
 	res, err := pubRunGit(ctx, req.Worktree, env, "", false, []*os.File{r}, args...)
 	if err != nil {
 		return refuse("could not run git: %v", err)
@@ -432,7 +413,7 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 // redirect a push or capture a credential, or "".
 func dangerousKey(ctx context.Context, dir string, env []string) string {
 	res, err := pubRunGit(ctx, dir, env, "", false, nil, "config", "--list", "--null")
-	if err != nil {
+	if err != nil || res.exit != 0 {
 		return "git config could not be read"
 	}
 	for _, entry := range strings.Split(res.stdout, "\x00") {

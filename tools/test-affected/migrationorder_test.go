@@ -45,8 +45,19 @@ func (r *orderRepo) write(dir, name string) {
 	}
 }
 
+// Each orderRepo is three git repositories of its own under t.TempDir(), and
+// building and checking one is a few dozen git processes: on a loaded host
+// that is tens of seconds a test. The tests that use one run in parallel, or
+// the package's serial sum (240s at load 100) runs into the 5-minute package
+// timeout of the race-enabled release gate.
 func newOrderRepo(t *testing.T, onMain ...string) *orderRepo {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("creates, clones and fetches real git repositories; runs in task test, skipped under -short")
+	}
+	// Each fixture owns its origin and working trees. Let these subprocess-heavy
+	// tests overlap in the full tier instead of accumulating serial git latency.
+	t.Parallel()
 	base := t.TempDir()
 	r := &orderRepo{t: t, origin: filepath.Join(base, "origin.git"), clone: filepath.Join(base, "clone")}
 	r.git(base, "init", "-q", "--bare", "-b", "main", r.origin)
@@ -104,6 +115,7 @@ func (r *orderRepo) check(opts orderOptions) ([]orderViolation, error) {
 }
 
 func TestMigrationBelowMainsHeadFails(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024035148_hosted_http_action_tickets.up.sql")
 	r.addOnBranch("20261024024221_chats_worktree_binding_index.up.sql")
 
@@ -131,6 +143,7 @@ func TestMigrationBelowMainsHeadFails(t *testing.T) {
 }
 
 func TestMigrationAboveMainsHeadPasses(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024035148_hosted_http_action_tickets.up.sql")
 	r.addOnBranch("20261024053145_daemon_attachment_build.up.sql")
 
@@ -146,6 +159,7 @@ func TestMigrationAboveMainsHeadPasses(t *testing.T) {
 // Merged history is below the head by definition and must never be flagged:
 // only a file main does not carry (by name) is a candidate.
 func TestMergedHistoryBelowTheHeadIsNeverFlagged(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t,
 		"20261001000000_old.up.sql",
 		"20261024035148_head.up.sql")
@@ -161,6 +175,7 @@ func TestMergedHistoryBelowTheHeadIsNeverFlagged(t *testing.T) {
 // A version equal to main's head under a different name is a collision, and
 // as unapplyable as a lower one.
 func TestSameVersionAsMainsHeadUnderAnotherNameFails(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024035148_head.up.sql")
 	r.addOnBranch("20261024035148_other.up.sql")
 	vs, err := r.check(orderOptions{Fetch: true})
@@ -178,6 +193,7 @@ func TestSameVersionAsMainsHeadUnderAnotherNameFails(t *testing.T) {
 // not bring them back: flagging them would fail every stale branch for
 // someone else's migration.
 func TestFileMainRenamedAfterTheBranchWasCutIsNotTheBranchsToFix(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024024221_chats_worktree_binding_index.up.sql", "20261024035148_hosted_http_action_tickets.up.sql")
 	r.advanceMain("20261024173535_other.up.sql")
 	other := filepath.Join(filepath.Dir(r.clone), "other")
@@ -199,6 +215,7 @@ func TestFileMainRenamedAfterTheBranchWasCutIsNotTheBranchsToFix(t *testing.T) {
 // the clone's origin/main is behind: judged against the stale ref the low
 // migration looks fine, which is how reliant#1399 merged.
 func TestStaleOriginMainPassesWithoutAFetchAndFailsWithOne(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261001000000_old.up.sql")
 	r.addOnBranch("20261024024221_chats_worktree_binding_index.up.sql")
 	r.advanceMain("20261024035148_hosted_http_action_tickets.up.sql")
@@ -223,6 +240,7 @@ func TestStaleOriginMainPassesWithoutAFetchAndFailsWithOne(t *testing.T) {
 // A check that cannot reach main cannot say the order is right. It fails
 // closed rather than passing over a ref it could not refresh.
 func TestFetchFailureFailsClosed(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261001000000_old.up.sql")
 	r.addOnBranch("20261024024221_x.up.sql")
 	r.git(r.clone, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "gone.git"))
@@ -237,6 +255,10 @@ func TestFetchFailureFailsClosed(t *testing.T) {
 }
 
 func TestNoBaseRefFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("initializes a real git repository; runs in task test, skipped under -short")
+	}
+	t.Parallel()
 	dir := t.TempDir()
 	cmd := exec.Command("git", "init", "-q", "-b", "main")
 	cmd.Dir = dir
@@ -250,6 +272,7 @@ func TestNoBaseRefFailsClosed(t *testing.T) {
 }
 
 func TestNoMigrationsDirectoryPasses(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t)
 	if err := os.RemoveAll(filepath.Join(r.clone, "db")); err != nil {
 		t.Fatal(err)
@@ -266,6 +289,7 @@ func TestNoMigrationsDirectoryPasses(t *testing.T) {
 // An uncommitted migration is judged too: the check runs from a working tree
 // before anything is committed.
 func TestUncommittedMigrationIsJudged(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024035148_head.up.sql")
 	r.write(r.clone, "20261024024221_low.up.sql")
 	vs, err := r.check(orderOptions{Fetch: true})
@@ -278,6 +302,7 @@ func TestUncommittedMigrationIsJudged(t *testing.T) {
 }
 
 func TestMigrationOrderCommandExitCodes(t *testing.T) {
+	t.Parallel()
 	r := newOrderRepo(t, "20261024035148_head.up.sql")
 	r.addOnBranch("20261024024221_low.up.sql")
 	var out, errOut bytes.Buffer
@@ -293,6 +318,33 @@ func TestMigrationOrderCommandExitCodes(t *testing.T) {
 	errOut.Reset()
 	if code := runMigrationOrder([]string{"-root", r.clone}, &out, &errOut); code != 0 {
 		t.Fatalf("exit = %d, want 0\nstdout: %s\nstderr: %s", code, out.String(), errOut.String())
+	}
+}
+
+// Keep filename validation in the fast tier; the real-git order checks above
+// exercise the repository boundary only in the full tier.
+func TestParseMigration(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version uint64
+		stem    string
+		ok      bool
+	}{
+		{"20261024035148_head.up.sql", 20261024035148, "head", true},
+		{"00001_baseline.up.sql", 1, "baseline", true},
+		{"18446744073709551615_max.up.sql", ^uint64(0), "max", true},
+		{"18446744073709551616_overflow.up.sql", 0, "", false},
+		{"20261024035148_head.down.sql", 0, "", false},
+		{"20261024035148_.up.sql", 0, "", false},
+		{"head.up.sql", 0, "", false},
+		{"README.md", 0, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			version, stem, ok := parseMigration(tc.name)
+			if version != tc.version || stem != tc.stem || ok != tc.ok {
+				t.Fatalf("parseMigration(%q) = (%d, %q, %v), want (%d, %q, %v)", tc.name, version, stem, ok, tc.version, tc.stem, tc.ok)
+			}
+		})
 	}
 }
 
