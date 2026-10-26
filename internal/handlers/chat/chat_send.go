@@ -480,10 +480,9 @@ func (s *Service) resurrectGhostWorkflow(
 
 	// Step 6: Update run IDs and workflow status
 	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
-	if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.WarnContext(ctx, "[Ghost Recovery] Failed to update workflow status", "error", err, "workflowID", workflowID)
-		// Non-fatal - workflow is running in Temporal
-	}
+	// Only over the status the row had before the start: the new run may
+	// already have written its own (workflow.MarkWokenRunActive).
+	workflow.MarkWokenRunActive(ctx, s.deps.Repo, workflowID, existingWorkflow.Status, true)
 
 	workflowStatus := fmt.Sprintf("%d", db.Active())
 	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))

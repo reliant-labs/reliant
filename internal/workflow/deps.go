@@ -18,6 +18,7 @@ import (
 type PauseStore interface {
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
+	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)

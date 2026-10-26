@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // A message the user sends to a paused chat is the user asking it to go on,
@@ -67,6 +68,7 @@ func (s *Service) resumePausedRun(
 	// Resume the run. The service signals a live execution, reset-replays a
 	// dead-but-replayable one, and refreshes the chat's run id when a reset
 	// minted a new one — and whichever run wakes gets the input update first.
+	before, known := workflow.StatusBeforeWake(ctx, s.deps.Repo, workflowID)
 	outcome, err := s.runs.Resume(ctx, chat.ID, inputUpdate)
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err
@@ -82,15 +84,12 @@ func (s *Service) resumePausedRun(
 	s.postModelFallbackNotices(ctx, chat.ID, workflowID, targetThread, modelNotices)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, sent, inputUpdate, modelMoves, 0)
 
-	// The run is awake. Correct the DB status now that the authoritative step
-	// has succeeded. Best-effort on purpose: if this write loses a
-	// serialization race, the workflow's own "started"/Resumed notification
-	// and the reconciler both still converge it, and a stale row is not worth
-	// failing a request that already did the important part.
-	if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-		logging.WarnContext(ctx, "Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
-			"error", err, "workflowID", workflowID, "chatID", chat.ID)
-	}
+	// The run is awake: mark it running, but only over the status it had
+	// before the resume. By now the woken run may well have finished, and an
+	// unconditional write of active this late overwrote the run's own
+	// COMPLETED, leaving a closed run whose chat read as running (e2e story
+	// 05). The resume usually marked it already, which makes this a no-op.
+	workflow.MarkWokenRunActive(ctx, s.deps.Repo, workflowID, before, known)
 	return outcome, nil
 }
 
