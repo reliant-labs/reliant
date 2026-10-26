@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -931,7 +932,7 @@ var File_reliant_v1_terminal_proto protoreflect.FileDescriptor
 const file_reliant_v1_terminal_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/terminal.proto\x12\n" +
-	"reliant.v1\"\xa1\x01\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\xa1\x01\n" +
 	"\x0fTerminalSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vworking_dir\x18\x02 \x01(\tR\n" +
@@ -994,11 +995,11 @@ const file_reliant_v1_terminal_proto_rawDesc = "" +
 	"\rTerminalError\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xb6\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xea\x03\n" +
 	"\x0fTerminalService\x12c\n" +
-	"\fListSessions\x12'.reliant.v1.ListTerminalSessionsRequest\x1a(.reliant.v1.ListTerminalSessionsResponse\"\x00\x12c\n" +
-	"\fCloseSession\x12'.reliant.v1.CloseTerminalSessionRequest\x1a(.reliant.v1.CloseTerminalSessionResponse\"\x00\x12Y\n" +
-	"\x0eStreamTerminal\x12\x1f.reliant.v1.TerminalStreamInput\x1a .reliant.v1.TerminalStreamOutput\"\x00(\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fListSessions\x12'.reliant.v1.ListTerminalSessionsRequest\x1a(.reliant.v1.ListTerminalSessionsResponse\"\x00\x12\xbe\x01\n" +
+	"\fCloseSession\x12'.reliant.v1.CloseTerminalSessionRequest\x1a(.reliant.v1.CloseTerminalSessionResponse\"[\xa2\xbb\x18W:U:Scloses a terminal session on the daemon: interactive transport, not project history\x12\xb0\x01\n" +
+	"\x0eStreamTerminal\x12\x1f.reliant.v1.TerminalStreamInput\x1a .reliant.v1.TerminalStreamOutput\"W\xa2\xbb\x18S:Q:Oterminal I/O to and from the daemon: interactive transport, not project history(\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_terminal_proto_rawDescOnce sync.Once

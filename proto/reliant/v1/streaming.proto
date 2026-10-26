@@ -109,7 +109,9 @@ service StreamingService {
   // When subscribe_chat_id is set, ALSO delivers per-chat detail events
   // (messages, approvals, tool calls, streaming deltas, workflow/node events).
   // To switch chat subscriptions, the client disconnects and reconnects with a new request.
-  rpc StreamUserUpdates(StreamUserUpdatesRequest) returns (stream UserStreamEvent) {}
+  rpc StreamUserUpdates(StreamUserUpdatesRequest) returns (stream UserStreamEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================

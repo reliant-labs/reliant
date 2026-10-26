@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -155,6 +156,19 @@ func TestDaemonAuthInterceptorOutageIsUnavailable(t *testing.T) {
 
 	_, err = interceptor.authenticate(context.Background(), bearer(token))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assertOutageWithheld(t, err, "daemon credential verification unavailable")
+}
+
+// assertOutageWithheld pins what an outage tells the caller: the fixed text,
+// and none of the dependency's own error, which stays server-side as the
+// cause the "rpc failed" record logs.
+func assertOutageWithheld(t *testing.T, err error, want string) {
+	t.Helper()
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	require.Equal(t, want, ce.Message())
+	require.NotContains(t, ce.Message(), tokenauthority.ErrMemoryUnavailable.Error())
+	require.ErrorIs(t, svcerr.Cause(err), tokenauthority.ErrMemoryUnavailable)
 }
 
 func TestDaemonAuthInterceptorRejectsRetiredPAT(t *testing.T) {

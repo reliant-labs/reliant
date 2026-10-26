@@ -65,6 +65,7 @@ func NewStreamingServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+StreamingServiceStreamUserUpdatesProcedure,
 			connect.WithSchema(streamingServiceMethods.ByName("StreamUserUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -101,6 +102,7 @@ func NewStreamingServiceHandler(svc StreamingServiceHandler, opts ...connect.Han
 		StreamingServiceStreamUserUpdatesProcedure,
 		svc.StreamUserUpdates,
 		connect.WithSchema(streamingServiceMethods.ByName("StreamUserUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.StreamingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

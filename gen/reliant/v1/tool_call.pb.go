@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -282,7 +283,7 @@ var File_reliant_v1_tool_call_proto protoreflect.FileDescriptor
 const file_reliant_v1_tool_call_proto_rawDesc = "" +
 	"\n" +
 	"\x1areliant/v1/tool_call.proto\x12\n" +
-	"reliant.v1\"9\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"9\n" +
 	"\x15CancelToolCallRequest\x12 \n" +
 	"\ftool_call_id\x18\x01 \x01(\tR\n" +
 	"toolCallId\"\xa6\x01\n" +
@@ -306,10 +307,10 @@ const file_reliant_v1_tool_call_proto_rawDesc = "" +
 	"toolCallId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x05 \x01(\tR\tsessionId\x12\x17\n" +
-	"\achat_id\x18\x06 \x01(\tR\x06chatId2\xd6\x01\n" +
-	"\x0fToolCallService\x12Y\n" +
-	"\x0eCancelToolCall\x12!.reliant.v1.CancelToolCallRequest\x1a\".reliant.v1.CancelToolCallResponse\"\x00\x12h\n" +
-	"\x13ConvertToBackground\x12&.reliant.v1.ConvertToBackgroundRequest\x1a'.reliant.v1.ConvertToBackgroundResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\achat_id\x18\x06 \x01(\tR\x06chatId2\xf6\x02\n" +
+	"\x0fToolCallService\x12\xa3\x01\n" +
+	"\x0eCancelToolCall\x12!.reliant.v1.CancelToolCallRequest\x1a\".reliant.v1.CancelToolCallResponse\"J\xa2\xbb\x18F:D:Bper-turn agent control: the cancelled call records its own outcome\x12\xbc\x01\n" +
+	"\x13ConvertToBackground\x12&.reliant.v1.ConvertToBackgroundRequest\x1a'.reliant.v1.ConvertToBackgroundResponse\"T\xa2\xbb\x18P:N:Lper-turn agent control: moves an in-flight tool call to a background processB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_tool_call_proto_rawDescOnce sync.Once

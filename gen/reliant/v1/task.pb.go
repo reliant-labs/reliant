@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1224,7 +1225,7 @@ var File_reliant_v1_task_proto protoreflect.FileDescriptor
 const file_reliant_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/task.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x8b\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8b\x03\n" +
 	"\x04Task\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x14\n" +
@@ -1335,18 +1336,28 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\x1bDEPENDENCY_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEPENDENCY_TYPE_BLOCKS\x10\x01\x12\x1b\n" +
 	"\x17DEPENDENCY_TYPE_RELATED\x10\x02\x12!\n" +
-	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\xb8\x05\n" +
+	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\xa3\a\n" +
 	"\vTaskService\x12M\n" +
 	"\n" +
 	"CreateTask\x12\x1d.reliant.v1.CreateTaskRequest\x1a\x1e.reliant.v1.CreateTaskResponse\"\x00\x12D\n" +
 	"\aGetTask\x12\x1a.reliant.v1.GetTaskRequest\x1a\x1b.reliant.v1.GetTaskResponse\"\x00\x12J\n" +
-	"\tListTasks\x12\x1c.reliant.v1.ListTasksRequest\x1a\x1d.reliant.v1.ListTasksResponse\"\x00\x12M\n" +
+	"\tListTasks\x12\x1c.reliant.v1.ListTasksRequest\x1a\x1d.reliant.v1.ListTasksResponse\"\x00\x12\x81\x01\n" +
 	"\n" +
-	"UpdateTask\x12\x1d.reliant.v1.UpdateTaskRequest\x1a\x1e.reliant.v1.UpdateTaskResponse\"\x00\x12M\n" +
+	"UpdateTask\x12\x1d.reliant.v1.UpdateTaskRequest\x1a\x1e.reliant.v1.UpdateTaskResponse\"4\xa2\xbb\x180:.\n" +
+	"\x06update\x12$\n" +
+	"\x04task\x12\atask_id\x1a\x13response.task.title\x12l\n" +
 	"\n" +
-	"DeleteTask\x12\x1d.reliant.v1.DeleteTaskRequest\x1a\x1e.reliant.v1.DeleteTaskResponse\"\x00\x12b\n" +
-	"\x11AddTaskDependency\x12$.reliant.v1.AddTaskDependencyRequest\x1a%.reliant.v1.AddTaskDependencyResponse\"\x00\x12k\n" +
-	"\x14RemoveTaskDependency\x12'.reliant.v1.RemoveTaskDependencyRequest\x1a(.reliant.v1.RemoveTaskDependencyResponse\"\x00\x12Y\n" +
+	"DeleteTask\x12\x1d.reliant.v1.DeleteTaskRequest\x1a\x1e.reliant.v1.DeleteTaskResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
+	"\x06delete\x12\x0f\n" +
+	"\x04task\x12\atask_id\x12\xab\x01\n" +
+	"\x11AddTaskDependency\x12$.reliant.v1.AddTaskDependencyRequest\x1a%.reliant.v1.AddTaskDependencyResponse\"I\xa2\xbb\x18E:C\n" +
+	"\x0eadd_dependency\x12\x14\n" +
+	"\x04task\x12\ffrom_task_id*\n" +
+	"to_task_id*\x0fdependency_type\x12\xb7\x01\n" +
+	"\x14RemoveTaskDependency\x12'.reliant.v1.RemoveTaskDependencyRequest\x1a(.reliant.v1.RemoveTaskDependencyResponse\"L\xa2\xbb\x18H:F\n" +
+	"\x11remove_dependency\x12\x14\n" +
+	"\x04task\x12\ffrom_task_id*\n" +
+	"to_task_id*\x0fdependency_type\x12Y\n" +
 	"\x0eListReadyTasks\x12!.reliant.v1.ListReadyTasksRequest\x1a\".reliant.v1.ListReadyTasksResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

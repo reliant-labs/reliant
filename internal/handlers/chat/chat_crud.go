@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -1031,6 +1032,8 @@ func (s *Service) ResumeChat(
 
 	case runs.OutcomeNeedsRecovery, runs.OutcomeNeedsRestart:
 		// The frontend prompts the user to confirm starting a new conversation.
+		// Nothing was resumed, so the call records no "resume" event.
+		activity.Skip(ctx)
 		return connect.NewResponse(&reliantv1.ResumeChatResponse{
 			Success:       false,
 			Message:       "The workflow session was interrupted and cannot be resumed. Your message history is preserved. Would you like to start a new conversation?",

@@ -95,6 +95,7 @@ func NewBackgroundServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+BackgroundServiceStreamProcessOutputProcedure,
 			connect.WithSchema(backgroundServiceMethods.ByName("StreamProcessOutput")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -170,6 +171,7 @@ func NewBackgroundServiceHandler(svc BackgroundServiceHandler, opts ...connect.H
 		BackgroundServiceStreamProcessOutputProcedure,
 		svc.StreamProcessOutput,
 		connect.WithSchema(backgroundServiceMethods.ByName("StreamProcessOutput")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.BackgroundService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

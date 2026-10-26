@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -16,11 +17,17 @@ service BackgroundService {
   rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse) {}
   
   // KillProcess terminates a background process
-  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {}
+  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}
+    };
+  }
   
   // StreamProcessOutput streams real-time process output (stdout/stderr)
   // Returns existing output first, then streams new lines as they arrive
-  rpc StreamProcessOutput(StreamProcessOutputRequest) returns (stream ProcessOutputEvent) {}
+  rpc StreamProcessOutput(StreamProcessOutputRequest) returns (stream ProcessOutputEvent) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================

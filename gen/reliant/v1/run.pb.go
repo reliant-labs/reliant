@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -1494,7 +1495,7 @@ var File_reliant_v1_run_proto protoreflect.FileDescriptor
 const file_reliant_v1_run_proto_rawDesc = "" +
 	"\n" +
 	"\x14reliant/v1/run.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\x88\a\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15reliant/v1/chat.proto\"\x88\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -1629,18 +1630,26 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x1bRUN_DISPLAY_STATE_COMPLETED\x10\x05\x12\x1c\n" +
 	"\x18RUN_DISPLAY_STATE_FAILED\x10\x06\x12\x1f\n" +
 	"\x1bRUN_DISPLAY_STATE_CANCELLED\x10\a\x12)\n" +
-	"%RUN_DISPLAY_STATE_WAITING_FOR_MACHINE\x10\b2\xcd\x05\n" +
+	"%RUN_DISPLAY_STATE_WAITING_FOR_MACHINE\x10\b2\xdb\b\n" +
 	"\n" +
-	"RunService\x12G\n" +
-	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"\x00\x12J\n" +
-	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"\x00\x12A\n" +
+	"RunService\x12\x8a\x01\n" +
+	"\bStartRun\x12\x1b.reliant.v1.StartRunRequest\x1a\x1c.reliant.v1.StartRunResponse\"C\xa2\xbb\x18?:=\n" +
+	"\x05start\x12*\n" +
+	"\x03run\x12\x0fresponse.run.id\x1a\x12response.run.title*\bworkflow\x12\xa5\x01\n" +
+	"\tSignalRun\x12\x1c.reliant.v1.SignalRunRequest\x1a\x1d.reliant.v1.SignalRunResponse\"[\xa2\xbb\x18W:U:Sdelivers messages into a live run: per-turn agent traffic the run's history records\x12A\n" +
 	"\x06GetRun\x12\x19.reliant.v1.GetRunRequest\x1a\x1a.reliant.v1.GetRunResponse\"\x00\x12G\n" +
 	"\bListRuns\x12\x1b.reliant.v1.ListRunsRequest\x1a\x1c.reliant.v1.ListRunsResponse\"\x00\x12h\n" +
-	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x03\x90\x02\x01\x12G\n" +
-	"\bPauseRun\x12\x1b.reliant.v1.PauseRunRequest\x1a\x1c.reliant.v1.PauseRunResponse\"\x00\x12J\n" +
-	"\tResumeRun\x12\x1c.reliant.v1.ResumeRunRequest\x1a\x1d.reliant.v1.ResumeRunResponse\"\x00\x12J\n" +
-	"\tCancelRun\x12\x1c.reliant.v1.CancelRunRequest\x1a\x1d.reliant.v1.CancelRunResponse\"\x00\x12S\n" +
-	"\fInterruptRun\x12\x1f.reliant.v1.InterruptRunRequest\x1a .reliant.v1.InterruptRunResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x12LastRunPerWorkflow\x12%.reliant.v1.LastRunPerWorkflowRequest\x1a&.reliant.v1.LastRunPerWorkflowResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\bPauseRun\x12\x1b.reliant.v1.PauseRunRequest\x1a\x1c.reliant.v1.PauseRunResponse\"\x1c\xa2\xbb\x18\x18:\x16\n" +
+	"\x05pause\x12\r\n" +
+	"\x03run\x12\x06run_id\x12{\n" +
+	"\tResumeRun\x12\x1c.reliant.v1.ResumeRunRequest\x1a\x1d.reliant.v1.ResumeRunResponse\"1\xa2\xbb\x18-:+\n" +
+	"\x06resume\x12!\n" +
+	"\x03run\x12\x06run_id\x1a\x12response.run.title\x12g\n" +
+	"\tCancelRun\x12\x1c.reliant.v1.CancelRunRequest\x1a\x1d.reliant.v1.CancelRunResponse\"\x1d\xa2\xbb\x18\x19:\x17\n" +
+	"\x06cancel\x12\r\n" +
+	"\x03run\x12\x06run_id\x12\xd6\x01\n" +
+	"\fInterruptRun\x12\x1f.reliant.v1.InterruptRunRequest\x1a .reliant.v1.InterruptRunResponse\"\x82\x01\xa2\xbb\x18~:|:zper-turn steering: cancels the in-flight step without ending the run, and each cancelled tool call records its own outcomeB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_run_proto_rawDescOnce sync.Once

@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/proto"
@@ -527,6 +528,7 @@ func (s *Service) SaveWorkflow(
 	isValid := check.valid()
 	validationErrors := check.protoErrors(true)
 	rejected := func(message string) *connect.Response[reliantv1.SaveWorkflowResponse] {
+		activity.Skip(ctx) // nothing was stored: no "save" event
 		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
 			Success:          false,
 			Message:          message,
@@ -1034,17 +1036,21 @@ func (s *Service) SetWorkflowStatus(
 
 	check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))
 	if target == db.WorkflowDraftStatusComplete && !check.valid() {
+		activity.Skip(ctx) // refused: the status did not change
 		return connect.NewResponse(&reliantv1.SetWorkflowStatusResponse{
 			Success:          false,
 			Message:          "Not marked complete: fix the validation errors first — " + check.summary(),
 			Status:           draftStatusToProto(draft.Status),
 			ValidationErrors: check.protoErrors(true),
 			Version:          draft.Version,
+			Slug:             draft.Slug,
 		}), nil
 	}
 
 	updated := draft
-	if draft.Status != target {
+	if draft.Status == target {
+		activity.Skip(ctx) // already there: nothing changed
+	} else {
 		updated, err = s.deps.Repo.SetWorkflowDraftStatus(ctx, draft.ID, target)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow status"))
@@ -1062,6 +1068,7 @@ func (s *Service) SetWorkflowStatus(
 		Status:           draftStatusToProto(updated.Status),
 		ValidationErrors: check.protoErrors(true),
 		Version:          updated.Version,
+		Slug:             updated.Slug,
 	}), nil
 }
 
@@ -1254,6 +1261,7 @@ func (s *Service) DeleteWorkflow(
 	return connect.NewResponse(&reliantv1.DeleteWorkflowResponse{
 		Success: true,
 		Message: message,
+		Slug:    slug,
 	}), nil
 }
 
@@ -1334,7 +1342,8 @@ func (s *Service) ImportWorkflow(
 	}
 
 	if existing != nil && !req.Msg.Overwrite {
-		// Return conflict response
+		// Return conflict response. Nothing was imported: no "import" event.
+		activity.Skip(ctx)
 		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
 			Success:    false,
 			Message:    fmt.Sprintf("Workflow '%s' already exists. Set overwrite=true to replace.", protoWf.Name),
@@ -1352,6 +1361,7 @@ func (s *Service) ImportWorkflow(
 	validationErrors := check.protoErrors(true)
 	status := resolveDraftStatus(req.Msg.GetStatus(), existing)
 	if status == db.WorkflowDraftStatusComplete && !isValid {
+		activity.Skip(ctx) // nothing was imported: no "import" event
 		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
 			Success:          false,
 			Message:          "Workflow not imported: a complete workflow must pass validation — fix the errors or import it as a draft. " + check.summary(),

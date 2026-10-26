@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // TerminalService provides terminal session management and streaming.
@@ -11,10 +13,18 @@ service TerminalService {
   rpc ListSessions(ListTerminalSessionsRequest) returns (ListTerminalSessionsResponse) {}
 
   // CloseSession closes a specific terminal session
-  rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {}
+  rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "closes a terminal session on the daemon: interactive transport, not project history"}
+    };
+  }
 
   // StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
-  rpc StreamTerminal(stream TerminalStreamInput) returns (stream TerminalStreamOutput) {}
+  rpc StreamTerminal(stream TerminalStreamInput) returns (stream TerminalStreamOutput) {
+    option (forge.v1.method) = {
+      activity: {none: "terminal I/O to and from the daemon: interactive transport, not project history"}
+    };
+  }
 }
 
 // TerminalSession represents an active terminal session

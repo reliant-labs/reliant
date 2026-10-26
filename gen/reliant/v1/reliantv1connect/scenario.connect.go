@@ -119,6 +119,7 @@ func NewScenarioServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+ScenarioServiceExportScenarioProcedure,
 			connect.WithSchema(scenarioServiceMethods.ByName("ExportScenario")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -224,6 +225,7 @@ func NewScenarioServiceHandler(svc ScenarioServiceHandler, opts ...connect.Handl
 		ScenarioServiceExportScenarioProcedure,
 		svc.ExportScenario,
 		connect.WithSchema(scenarioServiceMethods.ByName("ExportScenario")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ScenarioService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
