@@ -333,7 +333,7 @@ hand-written for a stated reason. `src/api/grpc-client.ts` is deleted: hand-writ
 
 - **Merged:** wave A #1385; B1 #1437, B2 #1472; C: Run #1508, Project #1513, Worktree #1514, Trigger #1515,
   Workflow #1516; D (plan `16-p9-r4-wave-d-plan.md` #1518): D0 #1521, D1 #1533, D2 #1562, D3 #1537,
-  D4 #1544, D5 #1567, D6 #1569, D7 #1576, and lane DZ, which deleted `grpc-client.ts` and
+  D4 #1544, D5 #1567, D6 #1569, D7 #1576, and DZ #1582, which deleted `grpc-client.ts` and
   `daemon-grpc.ts` and removed the caller-less wrappers.
 - **Stayed hand-written** (D4's "acceptable where streaming owns the cache", decided per service in
   16 §0):

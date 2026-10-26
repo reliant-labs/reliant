@@ -26,7 +26,7 @@ Trigger #1515, Workflow #1516. Wave D:
 | D5 FileSystem | #1567 | directory picker and search on generated keys; `filesystem-grpc.ts` merged into `api/fileSystem.ts` |
 | D6 Settings stores | #1569 | owner option C: the preferences, privacy and bookmarks mirror stores (and the dead `settingsStore`) deleted; readers use the generated hooks |
 | D7 stragglers | #1576 | Inbox, Connector, Message, Account, ModelEndpoint on generated keys |
-| DZ cleanup | lane DZ | `api/grpc-client.ts` and `api/daemon-grpc.ts` deleted; the leftovers below moved onto `connectClient` or the generated hooks |
+| DZ cleanup | #1582 | `api/grpc-client.ts` and `api/daemon-grpc.ts` deleted; the leftovers below moved onto `connectClient` or the generated hooks |
 
 DZ moved the last `grpc-client` names to their owners. Base-URL readers (Terminal, ActivateTriggerDialog,
 MessageGeneratedVideos, useAuthMode) call `reliantApiBaseUrl()`. `ConfigPanel` reads `useListNodes` and
