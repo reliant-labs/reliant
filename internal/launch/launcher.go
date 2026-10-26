@@ -374,7 +374,42 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// twice. Group them in one transaction so any failure leaves nothing
 	// behind (no orphan chat, no thread-less chat, no announcement for a
 	// chat that doesn't exist).
-	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	//
+	// READ COMMITTED, because what must hold here is atomicity, and nothing in
+	// an unguarded launch is a read-check-write that only SERIALIZABLE would
+	// keep correct:
+	//   - two launches of one event: the (kind, dedupe_key) unique constraint
+	//     on the insert, and the outcome predicate on the claim's UPDATE,
+	//     which READ COMMITTED re-checks against the row it waited for;
+	//   - the selection merge: its advisory lock (MutateChatSelection);
+	//   - the chat_created sequence number: the user's counter row, raised
+	//     by one UPDATE … RETURNING;
+	//   - the thread's ordinals, seqs and context window: the chat and its
+	//     thread are new and invisible to every other transaction until this
+	//     one commits, so nothing else can number them.
+	// SERIALIZABLE bought none of that and cost every launch its predicate
+	// locks: on the young index pages of chats, workflows, threads,
+	// context_windows, messages and chat_selections (foreign-key checks and
+	// ON CONFLICT probes included), so concurrent launches for DIFFERENT
+	// users aborted one another with SQLSTATE 40001 at whichever insert
+	// closed the cycle — "failed to create workflow" when it was the root
+	// workflow's — until one ran out of attempts
+	// (TestConcurrentStartChatsTakeNoPredicateLocks).
+	//
+	// A guarded launch (a trigger's overlap guard) keeps SERIALIZABLE, as
+	// before. Its guard does not count the previous fire's root as live while
+	// it is still PENDING — the shape of a fire whose Temporal start failed —
+	// but a fire that has just committed is pending too, until its start marks
+	// it active. A fire queued on the trigger lock behind it reads it as
+	// stranded and launches beside it, sooner under READ COMMITTED than after
+	// SERIALIZABLE's retry backoff (TestConcurrentFiresRespectOverlapSkip,
+	// already intermittent on main). One trigger's fires are rare and
+	// serialize on its lock anyway, so they keep the level they had.
+	var launchTx orm.TxPolicy = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	if spec.Guard != nil {
+		launchTx = orm.Serializable
+	}
+	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {

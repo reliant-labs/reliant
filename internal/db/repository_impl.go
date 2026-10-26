@@ -2512,9 +2512,20 @@ func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []stri
 	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
 }
 
+// workflowStatusWrite is the transaction a workflow status write runs in when
+// its caller has none. READ COMMITTED is enough: each write is ONE UPDATE of
+// one row by id — a CAS keeps its expected status in the UPDATE's own WHERE,
+// which Postgres re-checks against the row it waited for — and the read that
+// follows only finds the chat to announce, after the commit. SERIALIZABLE
+// added nothing to that and made every status write a party to predicate-lock
+// conflicts with whatever else was inserting workflows, so under load a run's
+// status writes (its launch's mark-active, its terminal status) failed with
+// SQLSTATE 40001. Called inside a caller's transaction, they join it.
+var workflowStatusWrite = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+
 func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error) {
 	var swapped bool
-	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
 		ok, err := store.CompareAndSwapWorkflowStatus(txCtx, r.ORM(), id, newStatus, expectedStatus)
 		if err != nil {
 			return err
@@ -2536,7 +2547,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 }
 
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
-	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	return r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
