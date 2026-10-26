@@ -25,15 +25,18 @@ import (
 
 // Options configures optional behavior for message conversion.
 type Options struct {
-	// ToolResultsByCallID maps tool_call IDs to their matched results.
-	// When non-nil, tool_call content blocks will have their MatchedResult populated.
-	ToolResultsByCallID map[string]*reliantv1.MatchedToolResult
-
 	// ToolCallStatusByCallID maps tool_call IDs to their durable status row.
 	// When non-nil, tool_call content blocks have tool_call_status/started_at/
 	// completed_at populated from it, giving the read path a real status
 	// instead of leaving the frontend to infer one from workflow activity.
 	ToolCallStatusByCallID map[string]*db.ToolCall
+
+	// ToolNameByCallID names the tool behind each tool_call id, for a
+	// tool_result block that does not carry its own tool_name. The name
+	// decides whether the result is previewed (see PreviewToolResult).
+	// AssembleForDisplay fills it from the page's tool_call blocks; FromDB
+	// also falls back to ToolCallStatusByCallID's rows.
+	ToolNameByCallID map[string]string
 
 	// ViewingThreadID is the thread the messages are being read for. A branch
 	// displays history it does not own, so a call still running in the thread
@@ -91,7 +94,8 @@ func InheritedInFlightCall(call *db.ToolCall, viewingThreadID string) bool {
 	return *call.ThreadID != viewingThreadID
 }
 
-func contentBlockToProto(b *db.MessageContentBlock, toolResultsByCallID map[string]*reliantv1.MatchedToolResult, toolCallStatusByCallID map[string]*db.ToolCall, viewingThreadID string) *reliantv1.ContentBlock {
+func contentBlockToProto(b *db.MessageContentBlock, opts *Options) *reliantv1.ContentBlock {
+	toolCallStatusByCallID, viewingThreadID := opts.ToolCallStatusByCallID, opts.ViewingThreadID
 	proto := &reliantv1.ContentBlock{
 		Id:    b.ID,
 		Index: int32(b.Position),
@@ -99,17 +103,23 @@ func contentBlockToProto(b *db.MessageContentBlock, toolResultsByCallID map[stri
 	}
 	if b.Content != nil {
 		proto.Content = b.Content
+		if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT {
+			if preview, truncated := PreviewToolResult(resultToolName(b, opts), *b.Content); truncated {
+				proto.Content = &preview
+				proto.Truncated = ptr.Of(true)
+				proto.OriginalSize = ptr.Of(int64(len(*b.Content)))
+			}
+		}
 	}
 	if b.ToolName != nil {
 		proto.ToolName = b.ToolName
 	}
 	if b.ToolCallID != nil {
 		proto.ToolCallId = b.ToolCallID
-		// For tool_call blocks, attach matched result and durable status if available
+		// For tool_call blocks, attach the durable status if available. The
+		// result is NOT copied onto the call: it is its own tool_result block,
+		// and the client joins the two by tool_call_id.
 		if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL {
-			if result, found := toolResultsByCallID[*b.ToolCallID]; found {
-				proto.MatchedResult = result
-			}
 			if call, found := toolCallStatusByCallID[*b.ToolCallID]; found {
 				status := toolCallStatusToProto(call.Status)
 				if InheritedInFlightCall(call, viewingThreadID) {
@@ -141,7 +151,28 @@ func contentBlockToProto(b *db.MessageContentBlock, toolResultsByCallID map[stri
 	return proto
 }
 
+// resultToolName is the tool that produced a tool_result block: the block's
+// own tool_name, else the name its call is known by.
+func resultToolName(b *db.MessageContentBlock, opts *Options) string {
+	if b.ToolName != nil && *b.ToolName != "" {
+		return *b.ToolName
+	}
+	if b.ToolCallID == nil {
+		return ""
+	}
+	if name := opts.ToolNameByCallID[*b.ToolCallID]; name != "" {
+		return name
+	}
+	if call, found := opts.ToolCallStatusByCallID[*b.ToolCallID]; found {
+		return call.ToolName
+	}
+	return ""
+}
+
 // FromDB converts a db.Message to proto Message.
+//
+// It is the client-facing conversion: a large tool_result's content is sent
+// as a preview (see PreviewToolResult), never as stored.
 // blocks and attachments are required; opts is optional (pass nil for defaults).
 func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.Attachment, opts *Options) *reliantv1.Message {
 	if opts == nil {
@@ -192,7 +223,7 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 	// Convert content blocks
 	protoBlocks := make([]*reliantv1.ContentBlock, len(blocks))
 	for i, b := range blocks {
-		protoBlocks[i] = contentBlockToProto(b, opts.ToolResultsByCallID, opts.ToolCallStatusByCallID, opts.ViewingThreadID)
+		protoBlocks[i] = contentBlockToProto(b, opts)
 	}
 	proto.ContentBlocks = protoBlocks
 
@@ -213,7 +244,7 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 }
 
 // AssembleForDisplay converts a page of messages to proto WITH the
-// enrichment every display path needs: matched tool results, durable tool-call
+// enrichment every display path needs: tool-result previews, durable tool-call
 // status, and the child_workflow_id that tells a spawn which thread it owns.
 //
 // It exists because that enrichment used to be open-coded at each call site,
@@ -241,31 +272,6 @@ func AssembleForDisplay(
 	viewingThreadID string,
 	sequenceNumber int64,
 ) []*reliantv1.Message {
-	// Matched tool results, keyed by call id. Results arrive as their own
-	// TOOL-role messages, so they must be collected across the whole page
-	// before any single message is converted.
-	toolResultsByCallID := make(map[string]*reliantv1.MatchedToolResult)
-	for _, msg := range messages {
-		if msg.Role != reliantv1.MessageRole_MESSAGE_ROLE_TOOL {
-			continue
-		}
-		for _, block := range blocksByMessageID[msg.ID] {
-			if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT && block.ToolCallID != nil {
-				result := &reliantv1.MatchedToolResult{
-					ToolCallId: *block.ToolCallID,
-					Type:       "tool_result",
-				}
-				if block.Content != nil {
-					result.Content = block.Content
-				}
-				if block.IsError != nil {
-					result.IsError = block.IsError
-				}
-				toolResultsByCallID[*block.ToolCallID] = result
-			}
-		}
-	}
-
 	// Durable tool-call rows: real status instead of the frontend inferring
 	// one from workflow activity, plus child_workflow_id for spawns.
 	//
@@ -290,9 +296,16 @@ func AssembleForDisplay(
 		}
 	}
 
+	// Tool names by call id, from the page's tool_call blocks: a tool_result
+	// block's own tool_name can be empty, and the name decides whether its
+	// content is previewed.
+	toolNameByCallID := make(map[string]string)
 	blockToolCallIDs := make([]string, 0)
 	for _, blocks := range blocksByMessageID {
 		for _, b := range blocks {
+			if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL && b.ToolCallID != nil && b.ToolName != nil {
+				toolNameByCallID[*b.ToolCallID] = *b.ToolName
+			}
 			if b.ToolCallID != nil && *b.ToolCallID != "" {
 				if _, found := toolCallStatusByCallID[*b.ToolCallID]; !found {
 					blockToolCallIDs = append(blockToolCallIDs, *b.ToolCallID)
@@ -331,8 +344,8 @@ func AssembleForDisplay(
 		}
 
 		protoMessages = append(protoMessages, FromDB(msg, blocks, msgAttachments, &Options{
-			ToolResultsByCallID:    toolResultsByCallID,
 			ToolCallStatusByCallID: toolCallStatusByCallID,
+			ToolNameByCallID:       toolNameByCallID,
 			ViewingThreadID:        viewingThreadID,
 			SequenceNumber:         sequenceNumber,
 		}))

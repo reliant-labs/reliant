@@ -257,6 +257,9 @@
             "Name": "ListMessages"
           },
           {
+            "Name": "GetToolResult"
+          },
+          {
             "Name": "UpdateChatState"
           },
           {

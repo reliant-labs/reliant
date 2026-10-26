@@ -5290,6 +5290,22 @@
           }
         },
         {
+          "Name": "GetToolResult",
+          "InputType": "GetToolResultRequest",
+          "OutputType": "GetToolResultResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetToolResultRequest",
+          "OutputTypeFQ": "reliant.v1.GetToolResultResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
           "Name": "UpdateChatState",
           "InputType": "UpdateChatStateRequest",
           "OutputType": "UpdateChatStateResponse",
@@ -5863,6 +5879,40 @@
           {
             "Name": "resumable",
             "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "GetToolResultRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "tool_call_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetToolResultResponse": [
+          {
+            "Name": "tool_call_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "content",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "is_error",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "size",
+            "ProtoType": "int64",
             "IsOptional": false
           }
         ],
@@ -7144,12 +7194,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -7168,6 +7212,16 @@
           {
             "name": "child_workflow_id",
             "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "truncated",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "original_size",
+            "kind": "int64",
             "optional": true
           }
         ],
@@ -7280,6 +7334,40 @@
           {
             "name": "resumable",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.GetToolResultRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "tool_call_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          }
+        ],
+        "reliant.v1.GetToolResultResponse": [
+          {
+            "name": "tool_call_id",
+            "kind": "string"
+          },
+          {
+            "name": "content",
+            "kind": "string"
+          },
+          {
+            "name": "is_error",
+            "kind": "bool"
+          },
+          {
+            "name": "size",
+            "kind": "int64"
           }
         ],
         "reliant.v1.GetWorkflowExecutionsRequest": [
@@ -7557,26 +7645,6 @@
           {
             "name": "message",
             "kind": "string"
-          }
-        ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
           }
         ],
         "reliant.v1.Message": [
@@ -8505,6 +8573,8 @@
         "reliant.v1.GetChatUpdatesResponse": "reliant/v1/chat.proto",
         "reliant.v1.GetThreadWorkflowInputsRequest": "reliant/v1/chat.proto",
         "reliant.v1.GetThreadWorkflowInputsResponse": "reliant/v1/chat.proto",
+        "reliant.v1.GetToolResultRequest": "reliant/v1/chat.proto",
+        "reliant.v1.GetToolResultResponse": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsRequest": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsResponse": "reliant/v1/chat.proto",
         "reliant.v1.InputMessage": "reliant/v1/chat.proto",
@@ -8526,7 +8596,6 @@
         "reliant.v1.ListStepExecutionsResponse": "reliant/v1/chat.proto",
         "reliant.v1.MarkUnreadChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.MarkUnreadChatResponse": "reliant/v1/chat.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
@@ -21075,12 +21144,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -21100,6 +21163,16 @@
             "name": "child_workflow_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "truncated",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "original_size",
+            "kind": "int64",
+            "optional": true
           }
         ],
         "reliant.v1.GetMessageRequest": [
@@ -21113,26 +21186,6 @@
             "name": "message",
             "kind": "message",
             "type_name": "reliant.v1.Message"
-          }
-        ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
           }
         ],
         "reliant.v1.Message": [
@@ -21229,7 +21282,6 @@
         "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
         "reliant.v1.GetMessageRequest": "reliant/v1/message.proto",
         "reliant.v1.GetMessageResponse": "reliant/v1/message.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto"
       },
       "Enums": {
@@ -32125,12 +32177,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -32150,32 +32196,22 @@
             "name": "child_workflow_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "truncated",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "original_size",
+            "kind": "int64",
+            "optional": true
           }
         ],
         "reliant.v1.Heartbeat": [
           {
             "name": "timestamp",
             "kind": "int64"
-          }
-        ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
           }
         ],
         "reliant.v1.Message": [
@@ -32529,7 +32565,6 @@
         "reliant.v1.ChatUserUpdates": "reliant/v1/streaming.proto",
         "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
         "reliant.v1.Heartbeat": "reliant/v1/streaming.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto",
         "reliant.v1.NodeExecutionState": "reliant/v1/streaming.proto",
         "reliant.v1.StreamChatUpdatesRequest": "reliant/v1/streaming.proto",
@@ -40999,7 +41034,7 @@
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "4b78eab5552a9d6007156033f9971c309f48ee0203e95c0b2c383c89e494920b",
+    "reliant/v1/chat.proto": "78fed97c9c4a1a3788d825a7a94e54afcaab1af7719b88e7f7f192ad54af2d72",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",

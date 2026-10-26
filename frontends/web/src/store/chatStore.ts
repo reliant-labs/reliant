@@ -12,9 +12,11 @@ import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
   foldToolResultMessage,
+  resolvedToolResultFromBlock,
   getProcessedMessage,
 } from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
+import { registerToolResultSink } from "../lib/toolResultSink";
 import {
   CHAT_MARKER_KINDS,
   extractChatMarker,
@@ -956,6 +958,10 @@ interface ChatStoreState {
   // Resolves to true when more history may still remain, false when the top of
   // the chat has been reached (or nothing could be loaded).
   loadOlderMessages: (chatId: string) => Promise<boolean>;
+  // Merge the tool results of messages read outside this store (the React
+  // Query seed and single-thread reads) into toolResultsByCallId. Known
+  // entries are kept: a result is written once.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => void;
 
   // Stream methods (chat detail events are delivered by the per-chat stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
@@ -1998,9 +2004,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         approvalsFromCache(chatId);
       // Build the normalized tool-result index from the loaded TOOL messages,
       // merged over anything already known for this chat, so processMessage can
-      // resolve call→result the same way the live stream path does. (Loaded
-      // assistant messages may also carry a backend-embedded matchedResult;
-      // processMessage falls back to that when the index has no entry.)
+      // resolve call→result the same way the live stream path does. The server
+      // does not copy a result onto its call block: this index is the join.
       const loadedToolResults: ToolResultsByCallId = {
         ...(state.toolResultsByCallId[chatId] || {}),
       };
@@ -2057,6 +2062,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Scroll-back paging. The initial snapshot is bounded to the newest N
   // messages, so this is how the rest of a long chat becomes reachable: fetch
   // the page immediately older than what we hold and PREPEND it.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => {
+    const found: ToolResultsByCallId = {};
+    for (const message of messages) {
+      if (message.role === MessageRole.TOOL) foldToolResultMessage(message, found);
+    }
+    const existing = get().toolResultsByCallId[chatId] || {};
+    const added = Object.keys(found).filter((id) => !(id in existing));
+    if (added.length === 0) return;
+    const merged: ToolResultsByCallId = { ...existing };
+    for (const id of added) merged[id] = found[id];
+    set((state) => ({
+      toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: merged },
+    }));
+  },
+
   loadOlderMessages: async (chatId: string) => {
     // Concurrency guard. Virtuoso can fire startReached several times in quick
     // succession (each prepend re-renders the list near the top edge), and
@@ -2693,11 +2713,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   return;
                 }
                 batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
-                batchToolResults[block.toolCallId] = {
-                  content: block.content || "",
-                  is_error: block.isError,
-                  tool_name: block.toolName,
-                };
+                batchToolResults[block.toolCallId] = resolvedToolResultFromBlock(block);
               }
             });
 
@@ -4154,3 +4170,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 }));
+
+registerToolResultSink((chatId, messages) =>
+  useChatStore.getState().ingestToolResultMessages(chatId, messages),
+);

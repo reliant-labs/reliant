@@ -16,6 +16,7 @@ import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
+import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
@@ -340,6 +341,14 @@ function ChatMessageComponent({
       }
 
       if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
+        // A large result is held as a preview: copy the full output instead.
+        const resultContents = await Promise.all(
+          parsed.toolExecutions.map((execution) =>
+            execution.result?.truncated && chatId
+              ? fetchFullToolResult(chatId, execution.call.id)
+              : Promise.resolve(execution.result?.content),
+          ),
+        );
         parsed.toolExecutions.forEach((execution, index) => {
           // Format tool call with parameters like Claude does
           let toolCallText = `Tool: ${execution.call.name}`;
@@ -383,8 +392,9 @@ function ChatMessageComponent({
           }
 
           contentToCopy += `${toolCallText}\n`;
-          if (execution.result && execution.result.content) {
-            contentToCopy += execution.result.content + "\n";
+          const resultContent = resultContents[index];
+          if (resultContent) {
+            contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
           }

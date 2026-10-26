@@ -125,7 +125,6 @@ function buildAssistantMessage(): Message {
         toolCallId: "call-1",
         toolName: "generate_video",
         input: JSON.stringify({ prompt: "a red ball" }),
-        matchedResult: { toolCallId: "call-1", content: "ok", isError: false },
       },
     ],
     createdAt: "2024-01-01T00:00:00.000Z",

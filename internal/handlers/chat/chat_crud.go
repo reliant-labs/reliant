@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/planproto"
 	"go.temporal.io/api/serviceerror"
 )
@@ -663,11 +664,16 @@ func (s *Service) GetChatUpdates(
 	// Convert to proto messages
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
 	for i, update := range updates {
+		data := []byte(update.Data)
+		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
+			// The same tool-result preview every client-facing read sends.
+			data = messageproto.PreviewMessageUpdate(data)
+		}
 		protoUpdates[i] = &reliantv1.ChatUpdate{
 			SequenceNumber: update.SequenceNumber,
 			UpdateType:     update.UpdateType.String(),
 			EntityId:       update.EntityID,
-			Data:           string(update.Data),
+			Data:           string(data),
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339),
 		}
 	}

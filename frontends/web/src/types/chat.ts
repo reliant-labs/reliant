@@ -11,7 +11,6 @@ import type {
   Message as ProtoMessage,
   ContentBlock as ProtoContentBlock,
   Attachment as ProtoAttachment,
-  MatchedToolResult as ProtoMatchedToolResult,
   ArchivedChat as ProtoArchivedChat,
   WorkflowExecution as ProtoWorkflowExecution,
   StepExecution as ProtoStepExecution,
@@ -51,17 +50,16 @@ export type Message = Omit<ProtoMessage, 'contentBlocks' | '$typeName'> & {
   contentBlocks: ContentBlock[];
 };
 
-/** ContentBlock with matchedResult using our MatchedToolResult type */
-export type ContentBlock = Omit<ProtoContentBlock, 'matchedResult' | '$typeName'> & {
+/**
+ * ContentBlock with $typeName optional. A tool_call block never carries its
+ * result: the result is its own tool_result block, joined to the call by
+ * tool_call_id (see foldToolResultMessage / toolResultsByCallId).
+ */
+export type ContentBlock = Omit<ProtoContentBlock, '$typeName'> & {
   $typeName?: string;
-  matchedResult?: MatchedToolResult;
 };
 
 export type Attachment = ProtoAttachment;
-/** MatchedToolResult with $typeName made optional for inline construction */
-export type MatchedToolResult = Omit<ProtoMatchedToolResult, '$typeName'> & {
-  $typeName?: string;
-};
 
 /** ArchivedChat with chat field using our Chat type */
 export type ArchivedChat = Omit<ProtoArchivedChat, 'chat' | '$typeName'> & {

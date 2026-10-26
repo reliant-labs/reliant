@@ -2,9 +2,11 @@ package streaming
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,4 +85,28 @@ func TestFormatChatUpdateDataJSON_InvalidJSONFallsBackToRaw(t *testing.T) {
 	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
 
 	require.Equal(t, string(raw), formatted)
+}
+
+func TestFormatChatUpdateDataJSON_LiveToolResultIsPreviewed(t *testing.T) {
+	// A live message update carries the same tool-result preview the
+	// snapshot and ListMessages send, not the whole output.
+	big := strings.Repeat("output line\n", 4000)
+	raw, err := json.Marshal(map[string]any{
+		"id": "msg-1",
+		"content_blocks": []any{map[string]any{
+			"id": "b1", "type": int(reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT),
+			"tool_call_id": "c1", "tool_name": "shell", "content": big,
+		}},
+	})
+	require.NoError(t, err)
+
+	formatted := formatChatUpdateDataJSON(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, raw)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal([]byte(formatted), &decoded))
+	message := decoded["message"].(map[string]any)
+	block := message["content_blocks"].([]any)[0].(map[string]any)
+	require.Equal(t, true, block["truncated"])
+	require.Equal(t, float64(len(big)), block["original_size"])
+	require.LessOrEqual(t, len(block["content"].(string)), messageproto.ToolResultPreviewBytes)
 }

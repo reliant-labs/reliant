@@ -892,11 +892,15 @@ func toolCallStatusString(status core.ToolCallStatus) string {
 }
 
 // formatChatUpdateDataJSON wraps message updates in a {message: ...} envelope
-// so the frontend can detect them consistently.
+// so the frontend can detect them consistently, and previews their large tool
+// results.
 func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage) string {
 	if updateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 		return string(rawData)
 	}
+	// Large tool output goes to the client as a preview, the same one the
+	// snapshot and ListMessages send (GetToolResult has the rest).
+	rawData = messageproto.PreviewMessageUpdate(rawData)
 
 	var payload map[string]any
 	if err := json.Unmarshal(rawData, &payload); err != nil {

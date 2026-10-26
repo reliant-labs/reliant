@@ -11,23 +11,28 @@ import { cn } from '../../../lib/utils';
 interface CopyButtonProps {
   /** Text content to copy to clipboard */
   content: string;
+  /**
+   * Resolves the text to copy, used instead of `content` when given: a tool
+   * output the transcript holds only a preview of is fetched in full first.
+   */
+  resolveContent?: () => Promise<string>;
   /** Additional CSS classes */
   className?: string;
 }
 
-function CopyButtonComponent({ content, className }: CopyButtonProps) {
+function CopyButtonComponent({ content, resolveContent, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(resolveContent ? await resolveContent() : content);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard API may fail in some contexts
     }
-  }, [content]);
+  }, [content, resolveContent]);
 
   return (
     <Tooltip content={copied ? 'Copied!' : 'Copy to clipboard'} side="bottom" delay={300} triggerClassName="inline-flex">

@@ -326,6 +326,11 @@ service ChatService {
   // ListMessages lists messages for a chat with content blocks
   // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
+
+  // GetToolResult returns one tool call's full result content. The transcript
+  // read paths send a truncated preview of a large result (ContentBlock.
+  // truncated); this is how the client gets the rest, on demand.
+  rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
@@ -648,7 +653,11 @@ message ContentBlock {
   optional string tool_call_id = 6;    // For tool_call and tool_result blocks
   optional string input = 7;           // Tool input (JSON string)
   optional bool is_error = 8;          // For tool_result blocks
-  optional MatchedToolResult matched_result = 9; // For tool_call blocks with results
+  // 9 was matched_result: a copy of the tool_result block's content on its
+  // tool_call block, which put every tool output on the wire twice. The
+  // client joins a call to its result by tool_call_id instead.
+  reserved 9;
+  reserved "matched_result";
   optional ToolCallStatus tool_call_status = 10; // Durable status, for tool_call blocks
   optional string started_at = 11;     // Durable status timing, for tool_call blocks
   optional string completed_at = 12;   // Durable status timing, for tool_call blocks
@@ -663,14 +672,16 @@ message ContentBlock {
   // running). The renderer then showed "Starting..." over a child thread that
   // already had hundreds of messages.
   optional string child_workflow_id = 13; // For spawn tool_call blocks
-}
-
-// MatchedToolResult pairs a tool call with its result
-message MatchedToolResult {
-  string tool_call_id = 1;
-  string type = 2;                     // Always "tool_result"
-  optional string content = 3;
-  optional bool is_error = 4;
+  // A tool_result block's content was shortened for display: the transcript
+  // read paths (ListMessages, GetMessage, the stream snapshot and live
+  // message updates) cap tool output so a chat with large outputs opens
+  // fast. content then holds a preview (head and tail, or for a JSON object
+  // the same object with its long strings shortened) and GetToolResult
+  // returns the whole thing. Only what is sent to clients is shortened: the
+  // stored block and what the model sees are untouched.
+  optional bool truncated = 14;
+  // Byte length of the full content, set when truncated is.
+  optional int64 original_size = 15;
 }
 
 // Attachment represents a file attachment
@@ -1076,6 +1087,22 @@ message ListMessagesResponse {
   int32 count = 3;
   bool has_more = 4;
   int64 oldest_seq = 5;
+}
+
+// GetToolResultRequest names a tool call in a chat the caller owns. A
+// branch's inherited calls resolve too: their results live in the chat the
+// branch was taken from.
+message GetToolResultRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  string tool_call_id = 2 [(buf.validate.field).required = true];
+}
+
+// GetToolResultResponse is the tool call's stored result, in full.
+message GetToolResultResponse {
+  string tool_call_id = 1;
+  string content = 2;
+  bool is_error = 3;
+  int64 size = 4;                      // Byte length of content
 }
 
 // UpdateChatStateRequest changes chat state
