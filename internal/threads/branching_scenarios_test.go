@@ -84,7 +84,7 @@ func (e *testEnv) createChat(title string) (chatID, threadID, cwID string) {
 // addMessage adds a message to a thread/CW at the given ordinal
 func (e *testEnv) addMessage(chatID, threadID, cwID string, ordinal int64, role reliantv1.MessageRole) *db.Message {
 	e.t.Helper()
-	seq, err := e.repo.GetNextSeq(e.ctx, chatID, threadID)
+	_, seq, err := e.repo.AllocateMessageOrder(e.ctx, threadID, chatID)
 	require.NoError(e.t, err)
 	msg := &db.Message{
 		ID:              uuid.New().String(),

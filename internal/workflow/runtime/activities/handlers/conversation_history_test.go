@@ -110,7 +110,7 @@ func createMessageWithParts(t *testing.T, repo *db.Repo, chatID, threadID, conte
 	t.Helper()
 	ctx := context.Background()
 
-	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 
 	msg := &db.Message{
@@ -149,7 +149,7 @@ func createMessageWithToolCall(t *testing.T, repo *db.Repo, chatID, threadID, co
 	t.Helper()
 	ctx := context.Background()
 
-	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 
 	msg := &db.Message{
@@ -190,7 +190,7 @@ func createMessageWithToolResult(t *testing.T, repo *db.Repo, chatID, threadID, 
 	t.Helper()
 	ctx := context.Background()
 
-	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 
 	msg := &db.Message{

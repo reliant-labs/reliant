@@ -70,9 +70,7 @@ func (c *isolationChats) thread(t *testing.T, chatID, threadID string, parent *s
 func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) string {
 	t.Helper()
 	ctx := context.Background()
-	ordinal, err := c.h.Repo().GetNextOrdinal(ctx, thread)
-	require.NoError(t, err)
-	seq, err := c.h.Repo().GetNextSeq(ctx, chatID, thread)
+	ordinal, seq, err := c.h.Repo().AllocateMessageOrder(ctx, thread, chatID)
 	require.NoError(t, err)
 	id := uuid.New().String()
 	now := time.Now().UTC()

@@ -179,9 +179,7 @@ func seedGrantsChat(t *testing.T, repo *db.Repo) string {
 	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{ID: contextWindowID, ThreadID: chatID})
 	require.NoError(t, err)
 
-	ordinal, err := repo.GetNextOrdinal(ctx, chatID)
-	require.NoError(t, err)
-	seq, err := repo.GetNextSeq(ctx, chatID, chatID)
+	ordinal, seq, err := repo.AllocateMessageOrder(ctx, chatID, chatID)
 	require.NoError(t, err)
 	msgID := uuid.NewString()
 	now := time.Now().UTC()

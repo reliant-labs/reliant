@@ -352,18 +352,13 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 		t.Fatalf("CountMessage(chat) = %d, %v; want 8", n, err)
 	}
 
-	// Allocators that still read the table.
-	if next, err := store.NextOrdinalInThread(ctx, o, f.main); err != nil || next != 4 {
-		t.Fatalf("NextOrdinalInThread = %d, %v; want 4", next, err)
+	// Every insert raised the counters to its numbers, so the next allocation
+	// follows the transcript without reading it.
+	if ord, seq, err := f.env.Repo.AllocateMessageOrder(ctx, f.main, f.chat); err != nil || ord != 4 || seq != 8 {
+		t.Fatalf("AllocateMessageOrder = (%d, %d), %v; want (4, 8)", ord, seq, err)
 	}
-	if next, err := store.NextOrdinalInThread(ctx, o, "no-thread"); err != nil || next != 0 {
-		t.Fatalf("NextOrdinalInThread(empty) = %d, %v; want 0", next, err)
-	}
-	if next, err := store.NextSeqInChat(ctx, o, f.chat, f.main); err != nil || next != 8 {
-		t.Fatalf("NextSeqInChat = %d, %v; want 8", next, err)
-	}
-	if twin, err := f.env.Repo.GetNextSeq(ctx, f.chat, f.main); err != nil || twin != 8 {
-		t.Fatalf("Repo.GetNextSeq = %d, %v; want 8", twin, err)
+	if ord, _, err := f.env.Repo.AllocateMessageOrder(ctx, "no-thread", f.chat); err != nil || ord != 0 {
+		t.Fatalf("AllocateMessageOrder(new thread) ordinal = %d, %v; want 0", ord, err)
 	}
 
 	// Per-thread activity: the newest created_at of each thread.
@@ -373,10 +368,11 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	}
 }
 
-// TestNextSeqInChat_ClearsInheritedForkHistory: a branched chat's own rows are
-// empty, but the seq it allocates must clear what its thread inherits through
-// the context-window chain.
-func TestNextSeqInChat_ClearsInheritedForkHistory(t *testing.T) {
+// TestSeedSeqCounterForFork_ClearsInheritedForkHistory: a branched chat's own
+// rows are empty, but the seq it allocates must clear what its thread inherits
+// through the context-window chain. The fork raises its counter to the
+// parent's, which every parent row raised.
+func TestSeedSeqCounterForFork_ClearsInheritedForkHistory(t *testing.T) {
 	f := newMsgFixture(t, "chat-msg-fork")
 	ctx := context.Background()
 	f.seedTranscript(t)
@@ -393,11 +389,7 @@ func TestNextSeqInChat_ClearsInheritedForkHistory(t *testing.T) {
 	if _, err := f.env.Repo.CreateContextWindow(ctx, &db.ContextWindow{ID: branch + ":cw", ThreadID: branch, ParentContextWindowID: &f.mainCW1, CreatedAt: t0}); err != nil {
 		t.Fatal(err)
 	}
-	if next, err := store.NextSeqInChat(ctx, f.env.ORM, branch, branch); err != nil || next != 8 {
-		t.Fatalf("NextSeqInChat(branch) = %d, %v; want 8 (past inherited m7)", next, err)
-	}
-
-	// Seeding the branch's counter from the fork chain: monotonic, repeatable.
+	// Seeding the branch's counter from its parent's: monotonic, repeatable.
 	if err := store.SeedSeqCounterForFork(ctx, f.env.ORM, branch, branch+":cw"); err != nil {
 		t.Fatal(err)
 	}

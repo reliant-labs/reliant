@@ -136,7 +136,11 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 	// Creates a new context window with incremented sequence and links to parent CW
 	if opts.NewContextSequence {
 		parentCWID := cw.ID // Capture parent before reassigning cw
-		newSeq := cw.Sequence + 1
+		// From the thread's counter, never the latest window's sequence + 1.
+		newSeq, err := s.repo.AllocateContextWindowSequence(ctx, opts.Thread)
+		if err != nil {
+			return nil, fmt.Errorf("failed to allocate context window sequence: %w", err)
+		}
 		newCWID := contextWindowID(opts.ChatID, opts.Thread, newSeq)
 		newCW := &db.ContextWindow{
 			ID:                    newCWID,
