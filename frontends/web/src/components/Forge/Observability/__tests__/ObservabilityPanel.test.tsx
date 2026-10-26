@@ -74,6 +74,76 @@ describe("ObservabilityPanel", () => {
     expect(screen.queryByTestId("obs-logs")).not.toBeInTheDocument();
   });
 
+  it("leads the not-set-up answer with what the view shows, then how to get started", async () => {
+    const user = userEvent.setup();
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
+    const state = await screen.findByTestId("obs-not-set-up");
+    expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
+    // The pinned environment names itself in the command to copy.
+    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByTestId("obs-not-set-up-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability");
+    await user.click(screen.getByTestId("obs-view-traces"));
+    expect(screen.getByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
+  });
+
+  it("says once that nothing has arrived yet, with the commands that deploy and check", async () => {
+    const user = userEvent.setup();
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }));
+    const state = await screen.findByTestId("obs-nothing-yet");
+    expect(state).toHaveAttribute("role", "status");
+    expect(state).toHaveTextContent("Nothing has arrived from prod yet");
+    expect(state).toHaveTextContent("set up, but nothing in prod has sent telemetry in the last 7 days");
+    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("forge obs status prod")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
+    // Sessions says how ITS data arrives: replay is opt-in, in two places, and masked.
+    await user.click(screen.getByTestId("obs-view-sessions"));
+    const sessions = await screen.findByTestId("obs-nothing-yet");
+    expect(within(sessions).getByTestId("obs-nothing-yet-about")).toHaveTextContent("real users' browser sessions");
+    expect(sessions).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(sessions).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
+    expect(within(sessions).getByTestId("obs-nothing-yet-docs")).toHaveAttribute("href", expect.stringContaining("#session-replay"));
+    expect(screen.getAllByTestId("obs-nothing-yet")).toHaveLength(1);
+  });
+
+  it("keeps Alerts its own page when nothing has arrived", async () => {
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "alerts" });
+    await screen.findByTestId("obs-alerts");
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("asks about the week only when the window is empty", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, signals: { services: [], truncated: false } }));
+    await screen.findByTestId("obs-overview");
+    expect(onCall).not.toHaveBeenCalledWith("GetServiceSignals", expect.anything());
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("calls an empty window an empty window when the week has data", async () => {
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [{ service: "api", emitting: ["logs"], declared: [], declarationKnown: false }], truncated: false } }));
+    expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No telemetry in the last hour");
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("never calls an app empty on a service that only declares signals, or a truncated answer", async () => {
+    // A declared-only service sent nothing: still nothing-yet.
+    const declared = renderPanel(createFixtureApi({ empty: true, signals: { services: [{ service: "api", emitting: [], declared: ["logs"], declarationKnown: true }], truncated: false } }));
+    expect(await screen.findByTestId("obs-nothing-yet")).toBeInTheDocument();
+    declared.unmount();
+    // A truncated list is not "none": the window-empty state stays.
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: true } }));
+    expect(await screen.findByTestId("obs-no-data")).toBeInTheDocument();
+  });
+
+  it("still opens a deep link when nothing has arrived this week", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, empty: true, signals: { services: [], truncated: false } }), { view: "traces", trace: "abc123" });
+    await waitFor(() => expect(onCall).toHaveBeenCalledWith("GetServiceSignals", expect.anything()));
+    expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
   it("has a designed empty state that offers a wider window", async () => {
     const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi({ empty: true }));

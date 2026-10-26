@@ -21,14 +21,13 @@
 
 import { lazy, Suspense, useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
+import { ObsNoEnvironments } from "../Observability/ObsStates";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL } from "./envScope";
@@ -115,11 +114,7 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
         </p>
       ) : needsEnvironments && environments.length === 0 ? (
         <div data-testid="forge-observability-no-envs">
-          <EmptyState
-            icon={<Activity className="h-6 w-6" aria-hidden="true" />}
-            title="No environments to observe yet"
-            description="Telemetry is filed under the environments Reliant records. Deploy one through Reliant (forge env deploy <env>) and its logs, traces, metrics and workloads appear here."
-          />
+          <ObsNoEnvironments topic={view} />
         </div>
       ) : (
         <Suspense fallback={loading}>

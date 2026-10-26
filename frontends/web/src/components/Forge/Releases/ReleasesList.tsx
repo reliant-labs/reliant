@@ -24,8 +24,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Search, Tag as TagIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import PageHeader from "@/components/forge-ui/page_header";
 import { useDoraMetrics, useObservabilityOrg } from "@/hooks/observability-queries";
@@ -95,6 +95,8 @@ export interface ReleasesListProps {
   releaseHref: (version: string, search?: Record<string, unknown>) => string;
   onSelectEnv: (env: string) => void;
   promote: PromoteControl;
+  /** The scope names a local environment, which runs the working tree and has no releases by design. */
+  scopeIsLocal?: boolean;
 }
 
 /** The environment a mutating action targets when the scope is not one long-lived environment. */
@@ -103,7 +105,7 @@ function actionEnvOf(env: string, model: ReleaseModel): string | null {
   return referenceEnv(model.longEnvs)?.name ?? null;
 }
 
-export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, onSelectEnv, promote }: ReleasesListProps) {
+export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, onSelectEnv, promote, scopeIsLocal = false }: ReleasesListProps) {
   const data = useReleaseData(project, envs);
   const [promoting, setPromoting] = useState<string | null>(null);
   const model = data.model;
@@ -156,11 +158,28 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
     return (
       <div className="space-y-6" data-testid="releases" data-state="empty">
         {header}
-        <EmptyState
-          icon={<TagIcon className="h-6 w-6" aria-hidden="true" />}
+        <GettingStarted
+          testId="releases-getting-started"
+          icon={<TagIcon className="h-4 w-4" />}
           title="No releases yet"
-          description={`A release is cut the first time ${project} is deployed through Reliant. Run forge env deploy <env> from your checkout, and it appears here with what it changed and where it runs.`}
-        />
+          about={`Releases lists every build of ${project} Reliant has recorded: the commit it came from, what it changed, which environments run it, and how each promotion went.`}
+          steps={[
+            {
+              text: "Deploy from your checkout. It builds, cuts a release, deploys it, and the release appears here.",
+              command: `forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
+            },
+            {
+              text: "Promote that release to the next environment: exactly what staging runs, with nothing rebuilt.",
+              command: "forge env deploy prod --from staging",
+            },
+          ]}
+          docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+        >
+          <p>
+            A release is cut the first time {project} is deployed through Reliant. A local environment (forge env up) runs your working tree
+            and never has releases.
+          </p>
+        </GettingStarted>
       </div>
     );
   }
@@ -244,6 +263,13 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
                   Clear them
                 </button>
               </>
+            ) : scopeIsLocal ? (
+              <span data-testid="releases-local-env">
+                {env} runs locally from your working tree (forge env up), so it never has releases.{" "}
+                <button type="button" className={INK_BUTTON} onClick={() => onSearch({ every: true })}>
+                  Show every release
+                </button>
+              </span>
             ) : (
               <>
                 No release has run in {env} yet.{" "}

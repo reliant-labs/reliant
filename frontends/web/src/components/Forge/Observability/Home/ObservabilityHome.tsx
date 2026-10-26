@@ -39,7 +39,8 @@ import { describePromotion, useReleaseMarkers } from "../releaseMarkers";
 import { formatAgo, formatCores, formatDuration, formatPercent, formatRate } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
-import { ObsError, ObsNotSetUp } from "../ObsStates";
+import { ObsError, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { useNothingArrived } from "../serviceSignals";
 import { HealthStrip } from "./HealthStrip";
 import { byAttention, serviceRows, type ServiceRow } from "./homeModel";
 import { StackedTable } from "@/components/Forge/StackedTable";
@@ -90,6 +91,12 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
   const workloads = useWorkloads(scope, range);
   const alerts = useAlerts(orgId, envId ?? undefined);
   const releases = useReleaseMarkers(scope, range, environments, !!scope);
+  const notSetUp = !!overview.error && obsErrorKind(overview.error) === "not-set-up";
+  // Set up, and nothing in scope has sent anything this week: say how to get
+  // data here instead of an empty strip and "no service sent telemetry".
+  // Asked only of an empty window — a service in it already answers.
+  const nothingYet = useNothingArrived(scope && overview.data?.services.length === 0 ? scope : null);
+  const envHint = env === ENV_ALL ? undefined : env;
 
   const rows = useMemo(
     () => serviceRows(overview.data?.services ?? [], workloads.data?.workloads ?? [], alerts.data ?? [], (id) => environments.find((e) => e.id === id)?.name).sort(byAttention),
@@ -135,15 +142,27 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
     return (
       <div className="space-y-6" data-testid="observability-home">
         {header}
-        {org.error ? <ObsError error={org.error} subject={project} onRetry={() => void org.refetch()} /> : <ObsNotSetUp subject={project} />}
+        {org.error ? (
+          <ObsError error={org.error} subject={project} onRetry={() => void org.refetch()} />
+        ) : (
+          <ObsNotSetUp subject={project} topic="overview" env={envHint} />
+        )}
       </div>
     );
   }
-  if (overview.error && obsErrorKind(overview.error) === "not-set-up") {
+  if (notSetUp) {
     return (
       <div className="space-y-6" data-testid="observability-home">
         {header}
-        <ObsNotSetUp subject={project} />
+        <ObsNotSetUp subject={project} topic="overview" env={envHint} />
+      </div>
+    );
+  }
+  if (nothingYet) {
+    return (
+      <div className="space-y-6" data-testid="observability-home">
+        {header}
+        <ObsNothingYet subject={project} topic="overview" env={envHint} />
       </div>
     );
   }

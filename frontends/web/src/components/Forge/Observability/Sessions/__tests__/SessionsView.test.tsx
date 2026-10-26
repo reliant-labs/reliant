@@ -100,6 +100,11 @@ describe("the session list", () => {
   it("explains an empty window, and an older control plane", async () => {
     renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No browser sessions");
+    // Other telemetry flowing says nothing about sessions: the empty state says how they and replays arrive.
+    const source = screen.getByTestId("obs-no-data-source");
+    expect(source).toHaveTextContent("A forge frontend sends sessions on its own");
+    expect(source).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(source).toHaveTextContent("no unmasked mode");
   });
 
   it("explains a control plane without sessions", async () => {

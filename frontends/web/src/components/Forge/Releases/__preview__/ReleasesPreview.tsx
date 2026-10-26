@@ -12,7 +12,7 @@
  *   /forge-releases-preview                                   the list, scoped to prod
  *   /forge-releases-preview?version=20261018.052711-950b560e58ce   a release
  *   …&tab=rollout|checks|artifacts|health   &env=all|e2e|pr-984
- *   …&case=empty|error|loading|ledger-failed|compare-fails
+ *   …&case=empty|error|loading|ledger-failed|compare-fails|local-env
  *   …&dark=1&scheme=pure-black
  */
 
@@ -57,6 +57,8 @@ const CASES: { id: string; label: string; options: ReleasesFixtureOptions }[] = 
   { id: "error", label: "control plane unavailable", options: { state: "error" } },
   { id: "ledger-failed", label: "promotion history unreadable", options: { promotionsFail: true } },
   { id: "compare-fails", label: "CompareReleases fails", options: { compareFails: true } },
+  // The scope is a local environment (forge env up): no releases, by design.
+  { id: "local-env", label: "scoped to a local env (laptop)", options: {} },
 ];
 
 type PreviewSearch = ReleasesSearch &
@@ -67,8 +69,9 @@ const CONTROL = "rounded-md border border-border bg-surface px-2 py-1 text-sm te
 export default function ReleasesPreview() {
   const search = useSearch({ strict: false }) as PreviewSearch;
   const navigate = useNavigate();
-  const env = search.env ?? "prod";
   const caseId = search.case ?? "data";
+  // The fixture's dev is hosted; the local case scopes to an environment that runs on a laptop.
+  const env = search.env ?? (caseId === "local-env" ? "laptop" : "prod");
   const active = CASES.find((c) => c.id === caseId) ?? CASES[0]!;
   // The router parses `dark=1` as JSON, so it arrives as a number.
   const dark = !!search.dark && String(search.dark) !== "0" && String(search.dark) !== "false";
@@ -165,6 +168,7 @@ export default function ReleasesPreview() {
                 releaseHref={releaseHref}
                 onSelectEnv={(next) => go({ env: next })}
                 promote={promote}
+                scopeIsLocal={caseId === "local-env" && env === "laptop"}
               />
             )}
           </ReleasesApiProvider>

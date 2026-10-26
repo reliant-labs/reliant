@@ -106,6 +106,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           what={statuses.length ? "issues" : "open issues"}
           range={range}
           filtered={filtered}
+          topic="errors"
           onWiden={() => navigate({ range: "7d" })}
           onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, q: undefined })}
         />

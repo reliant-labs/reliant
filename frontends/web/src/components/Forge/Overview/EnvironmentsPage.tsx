@@ -33,7 +33,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { CircleDashed, Layers } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useCloudEnvStatuses } from "@/hooks/forge-queries";
@@ -105,15 +105,27 @@ export function EnvironmentsPage() {
 
       {rows.length === 0 ? (
         <div data-testid="forge-environments-empty">
-          <EmptyState
-            icon={<Layers className="h-6 w-6" aria-hidden="true" />}
+          <GettingStarted
+            testId="environments-getting-started"
+            icon={<Layers className="h-4 w-4" />}
             title="No environments recorded yet"
-            description={
-              checkoutEnvs.length > 0
-                ? "Your code declares the environments below. Open one and register it to track its releases and set its secrets here."
-                : "Run forge env build <env> to record the first one, or open an environment your code declares and register it."
-            }
-          />
+            about="Environments lists where this project runs: each environment's host, the release it is on, where that came from, and when it last moved."
+            steps={[
+              {
+                text: "Deploy one through Reliant from your checkout. That records the environment and its first release.",
+                command: "forge env deploy <env>",
+              },
+              {
+                text:
+                  checkoutEnvs.length > 0
+                    ? "Or open one of the environments your code declares, below, and register it to set its secrets before the first deploy."
+                    : "Or open an environment your code declares and register it to set its secrets before the first deploy.",
+              },
+            ]}
+            docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+          >
+            <p>A local environment (forge env up) runs your working tree on your machine; it has no releases and needs no registering.</p>
+          </GettingStarted>
         </div>
       ) : (
         <EnvironmentTable rows={rows} onOpen={openEnv} />
