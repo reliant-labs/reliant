@@ -37,7 +37,7 @@ type Client struct {
 	sign    Signer
 }
 
-// New returns a client for the control-plane at deps.BaseURL.
+// New returns a client for the control-plane deps.ControlPlane names.
 //
 // forge:constructor
 func New(deps Deps) Service {
@@ -46,7 +46,7 @@ func New(deps Deps) Service {
 		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 10 * time.Second})
 	}
 	return &Client{
-		baseURL: strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),
+		baseURL: strings.TrimRight(strings.TrimSpace(deps.ControlPlane.GetUrl()), "/"),
 		http:    httpClient,
 		sign:    deps.Sign,
 	}

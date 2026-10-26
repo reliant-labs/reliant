@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,8 +85,8 @@ func newClient(t *testing.T, cp *fakeCP) gitcredentialclient.Service {
 	srv := httptest.NewServer(cp)
 	t.Cleanup(srv.Close)
 	return gitcredentialclient.New(gitcredentialclient.Deps{
-		BaseURL: srv.URL + "/",
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL + "/"},
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 }
 
@@ -157,8 +159,8 @@ func TestUserAccessToken_SendsTheInternalServiceBearer(t *testing.T) {
 	srv := httptest.NewServer(cp)
 	defer srv.Close()
 	unsigned := gitcredentialclient.New(gitcredentialclient.Deps{
-		BaseURL: srv.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken("the-wrong-secret") },
+		ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL},
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken("the-wrong-secret") },
 	})
 	_, err := unsigned.UserAccessToken(context.Background(), "idp|alice", "github")
 	var rpc *gitcredentialclient.RPCError
@@ -215,8 +217,8 @@ func newMintClient(t *testing.T, f *fakeMint) gitcredentialclient.Service {
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	return gitcredentialclient.New(gitcredentialclient.Deps{
-		BaseURL: srv.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL},
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 }
 
@@ -330,7 +332,7 @@ func TestMintInstallationToken_SendsTheInternalServiceBearer(t *testing.T) {
 	f.t = t
 	srv := httptest.NewServer(f)
 	defer srv.Close()
-	wrong := gitcredentialclient.New(gitcredentialclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return auth.SignInternalServiceToken("the-wrong-secret") }})
+	wrong := gitcredentialclient.New(gitcredentialclient.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: func() (string, error) { return auth.SignInternalServiceToken("the-wrong-secret") }})
 	_, err := wrong.MintInstallationToken(context.Background(), gitcredentialclient.InstallationRequest{ExternalUserID: "u", Owner: "o", Repo: "r"})
 	var rpc *gitcredentialclient.RPCError
 	require.True(t, errors.As(err, &rpc), "a wrongly-signed call must be refused, got %v", err)

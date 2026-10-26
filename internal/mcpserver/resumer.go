@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"strings"
 	"time"
 
@@ -51,7 +52,7 @@ func NewControlPlaneResumer(baseURL string) *ControlPlaneResumer {
 	if trimmed == "" {
 		return nil
 	}
-	return &ControlPlaneResumer{client: controlplane.NewInstrumented(controlplane.Deps{BaseURL: trimmed})}
+	return &ControlPlaneResumer{client: controlplane.NewInstrumented(controlplane.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: trimmed}})}
 }
 
 // ResumeDaemon asks the control plane to wake daemonID on the user's behalf.

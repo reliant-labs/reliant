@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -103,7 +105,7 @@ func (s *stubStore) ListAuditByGrant(context.Context, string, string, int) ([]*c
 // newConnectorService builds the service over the given store, authority and
 // public URL through the generated harness.
 func newConnectorService(t *testing.T, store GrantStore, tokens TokenAuthority, publicURL string) *Service {
-	return NewTestConnector(t, WithConnectorDeps(Deps{Grants: store, Tokens: tokens, PublicURL: publicURL}))
+	return NewTestConnector(t, WithConnectorDeps(Deps{Grants: store, Tokens: tokens, Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}}))
 }
 
 // connectorCtx returns a context authenticated as userID. Distinct from the

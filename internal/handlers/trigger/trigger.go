@@ -956,7 +956,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	}
 	switch t.Kind {
 	case core.TriggerKindWebhook:
-		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
+		webhookURL := triggers.WebhookURL(s.publicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
 		proto.WebhookManaged = s.managed(t)
 	case core.TriggerKindIntegration:
@@ -965,7 +965,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		// know it; an operator-registered app webhook does not.
 		if uc, ok := s.deps.Catalog.(userConfiguredCatalog); ok {
 			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
-				eventsURL := triggers.IntegrationEventsURL(s.deps.PublicURL, cfg.Integration)
+				eventsURL := triggers.IntegrationEventsURL(s.publicURL, cfg.Integration)
 				proto.WebhookUrl = &eventsURL
 			}
 		}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -44,7 +46,7 @@ func TestDefaultClientTracesEachCallOnce(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(Deps{BaseURL: srv.URL, Sign: signWith("s")})
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
 	clientSpans := func() []sdktrace.ReadOnlySpan {
 		var out []sdktrace.ReadOnlySpan
 		for _, s := range rec.Ended() {

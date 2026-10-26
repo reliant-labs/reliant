@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -159,7 +160,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 
 	router := toolexec.NewNATSDaemonRouter(nc,
 		toolexec.WithDatabase(repo),
-		toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{BaseURL: cpSrv.URL})),
+		toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL}})),
 		toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
 
 	projectID, chatID := uuid.NewString(), uuid.NewString()

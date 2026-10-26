@@ -382,7 +382,7 @@ func (s *Service) ListAvailableTools(
 
 // mcpURL is the endpoint the user pastes into their MCP client.
 func (s *Service) mcpURL() string {
-	base := strings.TrimSuffix(strings.TrimSpace(s.deps.PublicURL), "/")
+	base := s.publicURL
 	if base == "" {
 		// Without a configured public URL, return the path alone rather than
 		// inventing a hostname that would silently be wrong.

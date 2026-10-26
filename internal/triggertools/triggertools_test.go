@@ -4,6 +4,7 @@ package triggertools_test
 import (
 	"context"
 	"encoding/json"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"log/slog"
 	"reflect"
 	"slices"
@@ -116,7 +117,7 @@ func setup(t *testing.T, publicURL string) *env {
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
 		Syncer: e.backend, Fires: e.backend,
-		PublicURL: publicURL, Catalog: fakeCatalog{}, Intake: fakeIntake{},
+		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
 	e.svc = svc
