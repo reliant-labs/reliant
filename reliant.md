@@ -38,34 +38,30 @@ Reliant is a **multi-tenant distributed system** with three server roles — **A
 
 Every log — backend, browser console, Electron — is under `.forge/logs/dev/` of the checkout that ran `forge env up dev`: `./.forge/logs/dev/` for this checkout's stack, `../control-plane/.forge/logs/dev/` for control-plane's (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_web.log` / `frontend_reliant-web.log` = UI `[browser:<level>]` lines). Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep. `./.reliant/tools/log-search.sh` greps them.
 
-## Merging to main: the merge-gate status is required
+## Merging to main: push, label `merge:queue`, stop
 
-Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed, ~5 min), before every merge; the **release gate**, `task release:gate` (`scripts/release-gate.sh`: everything, `-race`, slow tests, integration, e2e; recorded per sha), before every release — `task release:tag` refuses a commit without a green record.
+**You never gate or merge a PR yourself.** Verify only what you touched (build, and
+the scoped short tests of what you changed: `make test-short PKGS=...`), push, open
+the PR, add the label **`merge:queue`** (and **`merge:priority`** if it is urgent),
+and report the PR URL as done. Never run `task ci:merge`, `scripts/merge-gate.sh`,
+`merge_queue*.sh`, `task release:gate` or `gh pr merge` yourself.
+
+The **merge steward** is the only merger (control-plane `tools/merge-steward/`,
+documented in ONE place: its `README.md`). It squashes a batch of queued PRs onto
+main in its own pool checkout, runs the **merge gate** (`scripts/merge-gate.sh
+--amend`, below) ONCE on the batch, posts the SUCCESS `merge-gate` status on the
+exact commit each PR lands as, and squash-merges them in order. A red batch is
+bisected: the culprit gets **`merge:failed`** and a comment with the gate's summary
+and log tail. Fix it, push, add `merge:queue` again.
+
+Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed, ~5 min), which the steward runs per batch and you may run to reproduce a `merge:failed`; the **release gate**, `task release:gate` (`scripts/release-gate.sh`: everything, `-race`, slow tests, integration, e2e; recorded per sha), before every release — `task release:tag` refuses a commit without a green record.
 
 GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
 commit status (ruleset "main: merge-gate required", head must be up to date
-with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
-merge queue merges main into the branch (never a rebase), squashes, runs
-`scripts/merge-gate.sh --amend` on that exact commit and posts the status:
-
-```bash
-/home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
-```
-
-Pool checkouts are granted first come, first served: a run prints its place in
-line and an estimated wait, and `merge_queue3.sh --status` shows the whole
-queue. A run you kill loses its place. When a run failed on a host flake or a
-test timeout, rerun it and it gets its old place back. For a test failure
-unrelated to your diff, rerun with `--flake-retry`.
-
-The only other way in is an audited waiver — a hotfix that cannot wait, or a
-gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
-comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:
-
-```bash
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
-```
+with main, **no bypass actors** — `gh pr merge --admin` is refused too). Only the
+steward posts it. The audited waiver (`merge_gate_waive.sh`, which posts
+`WAIVED: <reason>` and logs to `/home/workspace/fm-logs/merge-gate-waivers.log`)
+is the owner's, for prod incidents only.
 
 GitHub CI (`.github/workflows/ci.yml`) is a thin wrapper over the same tasks: `task ci:merge` on a PR, `task release:gate` on main and nightly.
 
@@ -86,7 +82,7 @@ task test:affected                          # diff vs merge-base with origin/mai
 task test:affected:plan                     # same decision, nothing run
 task test:affected LANES=go                 # one lane; TEST_BASE=<rev> moves the base, TEST_FULL=1 runs all
 task test:short -- ./internal/<pkg>/...     # one package by hand: -short, cached, no -race
-task ci:merge                               # the merge gate, before you hand a branch to the queue
+task ci:merge                               # the merge gate the steward runs per batch: only to reproduce a merge:failed
 ```
 
 `go.mod`, `package.json`, `Taskfile.yml`, config, or a path nothing claims runs the whole

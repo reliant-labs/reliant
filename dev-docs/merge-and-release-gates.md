@@ -15,7 +15,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`) of the changed packages and their **direct** importers, `go build ./...`, the web `tsc -b` when a web file changed, `forge lint --scope <changed dirs>`, migration-safety when a migration changed, and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`) of the changed packages and their **direct** importers, `go build ./...`, the web `tsc -b` when a web file changed, `forge lint --scope <changed dirs>`, migration-safety when a migration changed, and the forge-generate and docs-generate no-op checks only when one of their inputs changed | on **every batch** the merge steward lands: once, on the batch's squashed tip. Agents do not run it before queueing; run it to reproduce a `merge:failed` |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
@@ -116,8 +116,8 @@ the gate and is named: `FAILED: docs never completed (no result row; ...)`.
 The verdict is also written to `$MG_LOGDIR/verdict`. A missing `jq` or an
 unparsable `plan.json` aborts the gate, because every lane would otherwise read
 as "not selected". reliant#1393 merged with docs-generate still queued; this is
-the check that stops that. The merge queue posts `merge-gate` SUCCESS only when
-the verdict is `OK`, and posts a FAILURE status carrying it otherwise.
+the check that stops that. The merge steward lands (and posts `merge-gate`
+SUCCESS) only when the verdict is `OK`.
 
 ### Direct importers only
 
@@ -149,12 +149,10 @@ These are the trade-offs. Each is caught by the release gate:
 - **Whole-project lint lanes.** golangci over packages the diff did not touch,
   the frontend lint, the graph, component-drift and config-reach lanes cannot
   be scoped, so `--scope` skips them.
-- **Semantic interactions with a concurrent merge.** When main moves during the
-  gate, the queue lands without re-running the gate if main's new commits touch
-  none of the branch's files and none of the project-wide inputs: pins, proto,
-  migrations, the Taskfile, the selector. In that case it only re-checks that
-  the result builds. Two such changes can still interact through behaviour,
-  with each one green alone.
+- **The commits inside a batch.** The merge steward gates a batch's tip once;
+  each pull request lands as its own commit, and the commits between are not
+  gated on their own. When main moves under a batch (anyone else's push), the
+  batch gates again on the new main.
 - **Integration-tagged and e2e tests.**
 
 ## Slow tests: what moved to the release gate
@@ -235,65 +233,40 @@ nothing else merges in between, the bump commit inherits that green.
 A hotfix that cannot wait takes `scripts/release-tag.sh --skip-release-gate`.
 Say so in the release notes. There is no waiver for a red run: fix it.
 
-## The merge queue
+## The merge steward
 
-The fleet's merge queue (`.fm-tools/merge_queue3.sh`, outside this repo) is a
-thin orchestrator over `scripts/merge-gate.sh`. Branches gate in parallel, one
-per pool checkout. There are three pools. The host's heavy slots are the
-limit, not the number of checkouts, so more pools would only add gates that
-queue for a slot.
+Agents never gate or merge: they push, open a pull request and label it
+`merge:queue` (`merge:priority` to jump the line). The **merge steward** is the
+one merger. Its design, configuration (`repos/reliant.yaml`) and operations are
+documented in ONE place, control-plane `tools/merge-steward/README.md`. For
+reliant, per batch of up to six queued pull requests, in its own pool checkout:
 
-Pools are granted **first come, first served** (`.fm-tools/mq3/sched.sh`). A
-branch takes a ticket when it arrives. It gets a pool once every earlier ticket
-has one. While it waits it prints its place in line and an estimated wait, from
-the median time recent runs held a pool. It prints this at the start and every
-3 minutes. `merge_queue3.sh --status` prints every queue. A run that dies loses
-its place, and the run behind it moves up at once. A rerun gets its old place
-back when the last run failed for a reason that was not the branch's:
+1. each pull request merges the batch tip in (never a rebase), its migrations
+   are re-versioned above the tip's, and it is squashed onto the tip; a
+   generated-file conflict takes the pull request's side and sets `--regen`;
+2. `scripts/merge-gate.sh --base <main> --amend [--regen]` runs ONCE on the
+   batch tip, in one heavy slot, and must leave `verdict` = `OK`;
+3. green: each pull request lands in order as exactly the tree the gate
+   verified: pushed to its own branch (leased on the head the steward judged),
+   the SUCCESS `merge-gate` status posted on that exact commit, squash-merged;
+4. red: the batch is bisected; the culprit gets `merge:failed` and a comment
+   with the gate's summary and log tail, the rest land.
 
-- a host flake (an OOM kill or a build-cache trim);
-- a test timeout;
-- main moving into its files until its gates ran out;
-- any other gate failure, if you rerun it with `--flake-retry`.
-
-A run keeps its old place for up to 6 hours and 3 reruns.
-`.fm-tools/mq3/sched_test.sh` tests the scheduler.
-
-On its pool checkout, each branch's run:
-
-1. merges main in (never a rebase);
-2. re-versions the branch's migrations above main's;
-3. squashes onto main;
-4. runs `scripts/merge-gate.sh --base <main> --amend` in one heavy slot.
-
-Only the land step is serialized under one lock: fetch, push, post the
-`merge-gate` commit status on the verified commit, and squash-merge. If main moved, the queue carries the verified commit onto the new
-main and re-checks only that it builds, as long as main's new commits are
-disjoint from the branch's files and from the project-wide inputs. Otherwise it
-runs the gate again. The queue's summary, posted into each merge PR's body,
-separates the time queued for a heavy slot from the time spent running.
+The gate judges the batch tip; the commits between land ungated on their own
+(GitHub's merge queue makes the same trade), and the release gate judges main
+before any release.
 
 ### The required status, and the audited waiver
 
 `main` accepts a merge only when the commit carries a SUCCESS `merge-gate`
 commit status: the ruleset "main: merge-gate required" requires it, requires the
 head to be up to date with `main`, and has **no bypass actors**, so `gh pr merge
---admin` is refused too. The queue posts that status on the exact squashed
-commit its gate verified:
+--admin` is refused too. Only the steward posts it, on the exact commit it lands.
 
-```sh
-.fm-tools/merge_queue3.sh <remote-branch>
-```
-
-The only other way in is an audited waiver, for a hotfix that cannot wait or a
-gate failure that reproduces identically on `main`. It posts
-`WAIVED: <reason>` as the status, comments on the PR and appends to the
-waiver log:
-
-```sh
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
-```
+The only other way in is an audited waiver, the owner's, for a prod incident
+that cannot wait. It posts `WAIVED: <reason>` as the status, comments on the
+pull request and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`
+(`merge_gate_waive.sh --by <who> --reason <why> <pr>`).
 
 There is no waiver for the release gate: a red release-gate run is fixed, not
 waived (`scripts/release-tag.sh --skip-release-gate` is the hotfix escape for
