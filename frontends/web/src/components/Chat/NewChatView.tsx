@@ -19,9 +19,11 @@ import {
   defaultChatMachine,
   defaultMachineDaemon,
   hasMachine,
+  installedDaemonIds,
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
+import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -134,6 +136,9 @@ export function NewChatView({
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
+  // The machine a new chat lands on is the one the project is installed on
+  // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
+  const installs = useProjectDaemonInstalls();
   // Until the registry has answered, nothing is known about the user's
   // machines — including when the first read failed (a tab waking with a dead
   // connection). An empty list then is not "no machine", and No machine is a
@@ -403,7 +408,7 @@ export function NewChatView({
                     value={machine}
                     onChange={setMachineChoice}
                     daemons={daemons}
-                    defaultDaemon={defaultMachineDaemon(daemons)}
+                    defaultDaemon={defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))}
                     disabled={isCreating}
                   />
                 )}

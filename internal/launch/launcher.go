@@ -54,6 +54,30 @@ type Launcher struct {
 	runs      RunRecorder
 	threads   ThreadCreator
 	taskQueue string
+	pinner    ChatPinner
+}
+
+// ChatPinner decides which machine a chat that names none runs on, so the
+// choice is made once and stored instead of re-made by default resolution on
+// every tool call (research/CHAT_MACHINE_PLACEMENT.md). *daemonplacement.Pinner
+// implements it.
+type ChatPinner interface {
+	// Target is the machine chat should be pinned to, or "" to leave it
+	// unpinned. It writes nothing.
+	Target(ctx context.Context, chat *db.Chat) string
+	// Pin stores that choice on the chat row and on chat itself, leaving an
+	// existing pin alone. It never fails a launch.
+	Pin(ctx context.Context, chat *db.Chat)
+}
+
+// LauncherOption configures a Launcher.
+type LauncherOption func(*Launcher)
+
+// WithChatPinner makes every run this launcher starts pin an unpinned chat
+// first. Without it a launch pins nothing: the chat runs wherever default
+// resolution points on each call.
+func WithChatPinner(p ChatPinner) LauncherOption {
+	return func(l *Launcher) { l.pinner = p }
 }
 
 // NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
@@ -64,14 +88,19 @@ func NewLauncher(
 	temporal TemporalStarter,
 	runRecorder RunRecorder,
 	taskQueue string,
+	opts ...LauncherOption,
 ) *Launcher {
-	return &Launcher{
+	l := &Launcher{
 		repo:      repo,
 		temporal:  temporal,
 		runs:      runRecorder,
 		threads:   threadCreator,
 		taskQueue: taskQueue,
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 // errEventExists aborts the session transaction when another launch recorded
@@ -301,6 +330,13 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	chat.WorktreeID = worktreeID
 	if spec.DaemonID != "" {
 		chat.ActiveDaemonID = &spec.DaemonID
+	} else if l.pinner != nil && !chat.NoMachine {
+		// No machine chosen: the chat still lands on exactly one, decided now
+		// and stored with the row, not left to default resolution on every
+		// tool call (which moves it when another machine connects).
+		if target := l.pinner.Target(ctx, chat); target != "" {
+			chat.ActiveDaemonID = &target
+		}
 	}
 
 	// Build and validate workflow inputs BEFORE creating chat
@@ -1090,7 +1126,12 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
-	// Inject session daemon if set on chat
+	// Inject session daemon if set on chat. A chat that reaches here still
+	// unpinned (a branch's first send, a trigger-recorded chat) is pinned
+	// first; an existing pin is never overwritten.
+	if l.pinner != nil {
+		l.pinner.Pin(ctx, chat)
+	}
 	InjectSessionDaemonID(initialData, chat)
 
 	// An unattended run has nobody to answer an ask_user or ask_question; the

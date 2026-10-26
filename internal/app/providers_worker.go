@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -274,12 +275,17 @@ type RunLauncherDeps struct {
 	DB       *db.Repo
 	Temporal *TemporalClient
 	Runs     *runs.Service
+	// Router places a run's chat on a machine before it starts, so a trigger
+	// or scheduled run is pinned like an interactive one.
+	Router *WorkerDaemonRouter
 }
 
 // NewRunLauncher launches runs on the shared task queue: the launcher the
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
-	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue), nil
+	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
+	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue,
+		launch.WithChatPinner(pinner)), nil
 }
 
 // WorkerChat is the chat service as the run tools reach it on the worker.

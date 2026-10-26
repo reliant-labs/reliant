@@ -450,6 +450,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Note: Message was already saved above before ghost recovery
 
 	// Inject session daemon if set on chat
+	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
@@ -1234,6 +1235,7 @@ func (s *Service) SendMessage(
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat
+	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	// A message queued to a run that closed before its wake is still in the
@@ -1668,6 +1670,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
+	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {

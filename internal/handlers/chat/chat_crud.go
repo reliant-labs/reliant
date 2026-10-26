@@ -179,9 +179,13 @@ func (s *Service) startChat(
 			wakeChat = &pinnedCopy
 		}
 	}
-	// A nil wakeChat still wakes the user's default machine, so a run with no
-	// machine skips the wake outright rather than relying on the chat row.
+	// A new chat has no row yet; the wake still has to target the machine the
+	// launcher will pin it to, so it is asked about the chat it will be. A run
+	// with no machine skips the wake outright rather than relying on the row.
 	if !spec.NoMachine {
+		if wakeChat == nil {
+			wakeChat = &db.Chat{UserID: userID, ProjectID: msg.ProjectId, WorktreeID: msg.WorktreeId}
+		}
 		s.wakeDaemonForAttendedTurn(ctx, userID, wakeChat)
 	}
 

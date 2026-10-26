@@ -187,6 +187,29 @@ func (r *NATSDaemonRouter) ResolveDaemonID(ctx context.Context, userID string) (
 	return r.resolveDefaultDaemonID(ctx, userID)
 }
 
+// PlacementDaemonID is ResolveDaemonID for a caller that records the machine
+// rather than sending to it (pinning a chat, placing a workspace): daemonID
+// names the machine to resolve, "" is default resolution. A machine that is
+// starting or suspended answers with its record id instead of
+// ErrDaemonPending, because the id is already known and a pin must not wait
+// for the machine to come up. Every other outcome is ResolveDaemonID's, so
+// "the user has no such machine" is still ErrNoDaemon.
+func (r *NATSDaemonRouter) PlacementDaemonID(ctx context.Context, userID, daemonID string) (string, error) {
+	var selector *DaemonSelector
+	if daemonID != "" {
+		selector = &DaemonSelector{ID: daemonID}
+	}
+	id, err := r.resolveDaemonID(ctx, userID, selector)
+	if err == nil || !IsDaemonPending(err) {
+		return id, err
+	}
+	rec, found, _, lookupErr := r.lookupDaemonRecord(ctx, userID, selector)
+	if lookupErr != nil || !found {
+		return "", err
+	}
+	return rec.id, nil
+}
+
 // resolveDaemonID resolves a daemon ID for a user, optionally using a selector.
 // Resolution order:
 //  1. Local resolver (connected daemons on this gateway)

@@ -33,6 +33,12 @@ const chatParamsState = vi.hoisted(() => ({
 
 // The starter grid waited on the chat list before rendering. It is resolved
 // here, so if a grid comes back on that condition these tests see it.
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: [{ id: "c1" }], isSuccess: true }),
 }));

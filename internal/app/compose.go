@@ -452,6 +452,7 @@ func (g *Graph) newRunLauncher() (*launch.Launcher, error) {
 		Temporal: g.TemporalClient(),
 		Runs:     g.RunLifecycle(),
 		DB:       g.Database(),
+		Router:   g.WorkerDaemonRouter(),
 	})
 }
 

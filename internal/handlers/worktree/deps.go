@@ -54,4 +54,5 @@ type Repository interface {
 	repopkg.AdoptStore
 	machinewake.Owners
 	daemonplacement.WorktreeReader
+	daemonplacement.Installs
 }

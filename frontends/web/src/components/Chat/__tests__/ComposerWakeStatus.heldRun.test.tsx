@@ -23,6 +23,12 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useDaemonList: () => ({ data: state.daemons, isLoading: false }),
   useResumeDaemon: () => ({ mutate: state.resume, isPending: false }),

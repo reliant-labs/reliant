@@ -60,18 +60,20 @@ export interface ChatMachineNotice {
 }
 
 /**
- * The machine a chat runs on: its pinned daemon, or for an unpinned chat the
- * one the server's default resolution picks. Undefined while the registry has
+ * The machine a chat runs on: its pinned daemon, or for an unpinned chat (one
+ * whose run has not started yet) the machine the server will pin it to
+ * (`installedOn`: the project's installs, see defaultMachineDaemon). Undefined while the registry has
  * not answered, and for a pinned machine that no longer exists (the composer
  * says that one).
  */
 export function resolveChatMachine(
   daemons: ReadonlyArray<DaemonInfo> | undefined,
   pinnedDaemonId: string | undefined,
+  installedOn?: ReadonlySet<string>,
 ): DaemonInfo | undefined {
   if (!daemons) return undefined;
   if (pinnedDaemonId) return daemons.find((d) => d.daemonId === pinnedDaemonId);
-  return defaultMachineDaemon(daemons);
+  return defaultMachineDaemon(daemons, installedOn);
 }
 
 export interface ChatMachineNoticeInput {
