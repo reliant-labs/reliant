@@ -21,8 +21,6 @@ vi.mock("../../api/streaming-grpc", () => ({
   UserStreamingService: vi.fn().mockImplementation(() => ({
     isConnected: () => false,
     disconnect: vi.fn(),
-    subscribeToChatDetails: vi.fn(),
-    unsubscribeFromChatDetails: vi.fn(),
   })),
 }));
 

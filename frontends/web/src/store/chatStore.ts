@@ -35,7 +35,7 @@ import {
 
 import * as Sentry from "@sentry/react";
 
-// Chat streaming is handled via the unified gRPC stream in globalUpdatesStore
+// Chat streaming is handled by the per-chat stream globalUpdatesStore owns
 import type {
   ChatUpdate,
   ProtoMessageUpdate,
@@ -957,7 +957,7 @@ interface ChatStoreState {
   // the chat has been reached (or nothing could be loaded).
   loadOlderMessages: (chatId: string) => Promise<boolean>;
 
-  // Stream methods (chat detail events are delivered via the unified global stream)
+  // Stream methods (chat detail events are delivered by the per-chat stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
   // Clears streaming placeholders/buffers for a chat. Called when the chat's
   // activity goes IDLE — the authoritative "nothing is streaming" signal —
@@ -1597,7 +1597,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     // Start WebSocket for real-time updates (synchronous setup, async connection)
-    // Subscribe to per-chat detail events via the unified global stream
+    // Subscribe to per-chat detail events (the per-chat stream; the user stream is untouched)
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
@@ -2182,7 +2182,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
 
-  // Process chat detail events from the unified global stream.
+  // Process chat detail events from the per-chat stream.
   // Called by globalUpdatesStore when per-chat events arrive.
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot = false) => {
     // Helper to process streaming deltas and build/update a temporary streaming message
@@ -3680,10 +3680,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     await resolvePendingQuestion(chatId, questionId, action, responseData);
   },
 
-  // Refresh chat - reconnects the unified stream to re-fetch data
+  // Refresh chat - re-asserts the chat stream
   refreshChat: async (chatId: string) => {
-    // Data refreshes via the unified global stream reconnection
-    // Re-subscribing to the chat triggers a fresh sync snapshot
+    // Re-subscribing restores a dropped chat stream (resuming from its
+    // cursor); it is a no-op while the stream is already up.
     getGlobalUpdatesStore()?.subscribeToChatDetails(chatId);
   },
 
@@ -3877,7 +3877,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Connection restored - streaming is managed by globalUpdatesStore
   onConnectionRestored: () => {
     set({ error: null });
-    // The unified global stream reconnects automatically via globalUpdatesStore
+    // Both streams reconnect on their own (globalUpdatesStore)
   },
 
   // Clear error
@@ -4113,7 +4113,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     streamingBuffers.clear();
 
-    // Unsubscribe from chat details in the unified stream
+    // Unsubscribe from chat details (closes the chat stream)
     try {
       getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
     } catch {

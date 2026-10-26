@@ -20,8 +20,6 @@ vi.mock("../../api/streaming-grpc", () => ({
   UserStreamingService: vi.fn().mockImplementation(() => ({
     isConnected: () => false,
     disconnect: vi.fn(),
-    subscribeToChatDetails: vi.fn(),
-    unsubscribeFromChatDetails: vi.fn(),
   })),
 }));
 
@@ -205,14 +203,13 @@ describe("STREAM_INVALIDATED_SCOPES covers every stream handler", () => {
     const store = useGlobalUpdatesStore.getState();
     for (const event of everyStreamEvent()) store.handleUpdate([event]);
     // The chat stream's refetch signals (chatStore) reach the same subscribers.
-    useGlobalUpdatesStore.setState({ subscribedChatId: "chat-1" });
     store.handleChatUpdate(
+      "chat-1",
       REFETCH_TYPES.map((type) => ({ update_type: "refetch", type }) as unknown as ChatUpdate),
     );
     // refetchStore debounces before notifying its subscribers.
     await vi.advanceTimersByTimeAsync(1_000);
     await settle();
-    useGlobalUpdatesStore.setState({ subscribedChatId: null });
 
     const roots = Object.values(STREAM_INVALIDATED_SCOPES);
     const unregistered = invalidated.filter((key) => !key || !roots.some((root) => isUnderRoot(key, root)));

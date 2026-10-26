@@ -4,7 +4,6 @@ package streaming
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sort"
 	"time"
 
@@ -65,10 +64,10 @@ const (
 	maxChatReplayGap = 2000
 )
 
-// StreamUserUpdates implements the unified server-streaming for all updates.
-// It always delivers user-level events (chat state, projects, processes, etc.).
-// When subscribe_chat_id is set, it ALSO delivers per-chat detail events
-// (messages, approvals, tool calls, streaming deltas, workflow/node events).
+// StreamUserUpdates streams user-level events (chat state, projects,
+// processes, daemon signals, ...). It carries no per-chat detail: each open
+// chat has its own StreamChatUpdates, so switching chats never touches this
+// stream.
 func (s *Service) StreamUserUpdates(
 	ctx context.Context,
 	req *connect.Request[reliantv1.StreamUserUpdatesRequest],
@@ -81,9 +80,7 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	sinceSeq := req.Msg.SinceSeq
-	subscribeChatID := req.Msg.GetSubscribeChatId()
-	chatSinceSeq := req.Msg.ChatSinceSeq
-	filter := newUserUpdateFilter(s.deps.Repo, req.Msg.GetProjectId(), subscribeChatID)
+	filter := userUpdateFilter{projectID: req.Msg.GetProjectId()}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -104,8 +101,9 @@ func (s *Service) StreamUserUpdates(
 	}
 
 	// Subscribe to user updates before the catch-up read below, for the same
-	// reason as the per-chat hub: an event published between the catch-up
-	// query and the subscription would be in neither.
+	// reason as StreamChatUpdates subscribes before its snapshot: an event
+	// published between the catch-up query and the subscription would be in
+	// neither.
 	var userUpdateSub streaming.UpdateSubscription[db.UserUpdate]
 	if s.deps.UserUpdates != nil {
 		userUpdateSub = s.deps.UserUpdates.Subscribe(ctx, userID)
@@ -122,96 +120,10 @@ func (s *Service) StreamUserUpdates(
 		lastUserSeq = latestSeq
 	}
 
-	// --- Per-chat subscription initialization ---
-	var lastChatSeq int64
-	var hubSub streaming.Subscription
-	var chatUpdateSub streaming.UpdateSubscription[db.ChatUpdate]
-
-	if subscribeChatID != "" {
-		// Verify user owns the chat before subscribing
-		chat, err := s.deps.Repo.GetChat(ctx, subscribeChatID)
-		if err != nil {
-			return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
-		}
-		if chat == nil || chat.UserID != userID {
-			return svcerr.NotFound("chat")
-		}
-
-		logging.DebugContext(ctx, LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
-			"userID", userID, "chatID", subscribeChatID[:8])
-
-		// Subscribe to the streaming hub for ephemeral events (streaming deltas)
-		if s.deps.Deltas != nil {
-			hubSub = s.deps.Deltas.Subscribe(ctx, subscribeChatID)
-		}
-
-		// Subscribe to persisted chat updates BEFORE the snapshot below.
-		// buildChatSnapshot reads its sequence high-water mark first and then
-		// does substantially more DB work; an update committed inside that
-		// window would be published with no subscriber attached and, since
-		// core NATS has no retention, lost from the live stream — while also
-		// being absent from the snapshot, whose sequence predates it. That
-		// loses the update permanently when it is the last one of a turn,
-		// because no later event ever arrives to trip the client's gap
-		// detection. Subscribing first makes the two overlap instead; the
-		// seq <= lastChatSeq dedup in the main loop drops the redundancy.
-		if s.deps.ChatUpdates != nil {
-			chatUpdateSub = s.deps.ChatUpdates.Subscribe(ctx, subscribeChatID)
-			defer chatUpdateSub.Unsubscribe()
-		}
-
-		// Send initial chat sync: a snapshot for an initial load, otherwise a
-		// replay from the client's cursor — unless that replay should not be
-		// attempted (see chatCursorNeedsSnapshot), which also gets a snapshot.
-		useSnapshot := chatSinceSeq == 0
-		var chatLatestSeq int64
-		if !useSnapshot {
-			chatLatestSeq, err = s.deps.Repo.GetLatestUpdateSequence(ctx, subscribeChatID)
-			if err != nil {
-				return svcerr.WrapOr(err, svcerr.Internal("failed to read the latest chat update sequence"))
-			}
-			if chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq) {
-				logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
-					"chatID", subscribeChatID[:8], "chatSinceSeq", chatSinceSeq, "chatLatestSeq", chatLatestSeq)
-				useSnapshot = true
-			}
-		}
-
-		if useSnapshot {
-			// lastChatSeq comes from the snapshot's own high-water mark, not
-			// chatLatestSeq above: the snapshot reads it again, later, and
-			// anything committed in between is in the snapshot.
-			snapshotSeq, err := s.sendChatSnapshotViaUserStream(ctx, subscribeChatID, stream)
-			if err != nil {
-				return svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
-			}
-			lastChatSeq = snapshotSeq
-		} else {
-			if chatLatestSeq > chatSinceSeq {
-				if err := s.sendChatUpdateBatchesViaUserStream(ctx, subscribeChatID, chatSinceSeq, chatLatestSeq, stream); err != nil {
-					return svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
-				}
-			}
-			lastChatSeq = chatLatestSeq
-		}
-
-		// The initial chat sync is over, whichever path it took — including a
-		// replay of nothing, which sent no chat frame. Say so explicitly: the
-		// client shows its cached transcript as "syncing" until this arrives,
-		// and no other frame can tell it the sync is complete.
-		if err := stream.Send(&reliantv1.UserStreamEvent{
-			Event: &reliantv1.UserStreamEvent_ChatCaughtUp{
-				ChatCaughtUp: &reliantv1.ChatCaughtUp{LatestSequence: lastChatSeq},
-			},
-		}); err != nil {
-			return err
-		}
-	}
-
 	// --- Event-driven main loop ---
-	// Both hubs are subscribed above, before their respective catch-up reads,
-	// so live events overlap the replay rather than falling between the two.
-	// The seq <= last*Seq checks below discard the overlap.
+	// The hub is subscribed above, before the catch-up read, so live events
+	// overlap the replay rather than falling between the two. The
+	// seq <= lastUserSeq check below discards the overlap.
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
@@ -219,14 +131,6 @@ func (s *Service) StreamUserUpdates(
 	var userUpdateCh <-chan streaming.UpdateEvent[db.UserUpdate]
 	if userUpdateSub != nil {
 		userUpdateCh = userUpdateSub.Events()
-	}
-	var chatUpdateCh <-chan streaming.UpdateEvent[db.ChatUpdate]
-	if chatUpdateSub != nil {
-		chatUpdateCh = chatUpdateSub.Events()
-	}
-	var hubEventCh <-chan streaming.StreamingDelta
-	if hubSub != nil {
-		hubEventCh = hubSub.Events()
 	}
 
 	for {
@@ -275,41 +179,6 @@ func (s *Service) StreamUserUpdates(
 				return err
 			}
 
-		case event := <-chatUpdateCh:
-			// Dedup: skip events already sent during catch-up
-			if event.SequenceNumber <= lastChatSeq {
-				continue
-			}
-			lastChatSeq = event.SequenceNumber
-			if err := s.sendSingleChatUpdate(event.Payload, lastChatSeq, stream); err != nil {
-				return err
-			}
-
-		case delta, ok := <-hubEventCh:
-			if !ok {
-				// The ephemeral delta hub went away (NATS restart wiped the
-				// memory-backed stream, consumer torn down). That is a
-				// DEGRADATION of live token streaming, not a reason to end the
-				// stream: everything durable — messages, approvals, tool calls,
-				// chat state — still arrives over chatUpdateCh from the DB.
-				//
-				// Returning here used to end the RPC, which the client reads as
-				// a disconnect; it reconnects, resubscribes, the hub fails the
-				// same way, and the cycle repeats. Measured in dev at ~20
-				// reconnects/second for hours, each dragging a full
-				// ListChats/GetChat/ListArchivedChats refetch behind it.
-				//
-				// Drop to a nil channel so this branch is never selected again
-				// and the stream stays up on its durable path.
-				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Delta hub closed — continuing without live deltas",
-					"chatID", subscribeChatID[:min(8, len(subscribeChatID))])
-				hubEventCh = nil
-				continue
-			}
-			if err := s.sendStreamingDeltaViaUserStream(subscribeChatID, delta, lastChatSeq, stream); err != nil {
-				return err
-			}
-
 		case <-heartbeatTicker.C:
 			if err := s.sendHeartbeat(stream); err != nil {
 				return err
@@ -318,21 +187,7 @@ func (s *Service) StreamUserUpdates(
 	}
 }
 
-// chatCursorNeedsSnapshot reports whether a reconnect at chatSinceSeq (> 0)
-// should get a fresh snapshot rather than an incremental replay up to
-// chatLatestSeq.
-//
-//   - The gap exceeds maxChatReplayGap: replay would cost more than the
-//     snapshot and deliver less useful state. See maxChatReplayGap.
-//   - The cursor is AHEAD of the chat: there is nothing to replay from. The
-//     cursor belongs to another database, or to a chat whose update log was
-//     rebuilt; "replay nothing" sent no chat state at all, leaving the client
-//     on its stale cache with no signal that it was wrong.
-func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
-	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap
-}
-
-// sendHeartbeat sends a heartbeat through the unified stream
+// sendHeartbeat sends a heartbeat on the user stream
 func (s *Service) sendHeartbeat(stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Heartbeat{
@@ -396,133 +251,6 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 		logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send user update", "error", err)
 		return err
 	}
-	return nil
-}
-
-// sendSingleChatUpdate sends a single chat update event received from the UpdateHub.
-func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
-	dataJSON := formatChatUpdateDataJSON(update.UpdateType, update.Data)
-	protoUpdate := &reliantv1.ChatUpdateData{
-		UpdateType:     update.UpdateType,
-		SequenceNumber: update.SequenceNumber,
-		EntityId:       update.EntityID,
-		ChatId:         update.ChatID,
-		DataJson:       dataJSON,
-		CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
-	}
-	event := &reliantv1.UserStreamEvent{
-		Event: &reliantv1.UserStreamEvent_ChatUpdates{
-			ChatUpdates: &reliantv1.ChatUpdateBatch{
-				Updates:        []*reliantv1.ChatUpdateData{protoUpdate},
-				LatestSequence: latestSeq,
-			},
-		},
-	}
-	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send chat update", "error", err)
-		return err
-	}
-	return nil
-}
-
-// sendStreamingDeltaViaUserStream sends an ephemeral streaming delta through the unified stream
-func (s *Service) sendStreamingDeltaViaUserStream(chatID string, delta streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
-	deltaJSON, err := json.Marshal(delta)
-	if err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to marshal streaming delta", "error", err, "chatID", chatID[:8])
-		return nil // Don't break stream for marshal errors
-	}
-
-	event := &reliantv1.UserStreamEvent{
-		Event: &reliantv1.UserStreamEvent_ChatUpdates{
-			ChatUpdates: &reliantv1.ChatUpdateBatch{
-				Updates: []*reliantv1.ChatUpdateData{
-					{
-						UpdateType:     reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA,
-						SequenceNumber: 0, // Ephemeral - no sequence number
-						EntityId:       "",
-						ChatId:         chatID,
-						DataJson:       string(deltaJSON),
-						CreatedAt:      time.Now().Format(time.RFC3339Nano),
-					},
-				},
-				LatestSequence: lastChatSeq,
-			},
-		},
-	}
-	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send streaming delta", "error", err, "chatID", chatID[:8])
-		return err
-	}
-	return nil
-}
-
-// sendChatSnapshotViaUserStream sends a chat snapshot through the unified stream
-func (s *Service) sendChatSnapshotViaUserStream(ctx context.Context, chatID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) (int64, error) {
-	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chatID)
-	if err != nil {
-		return 0, err
-	}
-
-	event := &reliantv1.UserStreamEvent{
-		Event: &reliantv1.UserStreamEvent_ChatSyncSnapshot{
-			ChatSyncSnapshot: snapshot,
-		},
-	}
-	if err := stream.Send(event); err != nil {
-		return 0, err
-	}
-
-	return latestSeq, nil
-}
-
-// sendChatUpdateBatchesViaUserStream sends chat update batches through the unified stream
-func (s *Service) sendChatUpdateBatchesViaUserStream(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
-	currentSeq := startSeq
-
-	for currentSeq < latestSeq {
-		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, batchSize)
-		if err != nil {
-			return err
-		}
-
-		if len(updates) == 0 {
-			break
-		}
-
-		protoUpdates := make([]*reliantv1.ChatUpdateData, 0, len(updates))
-		maxSeq := currentSeq
-		for _, update := range updates {
-			if update.SequenceNumber > maxSeq {
-				maxSeq = update.SequenceNumber
-			}
-
-			dataJSON := formatChatUpdateDataJSON(update.UpdateType, update.Data)
-			protoUpdates = append(protoUpdates, &reliantv1.ChatUpdateData{
-				UpdateType:     update.UpdateType,
-				SequenceNumber: update.SequenceNumber,
-				EntityId:       update.EntityID,
-				ChatId:         update.ChatID,
-				DataJson:       dataJSON,
-				CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
-			})
-		}
-
-		event := &reliantv1.UserStreamEvent{
-			Event: &reliantv1.UserStreamEvent_ChatUpdates{
-				ChatUpdates: &reliantv1.ChatUpdateBatch{
-					Updates:        protoUpdates,
-					LatestSequence: maxSeq,
-				},
-			},
-		}
-		if err := stream.Send(event); err != nil {
-			return err
-		}
-
-		currentSeq = maxSeq
-	}
-
 	return nil
 }
 
@@ -1196,7 +924,7 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 // the last one, with no updates — its only content is the cursor, and without
 // it a client whose project saw nothing new would resume from a stale cursor
 // and re-read the same rows on every reconnect.
-func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, filter *userUpdateFilter, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, filter userUpdateFilter, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
@@ -1251,83 +979,18 @@ func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, star
 	return nil
 }
 
-// userUpdateFilter decides which user updates one stream delivers.
-//
-// A stream is scoped to the client's current project, but a chat the stream
-// explicitly subscribes to (subscribe_chat_id) is the client's focus no matter
-// which project it belongs to. A deep link or notification can open a chat
-// outside the project the client last selected; without the exemption that
-// chat's status, activity and run state were all dropped, and so were the
-// chats an agent started from it (agent.start_run), because both are
-// project-filtered user updates.
+// userUpdateFilter decides which user updates one user stream delivers: those
+// in the client's current project (see userUpdateMatchesProject). The chat the
+// client has open may be in another project; StreamChatUpdates forwards that
+// chat's updates the filter drops (chatFocusFilter), so this stream needs no
+// knowledge of which chat is open.
 type userUpdateFilter struct {
-	projectID       string
-	subscribeChatID string
-	// parentOf returns the chat that started chatID through agent.start_run,
-	// or "" when chatID was not started that way. A non-nil error means the
-	// answer is unknown, not "none".
-	parentOf func(ctx context.Context, chatID string) (string, error)
-	// childOfSubscribed memoizes parentOf(chat) == subscribeChatID per chat.
-	childOfSubscribed map[string]bool
+	projectID string
 }
 
-func newUserUpdateFilter(repo Repository, projectID, subscribeChatID string) *userUpdateFilter {
-	f := &userUpdateFilter{projectID: projectID, subscribeChatID: subscribeChatID}
-	if subscribeChatID != "" && repo != nil {
-		f.childOfSubscribed = map[string]bool{}
-		f.parentOf = func(ctx context.Context, chatID string) (string, error) {
-			ev, err := repo.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chatID)
-			if errors.Is(err, core.ErrTriggerEventNotFound) {
-				return "", nil
-			}
-			if err != nil {
-				return "", err
-			}
-			parent, _ := ev.Payload["parent_chat_id"].(string)
-			return parent, nil
-		}
-	}
-	return f
-}
-
-// matches reports whether the stream should receive the update. A stream is
-// used by one goroutine, so the memo needs no lock.
-func (f *userUpdateFilter) matches(ctx context.Context, update *db.UserUpdate) bool {
-	if userUpdateMatchesProject(update, f.projectID) {
-		return true
-	}
-	chatID := userUpdateChatID(update)
-	if chatID == "" || f.subscribeChatID == "" {
-		return false
-	}
-	if chatID == f.subscribeChatID {
-		return true
-	}
-	if f.parentOf == nil {
-		return false
-	}
-	child, ok := f.childOfSubscribed[chatID]
-	if !ok {
-		parent, err := f.parentOf(ctx, chatID)
-		if err != nil {
-			// Unknown: drop this update, ask again for the next one.
-			return false
-		}
-		child = parent == f.subscribeChatID
-		f.childOfSubscribed[chatID] = child
-	}
-	return child
-}
-
-// userUpdateChatID is the chat a chat-scoped update is about, or "".
-func userUpdateChatID(update *db.UserUpdate) string {
-	if update.ChatID != nil {
-		return *update.ChatID
-	}
-	if update.EntityType == db.EntityTypeChat {
-		return update.EntityID
-	}
-	return ""
+// matches reports whether the stream should receive the update.
+func (f userUpdateFilter) matches(_ context.Context, update *db.UserUpdate) bool {
+	return userUpdateMatchesProject(update, f.projectID)
 }
 
 // userUpdateMatchesProject reports whether a project-scoped subscriber should

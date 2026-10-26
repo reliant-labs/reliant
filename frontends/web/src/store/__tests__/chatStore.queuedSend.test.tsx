@@ -144,7 +144,7 @@ async function deliverDrain(rowId: string) {
     { update_type: "agent_messages_drained", thread: THREAD, message_ids: [rowId] },
   ] as unknown as ChatUpdate[];
   act(() => {
-    useGlobalUpdatesStore.getState().handleChatUpdate(updates);
+    useGlobalUpdatesStore.getState().handleChatUpdate(CHAT, updates);
   });
   await settle();
 }

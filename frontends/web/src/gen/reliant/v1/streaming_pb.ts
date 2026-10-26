@@ -15,11 +15,131 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/streaming.proto.
  */
 export const file_reliant_v1_streaming: GenFile = /*@__PURE__*/
-  fileDesc("ChpyZWxpYW50L3YxL3N0cmVhbWluZy5wcm90bxIKcmVsaWFudC52MSKyAgoQQ2hhdFN5bmNTbmFwc2hvdBIlCghtZXNzYWdlcxgBIAMoCzITLnJlbGlhbnQudjEuTWVzc2FnZRIxCg1vdGhlcl91cGRhdGVzGAIgAygLMhoucmVsaWFudC52MS5DaGF0VXBkYXRlRGF0YRIXCg9sYXRlc3Rfc2VxdWVuY2UYAyABKAMSDQoFdG90YWwYBCABKAUSEAoIaGFzX21vcmUYBSABKAgSEgoKb2xkZXN0X3NlcRgGIAEoAxIaChJ0aHJlYWRfdG9rZW5fY291bnQYByABKAMSHAoUY29tcGFjdGlvbl90aHJlc2hvbGQYCCABKAMSPAoQYWN0aXZlX3dvcmtmbG93cxgJIAMoCzIiLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZSJXCg9DaGF0VXBkYXRlQmF0Y2gSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAIgASgDIqUBCg5DaGF0VXBkYXRlRGF0YRIvCgt1cGRhdGVfdHlwZRgBIAEoDjIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZVR5cGUSFwoPc2VxdWVuY2VfbnVtYmVyGAIgASgDEhEKCWVudGl0eV9pZBgDIAEoCRIPCgdjaGF0X2lkGAQgASgJEhEKCWRhdGFfanNvbhgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJIqMBChhTdHJlYW1Vc2VyVXBkYXRlc1JlcXVlc3QSEQoJc2luY2Vfc2VxGAEgASgDEh4KEXN1YnNjcmliZV9jaGF0X2lkGAIgASgJSACIAQESFgoOY2hhdF9zaW5jZV9zZXEYAyABKAMSFwoKcHJvamVjdF9pZBgEIAEoCUgBiAEBQhQKEl9zdWJzY3JpYmVfY2hhdF9pZEINCgtfcHJvamVjdF9pZCLsAwoPVXNlclN0cmVhbUV2ZW50EigKBHN5bmMYASABKAsyGC5yZWxpYW50LnYxLlVzZXJTeW5jSW5mb0gAEi4KB3VwZGF0ZXMYAiABKAsyGy5yZWxpYW50LnYxLlVzZXJVcGRhdGVCYXRjaEgAEioKCWhlYXJ0YmVhdBgDIAEoCzIVLnJlbGlhbnQudjEuSGVhcnRiZWF0SAASOgoSY2hhdF9zeW5jX3NuYXBzaG90GAQgASgLMhwucmVsaWFudC52MS5DaGF0U3luY1NuYXBzaG90SAASMwoMY2hhdF91cGRhdGVzGAUgASgLMhsucmVsaWFudC52MS5DaGF0VXBkYXRlQmF0Y2hIABI8Cg53b3JrZmxvd19ldmVudBgGIAEoCzIiLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25FdmVudEgAEjQKCm5vZGVfZXZlbnQYByABKAsyHi5yZWxpYW50LnYxLk5vZGVFeGVjdXRpb25FdmVudEgAEjEKDWV4ZWN1dGlvbl9sb2cYCCABKAsyGC5yZWxpYW50LnYxLkV4ZWN1dGlvbkxvZ0gAEjIKDmNoYXRfY2F1Z2h0X3VwGAkgASgLMhgucmVsaWFudC52MS5DaGF0Q2F1Z2h0VXBIAEIHCgVldmVudCInCgxDaGF0Q2F1Z2h0VXASFwoPbGF0ZXN0X3NlcXVlbmNlGAEgASgDIiUKDFVzZXJTeW5jSW5mbxIVCg1sYXN0X3NlcXVlbmNlGAEgASgDIlcKD1VzZXJVcGRhdGVCYXRjaBIrCgd1cGRhdGVzGAEgAygLMhoucmVsaWFudC52MS5Vc2VyVXBkYXRlRGF0YRIXCg9sYXRlc3Rfc2VxdWVuY2UYAiABKAMi0gIKDlVzZXJVcGRhdGVEYXRhEgoKAmlkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSFwoPc2VxdWVuY2VfbnVtYmVyGAMgASgDEhcKCnByb2plY3RfaWQYBCABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgFIAEoCUgBiAEBEhQKB2NoYXRfaWQYBiABKAlIAogBARIvCgt1cGRhdGVfdHlwZRgHIAEoDjIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZVR5cGUSKwoLZW50aXR5X3R5cGUYCCABKA4yFi5yZWxpYW50LnYxLkVudGl0eVR5cGUSEQoJZW50aXR5X2lkGAkgASgJEhEKCWRhdGFfanNvbhgKIAEoCRISCgpjcmVhdGVkX2F0GAsgASgJQg0KC19wcm9qZWN0X2lkQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCIeCglIZWFydGJlYXQSEQoJdGltZXN0YW1wGAEgASgDIvEEChJOb2RlRXhlY3V0aW9uU3RhdGUSDwoHbm9kZV9pZBgBIAEoCRIRCglub2RlX3R5cGUYAiABKAkSLwoGc3RhdHVzGAMgASgOMh8ucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdHVzEhMKC3dvcmtmbG93X2lkGAQgASgJEhsKDnBhcmVudF9ub2RlX2lkGAUgASgJSACIAQESGAoLYWN0aXZpdHlfaWQYBiABKAlIAYgBARIXCgpzdGFydGVkX2F0GAcgASgDSAKIAQESGQoMY29tcGxldGVkX2F0GAggASgDSAOIAQESGAoLZHVyYXRpb25fbXMYCSABKANIBIgBARIWCglleGl0X2NvZGUYCiABKAVIBYgBARIaCg1lcnJvcl9tZXNzYWdlGAsgASgJSAaIAQESFgoJaXRlcmF0aW9uGAwgASgFSAeIAQESGwoObWF4X2l0ZXJhdGlvbnMYDSABKAVICIgBARI+CghtZXRhZGF0YRgOIAMoCzIsLnJlbGlhbnQudjEuTm9kZUV4ZWN1dGlvblN0YXRlLk1ldGFkYXRhRW50cnkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQhEKD19wYXJlbnRfbm9kZV9pZEIOCgxfYWN0aXZpdHlfaWRCDQoLX3N0YXJ0ZWRfYXRCDwoNX2NvbXBsZXRlZF9hdEIOCgxfZHVyYXRpb25fbXNCDAoKX2V4aXRfY29kZUIQCg5fZXJyb3JfbWVzc2FnZUIMCgpfaXRlcmF0aW9uQhEKD19tYXhfaXRlcmF0aW9ucyKCBQoWV29ya2Zsb3dFeGVjdXRpb25TdGF0ZRITCgt3b3JrZmxvd19pZBgBIAEoCRIVCg13b3JrZmxvd19uYW1lGAIgASgJEg8KB2NoYXRfaWQYAyABKAkSMwoGc3RhdHVzGAQgASgOMiMucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXR1cxIfChJwYXJlbnRfd29ya2Zsb3dfaWQYBSABKAlIAIgBARIOCgZ0aHJlYWQYBiABKAkSFAoMYWN0aXZlX25vZGVzGAcgAygJEi0KBW5vZGVzGAggAygLMh4ucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdGUSNAoIY2hpbGRyZW4YCSADKAsyIi5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUSFwoKc3RhcnRlZF9hdBgKIAEoA0gBiAEBEhkKDGNvbXBsZXRlZF9hdBgLIAEoA0gCiAEBEj4KBnBhcmFtcxgMIAMoCzIuLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZS5QYXJhbXNFbnRyeRJACgdvdXRwdXRzGA0gAygLMi8ucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXRlLk91dHB1dHNFbnRyeRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGi4KDE91dHB1dHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQhUKE19wYXJlbnRfd29ya2Zsb3dfaWRCDQoLX3N0YXJ0ZWRfYXRCDwoNX2NvbXBsZXRlZF9hdCKoAgoMRXhlY3V0aW9uTG9nEgoKAmlkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEhQKB25vZGVfaWQYAyABKAlIAIgBARIsCgVsZXZlbBgEIAEoDjIdLnJlbGlhbnQudjEuRXhlY3V0aW9uTG9nTGV2ZWwSDwoHbWVzc2FnZRgFIAEoCRIRCgl0aW1lc3RhbXAYBiABKAMSEwoGc291cmNlGAcgASgJSAGIAQESNAoGZmllbGRzGAggAygLMiQucmVsaWFudC52MS5FeGVjdXRpb25Mb2cuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIKCghfbm9kZV9pZEIJCgdfc291cmNlIuIBChJOb2RlRXhlY3V0aW9uRXZlbnQSNgoKZXZlbnRfdHlwZRgBIAEoDjIiLnJlbGlhbnQudjEuTm9kZUV4ZWN1dGlvbkV2ZW50VHlwZRIsCgRub2RlGAIgASgLMh4ucmVsaWFudC52MS5Ob2RlRXhlY3V0aW9uU3RhdGUSHQoQcHJvZ3Jlc3NfbWVzc2FnZRgDIAEoCUgAiAEBEh0KEHByb2dyZXNzX3BlcmNlbnQYBCABKAFIAYgBAUITChFfcHJvZ3Jlc3NfbWVzc2FnZUITChFfcHJvZ3Jlc3NfcGVyY2VudCKKAQoWV29ya2Zsb3dFeGVjdXRpb25FdmVudBI6CgpldmVudF90eXBlGAEgASgOMiYucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvbkV2ZW50VHlwZRI0Cgh3b3JrZmxvdxgCIAEoCzIiLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZSqzBQoOQ2hhdFVwZGF0ZVR5cGUSIAocQ0hBVF9VUERBVEVfVFlQRV9VTlNQRUNJRklFRBAAEhwKGENIQVRfVVBEQVRFX1RZUEVfTUVTU0FHRRABEh0KGUNIQVRfVVBEQVRFX1RZUEVfQVBQUk9WQUwQAhIbChdDSEFUX1VQREFURV9UWVBFX1RIUkVBRBADEh4KGkNIQVRfVVBEQVRFX1RZUEVfVE9PTF9DQUxMEAQSJAogQ0hBVF9VUERBVEVfVFlQRV9XT1JLRkxPV19TVEFUVVMQBRIaChZDSEFUX1VQREFURV9UWVBFX0VSUk9SEAYSGQoVQ0hBVF9VUERBVEVfVFlQRV9DSEFUEAcSHwobQ0hBVF9VUERBVEVfVFlQRV9SVU5fT1VUUFVUEAgSIwofQ0hBVF9VUERBVEVfVFlQRV9OT0RFX0VYRUNVVElPThAJEiIKHkNIQVRfVVBEQVRFX1RZUEVfRVhFQ1VUSU9OX0xPRxAKEicKI0NIQVRfVVBEQVRFX1RZUEVfV09SS0ZMT1dfRVhFQ1VUSU9OEAsSGQoVQ0hBVF9VUERBVEVfVFlQRV9JTkZPEA0SHAoYQ0hBVF9VUERBVEVfVFlQRV9XQVJOSU5HEA4SHAoYQ0hBVF9VUERBVEVfVFlQRV9SRUZFVENIEA8SJAogQ0hBVF9VUERBVEVfVFlQRV9TVFJFQU1JTkdfREVMVEEQEBIlCiFDSEFUX1VQREFURV9UWVBFX1NLSUxMX0lOVk9DQVRJT04QERIdChlDSEFUX1VQREFURV9UWVBFX1FVRVNUSU9OEBISJQohQ0hBVF9VUERBVEVfVFlQRV9TVFJFQU1fRklOQUxJWkVEEBMSKwonQ0hBVF9VUERBVEVfVFlQRV9BR0VOVF9NRVNTQUdFU19EUkFJTkVEEBQq7gYKDlVzZXJVcGRhdGVUeXBlEiAKHFVTRVJfVVBEQVRFX1RZUEVfVU5TUEVDSUZJRUQQABImCiJVU0VSX1VQREFURV9UWVBFX0NIQVRfU1RBVEVfQ0hBTkdFEAESKAokVVNFUl9VUERBVEVfVFlQRV9DSEFUX0NPTkZJR19DSEFOR0VEEAISIQodVVNFUl9VUERBVEVfVFlQRV9DSEFUX0NSRUFURUQQAxInCiNVU0VSX1VQREFURV9UWVBFX0NIQVRfVElUTEVfQ0hBTkdFRBAEEiEKHVVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9ERUxFVEVEEAUSKgomVVNFUl9VUERBVEVfVFlQRV9DSEFUX0FDVElWSVRZX0NIQU5HRUQQBhIkCiBVU0VSX1VQREFURV9UWVBFX1BST0pFQ1RfQ1JFQVRFRBAHEiQKIFVTRVJfVVBEQVRFX1RZUEVfUFJPSkVDVF9ERUxFVEVEEAgSLQopVVNFUl9VUERBVEVfVFlQRV9QUk9KRUNUX1NFVFRJTkdTX0NIQU5HRUQQCRIlCiFVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX0NSRUFURUQQChIlCiFVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX0RFTEVURUQQCxIsCihVU0VSX1VQREFURV9UWVBFX1dPUktUUkVFX1NUQVRVU19DSEFOR0VEEAwSJAogVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX1NUQVJURUQQDRIjCh9VU0VSX1VQREFURV9UWVBFX1BST0NFU1NfT1VUUFVUEA4SJgoiVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX0NPTVBMRVRFRBAPEiMKH1VTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19GQUlMRUQQEBIpCiVVU0VSX1VQREFURV9UWVBFX1BST0NFU1NfUE9SVF9DSEFOR0VEEBESIQodVVNFUl9VUERBVEVfVFlQRV9OT1RJRklDQVRJT04QEhIcChhVU0VSX1VQREFURV9UWVBFX1JFRkVUQ0gQExIlCiFVU0VSX1VQREFURV9UWVBFX0RBRU1PTl9IRUFSVEJFQVQQFBIrCidVU0VSX1VQREFURV9UWVBFX1dPUktGTE9XX0RSQUZUX1VQREFURUQQFSrOAQoKRW50aXR5VHlwZRIbChdFTlRJVFlfVFlQRV9VTlNQRUNJRklFRBAAEhQKEEVOVElUWV9UWVBFX0NIQVQQARIXChNFTlRJVFlfVFlQRV9QUk9KRUNUEAISGAoURU5USVRZX1RZUEVfV09SS1RSRUUQAxIiCh5FTlRJVFlfVFlQRV9CQUNLR1JPVU5EX1BST0NFU1MQBBIWChJFTlRJVFlfVFlQRV9TWVNURU0QBRIeChpFTlRJVFlfVFlQRV9XT1JLRkxPV19EUkFGVBAGKuEBChZOb2RlRXhlY3V0aW9uRXZlbnRUeXBlEikKJU5PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfVU5TUEVDSUZJRUQQABIlCiFOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX1NUQVJURUQQARImCiJOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX1BST0dSRVNTEAISJwojTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9DT01QTEVURUQQAxIkCiBOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX0ZBSUxFRBAEKvoBChpXb3JrZmxvd0V4ZWN1dGlvbkV2ZW50VHlwZRItCilXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9VTlNQRUNJRklFRBAAEikKJVdPUktGTE9XX0VYRUNVVElPTl9FVkVOVF9UWVBFX1NUQVJURUQQARIrCidXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9DT01QTEVURUQQAhIoCiRXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9GQUlMRUQQAxIrCidXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9DQU5DRUxMRUQQBCqRAgoTTm9kZUV4ZWN1dGlvblN0YXR1cxIlCiFOT0RFX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIhCh1OT0RFX0VYRUNVVElPTl9TVEFUVVNfUEVORElORxABEiEKHU5PREVfRVhFQ1VUSU9OX1NUQVRVU19SVU5OSU5HEAISIwofTk9ERV9FWEVDVVRJT05fU1RBVFVTX0NPTVBMRVRFRBADEiAKHE5PREVfRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQBBIjCh9OT0RFX0VYRUNVVElPTl9TVEFUVVNfQ0FOQ0VMTEVEEAUSIQodTk9ERV9FWEVDVVRJT05fU1RBVFVTX1NLSVBQRUQQBirjAQoXV29ya2Zsb3dFeGVjdXRpb25TdGF0dXMSKQolV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEiUKIVdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfUlVOTklORxABEicKI1dPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfQ09NUExFVEVEEAISJAogV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQAxInCiNXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX0NBTkNFTExFRBAEKrIBChFFeGVjdXRpb25Mb2dMZXZlbBIjCh9FWEVDVVRJT05fTE9HX0xFVkVMX1VOU1BFQ0lGSUVEEAASHQoZRVhFQ1VUSU9OX0xPR19MRVZFTF9ERUJVRxABEhwKGEVYRUNVVElPTl9MT0dfTEVWRUxfSU5GTxACEhwKGEVYRUNVVElPTl9MT0dfTEVWRUxfV0FSThADEh0KGUVYRUNVVElPTl9MT0dfTEVWRUxfRVJST1IQBDJxChBTdHJlYW1pbmdTZXJ2aWNlEl0KEVN0cmVhbVVzZXJVcGRhdGVzEiQucmVsaWFudC52MS5TdHJlYW1Vc2VyVXBkYXRlc1JlcXVlc3QaGy5yZWxpYW50LnYxLlVzZXJTdHJlYW1FdmVudCIDkAIBMAFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_chat]);
+  fileDesc("ChpyZWxpYW50L3YxL3N0cmVhbWluZy5wcm90bxIKcmVsaWFudC52MSJmChhTdHJlYW1DaGF0VXBkYXRlc1JlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRIRCglzaW5jZV9zZXEYAiABKAMSFwoKcHJvamVjdF9pZBgDIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIowCCg9DaGF0U3RyZWFtRXZlbnQSMAoIc25hcHNob3QYASABKAsyHC5yZWxpYW50LnYxLkNoYXRTeW5jU25hcHNob3RIABIuCgd1cGRhdGVzGAIgASgLMhsucmVsaWFudC52MS5DaGF0VXBkYXRlQmF0Y2hIABItCgljYXVnaHRfdXAYAyABKAsyGC5yZWxpYW50LnYxLkNoYXRDYXVnaHRVcEgAEioKCWhlYXJ0YmVhdBgEIAEoCzIVLnJlbGlhbnQudjEuSGVhcnRiZWF0SAASMwoMdXNlcl91cGRhdGVzGAUgASgLMhsucmVsaWFudC52MS5DaGF0VXNlclVwZGF0ZXNIAEIHCgVldmVudCI+Cg9DaGF0VXNlclVwZGF0ZXMSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZURhdGEisgIKEENoYXRTeW5jU25hcHNob3QSJQoIbWVzc2FnZXMYASADKAsyEy5yZWxpYW50LnYxLk1lc3NhZ2USMQoNb3RoZXJfdXBkYXRlcxgCIAMoCzIaLnJlbGlhbnQudjEuQ2hhdFVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAMgASgDEg0KBXRvdGFsGAQgASgFEhAKCGhhc19tb3JlGAUgASgIEhIKCm9sZGVzdF9zZXEYBiABKAMSGgoSdGhyZWFkX3Rva2VuX2NvdW50GAcgASgDEhwKFGNvbXBhY3Rpb25fdGhyZXNob2xkGAggASgDEjwKEGFjdGl2ZV93b3JrZmxvd3MYCSADKAsyIi5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUiVwoPQ2hhdFVwZGF0ZUJhdGNoEisKB3VwZGF0ZXMYASADKAsyGi5yZWxpYW50LnYxLkNoYXRVcGRhdGVEYXRhEhcKD2xhdGVzdF9zZXF1ZW5jZRgCIAEoAyKlAQoOQ2hhdFVwZGF0ZURhdGESLwoLdXBkYXRlX3R5cGUYASABKA4yGi5yZWxpYW50LnYxLkNoYXRVcGRhdGVUeXBlEhcKD3NlcXVlbmNlX251bWJlchgCIAEoAxIRCgllbnRpdHlfaWQYAyABKAkSDwoHY2hhdF9pZBgEIAEoCRIRCglkYXRhX2pzb24YBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoCSKEAQoYU3RyZWFtVXNlclVwZGF0ZXNSZXF1ZXN0EhEKCXNpbmNlX3NlcRgBIAEoAxIXCgpwcm9qZWN0X2lkGAQgASgJSACIAQFCDQoLX3Byb2plY3RfaWRKBAgCEANKBAgDEARSEXN1YnNjcmliZV9jaGF0X2lkUg5jaGF0X3NpbmNlX3NlcSKDAgoPVXNlclN0cmVhbUV2ZW50EigKBHN5bmMYASABKAsyGC5yZWxpYW50LnYxLlVzZXJTeW5jSW5mb0gAEi4KB3VwZGF0ZXMYAiABKAsyGy5yZWxpYW50LnYxLlVzZXJVcGRhdGVCYXRjaEgAEioKCWhlYXJ0YmVhdBgDIAEoCzIVLnJlbGlhbnQudjEuSGVhcnRiZWF0SABCBwoFZXZlbnRKBAgEEApSEmNoYXRfc3luY19zbmFwc2hvdFIMY2hhdF91cGRhdGVzUg53b3JrZmxvd19ldmVudFIKbm9kZV9ldmVudFINZXhlY3V0aW9uX2xvZ1IOY2hhdF9jYXVnaHRfdXAiJwoMQ2hhdENhdWdodFVwEhcKD2xhdGVzdF9zZXF1ZW5jZRgBIAEoAyIlCgxVc2VyU3luY0luZm8SFQoNbGFzdF9zZXF1ZW5jZRgBIAEoAyJXCg9Vc2VyVXBkYXRlQmF0Y2gSKwoHdXBkYXRlcxgBIAMoCzIaLnJlbGlhbnQudjEuVXNlclVwZGF0ZURhdGESFwoPbGF0ZXN0X3NlcXVlbmNlGAIgASgDItICCg5Vc2VyVXBkYXRlRGF0YRIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhcKD3NlcXVlbmNlX251bWJlchgDIAEoAxIXCgpwcm9qZWN0X2lkGAQgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBSABKAlIAYgBARIUCgdjaGF0X2lkGAYgASgJSAKIAQESLwoLdXBkYXRlX3R5cGUYByABKA4yGi5yZWxpYW50LnYxLlVzZXJVcGRhdGVUeXBlEisKC2VudGl0eV90eXBlGAggASgOMhYucmVsaWFudC52MS5FbnRpdHlUeXBlEhEKCWVudGl0eV9pZBgJIAEoCRIRCglkYXRhX2pzb24YCiABKAkSEgoKY3JlYXRlZF9hdBgLIAEoCUINCgtfcHJvamVjdF9pZEIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiHgoJSGVhcnRiZWF0EhEKCXRpbWVzdGFtcBgBIAEoAyLxBAoSTm9kZUV4ZWN1dGlvblN0YXRlEg8KB25vZGVfaWQYASABKAkSEQoJbm9kZV90eXBlGAIgASgJEi8KBnN0YXR1cxgDIAEoDjIfLnJlbGlhbnQudjEuTm9kZUV4ZWN1dGlvblN0YXR1cxITCgt3b3JrZmxvd19pZBgEIAEoCRIbCg5wYXJlbnRfbm9kZV9pZBgFIAEoCUgAiAEBEhgKC2FjdGl2aXR5X2lkGAYgASgJSAGIAQESFwoKc3RhcnRlZF9hdBgHIAEoA0gCiAEBEhkKDGNvbXBsZXRlZF9hdBgIIAEoA0gDiAEBEhgKC2R1cmF0aW9uX21zGAkgASgDSASIAQESFgoJZXhpdF9jb2RlGAogASgFSAWIAQESGgoNZXJyb3JfbWVzc2FnZRgLIAEoCUgGiAEBEhYKCWl0ZXJhdGlvbhgMIAEoBUgHiAEBEhsKDm1heF9pdGVyYXRpb25zGA0gASgFSAiIAQESPgoIbWV0YWRhdGEYDiADKAsyLC5yZWxpYW50LnYxLk5vZGVFeGVjdXRpb25TdGF0ZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIRCg9fcGFyZW50X25vZGVfaWRCDgoMX2FjdGl2aXR5X2lkQg0KC19zdGFydGVkX2F0Qg8KDV9jb21wbGV0ZWRfYXRCDgoMX2R1cmF0aW9uX21zQgwKCl9leGl0X2NvZGVCEAoOX2Vycm9yX21lc3NhZ2VCDAoKX2l0ZXJhdGlvbkIRCg9fbWF4X2l0ZXJhdGlvbnMiggUKFldvcmtmbG93RXhlY3V0aW9uU3RhdGUSEwoLd29ya2Zsb3dfaWQYASABKAkSFQoNd29ya2Zsb3dfbmFtZRgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEjMKBnN0YXR1cxgEIAEoDjIjLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0dXMSHwoScGFyZW50X3dvcmtmbG93X2lkGAUgASgJSACIAQESDgoGdGhyZWFkGAYgASgJEhQKDGFjdGl2ZV9ub2RlcxgHIAMoCRItCgVub2RlcxgIIAMoCzIeLnJlbGlhbnQudjEuTm9kZUV4ZWN1dGlvblN0YXRlEjQKCGNoaWxkcmVuGAkgAygLMiIucmVsaWFudC52MS5Xb3JrZmxvd0V4ZWN1dGlvblN0YXRlEhcKCnN0YXJ0ZWRfYXQYCiABKANIAYgBARIZCgxjb21wbGV0ZWRfYXQYCyABKANIAogBARI+CgZwYXJhbXMYDCADKAsyLi5yZWxpYW50LnYxLldvcmtmbG93RXhlY3V0aW9uU3RhdGUuUGFyYW1zRW50cnkSQAoHb3V0cHV0cxgNIAMoCzIvLnJlbGlhbnQudjEuV29ya2Zsb3dFeGVjdXRpb25TdGF0ZS5PdXRwdXRzRW50cnkaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARouCgxPdXRwdXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIVChNfcGFyZW50X3dvcmtmbG93X2lkQg0KC19zdGFydGVkX2F0Qg8KDV9jb21wbGV0ZWRfYXQqswUKDkNoYXRVcGRhdGVUeXBlEiAKHENIQVRfVVBEQVRFX1RZUEVfVU5TUEVDSUZJRUQQABIcChhDSEFUX1VQREFURV9UWVBFX01FU1NBR0UQARIdChlDSEFUX1VQREFURV9UWVBFX0FQUFJPVkFMEAISGwoXQ0hBVF9VUERBVEVfVFlQRV9USFJFQUQQAxIeChpDSEFUX1VQREFURV9UWVBFX1RPT0xfQ0FMTBAEEiQKIENIQVRfVVBEQVRFX1RZUEVfV09SS0ZMT1dfU1RBVFVTEAUSGgoWQ0hBVF9VUERBVEVfVFlQRV9FUlJPUhAGEhkKFUNIQVRfVVBEQVRFX1RZUEVfQ0hBVBAHEh8KG0NIQVRfVVBEQVRFX1RZUEVfUlVOX09VVFBVVBAIEiMKH0NIQVRfVVBEQVRFX1RZUEVfTk9ERV9FWEVDVVRJT04QCRIiCh5DSEFUX1VQREFURV9UWVBFX0VYRUNVVElPTl9MT0cQChInCiNDSEFUX1VQREFURV9UWVBFX1dPUktGTE9XX0VYRUNVVElPThALEhkKFUNIQVRfVVBEQVRFX1RZUEVfSU5GTxANEhwKGENIQVRfVVBEQVRFX1RZUEVfV0FSTklORxAOEhwKGENIQVRfVVBEQVRFX1RZUEVfUkVGRVRDSBAPEiQKIENIQVRfVVBEQVRFX1RZUEVfU1RSRUFNSU5HX0RFTFRBEBASJQohQ0hBVF9VUERBVEVfVFlQRV9TS0lMTF9JTlZPQ0FUSU9OEBESHQoZQ0hBVF9VUERBVEVfVFlQRV9RVUVTVElPThASEiUKIUNIQVRfVVBEQVRFX1RZUEVfU1RSRUFNX0ZJTkFMSVpFRBATEisKJ0NIQVRfVVBEQVRFX1RZUEVfQUdFTlRfTUVTU0FHRVNfRFJBSU5FRBAUKu4GCg5Vc2VyVXBkYXRlVHlwZRIgChxVU0VSX1VQREFURV9UWVBFX1VOU1BFQ0lGSUVEEAASJgoiVVNFUl9VUERBVEVfVFlQRV9DSEFUX1NUQVRFX0NIQU5HRRABEigKJFVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9DT05GSUdfQ0hBTkdFRBACEiEKHVVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9DUkVBVEVEEAMSJwojVVNFUl9VUERBVEVfVFlQRV9DSEFUX1RJVExFX0NIQU5HRUQQBBIhCh1VU0VSX1VQREFURV9UWVBFX0NIQVRfREVMRVRFRBAFEioKJlVTRVJfVVBEQVRFX1RZUEVfQ0hBVF9BQ1RJVklUWV9DSEFOR0VEEAYSJAogVVNFUl9VUERBVEVfVFlQRV9QUk9KRUNUX0NSRUFURUQQBxIkCiBVU0VSX1VQREFURV9UWVBFX1BST0pFQ1RfREVMRVRFRBAIEi0KKVVTRVJfVVBEQVRFX1RZUEVfUFJPSkVDVF9TRVRUSU5HU19DSEFOR0VEEAkSJQohVVNFUl9VUERBVEVfVFlQRV9XT1JLVFJFRV9DUkVBVEVEEAoSJQohVVNFUl9VUERBVEVfVFlQRV9XT1JLVFJFRV9ERUxFVEVEEAsSLAooVVNFUl9VUERBVEVfVFlQRV9XT1JLVFJFRV9TVEFUVVNfQ0hBTkdFRBAMEiQKIFVTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19TVEFSVEVEEA0SIwofVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX09VVFBVVBAOEiYKIlVTRVJfVVBEQVRFX1RZUEVfUFJPQ0VTU19DT01QTEVURUQQDxIjCh9VU0VSX1VQREFURV9UWVBFX1BST0NFU1NfRkFJTEVEEBASKQolVVNFUl9VUERBVEVfVFlQRV9QUk9DRVNTX1BPUlRfQ0hBTkdFRBAREiEKHVVTRVJfVVBEQVRFX1RZUEVfTk9USUZJQ0FUSU9OEBISHAoYVVNFUl9VUERBVEVfVFlQRV9SRUZFVENIEBMSJQohVVNFUl9VUERBVEVfVFlQRV9EQUVNT05fSEVBUlRCRUFUEBQSKwonVVNFUl9VUERBVEVfVFlQRV9XT1JLRkxPV19EUkFGVF9VUERBVEVEEBUqzgEKCkVudGl0eVR5cGUSGwoXRU5USVRZX1RZUEVfVU5TUEVDSUZJRUQQABIUChBFTlRJVFlfVFlQRV9DSEFUEAESFwoTRU5USVRZX1RZUEVfUFJPSkVDVBACEhgKFEVOVElUWV9UWVBFX1dPUktUUkVFEAMSIgoeRU5USVRZX1RZUEVfQkFDS0dST1VORF9QUk9DRVNTEAQSFgoSRU5USVRZX1RZUEVfU1lTVEVNEAUSHgoaRU5USVRZX1RZUEVfV09SS0ZMT1dfRFJBRlQQBirhAQoWTm9kZUV4ZWN1dGlvbkV2ZW50VHlwZRIpCiVOT0RFX0VYRUNVVElPTl9FVkVOVF9UWVBFX1VOU1BFQ0lGSUVEEAASJQohTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9TVEFSVEVEEAESJgoiTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9QUk9HUkVTUxACEicKI05PREVfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfQ09NUExFVEVEEAMSJAogTk9ERV9FWEVDVVRJT05fRVZFTlRfVFlQRV9GQUlMRUQQBCr6AQoaV29ya2Zsb3dFeGVjdXRpb25FdmVudFR5cGUSLQopV09SS0ZMT1dfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfVU5TUEVDSUZJRUQQABIpCiVXT1JLRkxPV19FWEVDVVRJT05fRVZFTlRfVFlQRV9TVEFSVEVEEAESKwonV09SS0ZMT1dfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfQ09NUExFVEVEEAISKAokV09SS0ZMT1dfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfRkFJTEVEEAMSKwonV09SS0ZMT1dfRVhFQ1VUSU9OX0VWRU5UX1RZUEVfQ0FOQ0VMTEVEEAQqkQIKE05vZGVFeGVjdXRpb25TdGF0dXMSJQohTk9ERV9FWEVDVVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIQodTk9ERV9FWEVDVVRJT05fU1RBVFVTX1BFTkRJTkcQARIhCh1OT0RFX0VYRUNVVElPTl9TVEFUVVNfUlVOTklORxACEiMKH05PREVfRVhFQ1VUSU9OX1NUQVRVU19DT01QTEVURUQQAxIgChxOT0RFX0VYRUNVVElPTl9TVEFUVVNfRkFJTEVEEAQSIwofTk9ERV9FWEVDVVRJT05fU1RBVFVTX0NBTkNFTExFRBAFEiEKHU5PREVfRVhFQ1VUSU9OX1NUQVRVU19TS0lQUEVEEAYq4wEKF1dvcmtmbG93RXhlY3V0aW9uU3RhdHVzEikKJVdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIlCiFXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX1JVTk5JTkcQARInCiNXT1JLRkxPV19FWEVDVVRJT05fU1RBVFVTX0NPTVBMRVRFRBACEiQKIFdPUktGTE9XX0VYRUNVVElPTl9TVEFUVVNfRkFJTEVEEAMSJwojV09SS0ZMT1dfRVhFQ1VUSU9OX1NUQVRVU19DQU5DRUxMRUQQBCqyAQoRRXhlY3V0aW9uTG9nTGV2ZWwSIwofRVhFQ1VUSU9OX0xPR19MRVZFTF9VTlNQRUNJRklFRBAAEh0KGUVYRUNVVElPTl9MT0dfTEVWRUxfREVCVUcQARIcChhFWEVDVVRJT05fTE9HX0xFVkVMX0lORk8QAhIcChhFWEVDVVRJT05fTE9HX0xFVkVMX1dBUk4QAxIdChlFWEVDVVRJT05fTE9HX0xFVkVMX0VSUk9SEAQy0AEKEFN0cmVhbWluZ1NlcnZpY2USXQoRU3RyZWFtVXNlclVwZGF0ZXMSJC5yZWxpYW50LnYxLlN0cmVhbVVzZXJVcGRhdGVzUmVxdWVzdBobLnJlbGlhbnQudjEuVXNlclN0cmVhbUV2ZW50IgOQAgEwARJdChFTdHJlYW1DaGF0VXBkYXRlcxIkLnJlbGlhbnQudjEuU3RyZWFtQ2hhdFVwZGF0ZXNSZXF1ZXN0GhsucmVsaWFudC52MS5DaGF0U3RyZWFtRXZlbnQiA5ACATABQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_reliant_v1_chat]);
+
+/**
+ * StreamChatUpdatesRequest opens one chat's detail stream.
+ *
+ * @generated from message reliant.v1.StreamChatUpdatesRequest
+ */
+export type StreamChatUpdatesRequest = Message<"reliant.v1.StreamChatUpdatesRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * Chat-level sequence the client's cached state is current as of: the
+   * server replays (since_seq, latest]. 0 asks for a snapshot, and so does a
+   * cursor too far behind or ahead of the chat to replay from.
+   *
+   * @generated from field: int64 since_seq = 2;
+   */
+  sinceSeq: bigint;
+
+  /**
+   * The project the client's user stream (StreamUserUpdates) is scoped to,
+   * or unset when it streams every project. See ChatUserUpdates.
+   *
+   * @generated from field: optional string project_id = 3;
+   */
+  projectId?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.StreamChatUpdatesRequest.
+ * Use `create(StreamChatUpdatesRequestSchema)` to create a new message.
+ */
+export const StreamChatUpdatesRequestSchema: GenMessage<StreamChatUpdatesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 0);
+
+/**
+ * ChatStreamEvent is one frame of a chat's detail stream.
+ *
+ * @generated from message reliant.v1.ChatStreamEvent
+ */
+export type ChatStreamEvent = Message<"reliant.v1.ChatStreamEvent"> & {
+  /**
+   * @generated from oneof reliant.v1.ChatStreamEvent.event
+   */
+  event: {
+    /**
+     * Initial sync with assembled messages
+     *
+     * @generated from field: reliant.v1.ChatSyncSnapshot snapshot = 1;
+     */
+    value: ChatSyncSnapshot;
+    case: "snapshot";
+  } | {
+    /**
+     * Replayed or live chat updates
+     *
+     * @generated from field: reliant.v1.ChatUpdateBatch updates = 2;
+     */
+    value: ChatUpdateBatch;
+    case: "updates";
+  } | {
+    /**
+     * Initial sync complete (once per stream)
+     *
+     * @generated from field: reliant.v1.ChatCaughtUp caught_up = 3;
+     */
+    value: ChatCaughtUp;
+    case: "caughtUp";
+  } | {
+    /**
+     * Keepalive heartbeat
+     *
+     * @generated from field: reliant.v1.Heartbeat heartbeat = 4;
+     */
+    value: Heartbeat;
+    case: "heartbeat";
+  } | {
+    /**
+     * This chat's user-level updates the user stream filters out
+     *
+     * @generated from field: reliant.v1.ChatUserUpdates user_updates = 5;
+     */
+    value: ChatUserUpdates;
+    case: "userUpdates";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message reliant.v1.ChatStreamEvent.
+ * Use `create(ChatStreamEventSchema)` to create a new message.
+ */
+export const ChatStreamEventSchema: GenMessage<ChatStreamEvent> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 1);
+
+/**
+ * ChatUserUpdates carries user-level updates about the streamed chat, or about
+ * a chat it started (agent.start_run), that the client's project-scoped user
+ * stream does not deliver because they belong to another project. A chat
+ * opened outside the current project (a deep link, a notification) still gets
+ * its status, activity and spawned runs this way. The two streams partition
+ * the updates: one in the request's project goes to the user stream, never
+ * here. Sent only when the request names a project_id. Live only: these carry
+ * no cursor and do not advance the user stream's.
+ *
+ * @generated from message reliant.v1.ChatUserUpdates
+ */
+export type ChatUserUpdates = Message<"reliant.v1.ChatUserUpdates"> & {
+  /**
+   * @generated from field: repeated reliant.v1.UserUpdateData updates = 1;
+   */
+  updates: UserUpdateData[];
+};
+
+/**
+ * Describes the message reliant.v1.ChatUserUpdates.
+ * Use `create(ChatUserUpdatesSchema)` to create a new message.
+ */
+export const ChatUserUpdatesSchema: GenMessage<ChatUserUpdates> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_streaming, 2);
 
 /**
  * ChatSyncSnapshot provides the initial sync with pre-assembled messages.
- * Sent through the unified stream when subscribe_chat_id is set.
  *
  * @generated from message reliant.v1.ChatSyncSnapshot
  */
@@ -97,7 +217,7 @@ export type ChatSyncSnapshot = Message<"reliant.v1.ChatSyncSnapshot"> & {
  * Use `create(ChatSyncSnapshotSchema)` to create a new message.
  */
 export const ChatSyncSnapshotSchema: GenMessage<ChatSyncSnapshot> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 0);
+  messageDesc(file_reliant_v1_streaming, 3);
 
 /**
  * ChatUpdateBatch contains a batch of incremental chat updates
@@ -121,7 +241,7 @@ export type ChatUpdateBatch = Message<"reliant.v1.ChatUpdateBatch"> & {
  * Use `create(ChatUpdateBatchSchema)` to create a new message.
  */
 export const ChatUpdateBatchSchema: GenMessage<ChatUpdateBatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 1);
+  messageDesc(file_reliant_v1_streaming, 4);
 
 /**
  * ChatUpdateData represents a single chat update event (generic JSON-like structure)
@@ -167,10 +287,10 @@ export type ChatUpdateData = Message<"reliant.v1.ChatUpdateData"> & {
  * Use `create(ChatUpdateDataSchema)` to create a new message.
  */
 export const ChatUpdateDataSchema: GenMessage<ChatUpdateData> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 2);
+  messageDesc(file_reliant_v1_streaming, 5);
 
 /**
- * StreamUserUpdatesRequest initiates the unified update stream
+ * StreamUserUpdatesRequest initiates the user-wide update stream
  *
  * @generated from message reliant.v1.StreamUserUpdatesRequest
  */
@@ -181,20 +301,6 @@ export type StreamUserUpdatesRequest = Message<"reliant.v1.StreamUserUpdatesRequ
    * @generated from field: int64 since_seq = 1;
    */
   sinceSeq: bigint;
-
-  /**
-   * Subscribe to per-chat detail events for this chat
-   *
-   * @generated from field: optional string subscribe_chat_id = 2;
-   */
-  subscribeChatId?: string | undefined;
-
-  /**
-   * Chat-level sequence number to start from (0 for initial sync snapshot)
-   *
-   * @generated from field: int64 chat_since_seq = 3;
-   */
-  chatSinceSeq: bigint;
 
   /**
    * Scope updates to this project (omit for all projects)
@@ -209,11 +315,10 @@ export type StreamUserUpdatesRequest = Message<"reliant.v1.StreamUserUpdatesRequ
  * Use `create(StreamUserUpdatesRequestSchema)` to create a new message.
  */
 export const StreamUserUpdatesRequestSchema: GenMessage<StreamUserUpdatesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 3);
+  messageDesc(file_reliant_v1_streaming, 6);
 
 /**
- * UserStreamEvent represents a single event in the unified update stream.
- * Contains BOTH user-level events and per-chat detail events.
+ * UserStreamEvent represents a single event in the user-wide update stream.
  *
  * @generated from message reliant.v1.UserStreamEvent
  */
@@ -223,8 +328,6 @@ export type UserStreamEvent = Message<"reliant.v1.UserStreamEvent"> & {
    */
   event: {
     /**
-     * User-level events (always delivered)
-     *
      * Initial sync info
      *
      * @generated from field: reliant.v1.UserSyncInfo sync = 1;
@@ -247,56 +350,6 @@ export type UserStreamEvent = Message<"reliant.v1.UserStreamEvent"> & {
      */
     value: Heartbeat;
     case: "heartbeat";
-  } | {
-    /**
-     * Per-chat detail events (only when subscribe_chat_id is set)
-     *
-     * Initial chat sync with assembled messages
-     *
-     * @generated from field: reliant.v1.ChatSyncSnapshot chat_sync_snapshot = 4;
-     */
-    value: ChatSyncSnapshot;
-    case: "chatSyncSnapshot";
-  } | {
-    /**
-     * Incremental chat updates batch
-     *
-     * @generated from field: reliant.v1.ChatUpdateBatch chat_updates = 5;
-     */
-    value: ChatUpdateBatch;
-    case: "chatUpdates";
-  } | {
-    /**
-     * Workflow lifecycle event
-     *
-     * @generated from field: reliant.v1.WorkflowExecutionEvent workflow_event = 6;
-     */
-    value: WorkflowExecutionEvent;
-    case: "workflowEvent";
-  } | {
-    /**
-     * Node lifecycle event
-     *
-     * @generated from field: reliant.v1.NodeExecutionEvent node_event = 7;
-     */
-    value: NodeExecutionEvent;
-    case: "nodeEvent";
-  } | {
-    /**
-     * Log entry from execution
-     *
-     * @generated from field: reliant.v1.ExecutionLog execution_log = 8;
-     */
-    value: ExecutionLog;
-    case: "executionLog";
-  } | {
-    /**
-     * Initial chat sync complete (sent once per subscription)
-     *
-     * @generated from field: reliant.v1.ChatCaughtUp chat_caught_up = 9;
-     */
-    value: ChatCaughtUp;
-    case: "chatCaughtUp";
   } | { case: undefined; value?: undefined };
 };
 
@@ -305,12 +358,12 @@ export type UserStreamEvent = Message<"reliant.v1.UserStreamEvent"> & {
  * Use `create(UserStreamEventSchema)` to create a new message.
  */
 export const UserStreamEventSchema: GenMessage<UserStreamEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 4);
+  messageDesc(file_reliant_v1_streaming, 7);
 
 /**
- * ChatCaughtUp marks the end of a subscription's initial chat sync. It is sent
- * exactly once per subscription, after the snapshot or the replay from
- * chat_since_seq — including a replay of nothing — and before any live chat
+ * ChatCaughtUp marks the end of a chat stream's initial sync. It is sent
+ * exactly once per stream, after the snapshot or the replay from
+ * since_seq — including a replay of nothing — and before any live chat
  * event. Until it arrives, the client's cached transcript may still be behind
  * the server; no other frame can stand in for it, because a replay of nothing
  * sends no chat frame at all.
@@ -332,7 +385,7 @@ export type ChatCaughtUp = Message<"reliant.v1.ChatCaughtUp"> & {
  * Use `create(ChatCaughtUpSchema)` to create a new message.
  */
 export const ChatCaughtUpSchema: GenMessage<ChatCaughtUp> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 5);
+  messageDesc(file_reliant_v1_streaming, 8);
 
 /**
  * UserSyncInfo provides initial sync information
@@ -351,7 +404,7 @@ export type UserSyncInfo = Message<"reliant.v1.UserSyncInfo"> & {
  * Use `create(UserSyncInfoSchema)` to create a new message.
  */
 export const UserSyncInfoSchema: GenMessage<UserSyncInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 6);
+  messageDesc(file_reliant_v1_streaming, 9);
 
 /**
  * UserUpdateBatch contains a batch of user-level updates
@@ -384,7 +437,7 @@ export type UserUpdateBatch = Message<"reliant.v1.UserUpdateBatch"> & {
  * Use `create(UserUpdateBatchSchema)` to create a new message.
  */
 export const UserUpdateBatchSchema: GenMessage<UserUpdateBatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 7);
+  messageDesc(file_reliant_v1_streaming, 10);
 
 /**
  * UserUpdateData represents a user-level update
@@ -455,7 +508,7 @@ export type UserUpdateData = Message<"reliant.v1.UserUpdateData"> & {
  * Use `create(UserUpdateDataSchema)` to create a new message.
  */
 export const UserUpdateDataSchema: GenMessage<UserUpdateData> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 8);
+  messageDesc(file_reliant_v1_streaming, 11);
 
 /**
  * Heartbeat is sent periodically to keep the connection alive
@@ -474,7 +527,7 @@ export type Heartbeat = Message<"reliant.v1.Heartbeat"> & {
  * Use `create(HeartbeatSchema)` to create a new message.
  */
 export const HeartbeatSchema: GenMessage<Heartbeat> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 9);
+  messageDesc(file_reliant_v1_streaming, 12);
 
 /**
  * NodeExecutionState represents the current state of a single workflow node
@@ -586,7 +639,7 @@ export type NodeExecutionState = Message<"reliant.v1.NodeExecutionState"> & {
  * Use `create(NodeExecutionStateSchema)` to create a new message.
  */
 export const NodeExecutionStateSchema: GenMessage<NodeExecutionState> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 10);
+  messageDesc(file_reliant_v1_streaming, 13);
 
 /**
  * WorkflowExecutionState represents the complete execution state of a workflow
@@ -691,142 +744,6 @@ export type WorkflowExecutionState = Message<"reliant.v1.WorkflowExecutionState"
  * Use `create(WorkflowExecutionStateSchema)` to create a new message.
  */
 export const WorkflowExecutionStateSchema: GenMessage<WorkflowExecutionState> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 11);
-
-/**
- * ExecutionLog represents a log entry from workflow/node execution
- *
- * @generated from message reliant.v1.ExecutionLog
- */
-export type ExecutionLog = Message<"reliant.v1.ExecutionLog"> & {
-  /**
-   * Unique log entry ID
-   *
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * Workflow UUID
-   *
-   * @generated from field: string workflow_id = 2;
-   */
-  workflowId: string;
-
-  /**
-   * Node ID if from a specific node
-   *
-   * @generated from field: optional string node_id = 3;
-   */
-  nodeId?: string | undefined;
-
-  /**
-   * Log severity
-   *
-   * @generated from field: reliant.v1.ExecutionLogLevel level = 4;
-   */
-  level: ExecutionLogLevel;
-
-  /**
-   * Log message content
-   *
-   * @generated from field: string message = 5;
-   */
-  message: string;
-
-  /**
-   * Unix timestamp
-   *
-   * @generated from field: int64 timestamp = 6;
-   */
-  timestamp: bigint;
-
-  /**
-   * Source identifier (e.g., "stdout", "stderr", "activity")
-   *
-   * @generated from field: optional string source = 7;
-   */
-  source?: string | undefined;
-
-  /**
-   * Structured log fields
-   *
-   * @generated from field: map<string, string> fields = 8;
-   */
-  fields: { [key: string]: string };
-};
-
-/**
- * Describes the message reliant.v1.ExecutionLog.
- * Use `create(ExecutionLogSchema)` to create a new message.
- */
-export const ExecutionLogSchema: GenMessage<ExecutionLog> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 12);
-
-/**
- * NodeExecutionEvent represents a node lifecycle event (start, update, complete)
- *
- * @generated from message reliant.v1.NodeExecutionEvent
- */
-export type NodeExecutionEvent = Message<"reliant.v1.NodeExecutionEvent"> & {
-  /**
-   * @generated from field: reliant.v1.NodeExecutionEventType event_type = 1;
-   */
-  eventType: NodeExecutionEventType;
-
-  /**
-   * Current node state
-   *
-   * @generated from field: reliant.v1.NodeExecutionState node = 2;
-   */
-  node?: NodeExecutionState | undefined;
-
-  /**
-   * Optional progress message for "progress" events
-   *
-   * @generated from field: optional string progress_message = 3;
-   */
-  progressMessage?: string | undefined;
-
-  /**
-   * Optional progress percentage (0-100)
-   *
-   * @generated from field: optional double progress_percent = 4;
-   */
-  progressPercent?: number | undefined;
-};
-
-/**
- * Describes the message reliant.v1.NodeExecutionEvent.
- * Use `create(NodeExecutionEventSchema)` to create a new message.
- */
-export const NodeExecutionEventSchema: GenMessage<NodeExecutionEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_streaming, 13);
-
-/**
- * WorkflowExecutionEvent represents a workflow lifecycle event
- *
- * @generated from message reliant.v1.WorkflowExecutionEvent
- */
-export type WorkflowExecutionEvent = Message<"reliant.v1.WorkflowExecutionEvent"> & {
-  /**
-   * @generated from field: reliant.v1.WorkflowExecutionEventType event_type = 1;
-   */
-  eventType: WorkflowExecutionEventType;
-
-  /**
-   * Current workflow state (may include nested state)
-   *
-   * @generated from field: reliant.v1.WorkflowExecutionState workflow = 2;
-   */
-  workflow?: WorkflowExecutionState | undefined;
-};
-
-/**
- * Describes the message reliant.v1.WorkflowExecutionEvent.
- * Use `create(WorkflowExecutionEventSchema)` to create a new message.
- */
-export const WorkflowExecutionEventSchema: GenMessage<WorkflowExecutionEvent> = /*@__PURE__*/
   messageDesc(file_reliant_v1_streaming, 14);
 
 /**
@@ -1342,20 +1259,18 @@ export const ExecutionLogLevelSchema: GenEnum<ExecutionLogLevel> = /*@__PURE__*/
   enumDesc(file_reliant_v1_streaming, 7);
 
 /**
- * StreamingService provides real-time streaming of updates.
- * Uses gRPC server-streaming for efficient push-based updates.
- * A single StreamUserUpdates stream handles BOTH global user-level events
- * and per-chat detail events (when subscribe_chat_id is set).
+ * StreamingService provides real-time streaming of updates over two
+ * independent server streams: one per client for user-level events, and one
+ * per open chat for that chat's detail events. Switching chats cancels and
+ * reopens only the chat stream; the user stream stays connected.
  *
  * @generated from service reliant.v1.StreamingService
  */
 export const StreamingService: GenService<{
   /**
-   * StreamUserUpdates opens a server-streaming connection for all real-time updates.
-   * Always delivers user-level events (chat state, projects, processes, etc.).
-   * When subscribe_chat_id is set, ALSO delivers per-chat detail events
-   * (messages, approvals, tool calls, streaming deltas, workflow/node events).
-   * To switch chat subscriptions, the client disconnects and reconnects with a new request.
+   * StreamUserUpdates opens the user-wide stream: chat state, projects,
+   * processes, daemon signals and every other user-level event. It carries no
+   * per-chat detail; that is StreamChatUpdates.
    *
    * @generated from rpc reliant.v1.StreamingService.StreamUserUpdates
    */
@@ -1363,6 +1278,20 @@ export const StreamingService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamUserUpdatesRequestSchema;
     output: typeof UserStreamEventSchema;
+  },
+  /**
+   * StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
+   * or a cursor the server will not replay from) or a replay of
+   * (since_seq, latest], then exactly one caught_up, then live chat updates
+   * (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
+   * for a chat that does not exist or is not the caller's.
+   *
+   * @generated from rpc reliant.v1.StreamingService.StreamChatUpdates
+   */
+  streamChatUpdates: {
+    methodKind: "server_streaming";
+    input: typeof StreamChatUpdatesRequestSchema;
+    output: typeof ChatStreamEventSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_streaming, 0);

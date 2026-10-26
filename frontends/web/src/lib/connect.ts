@@ -74,9 +74,9 @@ export type TransportRoute =
 const CONTROL_PLANE_PACKAGE = "controlplane.v1.";
 
 /**
- * StreamUserUpdates carries snapshots and heartbeats, so StreamingService is
- * the one hot path kept on the binary wire format; unary RPCs stay JSON for
- * readable network inspection.
+ * StreamUserUpdates and StreamChatUpdates carry snapshots and heartbeats, so
+ * StreamingService is the one hot path kept on the binary wire format; unary
+ * RPCs stay JSON for readable network inspection.
  */
 const STREAMING_SERVICE = "reliant.v1.StreamingService";
 
