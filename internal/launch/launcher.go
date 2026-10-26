@@ -376,13 +376,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// chat that doesn't exist).
 	//
 	// READ COMMITTED, because what must hold here is atomicity, and nothing in
-	// it is a read-check-write that only SERIALIZABLE would keep correct:
+	// an unguarded launch is a read-check-write that only SERIALIZABLE would
+	// keep correct:
 	//   - two launches of one event: the (kind, dedupe_key) unique constraint
 	//     on the insert, and the outcome predicate on the claim's UPDATE,
 	//     which READ COMMITTED re-checks against the row it waited for;
-	//   - a trigger's overlap guard: the trigger row's FOR UPDATE, taken
-	//     before the guard reads the previous fire, which each statement
-	//     here then sees committed;
 	//   - the selection merge: its advisory lock (MutateChatSelection);
 	//   - the chat_created sequence number: the user's counter row, raised
 	//     by one UPDATE … RETURNING;
@@ -397,7 +395,21 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// closed the cycle — "failed to create workflow" when it was the root
 	// workflow's — until one ran out of attempts
 	// (TestConcurrentStartChatsTakeNoPredicateLocks).
-	if err := l.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+	//
+	// A guarded launch (a trigger's overlap guard) keeps SERIALIZABLE, as
+	// before. Its guard does not count the previous fire's root as live while
+	// it is still PENDING — the shape of a fire whose Temporal start failed —
+	// but a fire that has just committed is pending too, until its start marks
+	// it active. A fire queued on the trigger lock behind it reads it as
+	// stranded and launches beside it, sooner under READ COMMITTED than after
+	// SERIALIZABLE's retry backoff (TestConcurrentFiresRespectOverlapSkip,
+	// already intermittent on main). One trigger's fires are rare and
+	// serialize on its lock anyway, so they keep the level they had.
+	var launchTx orm.TxPolicy = orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	if spec.Guard != nil {
+		launchTx = orm.Serializable
+	}
+	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
