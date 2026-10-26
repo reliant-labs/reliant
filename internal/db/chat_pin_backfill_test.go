@@ -3,6 +3,7 @@ package db
 
 import (
 	"database/sql"
+	"io/fs"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,12 @@ func TestPinUnpinnedChatsMigration(t *testing.T) {
 	chat("already-pinned", "u1", "single", nil, false, "laptop")
 	chat("no-machine", "u1", "single", nil, true, nil)
 
-	body, err := forgedb.MigrationsFS.ReadFile("migrations/20261026034904_pin_unpinned_chats_to_machine.up.sql")
+	// Found by name, not version: the merge queue re-versions a branch's
+	// migrations above main's when it lands.
+	matches, err := fs.Glob(forgedb.MigrationsFS, "migrations/*_pin_unpinned_chats_to_machine.up.sql")
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	body, err := forgedb.MigrationsFS.ReadFile(matches[0])
 	require.NoError(t, err)
 	exec(string(body))
 
