@@ -10,13 +10,14 @@ import (
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
 func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	// Explicit expectations: adding an unsafe registry capability must not opt it in.
 	want := fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeClusterManage,
-		fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+		fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
 		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
@@ -97,7 +98,7 @@ func TestExchangeToken_RefreshPreservesOptInRestrictions(t *testing.T) {
 func TestExchangeToken_WriteDoesNotDelegateAnUnheldReadScope(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
-	for _, pair := range [][2]fat.Scope{{fat.ScopeDeployWrite, fat.ScopeDeployRead}, {fat.ScopeTokenWrite, fat.ScopeTokenRead}, {fat.ScopeIdentityManage, fat.ScopeIdentityRead}, {fat.ScopeObsTriage, fat.ScopeObsRead}, {fat.ScopeObsWrite, fat.ScopeObsRead}} {
+	for _, pair := range [][2]fat.Scope{{fat.ScopeDeployWrite, fat.ScopeDeployRead}, {fat.ScopeIdentityManage, fat.ScopeIdentityRead}, {fat.ScopeObsTriage, fat.ScopeObsRead}, {fat.ScopeObsWrite, fat.ScopeObsRead}} {
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, pair[0]}})
 		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane, Scopes: []string{string(pair[1])}}))
 		if svcerr.Code(err) != connect.CodePermissionDenied {
@@ -153,5 +154,34 @@ func TestCreateAndExchangeToken_ReportCurrentOrgGrants(t *testing.T) {
 	}
 	if !reflect.DeepEqual(child.Scopes, a.grants) || !reflect.DeepEqual(resp.Msg.GetScopes(), a.grants.Strings()) {
 		t.Fatalf("exchange did not report current org grant clipping: child=%s response=%v", child.Scopes, resp.Msg.GetScopes())
+	}
+}
+
+// TestDaemonAndCLICredentialsNeverRequestTokenScopes: token:read/token:write
+// administer member permissions and tokens, which the control plane reserves to
+// a signed-in person. On a long-lived daemon or CLI credential they are dead
+// authority today and a latent escalation path, so nothing requests them.
+func TestDaemonAndCLICredentialsNeverRequestTokenScopes(t *testing.T) {
+	for _, s := range cliauth.ForgeScopes() {
+		if fat.Scope(s) == fat.ScopeTokenRead || fat.Scope(s) == fat.ScopeTokenWrite {
+			t.Errorf("cliauth.ForgeScopes() requests %s", s)
+		}
+	}
+	for _, s := range daemonCeiling() {
+		if s == fat.ScopeTokenRead || s == fat.ScopeTokenWrite {
+			t.Errorf("daemonCeiling() includes %s", s)
+		}
+	}
+	for _, s := range exchangeableScopes {
+		if s == fat.ScopeTokenRead || s == fat.ScopeTokenWrite {
+			t.Errorf("exchangeableScopes includes %s", s)
+		}
+	}
+	// What the owner chose to keep stays.
+	kept := fat.SetOf(daemonCeiling()...)
+	for _, s := range []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeIdentityManage, fat.ScopeDBQuery, fat.ScopeObsWrite} {
+		if !kept.Has(s) {
+			t.Errorf("daemonCeiling() lost %s, which stays by decision", s)
+		}
 	}
 }

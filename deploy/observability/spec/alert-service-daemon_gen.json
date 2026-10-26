@@ -1,0 +1,7 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "alert": {
+    "name": "daemon",
+    "rpc_service": "reliant.v1.DaemonService"
+  }
+}

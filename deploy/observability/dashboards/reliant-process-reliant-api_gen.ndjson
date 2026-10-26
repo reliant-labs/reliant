@@ -1,0 +1,1 @@
+{"name":"reliant: reliant-api: error logs","source":"Logs","select":"Timestamp, ServiceName, SeverityText, Body","where":"ServiceName IN ('reliant-api-server') AND lower(SeverityText) = 'error'","whereLanguage":"sql","orderBy":"Timestamp DESC","tags":["forge","generated"]}

@@ -153,7 +153,17 @@ type Cluster struct {
 	Address string `protobuf:"bytes,13,opt,name=address,proto3" json:"address,omitempty"`
 	// The secret-store issuer registered for this cluster, or unset when none
 	// is. See ClusterIssuer.
-	Issuer        *ClusterIssuer `protobuf:"bytes,15,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Issuer *ClusterIssuer `protobuf:"bytes,15,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// The SHA-256 fingerprint of the registered CA certificate (the first
+	// CERTIFICATE block of the uploaded bundle), over its DER encoding, as
+	// colon-separated uppercase hex — the form `openssl x509 -fingerprint
+	// -sha256` and `kubectl` print, so it can be compared against a cluster's own
+	// CA by eye. Computed on the server from the stored CA; the CA itself is never
+	// returned. Empty until ConnectCluster has stored a CA.
+	CaFingerprint string `protobuf:"bytes,16,opt,name=ca_fingerprint,json=caFingerprint,proto3" json:"ca_fingerprint,omitempty"`
+	// When the registration row last changed: a connect or re-connect (new
+	// address, CA or token) moves it.
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -240,6 +250,20 @@ func (x *Cluster) GetAddress() string {
 func (x *Cluster) GetIssuer() *ClusterIssuer {
 	if x != nil {
 		return x.Issuer
+	}
+	return nil
+}
+
+func (x *Cluster) GetCaFingerprint() string {
+	if x != nil {
+		return x.CaFingerprint
+	}
+	return ""
+}
+
+func (x *Cluster) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
 	}
 	return nil
 }
@@ -866,7 +890,7 @@ var File_services_cluster_v1_cluster_proto protoreflect.FileDescriptor
 
 const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\n" +
-	"!services/cluster/v1/cluster.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x86\x03\n" +
+	"!services/cluster/v1/cluster.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe8\x03\n" +
 	"\aCluster\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12<\n" +
@@ -879,7 +903,10 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
 	"\aaddress\x18\r \x01(\tR\aaddress\x126\n" +
-	"\x06issuer\x18\x0f \x01(\v2\x1e.controlplane.v1.ClusterIssuerR\x06issuerJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\x04authR\rcloud_cluster\"\x15\n" +
+	"\x06issuer\x18\x0f \x01(\v2\x1e.controlplane.v1.ClusterIssuerR\x06issuer\x12%\n" +
+	"\x0eca_fingerprint\x18\x10 \x01(\tR\rcaFingerprint\x129\n" +
+	"\n" +
+	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\x04authR\rcloud_cluster\"\x15\n" +
 	"\x13ListClustersRequest\"L\n" +
 	"\x14ListClustersResponse\x124\n" +
 	"\bclusters\x18\x01 \x03(\v2\x18.controlplane.v1.ClusterR\bclusters\"#\n" +
@@ -962,25 +989,26 @@ var file_services_cluster_v1_cluster_proto_depIdxs = []int32{
 	1,  // 1: controlplane.v1.Cluster.connection:type_name -> controlplane.v1.ClusterConnection
 	13, // 2: controlplane.v1.Cluster.created_at:type_name -> google.protobuf.Timestamp
 	11, // 3: controlplane.v1.Cluster.issuer:type_name -> controlplane.v1.ClusterIssuer
-	2,  // 4: controlplane.v1.ListClustersResponse.clusters:type_name -> controlplane.v1.Cluster
-	2,  // 5: controlplane.v1.GetClusterResponse.cluster:type_name -> controlplane.v1.Cluster
-	13, // 6: controlplane.v1.ConnectClusterRequest.token_expires_at:type_name -> google.protobuf.Timestamp
-	10, // 7: controlplane.v1.ConnectClusterRequest.issuer:type_name -> controlplane.v1.ClusterIssuerRegistration
-	13, // 8: controlplane.v1.ClusterIssuer.updated_at:type_name -> google.protobuf.Timestamp
-	2,  // 9: controlplane.v1.ConnectClusterResponse.cluster:type_name -> controlplane.v1.Cluster
-	3,  // 10: controlplane.v1.ClusterService.ListClusters:input_type -> controlplane.v1.ListClustersRequest
-	5,  // 11: controlplane.v1.ClusterService.GetCluster:input_type -> controlplane.v1.GetClusterRequest
-	7,  // 12: controlplane.v1.ClusterService.RemoveCluster:input_type -> controlplane.v1.RemoveClusterRequest
-	9,  // 13: controlplane.v1.ClusterService.ConnectCluster:input_type -> controlplane.v1.ConnectClusterRequest
-	4,  // 14: controlplane.v1.ClusterService.ListClusters:output_type -> controlplane.v1.ListClustersResponse
-	6,  // 15: controlplane.v1.ClusterService.GetCluster:output_type -> controlplane.v1.GetClusterResponse
-	8,  // 16: controlplane.v1.ClusterService.RemoveCluster:output_type -> controlplane.v1.RemoveClusterResponse
-	12, // 17: controlplane.v1.ClusterService.ConnectCluster:output_type -> controlplane.v1.ConnectClusterResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	13, // 4: controlplane.v1.Cluster.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 5: controlplane.v1.ListClustersResponse.clusters:type_name -> controlplane.v1.Cluster
+	2,  // 6: controlplane.v1.GetClusterResponse.cluster:type_name -> controlplane.v1.Cluster
+	13, // 7: controlplane.v1.ConnectClusterRequest.token_expires_at:type_name -> google.protobuf.Timestamp
+	10, // 8: controlplane.v1.ConnectClusterRequest.issuer:type_name -> controlplane.v1.ClusterIssuerRegistration
+	13, // 9: controlplane.v1.ClusterIssuer.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 10: controlplane.v1.ConnectClusterResponse.cluster:type_name -> controlplane.v1.Cluster
+	3,  // 11: controlplane.v1.ClusterService.ListClusters:input_type -> controlplane.v1.ListClustersRequest
+	5,  // 12: controlplane.v1.ClusterService.GetCluster:input_type -> controlplane.v1.GetClusterRequest
+	7,  // 13: controlplane.v1.ClusterService.RemoveCluster:input_type -> controlplane.v1.RemoveClusterRequest
+	9,  // 14: controlplane.v1.ClusterService.ConnectCluster:input_type -> controlplane.v1.ConnectClusterRequest
+	4,  // 15: controlplane.v1.ClusterService.ListClusters:output_type -> controlplane.v1.ListClustersResponse
+	6,  // 16: controlplane.v1.ClusterService.GetCluster:output_type -> controlplane.v1.GetClusterResponse
+	8,  // 17: controlplane.v1.ClusterService.RemoveCluster:output_type -> controlplane.v1.RemoveClusterResponse
+	12, // 18: controlplane.v1.ClusterService.ConnectCluster:output_type -> controlplane.v1.ConnectClusterResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_services_cluster_v1_cluster_proto_init() }

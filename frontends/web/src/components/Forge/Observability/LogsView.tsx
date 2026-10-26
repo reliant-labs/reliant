@@ -28,7 +28,7 @@ import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useSearchLogs, useServiceOverview, type LogFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
-import { SEVERITIES, type ObsScope, type LogRecord, type Severity } from "@/services/controlPlane/observability/types";
+import { SEVERITIES, type ObsScope, type LogRecord, type ServiceSignal, type Severity } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,7 @@ import { AttributeTable } from "./AttributeTable";
 import { formatTimestamp } from "./format";
 import { severityParam, type ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { servicesFor, useSignalsIndex } from "./serviceSignals";
 import { useRovingFocus } from "./useRovingFocus";
 
 const features = tableFeatures({});
@@ -260,6 +261,7 @@ function LogsToolbar({
           range={range}
           value={service}
           onChange={(next) => navigate({ service: next }, { replace: true })}
+          signal="logs"
         />
         <Button
           variant={live ? "primary" : "outline"}
@@ -306,6 +308,7 @@ export function ServiceSelect({
   onChange,
   includeAll = true,
   id = "obs-service-filter",
+  signal,
 }: {
   scope: ObsScope;
   range: RangePreset;
@@ -313,14 +316,27 @@ export function ServiceSelect({
   onChange: (service: string | undefined) => void;
   includeAll?: boolean;
   id?: string;
+  /**
+   * The signal the view reads. Set, the picker offers only the services that
+   * send it, plus the ones that declare it and are idle (listed apart, as not
+   * selectable), and adds services the overview does not list (one that sends
+   * profiles and nothing else). Unset (Errors, Sessions): every service seen.
+   */
+  signal?: ServiceSignal;
 }) {
   const overview = useServiceOverview(scope, range);
-  const names = useMemo(() => {
+  const signals = useSignalsIndex(signal ? scope : null, range);
+  const rows = useMemo(() => {
     const known = (overview.data?.services ?? []).map((s) => s.name);
-    // A service from a link that the window no longer contains is still selectable.
-    if (value && !known.includes(value)) known.unshift(value);
-    return known;
-  }, [overview.data, value]);
+    if (!signal) {
+      // A service from a link that the window no longer contains is still selectable.
+      if (value && !known.includes(value)) known.unshift(value);
+      return known.map((name) => ({ name, idle: "" }));
+    }
+    return servicesFor(signals, signal, known, value).map((row) => ({ name: row.name, idle: row.state.kind === "idle" ? row.state.hint : "" }));
+  }, [overview.data, value, signal, signals]);
+  const active = rows.filter((row) => !row.idle);
+  const idle = rows.filter((row) => row.idle);
 
   return (
     <>
@@ -336,11 +352,21 @@ export function ServiceSelect({
       >
         {includeAll && <option value="">All services</option>}
         {!includeAll && !value && <option value="">Choose a service…</option>}
-        {names.map((name) => (
+        {active.map(({ name }) => (
           <option key={name} value={name}>
             {name}
           </option>
         ))}
+        {idle.length > 0 && signal && (
+          <optgroup label={`No ${signal} in ${signals?.range === "7d" ? "the last 7 days" : "the last 24 hours"}`} data-testid={`${id}-idle`}>
+            {idle.map(({ name, idle: hint }) => (
+              // The current selection stays selectable, so the picker still shows it.
+              <option key={name} value={name} disabled={name !== value} title={hint}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
     </>
   );
