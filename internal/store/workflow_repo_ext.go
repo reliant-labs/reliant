@@ -287,8 +287,8 @@ func AbandonFailedWorkflowStart(ctx context.Context, db orm.Context, id string) 
 // has been recorded for. The launch time is the later of the root's creation
 // and its event's: a branch's root is created when it is branched, long
 // before its first send records the event and starts it.
-const strandedStartsSQL = `
-SELECT w.*
+var strandedStartsSQL = `
+SELECT ` + columnsOf[Workflow]("w") + `
 FROM workflows w
 WHERE w.parent_id IS NULL
   AND w.state = ?0
