@@ -21,8 +21,7 @@
 
 import { toast } from "sonner";
 
-import { gitService } from "@/services/controlPlane/git";
-import { supabase } from "@/lib/supabase";
+import { connectGitHub } from "@/lib/github-connect";
 import { trackEvent } from "@/lib/analytics";
 import { logger } from "@/lib/logger";
 import { useEvent } from "@/lib/event-context";
@@ -31,23 +30,12 @@ const SYNC_TOAST_ID = "github-sync";
 
 async function retryGitHubOAuth() {
   trackEvent("github_credential_sync_retry_clicked");
-  try {
-    // Restart the control-plane custom OAuth flow. The backend
-    // /auth/github/authorize endpoint will exchange the code for a
-    // long-lived repo-scoped token and write it to git_credentials,
-    // which clears the failed-sync state on return.
-    const oauthURL = gitService.getOAuthURL();
-    if (!oauthURL) throw new Error("Control plane URL not configured");
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("Not signed in");
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    const params = new URLSearchParams({
-      token: session.access_token,
-      returnTo,
-    });
-    window.location.href = `${oauthURL}?${params.toString()}`;
-  } catch (err) {
-    logger.warn("[GitHubSyncStatus] retry GitHub OAuth failed", err);
+  // Restart the control-plane connect flow, which re-issues a long-lived
+  // credential and writes it to git_credentials, clearing the failed-sync
+  // state on return.
+  const outcome = await connectGitHub();
+  if (outcome.kind === "error") {
+    logger.warn("[GitHubSyncStatus] retry GitHub OAuth failed", outcome.message);
   }
 }
 

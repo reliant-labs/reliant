@@ -351,9 +351,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithGithub: async (state?: OAuthRedirectState) => {
-    // The Supabase GitHub provider is sign-in only (0 scopes). We never persist
-    // the provider_token here — repo access comes from the dedicated
-    // /auth/github/authorize custom flow.
+    // Whether the provider_token is kept depends on which GitHub app backs the
+    // Supabase provider: a GitHub App user token (`ghu_`) is persisted by
+    // OAuthCallback via githubCredentialSync, a classic sign-in-only token
+    // (`gho_`, 0 scopes) is not, and repo access then comes from the dedicated
+    // /auth/github/authorize connect flow.
     await runOAuthSignIn('github', state)
   },
 
@@ -924,9 +926,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
         setTelemetryUserId(session?.user ? { id: session.user.id } : null)
 
-        // The Supabase GitHub provider is sign-in only (0 scopes); we never
-        // persist its provider_token. Repo access is owned by the dedicated
-        // /auth/github/authorize flow, which writes git_credentials directly.
+        // provider_token is deliberately not persisted here: this listener
+        // also fires on every token refresh and tab focus, when the provider
+        // token is gone or stale. The one-shot capture lives in OAuthCallback,
+        // which sees the session straight after the sign-in exchange.
 
         // NOTE: Supabase automatically saves session through custom storage adapter
       })

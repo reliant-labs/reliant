@@ -5,7 +5,7 @@ import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitAccount } from "../../services/controlPlane/git";
-import { supabase } from "../../lib/supabase";
+import { connectGitHub } from "../../lib/github-connect";
 
 interface AddRepoModalProps {
   isOpen: boolean;
@@ -77,21 +77,17 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
   }, [isOpen]);
 
   const handleConnectGitHub = async () => {
-    try {
-      // Kick off the control-plane custom OAuth flow. The Supabase GitHub
-      // provider is sign-in only (0 scopes); the long-lived repo-scoped
-      // token comes from /auth/github/authorize, which writes it to
-      // git_credentials. The page will navigate away; on return, the
-      // modal's open-effect re-runs and refreshes accounts.
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) throw new Error("Control plane URL not configured");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not signed in");
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({ token: session.access_token, returnTo });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
+    // Web navigates away and the modal's open-effect re-reads accounts on
+    // return; desktop finishes in place, so re-read here.
+    const outcome = await connectGitHub();
+    if (outcome.kind === "error") setError(outcome.message);
+    if (outcome.kind === "connected") {
+      try {
+        const res = await gitService.listCredentials("github");
+        setAccounts(res.accounts ?? []);
+      } catch {
+        setAccounts([]);
+      }
     }
   };
 

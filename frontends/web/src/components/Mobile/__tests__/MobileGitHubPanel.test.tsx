@@ -1,7 +1,7 @@
 /**
  * MobileGitHubPanel — pins that it reads/writes through the exact same
- * `useGitHubCredential` hook and `gitService.getOAuthURL` /
- * `deleteCredential` calls desktop `GitConnectionsSettings` uses. A
+ * `useGitHubCredential` hook, `connectGitHub` and `gitService.deleteCredential`
+ * calls desktop `GitConnectionsSettings` uses. A
  * divergent write path here would be a real bug, not a UI difference.
  */
 
@@ -9,7 +9,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getOAuthURL: vi.fn(),
+  buildOAuthURL: vi.fn(),
   deleteCredential: vi.fn(),
   getSession: vi.fn(),
   refresh: vi.fn(),
@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../services/controlPlane/git", () => ({
   gitService: {
-    getOAuthURL: mocks.getOAuthURL,
+    buildOAuthURL: mocks.buildOAuthURL,
     deleteCredential: mocks.deleteCredential,
   },
 }));
@@ -34,7 +34,7 @@ vi.mock("../../../hooks/useGitHubCredential", () => ({
 const { MobileGitHubPanel } = await import("../MobileGitHubPanel");
 
 beforeEach(() => {
-  mocks.getOAuthURL.mockReset().mockReturnValue("https://cp.example.com/auth/github/authorize");
+  mocks.buildOAuthURL.mockReset().mockReturnValue("https://cp.example.com/auth/github/authorize?token=tok-123");
   mocks.deleteCredential.mockReset().mockResolvedValue(undefined);
   mocks.getSession.mockReset().mockResolvedValue({
     data: { session: { access_token: "tok-123" } },
@@ -61,14 +61,14 @@ describe("MobileGitHubPanel", () => {
     expect(screen.getByText(/scopes: repo/i)).toBeInTheDocument();
   });
 
-  it("starts OAuth through the same gitService.getOAuthURL + Supabase session desktop uses", async () => {
+  it("starts OAuth through the same connectGitHub helper + Supabase session desktop uses", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const user = userEvent.setup();
 
     render(<MobileGitHubPanel />);
     await user.click(screen.getByRole("button", { name: /connect with github/i }));
 
-    await waitFor(() => expect(mocks.getOAuthURL).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.buildOAuthURL).toHaveBeenCalled());
     expect(mocks.getSession).toHaveBeenCalled();
   });
 

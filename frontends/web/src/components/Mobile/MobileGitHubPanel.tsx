@@ -2,7 +2,7 @@
  * Mobile-native "GitHub connection" panel — connection status, connect via
  * OAuth, and disconnect. Reuses the exact same data layer as desktop
  * `GitConnectionsSettings`: `useGitHubCredential` for status,
- * `gitService.getOAuthURL()` + the Supabase session token to kick off the
+ * `connectGitHub()` (which builds the authorize URL from a fresh Supabase token) to kick off the
  * same `/auth/github/authorize` redirect, and `gitService.deleteCredential`
  * to disconnect. A divergent write path here would be a real bug, not a UI
  * difference — see that hook's module comment.
@@ -19,7 +19,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Github, Loader2 } from "lucide-react";
 import { gitService } from "../../services/controlPlane/git";
-import { supabase } from "../../lib/supabase";
+import { connectGitHub } from "../../lib/github-connect";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { cn } from "../../lib/utils";
 import { MOBILE_PRIMARY_ACTION } from "./MobileChrome";
@@ -51,20 +51,11 @@ export function MobileGitHubPanel() {
   const handleConnect = async () => {
     setConnecting(true);
     setError(null);
-    try {
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) throw new Error("Control plane URL not configured");
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session");
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({ token: session.access_token, returnTo });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start OAuth flow");
-      setConnecting(false);
-    }
+    const outcome = await connectGitHub();
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    if (outcome.kind === "connected") await refresh();
+    setConnecting(false);
   };
 
   const handleDisconnect = async () => {

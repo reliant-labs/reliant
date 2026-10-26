@@ -9,7 +9,7 @@ import type {
   GitCredentialStatus,
 } from "../../services/controlPlane/git/types";
 import { capabilities } from "../../services/controlPlane/capabilities";
-import { supabase } from "../../lib/supabase";
+import { connectGitHub } from "../../lib/github-connect";
 import { ManageGitHubAccess } from "../Projects/ManageGitHubAccess";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -181,18 +181,11 @@ export function GitConnectionsSettings() {
   const handleConnectOAuth = async () => {
     setConnectingOAuth(true);
     setError(null);
-    try {
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) throw new Error("Control plane URL not configured");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("No active session");
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({ token: session.access_token, returnTo });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start OAuth flow");
-      setConnectingOAuth(false);
-    }
+    const outcome = await connectGitHub();
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    if (outcome.kind === "connected") await refresh();
+    setConnectingOAuth(false);
   };
 
   const handleAddPat = async () => {

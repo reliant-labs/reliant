@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { describeAuthError } from "@/lib/authErrors";
 import { logger } from "@/lib/logger";
+import { githubCredentialSync } from "@/lib/githubCredentialSync";
 import { GradientBackground } from "./GradientBackground";
 import { BrandMark } from "./icons/BrandMark";
 
@@ -192,6 +193,16 @@ export function OAuthCallback() {
           isAnonymous: user?.is_anonymous,
           hasEmail: !!user?.email,
         });
+
+        // A GitHub sign-in backed by the GitHub App hands us a user token
+        // that is already authorized for repo access: keep it, so signing in
+        // is the only consent the user gives. This route is the one place the
+        // fresh provider_token is in hand — on the web and on the desktop
+        // loopback sign-in, which loads this same route. A classic OAuth
+        // token is ignored. Not awaited: a failed save is retried and
+        // surfaced by githubCredentialSync itself and must not hold up the
+        // sign-in landing.
+        void githubCredentialSync.syncProviderTokenFromSession(session);
 
         if (isSafeReturnTo(returnTo)) {
           // Restore the originating URL. This is what makes an email link feel
