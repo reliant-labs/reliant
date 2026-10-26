@@ -17,10 +17,29 @@ import (
 // separate by design (see ExecGraceDelay), and so are their tests: a change
 // that collapses them back into one timer breaks one of these files.
 
+// unhurriedCancel gives a cancelled command all the time it needs to finish
+// its SIGTERM handler, for the tests below that pin WHAT a cancellation does
+// (the handler runs, a clean exit is a success), not how long it is allowed.
+//
+// Those two durations are the production escalation to SIGKILL (ExecGraceDelay,
+// and os/exec's own kill at ExecWaitDelay once cmd.Cancel is set). A command
+// runs at nice 10 (osutil.LowerChildPriority), so on a saturated host its
+// handler gets a sliver of a CPU: at load ~100 the 3s grace passed before the
+// shell ran `exit 0`, the group was SIGKILLed, and a correct implementation
+// reported ExitCode -1. The escalation itself is osutil's
+// graceful-cancel tests' to pin.
+func unhurriedCancel(t *testing.T) {
+	t.Helper()
+	prevGrace, prevWait := ExecGraceDelay, ExecWaitDelay
+	ExecGraceDelay, ExecWaitDelay = 2*time.Minute, 2*time.Minute
+	t.Cleanup(func() { ExecGraceDelay, ExecWaitDelay = prevGrace, prevWait })
+}
+
 // TestRunCommand_CancelledCommandRunsCleanup is the general fix, proved
 // through the real exec path rather than the primitive: a cancelled command
 // must get the chance to run its signal handler.
 func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
+	unhurriedCancel(t)
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "cleanup.txt")
 	ready := filepath.Join(dir, "ready.txt")
@@ -60,7 +79,7 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(15 * time.Second):
+	case <-time.After(3 * time.Minute): // past unhurriedCancel's escalation
 		t.Fatal("RunCommand did not return after cancellation")
 	}
 
@@ -83,6 +102,7 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 // back as exit 1 with "context canceled" pasted onto its stderr — a failure
 // that never happened.
 func TestRunCommand_CleanCancellationIsNotAFailure(t *testing.T) {
+	unhurriedCancel(t)
 	dir := t.TempDir()
 	ready := filepath.Join(dir, "ready.txt")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -124,7 +144,7 @@ func TestRunCommand_CleanCancellationIsNotAFailure(t *testing.T) {
 	var got result
 	select {
 	case got = <-done:
-	case <-time.After(15 * time.Second):
+	case <-time.After(3 * time.Minute): // past unhurriedCancel's escalation
 		t.Fatal("RunCommand did not return after cancellation")
 	}
 
