@@ -3021,8 +3021,10 @@ export type QueryPanelResponse = Message<"controlplane.v1.QueryPanelResponse"> &
   seriesTotal: number;
 
   /**
-   * Non-fatal notes about the result, as stable codes: mixed_bounds,
-   * mixed_temporality, step_raised, metric_stored_as_n_kinds. Metrics panels.
+   * Non-fatal notes about the result, as "<code>" or "<code>: <detail>":
+   * mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds,
+   * metric_kind_mismatch, and metric_absent (a series' metric has no data in
+   * the scope and range: its series is empty, never an error). Metrics panels.
    *
    * @generated from field: repeated string warnings = 17;
    */
