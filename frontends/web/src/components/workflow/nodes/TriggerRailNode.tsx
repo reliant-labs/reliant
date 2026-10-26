@@ -46,7 +46,7 @@ import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { NODE_DIMENSIONS } from "../../../lib/workflow-node-dimensions";
 import ToggleSwitch from "../../forge-ui/toggle_switch";
 
-interface TriggerRailNodeProps {
+export interface TriggerRailNodeProps {
   data: {
     eventType: string;
     label: string;

@@ -13,7 +13,9 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
-    "noEmit": true,
+    /* Declarations for tsconfig.app.json and tsconfig.test.json, which reference this project; see tsconfig.app.json. */
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.tmp/tsc",
 
     /* Relaxed linting for generated code */
     "strict": true,

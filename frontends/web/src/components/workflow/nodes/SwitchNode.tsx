@@ -16,7 +16,7 @@ export interface SwitchNodeData {
   saveMessage?: import('../../../types/workflow').SaveMessageConfig
 }
 
-interface SwitchNodeProps {
+export interface SwitchNodeProps {
   id: string
   data: SwitchNodeData
   selected?: boolean
