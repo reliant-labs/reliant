@@ -886,16 +886,16 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x15\n" +
 	"\x13DevAuthClearRequest\"0\n" +
 	"\x14DevAuthClearResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xab\x05\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\xd7\a\n" +
 	"\rSystemService\x12J\n" +
 	"\x06Health\x12\x19.reliant.v1.HealthRequest\x1a\x1a.reliant.v1.HealthResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12G\n" +
 	"\x05Ready\x12\x18.reliant.v1.ReadyRequest\x1a\x19.reliant.v1.ReadyResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12D\n" +
 	"\x04Info\x12\x17.reliant.v1.InfoRequest\x1a\x18.reliant.v1.InfoResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12M\n" +
-	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12e\n" +
-	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
-	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
-	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12Y\n" +
-	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12\xc2\x01\n" +
+	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"c\xa2\xbb\x18_\b\x00:[:Ysign-in handshake: returns session tokens to the desktop app and changes no reliant state\x12\x99\x01\n" +
+	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"I\xa2\xbb\x18E\b\x00:A:?development only: reads the developer's local auth session file\x12\x9a\x01\n" +
+	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"J\xa2\xbb\x18F\b\x00:B:@development only: writes the developer's local auth session file\x12\x9d\x01\n" +
+	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"J\xa2\xbb\x18F\b\x00:B:@development only: clears the developer's local auth session fileB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_system_proto_rawDescOnce sync.Once

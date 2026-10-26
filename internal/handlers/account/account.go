@@ -176,6 +176,7 @@ func (s *Service) DeleteAccount(
 		"refund_pending", resp.RefundPending)
 
 	resp.DeletedRowCount = deleted
+	resp.UserId = userID
 	return connect.NewResponse(resp), nil
 }
 

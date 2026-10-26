@@ -36,7 +36,11 @@
           "InputProtoFile": "reliant/v1/account.proto",
           "OutputProtoFile": "reliant/v1/account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "account",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -80,6 +84,11 @@
           {
             "Name": "refund_owed_cents",
             "ProtoType": "int64",
+            "IsOptional": false
+          },
+          {
+            "Name": "user_id",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -182,6 +191,10 @@
           {
             "name": "refund_owed_cents",
             "kind": "int64"
+          },
+          {
+            "name": "user_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.PreviewAccountDeletionRequest": [],
@@ -1553,7 +1566,11 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "connection",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -1569,7 +1586,9 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "OAuth handshake in flight: nothing is stored until CompleteOAuth records the connection"
           }
         },
         {
@@ -1585,7 +1604,11 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "connect",
+            "TargetKind": "connection",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -1601,7 +1624,9 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "probes the live credential; refreshing the account label it detects is bookkeeping, not a change a person made"
           }
         },
         {
@@ -1617,7 +1642,11 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "rename",
+            "TargetKind": "connection",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -1633,7 +1662,11 @@
           "InputProtoFile": "reliant/v1/connection.proto",
           "OutputProtoFile": "reliant/v1/connection.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_default",
+            "TargetKind": "connection",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -13239,7 +13272,11 @@
           "InputProtoFile": "reliant/v1/connector.proto",
           "OutputProtoFile": "reliant/v1/connector.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "revoke",
+            "TargetKind": "connector",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -13287,7 +13324,11 @@
           "InputProtoFile": "reliant/v1/connector.proto",
           "OutputProtoFile": "reliant/v1/connector.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "authorize",
+            "TargetKind": "connector_client",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -13319,7 +13360,11 @@
           "InputProtoFile": "reliant/v1/connector.proto",
           "OutputProtoFile": "reliant/v1/connector.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "revoke",
+            "TargetKind": "connector_client",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -21353,7 +21398,11 @@
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
           "OutputProtoFile": "reliant/v1/model_endpoint.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "model_endpoint",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -21391,7 +21440,9 @@
           "InputProtoFile": "reliant/v1/model_endpoint.proto",
           "OutputProtoFile": "reliant/v1/model_endpoint.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "probes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changed"
           }
         }
       ],
@@ -23932,7 +23983,11 @@
           "InputProtoFile": "reliant/v1/preset.proto",
           "OutputProtoFile": "reliant/v1/preset.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "preset",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -23948,7 +24003,11 @@
           "InputProtoFile": "reliant/v1/preset.proto",
           "OutputProtoFile": "reliant/v1/preset.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "preset",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -23964,7 +24023,11 @@
           "InputProtoFile": "reliant/v1/preset.proto",
           "OutputProtoFile": "reliant/v1/preset.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "preset",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -23980,7 +24043,11 @@
           "InputProtoFile": "reliant/v1/preset.proto",
           "OutputProtoFile": "reliant/v1/preset.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_default_preset",
+            "TargetKind": "workflow",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -24084,6 +24151,11 @@
           },
           {
             "Name": "error",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "id",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -24347,6 +24419,10 @@
           },
           {
             "name": "error",
+            "kind": "string"
+          },
+          {
+            "name": "id",
             "kind": "string"
           }
         ],
@@ -26579,7 +26655,11 @@
           "InputProtoFile": "reliant/v1/provider_account.proto",
           "OutputProtoFile": "reliant/v1/provider_account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -26595,7 +26675,9 @@
           "InputProtoFile": "reliant/v1/provider_account.proto",
           "OutputProtoFile": "reliant/v1/provider_account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "routing preference: the priority order among one provider's accounts, which the Providers list shows directly"
           }
         },
         {
@@ -26612,7 +26694,11 @@
           "InputProtoFile": "reliant/v1/provider_account.proto",
           "OutputProtoFile": "reliant/v1/provider_account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -26628,7 +26714,11 @@
           "InputProtoFile": "reliant/v1/provider_account.proto",
           "OutputProtoFile": "reliant/v1/provider_account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "add",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -26644,7 +26734,9 @@
           "InputProtoFile": "reliant/v1/provider_account.proto",
           "OutputProtoFile": "reliant/v1/provider_account.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "re-reads usage from the provider (throttled); changes only the cached usage windows"
           }
         },
         {
@@ -28474,10 +28566,7 @@
           "Activity": {
             "Mutating": true,
             "Declared": true,
-            "Verb": "create",
-            "TargetKind": "setting",
-            "Implied": true,
-            "Writer": "INTERCEPTOR"
+            "None": "per-user preference: a key/value upsert into the caller's settings, not product history"
           }
         },
         {
@@ -28528,7 +28617,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user preference: a key/value upsert into the caller's settings, not product history"
           }
         },
         {
@@ -28545,7 +28636,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user preference: a key/value upsert into the caller's settings, not product history"
           }
         },
         {
@@ -28561,7 +28654,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user preference: a key/value upsert into the caller's settings, not product history"
           }
         },
         {
@@ -28593,7 +28688,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user UI preference: keyboard shortcuts"
           }
         },
         {
@@ -28625,7 +28722,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user UI preference"
           }
         },
         {
@@ -28641,7 +28740,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user UI preference: hides a workflow or preset from the pickers"
           }
         },
         {
@@ -28673,7 +28774,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user prompt library, stored as one settings key like the other preferences"
           }
         },
         {
@@ -28705,7 +28808,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "checks a key against its provider and stores nothing; AddProviderAPIKey records the account"
           }
         },
         {
@@ -28721,7 +28826,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "machine sync: onboarding hydrates the managed Reliant gateway key the control plane mints, not a change a person makes"
           }
         },
         {
@@ -28737,7 +28844,11 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "connect",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -28753,7 +28864,11 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "connect",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -28769,7 +28884,11 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "connect",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -28785,7 +28904,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "device-authorization handshake in flight: PollCopilotDeviceAuth records the account once it is authorized"
           }
         },
         {
@@ -28801,7 +28922,11 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "connect",
+            "TargetKind": "provider_account",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -28833,7 +28958,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user preference: the analytics and crash-reporting opt-ins, like UpdatePreferences"
           }
         },
         {
@@ -28849,7 +28976,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "analytics ping: a page view for the analytics pipeline, not product state"
           }
         },
         {
@@ -28865,7 +28994,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"
           }
         },
         {
@@ -28881,7 +29012,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"
           }
         },
         {
@@ -28929,7 +29062,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"
           }
         },
         {
@@ -28961,7 +29096,9 @@
           "InputProtoFile": "reliant/v1/settings.proto",
           "OutputProtoFile": "reliant/v1/settings.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "never implemented: answers Unimplemented, so it changes nothing; declare its event when it is implemented"
           }
         },
         {
@@ -32856,7 +32993,9 @@
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "sign-in handshake: returns session tokens to the desktop app and changes no reliant state"
           }
         },
         {
@@ -32872,7 +33011,9 @@
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "development only: reads the developer's local auth session file"
           }
         },
         {
@@ -32888,7 +33029,9 @@
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "development only: writes the developer's local auth session file"
           }
         },
         {
@@ -32904,7 +33047,9 @@
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "development only: clears the developer's local auth session file"
           }
         }
       ],
@@ -33589,7 +33734,11 @@
           "InputProtoFile": "reliant/v1/token.proto",
           "OutputProtoFile": "reliant/v1/token.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "token",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -33621,7 +33770,11 @@
           "InputProtoFile": "reliant/v1/token.proto",
           "OutputProtoFile": "reliant/v1/token.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "revoke",
+            "TargetKind": "token",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -33637,7 +33790,11 @@
           "InputProtoFile": "reliant/v1/token.proto",
           "OutputProtoFile": "reliant/v1/token.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "token",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -33653,7 +33810,9 @@
           "InputProtoFile": "reliant/v1/token.proto",
           "OutputProtoFile": "reliant/v1/token.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-command credential exchange: forge mints one short-lived, attenuated token for each control-plane call, so an event per exchange is noise"
           }
         },
         {
@@ -40931,7 +41090,7 @@
     "reliant/config/v1/vault_config.proto": "e0c1e732880cc444791cb314c802fb5af73ee007c6a37c6333f6f4367a45d192",
     "reliant/config/v1/web_config.proto": "cb909dc9c05caa85bc3ab3689f22ac7322965aeea013ead4d812976e6b69c230",
     "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
-    "reliant/v1/account.proto": "5ac0387f3f00fe31139db27af006c500337d0441ce9785208411893901a00ab6",
+    "reliant/v1/account.proto": "9a2ee53fe8cd0e6ad7e2bc371885bb267664232a3782761076b843a0f7ca102d",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4d455295dc786a51bb13f302b34a6b60ac70d131b5b6c1bd91967f17f37c7d72",
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
@@ -40939,8 +41098,8 @@
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
     "reliant/v1/chat.proto": "4b78eab5552a9d6007156033f9971c309f48ee0203e95c0b2c383c89e494920b",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
-    "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
-    "reliant/v1/connector.proto": "604b069c652292d84d3c220ad54815a01b9d28670accd4fc75b042ffae8efcfe",
+    "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
+    "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
     "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
@@ -40949,22 +41108,22 @@
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
-    "reliant/v1/model_endpoint.proto": "2fb5bd0a5d3a2bda68df02bfb6658b210ea7eb021999816d2ec8e3cf3705b890",
+    "reliant/v1/model_endpoint.proto": "e0cc2fe196e9924630a5fed14a68e89e4e51192d98b763201af3f7f84210caf3",
     "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
     "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
-    "reliant/v1/preset.proto": "27acb3ba272869868343c82279adc59b24a15bdc22f500ea36e5aa73a709dae8",
+    "reliant/v1/preset.proto": "4a4d7a48d45412e11b50bac80bbdc2d2e5c9a86596f680598efa312cb9f300c5",
     "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
-    "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
+    "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
     "reliant/v1/run.proto": "40df7416b308111e1627565d8498943ad1ceeaefb0adf22c3e2c212f518762a7",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
-    "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
+    "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
     "reliant/v1/streaming.proto": "e75666fc99eae37e14188b9a98efdf06699d92ad922db89abf5dc9190ae8d2bc",
-    "reliant/v1/system.proto": "7a9eb1bc4d6a322cbb907ec1843f74815c9a10d01b3d2ee305aa945b4c48d666",
+    "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
-    "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
+    "reliant/v1/token.proto": "280e0dcd903d116bb7805890cace95e2440c24d33047fcac2e2cba1b5a986bd2",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
     "reliant/v1/trigger.proto": "865ce2ff003ba8acd15c4f2e664e149a00e7e6c840e4fcae5a5503b93f4a411a",
