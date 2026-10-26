@@ -53,6 +53,8 @@ func main() {
 		return
 	case "migration-order":
 		os.Exit(runMigrationOrder(args, os.Stdout, os.Stderr))
+	case "gate-verify":
+		os.Exit(runGateVerify(args, os.Stdout, os.Stderr))
 	case "plan", "run":
 	default:
 		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order or changed-tests)\n", cmd)

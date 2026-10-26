@@ -96,6 +96,22 @@ code, build and test run again on the amended tree. A dirty tree (a local run
 with uncommitted edits) runs the generators in place, first, because a scratch
 checkout of HEAD would not see your edits.
 
+### A skip is not a pass
+
+The gate fails closed on a phase that never completed. Every phase records
+itself in `$MG_LOGDIR/expected` before it launches and leaves a `<phase>.row`
+only when it finishes. The last step, `go run ./tools/test-affected gate-verify`,
+compares what the plan **obliges** (build, test, plus `generate`, `docs`,
+`migorder`, `typecheck`, `migsafety`, `lint` as the plan and the diff select
+them) and what the gate **started** against the rows. A phase with no row
+(queued for a slot and cut off, cancelled, timed out, its tool missing) fails
+the gate and is named: `FAILED: docs never completed (no result row; ...)`.
+The verdict is also written to `$MG_LOGDIR/verdict`. A missing `jq` or an
+unparsable `plan.json` aborts the gate, because every lane would otherwise read
+as "not selected". reliant#1393 merged with docs-generate still queued; this is
+the check that stops that. The merge queue posts `merge-gate` SUCCESS only when
+the verdict is `OK`, and posts a FAILURE status carrying it otherwise.
+
 ### Direct importers only
 
 A change to a hub package (`internal/logging`, `internal/observability`) reaches
