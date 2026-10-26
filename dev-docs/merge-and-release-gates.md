@@ -77,6 +77,13 @@ The phases:
      a web file. The web test lane cannot stand in for it: vitest strips types
      without checking them, and a changed module no test imports selects no
      test. #1556 merged a test type error because the gate had no such phase.
+     Each file is type-checked once: `tsconfig.test.json` holds only the
+     tests and references the composite app and gen projects, reading their
+     emitted declarations. The build info and declarations live in
+     `frontends/web/node_modules/.tmp/`, which the gate's `git clean -fdq`
+     keeps (it is ignored) and `npm ci` drops with the rest of
+     `node_modules`, so a pool checkout re-checks what the squash changed
+     and what depends on it, and a lockfile change starts cold.
    - **lint** is `forge lint --scope <every changed directory>`, or unscoped
      when `go.mod`, `go.sum` or `forge.yaml` changed (a pin bump moves every
      package).

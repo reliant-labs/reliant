@@ -15,13 +15,17 @@
    * declarations alone does not re-check the tests.
    *
    * Same options as the app (`extends`), but a leaf: nothing references it, so
-   * it emits nothing. `types` adds the vitest globals the config enables
-   * (`test.globals`) and Node's, for the tests that read files.
+   * it emits nothing. `incremental` because `composite: false` drops it, and
+   * without it `tsc -b` re-checks every test whenever any one is out of date
+   * (the build info then records only the root files). `types` adds the
+   * vitest globals the config enables (`test.globals`) and Node's, for the
+   * tests that read files.
    */
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "composite": false,
+    "incremental": true,
     "declaration": false,
     "emitDeclarationOnly": false,
     "noEmit": true,
