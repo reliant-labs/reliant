@@ -9,6 +9,9 @@ import {
 } from "react";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
+import { useSurface } from "../../lib/surfaceContext";
+import { useVisualViewport } from "../../hooks/useVisualViewport";
+import { composerMaxHeight } from "./composerHeight";
 import { CodeContextChip } from "./CodeContextChip";
 import type { CodeContext } from "./useCodeContexts";
 import {
@@ -64,9 +67,6 @@ interface ChatTextAreaProps {
   /** Remove one of those references. */
   onRemoveContext?: (id: string) => void;
 }
-
-/** Maximum composer height, in lines, before it scrolls. */
-const MAX_VISIBLE_LINES = 10;
 
 // Example prompts that rotate randomly
 const EXAMPLE_PROMPTS = [
@@ -161,7 +161,12 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
     const defaultPlaceholder = `Ask Reliant, e.g. "${examplePrompt}"`;
 
-    /** Grow to fit the content, up to MAX_VISIBLE_LINES, then scroll. */
+    // On the phone the cap follows the visible viewport, so an open keyboard
+    // cannot let a long message push the timeline off screen.
+    const isMobile = useSurface() === "mobile";
+    const viewportHeight = useVisualViewport(isMobile)?.height;
+
+    /** Grow to fit the content, up to the cap, then scroll inside. */
     const adjustHeight = useCallback(() => {
       const el = textareaRef.current;
       if (!el) return;
@@ -170,14 +175,29 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       const lineHeight = parseFloat(style.lineHeight) || 20;
       const paddingTop = parseFloat(style.paddingTop) || 0;
       const paddingBottom = parseFloat(style.paddingBottom) || 0;
-      const minHeight = lineHeight + paddingTop + paddingBottom;
-      const maxHeight = lineHeight * MAX_VISIBLE_LINES + paddingTop + paddingBottom;
+      const paddingY = paddingTop + paddingBottom;
+      const minHeight = lineHeight + paddingY;
+      const maxHeight = composerMaxHeight({
+        lineHeight,
+        paddingY,
+        viewportHeight: isMobile ? viewportHeight : undefined,
+      });
 
+      // Collapsing to `auto` below clamps scrollTop to 0; put it back so a
+      // capped composer does not jump to its first line on every keystroke.
+      const scrollTop = el.scrollTop;
       // scrollHeight only reports the content height once the element is not
       // already sized to fit it.
       el.style.height = "auto";
+      el.style.maxHeight = `${maxHeight}px`;
       el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)}px`;
-    }, []);
+
+      const caretAtEnd =
+        document.activeElement === el &&
+        el.selectionStart === el.selectionEnd &&
+        el.selectionEnd === el.value.length;
+      el.scrollTop = caretAtEnd ? el.scrollHeight : scrollTop;
+    }, [isMobile, viewportHeight]);
 
     useLayoutEffect(() => {
       adjustHeight();
@@ -341,7 +361,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-2.5"
           style={{
             color: "var(--chat-input-text)",
-            maxHeight: 200,
           }}
         />
         {slashCommands && slashCommands.length > 0 && (

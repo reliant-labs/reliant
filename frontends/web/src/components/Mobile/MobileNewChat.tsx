@@ -313,7 +313,7 @@ export function MobileNewChat() {
           bottom inset to whichever element actually sits at the edge. */}
       <div
         className="flex shrink-0 items-end gap-2 border-t border-border px-3 py-3"
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "calc(0.75rem + var(--mobile-safe-bottom, env(safe-area-inset-bottom)))" }}
       >
         <textarea
           value={message}
