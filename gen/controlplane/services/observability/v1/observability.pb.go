@@ -6086,8 +6086,10 @@ type QueryPanelResponse struct {
 	// len(series) (or len(rows)) for "showing 10 of 1,204". 0 when unknown or
 	// for a panel that is not capped by series.
 	SeriesTotal int32 `protobuf:"varint,16,opt,name=series_total,json=seriesTotal,proto3" json:"series_total,omitempty"`
-	// Non-fatal notes about the result, as stable codes: mixed_bounds,
-	// mixed_temporality, step_raised, metric_stored_as_n_kinds. Metrics panels.
+	// Non-fatal notes about the result, as "<code>" or "<code>: <detail>":
+	// mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds,
+	// metric_kind_mismatch, and metric_absent (a series' metric has no data in
+	// the scope and range: its series is empty, never an error). Metrics panels.
 	Warnings      []string `protobuf:"bytes,17,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

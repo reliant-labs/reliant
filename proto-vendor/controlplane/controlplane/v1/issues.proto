@@ -76,7 +76,11 @@ message Issue {
   string last_version = 16;
   // Events in the queried window.
   int64 events = 17;
-  // Distinct sessions (browser) or traces (server) in the queried window.
+  // Distinct things the issue touched in the queried window, counted over
+  // affected_unit: sessions for a browser issue; for a server issue the users its
+  // events name when at least half of them do, else the chats, threads or workflows
+  // they ran for (a worker or reconciler logs on behalf of a run, not a request),
+  // else traces.
   int64 affected = 18;
   // Hourly event counts across the queried window, oldest first.
   repeated IssueTrendPoint trend = 19;
@@ -96,4 +100,7 @@ message Issue {
   // observe.IssueSource): a report filed like an error without being one, such
   // as an agent's bug report ("llm_bug_report"). Empty for an error.
   string source = 27;
+  // What affected counted: "users", "chats", "threads", "workflows", "traces" or
+  // "sessions". Empty on a control plane older than the field.
+  string affected_unit = 28;
 }

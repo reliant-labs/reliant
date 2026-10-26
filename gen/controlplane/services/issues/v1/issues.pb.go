@@ -837,12 +837,14 @@ func (x *IssueFrame) GetInApp() bool {
 }
 
 type IssueVersionBreakdown struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Events        int64                  `protobuf:"varint,2,opt,name=events,proto3" json:"events,omitempty"`
-	Affected      int64                  `protobuf:"varint,3,opt,name=affected,proto3" json:"affected,omitempty"`
-	FirstSeenAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
-	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Version     string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Events      int64                  `protobuf:"varint,2,opt,name=events,proto3" json:"events,omitempty"`
+	Affected    int64                  `protobuf:"varint,3,opt,name=affected,proto3" json:"affected,omitempty"`
+	FirstSeenAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
+	LastSeenAt  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	// What affected counted, as controlplane.v1.Issue.affected_unit.
+	AffectedUnit  string `protobuf:"bytes,6,opt,name=affected_unit,json=affectedUnit,proto3" json:"affected_unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -910,6 +912,13 @@ func (x *IssueVersionBreakdown) GetLastSeenAt() *timestamppb.Timestamp {
 		return x.LastSeenAt
 	}
 	return nil
+}
+
+func (x *IssueVersionBreakdown) GetAffectedUnit() string {
+	if x != nil {
+		return x.AffectedUnit
+	}
+	return ""
 }
 
 // IssueReleaseRef names the release an issue first appeared in and what changed
@@ -1368,14 +1377,15 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x04file\x18\x02 \x01(\tR\x04file\x12\x12\n" +
 	"\x04line\x18\x03 \x01(\x05R\x04line\x12\x16\n" +
 	"\x06column\x18\x04 \x01(\x05R\x06column\x12\x15\n" +
-	"\x06in_app\x18\x05 \x01(\bR\x05inApp\"\xe3\x01\n" +
+	"\x06in_app\x18\x05 \x01(\bR\x05inApp\"\x88\x02\n" +
 	"\x15IssueVersionBreakdown\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06events\x18\x02 \x01(\x03R\x06events\x12\x1a\n" +
 	"\baffected\x18\x03 \x01(\x03R\baffected\x12>\n" +
 	"\rfirst_seen_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vfirstSeenAt\x12<\n" +
 	"\flast_seen_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastSeenAt\"\xaa\x01\n" +
+	"lastSeenAt\x12#\n" +
+	"\raffected_unit\x18\x06 \x01(\tR\faffectedUnit\"\xaa\x01\n" +
 	"\x0fIssueReleaseRef\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
 	"\n" +

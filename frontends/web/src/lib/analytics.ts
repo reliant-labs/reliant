@@ -5,8 +5,8 @@
  * optional and independent: one failing never stops the other.
  *
  *  - ClickStack, through forge's web runtime `track()`, when the build ships to
- *    it (VITE_TELEMETRY_SINKS includes `clickstack` and VITE_OTEL_ENDPOINT is
- *    set). The event becomes a span named `product.<event>` on the same session
+ *    it (the runtime config's TELEMETRY_SINKS includes `clickstack` and its
+ *    OTEL_ENDPOINT is set). The event becomes a span named `product.<event>` on the same session
  *    as the page's errors and replay; the runtime bounds and redacts the props.
  *    This is where funnels are queried: the backend's product events are log
  *    records with the same `product.` names (dev-docs/product-events.md).
