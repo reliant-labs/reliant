@@ -34,17 +34,11 @@ const listCatalogIntegrations = vi.fn();
 const listNodes = vi.fn();
 const listIntegrations = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-  },
-  getCatalogClient: () => ({ listNodes }),
-  getGRPCBaseURLPublic: () => null,
-}));
-
 // CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
     "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.ListNodes": (req) => listNodes(req),
     "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
     "CatalogService.ListCatalogIntegrations": (req) => listCatalogIntegrations(req),
     "ConnectionService.ListIntegrations": (req) => listIntegrations(req),

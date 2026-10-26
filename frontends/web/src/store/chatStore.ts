@@ -241,7 +241,7 @@ const streamingBuffers = new Map<string, StreamingBuffer>();
 
 // Single-fire guard: a burst of error events (one per workflow retry attempt
 // before the workflow gives up) opens exactly one modal, not N. Mirrors the
-// upgradeInterceptor pattern in api/grpc-client.ts. Reset when the modal
+// upgradeInterceptor pattern in api/upgradeInterceptor.ts. Reset when the modal
 // closes so a later quota hit in a different chat still surfaces a modal.
 let _reliantManagedQuotaModalInFlight = false;
 

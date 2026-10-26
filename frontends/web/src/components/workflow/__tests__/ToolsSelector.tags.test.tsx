@@ -7,12 +7,19 @@
  */
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { screen, render } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
+import { renderWithQuery } from "../../../test/renderWithQuery";
 import userEvent from "@testing-library/user-event";
 
-vi.mock("../../../api/client", () => ({
-  api: { tools: { list: async () => ({ tools: [{ name: "view", description: "Read a file", category: "File" }] }) } },
-}));
+// ListTools is answered at the transport (ToolsSelector reads the generated hook).
+setTransport(
+  mockTransport({
+    "CatalogService.ListTools": { response: { tools: [{ name: "view", description: "Read a file", category: "File" }] } },
+  }),
+);
 
 import { ToolsSelector } from "../ToolsSelector";
 
@@ -32,7 +39,7 @@ function Selector({ onValue }: { onValue: (tools: string[]) => void }) {
 async function openSelector() {
   const user = userEvent.setup();
   const onValue = vi.fn();
-  render(<Selector onValue={onValue} />);
+  renderWithQuery(<Selector onValue={onValue} />);
   await user.click(await screen.findByRole("button", { name: /token\(s\) selected/ }));
   return { user, onValue };
 }

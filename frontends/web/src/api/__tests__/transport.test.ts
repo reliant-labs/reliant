@@ -256,21 +256,21 @@ describe('same-origin transport selection (CORS-free dev model)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('getGRPCBaseURL returns the document origin when served over http (dev)', async () => {
+  it('reliantApiBaseUrl returns the document origin when served over http (dev)', async () => {
     stubLocation('http:', 'http://127.0.0.1:5173')
-    const { getGRPCBaseURLPublic } = await import('../grpc-client')
-    expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:5173')
+    const { reliantApiBaseUrl } = await import('../../lib/connect')
+    expect(reliantApiBaseUrl()).toBe('http://127.0.0.1:5173')
   })
 
-  it('getGRPCBaseURL prefers RELIANT_CONFIG.grpcUrl when served from file:// (packaged Electron)', async () => {
+  it('reliantApiBaseUrl prefers RELIANT_CONFIG.grpcUrl when served from file:// (packaged Electron)', async () => {
     stubLocation('file:', 'null')
     ;(window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG = {
       isElectron: true,
       grpcUrl: 'http://127.0.0.1:54321',
     }
     try {
-      const { getGRPCBaseURLPublic } = await import('../grpc-client')
-      expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:54321')
+      const { reliantApiBaseUrl } = await import('../../lib/connect')
+      expect(reliantApiBaseUrl()).toBe('http://127.0.0.1:54321')
     } finally {
       delete (window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG
     }

@@ -423,8 +423,8 @@ const injectReliantConfig = async () => {
       // rendererApiUrl = where the renderer's MAIN Connect transport hits for
       //                  reliant.v1.* services (ProjectService, ChatService, …).
       //                  In prod the two collapse; in cloud-dev they're distinct
-      //                  processes on different ports. getGRPCBaseURL() in
-      //                  frontends/web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
+      //                  processes on different ports. reliantApiBaseUrl() in
+      //                  frontends/web/src/lib/connect.ts reads window.RELIANT_CONFIG.grpcUrl.
       const apiUrl = status?.apiUrl || 'http://localhost:8080';
       const rendererApiUrl = status?.rendererApiUrl || apiUrl;
       return {

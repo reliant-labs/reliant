@@ -33,18 +33,13 @@ const listTriggers = vi.fn();
 const setTriggerEnabled = vi.fn();
 const listDaemons = vi.fn(async () => ({ daemons: [] }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons }),
-  },
-}));
-
 // TriggerService is on its generated hooks, so it is answered at the transport.
 // Integration events are named from the catalog's trigger types; none here.
 setTransport(
   mockTransport({
     ...serviceHandlers("WorkflowService", { listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
     ...serviceHandlers("TriggerService", { listTriggers, setTriggerEnabled }),
+    ...serviceHandlers("DaemonRegistryService", { listDaemons }),
     "CatalogService.SearchCatalog": { response: {} },
   }),
 );

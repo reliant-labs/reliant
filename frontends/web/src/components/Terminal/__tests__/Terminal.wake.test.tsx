@@ -125,8 +125,9 @@ vi.mock("../../../lib/supabase", () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: "t" } } }) } },
 }));
 
-vi.mock("../../../api/grpc-client", () => ({
-  getGRPCBaseURLPublic: () => "http://localhost:8080",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "http://localhost:8080",
 }));
 
 const terminalStoreState = vi.hoisted(() => ({

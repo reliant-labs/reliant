@@ -29,10 +29,6 @@ import { TriggerRailProvider, type TriggerRailContextValue } from "../../Trigger
 
 const listTriggers = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {},
-}));
-
 // TriggerService is on its generated hooks, so it is answered at the transport.
 // Integration events are named from the catalog's trigger types; none here.
 setTransport(

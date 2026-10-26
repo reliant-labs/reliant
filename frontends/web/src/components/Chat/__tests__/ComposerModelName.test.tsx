@@ -1,11 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { setTransport } from '../../../lib/connect'
+import { mockTransport } from '../../../lib/test-utils'
+
 const mocks = vi.hoisted(() => ({ listByProvider: vi.fn() }))
 
-vi.mock('../../../api/client', () => ({
-  api: { models: { listByProvider: mocks.listByProvider } },
-}))
+// ListModelsByProvider is answered at the transport; the fake takes the
+// provider and returns its models.
+setTransport(
+  mockTransport({
+    'CatalogService.ListModelsByProvider': async (req) => ({
+      models: await mocks.listByProvider((req as { provider: string }).provider),
+    }),
+  }),
+)
 
 import { ComposerModelName } from '../ComposerModelName'
 import { resetCatalogModelNames } from '../../../hooks/useCatalogModelName'

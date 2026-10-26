@@ -38,11 +38,6 @@ import { mockTransport } from "@/lib/test-utils";
 const listConnections = vi.fn();
 const resolveTriggerSenders = vi.fn();
 const listTriggerEvents = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {},
-  getGRPCBaseURLPublic: () => null,
-}));
-
 // TriggerService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({

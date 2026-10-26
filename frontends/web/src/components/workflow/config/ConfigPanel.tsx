@@ -50,11 +50,13 @@ import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 import { useStepRun } from "../run/BuilderRunContext";
 import { StepRunFailureBanner, StepRunPanel } from "../run/StepRunPanel";
 
-import { getCatalogClient } from "../../../api/grpc-client";
+import { useListNodes } from "../../../hooks/catalog-service-hooks_gen";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
 import { withWorkflowArgs, withLoopArgs, withRouterArgs } from "../../../types/workflow";
 import type { ConfigurationPanelAccent } from "../ConfigurationPanel";
 import { useWorkflowMutations } from "../WorkflowMutationContext";
+
+const NO_NODES: NodeInfo[] = [];
 
 interface ConfigPanelProps {
   step: Step;
@@ -164,8 +166,11 @@ export function ConfigPanel({
     [mutations],
   );
 
-  const [catalogNodes, setCatalogNodes] = useState<NodeInfo[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  // Catalog nodes for output fields. Shared with ActionStepConfig via props,
+  // and with every other ListNodes reader through the generated entry.
+  const catalogQuery = useListNodes({});
+  const catalogNodes = catalogQuery.data?.nodes ?? NO_NODES;
+  const catalogLoading = catalogQuery.isLoading;
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
 
@@ -279,19 +284,6 @@ export function ConfigPanel({
   // not its ref. IntegrationActionConfig reads the same cached entry.
   const integrationUses = isIntegrationActionStep(step) ? getActionUses(step) : "";
   const integrationEntry = useCatalogEntry(integrationUses && !integrationUses.includes("{{") ? integrationUses : undefined).data;
-
-  // Fetch catalog nodes for output fields. Shared with ActionStepConfig via
-  // props so we don't fire two identical listNodes RPCs per panel open.
-  useEffect(() => {
-    let cancelled = false;
-    const client = getCatalogClient();
-    setCatalogLoading(true);
-    client.listNodes({})
-      .then((res) => { if (!cancelled) setCatalogNodes(res.nodes || []); })
-      .catch(console.error)
-      .finally(() => { if (!cancelled) setCatalogLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
 
   // Fetch referenced workflow def for output resolution
   const [refWorkflowOutputs, setRefWorkflowOutputs] = useState<Record<string, string> | undefined>();
