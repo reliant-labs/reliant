@@ -8,7 +8,8 @@
  * bookmark or pasted link from before the move lands where it meant —
  * environment scope included.
  *
- *   /forge                                → /forge/p/:project
+ *   /forge                                → /apps, every app (components/Apps)
+ *   /forge?forgeProject=…|project=…       → /forge/p/:project
  *   /forge/env/:env?tab=releases          → /forge/p/:project/releases?env=:env
  *   /forge/env/:env?tab=activity          → /forge/p/:project/activity?env=:env
  *   /forge/env/:env?tab=secrets&secret=s  → /forge/p/:project/secrets?env=:env&secret=s
@@ -21,7 +22,7 @@
  *                                           `secret`), or the Overview
  */
 
-import { useParams, useSearch } from "@tanstack/react-router";
+import { Navigate, useParams, useSearch } from "@tanstack/react-router";
 
 import { ForgeResolve } from "./ForgeResolve";
 import {
@@ -38,6 +39,8 @@ type ResolveSearch = { project?: string; forgeProject?: string };
 /** `/forge`: the console's front door (the app sidebar's entry). */
 export function ForgeLandingRoute() {
   const search = useSearch({ strict: false }) as ResolveSearch;
+  // Naming nothing, /forge means "my apps": the list, not a guess at one of them.
+  if (!search.project && !search.forgeProject) return <Navigate to="/apps" replace />;
   return <ForgeResolve {...pick(search)} target={(name) => consolePath(name, { kind: "overview" })} />;
 }
 

@@ -2,7 +2,8 @@
 
 /**
  * The way INTO the console from anywhere that does not name a forge project:
- * the bare `/forge` (the app sidebar's entry) and every retired URL —
+ * `/forge?project=…|forgeProject=…` (the bare `/forge` is the Apps list now)
+ * and every retired URL —
  * `/forge/env/:env?tab=…`, `/forge/observability?…`, `/forge/domains`, and the
  * older per-command paths.
  *

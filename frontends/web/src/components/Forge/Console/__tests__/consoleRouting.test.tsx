@@ -204,8 +204,9 @@ function renderAt(initialEntry: string) {
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
-    routeTree: root.addChildren([authenticated.addChildren([forge]), home]),
+    routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   });
   render(
@@ -237,13 +238,14 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("resolves the persisted last project and opens its Overview, scoped to prod", async () => {
+  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+    // The persisted last project used to be opened here; the list of every
+    // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/forge/p/barkshop", { env: "prod" });
-    expect(restoreLastProject).toHaveBeenCalled();
-    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "overview");
-    expect(screen.getByTestId("page")).toHaveAttribute("data-project-id", "project-b");
+    await landsOn(router, "/apps");
+    expect(await screen.findByTestId("apps")).toBeInTheDocument();
+    expect(restoreLastProject).not.toHaveBeenCalled();
   });
 
   it("resolves a ?project= id (an old bookmark)", async () => {
@@ -256,9 +258,9 @@ describe("the way in: /forge", () => {
     await landsOn(router, "/forge/p/gamma");
   });
 
-  it("offers a picker — never a dead-end sentence — when nothing resolves", async () => {
+  it("offers a picker — never a dead-end sentence — when a named project does not resolve", async () => {
     const user = userEvent.setup();
-    const router = renderAt("/forge");
+    const router = renderAt("/forge?project=project-gone");
     await screen.findByTestId("forge-project-picker");
     await user.click(await screen.findByTestId("forge-project-option-project-a"));
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-a" }));

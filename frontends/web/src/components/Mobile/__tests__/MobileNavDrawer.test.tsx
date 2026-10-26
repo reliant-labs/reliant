@@ -90,7 +90,7 @@ describe("MobileNavDrawer", () => {
     await screen.findByRole("dialog", { name: "Navigation" });
     expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("href", "/m/inbox");
     // The forge console itself, which collapses its own nav at phone width.
-    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/forge");
+    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/apps");
     expect(screen.getByRole("link", { name: /^Observability/ })).toHaveAttribute("href", "/forge/observability");
   });
 

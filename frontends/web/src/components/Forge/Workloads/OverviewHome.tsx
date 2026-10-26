@@ -77,6 +77,7 @@ import {
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { LiveLinks } from "./LiveLinks";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface OverviewSearch {
@@ -218,6 +219,8 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
         <div className="min-w-0 flex-1">{header}</div>
         <div className="pt-1">{rangeControl}</div>
       </div>
+
+      <LiveLinks envs={envs} hosted={hosted} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
