@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "reliant/v1/tools_daemon.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -34,12 +35,27 @@ service ModelEndpointService {
   // forge:custom — seals the endpoint's credential in the credential store and probes before it stores
   rpc CreateModelEndpoint(CreateModelEndpointRequest) returns (CreateModelEndpointResponse) {}
   // forge:custom — re-probes, and revokes the endpoint from the daemon it moved off
-  rpc UpdateModelEndpoint(UpdateModelEndpointRequest) returns (UpdateModelEndpointResponse) {}
+  rpc UpdateModelEndpoint(UpdateModelEndpointRequest) returns (UpdateModelEndpointResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "model_endpoint"
+          id: "id"
+          label: "response.endpoint.name"
+        }
+      }
+    };
+  }
   // forge:custom — also deletes the endpoint's credential and revokes it from its relaying daemon
   rpc DeleteModelEndpoint(DeleteModelEndpointRequest) returns (DeleteModelEndpointResponse) {}
   // TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
   // returns the models it serves. Backs the UI's "Test connection".
-  rpc TestModelEndpoint(TestModelEndpointRequest) returns (TestModelEndpointResponse) {}
+  rpc TestModelEndpoint(TestModelEndpointRequest) returns (TestModelEndpointResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "probes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changed"}
+    };
+  }
 }
 
 enum ModelEndpointRoute {

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -910,7 +911,7 @@ var File_reliant_v1_model_endpoint_proto protoreflect.FileDescriptor
 const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\n" +
 	"\x1freliant/v1/model_endpoint.proto\x12\n" +
-	"reliant.v1\x1a\x1dreliant/v1/tools_daemon.proto\"\xf8\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1dreliant/v1/tools_daemon.proto\"\xf8\x02\n" +
 	"\rModelEndpoint\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -979,13 +980,15 @@ const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\x12ModelEndpointRoute\x12$\n" +
 	" MODEL_ENDPOINT_ROUTE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bMODEL_ENDPOINT_ROUTE_DIRECT\x10\x01\x12#\n" +
-	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\x9f\x04\n" +
+	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\xdc\x05\n" +
 	"\x14ModelEndpointService\x12e\n" +
 	"\x12ListModelEndpoints\x12%.reliant.v1.ListModelEndpointsRequest\x1a&.reliant.v1.ListModelEndpointsResponse\"\x00\x12h\n" +
-	"\x13CreateModelEndpoint\x12&.reliant.v1.CreateModelEndpointRequest\x1a'.reliant.v1.CreateModelEndpointResponse\"\x00\x12h\n" +
-	"\x13UpdateModelEndpoint\x12&.reliant.v1.UpdateModelEndpointRequest\x1a'.reliant.v1.UpdateModelEndpointResponse\"\x00\x12h\n" +
-	"\x13DeleteModelEndpoint\x12&.reliant.v1.DeleteModelEndpointRequest\x1a'.reliant.v1.DeleteModelEndpointResponse\"\x00\x12b\n" +
-	"\x11TestModelEndpoint\x12$.reliant.v1.TestModelEndpointRequest\x1a%.reliant.v1.TestModelEndpointResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x13CreateModelEndpoint\x12&.reliant.v1.CreateModelEndpointRequest\x1a'.reliant.v1.CreateModelEndpointResponse\"\x00\x12\xa4\x01\n" +
+	"\x13UpdateModelEndpoint\x12&.reliant.v1.UpdateModelEndpointRequest\x1a'.reliant.v1.UpdateModelEndpointResponse\"<\xa2\xbb\x188:6\n" +
+	"\x06update\x12,\n" +
+	"\x0emodel_endpoint\x12\x02id\x1a\x16response.endpoint.name\x12h\n" +
+	"\x13DeleteModelEndpoint\x12&.reliant.v1.DeleteModelEndpointRequest\x1a'.reliant.v1.DeleteModelEndpointResponse\"\x00\x12\xe1\x01\n" +
+	"\x11TestModelEndpoint\x12$.reliant.v1.TestModelEndpointRequest\x1a%.reliant.v1.TestModelEndpointResponse\"\x7f\xa2\xbb\x18{:y:wprobes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changedB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_model_endpoint_proto_rawDescOnce sync.Once

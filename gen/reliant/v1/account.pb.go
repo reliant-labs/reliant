@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -375,8 +376,11 @@ type DeleteAccountResponse struct {
 	// method and the deletion is finalized then; the user does nothing.
 	RefundPending   bool  `protobuf:"varint,5,opt,name=refund_pending,json=refundPending,proto3" json:"refund_pending,omitempty"`
 	RefundOwedCents int64 `protobuf:"varint,6,opt,name=refund_owed_cents,json=refundOwedCents,proto3" json:"refund_owed_cents,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The deleted account's user id: the target of the deletion's activity
+	// event (the request names the account only by its confirmation email).
+	UserId        string `protobuf:"bytes,7,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteAccountResponse) Reset() {
@@ -451,12 +455,19 @@ func (x *DeleteAccountResponse) GetRefundOwedCents() int64 {
 	return 0
 }
 
+func (x *DeleteAccountResponse) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
 var File_reliant_v1_account_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/account.proto\x12\n" +
-	"reliant.v1\"\x1f\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x1f\n" +
 	"\x1dPreviewAccountDeletionRequest\"\xfe\x02\n" +
 	"\x1ePreviewAccountDeletionResponse\x12#\n" +
 	"\rproject_count\x18\x01 \x01(\x03R\fprojectCount\x12\x1d\n" +
@@ -480,17 +491,20 @@ const file_reliant_v1_account_proto_rawDesc = "" +
 	"\x12unrefundable_cents\x18\x03 \x01(\x03R\x11unrefundableCents\x122\n" +
 	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\";\n" +
 	"\x14DeleteAccountRequest\x12#\n" +
-	"\rconfirm_email\x18\x01 \x01(\tR\fconfirmEmail\"\xc1\x02\n" +
+	"\rconfirm_email\x18\x01 \x01(\tR\fconfirmEmail\"\xda\x02\n" +
 	"\x15DeleteAccountResponse\x12*\n" +
 	"\x11deleted_row_count\x18\x01 \x01(\x03R\x0fdeletedRowCount\x12%\n" +
 	"\x0erefunded_cents\x18\x02 \x01(\x03R\rrefundedCents\x12N\n" +
 	"\x13refund_destinations\x18\x03 \x03(\v2\x1d.reliant.v1.RefundDestinationR\x12refundDestinations\x122\n" +
 	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x12%\n" +
 	"\x0erefund_pending\x18\x05 \x01(\bR\rrefundPending\x12*\n" +
-	"\x11refund_owed_cents\x18\x06 \x01(\x03R\x0frefundOwedCents2\xde\x01\n" +
+	"\x11refund_owed_cents\x18\x06 \x01(\x03R\x0frefundOwedCents\x12\x17\n" +
+	"\auser_id\x18\a \x01(\tR\x06userId2\xa6\x02\n" +
 	"\x0eAccountService\x12t\n" +
-	"\x16PreviewAccountDeletion\x12).reliant.v1.PreviewAccountDeletionRequest\x1a*.reliant.v1.PreviewAccountDeletionResponse\"\x03\x90\x02\x01\x12V\n" +
-	"\rDeleteAccount\x12 .reliant.v1.DeleteAccountRequest\x1a!.reliant.v1.DeleteAccountResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x16PreviewAccountDeletion\x12).reliant.v1.PreviewAccountDeletionRequest\x1a*.reliant.v1.PreviewAccountDeletionResponse\"\x03\x90\x02\x01\x12\x9d\x01\n" +
+	"\rDeleteAccount\x12 .reliant.v1.DeleteAccountRequest\x1a!.reliant.v1.DeleteAccountResponse\"G\xa2\xbb\x18C:A\n" +
+	"\x06delete\x12\x1b\n" +
+	"\aaccount\x12\x10response.user_id*\x1aresponse.deleted_row_countB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_account_proto_rawDescOnce sync.Once

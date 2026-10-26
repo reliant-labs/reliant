@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -26,19 +27,66 @@ service PresetService {
   
   // CreatePreset saves a new preset to the project's .reliant/presets/ directory.
   // Returns an error if a preset with the same name already exists.
-  rpc CreatePreset(CreatePresetRequest) returns (CreatePresetResponse) {}
+  rpc CreatePreset(CreatePresetRequest) returns (CreatePresetResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "preset"
+          id: "response.preset.id"
+          label: "name"
+        }
+      }
+    };
+  }
 
   // UpdatePreset updates an existing project preset (name, description, params).
   // Returns an error if the preset is builtin or doesn't exist.
-  rpc UpdatePreset(UpdatePresetRequest) returns (UpdatePresetResponse) {}
+  rpc UpdatePreset(UpdatePresetRequest) returns (UpdatePresetResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "preset"
+          id: "response.preset.id"
+          label: "response.preset.name"
+        }
+      }
+    };
+  }
 
   // DeletePreset deletes a project preset file.
   // Returns an error if the preset is builtin or doesn't exist.
-  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse) {}
+  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "preset"
+          id: "response.id"
+          label: "name"
+        }
+      }
+    };
+  }
 
   // SetDefaultPreset marks a preset as the default for a workflow tag.
   // Stores in settings table: preset.default.<tag> = <preset_name>
-  rpc SetDefaultPreset(SetDefaultPresetRequest) returns (SetDefaultPresetResponse) {}
+  rpc SetDefaultPreset(SetDefaultPresetRequest) returns (SetDefaultPresetResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_default_preset"
+        target: {
+          kind: "workflow"
+          id: "workflow_name"
+        }
+        detail: [
+          "preset_name",
+          "group_name"
+        ]
+      }
+    };
+  }
 
   // GetDefaultPreset retrieves the default preset for a workflow tag.
   rpc GetDefaultPreset(GetDefaultPresetRequest) returns (GetDefaultPresetResponse) {}
@@ -227,6 +275,10 @@ message DeletePresetResponse {
 
   // Error message if deletion failed
   string error = 2;
+
+  // The deleted preset's id, set when success is true: the target of the
+  // deletion's activity event (the request names the preset only by name).
+  string id = 3;
 }
 
 // SetDefaultPresetRequest is the request for SetDefaultPreset.
