@@ -102,7 +102,7 @@ interface WorkflowDisplay {
 type TimelineItem =
   | { type: "message"; message: Message; workflow: WorkflowDisplay }
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
-  | { type: "handoff"; toName: string; color: string }
+  | { type: "handoff"; toName: string; color: string; key: string }
   /**
    * `error` is the representative (earliest) failure and is what renders.
    * `errors` is every failure collapsed into this row — length 1 in the normal
@@ -121,17 +121,19 @@ type TimelineItem =
  * timeline rebuilds on every streamed delta, so that is thousands of
  * throwaway allocations a second during a long response.
  *
- * Only "handoff" needs the index: a handoff carries no id of its own, and two
- * handoffs to the same workflow are distinguishable only by position.
+ * A handoff carries no id of its own, so it is keyed on the message that
+ * triggered it. Keying on position would rename it whenever an older page is
+ * prepended, and the virtualizer re-finds the row the reader is on by key: a
+ * renamed anchor row means the prepend is not compensated and the view jumps.
  */
-function timelineItemKey(item: TimelineItem, index: number): string {
+function timelineItemKey(item: TimelineItem): string {
   switch (item.type) {
     case "message":
       return item.message.id;
     case "thread-start":
       return `thread-${item.workflow.thread}`;
     case "handoff":
-      return `handoff-${index}`;
+      return item.key;
     case "error":
       // Keyed on the representative plus the group size: a row that absorbs a
       // late sibling must remount rather than reuse the ungrouped row's key.
@@ -782,6 +784,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           type: "handoff",
           toName: getWorkflowName(newWorkflow),
           color: display.color,
+          key: `handoff-${msg.id}`,
         });
       }
 
@@ -971,7 +974,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // change, and it corrects before paint — see useTimelineVirtualizer.ts for
   // why that replaced react-virtuoso.
   const getTimelineItemKey = useCallback(
-    (index: number) => timelineItemKey(timelineItems[index], index),
+    (index: number) => timelineItemKey(timelineItems[index]),
     [timelineItems],
   );
   const timeline = useTimelineVirtualizer({
@@ -1032,12 +1035,45 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
   }, [userMessageForItem, pinnedHeaderLine]);
 
-  // Scroll-back paging: load the next page when the user nears the top.
+  // Scroll-back paging: load the next page when the reader is near the top.
   // Prepending needs no compensation here — the virtualizer is anchored to
   // the end, so rows prepended above hold the row being read in place.
+  //
+  // A scroll event is not enough to drive this. At scrollTop 0 the browser
+  // emits none, a page can land without moving the reader out of the zone, and
+  // a gesture that ends mid-fetch is never looked at again. So the one check,
+  // maybeLoadOlder, is also run whenever its inputs change (loading flips off,
+  // history appears, rows arrive) and on upward input at the very top.
   const LOAD_OLDER_WITHIN_PX = 400;
   const loadOlderStateRef = useRef({ hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages });
   loadOlderStateRef.current = { hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages };
+
+  const maybeLoadOlder = useCallback(() => {
+    const scroller = scrollerElRef.current;
+    const older = loadOlderStateRef.current;
+    if (!scroller || !older.onLoadOlderMessages) return;
+    if (!older.hasOlderMessages || older.isLoadingOlderMessages) return;
+    if (scroller.scrollTop >= LOAD_OLDER_WITHIN_PX) return;
+    older.onLoadOlderMessages();
+  }, []);
+
+  // A fetch that fails leaves hasMore alone and just stops loading, which the
+  // re-check effect below would read as "load again" — forever. So that effect
+  // only chains off a load that made progress: the message count at the start
+  // of the last load is remembered, and until the list differs from it the
+  // effect holds off. The reader's own input (scroll, wheel, touch, the
+  // button) clears the memory, which also makes a retry deliberate.
+  const loadStartCountRef = useRef<number | null>(null);
+  const userLoadOlder = useCallback(() => {
+    loadStartCountRef.current = null;
+    maybeLoadOlder();
+  }, [maybeLoadOlder]);
+
+  useEffect(() => {
+    if (isLoadingOlderMessages) loadStartCountRef.current = messages.length;
+    // Only the flag flipping starts a load; the count is read as of then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingOlderMessages]);
 
   useEffect(() => {
     const scroller = scrollerEl;
@@ -1049,15 +1085,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       frame = requestAnimationFrame(() => {
         frame = null;
         applyPinnedUserMessage();
-        const older = loadOlderStateRef.current;
-        if (
-          scroller.scrollTop < LOAD_OLDER_WITHIN_PX &&
-          older.onLoadOlderMessages &&
-          older.hasOlderMessages &&
-          !older.isLoadingOlderMessages
-        ) {
-          older.onLoadOlderMessages();
-        }
+        userLoadOlder();
       });
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
@@ -1065,7 +1093,45 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       scroller.removeEventListener("scroll", onScroll);
       if (frame !== null) cancelAnimationFrame(frame);
     };
-  }, [applyPinnedUserMessage, scrollerEl]);
+  }, [applyPinnedUserMessage, userLoadOlder, scrollerEl]);
+
+  // Re-check when the state the check reads changes. Deferred a frame so the
+  // virtualizer's prepend correction has moved scrollTop before it is read.
+  useEffect(() => {
+    if (!scrollerEl) return;
+    const frame = requestAnimationFrame(() => {
+      if (loadStartCountRef.current === messages.length) return;
+      maybeLoadOlder();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollerEl, maybeLoadOlder, isLoadingOlderMessages, hasOlderMessages, messages.length, timelineItems.length]);
+
+  // Pulling further up while already at the top produces no scroll event.
+  useEffect(() => {
+    const scroller = scrollerEl;
+    if (!scroller) return;
+    let touchY: number | null = null;
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0 && scroller.scrollTop <= 0) userLoadOlder();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      touchY = event.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      const y = event.touches[0]?.clientY;
+      if (touchY === null || y === undefined) return;
+      if (y > touchY && scroller.scrollTop <= 0) userLoadOlder();
+      touchY = y;
+    };
+    scroller.addEventListener("wheel", onWheel, { passive: true });
+    scroller.addEventListener("touchstart", onTouchStart, { passive: true });
+    scroller.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      scroller.removeEventListener("wheel", onWheel);
+      scroller.removeEventListener("touchstart", onTouchStart);
+      scroller.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [scrollerEl, userLoadOlder]);
 
   // Re-resolve the pin when the mapping or the line changes, not only on
   // scroll: a reply arriving while you sit still inserts rows and shifts every
@@ -1285,7 +1351,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       item.type === "message" &&
       item.message.id === highlightedMessageId;
 
-    const rowKey = timelineItemKey(item, index);
+    const rowKey = timelineItemKey(item);
     const toolRowSpacing = getToolRowSpacing(timelineItems, index);
 
     return (
@@ -1391,6 +1457,22 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           </div>
         </div>
       )}
+      {/* Scroll-back loading indicator, pinned to the top of the visible
+          viewport (not the scroll content) and above the pinned user-message
+          header, so it is seen wherever the reader is when a fetch starts. */}
+      {isLoadingOlderMessages && (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-[60] flex justify-center">
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="older-messages-loading"
+            className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground shadow-md"
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>Loading earlier messages…</span>
+          </div>
+        </div>
+      )}
       <div
         ref={setScrollerEl}
         className="h-full overflow-y-auto"
@@ -1408,19 +1490,26 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             with only the rows near the viewport actually rendered. */}
         {/* Height is written by the virtualizer (directDomUpdates), not JSX. */}
         <div ref={virtualizer.containerRef} className="relative w-full">
-          {/* Top of the transcript doubles as the scroll-back loading
-              indicator, in the space paddingStart reserves above row 0.
-              Fixed height in both states, so the indicator toggling never
-              moves the rows below it. */}
+          {/* The space paddingStart reserves above row 0: the manual
+              "load more" affordance, or the start-of-history marker. Fixed
+              height in every state, so it never moves the rows below it.
+              The in-flight indicator is the viewport overlay further down:
+              this band is usually scrolled out of sight when a load starts. */}
           <div
             className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 text-xs text-muted-foreground"
             style={{ height: TIMELINE_HEADER_PX }}
           >
-            {isLoadingOlderMessages && (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>Loading earlier messages…</span>
-              </>
+            {onLoadOlderMessages && hasOlderMessages && !isLoadingOlderMessages && (
+              <button
+                type="button"
+                onClick={userLoadOlder}
+                className="rounded-full px-3 py-1 transition-colors hover:text-foreground focus-visible:text-foreground"
+              >
+                Load earlier messages
+              </button>
+            )}
+            {onLoadOlderMessages && !hasOlderMessages && !isLoadingOlderMessages && timelineItems.length > 0 && (
+              <span data-testid="start-of-conversation">Start of conversation</span>
             )}
           </div>
           {virtualizer

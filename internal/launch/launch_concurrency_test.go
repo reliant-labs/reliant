@@ -71,14 +71,14 @@ func activityEvents(t *testing.T, repo *db.Repo, userID, chatID string) []db.Use
 // out of retries ("internal: failed to create chat", three e2e stories in one
 // release gate). The announcement now runs after the launch commits.
 //
-// Sized to stay inside the retry budget with margin, not to sit at its edge:
-// on a fresh test database every launch still shares the few index pages of
-// messages and context_windows, so some 40001 retries remain (the seed
-// message's MAX()-based ordinal and seq). Measured on one pgtest server: at 16
-// users the old code exhausted the budget on every run and the new code
-// passed but took up to 6 of 6 retries; at 8 users the old code needed up to
-// 5 and the new code never ran a transaction past a second. The deterministic
-// proof that the emit left the launch's transaction is
+// The seed messages used to be numbered by MAX(ordinal)+1 and a fork-chain
+// walk for MAX(seq)+1, reads whose predicate locks every launch shared on a
+// young table's few index pages; they now come from message_order_counters
+// with no read of messages at all. Measured on one pgtest server at 16 users,
+// 4 runs each: MAX()-numbered, 1.3-1.7 retries per launch and up to 4 failed
+// attempts of one launch; counters, 0.2-0.4 with at most 2. The remaining
+// retries share the other tables a launch writes. The deterministic proof
+// that the emit left the launch's transaction is
 // TestLaunchSucceedsWhenThePostCommitActivityEmitFails.
 func TestConcurrentLaunchesForDistinctUsersAllSucceed(t *testing.T) {
 	if testing.Short() {
@@ -90,7 +90,7 @@ func TestConcurrentLaunchesForDistinctUsersAllSucceed(t *testing.T) {
 	t.Cleanup(cleanup)
 	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
 
-	const users = 8
+	const users = 16
 	userIDs := make([]string, users)
 	projectIDs := make([]string, users)
 	for i := range userIDs {

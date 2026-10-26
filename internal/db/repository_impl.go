@@ -99,14 +99,11 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 
 // CreateMessage creates a message record in the database.
 //
-// WARNING: Prefer SaveMessageToThread for most use cases outside workflow activities.
-// This low-level function requires you to manually set Ordinal and ContextSequence,
-// which is error-prone. SaveMessageToThread handles these automatically and correctly
-// inherits context_sequence for forked workflows.
-//
-// Only use CreateMessage directly when:
-// - You're inside a workflow activity that manages its own ordinal/context_sequence
-// - You need very specific control over message placement (rare)
+// WARNING: Prefer SaveMessageToThread for most use cases outside workflow activities,
+// and CreateNumberedMessage for a message you build yourself. This low-level
+// function writes the Ordinal and Seq you set, which must come from
+// AllocateMessageOrder (never from the highest number already written); it
+// raises the counters to them, so a counter is never behind a row.
 func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("message cannot be nil")
@@ -117,7 +114,11 @@ func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return store.InsertMessage(ctx, r.ORM(), msg)
+	// One transaction: the insert raises the ordinal and seq counters to the
+	// row's numbers, and the two must not land apart.
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.InsertMessage(ctx, r.ORM(), msg)
+	})
 }
 
 // CreateMessageOnce creates a message record unless a row already holds its id,
@@ -136,7 +137,13 @@ func (r *Repo) CreateMessageOnce(ctx context.Context, msg *Message) (bool, error
 	if msg.ChatID == "" {
 		return false, fmt.Errorf("message ChatID cannot be empty")
 	}
-	return store.InsertMessageOnce(ctx, r.ORM(), msg)
+	var created bool
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		created, err = store.InsertMessageOnce(ctx, r.ORM(), msg)
+		return err
+	})
+	return created, err
 }
 
 // SaveMessageToThread atomically creates a message with text and optional image content blocks.
@@ -233,16 +240,13 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 		// starts over.
 		savedMsg, created = nil, true
 
-		// Get next ordinal for the thread
-		ordinal, err := r.GetNextOrdinal(txCtx, thread)
+		// The thread's ordinal and the chat's seq come from
+		// message_order_counters, never from the highest number already
+		// written (store.AllocateMessageOrder). When an id already taken makes
+		// a once-save write nothing, the numbers it took are a gap.
+		ordinal, seq, err := store.AllocateMessageOrder(txCtx, r.ORM(), thread, chatID)
 		if err != nil {
-			return fmt.Errorf("failed to get next ordinal: %w", err)
-		}
-
-		// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-		seq, err := r.GetNextSeq(txCtx, chatID, thread)
-		if err != nil {
-			return fmt.Errorf("failed to get next seq: %w", err)
+			return err
 		}
 
 		// Get the current context_sequence for the thread
@@ -470,28 +474,42 @@ func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {
 	return msg, nil
 }
 
-func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, error) {
+// AllocateMessageOrder takes the next ordinal of threadID and the next seq of
+// chatID from their counters (store.AllocateMessageOrder), for a message the
+// caller writes with CreateMessage. In the caller's transaction the numbers
+// follow commit order and a rollback returns them; outside one they are spent
+// as soon as they are taken.
+func (r *Repo) AllocateMessageOrder(ctx context.Context, threadID, chatID string) (ordinal, seq int64, err error) {
 	if threadID == "" {
-		return 0, fmt.Errorf("thread ID cannot be empty")
+		return 0, 0, fmt.Errorf("thread ID cannot be empty")
 	}
-
-	// Get the next ordinal from messages in this thread (all context windows)
-	// NOTE: For workflow forks, each workflow has its own ordinal space.
-	// Context inheritance is handled separately at LLM context resolution time.
-	return store.NextOrdinalInThread(ctx, r.ORM(), threadID)
+	if chatID == "" {
+		return 0, 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		ordinal, seq, err = store.AllocateMessageOrder(ctx, r.ORM(), threadID, chatID)
+		return err
+	})
+	return ordinal, seq, err
 }
 
-// GetNextSeq returns the next chat-global seq for a message being written to
-// threadID in chatID. threadID is required because a branched chat displays
-// inherited history it does not own; the allocator has to clear that
-// history's seqs or the branch restarts at 0 and new messages sort beneath
-// everything shown above them. See 20260802000000_add_message_seq.sql for
-// what seq is and why it exists alongside the per-thread Ordinal.
-func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
+// CreateNumberedMessage writes msg as the next message of its thread and chat:
+// it allocates msg.Ordinal and msg.Seq (AllocateMessageOrder) and inserts the
+// row in one transaction, joining the caller's when ctx carries one. It is
+// how a writer outside SaveMessageAtomic and SaveMessageToThread (a repair, a
+// denial) appends a message it builds itself.
+func (r *Repo) CreateNumberedMessage(ctx context.Context, msg *Message) error {
+	if msg == nil {
+		return fmt.Errorf("message cannot be nil")
 	}
-	return store.NextSeqInChat(ctx, r.ORM(), chatID, threadID)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		ordinal, seq, err := r.AllocateMessageOrder(ctx, msg.ThreadID, msg.ChatID)
+		if err != nil {
+			return err
+		}
+		msg.Ordinal, msg.Seq = ordinal, seq
+		return r.CreateMessage(ctx, msg)
+	})
 }
 
 func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error) {
@@ -3260,7 +3278,30 @@ func (r *Repo) CreateContextWindow(ctx context.Context, cw *ContextWindow) (*Con
 	if cw.ThreadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return store.InsertContextWindow(ctx, r.ORM(), cw)
+	// One transaction: the insert raises the thread's context_window counter.
+	var created *ContextWindow
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		created, err = store.InsertContextWindow(ctx, r.ORM(), cw)
+		return err
+	})
+	return created, err
+}
+
+// AllocateContextWindowSequence takes the sequence of threadID's next context
+// window from its counter (store.AllocateContextWindowSequence), never from
+// the highest window already written.
+func (r *Repo) AllocateContextWindowSequence(ctx context.Context, threadID string) (int, error) {
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
+	}
+	var seq int64
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var err error
+		seq, err = store.AllocateContextWindowSequence(ctx, r.ORM(), threadID)
+		return err
+	})
+	return int(seq), err
 }
 
 func (r *Repo) GetContextWindow(ctx context.Context, id string) (*ContextWindow, error) {

@@ -139,7 +139,7 @@ func createTestMessage(
 	ordinal int64,
 ) *db.Message {
 	messageID := uuid.New().String()
-	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := repo.AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 	msg := &db.Message{
 		ID:              messageID,

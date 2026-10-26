@@ -9,7 +9,7 @@
 // delegates (CreateMessage, GetMessageByID, ListMessage, CountMessage, …)
 // with orm.QueryOption filters; the bun builder off db.Bun() where a
 // predicate or a join is composed; and NewRaw for the statements whose value
-// is that they are one hand-tuned statement (NextSeqInChat's fork-chain walk,
+// is that they are one hand-tuned statement (the transcript windows,
 // SaveMessageAtomic). Every function takes no transaction parameter: called
 // with a ctx that carries a transaction (Repo.RunTx or orm RunTx), it joins
 // it.
@@ -36,8 +36,25 @@ import (
 // InsertMessage writes msg as a new row. The caller allocates ordinal and
 // seq; a collision on either is a unique violation the caller's transaction
 // retries.
+//
+// The row carries the ordinal and seq the caller chose, so it first raises
+// the thread's ordinal counter and the chat's seq counter to them
+// (message_order_counter_repo_ext.go): a counter is never behind a row. Run
+// it in the transaction that allocated the numbers, or in one of its own.
 func InsertMessage(ctx context.Context, db orm.Context, msg *core.Message) error {
+	if err := raiseMessageOrder(ctx, db, msg); err != nil {
+		return err
+	}
 	return CreateMessage(ctx, db, messageRow(msg))
+}
+
+// raiseMessageOrder raises msg's thread ordinal and chat seq counters to the
+// numbers msg carries.
+func raiseMessageOrder(ctx context.Context, db orm.Context, msg *core.Message) error {
+	if err := raiseCounter(ctx, db, CounterOrdinal, msg.ThreadID, msg.Ordinal); err != nil {
+		return err
+	}
+	return raiseCounter(ctx, db, CounterSeq, msg.ChatID, msg.Seq)
 }
 
 // InsertMessageOnce writes msg unless a row already holds its id, and
@@ -47,7 +64,14 @@ func InsertMessage(ctx context.Context, db orm.Context, msg *core.Message) error
 // unique violation (messages_chat_seq_key: two different writes racing for
 // one seq) still raises, and the caller's transaction retries. The row is
 // written exactly as given — created_at and updated_at included.
+//
+// Like InsertMessage it raises the counters to the row's numbers (before the
+// insert: a raise for a row the conflict then absorbed is harmless, the
+// numbers were the caller's to spend).
 func InsertMessageOnce(ctx context.Context, db orm.Context, msg *core.Message) (bool, error) {
+	if err := raiseMessageOrder(ctx, db, msg); err != nil {
+		return false, err
+	}
 	res, err := db.Bun().NewInsert().Model(messageRow(msg)).On("CONFLICT (id) DO NOTHING").Exec(ctx)
 	if err != nil {
 		return false, err
@@ -84,69 +108,6 @@ func FindMessageByActivity(ctx context.Context, db orm.Context, chatID, workflow
 		opts = append(opts, orm.WhereEq(MessageFieldWorkflowID, workflowID))
 	}
 	return firstMessage(ListMessage(ctx, db, append(opts, orm.WithLimit(1))...))
-}
-
-// NextOrdinalInThread is one past the thread's highest ordinal (0 for an
-// empty thread).
-func NextOrdinalInThread(ctx context.Context, db orm.Context, threadID string) (int64, error) {
-	var next int64
-	err := db.Bun().NewSelect().Model((*Message)(nil)).
-		ColumnExpr("COALESCE(MAX(ordinal), -1) + 1").
-		Where("thread_id = ?", threadID).
-		Scan(ctx, &next)
-	return next, err
-}
-
-// nextSeqInChatSQL is one past the highest seq a message written to threadID
-// in chatID must clear.
-//
-// A branched chat DISPLAYS its parent's history but does not own those rows —
-// they still carry the parent chat_id, resolved on read through the context
-// window chain. Allocating from this chat's rows alone therefore restarts a
-// branch at seq 0, and every message the user sends lands numerically beneath
-// the inherited messages shown above it: the reply is saved and streamed
-// correctly but renders at the top of the transcript, which reads as "my
-// message never arrived". So the high-water mark spans the whole
-// context-window chain the thread resolves.
-//
-// The two halves are deliberately SEPARATE max lookups combined with
-// GREATEST, not one `WHERE chat_id = … OR context_window_id IN (…)`: an OR
-// across two columns can use neither index, which degraded into a full
-// sequential scan of messages (35ms over 221k rows, against 1.7ms) and, under
-// SERIALIZABLE, a predicate lock over the whole table that conflicted with
-// every concurrent message insert in the system. `= ANY(ARRAY(…))` rather
-// than `IN (SELECT …)`: Postgres will not push a recursive-CTE reference into
-// an index condition, so the IN form re-introduced the seq scan;
-// materializing the chain into an array lets the planner use
-// idx_messages_context_window_ordinal.
-const nextSeqInChatSQL = `
-WITH RECURSIVE chain AS (
-    SELECT cw.id, cw.parent_context_window_id
-    FROM context_windows cw
-    WHERE cw.thread_id = ?1
-    UNION
-    SELECT parent.id, parent.parent_context_window_id
-    FROM context_windows parent
-    JOIN chain ON chain.parent_context_window_id = parent.id
-)
-SELECT COALESCE(
-    GREATEST(
-        (SELECT MAX(m.seq) FROM messages m WHERE m.chat_id = ?0),
-        (SELECT MAX(m.seq) FROM messages m
-          WHERE m.context_window_id = ANY(ARRAY(SELECT id FROM chain)))
-    ),
-    -1
-) + 1
-`
-
-// NextSeqInChat is the next chat-global seq for a message written to
-// threadID in chatID (see nextSeqInChatSQL). SaveMessageAtomic allocates from
-// message_order_counters instead; this serves the writers that still
-// allocate for themselves.
-func NextSeqInChat(ctx context.Context, db orm.Context, chatID, threadID string) (int64, error) {
-	var next int64
-	err := db.Bun().NewRaw(nextSeqInChatSQL, chatID, threadID).Scan(ctx, &next)
-	return next, err
 }
 
 // ListMessages reads a chat's messages in seq order, narrowed by opts: one

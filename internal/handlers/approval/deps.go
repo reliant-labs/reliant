@@ -24,9 +24,7 @@ type Repository interface {
 
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
-	CreateMessage(ctx context.Context, msg *db.Message) error
+	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
 }
 

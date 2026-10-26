@@ -712,9 +712,9 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
 // user is actively scrolling, so a smaller page keeps each round-trip cheap.
 const OLDER_MESSAGES_PAGE_SIZE = 100;
 
-// Chats with an older-messages page in flight. Module-scoped (not store state)
-// for the same reason the streaming buffers are: it is transient request
-// bookkeeping that no component renders, so it must not trigger re-renders.
+// Chats with an older-messages page in flight: the synchronous concurrency
+// guard. Its reactive mirror is the store's olderLoadingByChat, which the UI
+// reads for the loading indicator; the two are always written together.
 const olderMessagesInFlight = new Set<string>();
 
 // Per-chat stream resume cursor: the chat update sequence this store's cached
@@ -876,6 +876,11 @@ interface ChatStoreState {
   // time (the call→result join), instead of embedding results into assistant
   // message blocks.
   toolResultsByCallId: Record<string, ToolResultsByCallId>;
+
+  // Chats with an older-messages page in flight (scroll-back paging). The
+  // store owns this so every caller sees the real fetch: a duplicate call that
+  // returns early at the in-flight guard never touches it.
+  olderLoadingByChat: Record<string, boolean>;
 
   // Track which chat is currently active (for UI purposes)
   activeChatId: string | null;
@@ -1200,6 +1205,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   finalizedStreamIds: {}, // Delta identity: finalized assistant message ids per chat
   contextUsage: {}, // Context usage tracking for compaction indicator
   toolResultsByCallId: {}, // Normalized tool results per chat, keyed by tool_call_id
+  olderLoadingByChat: {}, // Chats with a scroll-back page in flight
   activeChatId: null,
   chatSyncPendingId: null,
   hasLoaded: false,
@@ -2077,6 +2083,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (beforeSeq <= 0) return false;
 
     olderMessagesInFlight.add(chatId);
+    set((state) => ({
+      olderLoadingByChat: { ...state.olderLoadingByChat, [chatId]: true },
+    }));
     try {
       logger.debug("[ChatStore] Loading older messages", {
         chatId: chatId.slice(0, 8),
@@ -2093,15 +2102,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         normalizeMessageAttachmentFields,
       );
 
-      // TERMINATION IS DRIVEN BY THE EMPTY PAGE, NOT BY has_more.
-      //
-      // The server computes hasMore as
-      //   len(messages) < totalCount || beforeSeq > 0
-      // (internal/grpc/services/chat_crud.go). That second disjunct makes it
-      // permanently TRUE for every paged request — we always pass a positive
-      // beforeSeq — so a loop that trusted it would never terminate and
-      // would keep re-requesting past the top of the chat. An empty page is the
-      // only trustworthy end-of-history signal from this RPC.
+      // End of history is read off the page itself: an empty page means
+      // nothing lies below the cursor, and a page shorter than requested
+      // (below) means this one consumed the remainder. The server's has_more
+      // is accurate on this path, but the page answers the same question
+      // without a second source of truth to disagree with.
       if (older.length === 0) {
         logger.debug("[ChatStore] Reached the start of chat history", {
           chatId: chatId.slice(0, 8),
@@ -2168,6 +2173,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return true;
     } finally {
       olderMessagesInFlight.delete(chatId);
+      set((state) => {
+        if (!state.olderLoadingByChat[chatId]) return state;
+        const { [chatId]: _done, ...rest } = state.olderLoadingByChat;
+        return { olderLoadingByChat: rest };
+      });
     }
   },
 
@@ -4085,6 +4095,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       streamingMessages: omit(state.streamingMessages),
       finalizedStreamIds: omit(state.finalizedStreamIds),
       toolResultsByCallId: omit(state.toolResultsByCallId),
+      olderLoadingByChat: omit(state.olderLoadingByChat),
       contextUsage: omit(state.contextUsage),
     }));
   },
@@ -4129,6 +4140,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       finalizedStreamIds: {},
       contextUsage: {},
       toolResultsByCallId: {},
+      olderLoadingByChat: {},
       toolCallStates: {},
       activeChatId: null,
       chatSyncPendingId: null,

@@ -196,9 +196,7 @@ func saveTextOnlyAssistantMessage(t *testing.T, h *IdempotencyTestHelper, chatID
 	ctx := context.Background()
 
 	msgID := uuid.New().String()
-	ordinal, err := h.Repo().GetNextOrdinal(ctx, threadID)
-	require.NoError(t, err)
-	seq, err := h.Repo().GetNextSeq(ctx, chatID, threadID)
+	ordinal, seq, err := h.Repo().AllocateMessageOrder(ctx, threadID, chatID)
 	require.NoError(t, err)
 
 	require.NoError(t, h.Repo().CreateMessage(ctx, &db.Message{

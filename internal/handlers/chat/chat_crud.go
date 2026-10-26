@@ -1583,8 +1583,8 @@ func (s *Service) listThreadMessages(
 //     covers every sibling thread's messages (siblings don't inherit from
 //     elsewhere, so their own chat_id-scoped rows are their whole count).
 //   - HasMore: taken directly from the main thread's own hasMoreOlder. This
-//     is sufficient because seq is a chat-global, densely-allocated order
-//     (GetNextSeqByChat walks the full CW chain when allocating) and every
+//     is sufficient because seq is a chat-global order (the chat's seq
+//     counter, which a branch's fork raises past its inherited history) and every
 //     message a branch chat displays -- inherited or local -- carries a seq
 //     from that same allocator, so no sibling thread's oldest message can
 //     precede the resolved main thread's oldest message.
