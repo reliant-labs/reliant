@@ -66,8 +66,13 @@ var protectedHome = []homeEntry{
 	{".azure", true},
 	{".config/gcloud", true},
 	{".docker/config.json", false},
+	{".docker/.token_seed", false},
+	{".docker/.token_seed.lock", false},
 	{".kube/config", false},
 	{".kube/gke_gcloud_auth_plugin_cache", false},
+	// Firebase and Expo CLI logins.
+	{".config/configstore", true},
+	{".expo/state.json", false},
 	// Model-provider logins.
 	{".claude", true},
 	{".codex", true},

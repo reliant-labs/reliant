@@ -139,9 +139,11 @@ tools_config:
     shell: {credentials: none}
 ```
 
-It is **not containment**: the command still runs as the daemon's Unix user and can read that user's files
-(`~/.config/gh/hosts.yml`, `~/.git-credentials`, `~/.ssh`). It stops an accidental push, not a command that goes
-looking. Never tell an agent to look elsewhere for a token; publish with a `git_publish` node.
+On Linux (every Reliant cloud machine) the command also runs in a sandbox where the daemon's credential files are
+absent (`~/.reliant/daemon.json`, `~/.config/forge`, `~/.git-credentials`, `~/.ssh`, `~/.config/gh`, kubeconfig and cloud files, the
+container engine's socket), sees only its own processes, and has no capabilities. It shares the network and can
+write its working directory, and on macOS and Windows only the environment is scrubbed. Never tell an agent to look
+elsewhere for a token; publish with a `git_publish` node.
 
 ### Threading
 
@@ -616,6 +618,8 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `toJson(dyn) -> string` | Serialize a value to a JSON string | `toJson(nodes.llm.tool_calls)` |
 | `string.trimPrefix(string) -> string` | Remove prefix from string | `nodes.run.stdout.trimPrefix("Error: ")` |
 | `string.trimSuffix(string) -> string` | Remove suffix from string | `nodes.run.stdout.trimSuffix("\n")` |
+| `untrustedJson(dyn[, int]) -> string` | Outside data as compact JSON that is safe to quote in a prompt: every string treated as untrustedText, keys sorted, lists and nesting bounded, and <, > and & escaped so a value cannot close the tag it sits in | `untrustedJson(inputs.alerts[0].labels)` |
+| `untrustedText(string[, int]) -> string` | Text an outside party can write (an error message, an alert label, a webhook body) as one plain line: control and invisible characters dropped, backticks neutralized, at most 400 runes (or the given length). Use it on every such value before it goes into a prompt | `untrustedText(trigger.payload.body.title, 120)` |
 
 ### Common patterns
 
