@@ -16,7 +16,7 @@ import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 import { useWorkflowNodeCallbacks } from '../WorkflowNodeCallbacksContext'
 
-interface LoopNodeProps {
+export interface LoopNodeProps {
   id: string
   data: {
     step: LoopStep

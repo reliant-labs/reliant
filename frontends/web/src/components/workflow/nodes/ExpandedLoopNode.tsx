@@ -40,7 +40,7 @@ interface ExpandedLoopNodeData {
   subWorkflowName: string
 }
 
-interface ExpandedLoopNodeProps {
+export interface ExpandedLoopNodeProps {
   id: string
   data: ExpandedLoopNodeData
   selected?: boolean

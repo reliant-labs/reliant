@@ -1,6 +1,16 @@
 {
+  /*
+   * `composite` and declaration-only output so tsconfig.test.json can
+   * reference this project and read its declarations instead of
+   * type-checking every app file again. The declarations go to the same
+   * outDir as tsconfig.gen.json's, so a relative import of src/gen/ in an
+   * emitted .d.ts still resolves; under skipLibCheck one that did not would
+   * silently type as `any` in the tests. node_modules/.tmp, like the build
+   * info: kept across `git clean -fd`, dropped with node_modules by `npm ci`.
+   */
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "composite": true,
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
@@ -12,7 +22,8 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
-    "noEmit": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.tmp/tsc",
     "jsx": "react-jsx",
 
     /* Linting */
@@ -29,6 +40,7 @@
       "@/*": ["./src/*"]
     }
   },
+  "references": [{ "path": "./tsconfig.gen.json" }],
   "include": ["src"],
   "exclude": ["src/**/__tests__/**/*", "src/**/*.test.*", "src/**/*.spec.*", "src/test/**/*", "src/gen/**/*"]
 }

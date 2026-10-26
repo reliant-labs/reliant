@@ -21,8 +21,9 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import type { Query, QueryClient } from "@tanstack/react-query";
-import type { ServiceQueryInput } from "@reliantlabs/forge-web-runtime/service-hooks";
+import type { DataTag, Query, QueryClient } from "@tanstack/react-query";
+import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
+import type { ServiceQueryInput, ServiceQueryKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 
 import {
   ListDaemonsResponseSchema,
@@ -51,8 +52,13 @@ export function daemonListQuery(options: ServiceQueryInput<ListDaemonsResponse, 
   return daemonRegistryServiceQueries.listDaemons(LIST_DAEMONS_REQUEST, { select: selectDaemons, ...options });
 }
 
-/** The daemon list's cache key (data-tagged as the response). */
-export const DAEMON_LIST_QUERY_KEY = daemonRegistryServiceQueries.listDaemons(LIST_DAEMONS_REQUEST).queryKey;
+/**
+ * The daemon list's cache key (data-tagged as the response). Typed out because
+ * TypeScript's declaration emit writes the inferred tag as `[dataTagSymbol]`
+ * without importing it, and the tests read this module's emitted declarations
+ * (tsconfig.test.json): the dangling name drops the tag there.
+ */
+export const DAEMON_LIST_QUERY_KEY: DataTag<ServiceQueryKey, ListDaemonsResponse, ConnectClientError> = daemonRegistryServiceQueries.listDaemons(LIST_DAEMONS_REQUEST).queryKey;
 
 /** What the cache holds now, without fetching. Undefined until a read answered. */
 export function cachedDaemonList(queryClient: QueryClient): DaemonInfo[] | undefined {

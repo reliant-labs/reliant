@@ -6,7 +6,7 @@ import { getStepCommand } from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 
-interface RunNodeProps {
+export interface RunNodeProps {
   data: {
     step: RunStep
     label: string
