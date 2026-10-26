@@ -19,5 +19,8 @@ interface ConnectDaemonModalProps {
 }
 
 export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps) {
+  // Mounted only while open, like the picker's: the modal reads eligibility
+  // and billing queries, and every no-machine surface renders this closed.
+  if (!isOpen) return null;
   return <AddMachineModal isOpen={isOpen} onClose={onClose} fallbackFocus={focusChatInput} />;
 }
