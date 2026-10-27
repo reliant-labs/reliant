@@ -19,6 +19,12 @@ type GuardedWaitStore struct{ store.PRReviewWaitStore }
 
 // Arm atomically rechecks current private policy before pinning wait authority.
 func (s GuardedWaitStore) Arm(ctx context.Context, r prreviewwait.Request, p runcontinuity.Result, authority prreviewwait.Authority) (prreviewwait.Subscription, error) {
+	if orm.InTx(ctx) {
+		return prreviewwait.Subscription{}, reviewpublisher.ErrUnauthorized
+	}
+	if _, ok := s.DB.(*orm.Tx); ok {
+		return prreviewwait.Subscription{}, reviewpublisher.ErrUnauthorized
+	}
 	var out prreviewwait.Subscription
 	err := s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if err := s.checkPolicy(ctx, r.OwnerID, r.RepoID, r.PR, r.HeadSHA, authority); err != nil {
@@ -34,6 +40,12 @@ func (s GuardedWaitStore) Arm(ctx context.Context, r prreviewwait.Request, p run
 // Put verifies server-owned confirmed assignment+intent+policy in the SAME
 // transaction as the inbox insert. A prefix alone never grants authority.
 func (s GuardedWaitStore) Put(ctx context.Context, o prreviewwait.Outcome, authority prreviewwait.Authority) (prreviewwait.Subscription, error) {
+	if orm.InTx(ctx) {
+		return prreviewwait.Subscription{}, reviewpublisher.ErrUnauthorized
+	}
+	if _, ok := s.DB.(*orm.Tx); ok {
+		return prreviewwait.Subscription{}, reviewpublisher.ErrUnauthorized
+	}
 	var out prreviewwait.Subscription
 	err := s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		parts := strings.Split(o.ProviderRef, ":")

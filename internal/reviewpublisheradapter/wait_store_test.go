@@ -36,6 +36,19 @@ func (s *committedSignal) SignalReview(ctx context.Context, _ runcontinuity.Exec
 	return nil
 }
 
+func TestGuardedWaitRejectsAmbientTransaction(t *testing.T) {
+	s, _, _ := publisherFixture(t, reviewpublisher.Approve)
+	guarded := GuardedWaitStore{PRReviewWaitStore: store.PRReviewWaitStore{DB: s.DB}}
+	err := s.DB.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
+		_, err := guarded.Put(ctx, prreviewwait.Outcome{}, prreviewwait.Authority{})
+		require.ErrorIs(t, err, reviewpublisher.ErrUnauthorized)
+		_, err = guarded.Arm(ctx, prreviewwait.Request{}, runcontinuity.Result{}, prreviewwait.Authority{})
+		require.ErrorIs(t, err, reviewpublisher.ErrUnauthorized)
+		return nil
+	})
+	require.NoError(t, err)
+}
+
 func TestGuardedWaitSignalsOnlyAfterInboxCommit(t *testing.T) {
 	s, id, _ := publisherFixture(t, reviewpublisher.Approve)
 	ctx := context.Background()
