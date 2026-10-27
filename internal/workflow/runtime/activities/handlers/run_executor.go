@@ -28,6 +28,7 @@ type RunExecutor interface {
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
 // Set by the activity before calling ExecuteCommand.
 type RunExecutorContext struct {
+	RootFirstRunID string
 	UserID         string
 	ChatID         string
 	ProjectID      string
@@ -104,6 +105,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		ToolInput:      string(inputJSON),
 		UserID:         e.execCtx.UserID,
 		ChatID:         e.execCtx.ChatID,
+		RootFirstRunID: e.execCtx.RootFirstRunID,
 		ProjectID:      e.execCtx.ProjectID,
 		WorktreeID:     e.execCtx.WorktreeID,
 		ProjectPath:    e.execCtx.ProjectPath,

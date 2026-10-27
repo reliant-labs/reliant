@@ -97,6 +97,12 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 // TerminateWithDrain stops scheduling work before draining owned daemon work.
 // CANCELLED is committed only after the daemon confirms completion.
 func (s *Service) TerminateWithDrain(ctx context.Context, chatID string, drain func() error) error {
+	return s.TerminateObserved(ctx, chatID, "", drain)
+}
+
+// TerminateObserved pins termination to the execution the caller inspected;
+// a concurrent new conversation must never be terminated in its place.
+func (s *Service) TerminateObserved(ctx context.Context, chatID, expectedRunID string, drain func() error) error {
 	_, workflowID, err := s.chatRun(ctx, chatID)
 	if err != nil {
 		return err
@@ -108,6 +114,9 @@ func (s *Service) TerminateWithDrain(ctx context.Context, chatID string, drain f
 	}
 
 	state, stateErr := s.State(ctx, workflowID)
+	if expectedRunID != "" && stateErr == nil && state.RunID != expectedRunID {
+		return fmt.Errorf("run changed while cancellation was requested; retry against the current run")
+	}
 	if stateErr == nil && (!state.Exists || !state.IsRunning) {
 		if drain != nil {
 			if err := drain(); err != nil {
@@ -129,7 +138,7 @@ func (s *Service) TerminateWithDrain(ctx context.Context, chatID string, drain f
 	if !ok {
 		return fmt.Errorf("temporal client cannot terminate workflows")
 	}
-	if err := terminator.TerminateWorkflow(ctx, workflowID, "", "Workflow terminated by operator"); err != nil {
+	if err := terminator.TerminateWorkflow(ctx, workflowID, expectedRunID, "Workflow terminated by operator"); err != nil {
 		return fmt.Errorf("terminate workflow before draining commands: %w", err)
 	}
 	if drain != nil {
@@ -138,6 +147,15 @@ func (s *Service) TerminateWithDrain(ctx context.Context, chatID string, drain f
 		}
 	}
 
+	if expectedRunID != "" {
+		latest, e := s.State(ctx, workflowID)
+		if e != nil {
+			return e
+		}
+		if latest.RunID != expectedRunID {
+			return fmt.Errorf("run changed during cancellation drain; terminal state not overwritten")
+		}
+	}
 	if err := s.markTerminated(ctx, workflowID); err != nil {
 		return err
 	}
@@ -380,7 +398,7 @@ func (s *Service) State(ctx context.Context, workflowID string) (RunState, error
 		status = db.Completed()
 	}
 
-	return RunState{Exists: true, Status: status, RunID: runID, IsRunning: isRunning}, nil
+	return RunState{Exists: true, Status: status, RunID: runID, FirstRunID: desc.WorkflowExecutionInfo.FirstRunId, IsRunning: isRunning}, nil
 }
 
 // RecordRun writes the workflow and run ids back onto the chat.

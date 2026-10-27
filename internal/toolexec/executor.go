@@ -5,6 +5,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/ctxkeys"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -31,6 +33,15 @@ type ToolExecutor interface {
 	Close() error
 }
 
+// WithRootFirstRunID carries the immutable originating execution identity.
+func WithRootFirstRunID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxkeys.RootFirstRunIDKey, id)
+}
+func RootFirstRunID(ctx context.Context) string {
+	id, _ := ctx.Value(ctxkeys.RootFirstRunIDKey).(string)
+	return id
+}
+
 // ToolRequest represents a tool execution request
 // All fields are primitives - ToolContext is reconstructed as needed
 type ToolRequest struct {
@@ -41,10 +52,11 @@ type ToolRequest struct {
 	ContentBlockID string // Database content block ID
 
 	// Required identifiers
-	UserID     string // User who owns this execution (REQUIRED for routing)
-	ChatID     string // Chat this execution belongs to (REQUIRED)
-	ProjectID  string // Project ID (REQUIRED)
-	WorktreeID string // Worktree ID (optional, empty if none)
+	UserID         string // User who owns this execution (REQUIRED for routing)
+	ChatID         string // Chat this execution belongs to (REQUIRED)
+	RootFirstRunID string // existing Temporal root chain identity; immutable for this dispatch
+	ProjectID      string // Project ID (REQUIRED)
+	WorktreeID     string // Worktree ID (optional, empty if none)
 	// WorktreeDaemonID is the daemon that owns the worktree's checkout
 	// (rctx.WorktreeInfo.DaemonID). Empty for the main checkout.
 	WorktreeDaemonID string

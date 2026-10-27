@@ -9,6 +9,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
+func rootRunIdentity(inputs map[string]interface{}) string {
+	id, _ := inputs["_root_first_run_id"].(string)
+	return id
+}
+
 // ExecutionContext is the single source of truth for workflow execution state.
 // It replaces scattered context maps and provides unified access via thread.* namespace
 // with explicit, typed fields.
@@ -26,6 +31,8 @@ type ExecutionContext struct {
 	// RunID is the Temporal run executing this context (workflow.run_id). Set
 	// by DynamicWorkflow from workflow info; inline children inherit it.
 	RunID string
+	// RootFirstRunID is the existing Temporal root execution-chain identity.
+	RootFirstRunID string
 
 	// Thread - THE authoritative thread for this execution
 	// This is the single source of truth - no lookups needed
@@ -256,6 +263,7 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 	child := &ExecutionContext{
 		WorkflowID:       ctx.WorkflowID,
 		ChatID:           ctx.ChatID,
+		RootFirstRunID:   ctx.RootFirstRunID,
 		WorkflowName:     ctx.WorkflowName,
 		ThreadMode:       ctx.ThreadMode,
 		ForkedFrom:       ctx.ForkedFrom,
@@ -294,6 +302,7 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 	child := &ExecutionContext{
 		WorkflowID:       ctx.WorkflowID, // Same workflow ID for inline execution
 		ChatID:           ctx.ChatID,
+		RootFirstRunID:   ctx.RootFirstRunID,
 		WorkflowName:     workflowName,
 		ThreadMode:       mode,
 		ParentThread:     ctx.Thread,           // Always track parent's thread for save_message
@@ -367,6 +376,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		ChatID:         ctx.ChatID,
 		WorkflowName:   ctx.WorkflowName,
 		RunID:          ctx.RunID,
+		RootFirstRunID: ctx.RootFirstRunID,
 		Thread:         ctx.Thread,
 		ThreadMode:     ctx.ThreadMode,
 		ThreadTitle:    ctx.ThreadTitle,

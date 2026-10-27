@@ -241,6 +241,15 @@ func fixture(t *testing.T) (*fakeRepo, *fakeTemporal, *fakePause, *Service) {
 // Terminate — hard stop policy owned by runs
 // =========================================================================
 
+func TestTerminateObservedDoesNotCancelNewConversation(t *testing.T) {
+	repo, temporal, _, svc := fixture(t)
+	temporal.runID = "new-run"
+	err := svc.TerminateObserved(context.Background(), "chat-1", "old-run", func() error { t.Fatal("drained wrong run"); return nil })
+	require.ErrorContains(t, err, "run changed")
+	require.Empty(t, temporal.terminated)
+	require.Empty(t, repo.casCalls)
+}
+
 func TestTerminateDrainFailureDoesNotPublishCancelled(t *testing.T) {
 	repo, temporal, _, svc := fixture(t)
 	err := svc.TerminateWithDrain(context.Background(), "chat-1", func() error {

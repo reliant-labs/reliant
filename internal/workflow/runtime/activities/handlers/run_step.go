@@ -28,6 +28,7 @@ import (
 // ExecuteRunStepInput is the input for ExecuteRunStep activity
 type ExecuteRunStepInput struct {
 	WorkflowID     string                   `json:"workflow_id"`
+	RootFirstRunID string                   `json:"root_first_run_id"`
 	ChatID         string                   `json:"chat_id" reliant:"-"`
 	StepID         string                   `json:"step_id"`
 	Command        string                   `json:"command"`
@@ -168,6 +169,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 	execCtx.Credentials = credentials
+	execCtx.RootFirstRunID = input.RootFirstRunID
 
 	// Determine working directory
 	workingDir := execCtx.ProjectPath

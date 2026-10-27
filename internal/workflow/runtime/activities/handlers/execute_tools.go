@@ -286,6 +286,7 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 
 // Execute contains PURE BUSINESS LOGIC only
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
+	ctx = toolexec.WithRootFirstRunID(ctx, input.Runtime.RootFirstRunID)
 	rtx := input.Runtime
 	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
 	protoArgs := model.GetExecuteToolsArgs(input.Node)

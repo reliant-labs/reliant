@@ -73,6 +73,7 @@ const (
 // and should not be validated against the workflow's input schema.
 // These are internal values used by the workflow engine, not user-provided inputs.
 var RuntimeInjectedInputs = map[string]bool{
+	"_root_first_run_id": true,
 	"project_path":       true, // Used for preset loading in spawned workflows; workflow.path
 	"worktree_path":      true, // The chat's worktree, when it has one; workflow.worktree_path
 	"worktree_branch":    true, // That worktree's branch; workflow.branch

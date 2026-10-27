@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/ctxkeys"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
@@ -600,6 +601,9 @@ func NewActivityWrapper[I any, O any](
 // Temporal's serialization layer handles all type conversion automatically.
 // Input comes as typed I, output goes as typed O - no manual conversion needed!
 func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error) {
+	if id := extractInputString(input, "root_first_run_id", "RootFirstRunID"); id != "" {
+		ctx = context.WithValue(ctx, ctxkeys.RootFirstRunIDKey, id)
+	}
 	var zeroOutput O
 
 	// Get activity info from Temporal context

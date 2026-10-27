@@ -963,6 +963,9 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 
 	// V2_ExecuteRunStep expects a flat map with runtime fields
 	runInputs["workflow_id"] = e.workflowID
+	if e.execContext != nil {
+		runInputs["root_first_run_id"] = e.execContext.RootFirstRunID
+	}
 	runInputs["chat_id"] = e.chatID
 	runInputs["step_id"] = node.GetId()
 	runInputs["node_path"] = joinNodePath(e.nodePathPrefix, node.GetId())
@@ -1161,6 +1164,7 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Thread from execution context
 	if e.execContext != nil {
 		rtx.Thread = e.execContext.Thread
+		rtx.RootFirstRunID = e.execContext.RootFirstRunID
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).

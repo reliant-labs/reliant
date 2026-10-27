@@ -139,7 +139,8 @@ type RunState struct {
 	Status db.WorkflowStatus
 
 	// RunID is the current run id.
-	RunID string
+	RunID      string
+	FirstRunID string
 
 	// IsRunning reports that Temporal considers the execution open. An open
 	// execution is not necessarily making progress — a run wedged with no

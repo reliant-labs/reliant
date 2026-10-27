@@ -15,6 +15,7 @@ type ToolCallContext struct {
 }
 
 const (
+	RootFirstRunIDKey ContextKey = "root_first_run_id"
 	// UserIDKey is the context key for the user ID
 	UserIDKey ContextKey = "user_id"
 

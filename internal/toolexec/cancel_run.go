@@ -11,7 +11,7 @@ import (
 // CancelRunCommands drains this chat on every owned daemon, including node
 // overrides. A publish is not an acknowledgment: every contacted daemon must
 // reply after its execution handlers have returned. Unreachable means unknown.
-func (r *NATSDaemonRouter) CancelRunCommands(ctx context.Context, userID, chatID string) error {
+func (r *NATSDaemonRouter) CancelRunCommands(ctx context.Context, userID, chatID, rootFirstRunID string) error {
 	if r.db == nil {
 		return fmt.Errorf("cannot confirm command cancellation: daemon registry unavailable")
 	}
@@ -19,7 +19,7 @@ func (r *NATSDaemonRouter) CancelRunCommands(ctx context.Context, userID, chatID
 	if err != nil {
 		return err
 	}
-	payload, _ := json.Marshal(map[string]string{"chat_id": chatID})
+	payload, _ := json.Marshal(map[string]string{"chat_id": chatID, "root_first_run_id": rootFirstRunID})
 	ids := make([]string, 0, len(daemons))
 	for _, d := range daemons {
 		ids = append(ids, d.ID)

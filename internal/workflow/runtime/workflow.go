@@ -838,7 +838,17 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	execCtx.WorkflowID = workflowID
 	// workflow.run_id. Read from workflow info, so replay sees the same value.
 	execCtx.RunID = info.WorkflowExecution.RunID
+	if inherited, _ := input.Inputs["_root_first_run_id"].(string); execCtx.RootFirstRunID == "" && inherited != "" {
+		execCtx.RootFirstRunID = inherited
+	}
+	if execCtx.RootFirstRunID == "" {
+		execCtx.RootFirstRunID = info.FirstRunID
+		if execCtx.RootFirstRunID == "" {
+			execCtx.RootFirstRunID = info.WorkflowExecution.RunID
+		}
+	}
 
+	input.Inputs["_root_first_run_id"] = execCtx.RootFirstRunID
 	thread := execCtx.Thread
 	forkedFromThread := execCtx.ForkedFrom
 
@@ -3684,6 +3694,7 @@ func prepareSpawnInline(
 	}
 
 	childExecContext := &ExecutionContext{
+		RootFirstRunID:   rootRunIdentity(workflowInputs),
 		WorkflowID:       config.childWorkflowID,
 		ChatID:           chatID,
 		WorkflowName:     targetWorkflow,
@@ -4367,6 +4378,7 @@ func prepareSpawnRelaunch(
 		childProjectPath = handoff.ProjectPath
 	}
 	childExecContext := &ExecutionContext{
+		RootFirstRunID:   rootRunIdentity(workflowInputs),
 		WorkflowID:       config.childWorkflowID,
 		ChatID:           chatID,
 		WorkflowName:     spawnTargetWorkflow,

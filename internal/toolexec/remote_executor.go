@@ -346,10 +346,11 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 // worker for a server-placed tool and on the daemon for a daemon-placed one.
 func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	contextMap := map[string]interface{}{
-		"user_id":    req.UserID,
-		"chat_id":    req.ChatID,
-		"thread":     req.Thread,
-		"message_id": req.MessageID,
+		"user_id":           req.UserID,
+		"chat_id":           req.ChatID,
+		"root_first_run_id": req.RootFirstRunID,
+		"thread":            req.Thread,
+		"message_id":        req.MessageID,
 		"project": map[string]interface{}{
 			"id":   req.ProjectID,
 			"path": req.ProjectPath,
@@ -392,6 +393,9 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 	}
 
 	contextMap := req.toolContextMap()
+	if req.RootFirstRunID == "" {
+		contextMap["root_first_run_id"] = RootFirstRunID(ctx)
+	}
 
 	timeoutMs := 0
 	if req.Timeout > 0 {

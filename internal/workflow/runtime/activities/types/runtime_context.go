@@ -7,11 +7,12 @@ package types
 // Placed in activities/types to avoid import cycles between runtime engine <-> handlers.
 type RuntimeContext struct {
 	// Core identifiers
-	ChatID     string `json:"chat_id"`
-	Thread     string `json:"thread"`
-	WorkflowID string `json:"workflow_id,omitempty"`
-	StepID     string `json:"step_id,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
+	ChatID         string `json:"chat_id"`
+	Thread         string `json:"thread"`
+	WorkflowID     string `json:"workflow_id,omitempty"`
+	RootFirstRunID string `json:"root_first_run_id,omitempty"`
+	StepID         string `json:"step_id,omitempty"`
+	SessionID      string `json:"session_id,omitempty"`
 
 	// AssistantMessageID is the pre-allocated id for the assistant message a
 	// call_llm activity will stream (delta identity protocol). Minted by the

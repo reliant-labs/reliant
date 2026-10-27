@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/osutil"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -20,6 +19,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/osutil"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -1843,7 +1844,13 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap["user_id"] = d.currentUserID()
 	}
 	chatID, _ := contextMap["chat_id"].(string)
-	finish := d.trackRunExecution(req.RequestId, chatID, cancel)
+	rootFirstRunID, _ := contextMap["root_first_run_id"].(string)
+	finish, trackErr := d.trackRunExecution(req.RequestId, chatID, rootFirstRunID, cancel)
+	if trackErr != nil {
+		cancel()
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{IsError: true, ErrorMessage: trackErr.Error(), Content: trackErr.Error()})
+		return
+	}
 	defer finish()
 	execCtx = osutil.WithCancellationUncertainty(execCtx, func(err error) {
 		d.cancelMu.Lock()
@@ -1928,6 +1935,9 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	}
 
 	logToolFinished(req.ToolName, result, time.Since(toolStart))
+	if result.Backgrounded {
+		osutil.ReportCancellationUncertainty(execCtx, fmt.Errorf("execution detached into background; command shutdown requires explicit process drain"))
+	}
 	d.sendToolResult(s, req.RequestId, result)
 }
 

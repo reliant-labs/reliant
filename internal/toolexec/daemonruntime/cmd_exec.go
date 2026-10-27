@@ -162,8 +162,10 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// manager below, outliving this function, and the timer must stay armed
 	// for as long as cancellation can still fire. It is stopped on every path
 	// where this function owns the command through to completion.
-	finishGrace := osutil.ApplyGracefulCancelChecked(cmd, daemon.ExecGraceDelay)
-	stopGrace := func() { osutil.ReportCancellationUncertainty(ctx, finishGrace()) }
+	if err := osutil.SuperviseCommand(cmd, daemon.ExecGraceDelay); err != nil {
+		return nil, err
+	}
+	stopGrace := func() {}
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
@@ -205,12 +207,19 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// was stopped, if it was.
 	deadline.Release()
 	stopGrace()
+	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 125 {
+		osutil.ReportCancellationUncertainty(ctx, fmt.Errorf("local command supervisor could not confirm descendant shutdown"))
+	}
 	duration := time.Since(start)
 
 	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
+	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 124 {
+		outcome.OutputIncomplete = true
+		outcome.ExitCode = 0
+	}
 
 	logExecFinished(outcome, duration)
 
