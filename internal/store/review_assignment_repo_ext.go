@@ -112,6 +112,40 @@ func (s ReviewAuthorityStore) ProvisionReviewPolicy(ctx context.Context, p Revie
 	})
 }
 
+// ResolveReviewWaitPolicy resolves only current enrolled owner/repo/PR/head
+// policy. The wait store pins this ID+revision in its own serializable operation.
+// A policy revision change between these separate operations fails subsequent
+// publication through the assignment authority checks; no instant remote fence
+// is claimed. The wait integration must not register another producer namespace.
+func (s ReviewAuthorityStore) ResolveReviewWaitPolicy(ctx context.Context, owner string, repoID, pr int64, head string) (string, int64, error) {
+	var row struct {
+		ID       string
+		Revision int64
+	}
+	err := s.DB.Bun().NewRaw(`SELECT p.id,p.revision FROM review_policies p JOIN pr_handoff_bindings b ON b.owner_id=p.owner_id AND b.repo_id=p.repository_id WHERE p.enabled AND p.owner_id=? AND p.repository_id=? AND b.pr_number=? AND b.head_sha=?`, owner, repoID, pr, head).Scan(ctx, &row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, reviewpublisher.ErrUnauthorized
+	}
+	return row.ID, row.Revision, err
+}
+
+// AssignmentSubject resolves the enabled policy-bound handoff subject for a fresh
+// server provider read. AssignReview repeats all SQL checks after that read.
+func (s ReviewAuthorityStore) AssignmentSubject(ctx context.Context, policyID, bindingID string) (reviewpublisher.Head, error) {
+	var row struct {
+		RepositoryID, PullNumber int64
+		SHA                      string
+	}
+	err := s.DB.Bun().NewRaw(`SELECT b.repo_id AS repository_id,b.pr_number AS pull_number,b.head_sha AS sha FROM pr_handoff_bindings b JOIN review_policies p ON p.id=? AND p.owner_id=b.owner_id AND p.repository_id=b.repo_id AND p.enabled WHERE b.id=?`, policyID, bindingID).Scan(ctx, &row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return reviewpublisher.Head{}, reviewpublisher.ErrUnauthorized
+	}
+	if err != nil {
+		return reviewpublisher.Head{}, err
+	}
+	return reviewpublisher.Head{RepositoryID: row.RepositoryID, PullNumber: row.PullNumber, SHA: row.SHA}, nil
+}
+
 // AssignReview reserves only private review authority, not admission capacity.
 // All identities are derived from the handoff binding and reserved event inside
 // this SERIALIZABLE transaction. A repeated source SHA returns its first assignment.
