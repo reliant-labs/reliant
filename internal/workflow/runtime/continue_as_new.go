@@ -353,9 +353,11 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 	// target comes only from Temporal registration identity, never YAML/inputs.
 	var target interface{} = DynamicWorkflow
 	if workflow.GetVersion(ctx, "continue-as-new-preserve-registered-type", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-		if name := workflow.GetInfo(ctx).WorkflowType.Name; name != "" {
-			target = name
+		name := workflow.GetInfo(ctx).WorkflowType.Name
+		if name == "" {
+			return fmt.Errorf("continue as new: missing registered workflow type")
 		}
+		target = name
 	}
 	return workflow.NewContinueAsNewError(ctx, target, WorkflowInput{
 		ChatID:       input.ChatID,

@@ -114,6 +114,18 @@ func TestActualDynamicPrivateContinuation(t *testing.T) {
 	require.NotEmpty(t, proof.Edges)
 }
 
+func TestContinueAsNewMissingRegisteredTypeFailsClosed(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		workflow.GetInfo(ctx).WorkflowType.Name = ""
+		return newContinueAsNewError(ctx, WorkflowInput{}, "loop", 1, nil, false)
+	})
+	require.ErrorContains(t, env.GetWorkflowError(), "missing registered workflow type")
+	var can *workflow.ContinueAsNewError
+	require.False(t, errors.As(env.GetWorkflowError(), &can))
+}
+
 func TestContinueAsNewRegisteredTypeVersionGate(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
 		t.Run(map[bool]string{false: "current", true: "legacy"}[legacy], func(t *testing.T) {
