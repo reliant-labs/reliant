@@ -71,10 +71,10 @@ type Reclaimer struct {
 	// regenerable output is shed (ShedLanded); zero means
 	// DefaultLandedShedFloor.
 	LandedShedFloor time.Duration
-	// ProcessUse is the complete process inspection (executables, open and
-	// mapped files, not only working directories) a live worktree must pass
-	// before anything in it is shed. NewReclaimer sets CheckProcessUse; nil
-	// relies on Cwds alone.
+	// Acquire excludes new runtime work through the final checks and shedding.
+	// Missing admission or process inspection fails closed: nothing is shed.
+	Acquire func(context.Context, []string) (RecoveryLease, error)
+	// ProcessUse checks executables, open and mapped files, not only cwd.
 	ProcessUse func(ctx context.Context, paths []string) error
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time

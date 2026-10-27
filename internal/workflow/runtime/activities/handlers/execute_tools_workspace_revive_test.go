@@ -92,7 +92,35 @@ func TestExecuteTools_LiveChatGetsItsReclaimedWorktreeBack(t *testing.T) {
 
 	again := f.run(t, executor, bashCall("ls"))
 	assert.NotContains(t, again.ToolResults[0].GetContent(), "[Workspace restored]", "said once")
-	assert.Empty(t, executor.ensures[1].Retire, "nothing left to retire")
+	assert.Equal(t, fence, executor.ensures[1].Retire, "retain retirement until the sweep persists positive acknowledgement")
+}
+
+func TestExecuteTools_RetirementDeferredAcrossBatchesRefusesUntilAck(t *testing.T) {
+	t.Parallel()
+	f := setupWorkspaceRecoveryFixture(t)
+	defer f.h.Cleanup()
+	fence := f.archiveUnderTheChat(t)
+	executor := recreatingDaemon(t)
+	recreate := executor.ensure
+	executor.ensure = func(req toolexec.WorkspaceEnsureRequest) (*toolexec.WorkspaceEnsureResponse, error) {
+		return &toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspaceBlocked}, nil
+	}
+	for i := 0; i < 2; i++ {
+		out := f.run(t, executor, bashCall("pwd"))
+		require.True(t, out.ToolResults[0].GetIsError())
+		assert.Contains(t, out.ToolResults[0].GetContent(), "Retry")
+		require.Empty(t, executor.requests, "deferred old remover must exclude tools even though row is live")
+		assert.Equal(t, fence, executor.ensures[i].Retire)
+	}
+	wt, err := f.h.Repo().GetWorktree(context.Background(), f.worktreeID)
+	require.NoError(t, err)
+	require.Nil(t, wt.DeletedAt)
+	require.Equal(t, fence, wt.CleanupMetadata.RetireFence)
+	executor.ensure = recreate
+	out := f.run(t, executor, bashCall("pwd"))
+	require.False(t, out.ToolResults[0].GetIsError(), out.ToolResults[0].GetContent())
+	require.Len(t, executor.requests, 1)
+	assert.Equal(t, fence, executor.ensures[2].Retire)
 }
 
 func TestExecuteTools_ArchivedWorktreeWithSavedWorkIsLeftForRecreate(t *testing.T) {
@@ -106,15 +134,17 @@ func TestExecuteTools_ArchivedWorktreeWithSavedWorkIsLeftForRecreate(t *testing.
 	}))
 	executor := recreatingDaemon(t)
 
-	f.run(t, executor, bashCall("pwd"))
-	require.Equal(t, 1, executor.ensureCount())
-	assert.False(t, executor.ensures[0].Repair, "saved work is re-applied by Recreate, not by a bare repair")
+	out := f.run(t, executor, bashCall("pwd"))
+	require.True(t, out.ToolResults[0].GetIsError())
+	assert.Contains(t, out.ToolResults[0].GetContent(), "preserved work")
+	require.Zero(t, executor.ensureCount(), "saved work is restored by explicit recovery, never branch-only repair")
+	require.Empty(t, executor.requests)
 	wt, err := f.h.Repo().GetWorktree(context.Background(), f.worktreeID)
 	require.NoError(t, err)
 	assert.NotNil(t, wt.DeletedAt)
 }
 
-func TestExecuteTools_RevivalBlockedByANameFallsBackAsBefore(t *testing.T) {
+func TestExecuteTools_RevivalBlockedByANameRefusesSafely(t *testing.T) {
 	t.Parallel()
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
@@ -127,10 +157,9 @@ func TestExecuteTools_RevivalBlockedByANameFallsBackAsBefore(t *testing.T) {
 	executor := recreatingDaemon(t)
 
 	out := f.run(t, executor, bashCall("pwd"))
-	assert.False(t, out.ToolResults[0].GetIsError(), out.ToolResults[0].GetContent())
-	require.Equal(t, 1, executor.ensureCount())
-	assert.False(t, executor.ensures[0].Repair)
-	assert.Equal(t, f.projectPath, executor.requests[0].WorktreePath, "it runs where it always fell back to")
+	assert.True(t, out.ToolResults[0].GetIsError(), out.ToolResults[0].GetContent())
+	require.Zero(t, executor.ensureCount())
+	require.Empty(t, executor.requests, "never run in an archived workspace or silently switch branches")
 	wt, err = f.h.Repo().GetWorktree(ctx, f.worktreeID)
 	require.NoError(t, err)
 	assert.NotNil(t, wt.DeletedAt)

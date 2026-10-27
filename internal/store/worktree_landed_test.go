@@ -137,6 +137,9 @@ func TestReviveArchivedWorktree(t *testing.T) {
 	require.Empty(t, m.HeldReason)
 	require.Empty(t, m.ArchivedBecause)
 	require.EqualValues(t, 42, m.StrippedBytes, "what was shed is remembered")
+	again, err := store.ReviveArchivedWorktree(ctx, env.ORM, id)
+	require.NoError(t, err)
+	require.Equal(t, fence, again, "a concurrent/second batch must also retire the pending fence")
 }
 
 func TestReviveArchivedWorktree_NameTaken(t *testing.T) {

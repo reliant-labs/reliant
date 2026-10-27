@@ -64,15 +64,36 @@ func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) 
 			return
 		}
 	}
-	if hold := r.inUse(ctx, w, false); hold != nil {
+	r.stripUnused(ctx, w, sc.Repos, checkouts, res)
+}
+
+// stripUnused holds exclusive runtime admission from fresh inspection through
+// deletion. Row/path locks serialize reclaimers, not tools. Unknown managed
+// owners and unsupported process inspection must never authorize shedding.
+func (r *Reclaimer) stripUnused(ctx context.Context, w Worktree, repos, checkouts []string, res *Result) {
+	if r.Acquire == nil || r.ProcessUse == nil {
 		return
 	}
-	r.strip(ctx, w, sc.Repos, checkouts, res)
+	lease, err := r.Acquire(ctx, []string{w.Path})
+	if err != nil || lease == nil {
+		return
+	}
+	defer lease.Release()
+	check := func() error {
+		if err := lease.Check(ctx); err != nil {
+			return err
+		}
+		return r.ProcessUse(ctx, []string{w.Path})
+	}
+	if hold := r.inUse(ctx, w, true); hold != nil || check() != nil {
+		return
+	}
+	r.strip(ctx, w, repos, checkouts, res, check)
 }
 
 // strip deletes the regenerable paths of checkouts (see shed) and records
 // them on res. The caller has established that nothing uses them.
-func (r *Reclaimer) strip(ctx context.Context, w Worktree, repos, checkouts []string, res *Result) {
+func (r *Reclaimer) strip(ctx context.Context, w Worktree, repos, checkouts []string, res *Result, check func() error) {
 	for _, c := range checkouts {
 		for _, rel := range regenerableTargets(ctx, c, repos) {
 			if ctx.Err() != nil {
@@ -80,6 +101,9 @@ func (r *Reclaimer) strip(ctx context.Context, w Worktree, repos, checkouts []st
 			}
 			full := filepath.Join(c, filepath.FromSlash(rel))
 			size, _ := DirSize(ctx, full)
+			if check() != nil {
+				return
+			}
 			if err := os.RemoveAll(full); err != nil {
 				continue
 			}

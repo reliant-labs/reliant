@@ -246,8 +246,13 @@ func TestLanded_ShedsRegenerableOutputOnlyWhenQuietAndUnused(t *testing.T) {
 	if got := f.landed(w, true); !exists(nm) {
 		t.Fatalf("shed while a file in it is open: %+v", got)
 	}
-	// An inspection the platform cannot make falls back to the cwd check.
+	// Unsupported platforms cannot prove that open/executable/mapped files
+	// are unused. A clear cwd snapshot alone never authorizes shedding.
 	f.r.ProcessUse = func(context.Context, []string) error { return ErrProcessUseUnsupported }
+	if got := f.landed(w, true); !exists(nm) || len(got.Stripped) != 0 {
+		t.Fatalf("shed without complete process inspection: %+v", got)
+	}
+	f.r.ProcessUse = func(context.Context, []string) error { return nil }
 
 	got = f.landed(w, true)
 	requireLanded(t, got, true, "quiet, unused, landed")

@@ -35,6 +35,8 @@ type batchWorkspace struct {
 	// the machine (noteIndex); "" says nothing.
 	note      string
 	noteIndex int
+	// blocked refuses machine calls without failing the conversation activity.
+	blocked string
 }
 
 // ensureBatchWorkspace checks — and, when it is gone, recovers — the directory
@@ -103,7 +105,11 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	// A thread-bound workspace that cannot be loaded, or is still archived,
 	// is refused call by call with the reason (loadWorktreeInfo); there is
 	// nothing here to check.
-	if threadBound && (worktree == nil || worktree.DeletedAt != nil) {
+	if worktree != nil && worktree.DeletedAt != nil {
+		out.blocked = "This workspace is archived with preserved work. Restore it through the worktree recovery UI before running machine tools; branch-only recreation would omit saved dirty or untracked files."
+		return out
+	}
+	if threadBound && worktree == nil {
 		return out
 	}
 
@@ -147,6 +153,11 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 		}
 	}
 
+	if retire != "" && req.Retire != retire {
+		out.blocked = "Workspace cleanup retirement requires its repository layout. Retry once the project repositories are available; no machine tools ran."
+		return out
+	}
+
 	// Routed exactly as the calls it precedes (toolDaemonSelector): the check
 	// must look at the disk they will run on.
 	worktreeDaemon := ""
@@ -156,8 +167,15 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, chatDaemonSelector(chat, rtx.DaemonSelector)))
 	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, selector, req)
 	if err != nil {
-		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory; running it as is",
+		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory",
 			"chatID", rtx.ChatID, "path", path, "error", err)
+		if retire != "" {
+			out.blocked = "Workspace cleanup retirement could not be confirmed. Retry this operation shortly; no machine tools ran."
+		}
+		return out
+	}
+	if resp.Status == toolexec.WorkspaceBlocked || (retire != "" && resp.Status != toolexec.WorkspacePresent && resp.Status != toolexec.WorkspaceRepaired) {
+		out.blocked = "Workspace cleanup is still retiring. Retry this operation shortly; no machine tools ran."
 		return out
 	}
 	if threadBound && resp.Status == toolexec.WorkspaceFallback {
@@ -187,16 +205,26 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 // is about to work in it, and returns the archive fence the daemon must
 // retire (see store.ReviveArchivedWorktree). It does so for a live chat's
 // own worktree (or its thread's) that reliant made, that has a directory and
-// branch on record and no saved work to re-apply (a confirmed clean-up's
-// snapshot refs are restored by Recreate, which applies them). Anything else
-// is left as it was, which keeps today's behavior: a fallback for the chat,
-// a refusal for a thread. worktree is updated in place when revived.
+// branch on record and proven clean landed provenance, without saved work.
+// The store rechecks eligibility under the row lock, including the canonical
+// recovery catalog. Other archives require explicit recovery; machine calls
+// are refused without ending the conversation. worktree is updated in place.
 func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat, project *db.Project, worktree *db.Worktree) (string, bool) {
-	if worktree == nil || worktree.DeletedAt == nil || worktree.IsMain || worktree.Path == "" || worktree.Branch == "" ||
-		chat.State == db.ChatStateArchived {
+	if worktree == nil {
 		return "", false
 	}
-	if m := worktree.CleanupMetadata; m != nil && len(m.SnapshotRefs) > 0 {
+	// Retirement is durable across batches, not just the batch that revived
+	// the row. Only a positive daemon acknowledgement (the sweep) clears it.
+	if worktree.DeletedAt == nil {
+		if m := worktree.CleanupMetadata; m != nil {
+			return m.RetireFence, false
+		}
+		return "", false
+	}
+	if worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
+		return "", false
+	}
+	if m := worktree.CleanupMetadata; m == nil || m.ArchivedBecause != db.ArchivedBecauseLanded || len(m.SnapshotRefs) > 0 {
 		return "", false
 	}
 	fence, err := a.repo.ReviveArchivedWorktree(ctx, worktree.ID)

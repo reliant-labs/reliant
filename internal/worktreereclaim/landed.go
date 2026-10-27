@@ -24,8 +24,7 @@ import (
 const DefaultLandedShedFloor = 30 * time.Minute
 
 // ErrProcessUseUnsupported is CheckProcessUse on a platform it cannot inspect
-// completely. Shedding then relies on the working-directory check alone, as
-// the automatic removal always has.
+// completely. It is uncertainty, never proof that destructive cleanup is safe.
 var ErrProcessUseUnsupported = errors.New("process-use inspection unsupported on this platform")
 
 // landedAnswer is what the landed probe concluded.
@@ -198,9 +197,9 @@ func remoteBaseCommits(ctx context.Context, checkout string, names []string) []s
 // shedLanded deletes the regenerable output of a landed ACTIVE worktree. It
 // is shed's live counterpart and stricter than it: the server has seen no
 // chat run in the worktree, the worktree has been quiet for the shed floor,
-// no process works in it (a fresh process list) and, where the platform
-// allows a complete look, no process has it as its executable or holds a
-// file in it open or mapped. Only regenerable paths in checkouts this row's
+// exclusive runtime admission excludes new tools, and a complete fresh
+// process inspection proves no cwd, executable, open file or mapped file
+// uses it. Unsupported inspection holds it. Only paths in checkouts this row's
 // lock proves are its own are touched (strip).
 func (r *Reclaimer) shedLanded(ctx context.Context, w Worktree, sc scan, res *Result) {
 	if w.KeepFiles || sc.Truncated {
@@ -221,15 +220,7 @@ func (r *Reclaimer) shedLanded(ctx context.Context, w Worktree, sc scan, res *Re
 	if err != nil || r.now().Sub(last) < floor {
 		return
 	}
-	if hold := r.inUse(ctx, w, true); hold != nil {
-		return
-	}
-	if r.ProcessUse != nil {
-		if err := r.ProcessUse(ctx, []string{w.Path}); err != nil && !errors.Is(err, ErrProcessUseUnsupported) {
-			return
-		}
-	}
-	r.strip(ctx, w, sc.Repos, checkouts, res)
+	r.stripUnused(ctx, w, sc.Repos, checkouts, res)
 }
 
 // selfWithin reports whether this process runs from inside path: its

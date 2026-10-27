@@ -655,16 +655,34 @@ func ReviveArchivedWorktree(ctx context.Context, db orm.Context, id string) (str
 		var row struct {
 			DeletedAt       *time.Time `bun:"deleted_at"`
 			CleanupMetadata *string    `bun:"cleanup_metadata"`
+			IsMain          bool       `bun:"is_main"`
+			Finalizing      *string    `bun:"recovery_finalizing_id"`
 		}
-		if err := db.Bun().NewRaw(`SELECT deleted_at, cleanup_metadata FROM worktrees WHERE id = ? FOR UPDATE`, id).Scan(ctx, &row); err != nil {
+		if err := db.Bun().NewRaw(`SELECT deleted_at, cleanup_metadata, is_main, recovery_finalizing_id FROM worktrees WHERE id = ? FOR UPDATE`, id).Scan(ctx, &row); err != nil {
 			return err
-		}
-		if row.DeletedAt == nil {
-			return nil
 		}
 		meta := core.CleanupMetadata{}
 		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
-			_ = json.Unmarshal([]byte(*row.CleanupMetadata), &meta)
+			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
+				return err
+			}
+		}
+		if row.DeletedAt == nil {
+			fence = meta.RetireFence
+			return nil
+		}
+		// Branch-only recreation is valid ONLY for the proven clean landed
+		// lifecycle. Catalog recovery captures dirty/untracked state separately
+		// from legacy SnapshotRefs. Creation of a recovery also locks this row.
+		if row.IsMain || row.Finalizing != nil || meta.ArchivedBecause != core.ArchivedBecauseLanded || len(meta.SnapshotRefs) != 0 {
+			return fmt.Errorf("workspace requires explicit recovery; cannot revive from its branch alone")
+		}
+		var recoveries int
+		if err := db.Bun().NewRaw(`SELECT COUNT(*) FROM worktree_recoveries WHERE source_worktree_id = ?`, id).Scan(ctx, &recoveries); err != nil {
+			return err
+		}
+		if recoveries != 0 {
+			return fmt.Errorf("workspace has preserved recovery state; restore it through recovery")
 		}
 		f := strconv.FormatInt(row.DeletedAt.UnixNano(), 10)
 		meta.RetireFence = f

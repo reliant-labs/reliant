@@ -101,6 +101,9 @@ const (
 	// WorkspaceIncomplete: Path exists, but some of its checkouts are missing
 	// and could not be recreated. Calls still run in Path.
 	WorkspaceIncomplete = "incomplete"
+	// WorkspaceBlocked: cleanup has not positively retired. No machine tools
+	// may run in this workspace (or silently fall back); retry safely later.
+	WorkspaceBlocked = "blocked"
 )
 
 // WorkspaceEnsureResponse is the daemon's answer.

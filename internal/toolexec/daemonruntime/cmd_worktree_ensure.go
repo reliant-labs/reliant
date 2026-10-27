@@ -90,14 +90,14 @@ func retireWithReclaimer(ctx context.Context, w worktreereclaim.Worktree) worktr
 	return r.Reconcile(ctx, worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
 }
 
-// retireFence retires a revived worktree's archive fence before its directory
-// is looked at. Whatever it answers, the ensure goes on: a checkout it could
-// not re-lock is still there to run in, a missing one is recreated (and
-// locked restored) below, and the server keeps the fence on the row for the
-// sweep to deliver until a re-lock succeeds.
-func (e *workspaceEnsurer) retireFence(ctx context.Context, root string, req toolexec.WorkspaceEnsureRequest) {
-	if req.Retire == "" || req.WorktreeID == "" || e.retire == nil {
-		return
+// retireFence requires positive retirement before observing or recreating the
+// workspace. A deferred old remover can still delete a present directory.
+func (e *workspaceEnsurer) retireFence(ctx context.Context, root string, req toolexec.WorkspaceEnsureRequest) bool {
+	if req.Retire == "" {
+		return true
+	}
+	if req.WorktreeID == "" || e.retire == nil {
+		return false
 	}
 	w := worktreereclaim.Worktree{ID: req.WorktreeID, Path: root, State: worktreereclaim.StateActive, Retire: req.Retire}
 	for _, repo := range req.Repos {
@@ -105,9 +105,11 @@ func (e *workspaceEnsurer) retireFence(ctx context.Context, root string, req too
 	}
 	switch res := e.retire(ctx, w); res.Outcome {
 	case worktreereclaim.OutcomeLocked, worktreereclaim.OutcomeGone:
+		return true
 	default:
 		logging.WarnContext(ctx, "worktree.ensure: could not retire a revived workspace's archive fence",
 			"path", root, "worktree_id", req.WorktreeID, "outcome", res.Outcome, "reason", res.Reason, "detail", res.Detail, "error", res.Error)
+		return false
 	}
 }
 
@@ -165,7 +167,9 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	now := e.now()
-	e.retireFence(ctx, root, req)
+	if !e.retireFence(ctx, root, req) {
+		return toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspaceBlocked, Detail: "workspace cleanup is still retiring; retry this operation shortly"}
+	}
 
 	checkouts := ensureCheckouts(req)
 	missing := missingCheckouts(root, checkouts)
@@ -197,6 +201,11 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 		// every checkout, but a single deleted nested repo is rebuilt alone.
 		var ok bool
 		if ok, reason = repairWorkspace(ctx, root, req, missing); ok {
+			// Gone retires the absent old checkout, but recreation's best-effort
+			// locking is not proof. Require the restored lock before tool admission.
+			if !e.retireFence(ctx, root, req) {
+				return toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspaceBlocked, Detail: "workspace was recreated but its restored lock could not be confirmed; retry shortly"}
+			}
 			logging.InfoContext(ctx, "worktree.ensure: recreated a missing workspace from its branch",
 				"path", root, "branch", req.Branch, "worktree_id", req.WorktreeID, "checkouts", checkoutRels(missing))
 			rec.announce(toolexec.WorkspaceNotice{
