@@ -157,6 +157,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return nil, err
 	}
+	if ev.CapacityOrder != nil && maxRunning == 0 {
+		return nil, errors.New("queued workflow capacity policy was removed; refusing to bypass admission")
+	}
 	if maxRunning > 0 {
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
 			return nil, err

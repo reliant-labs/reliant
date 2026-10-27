@@ -49,6 +49,9 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	}
 	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: t.Workflow}
 	if event.Outcome == core.TriggerEventPending {
+		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
+			return errors.New("queued workflow capacity scope changed")
+		}
 		if err := repo.EnqueueTriggerCapacity(ctx, event, scope); err != nil {
 			return err
 		}

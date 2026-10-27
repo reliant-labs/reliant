@@ -161,6 +161,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return nil, err
 	}
+	if existing != nil && existing.CapacityOrder != nil && maxRunning == 0 {
+		return nil, errors.New("queued workflow capacity policy was removed; refusing to bypass admission")
+	}
 	if maxRunning == 0 && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
 		// trigger, so fires released together after an outage cannot all
