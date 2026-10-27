@@ -59,7 +59,8 @@ type InboundEvent struct {
 	// Echo is what the event says about itself, for attributing it to a write
 	// Reliant made (see Enricher). Evidence only: it is never recorded and never
 	// reaches a filter. nil for a source that has none.
-	Echo *provenance.Echo
+	Echo             *provenance.Echo
+	AdmissionSubject *AdmissionSubject
 }
 
 // AcceptOptions modify Accept.
@@ -189,11 +190,27 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		CreatedAt:     in.now().UTC(),
 	}
 	ev.DedupeKey = dedupeKey
-	created, err := in.repo.CreateTriggerEvent(ctx, row)
+	var created bool
+	if decl != nil && decl.Concurrency != nil && outcome == core.TriggerEventPending {
+		row, created, err = in.enqueueAdmission(ctx, trigger, decl, ev, row)
+	} else {
+		created, err = in.repo.CreateTriggerEvent(ctx, row)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("record %s event for trigger %s: %w", ev.Kind, trigger.ID, err)
 	}
-	res := &AcceptResult{EventID: row.ID, Outcome: outcome, Detail: detail}
+	res := &AcceptResult{EventID: row.ID, Outcome: row.Outcome, Detail: row.OutcomeDetail}
+	if decl != nil && decl.Concurrency != nil {
+		if created && row.Outcome == core.TriggerEventFailed && strings.Contains(row.OutcomeDetail, "admission overloaded") {
+			// Existing ERROR-log metrics/alert pipeline; never include untrusted
+			// key or payload. The durable event remains the audit record.
+			logging.ErrorContext(ctx, "automation admission overloaded", "error_class", "admission_overload", "trigger_id", trigger.ID, "event_id", row.ID)
+		}
+		res.Duplicate = !created
+		// Admission dispatcher owns launch ordering, including after a crash.
+		// The accepted row is durable before the caller acknowledges delivery.
+		return res, nil
+	}
 	if !created {
 		stored, err := in.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 		if err != nil {

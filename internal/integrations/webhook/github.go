@@ -68,15 +68,16 @@ func (p *GitHubProvider) Parse(_ context.Context, req *Request) (*Delivery, erro
 	out := &Delivery{Revocations: parsed.Revocations}
 	for _, ev := range parsed.Events {
 		out.Events = append(out.Events, Event{
-			Type:        ev.Type,
-			AccountKey:  ev.AccountKey,
-			ResourceKey: ev.ResourceKey,
-			DeliveryID:  delivery,
-			OccurredAt:  ev.OccurredAt,
-			Attributes:  ev.Attributes,
-			Data:        ev.Data,
-			Sender:      ev.Sender,
-			Echo:        ev.Echo,
+			Type:         ev.Type,
+			AccountKey:   ev.AccountKey,
+			ResourceKey:  ev.ResourceKey,
+			DeliveryID:   delivery,
+			OccurredAt:   ev.OccurredAt,
+			Attributes:   ev.Attributes,
+			Data:         ev.Data,
+			Sender:       ev.Sender,
+			Echo:         ev.Echo,
+			ObservedHead: observedPRHead(ev.Type, ev.Data),
 		})
 	}
 	return out, nil

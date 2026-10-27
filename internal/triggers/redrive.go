@@ -33,10 +33,11 @@ const (
 // redelivers it on its own, so the receiver acks as soon as the row is
 // written and this closes the gap between the row and the run.
 type Redriver struct {
-	repo      EventRepo
-	starter   WorkflowStarter
-	taskQueue string
-	now       func() time.Time
+	repo           EventRepo
+	starter        WorkflowStarter
+	taskQueue      string
+	now            func() time.Time
+	admissionAfter int64 // bounded keyset scan; wraps, never queue ownership
 }
 
 // NewRedriver builds a Redriver. taskQueue empty means the shared queue.
@@ -50,6 +51,9 @@ func NewRedriver(repo EventRepo, starter WorkflowStarter, taskQueue string) *Red
 // RedriveOnce runs one pass. Every replica may run it concurrently: a start
 // names the event's fire id, so racing starts collapse into one execution.
 func (r *Redriver) RedriveOnce(ctx context.Context) error {
+	if err := r.redriveAdmissions(ctx); err != nil {
+		return err
+	}
 	now := r.now()
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {

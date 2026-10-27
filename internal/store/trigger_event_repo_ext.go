@@ -71,6 +71,7 @@ func InsertTriggerEventIfAbsent(ctx context.Context, db orm.Context, ev *core.Tr
 		return false, err
 	}
 	res, err := db.Bun().NewInsert().Model(row).
+		ExcludeColumn("admission_order").
 		On("CONFLICT (kind, dedupe_key) DO NOTHING").
 		Exec(ctx)
 	if err != nil {
@@ -243,7 +244,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 		limit = defaultTriggerEventLimit
 	}
 	rows, err := ListTriggerEvent(ctx, db,
-		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
+		func(q *bun.SelectQuery) { q.Where("outcome = 'pending' AND admission_state IS NULL") },
 		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
 		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
 		orm.WithLimit(limit))
@@ -291,6 +292,7 @@ func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, o
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = ?", outcome).
 		Set("outcome_detail = ?", detail).
+		Set("admission_state = CASE WHEN admission_state = 'queued' THEN 'superseded' ELSE admission_state END").
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
