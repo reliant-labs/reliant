@@ -7,7 +7,7 @@ import React from "react";
 // ---------------------------------------------------------------------------
 // A dozen surfaces read the daemon list — ModernApp, NewChatView, Terminal,
 // DaemonStatusDot, TabbedViewerPanel, DetectedPortsChip, OomKillBanner,
-// ProjectPicker, ConnectDaemonModal, WorkspacesSection, ComputeStep,
+// ProjectPicker, ConnectDaemonModal, BranchesSection, ComputeStep,
 // SelfHostedDaemonConnect. They share one query key, so consumers that mount
 // together already share a request.
 //

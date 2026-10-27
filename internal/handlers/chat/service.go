@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -41,9 +40,6 @@ type Deps struct {
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
 	// never call it themselves.
 	Pause runs.PauseController
-	// TaskQueue is the Temporal task queue chat runs start on. Empty means
-	// workflow.SharedTaskQueue.
-	TaskQueue string
 	// Router reaches the user's daemon. Interrupting a thread cancels its
 	// running tools through it, and an attended turn wakes a suspended
 	// machine through it when the router can wake (toolexec.DaemonWaker).
@@ -127,9 +123,6 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(deps.TaskQueue) == "" {
-		deps.TaskQueue = workflow.SharedTaskQueue
-	}
 	return &Service{
 		deps: deps,
 		runs: runs.NewService(deps.Repo, deps.Temporal, deps.Pause),
@@ -150,7 +143,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, s.deps.TaskQueue,
+		s.launcherImpl = launch.NewLauncher(s.deps.Repo, threads.NewService(s.deps.Repo), s.deps.Temporal, s.runs, workflow.SharedTaskQueue,
 			launch.WithChatPinner(s.chatPinner()))
 	})
 	return s.launcherImpl

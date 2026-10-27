@@ -17,7 +17,10 @@
  */
 
 import { useMemo, useState } from "react";
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
+const legacyOnly = async () => { throw new ConnectError("Legacy usage fixture", Code.Unimplemented); };
+const legacyBillingApi = { getObservabilityUsage: legacyOnly, listObservabilityUsage: legacyOnly, getObservabilityStorage: legacyOnly, getObservabilityLimits: legacyOnly, updateObservabilityLimits: legacyOnly };
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import PageHeader from "@/components/forge-ui/page_header";
@@ -210,7 +213,9 @@ export default function ObservabilityPreview() {
         )}
         <QueryClientProvider client={queryClient}>
           <ObservabilityApiProvider api={api}>
-            <ObservabilityPanel key={`${caseId}-${placeKind}`} place={place} search={search} navigate={navigate} />
+            <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+              <ObservabilityPanel key={`${caseId}-${placeKind}`} place={place} search={search} navigate={navigate} />
+            </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>
         </QueryClientProvider>
       </div>

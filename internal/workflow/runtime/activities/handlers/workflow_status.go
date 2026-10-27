@@ -141,6 +141,9 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	//   daemon, which also end the root as "failed".
 	// A completed run that declared a failure outcome is also a failure.
 	if isRootWorkflow {
+		if input.LaunchRun && (input.Status == "failed" || input.Status == "completed" && input.Outcome == model.OutcomeFailure) {
+			a.ensureAutomationFailureMessage(ctx, input)
+		}
 		a.recordLaunchRunStatus(ctx, input)
 		reason := ""
 		switch {

@@ -31,7 +31,7 @@ export function PresetsSettings() {
   }, [presets]);
 
   return (
-    <div className="space-y-6 px-8 py-8">
+    <div className="space-y-6">
       <SettingsPageHeader
         title="Presets"
         description="Saved input settings for a workflow, so you can start it the same way each time. Create one from the chat composer while configuring a workflow; a workflow's own presets and defaults are also on its page in Workflows."

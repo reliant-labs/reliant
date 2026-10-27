@@ -145,26 +145,6 @@ func TestPresetQueries(t *testing.T) {
 		t.Fatalf("ReplacePreset(missing) err = %v, want sql.ErrNoRows", err)
 	}
 
-	// Deletes by slug touch their own scope only.
-	if err := store.DeletePresetBySlugAndProject(ctx, env.ORM, user, "fast", project); err != nil {
-		t.Fatalf("DeletePresetBySlugAndProject(global slug): %v", err)
-	}
-	if _, err := env.Repo.GetPreset(ctx, "p-fast"); err != nil {
-		t.Fatalf("p-fast gone after a project-scoped delete of its slug: %v", err)
-	}
-	if err := store.DeletePresetBySlugAndProject(ctx, env.ORM, user, "smart", project); err != nil {
-		t.Fatalf("DeletePresetBySlugAndProject: %v", err)
-	}
-	if _, err := env.Repo.GetPreset(ctx, "p-smart"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("Repo.GetPreset(p-smart) after delete err = %v, want sql.ErrNoRows", err)
-	}
-	if err := store.DeletePresetBySlug(ctx, env.ORM, user, "fast"); err != nil {
-		t.Fatalf("DeletePresetBySlug: %v", err)
-	}
-	left, err := store.ListUserPresets(ctx, env.ORM, user)
-	if err != nil || ids(left) != "p-plan" {
-		t.Fatalf("after DeletePresetBySlug(fast) presets = %s, %v; want every global fast gone", ids(left), err)
-	}
 	if err := store.RemovePreset(ctx, env.ORM, "p-plan"); err != nil {
 		t.Fatalf("RemovePreset: %v", err)
 	}

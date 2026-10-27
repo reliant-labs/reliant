@@ -204,6 +204,7 @@ export interface TriggerHealth {
 export interface Trigger {
   id: string;
   name: string;
+  changes?: Array<{ id: string; userId: string; chatId: string; runId: string; toolCallId: string; operation: string; beforeState: string; afterState: string; createdAt: string }>;
   projectId: string;
   worktreeId?: string;
   enabled: boolean;
@@ -428,6 +429,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
   return {
     id: proto.id,
     name: proto.name,
+    changes: proto.changes ?? [],
     projectId: proto.projectId,
     worktreeId: proto.worktreeId || undefined,
     enabled: proto.enabled,

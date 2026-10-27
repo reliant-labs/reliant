@@ -41,6 +41,7 @@ import { useEnvPromotions, useProjectRelease, useProjectReleases } from "@/hooks
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
@@ -54,7 +55,7 @@ import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
 import { signalState, useSignalsIndex, type SignalState } from "../Observability/serviceSignals";
@@ -213,7 +214,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
     );
   }
 
-  const error = detail.error ?? (!detail.data ? listed.error : null);
+  const error = keepsLastResult(detail.error, detail.data) ? null : (detail.error ?? (!detail.data ? listed.error : null));
   if (error) {
     return (
       <div className="space-y-6" data-testid="workload-detail" data-state="error">
@@ -258,6 +259,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
 
   return (
     <div className="space-y-6" data-testid="workload-detail" data-state="ready" data-kind={summary?.kind ?? "job"}>
+      {detail.data && <ObsAsOf updatedAt={detail.dataUpdatedAt} />}
       <WorkloadHeader
         crumbs={crumbs}
         name={name}

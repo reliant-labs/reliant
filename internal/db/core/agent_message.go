@@ -10,30 +10,31 @@ package core
 import (
 	"errors"
 	"time"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
-// AgentMessageKind identifies what an agent_messages row carries.
-//
-// These values are the wire contract for the agent_messages.kind column.
-// Values are fixed: changing one silently reinterprets every row already in
-// the database.
-type AgentMessageKind int32
+// AgentMessageKind identifies what an agent_messages row carries. It is the
+// wire enum itself (reliantv1.AgentMessageKind), so the mailbox column, the
+// messages.sender_kind column and the API cannot drift apart. Values are
+// fixed: changing one silently reinterprets every row already in the database.
+type AgentMessageKind = reliantv1.AgentMessageKind
 
 const (
 	// AgentMessageKindUnspecified is the zero value; a persisted row should
 	// never carry it.
-	AgentMessageKindUnspecified AgentMessageKind = 0
+	AgentMessageKindUnspecified = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED
 	// AgentMessageKindMessage is free-form text sent between a parent and a
 	// running sub-agent (spawn_send).
-	AgentMessageKindMessage AgentMessageKind = 1
+	AgentMessageKindMessage = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_MESSAGE
 	// AgentMessageKindCompletion notifies the parent that a sub-agent
 	// finished successfully.
-	AgentMessageKindCompletion AgentMessageKind = 2
+	AgentMessageKindCompletion = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_COMPLETION
 	// AgentMessageKindCancelled notifies the parent that a sub-agent was
 	// cancelled.
-	AgentMessageKindCancelled AgentMessageKind = 3
+	AgentMessageKindCancelled = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_CANCELLED
 	// AgentMessageKindFailed notifies the parent that a sub-agent failed.
-	AgentMessageKindFailed AgentMessageKind = 4
+	AgentMessageKindFailed = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_FAILED
 	// AgentMessageKindHumanMessage is free-form text sent by the HUMAN user
 	// directly into a running thread (the SendAgentMessage RPC), as opposed
 	// to AgentMessageKindMessage which is agent-to-agent (spawn_send).
@@ -45,7 +46,7 @@ const (
 	// children, which would collide on the same FromThreadID. Kind is what
 	// the drain envelope actually keys off to label the sender, so it must
 	// be unambiguous on its own.
-	AgentMessageKindHumanMessage AgentMessageKind = 5
+	AgentMessageKindHumanMessage = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_HUMAN_MESSAGE
 )
 
 // AgentMessageStatus is the durable lifecycle state of a mailbox row.

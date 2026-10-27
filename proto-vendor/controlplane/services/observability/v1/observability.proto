@@ -232,7 +232,10 @@ service ObservabilityService {
   // enforcing. It is a plain Postgres read of what the hourly meter wrote
   // (nothing here queries ClickHouse), so it works when the tenant is
   // unreachable. Membership-checked on org_id.
+  // Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+  // Kept until deployed clients have migrated; it remains Postgres-only.
   rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option deprecated = true;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -1490,8 +1493,10 @@ message PanelSeriesResult {
 
 message PanelTableRow {
   map<string, string> group = 1;
-  // One per entry of QueryPanelResponse.columns.
+  // One per entry of QueryPanelResponse.columns. Values whose zero-based
+  // index is in missing_value_indexes MUST be ignored (NULL, not zero).
   repeated double values = 2;
+  repeated uint32 missing_value_indexes = 3;
 }
 
 message GetDashboardsRequest {
@@ -1536,6 +1541,12 @@ message Dashboard {
   // one of the same name). Empty for a synthesized dashboard. Set by the server
   // from the recorded row, never read from the dashboard's own JSON.
   string source = 7;
+  repeated DashboardSection sections = 8;
+}
+
+message DashboardSection {
+  string id = 1;
+  string title = 2;
 }
 
 message DashboardFilter {
@@ -1545,6 +1556,8 @@ message DashboardFilter {
   // traces | metrics | logs: the telemetry the dropdown reads its values from.
   // Empty is traces.
   string signal = 4;
+  // Empty applies to all panels; otherwise only these panel IDs.
+  repeated string panel_ids = 5;
 }
 
 // DashboardAnnotation declares where a dashboard's time-series markers come from.
@@ -1605,6 +1618,8 @@ message Panel {
   // {to:DateTime64(9)}, {step:UInt32}, {env_ids:Array(String)},
   // {envs:Array(String)} and {services:Array(String)}.
   string sql = 18;
+  // Optional declared presentation section; no implicit query filtering.
+  string section = 19;
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in
@@ -1659,6 +1674,39 @@ message DashboardAlert {
   double threshold = 6;
   string status = 7;
   string note = 8;
+}
+
+// === Query quota ===
+
+// QueryQuotaLimit names which of the org's hourly ClickHouse read limits ran
+// out. The quota is one per organization, shared by everything that reads for
+// it: the console, the CLI and alert evaluation.
+enum QueryQuotaLimit {
+  QUERY_QUOTA_LIMIT_UNSPECIFIED = 0;
+  // The number of queries in the interval.
+  QUERY_QUOTA_LIMIT_QUERIES = 1;
+  // Bytes read from storage in the interval.
+  QUERY_QUOTA_LIMIT_READ_BYTES = 2;
+  // Total query execution time in the interval.
+  QUERY_QUOTA_LIMIT_EXECUTION_TIME = 3;
+}
+
+// QueryQuotaExhausted is the typed detail on the ResourceExhausted (reason
+// "obs_query_quota", or "obs_query_quota_soft" for a background poll refused
+// early to keep a reserve for a person's own query) an org's hourly
+// observability query quota answers with. Reads are paused until resets_at;
+// ingest is not affected and nothing is lost. A client keeps showing what it
+// already has and retries after resets_at, not before.
+message QueryQuotaExhausted {
+  // The limit that ran out. UNSPECIFIED when ClickHouse named a limit this
+  // enum does not (resets_at is still right).
+  QueryQuotaLimit limit = 1;
+  // When the quota interval ends and the budget refills. Always set.
+  google.protobuf.Timestamp resets_at = 2;
+  // The query lane whose allowance ran out: "interactive" (the console),
+  // "automation" (alert evaluation) or "agent" (the CLI and tokens). Empty
+  // when the quota is not split into lanes.
+  string lane = 3;
 }
 
 // === Usage and billing ===

@@ -1,30 +1,42 @@
 # Reliant
 
-**AI coding assistant with programmable workflows**
+**Production apps, built and run by AI agents.**
 
 <p align="center">
-<img width="2184" height="1390" alt="546819518-cecdb7c2-1ee6-4c03-bc45-6b1feb44a8dd" src="https://reliantlabs.io/assets/Create_Workflows_ListItem.webp" /> 
+<img width="1200" height="630" alt="Reliant: production apps, built and run by AI agents" src="https://reliantlabs.io/og-image.png" />
 </p>
 
 <p align="center">
   <a href="https://reliantlabs.io">Website</a>
   ·
-  <a href="https://docs.reliantlabs.io/docs/">Docs</a>
+  <a href="https://docs.reliantlabs.io">Docs</a>
+  ·
+  <a href="https://github.com/reliant-labs/forge">Forge</a>
   ·
   <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA">Slack</a>
 </p>
 
-Reliant is a desktop AI coding assistant that goes beyond chat. Interact with your codebase through natural conversation, then extend that interaction with programmable workflows that automate complex, multi-step development tasks.
+Reliant is an agent harness for the whole life of an app: agents that build it,
+ship it, watch it and fix it when it breaks. Chat with an agent in the desktop or
+web app, or hand the loop to workflows that run on their own: review every pull
+request, turn a labelled issue into a tested PR, answer an alert at 2am with the
+cause and a proposed fix.
+
+Reliant works on any codebase. It works best on an app built with
+[Forge](https://github.com/reliant-labs/forge), our open-source framework: every
+Forge app has the same shape, tracing on every request, and linters that catch
+whole classes of bugs, so agents know your app from the start and can see what it
+is doing in production.
 
 ## Key Features
 
-- **Chat with your codebase** — AI understands your project structure, reads files, and maintains context across conversations
-- **Programmable workflows** — Define repeatable multi-step processes in YAML, version them with your code
-- **Multi-agent patterns** — Spawn parallel agents, implement debate patterns, or chain specialized agents together
-- **Git worktrees** — Isolate work in separate branches without switching contexts
-- **Any LLM provider** — Anthropic, OpenAI, Google Gemini, GitHub Copilot, AWS Bedrock, Azure, Groq, OpenRouter, and more
-- **MCP support** — Extend capabilities with Model Context Protocol servers
-- **Config as code** — Workflows and presets live in your repo as `.reliant/` files
+- **Agents that keep working** — workflows run on your laptop, a server you own, or a Reliant cloud machine, and keep going after you close the lid
+- **Autopilot** — built-in workflows for on-call, issue → pull request, PR review, security review and review responses, set off by alerts, pull requests, labels and comments
+- **Programmable workflows** — define repeatable multi-step processes in YAML under `.reliant/workflows/`, versioned with your code, and trigger them on a schedule, a webhook, or a GitHub or Slack event
+- **Multi-agent patterns** — spawn parallel agents, race attempts in separate git worktrees, chain specialized roles
+- **Build and ship with Forge** — `reliant forge` runs the Forge built into Reliant, already signed in; deploys land on Reliant hosting with dashboards and alerts
+- **Any model, no token markup** — bring your own key (Anthropic, OpenAI, Google, Bedrock, Azure, Groq, OpenRouter and more) or your ChatGPT plan; your provider bills you at their prices
+- **MCP support** — extend agents with Model Context Protocol servers
 
 ## Installation
 
@@ -58,12 +70,15 @@ See the [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start) f
 
 Full documentation at [docs.reliantlabs.io](https://docs.reliantlabs.io)
 
-- [Quick Start Guide](https://docs.reliantlabs.io/using-reliant/quick-start/)
-- [Workflows Overview](https://docs.reliantlabs.io/workflows/overview/)
-- [Multi-Agent Patterns](https://docs.reliantlabs.io/workflows/patterns/)
-- [Custom Workflows](https://docs.reliantlabs.io/workflows/custom-workflows/)
-- [Presets Reference](https://docs.reliantlabs.io/workflows/presets/)
-- [MCP Servers](https://docs.reliantlabs.io/settings/mcp-servers/)
+- [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start)
+- [Machines: your computer or the cloud](https://docs.reliantlabs.io/machines/overview)
+- [Autopilot](https://docs.reliantlabs.io/guides/autopilot)
+- [Workflows Overview](https://docs.reliantlabs.io/workflows/overview)
+- [Multi-Agent Patterns](https://docs.reliantlabs.io/workflows/patterns)
+- [Custom Workflows](https://docs.reliantlabs.io/workflows/custom-workflows)
+- [Presets Reference](https://docs.reliantlabs.io/workflows/presets)
+- [Forge: build, deploy and host apps](https://docs.reliantlabs.io/forge/overview)
+- [MCP Servers](https://docs.reliantlabs.io/settings/mcp-servers)
 
 ## How It Works
 

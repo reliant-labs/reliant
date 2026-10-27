@@ -28,7 +28,7 @@
     "package:electron": "cd electron && npm run package",
     "test:web": "cd frontends/web && npm run test",
     "test:e2e": "cd frontends/web && npm run test:e2e",
-    "postinstall": "cd frontends/web && npm install --legacy-peer-deps && cd ../../electron && npm install",
+    "postinstall": "cd frontends/web && pnpm install && cd ../../electron && npm install",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },

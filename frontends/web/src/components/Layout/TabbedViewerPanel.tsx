@@ -6,6 +6,7 @@ import { isElectron } from "../../lib/constants";
 import { ResizableDiffPanel } from "./ResizableDiffPanel";
 import { useViewerStore, type Viewer, type CommandsViewer, type WorkflowViewer } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { MonacoDiffViewer } from "../FileBrowser/MonacoDiffViewer";
 import { FileViewerTab } from "../FileBrowser/FileViewerTab";
@@ -200,6 +201,7 @@ interface ViewerTabProps {
 
 function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
   const tabRef = useRef<HTMLDivElement>(null);
+  const closeLabel = withShortcut("Close tab", useShortcutLabel("closeTab"));
 
   const getDiffStatusTitle = () => {
     if (viewer.type !== "diff") return "file";
@@ -277,7 +279,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
           : undefined
       }
       onClick={onSelect}
-      title={isActive ? "Active - Press Cmd+W to close" : viewer.title}
+      title={viewer.title}
     >
       {/* Status Badge */}
       <span
@@ -306,7 +308,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       )}
 
       {/* Close Button */}
-      <Tooltip content="Close tab (Cmd+W)" side="bottom" delay={300} triggerClassName="inline-flex">
+      <Tooltip content={closeLabel} side="bottom" delay={300} triggerClassName="inline-flex">
       <button
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -321,7 +323,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
           "p-0.5 rounded hover:bg-destructive/20 transition-all relative z-10 pointer-events-auto",
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}
-        aria-label="Close tab (Cmd+W)"
+        aria-label="Close tab"
       >
         <X className="w-3 h-3 pointer-events-none" />
       </button>

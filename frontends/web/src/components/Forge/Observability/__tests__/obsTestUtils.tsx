@@ -14,6 +14,7 @@ import { render, type RenderResult } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
+import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 import {
   ObservabilityApiProvider,
   type ObservabilityApi,
@@ -59,7 +60,7 @@ export function renderWithApi(api: ObservabilityApi, ui: ReactElement): RenderRe
   const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>{ui}</ObservabilityApiProvider>
+      <ObsQuotaProvider><ObservabilityApiProvider api={api}>{ui}</ObservabilityApiProvider></ObsQuotaProvider>
     </QueryClientProvider>
   );
 }

@@ -33,10 +33,7 @@ import (
 // server packages take, trimmed as every reader of these variables trimmed
 // them. The zero value is self-hosted.
 func ControlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoint {
-	return controlplane.Endpoint{
-		URL:                   strings.TrimSpace(cfg.GetUrl()),
-		InternalServiceSecret: strings.TrimSpace(cfg.GetInternalServiceSecret()),
-	}
+	return controlplane.EndpointFrom(cfg)
 }
 
 // AllowPrivateEgress is NetworkConfig.allow_private_egress: the one switch
@@ -87,6 +84,10 @@ func NATSEndpoint(cfg *configv1.NatsConfig) natsutil.Endpoint {
 // IntegrationSettings is the shared IntegrationsConfig in the shape the
 // server packages take.
 type IntegrationSettings struct {
+	// Config is the IntegrationsConfig these settings were read from, for a
+	// package that takes the config block itself (handlers/trigger,
+	// handlers/connector).
+	Config *configv1.IntegrationsConfig
 	// PublicURL is this deployment's externally reachable base URL
 	// (PUBLIC_URL); empty reports webhook URLs as bare paths.
 	PublicURL string
@@ -108,6 +109,7 @@ type IntegrationSettings struct {
 func Integrations(cfg *configv1.IntegrationsConfig) IntegrationSettings {
 	publicURL := strings.TrimSpace(cfg.GetPublicUrl())
 	return IntegrationSettings{
+		Config:    cfg,
 		PublicURL: publicURL,
 		VaultKey:  strings.TrimSpace(cfg.GetVaultKey()),
 		Webhooks: webhook.RegistryConfig{

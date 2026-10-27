@@ -54,6 +54,9 @@ import (
 // Before the grants were recorded durably, run 2 started with none: turn N+1
 // was not offered the tool and execute_tools refused the call as "load it
 // first", though the thread history told the model it was loaded.
+// grantsTestTimeout is each run's Temporal test-environment deadline.
+const grantsTestTimeout = 30 * time.Second
+
 func TestLoadedToolSurvivesACoarseRestartFromTheCheckpoint(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -66,6 +69,11 @@ func TestLoadedToolSurvivesACoarseRestartFromTheCheckpoint(t *testing.T) {
 	}}}
 	var suite temporaltest.WorkflowTestSuite
 	env1 := suite.NewTestWorkflowEnvironment()
+	// The test environment's own deadline is 3s of wall clock by default,
+	// and both runs drive real activities against pgtest's Postgres: on a
+	// loaded machine run 1 took 10s and the environment panicked "test
+	// timeout" mid-workflow. 30s, as the runtime package's suites use.
+	env1.SetTestTimeout(grantsTestTimeout)
 	newGrantsWorker(t, env1, repo, run1Model, newGrantsExecutor(repo), 1)
 	env1.SetStartWorkflowOptions(client.StartWorkflowOptions{ID: chatID})
 	env1.ExecuteWorkflow(v2.DynamicWorkflow, grantsWorkflowInput(chatID, nil))
@@ -86,6 +94,7 @@ func TestLoadedToolSurvivesACoarseRestartFromTheCheckpoint(t *testing.T) {
 	}}}
 	run2Executor := newGrantsExecutor(repo)
 	env2 := suite.NewTestWorkflowEnvironment()
+	env2.SetTestTimeout(grantsTestTimeout)
 	newGrantsWorker(t, env2, repo, run2Model, run2Executor, 0)
 	env2.SetStartWorkflowOptions(client.StartWorkflowOptions{ID: chatID})
 	env2.ExecuteWorkflow(v2.DynamicWorkflow, grantsWorkflowInput(chatID, resume))
@@ -206,6 +215,12 @@ func ptrTo[T any](v T) *T { return &v }
 // turns, at the next one.
 func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo *db.Repo, model *scriptedModel, executor toolexec.ToolExecutor, callLLMTurns int) {
 	t.Helper()
+	// This is a DB-backed integration, not an in-memory activity mock. The
+	// SDK's default 3s idle watchdog races real activities (notably SaveMessage)
+	// under host load and tears down their DB while they are still running.
+	// Match the harness's bounded workflow-task budget; this test asserts the
+	// durable result, not how quickly a database transaction finishes.
+	env.SetTestTimeout(temporaltest.DeadlockDetectionTimeout)
 	// The production data converter: activities return protos, which the
 	// workflow decodes into maps.
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())

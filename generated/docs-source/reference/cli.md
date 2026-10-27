@@ -195,6 +195,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`reliant forge mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
 | [`reliant forge obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
@@ -676,9 +677,11 @@ Credential resolution order:
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
      earlier 'daemon start' or 'reliant daemon register').
-  3. Otherwise a browser login of its own that mints a daemon credential.
-     This is a separate credential from 'reliant auth login', which is never
-     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+  3. Otherwise it pairs the machine: it prints a short code and a link, and
+     you approve "this machine" in the Reliant app — on the link, or by typing
+     the code into the Add machine window. Nothing has to reach back to this
+     terminal, so it works over ssh. The credential it is given is separate
+     from 'reliant auth login', which is never reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
      the daemon never opens a browser: it stays resident and idle, publishing
      "awaiting_credentials" in its runtime state (see 'reliant daemon
      status'), and polls for a credential to appear on disk. Electron spawns
@@ -1009,6 +1012,7 @@ reliant forge
 | [`lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`mcp`](#reliant-forge-mcp) | Run forge as an MCP server on stdio, so any agent harness can drive it |
 | [`obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`package`](#reliant-forge-package) | Manage internal packages |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
@@ -7508,6 +7512,50 @@ reliant forge logout [--endpoint URL] [flags]
 
 ---
 
+### reliant forge mcp
+
+Run forge as an MCP server on stdio, so any agent harness can drive it
+
+Run forge as a Model Context Protocol server on stdio.
+
+Any MCP-capable harness (Claude Code, Codex, Cursor, ...) can then call forge's
+introspection, skill and lint/generate verbs as tools, with no memory file in
+the project telling it how. The server says what forge is, and tells the model to
+load the 'forge' skill first.
+
+Tools (each takes an optional "dir": the project to act on; default is the
+directory the server was started in, or -C):
+
+  read-only   capabilities   every verb, lint analyzer and marker
+              annotations    the entity-authoring vocabulary
+              libraries      forge/pkg and web-runtime APIs
+              audit          what THIS project currently is
+              shapes         where every rpc/message/table/handler is, with file:line
+              skill_list     the skill catalog
+              skill_search   find a skill by keyword
+              skill_load     print one skill
+  mutating    lint           forge lint --quiet [--scope PATH...]
+              generate       forge generate [--dry-run | --check]
+
+Each tool runs the same command in-process; it does not shell out to a forge
+binary, and it does not hand a project pinned to another forge over to that
+forge (it reports the skew instead).
+
+Register it:
+
+  Claude Code   claude mcp add forge -- forge mcp
+  Codex         codex mcp add forge -- forge mcp
+  Cursor        {"mcpServers": {"forge": {"command": "forge", "args": ["mcp"]}}}
+                in .cursor/mcp.json
+
+docs/mcp.md has the config files in full.
+
+```
+reliant forge mcp
+```
+
+---
+
 ### reliant forge obs
 
 Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts
@@ -10606,6 +10654,13 @@ step on the way, so the gate is green without hand edits. In order:
   locks               refresh lockfiles that disagree with their package.json
   lint                forge lint --json; what remains is reported, not fixed
 
+--skip <phase> (repeatable) leaves a phase out so a big change can go in its own PR:
+codemods (the registry codemods the range crosses), playbooks (the codemods a
+playbook automates, connect-errors and composition-graph among them),
+vendored-contracts, generate, locks, lint. modules, templates and pin always run.
+The pin moves in the same run, so a skipped codemod is not picked up by the next
+upgrade: the phase's detail names each one to run yourself ('forge fix <name>').
+
 Whatever is left is printed as "Still needs a person" (--json: needs_human): a
 lint error, a playbook whose old shape remains, a codemod that listed what it
 could not decide. Rules still in their warn-first grace are listed under
@@ -10696,7 +10751,7 @@ reliant forge project upgrade [--force <path>...] [flags]
 | `--dry-run` | `bool` | - | Alias for --check |
 | `--force` | `bool` | - | Overwrite user-modified files. Name paths after it to overwrite only those |
 | `--json` | `bool` | - | Print one JSON document (schema forge-project-upgrade/v1) on stdout; progress goes to stderr |
-| `--skip` | `stringSlice` | `[]` | Phases not to run: playbooks, vendored-contracts, generate, locks, lint |
+| `--skip` | `stringSlice` | `[]` | Phases not to run: codemods, playbooks, vendored-contracts, generate, locks, lint |
 | `--to` | `string` | - | Target forge version (defaults to the current binary version) |
 
 ---

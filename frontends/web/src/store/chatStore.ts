@@ -6,15 +6,18 @@ import {
   ContentBlockType,
   StreamingState,
   ChatState,
+  AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
 import { ApprovalStatus, ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
   foldToolResultMessage,
+  resolvedToolResultFromBlock,
   getProcessedMessage,
 } from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
+import { registerToolResultSink } from "../lib/toolResultSink";
 import {
   CHAT_MARKER_KINDS,
   extractChatMarker,
@@ -35,7 +38,7 @@ import {
 
 import * as Sentry from "@sentry/react";
 
-// Chat streaming is handled via the unified gRPC stream in globalUpdatesStore
+// Chat streaming is handled by the per-chat stream globalUpdatesStore owns
 import type {
   ChatUpdate,
   ProtoMessageUpdate,
@@ -111,7 +114,6 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { QUEUED_SENDER_KIND_HUMAN } from "../hooks/chat-model";
 import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -956,8 +958,12 @@ interface ChatStoreState {
   // Resolves to true when more history may still remain, false when the top of
   // the chat has been reached (or nothing could be loaded).
   loadOlderMessages: (chatId: string) => Promise<boolean>;
+  // Merge the tool results of messages read outside this store (the React
+  // Query seed and single-thread reads) into toolResultsByCallId. Known
+  // entries are kept: a result is written once.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => void;
 
-  // Stream methods (chat detail events are delivered via the unified global stream)
+  // Stream methods (chat detail events are delivered by the per-chat stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
   // Clears streaming placeholders/buffers for a chat. Called when the chat's
   // activity goes IDLE — the authoritative "nothing is streaming" signal —
@@ -1597,7 +1603,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
 
     // Start WebSocket for real-time updates (synchronous setup, async connection)
-    // Subscribe to per-chat detail events via the unified global stream
+    // Subscribe to per-chat detail events (the per-chat stream; the user stream is untouched)
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-call");
     }
@@ -1686,7 +1692,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       id: clientMessageId,
       body: content,
       created_at: sentAt,
-      sender_kind: QUEUED_SENDER_KIND_HUMAN,
+      sender_kind: AgentMessageKind.HUMAN_MESSAGE,
       attachments: attachmentIds ?? [],
     };
     sendPayloads.set(clientMessageId, { chatId, content, attachmentIds, options: sendOptions });
@@ -1998,9 +2004,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         approvalsFromCache(chatId);
       // Build the normalized tool-result index from the loaded TOOL messages,
       // merged over anything already known for this chat, so processMessage can
-      // resolve call→result the same way the live stream path does. (Loaded
-      // assistant messages may also carry a backend-embedded matchedResult;
-      // processMessage falls back to that when the index has no entry.)
+      // resolve call→result the same way the live stream path does. The server
+      // does not copy a result onto its call block: this index is the join.
       const loadedToolResults: ToolResultsByCallId = {
         ...(state.toolResultsByCallId[chatId] || {}),
       };
@@ -2057,6 +2062,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Scroll-back paging. The initial snapshot is bounded to the newest N
   // messages, so this is how the rest of a long chat becomes reachable: fetch
   // the page immediately older than what we hold and PREPEND it.
+  ingestToolResultMessages: (chatId: string, messages: Message[]) => {
+    const found: ToolResultsByCallId = {};
+    for (const message of messages) {
+      if (message.role === MessageRole.TOOL) foldToolResultMessage(message, found);
+    }
+    const existing = get().toolResultsByCallId[chatId] || {};
+    const added = Object.keys(found).filter((id) => !(id in existing));
+    if (added.length === 0) return;
+    const merged: ToolResultsByCallId = { ...existing };
+    for (const id of added) merged[id] = found[id];
+    set((state) => ({
+      toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: merged },
+    }));
+  },
+
   loadOlderMessages: async (chatId: string) => {
     // Concurrency guard. Virtuoso can fire startReached several times in quick
     // succession (each prepend re-renders the list near the top edge), and
@@ -2182,7 +2202,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
 
-  // Process chat detail events from the unified global stream.
+  // Process chat detail events from the per-chat stream.
   // Called by globalUpdatesStore when per-chat events arrive.
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot = false) => {
     // Helper to process streaming deltas and build/update a temporary streaming message
@@ -2693,11 +2713,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   return;
                 }
                 batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
-                batchToolResults[block.toolCallId] = {
-                  content: block.content || "",
-                  is_error: block.isError,
-                  tool_name: block.toolName,
-                };
+                batchToolResults[block.toolCallId] = resolvedToolResultFromBlock(block);
               }
             });
 
@@ -3680,10 +3696,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     await resolvePendingQuestion(chatId, questionId, action, responseData);
   },
 
-  // Refresh chat - reconnects the unified stream to re-fetch data
+  // Refresh chat - re-asserts the chat stream
   refreshChat: async (chatId: string) => {
-    // Data refreshes via the unified global stream reconnection
-    // Re-subscribing to the chat triggers a fresh sync snapshot
+    // Re-subscribing restores a dropped chat stream (resuming from its
+    // cursor); it is a no-op while the stream is already up.
     getGlobalUpdatesStore()?.subscribeToChatDetails(chatId);
   },
 
@@ -3877,7 +3893,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Connection restored - streaming is managed by globalUpdatesStore
   onConnectionRestored: () => {
     set({ error: null });
-    // The unified global stream reconnects automatically via globalUpdatesStore
+    // Both streams reconnect on their own (globalUpdatesStore)
   },
 
   // Clear error
@@ -4113,7 +4129,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     streamingBuffers.clear();
 
-    // Unsubscribe from chat details in the unified stream
+    // Unsubscribe from chat details (closes the chat stream)
     try {
       getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
     } catch {
@@ -4154,3 +4170,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 }));
+
+registerToolResultSink((chatId, messages) =>
+  useChatStore.getState().ingestToolResultMessages(chatId, messages),
+);

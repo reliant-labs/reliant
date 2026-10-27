@@ -43,7 +43,7 @@ var fullDaemon = []fat.Scope{
 	fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
 	fat.ScopeDomainRead, fat.ScopeDomainWrite,
 	fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-	fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery,
+	fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead,
 	fat.ScopeClusterManage,
 }
 

@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 import "reliant/v1/tools_daemon.proto"; // for DiscoveredProject
 
@@ -19,24 +20,44 @@ service DaemonRegistryService {
 
   // ResolveDaemon picks the right daemon for routing given optional selectors.
   // Used by distributed OSS routers.
-  rpc ResolveDaemon(ResolveDaemonRequest) returns (ResolveDaemonResponse) {}
+  rpc ResolveDaemon(ResolveDaemonRequest) returns (ResolveDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
   // the resolved daemon is not currently active.
-  rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {}
+  rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"}
+    };
+  }
 
   // RefreshLocalModels asks an online daemon to re-probe its local model
   // servers and waits (bounded) for the new inventory. Backs the UI's
   // "Test connection" / "Refresh". Fails with Unavailable when the daemon is
   // offline.
-  rpc RefreshLocalModels(RefreshLocalModelsRequest) returns (RefreshLocalModelsResponse) {}
+  rpc RefreshLocalModels(RefreshLocalModelsRequest) returns (RefreshLocalModelsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"}
+    };
+  }
 
   // SetLocalModelEndpoints replaces the user-configured local model
   // endpoints on an online daemon (persisted in that machine's
   // ~/.reliant/config.yaml, models.providers.local) and returns the
   // re-probed inventory. Auto-detected well-known ports need no
   // configuration and are not listed here.
-  rpc SetLocalModelEndpoints(SetLocalModelEndpointsRequest) returns (SetLocalModelEndpointsResponse) {}
+  rpc SetLocalModelEndpoints(SetLocalModelEndpointsRequest) returns (SetLocalModelEndpointsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_local_model_endpoints"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
 
   // ClearMachineCaches frees space on an online machine by clearing the
   // rebuildable caches the user confirmed — only kinds the daemon reports as
@@ -46,7 +67,17 @@ service DaemonRegistryService {
   // could hold data. The clean-up runs in the background on the machine;
   // progress shows as DiskConsumer.clearing and then as freed space in the
   // next disk report. Fails with Unavailable when the machine is offline.
-  rpc ClearMachineCaches(ClearMachineCachesRequest) returns (ClearMachineCachesResponse) {}
+  rpc ClearMachineCaches(ClearMachineCachesRequest) returns (ClearMachineCachesResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "clear_caches"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
 }
 
 message ClearMachineCachesRequest {

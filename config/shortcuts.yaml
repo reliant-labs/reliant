@@ -26,18 +26,26 @@
 #   is ours — PROVIDED the browser releases it. The second key may be typed with
 #   Cmd still held (Cmd+K then Cmd+W, VS Code muscle memory), and the browser
 #   judges that held chord before the page sees it. So on the web a sequence's
-#   second key must not be T, N, W or Q: held, those open or close a browser
-#   tab/window — Cmd+K Cmd+W would close Reliant's own tab. bindings.test.ts
-#   enforces this.
+#   second key must not make a hard-reserved chord when held: not T, N, W or Q
+#   (Cmd+K Cmd+W would close Reliant's own tab), and not Shift+[ or Shift+]
+#   (Chrome's tab switching). bindings.test.ts enforces this.
 #
 # WEB BINDINGS:
 #   `binding` is the desktop (Electron) chord. `web_binding` overrides it in a
 #   browser tab. Omit web_binding when the chord works in both.
 #
+#   `desktop_only: true` — the shortcut does not exist in a browser tab: no
+#   binding there (a remap does not apply either), absent from the web's
+#   Settings list. For what the browser already provides itself, like
+#   find-in-page; it cannot be combined with web_binding.
+#
 #   Browsers fall into three buckets, and the bucket decides whether an override
 #   is required:
 #     HARD-RESERVED — the page never receives the event; preventDefault cannot
-#       help. Cmd+T, Cmd+N, Cmd+W, Cmd+Shift+T. An override is MANDATORY.
+#       help. Cmd+T, Cmd+N, Cmd+W, Cmd+Shift+T, and on macOS Chrome's tab
+#       switching: Cmd+Shift+[ / ], Cmd+Alt+Left / Right. An override is
+#       MANDATORY. The list is lib/keyboard/reserved.ts, taken from Chromium's
+#       reserved-command set — check it rather than guessing.
 #     HOSTILE — interceptable, but overriding breaks a universal expectation
 #       (Cmd+P print, Cmd+F find, Cmd+L address bar, Cmd+S save). Override
 #       unless the app meaning is clearly the one the user wants in context.
@@ -52,8 +60,9 @@
 #   innermost-first, so an inner context shadows the same chord in an outer one
 #   and neither needs to know about the other. Valid values, innermost first:
 #     modal, slash-menu, monaco, terminal, chat-input, file-tree,
-#     workflow-canvas, right-sidebar, global
-#   Defaults to `global`.
+#     workflow-canvas, right-sidebar, chat-view, global
+#   Defaults to `global`. `chat-view` is active while a workspace conversation
+#   is on screen, wherever focus is.
 #
 #   `allow_in_input: true`  — let an UNMODIFIED binding fire while typing.
 #   `passthrough: true`     — run the handler but let the event continue.
@@ -156,15 +165,21 @@ shortcuts:
 
   # Cmd+F is the universal "find in what I'm looking at" key, so it resolves by
   # context rather than meaning one fixed thing: the editor keeps its own find,
-  # and everywhere else it searches the conversation. Registering the Monaco
-  # entry explicitly is what lets the dispatcher stay out of Monaco's way —
-  # this replaces the old hardcoded "skip Cmd+F if Monaco is focused" branch.
+  # a conversation on screen searches that conversation, and anywhere else — a
+  # project home with no chat open, Settings, the Inbox, Workflows, Runs, Apps
+  # — it is find-in-page: the browser's own in a tab, findInPage (below) in the
+  # desktop app. Chat history stays a keystroke away everywhere through
+  # switchChat (Cmd+E), and the slash menu's "Search Chats" runs this from any
+  # page. Registering the
+  # Monaco entry explicitly is what lets the dispatcher stay out of Monaco's
+  # way — this replaces the old hardcoded "skip Cmd+F if Monaco is focused"
+  # branch.
   - id: chatSearch
     name: Search Chats
-    description: Search the current conversation and chat history
+    description: Search the conversation on screen and chat history
     category: Search & Navigation
     binding: Cmd+F
-    context: global
+    context: chat-view
     handler: onChatSearch
 
   - id: editorFind
@@ -175,6 +190,21 @@ shortcuts:
     context: monaco
     passthrough: true
     handler: onEditorFind
+
+  # The rest of Cmd+F: off a conversation and outside the editor, find text on
+  # the page. A browser tab already has that — its own find bar — so this
+  # exists only in the desktop app, which has no browser chrome to provide one.
+  # It sits in `global`, below chatSearch (`chat-view`) and editorFind
+  # (`monaco`), so those still win where they apply. Edit › Find in the desktop
+  # menu delivers this id, and with a conversation on screen it searches the
+  # conversation instead, exactly as the key would there.
+  - id: findInPage
+    name: Find in Page
+    description: Find text on the page
+    category: Search & Navigation
+    binding: Cmd+F
+    desktop_only: true
+    handler: onFindInPage
 
   # ==================================
   # Focus
@@ -197,6 +227,19 @@ shortcuts:
     binding: Cmd+L
     web_binding: Cmd+K L
     handler: onFocusChat
+
+  # The same chord with a selection in the file editor sends the selection to
+  # the chat — what the editor's "Add to chat" popup advertises. With nothing
+  # selected (or in an editor that has no chat to add to) it focuses the chat,
+  # exactly as focusChat would have.
+  - id: addSelectionToChat
+    name: Add Selection to Chat
+    description: Add the selected code to the chat composer
+    category: Chat Control
+    binding: Cmd+L
+    web_binding: Cmd+K L
+    context: monaco
+    handler: onAddSelectionToChat
 
   - id: focusTranscript
     name: Focus Conversation
@@ -379,11 +422,16 @@ shortcuts:
   # ==================================
   # File Navigation
   # ==================================
+  # Cmd+Shift+[ / ] is Chrome's next/previous TAB on macOS, and it is in
+  # Chrome's reserved set: the page never sees it, so in a browser these were
+  # dead. Cmd+K ] / [ keeps the bracket mnemonic; held, Cmd+] / Cmd+[ is
+  # back/forward, which the page is offered first.
   - id: nextFileTab
     name: Next File Tab
     description: Switch to the next open file tab
     category: File Navigation
     binding: Cmd+Shift+]
+    web_binding: Cmd+K ]
     handler: onNextFileTab
 
   - id: prevFileTab
@@ -391,12 +439,13 @@ shortcuts:
     description: Switch to the previous open file tab
     category: File Navigation
     binding: Cmd+Shift+[
+    web_binding: Cmd+K [
     handler: onPrevFileTab
 
   # Was Cmd+F, which shadowed every "find" the user actually meant: pressing it
   # anywhere focused the editor instead of searching. Cmd+F now belongs to
-  # search (chatSearch globally, editorFind inside Monaco), and focusing the
-  # editor joined the Focus family above.
+  # search (chatSearch over a conversation, editorFind inside Monaco), and
+  # focusing the editor joined the Focus family above.
   - id: focusFileEditor
     name: Focus File Editor
     description: Move the cursor to the active file editor

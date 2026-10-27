@@ -129,7 +129,7 @@ export function MemberPermissions() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Member Permissions"
+        title="Members"
         description="Control what each member of your organization is allowed to do. A token acting on someone's behalf can never carry more permissions than that person holds."
       />
 
@@ -147,7 +147,7 @@ export function MemberPermissions() {
         </p>
       )}
 
-      <div className="border border-border/40 rounded-lg p-6 space-y-4">
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />

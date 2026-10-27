@@ -3,16 +3,26 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 
 // AttachmentService handles file attachment operations
 service AttachmentService {
   // UploadAttachment uploads a new binary file attachment (for images)
-  rpc UploadAttachment(UploadAttachmentRequest) returns (UploadAttachmentResponse) {}
+  rpc UploadAttachment(UploadAttachmentRequest) returns (UploadAttachmentResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "stages an image for the composer: the message that sends it is the record"}
+    };
+  }
   
   // CreateFileReference creates a reference to a local file (for text files)
-  rpc CreateFileReference(CreateFileReferenceRequest) returns (CreateFileReferenceResponse) {}
+  rpc CreateFileReference(CreateFileReferenceRequest) returns (CreateFileReferenceResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "stages a file's content for the composer: the message that sends it is the record"}
+    };
+  }
   
   // GetAttachment retrieves an attachment by ID (includes file content)
   // forge:custom — scoped to the caller: another user's attachment answers NotFound
@@ -20,7 +30,11 @@ service AttachmentService {
   
   // DeleteAttachment removes an attachment by ID
   // forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
-  rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {}
+  rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "removes an attachment staged for the composer: draft state of a message not yet sent"}
+    };
+  }
 }
 
 // ============================================

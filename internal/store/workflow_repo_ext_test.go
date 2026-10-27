@@ -93,18 +93,12 @@ func TestWorkflowReads(t *testing.T) {
 			func() ([]*core.Workflow, error) { return store.ListRootWorkflows(ctx, env.ORM, "chat-none") }},
 		{"by status, oldest first", []string{"grandchild-a", "root-c"},
 			func() ([]*core.Workflow, error) { return store.ListWorkflowsByStatus(ctx, env.ORM, core.Completed()) }},
-		{"roots by status", []string{"root-c"},
-			func() ([]*core.Workflow, error) {
-				return store.ListRootWorkflowsByStatus(ctx, env.ORM, core.Completed())
-			}},
 		{"paused is not completed", []string{"child-a"},
 			func() ([]*core.Workflow, error) { return store.ListWorkflowsByStatus(ctx, env.ORM, core.Paused()) }},
 		{"active", []string{"root-a"},
 			func() ([]*core.Workflow, error) { return store.ListWorkflowsByStatus(ctx, env.ORM, core.Active()) }},
 		{"pending", []string{"root-b"},
 			func() ([]*core.Workflow, error) { return store.ListWorkflowsByStatus(ctx, env.ORM, core.Pending()) }},
-		{"roots at a status only children have", []string{},
-			func() ([]*core.Workflow, error) { return store.ListRootWorkflowsByStatus(ctx, env.ORM, core.Paused()) }},
 		{"a status nothing has", []string{},
 			func() ([]*core.Workflow, error) { return store.ListWorkflowsByStatus(ctx, env.ORM, core.Failed()) }},
 	}
@@ -333,28 +327,6 @@ func TestWorkflowWrites(t *testing.T) {
 		{name: "rename pending", from: core.Pending(), completedBefore: nil,
 			write:  func(id string) error { return store.RenamePendingWorkflow(ctx, env.ORM, id, "renamed") },
 			status: core.Pending(), completed: keep, newName: "renamed"},
-		{name: "worker started", from: core.Active(), completedBefore: nil,
-			write:  func(id string) error { return store.MarkWorkflowWorkerStarted(ctx, env.ORM, id) },
-			status: core.Active(), completed: keep, started: now},
-		{name: "worker stopped", from: core.Active(), completedBefore: nil,
-			write:  func(id string) error { return store.MarkWorkflowWorkerStopped(ctx, env.ORM, id) },
-			status: core.Active(), completed: keep, stopped: now},
-		{name: "worker started then stopped", from: core.Active(), completedBefore: nil,
-			write: func(id string) error {
-				if err := store.MarkWorkflowWorkerStarted(ctx, env.ORM, id); err != nil {
-					return err
-				}
-				return store.MarkWorkflowWorkerStopped(ctx, env.ORM, id)
-			},
-			status: core.Active(), completed: keep, started: now, stopped: now},
-		{name: "worker restarted clears the stop stamp", from: core.Active(), completedBefore: nil,
-			write: func(id string) error {
-				if err := store.MarkWorkflowWorkerStopped(ctx, env.ORM, id); err != nil {
-					return err
-				}
-				return store.MarkWorkflowWorkerStarted(ctx, env.ORM, id)
-			},
-			status: core.Active(), completed: keep, started: now, stopped: null},
 	}
 	for i, w := range writes {
 		id, bystander := fmt.Sprintf("w-%d", i), fmt.Sprintf("w-%d-bystander", i)
@@ -416,13 +388,6 @@ func TestWorkflowWrites(t *testing.T) {
 	}
 	if got, _ := store.LoadWorkflow(ctx, env.ORM, "w-0"); got.WorkflowName != "builtin://agent" {
 		t.Fatalf("a refused rename changed the name to %q", got.WorkflowName)
-	}
-	// Worker stamps and removal are silent no-ops on a missing workflow.
-	if err := store.MarkWorkflowWorkerStarted(ctx, env.ORM, "missing"); err != nil {
-		t.Fatalf("MarkWorkflowWorkerStarted(missing) = %v, want nil", err)
-	}
-	if err := store.MarkWorkflowWorkerStopped(ctx, env.ORM, "missing"); err != nil {
-		t.Fatalf("MarkWorkflowWorkerStopped(missing) = %v, want nil", err)
 	}
 }
 
@@ -486,9 +451,9 @@ func TestCompareAndSwapWorkflowStatus(t *testing.T) {
 	}
 }
 
-// TestPauseResumeAndRemove covers the chat-wide writes and the deletes: they
-// reach every workflow of the named chat and no other chat's.
-func TestPauseResumeAndRemove(t *testing.T) {
+// TestPauseResume covers the chat-wide writes: they reach every workflow of
+// the named chat and no other chat's.
+func TestPauseResume(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	for _, chat := range []string{"chat-pr", "chat-pr-other"} {
@@ -542,29 +507,6 @@ func TestPauseResumeAndRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Removal: one workflow, again (a no-op), a missing one, then the chat's.
-	if err := store.RemoveWorkflow(ctx, env.ORM, "chat-pr-2"); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []string{"chat-pr-2", "missing"} {
-		if err := store.RemoveWorkflow(ctx, env.ORM, id); err != nil {
-			t.Fatalf("removing %s again must be a no-op: %v", id, err)
-		}
-	}
-	ws, _ := store.ListChatWorkflows(ctx, env.ORM, "chat-pr")
-	if g := workflowIDs(ws); fmt.Sprint(g) != "[chat-pr-0 chat-pr-1 chat-pr-3 chat-pr-4 chat-pr-5]" {
-		t.Fatalf("after one removal: %v", g)
-	}
-	if err := store.RemoveChatWorkflows(ctx, env.ORM, "chat-pr"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.RemoveChatWorkflows(ctx, env.ORM, "chat-none"); err != nil {
-		t.Fatalf("removing the workflows of a chat with none must be a no-op: %v", err)
-	}
-	if n := len(statuses("chat-pr")); n != 0 {
-		t.Fatalf("remove by chat left %d workflows", n)
-	}
-	requireSame(t, "removal: the other chat", statuses("chat-pr-other"), untouched)
 }
 
 type treeNode struct {

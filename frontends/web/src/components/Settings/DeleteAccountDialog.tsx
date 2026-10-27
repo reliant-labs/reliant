@@ -195,7 +195,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
             {preview.wallet && <WalletSettlementSummary quote={preview.wallet} />}
 
             {preview.retainedElsewhere.length > 0 && (
-              <div className="rounded-lg border border-border/40 bg-muted/30 p-3">
+              <div className="rounded-lg border border-border/60 bg-background p-3">
                 <h4 className="text-sm font-medium mb-2">This will NOT be deleted</h4>
                 <ul className="space-y-1.5">
                   {preview.retainedElsewhere.map((line) => (
@@ -231,8 +231,8 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
         )}
 
         {error && (
-          <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+            <p className="text-sm text-destructive-ink">{error}</p>
           </div>
         )}
 

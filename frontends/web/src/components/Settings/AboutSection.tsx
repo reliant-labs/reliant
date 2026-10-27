@@ -5,6 +5,7 @@ import { toast } from "../../lib/toast-manager";
 import { UpdateSection } from "./UpdateSection";
 import { useTourStore } from "../../store/tourStore";
 import { ONBOARDING_STEPS } from "../Onboarding/constants";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 import { BrandMark } from "../icons/BrandMark";
 import { VersionDetails } from "./VersionDetails";
 
@@ -100,21 +101,22 @@ export function AboutSection() {
   ];
 
   return (
-    <div className="h-full w-full flex items-center justify-center text-muted-foreground chat-background relative overflow-y-auto py-12">
-      <div className="absolute inset-0 backdrop-blur-sm bg-background/30" />
-      
-      <div className="relative z-10 w-full max-w-sm px-6" data-onboarding="about-settings">
-        {/* Logo & Brand */}
-        <div className="text-center mb-10">
-          <BrandMark className="w-24 h-24 mx-auto mb-4" />
-          <h1 className="text-3xl font-semibold text-foreground tracking-tight">
-            Reliant
-          </h1>
+    <div className="space-y-4" data-onboarding="about-settings">
+      <SettingsPageHeader
+        title="About"
+        description="Which version of Reliant you are running, whether an update is ready, and where to get help."
+      />
+
+      <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <BrandMark className="h-12 w-12 shrink-0" />
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">Reliant</h2>
           <VersionDetails />
         </div>
+      </div>
 
         {/* Quick Links */}
-        <div className="bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 divide-y divide-border/50 mb-6">
+        <div className="rounded-lg border border-border bg-card divide-y divide-border/60">
           {links.map((link) => {
             const content = (
               <>
@@ -137,7 +139,7 @@ export function AboutSection() {
                     e.preventDefault();
                     link.onClick?.();
                   }}
-                  className="flex items-center justify-between px-4 py-3 text-sm text-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors first:rounded-t-xl last:rounded-b-xl group"
+                  className="flex items-center justify-between px-4 py-3 text-sm text-foreground/80 hover:text-foreground hover:bg-foreground/5 transition-colors first:rounded-t-lg last:rounded-b-lg group"
                 >
                   {content}
                 </a>
@@ -150,7 +152,7 @@ export function AboutSection() {
                 href={link.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between px-4 py-3 text-sm text-foreground/80 hover:text-foreground hover:bg-muted/50 transition-colors first:rounded-t-xl last:rounded-b-xl group"
+                className="flex items-center justify-between px-4 py-3 text-sm text-foreground/80 hover:text-foreground hover:bg-foreground/5 transition-colors first:rounded-t-lg last:rounded-b-lg group"
               >
                 {content}
               </a>
@@ -162,10 +164,9 @@ export function AboutSection() {
         <UpdateSection />
 
         {/* Copyright */}
-        <p className="text-center text-xs text-muted-foreground/60 mt-8">
+        <p className="text-xs text-muted-foreground">
           © {new Date().getFullYear()} Reliant Labs
         </p>
-      </div>
     </div>
   );
 }

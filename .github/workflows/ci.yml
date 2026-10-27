@@ -315,7 +315,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
       - name: task test:web:e2e

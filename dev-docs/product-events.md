@@ -128,3 +128,20 @@ Web events (`otel_traces`): `SpanName LIKE 'product.%'`, user in
 `SpanAttributes['rum.sessionId']`. A backend event logged during a request
 carries that request's `TraceId`, which joins it to the browser span (and so
 the browser session) that made the call.
+
+## Claim funnel (the `/claim` page)
+
+A claimable deploy is handed to a human as `…/claim#rcl_<token>`
+(control-plane `docs/design/claimable-deploys.md`). The web emits these, all
+from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
+
+| event | when | props |
+| --- | --- | --- |
+| `claim_link_opened` | the preview loaded, once per link | `result` (`live`, `suspended`, a refusal reason, or `error`), `situation` |
+| `claim_started` | "Claim it" pressed (or the upgrade resumed) | `situation` |
+| `claim_completed` | `CompleteClaim` succeeded | `claim_path`, `holds` |
+| `claim_failed` | any step failed | `stage` (`preview`, `open_session`, `adopt_session`, `complete`), `reason` (the server reason, else the Connect code) |
+
+`situation` is `signed-out`, `resume-upgrade`, `replace-anonymous` or
+`existing-account`. The control plane sends its own `signup` event with
+`source=claimable_deploy` at completion; the web does not duplicate it.

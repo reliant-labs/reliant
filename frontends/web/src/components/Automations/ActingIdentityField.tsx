@@ -13,8 +13,12 @@ import type { ActingIdentityKey } from "@/hooks/trigger-model";
 import { cn } from "@/lib/utils";
 
 export interface ActingIdentityFieldProps {
-  value: ActingIdentityKey;
+  value: ActingIdentityKey | undefined;
   onChange: (next: ActingIdentityKey) => void;
+  /** Mixed activations keep source-specific defaults or their stored choices. */
+  defaultHint?: string;
+  /** Only GitHub has an App identity; other integrations must not offer it. */
+  allowApp?: boolean;
   /** The owner's login, to say where their writes appear. */
   ownerLogin?: string;
   /** A non-blocking note under the cards (the bot cannot write somewhere). */
@@ -37,13 +41,14 @@ function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string
   ];
 }
 
-export function ActingIdentityField({ value, onChange, ownerLogin, warning, disabled = false }: ActingIdentityFieldProps) {
+export function ActingIdentityField({ value, onChange, ownerLogin, warning, defaultHint, allowApp = true, disabled = false }: ActingIdentityFieldProps) {
   const ids = useId();
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-1.5 text-sm font-medium text-foreground">Writes as</legend>
+      <legend className="mb-1.5 text-sm font-medium text-foreground">{allowApp ? "GitHub writes as" : "Writes as"}</legend>
+      {defaultHint && <p className="mb-1.5 text-xs text-muted-foreground">{defaultHint}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
-        {choices(ownerLogin).map((choice) => {
+        {choices(ownerLogin).filter((choice) => allowApp || choice.value !== "app").map((choice) => {
           const checked = value === choice.value;
           return (
             <label

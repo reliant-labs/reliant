@@ -47,6 +47,7 @@ import type {
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_DELIVERY, FIXTURE_NOW, RELEASE_ENVS, RELEASE_PROJECT, RELEASES } from "../../Releases/__fixtures__/releaseFixtures";
+import type { ForgeDomain } from "@/services/forge/domains";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import type { StripEnv } from "../workloadModel";
@@ -112,13 +113,45 @@ export const FIXTURE_HOSTED: ReadonlyMap<string, ReadonlyMap<string, ForgeHosted
         hosted("reliant-temporal-worker", { verdict: "degraded", observed_state: "degraded", last_error: "container worker OOMKilled: exceeded its 1Gi memory limit (14 restarts)" }),
       ],
       ["litellm", hosted("litellm", { verdict: "diverged", observed_digest: DIGEST("7f3b9a"), desired_digest: DIGEST("e9a0c1d2"), drifted: true })],
-      ["web", hosted("web", { url: "https://reliantlabs.io" })],
-      ["docs", hosted("docs", { declared_run_state: "suspended", observed_state: "suspended", suspend_reason: "owner", url: "https://docs.reliantlabs.io" })],
+      ["web", hosted("web", { tier: "static", url: "https://valiant-caribou.sites.reliantlabs.dev" })],
+      ["docs", hosted("docs", { tier: "static", declared_run_state: "suspended", observed_state: "suspended", suspend_reason: "owner", url: "https://bright-otter.sites.reliantlabs.dev" })],
     ]),
   ],
   ["e2e", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server", { verdict: "converging", observed_state: "progressing" })]])],
-  ["dev", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server")]])],
+  // dev's site was declared but the platform has not allocated its address yet.
+  ["dev", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server")], ["web", hosted("web", { tier: "static", verdict: "converging", observed_state: "progressing" })]])],
 ]);
+
+/** The org's domains: web is also served at app.reliantlabs.io, and one is still waiting for DNS. */
+export const FIXTURE_DOMAINS: ForgeDomain[] = [
+  {
+    id: "dom-app",
+    hostname: "app.reliantlabs.io",
+    state: "live",
+    origin: "external",
+    requiredRecords: [],
+    lastError: "",
+    binding: { id: "bind-app", domainId: "dom-app", environmentId: "env-prod", target: "web", redirectTo: "" },
+  },
+  {
+    id: "dom-docs",
+    hostname: "docs.reliantlabs.io",
+    state: "pending-dns",
+    origin: "external",
+    requiredRecords: [],
+    lastError: "",
+    binding: { id: "bind-docs", domainId: "dom-docs", environmentId: "env-prod", target: "docs", redirectTo: "" },
+  },
+  {
+    id: "dom-www",
+    hostname: "www.reliantlabs.io",
+    state: "live",
+    origin: "external",
+    requiredRecords: [],
+    lastError: "",
+    binding: { id: "bind-www", domainId: "dom-www", environmentId: "env-prod", target: "", redirectTo: "app.reliantlabs.io" },
+  },
+];
 
 /** What GetStatus says of one workload: the detail page's `hosted` prop. Null for an environment Reliant does not place. */
 export function fixtureHostedObservation(envName: string, workload: string): { workload: ForgeHostedWorkload | null; loading: boolean } | null {

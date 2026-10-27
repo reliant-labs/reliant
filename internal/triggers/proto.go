@@ -81,6 +81,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		NotifyOnComplete: t.NotifyOnComplete,
 		ProjectName:      t.ProjectName,
 		DaemonName:       t.DaemonName,
+		MachineState:     t.MachineState,
 		Health:           WithSource(ComputeHealth(firings), reg, time.Now()),
 		Filter:           t.Filter,
 		ConnectionId:     t.ConnectionID,

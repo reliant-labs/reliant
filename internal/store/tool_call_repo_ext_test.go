@@ -241,20 +241,6 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 		t.Fatalf("Repo.GetToolCallResultForMessage = %v, %v", got, err)
 	}
 
-	for _, tc := range []struct {
-		ids  []string
-		want string
-	}{{nil, "[]"}, {[]string{m4}, "[tr-c]"}, {[]string{m4, m1}, "[tr-a tr-b tr-c]"}} {
-		got, err := store.ListToolCallResultsByMessageIDs(ctx, o, tc.ids)
-		ids := make([]string, len(got))
-		for i, r := range got {
-			ids[i] = r.ToolCallID
-		}
-		if err != nil || fmt.Sprint(ids) != tc.want {
-			t.Fatalf("ListToolCallResultsByMessageIDs(%v) = %v, %v; want %s", tc.ids, ids, err, tc.want)
-		}
-	}
-
 	// Grants: only results that granted something, per thread.
 	grants, err := store.ListToolGrants(ctx, o, f.chat)
 	if err != nil || len(grants) != 1 || grants[0].ThreadID != f.main || fmt.Sprint(grants[0].Tools) != "[shell view]" {

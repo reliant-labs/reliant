@@ -129,18 +129,6 @@ func SetBackgroundProcessStatus(ctx context.Context, db orm.Context, id string, 
 	return err
 }
 
-// SetBackgroundProcessPID records the OS pid and process signature of a
-// started process. A missing record is not an error.
-func SetBackgroundProcessPID(ctx context.Context, db orm.Context, id string, pid int, signature string) error {
-	_, err := db.Bun().NewUpdate().Model((*BackgroundProcess)(nil)).
-		Set("pid = ?", pid).
-		Set("signature = ?", signature).
-		Set("updated_at = ?", time.Now()).
-		Where("id = ?", id).
-		Exec(ctx)
-	return err
-}
-
 // MarkStaleBackgroundProcesses marks the processes STALE, ended now.
 func MarkStaleBackgroundProcesses(ctx context.Context, db orm.Context, ids []string) error {
 	if len(ids) == 0 {

@@ -229,8 +229,8 @@ export function GitConnectionsSettings() {
         description="Connect your GitHub account so Reliant can clone your private repositories and push changes on your behalf. Come here to connect, or to disconnect and revoke access."
       />
 
-        <div className="rounded-lg border border-border p-6 text-center space-y-3">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+        <div className="rounded-lg border border-border bg-card p-6 text-center space-y-3">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-border/60 bg-background">
             <Cloud className="h-5 w-5 text-muted-foreground" />
           </div>
           <h3 className="text-sm font-medium">Cloud feature</h3>
@@ -252,13 +252,13 @@ export function GitConnectionsSettings() {
       />
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive-ink">{error}</p>
         </div>
       )}
 
-      <div className="space-y-3 rounded-lg border border-border p-4">
-        <h3 className="font-medium">Connection status</h3>
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold">Connection status</h3>
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -266,7 +266,7 @@ export function GitConnectionsSettings() {
           </div>
         ) : hasToken ? (
           <div className="space-y-3">
-          <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-border/60 bg-background px-3 py-2">
             <div className="flex items-start gap-3 min-w-0">
               {credential?.accountAvatarUrl ? (
                 <img
@@ -351,7 +351,7 @@ export function GitConnectionsSettings() {
               SILENTLY leaves this page with nothing to say about why
               repository access cannot be managed. Name the remedy instead. */}
           {kind === "unknown" && health !== "valid" && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-ink">
               Reconnect GitHub to enable repository access management. This
               connection was stored in a form Reliant can no longer read, so it
               can&apos;t tell which repositories it is allowed to see.
@@ -376,7 +376,7 @@ export function GitConnectionsSettings() {
           )}
 
           {scopesAreMeaningful && !hasRepoScope && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-ink">
               This GitHub token has no <code>repo</code> scope, so Reliant can only see public repositories.
               Reauthorize GitHub to grant the required repository access.
               <div className="mt-2 flex flex-wrap gap-2">
@@ -409,8 +409,8 @@ export function GitConnectionsSettings() {
       </div>
 
       {!loading && (!hasToken || adding) && (
-        <div className="space-y-3 rounded-lg border border-border p-4">
-          <h3 className="font-medium">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold">
             {hasToken ? "Personal access token" : "Connect GitHub"}
           </h3>
           <p className="text-xs text-muted-foreground">
@@ -444,7 +444,7 @@ export function GitConnectionsSettings() {
           )}
 
           {adding && (
-            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+            <div className="space-y-2 rounded-lg border border-border/60 bg-background p-3">
               <label className="block text-xs font-medium">
                 Personal access token (classic or fine-grained)
               </label>

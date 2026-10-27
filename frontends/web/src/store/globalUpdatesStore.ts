@@ -1,16 +1,17 @@
 /**
  * Global Updates Store
- * 
- * Manages the global connection for user-level updates.
- * Phase 12: Now uses gRPC streaming instead of WebSocket.
- * This replaces per-chat polling for chat state changes and enables
- * real-time updates for chats, projects, worktrees, and background processes.
+ *
+ * Owns the two live streams: the user-wide stream (chat list, activity,
+ * projects, worktrees, background processes, daemon signals) and the stream
+ * of the one chat on screen (its messages, approvals, tool calls and deltas).
+ * They connect independently: opening another chat replaces only the chat
+ * stream.
  */
 
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import { notifyManager } from "@tanstack/react-query";
-// Phase 12: Use gRPC streaming service instead of WebSocket
 import { UserStreamingService } from "../api/streaming-grpc";
+import { ChatStreamingService } from "../api/chat-streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo, MessagePaginationInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
 import { ChatState, type ChatSelection } from "../gen/reliant/v1/chat_pb";
@@ -140,6 +141,11 @@ const NOTIFIED_UPDATE_IDS_MAX = 500;
 // like REFETCH are not replayed). Null while the stream is undisturbed.
 let streamDisruptedAt: number | null = null;
 
+// The same, for the chat stream. Its replay restores the transcript; what it
+// cannot replay is the open chat's cross-project user updates (live only), so
+// its recovery re-reads that one chat.
+let chatStreamDisruptedAt: number | null = null;
+
 /**
  * Only data last read BEFORE the stream went down can have missed an
  * ephemeral signal. A query the user already re-read since then — the window
@@ -206,9 +212,13 @@ interface GlobalUpdatesState {
 
   // Currently subscribed chat ID for detail events
   subscribedChatId: string | null;
-  
-  // Unified gRPC streaming service
+
+  // The user-wide stream.
   wsService: UserStreamingService | null;
+  // The stream of the subscribed chat. Created on the first subscription and
+  // replaced after disconnect(), so a chat the server once refused is tried
+  // again by a fresh connection, as before.
+  chatStream: ChatStreamingService | null;
   
   // Actions
   setLastSequence: (seq: number) => void;
@@ -223,18 +233,23 @@ interface GlobalUpdatesState {
   // what should be subscribed. Callers should invoke this on every render of
   // the active chat (and whenever connection state changes), not just once
   // at selection time — a subscription lost to another component stealing
-  // the single slot otherwise never gets reclaimed. No-op for a null id;
+  // the chat stream otherwise never gets reclaimed. No-op for a null id;
   // idempotent when the rendered chat already matches the subscription
   // (delegates to subscribeToChatDetails's own service-truth guard).
   reconcileChatSubscription: (renderedChatId: string | null) => void;
   
   // Internal handlers
   handleUpdate: (updates: UserUpdate[]) => void;
-  handleChatUpdate: (updates: ChatUpdate[]) => void;
-  handleChatSnapshot: (updates: ChatUpdate[]) => void;
-  handleChatPaginationInfo: (pagination: MessagePaginationInfo) => void;
-  handleChatContextUsage: (contextUsage: ContextUsageInfo) => void;
+  // User updates the chat stream forwards (the open chat's cross-project
+  // ones): routed like any other, but they never move lastSequence, the user
+  // stream's resume cursor.
+  handleChatStreamUserUpdates: (updates: UserUpdate[]) => void;
+  handleChatUpdate: (chatId: string, updates: ChatUpdate[]) => void;
+  handleChatSnapshot: (chatId: string, updates: ChatUpdate[]) => void;
+  handleChatPaginationInfo: (chatId: string, pagination: MessagePaginationInfo) => void;
+  handleChatContextUsage: (chatId: string, contextUsage: ContextUsageInfo) => void;
   handleStatusChange: (status: ConnectionStatus) => void;
+  handleChatStreamStatusChange: (status: ConnectionStatus) => void;
   handleSync: (lastSequence: number) => void;
   handleError: (error: string) => void;
 }
@@ -247,6 +262,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   daemonProcessOomKills: {},
   subscribedChatId: null,
   wsService: null,
+  chatStream: null,
 
   setLastSequence: (seq: number) => {
     set({ lastSequence: seq });
@@ -271,9 +287,8 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    logger.info(`${LOG_PREFIX} Connecting unified gRPC stream`, {
+    logger.info(`${LOG_PREFIX} Connecting user stream`, {
       lastSequence: state.lastSequence,
-      subscribedChatId: state.subscribedChatId?.slice(0, 8),
     });
 
     const wsService = new UserStreamingService({
@@ -281,41 +296,30 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       onStatusChange: (status) => get().handleStatusChange(status),
       onSync: (lastSequence) => get().handleSync(lastSequence),
       onError: (error) => get().handleError(error),
-      // Per-chat detail event callbacks
-      onChatUpdate: (updates) => get().handleChatUpdate(updates),
-      onChatSnapshot: (updates) => get().handleChatSnapshot(updates),
-      onChatPaginationInfo: (pagination) => get().handleChatPaginationInfo(pagination),
-      onChatContextUsage: (contextUsage) => get().handleChatContextUsage(contextUsage),
-      // Delta resume: chatStore owns each chat's cached state, so it owns the
-      // cursor describing it and decides whether a reopen may replay.
-      onChatCursorRelease: (chatId, sequence) =>
-        useChatStore.getState().recordChatStreamCursor(chatId, sequence),
-      resolveChatResumeSequence: (chatId) =>
-        useChatStore.getState().resumeChatStreamFrom(chatId),
-      onChatSyncPending: (chatId) =>
-        useChatStore.getState().setChatSyncPending(chatId),
-      onChatSubscriptionRejected: (chatId) => {
-        if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
-      },
     });
 
     set({ wsService });
-    // Forward subscribedChatId and projectId so the initial connection
-    // includes the chat subscription and project scope — avoids redundant
-    // disconnect/reconnect and filters catch-up replay to this project.
+    // Scope the stream (and its catch-up replay) to this project. The chat
+    // stream is told too: it carries the open chat's updates this scope drops.
     const projectId = useProjectStore.getState().currentProject?.id;
-    wsService.start(state.lastSequence, state.subscribedChatId ?? undefined, 0, projectId);
+    wsService.start(state.lastSequence, projectId);
+    state.chatStream?.setProjectScope(projectId);
   },
 
   disconnect: () => {
     const state = get();
+    if (state.chatStream) {
+      state.chatStream.stop();
+    }
     if (state.wsService) {
-      logger.info(`${LOG_PREFIX} Disconnecting unified gRPC stream`);
+      logger.info(`${LOG_PREFIX} Disconnecting user stream`);
       state.wsService.stop();
-      set({ wsService: null, connectionStatus: "disconnected", subscribedChatId: null });
       // Selections are kept current only by this stream (they never revalidate
       // on mount), and nothing delivers their changes while it is closed.
       markChatSelectionsUnmaintained();
+    }
+    if (state.wsService || state.chatStream) {
+      set({ wsService: null, chatStream: null, connectionStatus: "disconnected", subscribedChatId: null });
     }
   },
 
@@ -327,40 +331,31 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     // "tried to subscribe and failed" — and treating the latter as the
     // former would make every retry a no-op.
     const serviceHasChat =
-      state.wsService?.getSubscribedChatId() === chatId &&
-      state.wsService?.isConnected();
+      state.chatStream?.getChatId() === chatId &&
+      state.chatStream?.isConnected();
     if (state.subscribedChatId === chatId && serviceHasChat) {
       logger.debug(`${LOG_PREFIX} Already subscribed to chat`, { chatId: chatId.slice(0, 8) });
       return;
     }
 
-    // Subscription is missing or stale — (re)assert it against the service.
-    if (state.wsService) {
-      logger.info(`${LOG_PREFIX} Asserting chat subscription`, {
-        chatId: chatId.slice(0, 8),
-        serviceChatId: state.wsService.getSubscribedChatId()?.slice(0, 8),
-        connected: state.wsService.isConnected(),
-      });
-      set({ subscribedChatId: chatId });
-      state.wsService.subscribeToChatDetails(chatId);
-      // The service declines a chat the server has already refused (see
-      // UserStreamingService.dropRefusedChat); mirror what it actually holds.
-      const held = state.wsService.getSubscribedChatId() ?? null;
-      if (held !== chatId) set({ subscribedChatId: held });
-      return;
-    }
-
-    logger.info(`${LOG_PREFIX} Subscribing to chat detail events`, {
+    const chatStream = state.chatStream ?? createChatStream(get, set);
+    logger.info(`${LOG_PREFIX} Asserting chat subscription`, {
       chatId: chatId.slice(0, 8),
-      previousChatId: state.subscribedChatId?.slice(0, 8),
+      serviceChatId: chatStream.getChatId()?.slice(0, 8),
+      connected: chatStream.isConnected(),
     });
+    set({ chatStream, subscribedChatId: chatId });
+    // Only the chat stream (re)connects; the user stream is untouched.
+    chatStream.subscribeToChat(chatId);
+    // The service declines a chat the server has already refused (see
+    // ChatStreamingService.dropRefusedChat); mirror what it actually holds.
+    const held = chatStream.getChatId() ?? null;
+    if (held !== chatId) set({ subscribedChatId: held });
 
-    // No service yet. Record the intent and connect; connect() forwards
-    // subscribedChatId into start(), so the subscription rides the initial
-    // connection. connect() may defer if chats have not loaded, in which
-    // case the ModernApp effect connects once they have and picks this up.
-    set({ subscribedChatId: chatId });
-    get().connect();
+    // A screen can subscribe before the shell has connected the user stream.
+    // connect() defers until chats have loaded, in which case the shell's
+    // useUpdateStreamConnection connects once they have.
+    if (!get().wsService) get().connect();
   },
 
   unsubscribeFromChatDetails: (chatId?: string) => {
@@ -396,26 +391,24 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
     set({ subscribedChatId: null });
 
-    if (state.wsService) {
-      state.wsService.unsubscribeFromChatDetails();
-    }
+    state.chatStream?.unsubscribe();
   },
 
   reconcileChatSubscription: (renderedChatId: string | null) => {
     if (!renderedChatId) return;
 
     const state = get();
-    const serviceChatId = state.wsService?.getSubscribedChatId();
+    const serviceChatId = state.chatStream?.getChatId();
     const isReconciled =
       state.subscribedChatId === renderedChatId &&
       serviceChatId === renderedChatId &&
-      state.wsService?.isConnected();
+      state.chatStream?.isConnected();
     if (isReconciled) return;
 
     // Mismatch between what's rendered and what's subscribed — this is
-    // exactly the "stuck chat" bug: some other component (or a reconnect
-    // that forwarded a stale id) stole the single subscription slot and
-    // nothing ever re-asserted it. Logged at INFO because that mismatch is
+    // exactly the "stuck chat" bug: some other component took the chat
+    // stream over (or a refusal or teardown dropped it) and nothing ever
+    // re-asserted it. Logged at INFO because that mismatch is
     // otherwise invisible until a user reports missing messages.
     logger.info(`${LOG_PREFIX} Reconciling chat subscription`, {
       renderedChatId: renderedChatId.slice(0, 8),
@@ -431,131 +424,12 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       if (update.sequence_number > get().lastSequence) {
         set({ lastSequence: update.sequence_number });
       }
-
-      // The Runs list holds chats the sidebar's cache patches never reach
-      // (automation and agent-started runs), so a change to any run marks it
-      // stale. Only observed lists refetch; an unopened Runs page costs nothing.
-      // Coalesced: a busy run or a reconnect replay is one refetch, not one per
-      // update (streamInvalidation).
-      if (runsInvalidatingUpdate(update.update_type)) {
-        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
-      }
-      // A fire that launched a run moves its automation's last event, health
-      // and next fire; the update names no trigger, so every mounted trigger
-      // read is marked stale, coalesced the same way.
-      if (triggersInvalidatingUpdate(update.update_type)) {
-        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
-      }
-      // The Inbox (and its nav badge) spans every chat, so it is marked stale
-      // too. Only observed queries refetch, coalesced the same way.
-      if (inboxInvalidatingUpdate(update.update_type, update.data)) {
-        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
-      }
-
-      // Route updates to appropriate stores
-      switch (update.update_type) {
-        case UserUpdateType.CHAT_STATE_CHANGE:
-          handleChatStateChange(update);
-          break;
-        case UserUpdateType.CHAT_CONFIG_CHANGED:
-          handleChatConfigChanged(update);
-          break;
-        case UserUpdateType.CHAT_CREATED:
-          handleChatCreated(update);
-          break;
-        case UserUpdateType.CHAT_TITLE_CHANGED:
-          handleChatTitleChanged(update);
-          break;
-        case UserUpdateType.CHAT_DELETED:
-          handleChatDeleted(update);
-          break;
-        case UserUpdateType.PROCESS_STARTED:
-          handleProcessStarted(update);
-          break;
-        case UserUpdateType.PROCESS_COMPLETED:
-          handleProcessCompleted(update);
-          break;
-        case UserUpdateType.PROCESS_FAILED:
-          handleProcessFailed(update);
-          break;
-        case UserUpdateType.PROCESS_PORT_CHANGED:
-          handleProcessPortChanged(update);
-          break;
-        case UserUpdateType.CHAT_ACTIVITY_CHANGED:
-          handleChatActivityChanged(update);
-          break;
-        case UserUpdateType.REFETCH:
-          handleRefetch(update);
-          break;
-        case UserUpdateType.NOTIFICATION:
-          handleNotification(update);
-          break;
-        case UserUpdateType.WORKFLOW_DRAFT_UPDATED: {
-          const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
-          const draftId = (data?.draft_id as string | undefined) || update.entity_id;
-          if (draftId) {
-            publishDraftUpdate({
-              draftId,
-              slug: (data?.slug as string | undefined) ?? "",
-              version: Number(data?.version ?? 0),
-              ...(data?.deleted === true ? { deleted: true } : {}),
-            });
-          }
-          // Every draft write announces itself here, whoever made it (an
-          // agent's tool call, another tab): the workflow reads (and the
-          // preset lists matched against a workflow's inputs) go stale.
-          // Coalesced, since an agent editing a draft writes it in bursts.
-          streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.workflows);
-          streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.presets);
-          break;
-        }
-        case UserUpdateType.DAEMON_HEARTBEAT: {
-          const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
-          if (data?.last_heartbeat) {
-            const ts = data.last_heartbeat as number;
-            set({ daemonLastSeen: ts });
-            setDaemonLastSeen(ts);
-          }
-          if (data?.daemon_id) {
-            noteDaemonHeartbeat(data.daemon_id as string);
-            // Proof the daemon is attached right now: a cached list that
-            // says otherwise is re-read (throttled).
-            reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
-          }
-          // detected_ports is present (possibly empty) on real heartbeats and
-          // absent on synthetic connection events — only update when carried,
-          // so a reconnect blip doesn't clear a still-valid port set.
-          if (data?.daemon_id && Array.isArray(data.detected_ports)) {
-            const daemonId = data.daemon_id as string;
-            const ports = (data.detected_ports as number[]).filter((p) => Number.isFinite(p));
-            set((state) => {
-              const prev = state.daemonDetectedPorts[daemonId];
-              if (prev && prev.length === ports.length && prev.every((p, i) => p === ports[i])) {
-                return state; // unchanged — avoid re-render churn every 15s
-              }
-              return { daemonDetectedPorts: { ...state.daemonDetectedPorts, [daemonId]: ports } };
-            });
-          }
-          // OOM kills are cumulative on the daemon, so a heartbeat without
-          // them (a machine that has had none) leaves the store alone.
-          const kills = data?.daemon_id ? heartbeatOomKills(data) : undefined;
-          if (kills) {
-            const daemonId = data.daemon_id as string;
-            set((state) => {
-              const prev = state.daemonProcessOomKills[daemonId];
-              if (prev && prev.count === kills.count && prev.lastAtMs === kills.lastAtMs) {
-                return state;
-              }
-              return { daemonProcessOomKills: { ...state.daemonProcessOomKills, [daemonId]: kills } };
-            });
-          }
-          try { getEventBus().emit("daemon:heartbeat"); } catch { /* bus not ready */ }
-          break;
-        }
-        default:
-          logger.debug(`${LOG_PREFIX} Unhandled update type: ${update.update_type}`);
-      }
     }
+    routeUserUpdates(updates, set);
+  },
+
+  handleChatStreamUserUpdates: (updates) => {
+    routeUserUpdates(updates, set);
   },
 
   handleStatusChange: (status) => {
@@ -584,6 +458,25 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     }
   },
 
+  handleChatStreamStatusChange: (status) => {
+    if ((status === "error" || status === "disconnected") && chatStreamDisruptedAt === null) {
+      chatStreamDisruptedAt = Date.now();
+    }
+    if (status === "connected" && chatStreamDisruptedAt !== null) {
+      const stale = readBeforeDisruption(chatStreamDisruptedAt);
+      chatStreamDisruptedAt = null;
+      // The replay restored the transcript. The chat's own record may have
+      // changed through updates the chat stream carries live only (another
+      // project's), so re-read it if it was last read before the outage.
+      const chatId = get().chatStream?.getChatId();
+      if (chatId) {
+        try {
+          void queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId), predicate: stale });
+        } catch { /* bus not ready */ }
+      }
+    }
+  },
+
   handleSync: (lastSequence) => {
     // Informational only. The resume cursor must track PROCESSED updates:
     // the server sends sync before replaying catch-up, so adopting its value
@@ -596,13 +489,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     logger.error(`${LOG_PREFIX} Error: ${error}`);
   },
 
-  handleChatUpdate: (updates) => {
-    const chatId = get().subscribedChatId;
-    if (!chatId) {
-      logger.warn(`${LOG_PREFIX} Received chat updates but no chat is subscribed`);
-      return;
-    }
-
+  handleChatUpdate: (chatId, updates) => {
     // Route incremental chat updates (merge semantics), then announce the
     // mailbox rows this batch drained. AFTER the messages are committed, and
     // in one React Query batch: both cache writes reach their observers in
@@ -617,13 +504,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
   },
 
-  handleChatSnapshot: (updates) => {
-    const chatId = get().subscribedChatId;
-    if (!chatId) {
-      logger.warn(`${LOG_PREFIX} Received chat snapshot but no chat is subscribed`);
-      return;
-    }
-
+  handleChatSnapshot: (chatId, updates) => {
     // Route snapshot updates (replace semantics — prevents cross-chat message
     // leaking). A reconnect replays the drain announcements alongside the
     // messages they describe; publishing them here too means a client that
@@ -635,18 +516,13 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
   },
 
-
-
   // Pagination info rides alongside the chat snapshot. The snapshot is BOUNDED
   // to the newest N messages, so these three numbers are the only thing that
   // tells the UI a long chat is truncated and where to resume paging from.
   // They are stored ON the message envelope (not in Zustand) so they stay
   // adjacent to the messages they describe and survive the stream's
   // message-only patches — see message-queries.ts.
-  handleChatPaginationInfo: (pagination) => {
-    const chatId = get().subscribedChatId;
-    if (!chatId) return;
-
+  handleChatPaginationInfo: (chatId, pagination) => {
     logger.debug(`${LOG_PREFIX} Chat pagination info`, {
       chatId: chatId.slice(0, 8),
       total: pagination.total,
@@ -661,10 +537,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
   },
 
-  handleChatContextUsage: (contextUsage) => {
-    const chatId = get().subscribedChatId;
-    if (!chatId) return;
-
+  handleChatContextUsage: (chatId, contextUsage) => {
     const existingChatUsage = useChatStore.getState().contextUsage[chatId] || {};
     useChatStore.setState((state) => ({
       contextUsage: {
@@ -680,6 +553,171 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     }));
   },
 }));
+
+type StoreGet = StoreApi<GlobalUpdatesState>["getState"];
+type StoreSet = StoreApi<GlobalUpdatesState>["setState"];
+
+// The chat stream's callbacks. Every chat event carries the chat the stream
+// delivered it for, so a late frame can never be filed under another chat.
+function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
+  return new ChatStreamingService(
+    {
+      onChatUpdate: (chatId, updates) => get().handleChatUpdate(chatId, updates),
+      onChatSnapshot: (chatId, updates) => get().handleChatSnapshot(chatId, updates),
+      onChatPaginationInfo: (chatId, pagination) => get().handleChatPaginationInfo(chatId, pagination),
+      onChatContextUsage: (chatId, contextUsage) => get().handleChatContextUsage(chatId, contextUsage),
+      onUserUpdates: (updates) => get().handleChatStreamUserUpdates(updates),
+      onStatusChange: (status) => get().handleChatStreamStatusChange(status),
+      onError: (error) => logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`),
+      // Delta resume: chatStore owns each chat's cached state, so it owns the
+      // cursor describing it and decides whether a reopen may replay.
+      onChatCursorRelease: (chatId, sequence) =>
+        useChatStore.getState().recordChatStreamCursor(chatId, sequence),
+      resolveChatResumeSequence: (chatId) =>
+        useChatStore.getState().resumeChatStreamFrom(chatId),
+      onChatSyncPending: (chatId) =>
+        useChatStore.getState().setChatSyncPending(chatId),
+      onChatSubscriptionRejected: (chatId) => {
+        if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
+      },
+    },
+    // The scope the user stream was (or will be) opened with.
+    useProjectStore.getState().currentProject?.id,
+  );
+}
+
+// Route user updates to the stores and caches they patch. Shared by the user
+// stream and the chat stream's forwarded updates.
+function routeUserUpdates(
+  updates: UserUpdate[],
+  set: StoreSet,
+): void {
+  for (const update of updates) {
+    // The Runs list holds chats the sidebar's cache patches never reach
+    // (automation and agent-started runs), so a change to any run marks it
+    // stale. Only observed lists refetch; an unopened Runs page costs nothing.
+    // Coalesced: a busy run or a reconnect replay is one refetch, not one per
+    // update (streamInvalidation).
+    if (runsInvalidatingUpdate(update.update_type)) {
+      streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.runs);
+    }
+    // A fire that launched a run moves its automation's last event, health
+    // and next fire; the update names no trigger, so every mounted trigger
+    // read is marked stale, coalesced the same way.
+    if (triggersInvalidatingUpdate(update.update_type)) {
+      streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.triggers);
+    }
+    // The Inbox (and its nav badge) spans every chat, so it is marked stale
+    // too. Only observed queries refetch, coalesced the same way.
+    if (inboxInvalidatingUpdate(update.update_type, update.data)) {
+      streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.inbox);
+    }
+
+    // Route updates to appropriate stores
+    switch (update.update_type) {
+      case UserUpdateType.CHAT_STATE_CHANGE:
+        handleChatStateChange(update);
+        break;
+      case UserUpdateType.CHAT_CONFIG_CHANGED:
+        handleChatConfigChanged(update);
+        break;
+      case UserUpdateType.CHAT_CREATED:
+        handleChatCreated(update);
+        break;
+      case UserUpdateType.CHAT_TITLE_CHANGED:
+        handleChatTitleChanged(update);
+        break;
+      case UserUpdateType.CHAT_DELETED:
+        handleChatDeleted(update);
+        break;
+      case UserUpdateType.PROCESS_STARTED:
+        handleProcessStarted(update);
+        break;
+      case UserUpdateType.PROCESS_COMPLETED:
+        handleProcessCompleted(update);
+        break;
+      case UserUpdateType.PROCESS_FAILED:
+        handleProcessFailed(update);
+        break;
+      case UserUpdateType.PROCESS_PORT_CHANGED:
+        handleProcessPortChanged(update);
+        break;
+      case UserUpdateType.CHAT_ACTIVITY_CHANGED:
+        handleChatActivityChanged(update);
+        break;
+      case UserUpdateType.REFETCH:
+        handleRefetch(update);
+        break;
+      case UserUpdateType.NOTIFICATION:
+        handleNotification(update);
+        break;
+      case UserUpdateType.WORKFLOW_DRAFT_UPDATED: {
+        const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
+        const draftId = (data?.draft_id as string | undefined) || update.entity_id;
+        if (draftId) {
+          publishDraftUpdate({
+            draftId,
+            slug: (data?.slug as string | undefined) ?? "",
+            version: Number(data?.version ?? 0),
+            ...(data?.deleted === true ? { deleted: true } : {}),
+          });
+        }
+        // Every draft write announces itself here, whoever made it (an
+        // agent's tool call, another tab): the workflow reads (and the
+        // preset lists matched against a workflow's inputs) go stale.
+        // Coalesced, since an agent editing a draft writes it in bursts.
+        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.workflows);
+        streamInvalidation.invalidate(STREAM_INVALIDATED_SCOPES.presets);
+        break;
+      }
+      case UserUpdateType.DAEMON_HEARTBEAT: {
+        const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
+        if (data?.last_heartbeat) {
+          const ts = data.last_heartbeat as number;
+          set({ daemonLastSeen: ts });
+          setDaemonLastSeen(ts);
+        }
+        if (data?.daemon_id) {
+          noteDaemonHeartbeat(data.daemon_id as string);
+          // Proof the daemon is attached right now: a cached list that
+          // says otherwise is re-read (throttled).
+          reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
+        }
+        // detected_ports is present (possibly empty) on real heartbeats and
+        // absent on synthetic connection events — only update when carried,
+        // so a reconnect blip doesn't clear a still-valid port set.
+        if (data?.daemon_id && Array.isArray(data.detected_ports)) {
+          const daemonId = data.daemon_id as string;
+          const ports = (data.detected_ports as number[]).filter((p) => Number.isFinite(p));
+          set((state) => {
+            const prev = state.daemonDetectedPorts[daemonId];
+            if (prev && prev.length === ports.length && prev.every((p, i) => p === ports[i])) {
+              return state; // unchanged — avoid re-render churn every 15s
+            }
+            return { daemonDetectedPorts: { ...state.daemonDetectedPorts, [daemonId]: ports } };
+          });
+        }
+        // OOM kills are cumulative on the daemon, so a heartbeat without
+        // them (a machine that has had none) leaves the store alone.
+        const kills = data?.daemon_id ? heartbeatOomKills(data) : undefined;
+        if (kills) {
+          const daemonId = data.daemon_id as string;
+          set((state) => {
+            const prev = state.daemonProcessOomKills[daemonId];
+            if (prev && prev.count === kills.count && prev.lastAtMs === kills.lastAtMs) {
+              return state;
+            }
+            return { daemonProcessOomKills: { ...state.daemonProcessOomKills, [daemonId]: kills } };
+          });
+        }
+        try { getEventBus().emit("daemon:heartbeat"); } catch { /* bus not ready */ }
+        break;
+      }
+      default:
+        logger.debug(`${LOG_PREFIX} Unhandled update type: ${update.update_type}`);
+    }
+  }
+}
 
 // ============================================
 // Update Handlers

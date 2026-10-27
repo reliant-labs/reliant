@@ -67,6 +67,13 @@ check_prerequisites() {
     else
         print_success "npm $(npm --version) found"
     fi
+
+    # Check pnpm (frontends/web installs with it)
+    if ! command -v pnpm &> /dev/null; then
+        missing+=("pnpm (npm install -g pnpm@12.15.0)")
+    else
+        print_success "pnpm $(pnpm --version) found"
+    fi
     
     # Check Go
     if ! command -v go &> /dev/null; then
@@ -111,7 +118,7 @@ install_dependencies() {
     if [ ! -d "$WEB_DIR/node_modules" ]; then
         print_step "Installing web dependencies..."
         cd "$WEB_DIR"
-        npm ci || npm install
+        pnpm install --frozen-lockfile
         print_success "Web dependencies installed"
     else
         print_success "Web dependencies already installed"

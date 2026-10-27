@@ -28,7 +28,7 @@ import {
   type IssueEvent as WireEvent,
 } from "@/gen/controlplane/services/issues/v1/issues_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import type {
   Issue,
@@ -44,7 +44,7 @@ import type {
 } from "./issuesTypes";
 
 function client() {
-  return getControlPlaneClient(IssuesService);
+  return obsClient(IssuesService);
 }
 
 function timestamp(ms: number): Timestamp {

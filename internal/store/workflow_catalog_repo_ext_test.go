@@ -113,12 +113,6 @@ func TestWorkflowDraftReads(t *testing.T) {
 		{"by name: another user's", "", func() (*core.WorkflowDraft, error) {
 			return store.FindWorkflowDraftByName(ctx, env.ORM, "nobody", "Draft done")
 		}},
-		{"by source path", "d-imported", func() (*core.WorkflowDraft, error) {
-			return store.FindWorkflowDraftBySourcePath(ctx, env.ORM, user, "/repo/.reliant/workflows/imported.yaml")
-		}},
-		{"by source path: unknown", "", func() (*core.WorkflowDraft, error) {
-			return store.FindWorkflowDraftBySourcePath(ctx, env.ORM, user, "/elsewhere.yaml")
-		}},
 		{"usable", "d-done", func() (*core.WorkflowDraft, error) { return store.FindUsableWorkflowBySlug(ctx, env.ORM, user, "done") }},
 		{"imported is usable", "d-imported", func() (*core.WorkflowDraft, error) {
 			return store.FindUsableWorkflowBySlug(ctx, env.ORM, user, "imported")
@@ -167,11 +161,6 @@ func TestWorkflowDraftReads(t *testing.T) {
 		}
 	}
 
-	for user, want := range map[string]int64{user: 4, "someone-else": 1, "nobody": 0} {
-		if n, err := store.CountUserWorkflowDrafts(ctx, env.ORM, user); err != nil || n != want {
-			t.Fatalf("count of %s = %d, %v; want %d", user, n, err, want)
-		}
-	}
 	for _, c := range []struct {
 		user, slug string
 		want       bool
@@ -358,8 +347,9 @@ func TestUpsertWorkflowDraftBySlug(t *testing.T) {
 	if err != nil || got.ID != "up-f" || got.Version != 1 {
 		t.Fatalf("another user's upsert = %+v, %v; want a new row at version 1", got, err)
 	}
-	if n, _ := store.CountUserWorkflowDrafts(ctx, env.ORM, storetest.SeedUserID); n != 1 {
-		t.Fatalf("the seed user has %d drafts, want 1", n)
+	list, err := store.ListUserWorkflowDrafts(ctx, env.ORM, storetest.SeedUserID)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("the seed user has %d drafts, %v; want 1", len(list), err)
 	}
 }
 
@@ -368,18 +358,8 @@ func TestRemoveWorkflowDraft(t *testing.T) {
 	ctx := context.Background()
 	seeded := seedDrafts(t, env)
 
-	// Removal returns the row it removed.
-	removed, err := store.RemoveWorkflowDraft(ctx, env.ORM, "d-imported")
-	if err != nil {
-		t.Fatal(err)
-	}
-	requireSame(t, "removed by id", removed, seeded["d-imported"])
-	if _, err := store.RemoveWorkflowDraft(ctx, env.ORM, "d-imported"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("removing it again = %v, want sql.ErrNoRows", err)
-	}
-
 	// By slug: the user's own draft, never someone else's with the same slug.
-	removed, err = store.RemoveWorkflowDraftBySlug(ctx, env.ORM, storetest.SeedUserID, "wip")
+	removed, err := store.RemoveWorkflowDraftBySlug(ctx, env.ORM, storetest.SeedUserID, "wip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,8 +374,8 @@ func TestRemoveWorkflowDraft(t *testing.T) {
 		t.Fatalf("the other user's draft with the same slug was removed: %v", err)
 	}
 	list, _ := store.ListUserWorkflowDrafts(ctx, env.ORM, storetest.SeedUserID)
-	if ids := draftIDs(list); fmt.Sprint(ids) != "[d-done d-hidden]" {
-		t.Fatalf("drafts left = %v, want [d-done d-hidden]", ids)
+	if ids := draftIDs(list); fmt.Sprint(ids) != "[d-done d-hidden d-imported]" {
+		t.Fatalf("drafts left = %v, want [d-done d-hidden d-imported]", ids)
 	}
 }
 
@@ -448,7 +428,6 @@ func TestWorkflowScenarioReads(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	want := seedScenarios(t, env)
-	user := storetest.SeedUserID
 
 	// Every column round-trips, version 1 included (a scenario once read back at
 	// version 0, so the scenario tools' conflict check compared against 0).
@@ -497,13 +476,6 @@ func TestWorkflowScenarioReads(t *testing.T) {
 		}},
 		{"by a draft with none", "[]", func() ([]*core.WorkflowScenario, error) {
 			return store.ListDraftWorkflowScenarios(ctx, env.ORM, "no-draft")
-		}},
-		{"by user, last updated first", "[sc-1 sc-raw sc-2]", func() ([]*core.WorkflowScenario, error) { return store.ListUserWorkflowScenarios(ctx, env.ORM, user) }},
-		{"by another user", "[sc-foreign]", func() ([]*core.WorkflowScenario, error) {
-			return store.ListUserWorkflowScenarios(ctx, env.ORM, "someone-else")
-		}},
-		{"by a user with none", "[]", func() ([]*core.WorkflowScenario, error) {
-			return store.ListUserWorkflowScenarios(ctx, env.ORM, "nobody")
 		}},
 	}
 	for _, l := range lists {
@@ -584,7 +556,6 @@ func TestWorkflowScenarioRemoval(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
 	want := seedScenarios(t, env)
-	user := storetest.SeedUserID
 
 	if err := store.RemoveWorkflowScenario(ctx, env.ORM, "sc-raw"); err != nil {
 		t.Fatal(err)
@@ -594,23 +565,12 @@ func TestWorkflowScenarioRemoval(t *testing.T) {
 			t.Fatalf("removing %s again is a no-op: %v", id, err)
 		}
 	}
-	left, _ := store.ListUserWorkflowScenarios(ctx, env.ORM, user)
-	if ids := scenarioIDs(left); fmt.Sprint(ids) != "[sc-1 sc-2]" {
-		t.Fatalf("after removing one: %v, want [sc-1 sc-2]", ids)
+	if removed, err := store.FindWorkflowScenario(ctx, env.ORM, "sc-raw"); err != nil || removed != nil {
+		t.Fatalf("removed scenario = %+v, %v; want nil, nil", removed, err)
 	}
-
-	// Removing a draft's scenarios takes all of its own, and no other draft's.
-	if err := store.RemoveDraftWorkflowScenarios(ctx, env.ORM, "d-sc"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.RemoveDraftWorkflowScenarios(ctx, env.ORM, "d-sc"); err != nil {
-		t.Fatalf("removing a draft's scenarios again is a no-op: %v", err)
-	}
-	if err := store.RemoveDraftWorkflowScenarios(ctx, env.ORM, "no-draft"); err != nil {
-		t.Fatalf("removing the scenarios of an unknown draft is a no-op: %v", err)
-	}
-	if left, _ := store.ListUserWorkflowScenarios(ctx, env.ORM, user); len(left) != 0 {
-		t.Fatalf("%v left for the owner", scenarioIDs(left))
+	left, err := store.ListDraftWorkflowScenarios(ctx, env.ORM, "d-sc")
+	if err != nil || fmt.Sprint(scenarioIDs(left)) != "[sc-2 sc-1]" {
+		t.Fatalf("unrelated draft scenarios = %v, %v; want [sc-2 sc-1]", scenarioIDs(left), err)
 	}
 	foreign, err := store.FindWorkflowScenario(ctx, env.ORM, "sc-foreign")
 	if err != nil || foreign == nil {

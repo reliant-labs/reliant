@@ -6,7 +6,7 @@
 // forge's library (`@/components/forge-ui/button`).
 //
 // The barrel exports exactly the contract surface:
-//   Card, CardHeader, CardTitle, CardContent, PageHeader,
+//   Card, CardHeader, CardTitle, CardContent,
 //   Table, Thead, Tbody, Tr, Th, Td, Badge, StatusDot, EmptyState
 export { Card, CardHeader, CardTitle, CardContent, CardInset } from "./card";
 export type {
@@ -16,8 +16,6 @@ export type {
   CardContentProps,
 } from "./card";
 
-export { PageHeader } from "./page_header";
-export type { PageHeaderProps } from "./page_header";
 
 export { Table, Thead, Tbody, Tr, Th, Td } from "./table";
 export type {

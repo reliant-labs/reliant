@@ -15,6 +15,7 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useSetWorkloadRunState } from "@/hooks/forge-queries";
 import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
@@ -95,11 +96,12 @@ export function actionsUnavailableReason(kind: LiveEnvKind, envName: string): st
 }
 
 /** Each hosted environment's GetStatus observation, by environment name then workload name. */
-function useHostedByEnv(envs: StripEnv[]): HostedByEnv {
+function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
   const hostedEnvs = useMemo(() => envs.filter((candidate) => candidate.placed), [envs]);
   const statuses = useCloudEnvStatuses(hostedEnvs.map((candidate) => candidate.id));
   const key = hostedEnvs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
-  return useMemo(() => {
+  const loading = hostedEnvs.some((candidate) => statuses.get(candidate.id)?.isLoading);
+  const hosted = useMemo(() => {
     const out = new Map<string, Map<string, ForgeHostedWorkload>>();
     for (const candidate of hostedEnvs) {
       const workloads = statuses.get(candidate.id)?.data?.workloads ?? [];
@@ -109,6 +111,7 @@ function useHostedByEnv(envs: StripEnv[]): HostedByEnv {
     // `statuses` is a fresh Map per render; `key` changes when any status lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostedEnvs, key]);
+  return { hosted, loading };
 }
 
 export function OverviewPage() {
@@ -117,7 +120,10 @@ export function OverviewPage() {
   const search = useSearch({ strict: false }) as OverviewSearch;
   const onSearch = useSearchUpdater<OverviewSearch>();
   const { envs, loading } = useStripEnvs();
-  const hosted = useHostedByEnv(envs);
+  const { hosted, loading: hostedLoading } = useHostedByEnv(envs);
+  // The org's domains show which custom domains serve each frontend. Only the
+  // frontends panel reads them, and a failed read just leaves that column out.
+  const domains = useForgeDomains();
   const hrefs = useMemo<OverviewHrefs>(
     () => ({
       // The workload page carries the window, so its charts open on the one the reader was looking at.
@@ -143,6 +149,9 @@ export function OverviewPage() {
         onSelectEnv={setEnv}
         navigateTo={(target) => void navigate({ href: target })}
         hosted={hosted}
+        hostedLoading={hostedLoading}
+        domains={domains.data}
+        domainsHref={href({ kind: "domains" })}
       />
     </div>
   );

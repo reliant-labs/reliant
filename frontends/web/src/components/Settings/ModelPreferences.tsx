@@ -320,9 +320,10 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
               key={tag}
               className={cn(
                 "rounded-lg border transition-colors",
+                // An inset when open; bg-muted would lift in dark mode and recess in light.
                 isExpanded
-                  ? "border-border bg-muted/30"
-                  : "border-transparent hover:bg-muted/20"
+                  ? "border-border/60 bg-background"
+                  : "border-transparent hover:bg-foreground/5"
               )}
             >
               {/* Collapsed row */}
@@ -555,16 +556,11 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
         })}
       </div>
 
-      {models.length === 0 && (
-        <div className="text-xs text-muted-foreground mt-3 p-3 rounded-md elevation-1">
-          No models available. Add an API key above to see available models.
-        </div>
-      )}
-
-      <div className="text-xs text-muted-foreground mt-3 p-3 rounded-md elevation-1">
-        <strong>Note:</strong> Only models from configured providers are shown.
-        Add more providers above to see additional models.
-      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {models.length === 0
+          ? "No models yet. Connect a provider on the Providers tab to choose from its models."
+          : "Only models from your connected providers are listed."}
+      </p>
     </div>
   );
 }

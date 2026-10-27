@@ -128,6 +128,15 @@ runs:
         version: ${{ steps.buf.outputs.version }}
         github_token: ${{ github.token }}
 
+    # frontends/web installs with pnpm, at the version that wrote its
+    # pnpm-lock.yaml (frontends/web/package.json engines.pnpm). The npm cache
+    # below covers the npm projects; pnpm fetches the web tree from the registry.
+    - name: Set up pnpm
+      if: inputs.node == 'true'
+      uses: pnpm/action-setup@v4
+      with:
+        version: 12.15.0
+
     - name: Set up Node
       if: inputs.node == 'true'
       uses: actions/setup-node@v6
@@ -136,7 +145,6 @@ runs:
         cache: npm
         cache-dependency-path: |
           package-lock.json
-          frontends/web/package-lock.json
           electron/package-lock.json
           tools/protoc-gen-es/package-lock.json
 

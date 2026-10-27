@@ -353,9 +353,15 @@ func TestLocalModelChangeOnlyPublication(t *testing.T) {
 		return nil
 	}
 	ctx := context.Background()
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	m.prober.now = func() time.Time { return now }
 	m.probeAndPublish(ctx, send, true)
-	time.Sleep(1100 * time.Millisecond) // probed_at changes; must not count
+	firstProbe := m.current().inventory.ProbedAt
+	now = now.Add(time.Second)
 	m.probeAndPublish(ctx, send, false)
+	if m.current().inventory.ProbedAt == firstProbe {
+		t.Fatal("precondition: probed_at must change without changing the inventory")
+	}
 	if len(sent) != 1 {
 		t.Fatalf("unchanged inventory re-sent: %d messages", len(sent))
 	}
@@ -411,6 +417,10 @@ func relayManagerFor(t *testing.T, root, kind string, models ...*reliantv1.Local
 }
 
 func TestLocalModelRelayStreamsVerbatim(t *testing.T) {
+	// Each write waits until the relay actually delivers it, rather than
+	// guessing that an 80ms sleep forces a separate streamed chunk.
+	delivered := make(chan struct{}, 3)
+	ctx, cancel := context.WithCancel(context.Background())
 	var gotBody, gotAuth, gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -420,15 +430,27 @@ func TestLocalModelRelayStreamsVerbatim(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			_, _ = io.WriteString(w, "data: chunk\n\n")
 			fl.Flush()
-			time.Sleep(80 * time.Millisecond)
+			select {
+			case <-delivered:
+			case <-r.Context().Done():
+				return
+			}
 		}
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	}))
 	defer srv.Close()
+	defer cancel() // release the upstream handler before Server.Close on failure
 
 	m := relayManagerFor(t, srv.URL, "ollama", &reliantv1.LocalModelInfo{Name: "qwen3:latest", ContextWindow: 24000})
 	sink := newChunkSink()
-	go m.relay(context.Background(), sink.send, &reliantv1.LocalModelHTTPRequest{
+	send := func(msg *reliantv1.DaemonMessage) error {
+		err := sink.send(msg)
+		if strings.Contains(string(msg.GetLocalModelHttpChunk().Data), "data: chunk") {
+			delivered <- struct{}{}
+		}
+		return err
+	}
+	go m.relay(ctx, send, &reliantv1.LocalModelHTTPRequest{
 		RequestId: "r1", EndpointId: "ollama", Method: "POST", Path: "/chat/completions",
 		Headers: map[string]string{"Authorization": "Bearer server-supplied", "Connection": "close", "Content-Type": "application/json"},
 		Body:    []byte(`{"model":"qwen3:latest","stream":true}`),
@@ -527,11 +549,15 @@ func TestLocalModelRelayConcurrencyLimit(t *testing.T) {
 	var mu sync.Mutex
 	cur, peak := 0, 0
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	started := make(chan struct{}, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		cur++
 		peak = max(peak, cur)
 		mu.Unlock()
+		started <- struct{}{}
 		<-release
 		mu.Lock()
 		cur--
@@ -539,6 +565,7 @@ func TestLocalModelRelayConcurrencyLimit(t *testing.T) {
 		_, _ = io.WriteString(w, "{}")
 	}))
 	defer srv.Close()
+	defer unblock()
 	m := relayManagerFor(t, srv.URL, "openai_compatible")
 	var sinks []*chunkSink
 	for i := 0; i < 8; i++ {
@@ -546,13 +573,19 @@ func TestLocalModelRelayConcurrencyLimit(t *testing.T) {
 		sinks = append(sinks, s)
 		go m.relay(context.Background(), s.send, &reliantv1.LocalModelHTTPRequest{RequestId: string(rune('a' + i)), EndpointId: "ollama", Method: "GET", Path: "/models"})
 	}
-	time.Sleep(300 * time.Millisecond)
+	for i := 0; i < localRelayMaxConcurrent; i++ {
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+			t.Fatal("relay slots did not fill")
+		}
+	}
 	mu.Lock()
 	if cur != localRelayMaxConcurrent {
 		t.Errorf("in flight = %d, want %d", cur, localRelayMaxConcurrent)
 	}
 	mu.Unlock()
-	close(release)
+	unblock()
 	for _, s := range sinks {
 		s.wait(t)
 	}

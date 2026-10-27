@@ -37,8 +37,9 @@ type Sources struct {
 type Resolved struct {
 	Ref    Ref
 	Source Source
-	// Path is the project file it came from, relative to Dir, for
-	// SourceProject.
+	// Path is the project file it came from, for SourceProject: relative to
+	// Dir for the project root's own workflows, to the project root for a
+	// nested repo's (Entry.Location).
 	Path string
 	// YAML is the definition as authored.
 	YAML     []byte
@@ -64,8 +65,10 @@ func Resolve(raw string, src Sources) (*Resolved, error) {
 		return parsed(ref, SourceBuiltin, "", data)
 	}
 
-	slug := Slug(ref.Name)
-	if src.User != nil {
+	slug := QualifiedSlug(ref.Name)
+	// A repo-qualified name addresses a project workflow and nothing else:
+	// the caller's own workflows have no repo.
+	if _, _, qualified := SplitQualifiedSlug(slug); !qualified && src.User != nil {
 		data, err := src.User(slug)
 		if err != nil {
 			return nil, err
@@ -78,7 +81,7 @@ func Resolve(raw string, src Sources) (*Resolved, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parsed(ref, SourceProject, entry.Path, entry.Content)
+	return parsed(ref, SourceProject, entry.Location(), entry.Content)
 }
 
 // BuiltinYAML returns the definition of the builtin workflow called name:

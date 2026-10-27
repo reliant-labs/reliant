@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -2258,7 +2259,7 @@ var File_reliant_v1_forge_proto protoreflect.FileDescriptor
 const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/forge.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\xbc\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xbc\x02\n" +
 	"\x0fForgeReportMeta\x12(\n" +
 	"\x10is_forge_project\x18\x01 \x01(\bR\x0eisForgeProject\x12\x1c\n" +
 	"\tsupported\x18\x02 \x01(\bR\tsupported\x12#\n" +
@@ -2427,19 +2428,25 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	")FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED\x10\x03\x12/\n" +
 	"+FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING\x10\x04\x12*\n" +
 	"&FORGE_DEPLOY_REFUSAL_REASON_PLAN_STALE\x10\x05\x123\n" +
-	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\x95\b\n" +
+	"/FORGE_DEPLOY_REFUSAL_REASON_PLAN_UNACKNOWLEDGED\x10\x062\xcd\v\n" +
 	"\fForgeService\x12Z\n" +
-	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12T\n" +
-	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x00\x12Z\n" +
+	"\vGetTopology\x12#.reliant.v1.GetForgeTopologyRequest\x1a$.reliant.v1.GetForgeTopologyResponse\"\x00\x12\xf1\x01\n" +
+	"\tVerifyEnv\x12!.reliant.v1.VerifyForgeEnvRequest\x1a\".reliant.v1.VerifyForgeEnvResponse\"\x9c\x01\xa2\xbb\x18\x97\x01:\x94\x01:\x91\x01reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS\x12Z\n" +
 	"\vListSecrets\x12#.reliant.v1.ListForgeSecretsRequest\x1a$.reliant.v1.ListForgeSecretsResponse\"\x00\x12]\n" +
 	"\fGetEnvStatus\x12$.reliant.v1.GetForgeEnvStatusRequest\x1a%.reliant.v1.GetForgeEnvStatusResponse\"\x00\x12Z\n" +
 	"\vGetEnvShape\x12#.reliant.v1.GetForgeEnvShapeRequest\x1a$.reliant.v1.GetForgeEnvShapeResponse\"\x00\x12]\n" +
-	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x03\x90\x02\x01\x12Y\n" +
-	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"\x00\x12Z\n" +
+	"\vPlanPromote\x12#.reliant.v1.PlanForgePromoteRequest\x1a$.reliant.v1.PlanForgePromoteResponse\"\x03\x90\x02\x01\x12\xa7\x01\n" +
+	"\fApplyPromote\x12\".reliant.v1.PromoteForgeEnvRequest\x1a#.reliant.v1.PromoteForgeEnvResponse\"N\xa2\xbb\x18J:H\n" +
+	"\apromote\x12\x12\n" +
+	"\arelease\x12\arelease\x1a\x03env*\n" +
+	"project_id*\x18expected_current_release\x12Z\n" +
 	"\n" +
-	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x03\x90\x02\x01\x12b\n" +
-	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12Z\n" +
-	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"\x00\x12f\n" +
+	"PlanDeploy\x12\".reliant.v1.PlanForgeDeployRequest\x1a#.reliant.v1.PlanForgeDeployResponse\"\x03\x90\x02\x01\x12\xdf\x01\n" +
+	"\x0fStartDeployPlan\x12'.reliant.v1.StartForgeDeployPlanRequest\x1a$.reliant.v1.StartForgeDeployResponse\"}\xa2\xbb\x18y:w:ubuilds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event\x12\xa6\x01\n" +
+	"\vStartDeploy\x12#.reliant.v1.StartForgeDeployRequest\x1a$.reliant.v1.StartForgeDeployResponse\"L\xa2\xbb\x18H:F\n" +
+	"\x06deploy\x12\x1a\n" +
+	"\arelease\x12\x0frelease_version\x1a\x03env*\n" +
+	"project_id*\x0fresponse.handle\x12f\n" +
 	"\x0fGetDeployStatus\x12'.reliant.v1.GetForgeDeployStatusRequest\x1a(.reliant.v1.GetForgeDeployStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

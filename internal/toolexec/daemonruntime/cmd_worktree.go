@@ -109,9 +109,11 @@ type worktreeCreateRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	// SubPath is the path component under the workspace dir for this repo's
 	// checkout. Empty means the workspace root itself (single-repo project).
-	SubPath    string `json:"sub_path,omitempty"`
-	BaseBranch string `json:"base_branch"`
-	Force      bool   `json:"force"`
+	SubPath      string `json:"sub_path,omitempty"`
+	BaseBranch   string `json:"base_branch"`
+	FetchBranch  string `json:"fetch_branch,omitempty"`
+	ExpectedHead string `json:"expected_head,omitempty"`
+	Force        bool   `json:"force"`
 	// WorktreeID is the id of the worktree row this checkout belongs to; it is
 	// written into the git lock reason. Empty skips locking.
 	WorktreeID string `json:"worktree_id,omitempty"`
@@ -183,6 +185,24 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
+	// Review-responder checkouts must refresh the exact target branch even
+	// when this clone already has a stale local or remote-tracking copy.
+	// A verified commit must never re-enter the branch-first resolver: a
+	// SHA-shaped local branch is a legal ref name and may point elsewhere.
+	var startPoint string
+	if req.FetchBranch != "" || req.ExpectedHead != "" {
+		if req.ReuseBranch {
+			return json.Marshal(worktreeCreateResponse{Error: "cannot reuse a branch with a verified fetched head"})
+		}
+		if err := refreshWorktreeHead(ctx, req.ProjectPath, req.FetchBranch, req.ExpectedHead); err != nil {
+			return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+		}
+		// The explicit object expression also defeats Git's DWIM lookup of
+		// a SHA-shaped branch when worktree add consumes this argument.
+		startPoint = req.ExpectedHead + "^{commit}"
+		req.BaseBranch = req.ExpectedHead
+	}
+
 	// Decide what the branch is made from BEFORE anything touches disk, so a
 	// base that cannot be found fails with nothing to roll back. Adopt mode
 	// checks out an existing local branch as it is and needs no base.
@@ -192,8 +212,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		localBranch.Dir = req.ProjectPath
 		reuseLocal = localBranch.Run() == nil
 	}
-	var startPoint string
-	if !reuseLocal {
+	if !reuseLocal && startPoint == "" {
 		var found bool
 		if startPoint, found = resolveWorktreeStartPoint(ctx, req.ProjectPath, req.BaseBranch); !found {
 			// Diagnosed as a refused `git worktree add` would be: a base the
@@ -304,6 +323,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			ErrorCode:   code,
 			ErrorDetail: detail,
 		})
+	}
+
+	if req.ExpectedHead != "" {
+		// Verify the postcondition on the actual checkout as well as the
+		// immutable starting argument; never report a wrong-head success.
+		head := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "HEAD")
+		head.Dir = worktreePath
+		out, err := head.Output()
+		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
+			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+		}
 	}
 
 	// Mark the checkout reliant-owned. forge's storage reaper skips locked

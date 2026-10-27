@@ -212,7 +212,7 @@ type TokenAuthorityDeps struct {
 // self-hosted (tokenauthority). Uncached here: a revoked credential is
 // refused on its next check.
 func NewTokenAuthority(d TokenAuthorityDeps) (tokenauthority.Authority, error) {
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(ControlPlaneEndpoint(d.ControlPlane), d.DB.ORM()))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{ControlPlane: d.ControlPlane, DB: d.DB.ORM()})
 	if err != nil {
 		return nil, fmt.Errorf("token authority: %w", err)
 	}

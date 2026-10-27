@@ -115,8 +115,8 @@ service DaemonService {
 }
 
 message CreateDaemonRequest {
-  // Human-readable name for the new daemon. Used for display and for the
-  // (owner, name) idempotency check inside CreateDaemon; not a lookup key.
+  // Human-readable name for the new daemon. Unique per owner: a name the owner
+  // already uses is ALREADY_EXISTS unless refresh_existing is set.
   string name = 1;
   DaemonType daemon_type = 2;
   // Managed daemon fields
@@ -131,6 +131,14 @@ message CreateDaemonRequest {
   // Daemon enhancements
   DaemonSize size = 10;
   string idle_timeout = 11; // duration string, e.g. "30m"
+  // What to do when the owner already has a daemon with this name.
+  //
+  // Unset (a person pressing Create): the request fails with ALREADY_EXISTS,
+  // so a second machine is never silently folded into the first. Set: the
+  // existing managed daemon is refreshed (size, image, repo) and returned —
+  // the retry-safe commit a flow that may run twice needs (onboarding names
+  // its one machine and re-sends the create on every retry).
+  bool refresh_existing = 12;
 }
 
 message CreateDaemonResponse {

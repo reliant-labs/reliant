@@ -141,7 +141,19 @@ func Resolve(ctx context.Context, store Store, opts Options, ref string) (*workf
 	if err != nil {
 		return nil, err
 	}
-	return workflowref.Resolve(ref, sources)
+	resolved, resolveErr := workflowref.Resolve(ref, sources)
+	if errors.Is(resolveErr, workflowref.ErrNotFound) {
+		// Optional diagnostic read only on a miss: no full config payload or
+		// liveness lookup on the successful run-start path.
+		if diagnostics, ok := store.(interface {
+			WorkflowSourceDiagnostic(context.Context, string, string) (string, error)
+		}); ok {
+			if hint, err := diagnostics.WorkflowSourceDiagnostic(ctx, opts.ProjectID, ref); err == nil && hint != "" {
+				resolveErr = fmt.Errorf("%w; %s", resolveErr, hint)
+			}
+		}
+	}
+	return resolved, resolveErr
 }
 
 // DraftLoader resolves refs while validating one of the user's own workflows

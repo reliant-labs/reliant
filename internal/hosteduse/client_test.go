@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -64,7 +66,7 @@ func actionTest(t *testing.T, name string, fn func(context.Context) error) {
 }
 func newTestClient(t *testing.T, store Store, base string) *Client {
 	t.Helper()
-	c, err := New(Deps{Store: store, BaseURL: base, Sign: func() (string, error) { return "internal-token", nil }})
+	c, err := New(Deps{Store: store, Worker: &configv1.WorkerConfig{HostedActionsUrl: base}, Sign: func() (string, error) { return "internal-token", nil }})
 	require.NoError(t, err)
 	return c.(*Client)
 }
@@ -204,10 +206,10 @@ func TestRedeemMismatchDoesNotConsumeAndConcurrentSingleUse(t *testing.T) {
 
 func TestNewFailsClosed(t *testing.T) {
 	for _, base := range []string{"", "http://external.example", "http://controller.ns.svc.cluster.local:9443", "http://controller.ns.svc:9443", "http://10.0.0.8:8090", "http://admin-server:8090", "https://user:pass@controller.example", "https://controller.example/path", "https://controller.example?query=1"} {
-		_, err := New(Deps{Store: &memoryStore{}, BaseURL: base, Sign: func() (string, error) { return "", errors.New("no token") }})
+		_, err := New(Deps{Store: &memoryStore{}, Worker: &configv1.WorkerConfig{HostedActionsUrl: base}, Sign: func() (string, error) { return "", errors.New("no token") }})
 		require.Error(t, err, base)
 	}
-	_, err := New(Deps{Store: &memoryStore{}, BaseURL: "http://external.example", Sign: func() (string, error) { return "t", nil }})
+	_, err := New(Deps{Store: &memoryStore{}, Worker: &configv1.WorkerConfig{HostedActionsUrl: "http://external.example"}, Sign: func() (string, error) { return "t", nil }})
 	require.ErrorContains(t, err, "requires HTTPS", "plaintext controller URLs are refused")
 }
 
@@ -218,7 +220,7 @@ func TestNewAcceptsVerifiedHTTPSAndLoopbackHTTP(t *testing.T) {
 		"http://localhost:8090/",
 		"https://controller.example",
 	} {
-		_, err := New(Deps{Store: &memoryStore{}, BaseURL: base, Sign: func() (string, error) { return "t", nil }})
+		_, err := New(Deps{Store: &memoryStore{}, Worker: &configv1.WorkerConfig{HostedActionsUrl: base}, Sign: func() (string, error) { return "t", nil }})
 		require.NoError(t, err, base)
 	}
 }

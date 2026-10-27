@@ -8,12 +8,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
+
+// This file pins the explicitly retained, read-only rollout fallback.
+vi.mock("@/hooks/observability-billing-queries", () => ({
+  useObsBillingUsage: () => ({ isPending: false, error: new ConnectError("not deployed", Code.Unimplemented), refetch: vi.fn() }),
+}));
 
 import { createFixtureApi, fixtureUsage, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
 import type { ObservabilityUsage } from "@/services/controlPlane/observability/types";
 import { usageNotice } from "../usageModel";
-import { UsageView } from "../UsageView";
+import { LegacyUsageView as UsageView } from "../UsageView";
 import { renderPanel, renderWithApi } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());

@@ -33,6 +33,8 @@ import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
+import { ObsWillLoad } from "../ObsStates";
 import type { Panel, PanelResult, Series, Unit } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
@@ -98,7 +100,8 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   if (query.isLoading) {
     return <div className={cn("animate-pulse rounded bg-ink/5 motion-reduce:animate-none", compact ? "h-7" : "h-16")} aria-busy="true" aria-label="Loading" />;
   }
-  if (query.error) {
+  if (query.error && !keepsLastResult(query.error, query.data)) {
+    if (obsErrorKind(query.error) === "over-quota") return <ObsWillLoad error={query.error} />;
     if (compact) return <p className="text-xs text-ink-muted">—</p>;
     if (obsErrorKind(query.error) === "invalid") {
       return (

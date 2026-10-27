@@ -94,6 +94,11 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	if chat.NoMachine {
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
+	// A resumed run can still carry the snapshot from before its chat was
+	// pinned. Check/wake the same machine its commands and tools will use.
+	if input.DaemonSelector == nil {
+		input.DaemonSelector = toolDaemonSelector("", chatDaemonSelector(chat, nil))
+	}
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return MachineResumeWakeOutput{}, fmt.Errorf("loading project for the resume wake: %w", err)

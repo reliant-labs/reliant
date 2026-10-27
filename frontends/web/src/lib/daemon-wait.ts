@@ -128,7 +128,11 @@ export const DAEMON_WAIT_POLL_MS = 2_000;
  * inline pill may only care about `tone`, a full-panel placeholder renders the
  * whole thing.
  */
-export type DaemonWaitTone = "waiting" | "slow" | "failed";
+/**
+ * `none` is not a wait at all: the account has no machine, so nothing is
+ * coming and the only useful thing to show is a way to add one.
+ */
+export type DaemonWaitTone = "waiting" | "slow" | "failed" | "none";
 
 export interface DaemonWaitState {
   tone: DaemonWaitTone;
@@ -148,6 +152,8 @@ export interface DaemonWaitState {
   showRetry: boolean;
   /** Whether to point the user at Settings → Machines to intervene. */
   showManage: boolean;
+  /** Whether to offer Add machine: there is no machine to wait for. */
+  showAddMachine?: boolean;
 }
 
 export interface DaemonWaitInput {
@@ -177,6 +183,11 @@ export interface DaemonWaitInput {
    * the list said last time — not the machine's current state.
    */
   registryUnreachable?: boolean;
+  /**
+   * The list answered and holds no machine at all. Distinct from `daemon`
+   * being absent, which is also true before the first read lands.
+   */
+  noMachine?: boolean;
 }
 
 /**
@@ -196,7 +207,7 @@ function statusMessage(daemon: Daemon | null | undefined): string | null {
  * the backend hasn't told us anything more specific.
  */
 export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
-  const { daemon, elapsedMs, isCloud, wakeStartedAt, now = Date.now(), registryUnreachable } = input;
+  const { daemon, elapsedMs, isCloud, wakeStartedAt, now = Date.now(), registryUnreachable, noMachine } = input;
 
   // ── We can't ask ─────────────────────────────────────────────────────────
   // First, because nothing below is current: every other branch narrates
@@ -212,6 +223,22 @@ export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
       shouldRetry: true,
       showRetry: true,
       showManage: false,
+    };
+  }
+
+  // ── Nothing to wait for ──────────────────────────────────────────────────
+  // The account has no machine. "Starting your machine" here was false —
+  // nothing is starting — and offered nothing that would start one.
+  if (noMachine && !daemon) {
+    return {
+      tone: "none",
+      title: `No ${MACHINE_NOUN} yet`,
+      detail: `Add a ${MACHINE_NOUN} to run your code. Chats work without one.`,
+      reason: null,
+      shouldRetry: false,
+      showRetry: false,
+      showManage: false,
+      showAddMachine: true,
     };
   }
 

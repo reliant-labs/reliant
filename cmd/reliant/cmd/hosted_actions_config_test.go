@@ -37,7 +37,9 @@ func TestServerWorkerBuildsHostedActionsFromProdEnv(t *testing.T) {
 		var logged bytes.Buffer
 		worker, err := config.LoadWorkerConfig(findServerCmd(t, "worker"))
 		require.NoError(t, err)
-		executor := app.HostedActions(slog.New(slog.NewTextHandler(&logged, nil)), &hosteduse.MockStore{}, opts.ControlPlane, worker.GetHostedActionsUrl(), worker.GetHostedActionsCaFile())
+		process, err := config.LoadServerProcessConfig(findServerCmd(t, "worker"))
+		require.NoError(t, err)
+		executor := app.HostedActions(slog.New(slog.NewTextHandler(&logged, nil)), &hosteduse.MockStore{}, process.GetControlPlane(), worker)
 		require.NotNil(t, executor, "a hosted worker has a hosted action executor")
 		_, err = executor.ExecuteAction(context.Background(), "run", "node", "grant", hostedhttp.Request{URL: "https://example.com", Method: "POST"})
 		require.Error(t, err, "outside an Action activity nothing executes")
@@ -63,8 +65,10 @@ func TestServerWorkerBuildsHostedActionsFromProdEnv(t *testing.T) {
 	})
 	t.Run("self-hosted has none", func(t *testing.T) {
 		isolateControlPlaneEnv(t)
-		var opts workerOptions
-		require.NoError(t, loadServerWorkerConfig(findServerCmd(t, "worker"), &opts))
-		assert.Nil(t, app.HostedActions(slog.Default(), &hosteduse.MockStore{}, opts.ControlPlane, "", ""))
+		worker, err := config.LoadWorkerConfig(findServerCmd(t, "worker"))
+		require.NoError(t, err)
+		process, err := config.LoadServerProcessConfig(findServerCmd(t, "worker"))
+		require.NoError(t, err)
+		assert.Nil(t, app.HostedActions(slog.Default(), &hosteduse.MockStore{}, process.GetControlPlane(), worker))
 	})
 }

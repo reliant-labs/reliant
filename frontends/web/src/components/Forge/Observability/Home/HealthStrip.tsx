@@ -16,6 +16,7 @@ import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import { useAlertHistory, useAlerts, usePanelQuery } from "@/hooks/observability-queries";
 import type { ObsScope, PanelResult } from "@/services/controlPlane/observability/types";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -120,7 +121,7 @@ function Strip({
   const trendErrors = trend.data ? seriesValues(trend.data.series, "errors") : [];
   const trendP95 = trend.data ? seriesValues(trend.data.series, "p95") : [];
   const loading = totals.isLoading;
-  const failed = !!totals.error;
+  const failed = !!totals.error && !keepsLastResult(totals.error, totals.data);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="observability-strip">

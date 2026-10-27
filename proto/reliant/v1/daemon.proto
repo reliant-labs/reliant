@@ -3,13 +3,19 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // DaemonService exposes daemon-side operations proxied through the daemon-gateway.
 service DaemonService {
   // StartOAuthFlow starts a localhost callback server on the daemon, opens the
   // browser for the user to authorize, and returns the authorization code.
-  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse) {}
+  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "an OAuth handshake still in flight on the daemon: the provider connection it completes is what records the change"}
+    };
+  }
 
   // OpenOAuthHelper asks the daemon to open its localhost OAuth helper port
   // for ONE account-linking session. Returns immediately — unlike
@@ -28,11 +34,19 @@ service DaemonService {
   // 127.0.0.1 itself. A successful probe proves the daemon that just opened it
   // is on the browser's machine; a failed one means the daemon is remote, and
   // the UI can say so instead of offering a flow that would hang.
-  rpc OpenOAuthHelper(OpenOAuthHelperRequest) returns (OpenOAuthHelperResponse) {}
+  rpc OpenOAuthHelper(OpenOAuthHelperRequest) returns (OpenOAuthHelperResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "opens the daemon's loopback OAuth helper for one linking session: handshake transport, not a change"}
+    };
+  }
 
   // CloseOAuthHelper closes the helper port when the linking session ends
   // (completed or cancelled).
-  rpc CloseOAuthHelper(CloseOAuthHelperRequest) returns (CloseOAuthHelperResponse) {}
+  rpc CloseOAuthHelper(CloseOAuthHelperRequest) returns (CloseOAuthHelperResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "closes the loopback OAuth helper when its linking session ends: handshake transport, not a change"}
+    };
+  }
 }
 
 message OpenOAuthHelperRequest {

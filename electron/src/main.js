@@ -9,6 +9,7 @@ const {
   globalShortcut,
   Notification,
   protocol,
+  WebContentsView,
 } = require("electron");
 
 // NOTE: With HTTP/2 (TLS), connection limits are not a concern.
@@ -66,6 +67,7 @@ const {
   shouldHideOnClose,
 } = require("./window-surfacing");
 const BrowserManager = require("./browser-manager");
+const { FIND_BAR_CHANNELS, createFindBarController } = require("./find-bar");
 const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
 const {
@@ -2041,6 +2043,48 @@ ipcMain.handle("shortcuts:update", async (_event, bindings) => {
   }
 });
 
+// ---- Find in page (find-bar.js) ----
+// One bar per window, made on its first Cmd+F. The window's renderer opens it;
+// the bar's own page, in its own view, searches, steps and closes.
+const findBars = new Map(); // BrowserWindow -> controller
+
+function findBarFor(window) {
+  let bar = findBars.get(window);
+  if (bar) return bar;
+  bar = createFindBarController({
+    window,
+    createView: () =>
+      new WebContentsView({ webPreferences: windowConfig.getFindBarWebPreferences() }),
+    url: `${app.isPackaged ? APP_ORIGIN : DEV_URL}/find-bar.html`,
+    log,
+  });
+  findBars.set(window, bar);
+  window.once("closed", () => {
+    bar.destroy();
+    findBars.delete(window);
+  });
+  return bar;
+}
+
+/** The bar whose page sent `event`, if any. */
+function findBarSending(event) {
+  for (const bar of findBars.values()) {
+    if (bar.owns(event.sender)) return bar;
+  }
+  return undefined;
+}
+
+ipcMain.handle(FIND_BAR_CHANNELS.open, (event, request) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed() || window.webContents !== event.sender) {
+    return { success: false };
+  }
+  return { success: findBarFor(window).open(request?.theme) };
+});
+ipcMain.on(FIND_BAR_CHANNELS.ready, (event) => findBarSending(event)?.ready());
+ipcMain.on(FIND_BAR_CHANNELS.find, (event, request) => findBarSending(event)?.find(request));
+ipcMain.on(FIND_BAR_CHANNELS.close, (event) => findBarSending(event)?.close());
+
 ipcMain.handle("get-privacy-settings", async () => {
   log.debug("[IPC] get-privacy-settings");
   const settings = {
@@ -3353,6 +3397,8 @@ function createApplicationMenu() {
         { role: "copy" },
         { role: "paste" },
         { role: "selectall" },
+        { type: "separator" },
+        shortcut.findInPage,
       ],
     },
     {

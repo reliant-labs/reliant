@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/issues.proto.
  */
 export const file_controlplane_v1_issues: GenFile = /*@__PURE__*/
-  fileDesc("Chxjb250cm9scGxhbmUvdjEvaXNzdWVzLnByb3RvEg9jb250cm9scGxhbmUudjEiSwoPSXNzdWVUcmVuZFBvaW50EigKBGhvdXIYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmV2ZW50cxgCIAEoAyKWBgoFSXNzdWUSCgoCaWQYASABKAkSMAoIcGxhdGZvcm0YAiABKA4yHi5jb250cm9scGxhbmUudjEuSXNzdWVQbGF0Zm9ybRIOCgZlbnZfaWQYAyABKAkSEAoIZW52X25hbWUYBCABKAkSDwoHc2VydmljZRgFIAEoCRITCgtmaW5nZXJwcmludBgGIAEoCRISCgpmcF92ZXJzaW9uGAcgASgFEg0KBXRpdGxlGAggASgJEg8KB2N1bHByaXQYCSABKAkSFgoOZXhjZXB0aW9uX3R5cGUYCiABKAkSLAoGc3RhdHVzGAsgASgOMhwuY29udHJvbHBsYW5lLnYxLklzc3VlU3RhdHVzEjEKDWZpcnN0X3NlZW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWZpcnN0X3ZlcnNpb24YDSABKAkSFQoNZmlyc3RfcmVsZWFzZRgOIAEoCRIwCgxsYXN0X3NlZW5fYXQYDyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhQKDGxhc3RfdmVyc2lvbhgQIAEoCRIOCgZldmVudHMYESABKAMSEAoIYWZmZWN0ZWQYEiABKAMSLwoFdHJlbmQYEyADKAsyIC5jb250cm9scGxhbmUudjEuSXNzdWVUcmVuZFBvaW50Ei8KC3Jlc29sdmVkX2F0GBQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChByZXNvbHZlZF92ZXJzaW9uGBUgASgJEjAKDHJlZ3Jlc3NlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMQoNaWdub3JlZF91bnRpbBgXIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLbWVyZ2VkX2ludG8YGCABKAkSFAoMc3ltYm9saWNhdGVkGBkgASgIEg8KB3ZlcnNpb24YGiABKAUSDgoGc291cmNlGBsgASgJEhUKDWFmZmVjdGVkX3VuaXQYHCABKAkqZgoNSXNzdWVQbGF0Zm9ybRIeChpJU1NVRV9QTEFURk9STV9VTlNQRUNJRklFRBAAEhoKFklTU1VFX1BMQVRGT1JNX0JST1dTRVIQARIZChVJU1NVRV9QTEFURk9STV9TRVJWRVIQAiqvAQoLSXNzdWVTdGF0dXMSHAoYSVNTVUVfU1RBVFVTX1VOU1BFQ0lGSUVEEAASFAoQSVNTVUVfU1RBVFVTX05FVxABEhsKF0lTU1VFX1NUQVRVU19VTlJFU09MVkVEEAISGQoVSVNTVUVfU1RBVFVTX1JFU09MVkVEEAMSGgoWSVNTVUVfU1RBVFVTX1JFR1JFU1NFRBAEEhgKFElTU1VFX1NUQVRVU19JR05PUkVEEAVC0AEKE2NvbS5jb250cm9scGxhbmUudjFCC0lzc3Vlc1Byb3RvUAFaT2dpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9jb250cm9scGxhbmUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Chxjb250cm9scGxhbmUvdjEvaXNzdWVzLnByb3RvEg9jb250cm9scGxhbmUudjEiSwoPSXNzdWVUcmVuZFBvaW50EigKBGhvdXIYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmV2ZW50cxgCIAEoAyLxBgoFSXNzdWUSCgoCaWQYASABKAkSMAoIcGxhdGZvcm0YAiABKA4yHi5jb250cm9scGxhbmUudjEuSXNzdWVQbGF0Zm9ybRIOCgZlbnZfaWQYAyABKAkSEAoIZW52X25hbWUYBCABKAkSDwoHc2VydmljZRgFIAEoCRITCgtmaW5nZXJwcmludBgGIAEoCRISCgpmcF92ZXJzaW9uGAcgASgFEg0KBXRpdGxlGAggASgJEg8KB2N1bHByaXQYCSABKAkSFgoOZXhjZXB0aW9uX3R5cGUYCiABKAkSLAoGc3RhdHVzGAsgASgOMhwuY29udHJvbHBsYW5lLnYxLklzc3VlU3RhdHVzEjEKDWZpcnN0X3NlZW5fYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWZpcnN0X3ZlcnNpb24YDSABKAkSFQoNZmlyc3RfcmVsZWFzZRgOIAEoCRIwCgxsYXN0X3NlZW5fYXQYDyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhQKDGxhc3RfdmVyc2lvbhgQIAEoCRIOCgZldmVudHMYESABKAMSEAoIYWZmZWN0ZWQYEiABKAMSLwoFdHJlbmQYEyADKAsyIC5jb250cm9scGxhbmUudjEuSXNzdWVUcmVuZFBvaW50Ei8KC3Jlc29sdmVkX2F0GBQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChByZXNvbHZlZF92ZXJzaW9uGBUgASgJEjAKDHJlZ3Jlc3NlZF9hdBgWIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMQoNaWdub3JlZF91bnRpbBgXIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLbWVyZ2VkX2ludG8YGCABKAkSFAoMc3ltYm9saWNhdGVkGBkgASgIEg8KB3ZlcnNpb24YGiABKAUSDgoGc291cmNlGBsgASgJEhUKDWFmZmVjdGVkX3VuaXQYHCABKAkSFAoMaW5jaWRlbnRfa2V5GB0gASgJEhUKDXJlbGF0ZWRfY291bnQYHiABKAUSLAoIYXNzaWduZWUYHyABKAsyGi5jb250cm9scGxhbmUudjEuSXNzdWVVc2VyIiUKCUlzc3VlVXNlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJKmYKDUlzc3VlUGxhdGZvcm0SHgoaSVNTVUVfUExBVEZPUk1fVU5TUEVDSUZJRUQQABIaChZJU1NVRV9QTEFURk9STV9CUk9XU0VSEAESGQoVSVNTVUVfUExBVEZPUk1fU0VSVkVSEAIqrwEKC0lzc3VlU3RhdHVzEhwKGElTU1VFX1NUQVRVU19VTlNQRUNJRklFRBAAEhQKEElTU1VFX1NUQVRVU19ORVcQARIbChdJU1NVRV9TVEFUVVNfVU5SRVNPTFZFRBACEhkKFUlTU1VFX1NUQVRVU19SRVNPTFZFRBADEhoKFklTU1VFX1NUQVRVU19SRUdSRVNTRUQQBBIYChRJU1NVRV9TVEFUVVNfSUdOT1JFRBAFQtABChNjb20uY29udHJvbHBsYW5lLnYxQgtJc3N1ZXNQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * IssueTrendPoint is one hour of an issue's event count.
@@ -224,6 +224,34 @@ export type Issue = Message<"controlplane.v1.Issue"> & {
    * @generated from field: string affected_unit = 28;
    */
   affectedUnit: string;
+
+  /**
+   * Shared by the issues of one incident: issues of the environment that share a
+   * cause (the SQLSTATE or refused connection target their error carries, else its
+   * normalized error class) and first fired within the request's incident window of
+   * one another, in any service. One dead dependency fails every caller, and each
+   * caller is its own issue; the key marks them as one outage. Empty when the issue
+   * is part of none, and for browser issues. Issues are never merged: each keeps its
+   * own counts and state.
+   *
+   * @generated from field: string incident_key = 29;
+   */
+  incidentKey: string;
+
+  /**
+   * How many OTHER issues carry the same incident_key.
+   *
+   * @generated from field: int32 related_count = 30;
+   */
+  relatedCount: number;
+
+  /**
+   * The person the issue is assigned to; unset when unassigned. Changed by
+   * IssuesService.AssignIssue, which bumps version.
+   *
+   * @generated from field: controlplane.v1.IssueUser assignee = 31;
+   */
+  assignee?: IssueUser | undefined;
 };
 
 /**
@@ -232,6 +260,31 @@ export type Issue = Message<"controlplane.v1.Issue"> & {
  */
 export const IssueSchema: GenMessage<Issue> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_issues, 1);
+
+/**
+ * IssueUser is a person as an issue shows them: an assignee. name is the
+ * user's display name, or their email when they have none, as of the read.
+ *
+ * @generated from message controlplane.v1.IssueUser
+ */
+export type IssueUser = Message<"controlplane.v1.IssueUser"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueUser.
+ * Use `create(IssueUserSchema)` to create a new message.
+ */
+export const IssueUserSchema: GenMessage<IssueUser> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_issues, 2);
 
 /**
  * IssuePlatform is where the errors of an issue were emitted.

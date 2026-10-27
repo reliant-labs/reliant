@@ -767,6 +767,11 @@ func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name
 	return loadPresetFromDB(ctx, l.repo, userID, projectID, name)
 }
 
+// ResolveRunPreset uses the launcher's exact user/project/builtin precedence.
+func ResolveRunPreset(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
+	return loadPresetFromDB(ctx, repo, userID, projectID, name)
+}
+
 func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
 	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 
@@ -847,7 +852,7 @@ func LoadProjectWorkflowBySlugFromDB(repo ProjectWorkflowLoader, ctx context.Con
 	}
 	protoWf, err := wfyaml.ParseWorkflow(entry.Content)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", entry.Path, err)
+		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", entry.Location(), err)
 	}
 	return protoWf, string(entry.Content), nil
 }

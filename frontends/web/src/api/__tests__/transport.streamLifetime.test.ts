@@ -131,10 +131,14 @@ describe("every server-streaming RPC the web can call", () => {
     }
   }
 
-  it("includes the update stream (the scan works)", () => {
+  it("includes both update streams (the scan works)", () => {
     expect(streams).toContainEqual({
       service: "reliant.v1.StreamingService",
       method: "StreamUserUpdates",
+    });
+    expect(streams).toContainEqual({
+      service: "reliant.v1.StreamingService",
+      method: "StreamChatUpdates",
     });
   });
 

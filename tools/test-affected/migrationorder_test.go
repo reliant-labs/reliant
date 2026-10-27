@@ -55,9 +55,7 @@ func newOrderRepo(t *testing.T, onMain ...string) *orderRepo {
 	if testing.Short() {
 		t.Skip("creates, clones and fetches real git repositories; runs in task test, skipped under -short")
 	}
-	// Each fixture owns its origin and working trees. Let these subprocess-heavy
-	// tests overlap in the full tier instead of accumulating serial git latency.
-	t.Parallel()
+	// Callers already call t.Parallel; doing it again here panics in full mode.
 	base := t.TempDir()
 	r := &orderRepo{t: t, origin: filepath.Join(base, "origin.git"), clone: filepath.Join(base, "clone")}
 	r.git(base, "init", "-q", "--bare", "-b", "main", r.origin)

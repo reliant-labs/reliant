@@ -26,6 +26,9 @@ type automationGrants struct {
 
 // ensure mints and stores the token for (userID, daemonID).
 func (g *automationGrants) ensure(ctx context.Context, userID, daemonID string) {
+	if deferActivationEffect(ctx, func(ctx context.Context) error { g.ensure(ctx, userID, daemonID); return nil }) {
+		return
+	}
 	if g == nil || g.client == nil || daemonID == "" {
 		return
 	}
@@ -50,6 +53,9 @@ func (g *automationGrants) ensure(ctx context.Context, userID, daemonID string) 
 // releaseIfUnused revokes and forgets the token for (userID, daemonID) unless
 // an enabled trigger of that user still names the daemon.
 func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID string) {
+	if deferActivationEffect(ctx, func(ctx context.Context) error { g.releaseIfUnused(ctx, userID, daemonID); return nil }) {
+		return
+	}
 	if g == nil || g.client == nil || daemonID == "" {
 		return
 	}

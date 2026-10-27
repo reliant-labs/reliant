@@ -91,10 +91,13 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 
 	mcpConfigs := flattenMCPConfigBytes(userMCP, mergedProjectMCP, mergedLocalMCP)
 
-	layout, workflowsDir := readWorkflowLayout(projectPath)
-	workflows, _ := indexWorkflows(layout, workflowsDir)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
+	workflows, _ := indexWorkflows(workflowSources)
 	presets, _ := indexPresets(projectPath)
-	scenarios, _ := indexScenarios(layout, workflowsDir)
+	scenarios, _ := indexScenarios(workflowSources)
 	skills, _ := indexSkills(projectPath)
 	repoMemories, _ := collectRepoMemories(projectPath)
 

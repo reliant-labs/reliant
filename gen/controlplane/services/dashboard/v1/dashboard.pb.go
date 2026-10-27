@@ -38,6 +38,8 @@ const (
 	DashboardSource_DASHBOARD_SOURCE_WORKSPACE DashboardSource = 3
 	// A built-in starting point. Read-only; SaveAsCopy instantiates it.
 	DashboardSource_DASHBOARD_SOURCE_TEMPLATE DashboardSource = 4
+	// Server-owned view, discovered without release or workspace copy.
+	DashboardSource_DASHBOARD_SOURCE_BUILTIN DashboardSource = 5
 )
 
 // Enum value maps for DashboardSource.
@@ -48,6 +50,7 @@ var (
 		2: "DASHBOARD_SOURCE_REPO",
 		3: "DASHBOARD_SOURCE_WORKSPACE",
 		4: "DASHBOARD_SOURCE_TEMPLATE",
+		5: "DASHBOARD_SOURCE_BUILTIN",
 	}
 	DashboardSource_value = map[string]int32{
 		"DASHBOARD_SOURCE_UNSPECIFIED": 0,
@@ -55,6 +58,7 @@ var (
 		"DASHBOARD_SOURCE_REPO":        2,
 		"DASHBOARD_SOURCE_WORKSPACE":   3,
 		"DASHBOARD_SOURCE_TEMPLATE":    4,
+		"DASHBOARD_SOURCE_BUILTIN":     5,
 	}
 )
 
@@ -83,6 +87,53 @@ func (x DashboardSource) Number() protoreflect.EnumNumber {
 // Deprecated: Use DashboardSource.Descriptor instead.
 func (DashboardSource) EnumDescriptor() ([]byte, []int) {
 	return file_services_dashboard_v1_dashboard_proto_rawDescGZIP(), []int{0}
+}
+
+// Dedicated typed views do not execute an observability SQL/spec panel.
+type DashboardViewKind int32
+
+const (
+	DashboardViewKind_DASHBOARD_VIEW_KIND_UNSPECIFIED        DashboardViewKind = 0
+	DashboardViewKind_DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS DashboardViewKind = 1
+)
+
+// Enum value maps for DashboardViewKind.
+var (
+	DashboardViewKind_name = map[int32]string{
+		0: "DASHBOARD_VIEW_KIND_UNSPECIFIED",
+		1: "DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS",
+	}
+	DashboardViewKind_value = map[string]int32{
+		"DASHBOARD_VIEW_KIND_UNSPECIFIED":        0,
+		"DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS": 1,
+	}
+)
+
+func (x DashboardViewKind) Enum() *DashboardViewKind {
+	p := new(DashboardViewKind)
+	*p = x
+	return p
+}
+
+func (x DashboardViewKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DashboardViewKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_dashboard_v1_dashboard_proto_enumTypes[1].Descriptor()
+}
+
+func (DashboardViewKind) Type() protoreflect.EnumType {
+	return &file_services_dashboard_v1_dashboard_proto_enumTypes[1]
+}
+
+func (x DashboardViewKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DashboardViewKind.Descriptor instead.
+func (DashboardViewKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_dashboard_v1_dashboard_proto_rawDescGZIP(), []int{1}
 }
 
 // DashboardRef addresses one dashboard.
@@ -407,7 +458,10 @@ type DashboardSummary struct {
 	// Set for a workspace dashboard.
 	Workspace *DashboardWorkspaceInfo `protobuf:"bytes,11,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	// Templates: "generated" (derived from what forge generates) or "platform".
-	Category      string `protobuf:"bytes,12,opt,name=category,proto3" json:"category,omitempty"`
+	Category string `protobuf:"bytes,12,opt,name=category,proto3" json:"category,omitempty"`
+	// ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
+	// Such a view has no SQL panel spec and cannot be copied into one.
+	ViewKind      DashboardViewKind `protobuf:"varint,13,opt,name=view_kind,json=viewKind,proto3,enum=controlplane.v1.DashboardViewKind" json:"view_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -524,6 +578,13 @@ func (x *DashboardSummary) GetCategory() string {
 		return x.Category
 	}
 	return ""
+}
+
+func (x *DashboardSummary) GetViewKind() DashboardViewKind {
+	if x != nil {
+		return x.ViewKind
+	}
+	return DashboardViewKind_DASHBOARD_VIEW_KIND_UNSPECIFIED
 }
 
 type DashboardVersionInfo struct {
@@ -2147,7 +2208,7 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\vforked_from\x18\x06 \x01(\tR\n" +
 	"forkedFrom\x12&\n" +
 	"\x0fpromoted_pr_url\x18\a \x01(\tR\rpromotedPrUrl\x12\x17\n" +
-	"\aenv_ids\x18\b \x03(\tR\x06envIds\"\xb3\x04\n" +
+	"\aenv_ids\x18\b \x03(\tR\x06envIds\"\xf4\x04\n" +
 	"\x10DashboardSummary\x12/\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1d.controlplane.v1.DashboardRefR\x03ref\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -2162,7 +2223,8 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\arelease\x18\n" +
 	" \x01(\v2%.controlplane.v1.DashboardReleaseInfoR\arelease\x12E\n" +
 	"\tworkspace\x18\v \x01(\v2'.controlplane.v1.DashboardWorkspaceInfoR\tworkspace\x12\x1a\n" +
-	"\bcategory\x18\f \x01(\tR\bcategory\"\x80\x02\n" +
+	"\bcategory\x18\f \x01(\tR\bcategory\x12?\n" +
+	"\tview_kind\x18\r \x01(\x0e2\".controlplane.v1.DashboardViewKindR\bviewKind\"\x80\x02\n" +
 	"\x14DashboardVersionInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x05R\aversion\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x126\n" +
@@ -2278,13 +2340,17 @@ const file_services_dashboard_v1_dashboard_proto_rawDesc = "" +
 	"\x1ePromoteDashboardToCodeResponse\x122\n" +
 	"\x04file\x18\x01 \x01(\v2\x1e.controlplane.v1.DashboardFileR\x04file\x12\x15\n" +
 	"\x06pr_url\x18\x02 \x01(\tR\x05prUrl\x12\x1a\n" +
-	"\bwarnings\x18\x03 \x03(\tR\bwarnings*\xad\x01\n" +
+	"\bwarnings\x18\x03 \x03(\tR\bwarnings*\xcb\x01\n" +
 	"\x0fDashboardSource\x12 \n" +
 	"\x1cDASHBOARD_SOURCE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aDASHBOARD_SOURCE_GENERATED\x10\x01\x12\x19\n" +
 	"\x15DASHBOARD_SOURCE_REPO\x10\x02\x12\x1e\n" +
 	"\x1aDASHBOARD_SOURCE_WORKSPACE\x10\x03\x12\x1d\n" +
-	"\x19DASHBOARD_SOURCE_TEMPLATE\x10\x042\x96\n" +
+	"\x19DASHBOARD_SOURCE_TEMPLATE\x10\x04\x12\x1c\n" +
+	"\x18DASHBOARD_SOURCE_BUILTIN\x10\x05*d\n" +
+	"\x11DashboardViewKind\x12#\n" +
+	"\x1fDASHBOARD_VIEW_KIND_UNSPECIFIED\x10\x00\x12*\n" +
+	"&DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS\x10\x012\x96\n" +
 	"\n" +
 	"\x10DashboardService\x12a\n" +
 	"\x0eListDashboards\x12&.controlplane.v1.ListDashboardsRequest\x1a'.controlplane.v1.ListDashboardsResponse\x12[\n" +
@@ -2314,114 +2380,116 @@ func file_services_dashboard_v1_dashboard_proto_rawDescGZIP() []byte {
 	return file_services_dashboard_v1_dashboard_proto_rawDescData
 }
 
-var file_services_dashboard_v1_dashboard_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_services_dashboard_v1_dashboard_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_services_dashboard_v1_dashboard_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_services_dashboard_v1_dashboard_proto_goTypes = []any{
 	(DashboardSource)(0),                    // 0: controlplane.v1.DashboardSource
-	(*DashboardRef)(nil),                    // 1: controlplane.v1.DashboardRef
-	(*DashboardUser)(nil),                   // 2: controlplane.v1.DashboardUser
-	(*DashboardReleaseInfo)(nil),            // 3: controlplane.v1.DashboardReleaseInfo
-	(*DashboardWorkspaceInfo)(nil),          // 4: controlplane.v1.DashboardWorkspaceInfo
-	(*DashboardSummary)(nil),                // 5: controlplane.v1.DashboardSummary
-	(*DashboardVersionInfo)(nil),            // 6: controlplane.v1.DashboardVersionInfo
-	(*ListDashboardsRequest)(nil),           // 7: controlplane.v1.ListDashboardsRequest
-	(*ListDashboardsResponse)(nil),          // 8: controlplane.v1.ListDashboardsResponse
-	(*GetDashboardRequest)(nil),             // 9: controlplane.v1.GetDashboardRequest
-	(*GetDashboardResponse)(nil),            // 10: controlplane.v1.GetDashboardResponse
-	(*EnvScope)(nil),                        // 11: controlplane.v1.EnvScope
-	(*SaveDashboardRequest)(nil),            // 12: controlplane.v1.SaveDashboardRequest
-	(*SaveDashboardResponse)(nil),           // 13: controlplane.v1.SaveDashboardResponse
-	(*SaveAsCopyRequest)(nil),               // 14: controlplane.v1.SaveAsCopyRequest
-	(*SaveAsCopyResponse)(nil),              // 15: controlplane.v1.SaveAsCopyResponse
-	(*ListDashboardVersionsRequest)(nil),    // 16: controlplane.v1.ListDashboardVersionsRequest
-	(*ListDashboardVersionsResponse)(nil),   // 17: controlplane.v1.ListDashboardVersionsResponse
-	(*RestoreDashboardVersionRequest)(nil),  // 18: controlplane.v1.RestoreDashboardVersionRequest
-	(*RestoreDashboardVersionResponse)(nil), // 19: controlplane.v1.RestoreDashboardVersionResponse
-	(*ArchiveDashboardRequest)(nil),         // 20: controlplane.v1.ArchiveDashboardRequest
-	(*ArchiveDashboardResponse)(nil),        // 21: controlplane.v1.ArchiveDashboardResponse
-	(*StarDashboardRequest)(nil),            // 22: controlplane.v1.StarDashboardRequest
-	(*StarDashboardResponse)(nil),           // 23: controlplane.v1.StarDashboardResponse
-	(*UnstarDashboardRequest)(nil),          // 24: controlplane.v1.UnstarDashboardRequest
-	(*UnstarDashboardResponse)(nil),         // 25: controlplane.v1.UnstarDashboardResponse
-	(*RecordDashboardViewRequest)(nil),      // 26: controlplane.v1.RecordDashboardViewRequest
-	(*RecordDashboardViewResponse)(nil),     // 27: controlplane.v1.RecordDashboardViewResponse
-	(*ListDashboardTemplatesRequest)(nil),   // 28: controlplane.v1.ListDashboardTemplatesRequest
-	(*ListDashboardTemplatesResponse)(nil),  // 29: controlplane.v1.ListDashboardTemplatesResponse
-	(*PromoteDashboardToCodeRequest)(nil),   // 30: controlplane.v1.PromoteDashboardToCodeRequest
-	(*DashboardFile)(nil),                   // 31: controlplane.v1.DashboardFile
-	(*PromoteDashboardToCodeResponse)(nil),  // 32: controlplane.v1.PromoteDashboardToCodeResponse
-	(*timestamppb.Timestamp)(nil),           // 33: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),                 // 34: google.protobuf.Struct
+	(DashboardViewKind)(0),                  // 1: controlplane.v1.DashboardViewKind
+	(*DashboardRef)(nil),                    // 2: controlplane.v1.DashboardRef
+	(*DashboardUser)(nil),                   // 3: controlplane.v1.DashboardUser
+	(*DashboardReleaseInfo)(nil),            // 4: controlplane.v1.DashboardReleaseInfo
+	(*DashboardWorkspaceInfo)(nil),          // 5: controlplane.v1.DashboardWorkspaceInfo
+	(*DashboardSummary)(nil),                // 6: controlplane.v1.DashboardSummary
+	(*DashboardVersionInfo)(nil),            // 7: controlplane.v1.DashboardVersionInfo
+	(*ListDashboardsRequest)(nil),           // 8: controlplane.v1.ListDashboardsRequest
+	(*ListDashboardsResponse)(nil),          // 9: controlplane.v1.ListDashboardsResponse
+	(*GetDashboardRequest)(nil),             // 10: controlplane.v1.GetDashboardRequest
+	(*GetDashboardResponse)(nil),            // 11: controlplane.v1.GetDashboardResponse
+	(*EnvScope)(nil),                        // 12: controlplane.v1.EnvScope
+	(*SaveDashboardRequest)(nil),            // 13: controlplane.v1.SaveDashboardRequest
+	(*SaveDashboardResponse)(nil),           // 14: controlplane.v1.SaveDashboardResponse
+	(*SaveAsCopyRequest)(nil),               // 15: controlplane.v1.SaveAsCopyRequest
+	(*SaveAsCopyResponse)(nil),              // 16: controlplane.v1.SaveAsCopyResponse
+	(*ListDashboardVersionsRequest)(nil),    // 17: controlplane.v1.ListDashboardVersionsRequest
+	(*ListDashboardVersionsResponse)(nil),   // 18: controlplane.v1.ListDashboardVersionsResponse
+	(*RestoreDashboardVersionRequest)(nil),  // 19: controlplane.v1.RestoreDashboardVersionRequest
+	(*RestoreDashboardVersionResponse)(nil), // 20: controlplane.v1.RestoreDashboardVersionResponse
+	(*ArchiveDashboardRequest)(nil),         // 21: controlplane.v1.ArchiveDashboardRequest
+	(*ArchiveDashboardResponse)(nil),        // 22: controlplane.v1.ArchiveDashboardResponse
+	(*StarDashboardRequest)(nil),            // 23: controlplane.v1.StarDashboardRequest
+	(*StarDashboardResponse)(nil),           // 24: controlplane.v1.StarDashboardResponse
+	(*UnstarDashboardRequest)(nil),          // 25: controlplane.v1.UnstarDashboardRequest
+	(*UnstarDashboardResponse)(nil),         // 26: controlplane.v1.UnstarDashboardResponse
+	(*RecordDashboardViewRequest)(nil),      // 27: controlplane.v1.RecordDashboardViewRequest
+	(*RecordDashboardViewResponse)(nil),     // 28: controlplane.v1.RecordDashboardViewResponse
+	(*ListDashboardTemplatesRequest)(nil),   // 29: controlplane.v1.ListDashboardTemplatesRequest
+	(*ListDashboardTemplatesResponse)(nil),  // 30: controlplane.v1.ListDashboardTemplatesResponse
+	(*PromoteDashboardToCodeRequest)(nil),   // 31: controlplane.v1.PromoteDashboardToCodeRequest
+	(*DashboardFile)(nil),                   // 32: controlplane.v1.DashboardFile
+	(*PromoteDashboardToCodeResponse)(nil),  // 33: controlplane.v1.PromoteDashboardToCodeResponse
+	(*timestamppb.Timestamp)(nil),           // 34: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                 // 35: google.protobuf.Struct
 }
 var file_services_dashboard_v1_dashboard_proto_depIdxs = []int32{
 	0,  // 0: controlplane.v1.DashboardRef.source:type_name -> controlplane.v1.DashboardSource
-	33, // 1: controlplane.v1.DashboardReleaseInfo.shipped_at:type_name -> google.protobuf.Timestamp
-	2,  // 2: controlplane.v1.DashboardWorkspaceInfo.created_by:type_name -> controlplane.v1.DashboardUser
-	2,  // 3: controlplane.v1.DashboardWorkspaceInfo.updated_by:type_name -> controlplane.v1.DashboardUser
-	33, // 4: controlplane.v1.DashboardWorkspaceInfo.created_at:type_name -> google.protobuf.Timestamp
-	33, // 5: controlplane.v1.DashboardWorkspaceInfo.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: controlplane.v1.DashboardSummary.ref:type_name -> controlplane.v1.DashboardRef
+	34, // 1: controlplane.v1.DashboardReleaseInfo.shipped_at:type_name -> google.protobuf.Timestamp
+	3,  // 2: controlplane.v1.DashboardWorkspaceInfo.created_by:type_name -> controlplane.v1.DashboardUser
+	3,  // 3: controlplane.v1.DashboardWorkspaceInfo.updated_by:type_name -> controlplane.v1.DashboardUser
+	34, // 4: controlplane.v1.DashboardWorkspaceInfo.created_at:type_name -> google.protobuf.Timestamp
+	34, // 5: controlplane.v1.DashboardWorkspaceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 6: controlplane.v1.DashboardSummary.ref:type_name -> controlplane.v1.DashboardRef
 	0,  // 7: controlplane.v1.DashboardSummary.source:type_name -> controlplane.v1.DashboardSource
-	33, // 8: controlplane.v1.DashboardSummary.last_viewed_at:type_name -> google.protobuf.Timestamp
-	34, // 9: controlplane.v1.DashboardSummary.preview_panels:type_name -> google.protobuf.Struct
-	3,  // 10: controlplane.v1.DashboardSummary.release:type_name -> controlplane.v1.DashboardReleaseInfo
-	4,  // 11: controlplane.v1.DashboardSummary.workspace:type_name -> controlplane.v1.DashboardWorkspaceInfo
-	2,  // 12: controlplane.v1.DashboardVersionInfo.author:type_name -> controlplane.v1.DashboardUser
-	33, // 13: controlplane.v1.DashboardVersionInfo.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 14: controlplane.v1.ListDashboardsRequest.source:type_name -> controlplane.v1.DashboardSource
-	5,  // 15: controlplane.v1.ListDashboardsResponse.dashboards:type_name -> controlplane.v1.DashboardSummary
-	1,  // 16: controlplane.v1.GetDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
-	5,  // 17: controlplane.v1.GetDashboardResponse.summary:type_name -> controlplane.v1.DashboardSummary
-	34, // 18: controlplane.v1.GetDashboardResponse.spec:type_name -> google.protobuf.Struct
-	34, // 19: controlplane.v1.SaveDashboardRequest.spec:type_name -> google.protobuf.Struct
-	11, // 20: controlplane.v1.SaveDashboardRequest.env_scope:type_name -> controlplane.v1.EnvScope
-	5,  // 21: controlplane.v1.SaveDashboardResponse.summary:type_name -> controlplane.v1.DashboardSummary
-	6,  // 22: controlplane.v1.SaveDashboardResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
-	1,  // 23: controlplane.v1.SaveAsCopyRequest.from:type_name -> controlplane.v1.DashboardRef
-	11, // 24: controlplane.v1.SaveAsCopyRequest.env_scope:type_name -> controlplane.v1.EnvScope
-	5,  // 25: controlplane.v1.SaveAsCopyResponse.summary:type_name -> controlplane.v1.DashboardSummary
-	6,  // 26: controlplane.v1.SaveAsCopyResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
-	1,  // 27: controlplane.v1.ListDashboardVersionsRequest.ref:type_name -> controlplane.v1.DashboardRef
-	6,  // 28: controlplane.v1.ListDashboardVersionsResponse.versions:type_name -> controlplane.v1.DashboardVersionInfo
-	1,  // 29: controlplane.v1.RestoreDashboardVersionRequest.ref:type_name -> controlplane.v1.DashboardRef
-	5,  // 30: controlplane.v1.RestoreDashboardVersionResponse.summary:type_name -> controlplane.v1.DashboardSummary
-	6,  // 31: controlplane.v1.RestoreDashboardVersionResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
-	1,  // 32: controlplane.v1.ArchiveDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
-	1,  // 33: controlplane.v1.StarDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
-	1,  // 34: controlplane.v1.UnstarDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
-	1,  // 35: controlplane.v1.RecordDashboardViewRequest.ref:type_name -> controlplane.v1.DashboardRef
-	5,  // 36: controlplane.v1.ListDashboardTemplatesResponse.templates:type_name -> controlplane.v1.DashboardSummary
-	1,  // 37: controlplane.v1.PromoteDashboardToCodeRequest.ref:type_name -> controlplane.v1.DashboardRef
-	31, // 38: controlplane.v1.PromoteDashboardToCodeResponse.file:type_name -> controlplane.v1.DashboardFile
-	7,  // 39: controlplane.v1.DashboardService.ListDashboards:input_type -> controlplane.v1.ListDashboardsRequest
-	9,  // 40: controlplane.v1.DashboardService.GetDashboard:input_type -> controlplane.v1.GetDashboardRequest
-	12, // 41: controlplane.v1.DashboardService.SaveDashboard:input_type -> controlplane.v1.SaveDashboardRequest
-	14, // 42: controlplane.v1.DashboardService.SaveAsCopy:input_type -> controlplane.v1.SaveAsCopyRequest
-	16, // 43: controlplane.v1.DashboardService.ListDashboardVersions:input_type -> controlplane.v1.ListDashboardVersionsRequest
-	18, // 44: controlplane.v1.DashboardService.RestoreDashboardVersion:input_type -> controlplane.v1.RestoreDashboardVersionRequest
-	20, // 45: controlplane.v1.DashboardService.ArchiveDashboard:input_type -> controlplane.v1.ArchiveDashboardRequest
-	22, // 46: controlplane.v1.DashboardService.StarDashboard:input_type -> controlplane.v1.StarDashboardRequest
-	24, // 47: controlplane.v1.DashboardService.UnstarDashboard:input_type -> controlplane.v1.UnstarDashboardRequest
-	26, // 48: controlplane.v1.DashboardService.RecordDashboardView:input_type -> controlplane.v1.RecordDashboardViewRequest
-	28, // 49: controlplane.v1.DashboardService.ListDashboardTemplates:input_type -> controlplane.v1.ListDashboardTemplatesRequest
-	30, // 50: controlplane.v1.DashboardService.PromoteDashboardToCode:input_type -> controlplane.v1.PromoteDashboardToCodeRequest
-	8,  // 51: controlplane.v1.DashboardService.ListDashboards:output_type -> controlplane.v1.ListDashboardsResponse
-	10, // 52: controlplane.v1.DashboardService.GetDashboard:output_type -> controlplane.v1.GetDashboardResponse
-	13, // 53: controlplane.v1.DashboardService.SaveDashboard:output_type -> controlplane.v1.SaveDashboardResponse
-	15, // 54: controlplane.v1.DashboardService.SaveAsCopy:output_type -> controlplane.v1.SaveAsCopyResponse
-	17, // 55: controlplane.v1.DashboardService.ListDashboardVersions:output_type -> controlplane.v1.ListDashboardVersionsResponse
-	19, // 56: controlplane.v1.DashboardService.RestoreDashboardVersion:output_type -> controlplane.v1.RestoreDashboardVersionResponse
-	21, // 57: controlplane.v1.DashboardService.ArchiveDashboard:output_type -> controlplane.v1.ArchiveDashboardResponse
-	23, // 58: controlplane.v1.DashboardService.StarDashboard:output_type -> controlplane.v1.StarDashboardResponse
-	25, // 59: controlplane.v1.DashboardService.UnstarDashboard:output_type -> controlplane.v1.UnstarDashboardResponse
-	27, // 60: controlplane.v1.DashboardService.RecordDashboardView:output_type -> controlplane.v1.RecordDashboardViewResponse
-	29, // 61: controlplane.v1.DashboardService.ListDashboardTemplates:output_type -> controlplane.v1.ListDashboardTemplatesResponse
-	32, // 62: controlplane.v1.DashboardService.PromoteDashboardToCode:output_type -> controlplane.v1.PromoteDashboardToCodeResponse
-	51, // [51:63] is the sub-list for method output_type
-	39, // [39:51] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	34, // 8: controlplane.v1.DashboardSummary.last_viewed_at:type_name -> google.protobuf.Timestamp
+	35, // 9: controlplane.v1.DashboardSummary.preview_panels:type_name -> google.protobuf.Struct
+	4,  // 10: controlplane.v1.DashboardSummary.release:type_name -> controlplane.v1.DashboardReleaseInfo
+	5,  // 11: controlplane.v1.DashboardSummary.workspace:type_name -> controlplane.v1.DashboardWorkspaceInfo
+	1,  // 12: controlplane.v1.DashboardSummary.view_kind:type_name -> controlplane.v1.DashboardViewKind
+	3,  // 13: controlplane.v1.DashboardVersionInfo.author:type_name -> controlplane.v1.DashboardUser
+	34, // 14: controlplane.v1.DashboardVersionInfo.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 15: controlplane.v1.ListDashboardsRequest.source:type_name -> controlplane.v1.DashboardSource
+	6,  // 16: controlplane.v1.ListDashboardsResponse.dashboards:type_name -> controlplane.v1.DashboardSummary
+	2,  // 17: controlplane.v1.GetDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
+	6,  // 18: controlplane.v1.GetDashboardResponse.summary:type_name -> controlplane.v1.DashboardSummary
+	35, // 19: controlplane.v1.GetDashboardResponse.spec:type_name -> google.protobuf.Struct
+	35, // 20: controlplane.v1.SaveDashboardRequest.spec:type_name -> google.protobuf.Struct
+	12, // 21: controlplane.v1.SaveDashboardRequest.env_scope:type_name -> controlplane.v1.EnvScope
+	6,  // 22: controlplane.v1.SaveDashboardResponse.summary:type_name -> controlplane.v1.DashboardSummary
+	7,  // 23: controlplane.v1.SaveDashboardResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
+	2,  // 24: controlplane.v1.SaveAsCopyRequest.from:type_name -> controlplane.v1.DashboardRef
+	12, // 25: controlplane.v1.SaveAsCopyRequest.env_scope:type_name -> controlplane.v1.EnvScope
+	6,  // 26: controlplane.v1.SaveAsCopyResponse.summary:type_name -> controlplane.v1.DashboardSummary
+	7,  // 27: controlplane.v1.SaveAsCopyResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
+	2,  // 28: controlplane.v1.ListDashboardVersionsRequest.ref:type_name -> controlplane.v1.DashboardRef
+	7,  // 29: controlplane.v1.ListDashboardVersionsResponse.versions:type_name -> controlplane.v1.DashboardVersionInfo
+	2,  // 30: controlplane.v1.RestoreDashboardVersionRequest.ref:type_name -> controlplane.v1.DashboardRef
+	6,  // 31: controlplane.v1.RestoreDashboardVersionResponse.summary:type_name -> controlplane.v1.DashboardSummary
+	7,  // 32: controlplane.v1.RestoreDashboardVersionResponse.version:type_name -> controlplane.v1.DashboardVersionInfo
+	2,  // 33: controlplane.v1.ArchiveDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
+	2,  // 34: controlplane.v1.StarDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
+	2,  // 35: controlplane.v1.UnstarDashboardRequest.ref:type_name -> controlplane.v1.DashboardRef
+	2,  // 36: controlplane.v1.RecordDashboardViewRequest.ref:type_name -> controlplane.v1.DashboardRef
+	6,  // 37: controlplane.v1.ListDashboardTemplatesResponse.templates:type_name -> controlplane.v1.DashboardSummary
+	2,  // 38: controlplane.v1.PromoteDashboardToCodeRequest.ref:type_name -> controlplane.v1.DashboardRef
+	32, // 39: controlplane.v1.PromoteDashboardToCodeResponse.file:type_name -> controlplane.v1.DashboardFile
+	8,  // 40: controlplane.v1.DashboardService.ListDashboards:input_type -> controlplane.v1.ListDashboardsRequest
+	10, // 41: controlplane.v1.DashboardService.GetDashboard:input_type -> controlplane.v1.GetDashboardRequest
+	13, // 42: controlplane.v1.DashboardService.SaveDashboard:input_type -> controlplane.v1.SaveDashboardRequest
+	15, // 43: controlplane.v1.DashboardService.SaveAsCopy:input_type -> controlplane.v1.SaveAsCopyRequest
+	17, // 44: controlplane.v1.DashboardService.ListDashboardVersions:input_type -> controlplane.v1.ListDashboardVersionsRequest
+	19, // 45: controlplane.v1.DashboardService.RestoreDashboardVersion:input_type -> controlplane.v1.RestoreDashboardVersionRequest
+	21, // 46: controlplane.v1.DashboardService.ArchiveDashboard:input_type -> controlplane.v1.ArchiveDashboardRequest
+	23, // 47: controlplane.v1.DashboardService.StarDashboard:input_type -> controlplane.v1.StarDashboardRequest
+	25, // 48: controlplane.v1.DashboardService.UnstarDashboard:input_type -> controlplane.v1.UnstarDashboardRequest
+	27, // 49: controlplane.v1.DashboardService.RecordDashboardView:input_type -> controlplane.v1.RecordDashboardViewRequest
+	29, // 50: controlplane.v1.DashboardService.ListDashboardTemplates:input_type -> controlplane.v1.ListDashboardTemplatesRequest
+	31, // 51: controlplane.v1.DashboardService.PromoteDashboardToCode:input_type -> controlplane.v1.PromoteDashboardToCodeRequest
+	9,  // 52: controlplane.v1.DashboardService.ListDashboards:output_type -> controlplane.v1.ListDashboardsResponse
+	11, // 53: controlplane.v1.DashboardService.GetDashboard:output_type -> controlplane.v1.GetDashboardResponse
+	14, // 54: controlplane.v1.DashboardService.SaveDashboard:output_type -> controlplane.v1.SaveDashboardResponse
+	16, // 55: controlplane.v1.DashboardService.SaveAsCopy:output_type -> controlplane.v1.SaveAsCopyResponse
+	18, // 56: controlplane.v1.DashboardService.ListDashboardVersions:output_type -> controlplane.v1.ListDashboardVersionsResponse
+	20, // 57: controlplane.v1.DashboardService.RestoreDashboardVersion:output_type -> controlplane.v1.RestoreDashboardVersionResponse
+	22, // 58: controlplane.v1.DashboardService.ArchiveDashboard:output_type -> controlplane.v1.ArchiveDashboardResponse
+	24, // 59: controlplane.v1.DashboardService.StarDashboard:output_type -> controlplane.v1.StarDashboardResponse
+	26, // 60: controlplane.v1.DashboardService.UnstarDashboard:output_type -> controlplane.v1.UnstarDashboardResponse
+	28, // 61: controlplane.v1.DashboardService.RecordDashboardView:output_type -> controlplane.v1.RecordDashboardViewResponse
+	30, // 62: controlplane.v1.DashboardService.ListDashboardTemplates:output_type -> controlplane.v1.ListDashboardTemplatesResponse
+	33, // 63: controlplane.v1.DashboardService.PromoteDashboardToCode:output_type -> controlplane.v1.PromoteDashboardToCodeResponse
+	52, // [52:64] is the sub-list for method output_type
+	40, // [40:52] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_services_dashboard_v1_dashboard_proto_init() }
@@ -2438,7 +2506,7 @@ func file_services_dashboard_v1_dashboard_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_dashboard_v1_dashboard_proto_rawDesc), len(file_services_dashboard_v1_dashboard_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,

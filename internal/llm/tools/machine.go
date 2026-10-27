@@ -101,6 +101,7 @@ var serverSafeTools = map[string]struct{}{
 	// Fire delegates to the saved activation's machine choice, not this run's;
 	// all trigger tool operations execute through the server-side service.
 	ToolListTriggers: {}, ToolFireTrigger: {}, ToolListTriggerEvents: {},
+	ToolCreateTriggerActivation: {}, ToolUpdateTriggerActivation: {}, ToolEnableTrigger: {}, ToolPauseTrigger: {},
 	// Returns a fixed text; the offer is the rendered call itself.
 	ToolRequestMachine: {},
 	// Database reads and a Sentry event.

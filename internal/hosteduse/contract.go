@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
@@ -30,13 +32,15 @@ type Store interface {
 
 // Deps configures the durable store and separately authenticated controller hop.
 type Deps struct {
-	Store   Store
-	BaseURL string
-	Sign    func() (string, error)
-	// CAFile is a dedicated PEM trust bundle for the private controller.
-	// It is re-read on each new TLS connection to follow projected CA updates.
-	//forge:optional-dep
-	CAFile string
+	Store Store
+	// Worker is the worker's config: hosted_actions_url
+	// (RELIANT_WORKER_HOSTED_ACTIONS_URL) is the private controller's
+	// endpoint, and hosted_actions_ca_file
+	// (RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE), when set, a dedicated PEM
+	// trust bundle for it, re-read on each new TLS connection to follow
+	// projected CA updates.
+	Worker *configv1.WorkerConfig
+	Sign   func() (string, error)
 	// HTTPClient is optional; the client is copied and redirects disabled.
 	//forge:optional-dep
 	HTTPClient *http.Client

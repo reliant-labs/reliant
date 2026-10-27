@@ -23,6 +23,7 @@ import Card from "../forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { RunHeader } from "./RunHeader";
+import { RunNodes } from "./RunNodes";
 import { useRunRoute } from "./RunRouteLoader";
 import { TriggerCard } from "./TriggerCard";
 import { useRerun } from "./useRerun";
@@ -125,6 +126,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
           />
         )}
       </div>
+      {chat.workflowId && <RunNodes workflowId={chat.workflowId} />}
       {rerun.dialog}
       <div className="min-h-0 flex-1">
         <ChatContainer tabId={chat.id} hideChatTitle />

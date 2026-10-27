@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -48,7 +50,7 @@ func setupAccessTriggerTest(t *testing.T) (*triggerTestEnv, *fakeAccess) {
 	env, _ := setupInboundTriggerTest(t)
 	access := &fakeAccess{}
 	env.configure(t, func(d *Deps) {
-		d.PublicURL = "https://api.example.com/"
+		d.Integrations = &configv1.IntegrationsConfig{PublicUrl: "https://api.example.com/"}
 		d.Sealer = fakeSealer{}
 		d.Catalog = fakeCatalog{"test": true, "gh": true}
 		d.Intake = &fakeIntake{}

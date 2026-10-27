@@ -14,6 +14,52 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/billing/v1;billingv1";
 
+message GetOrganizationCostSummaryRequest {
+  string org_id = 1;
+}
+
+// These independent facts MUST NOT be added into a grand total across periods.
+message GetOrganizationCostSummaryResponse {
+  string org_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp generated_at = 3;
+  repeated OrganizationCostPeriod periods = 4;
+  repeated OrganizationCostSource sources = 5;
+}
+
+message OrganizationCostPeriod {
+  string id = 1;
+  google.protobuf.Timestamp start = 2;
+  google.protobuf.Timestamp end = 3;
+}
+
+message OrganizationCostAllowance {
+  string id = 1;
+  string unit = 2;
+  double included = 3;
+  optional double consumed = 4;
+}
+
+message OrganizationCostSource {
+  string category = 1;
+  string period_id = 2;
+  // USD nanos. Missing means not measured, never zero.
+  optional int64 list_equivalent_usd_nanos = 3;
+  // Recognized billed consumption; NOT wallet funding or card payments.
+  optional int64 actual_charges_usd_nanos = 4;
+  // Promotional grants, not remaining credit or allocation against calls.
+  optional int64 credits_usd_nanos = 5;
+  optional int64 pending_estimate_usd_nanos = 6;
+  optional int64 pending_count = 7;
+  repeated OrganizationCostAllowance allowances = 8;
+  google.protobuf.Timestamp coverage_start = 9;
+  google.protobuf.Timestamp coverage_end = 10;
+  google.protobuf.Timestamp measured_through = 11;
+  // complete, partial, unavailable, not_measured.
+  string completeness = 12;
+  repeated string limitations = 13;
+}
+
 // === BillingService (public) ===
 //
 // User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
@@ -21,6 +67,15 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/billing/
 // BillingAdminService / BillingGatewayService.
 
 service BillingService {
+  // Canonical current-period organization accounting. Requires billing:read,
+  // not billing management. Unknown amounts stay absent; no historical range.
+  rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // Read-only catalog.
   rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -47,6 +102,20 @@ service BillingService {
   }
   rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
     option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListOrgLimitChanges is the org's limit-change history, newest first: who
+  // changed which limit, from what, to what, and when. One list across every
+  // org limit (observability spend cap today; LLM cap, infra overage and wallet
+  // auto-recharge as they adopt it). Any member of org_id may read it.
+  //
+  // forge:custom — hand-written over the shared org_limit_changes table; it is
+  // not an entity list, so it gets no CRUD wiring or admin page.
+  rpc ListOrgLimitChanges(ListOrgLimitChangesRequest) returns (ListOrgLimitChangesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
   }
 
   // Wallet (per-user).
@@ -489,6 +558,36 @@ message CreateCurrentUserBillingPortalSessionRequest {
 
 message CreateCurrentUserBillingPortalSessionResponse {
   string portal_url = 1;
+}
+
+message ListOrgLimitChangesRequest {
+  string org_id = 1;
+  // Only changes to this resource (for example "observability.spend_cap");
+  // empty lists every resource.
+  string resource = 2;
+  // At most 200; unspecified is 50.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message OrgLimitChange {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  // The email of the person who made the change; empty when it was not a person.
+  string actor_email = 3;
+  // "observability.spend_cap", "observability.alert_thresholds", ...
+  string resource = 4;
+  string field = 5;
+  // Display JSON ("5000", "[50,80,100]"); empty old_value means the limit had
+  // not been set before.
+  string old_value = 6;
+  string new_value = 7;
+}
+
+message ListOrgLimitChangesResponse {
+  repeated OrgLimitChange changes = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
 }
 
 message ListCurrentUserInvoicesRequest {}

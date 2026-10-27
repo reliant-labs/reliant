@@ -4,6 +4,8 @@ package heavyjob
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/shellparse"
 )
 
 // pattern is one heavy-command pattern, split into words.
@@ -22,7 +24,9 @@ func parsePatterns(src []string) []pattern {
 // classify reports whether any simple command in a shell line starts with a
 // pattern's words (the rules are on Gate.Heavy).
 func classify(patterns []pattern, line string) bool {
-	for _, words := range simpleCommands(line) {
+	// A heredoc body is data fed to a command, not commands: `cat >> notes
+	// <<'EOF'` followed by a line reading "forge lint" is not a lint run.
+	for _, words := range simpleCommands(shellparse.StripHeredocs(line)) {
 		if matchWords(patterns, words) {
 			return true
 		}

@@ -164,6 +164,21 @@ describe("variables, compare, refresh, share, full screen", () => {
     expect(await screen.findAllByTestId("obs-panel-change")).not.toHaveLength(0);
   });
 
+  it("applies declared RPC filters only to their panels and queries none grouping explicitly", async () => {
+    const { onCall } = renderDashboard(ref("workspace", "checkout-latency"), { rpcService: "pkg.Service", rpcMethod: "Get", breakdown: "none" });
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(calls(onCall, "QueryPanel").length).toBeGreaterThan(0));
+    const requests = calls(onCall, "QueryPanel");
+    const rpc = requests.find((request) => request.panel.id === "latency-by-route");
+    expect(rpc.panel).toMatchObject({ groupBy: [], where: expect.arrayContaining([
+      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service" },
+      { field: "span.attr.rpc.method", op: "eq", value: "Get" },
+    ]) });
+    const experience = requests.find((request) => request.panel.id === "conversion");
+    expect(experience.panel.where).toBeUndefined();
+    expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
+  });
+
   it("compares with the previous release, and says why it cannot across every environment", async () => {
     renderDashboard(ref("workspace", "checkout-latency"), { compare: "release" });
     expect(await screen.findByTestId("dashboard-compare-release")).toHaveTextContent("before v1.8.3 reached prod");
@@ -191,6 +206,20 @@ describe("variables, compare, refresh, share, full screen", () => {
       await user.keyboard("{Escape}");
     });
     await waitFor(() => expect(screen.queryByTestId("dashboard-tv")).not.toBeInTheDocument());
+  });
+
+  it("keeps annotation and metric visibility in viewer state without saving", async () => {
+    const user = userEvent.setup();
+    const { onCall, current } = renderDashboard(ref("workspace", "checkout-latency"));
+    await screen.findByTestId("dashboard-grid");
+    await user.click(screen.getByRole("checkbox", { name: "Release markers" }));
+    await user.click(screen.getByRole("checkbox", { name: "Alert bands" }));
+    expect(current()).toMatchObject({ releases: false, alerts: false });
+    await user.click(screen.getByTestId("dashboard-metrics"));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /p95 latency by route/ }));
+    expect(current().hiddenPanels).toContain("latency-by-route");
+    expect(screen.queryByTestId("dashboard-panel-latency-by-route")).not.toBeInTheDocument();
+    expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
   });
 
   it("drills from a series into Logs, Traces and the workload", async () => {

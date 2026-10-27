@@ -12,15 +12,18 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, AlertTriangle, Boxes, Clock, Lock, RefreshCw, Rocket, SearchX } from "lucide-react";
+import { Activity, AlertTriangle, Boxes, Clock, Lock, PauseCircle, RefreshCw, Rocket, SearchX } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
+import type { BillingTab } from "@/routeSchemas";
 import {
   obsErrorKind,
   obsErrorMessage,
   type ObsErrorKind,
 } from "@/services/controlPlane/observability/errors";
+import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
+import { formatClock, quotaOf } from "@/services/controlPlane/observability/quota";
 import type { Provenance } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 
@@ -357,8 +360,12 @@ const ERROR_COPY: Record<Exclude<ObsErrorKind, "not-set-up">, { title: string; b
     body: "The server couldn't parse the query. Check its syntax, or clear it.",
   },
   "over-quota": {
-    title: "This organization's query quota is used up for now",
-    body: "Queries are metered per organization, and the allowance refills on its own within the hour. A shorter time range or a narrower filter spends less of it.",
+    title: "Will load when the hourly query allowance refills",
+    body: "Nothing is wrong and nothing is lost: telemetry is still arriving.",
+  },
+  busy: {
+    title: "That query was refused",
+    body: "The server limits how many queries run at once and how much one may read. A shorter time range or a narrower filter usually fits.",
   },
   "too-broad": {
     title: "That query took too long",
@@ -388,6 +395,7 @@ export function ObsError({
 }) {
   const kind = obsErrorKind(error);
   if (kind === "not-set-up") return <ObsNotSetUp subject={subject} />;
+  if (kind === "over-quota") return <ObsWillLoad error={error} />;
   const copy = ERROR_COPY[kind];
   const detail = obsErrorMessage(error);
   return (
@@ -447,6 +455,94 @@ export function ObsLoadingRows({ rows = 6, testId = "obs-loading" }: { rows?: nu
           style={{ width: `${92 - ((index * 13) % 30)}%` }}
         />
       ))}
+    </div>
+  );
+}
+
+// ── The query allowance ──────────────────────────────────────────────────────
+//
+// When the org's hourly query allowance is spent, the console says so ONCE (the
+// banner), keeps every panel's last result with a badge, and shows a neutral
+// "will load" where there is no result. None of these is the red error: nothing
+// is broken, ingest continues and the allowance refills on its own.
+
+/** A view with no result yet, while the allowance is spent: neutral, and says when it will load. */
+export function ObsWillLoad({ error }: { error: unknown }) {
+  const resetsAtMs = quotaOf(error)?.resetsAtMs;
+  const when = resetsAtMs ? `Will load at ${formatClock(resetsAtMs)} when the hourly query allowance refills` : ERROR_COPY["over-quota"].title;
+  return (
+    <StateFrame testId="obs-error-over-quota" icon={<PauseCircle className="h-4 w-4" />} title={when}>
+      <p>{ERROR_COPY["over-quota"].body}</p>
+    </StateFrame>
+  );
+}
+
+/**
+ * Marks a result that is the LAST GOOD one: shown while the allowance is spent,
+ * and gone when it refills. `updatedAt` is the query's dataUpdatedAt (0 when
+ * the result is a previous one kept across a changed filter).
+ */
+export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; className?: string }) {
+  const state = useObsQuotaState();
+  if (state.kind !== "exhausted") return null;
+  return (
+    <span
+      role="status"
+      data-testid="obs-as-of"
+      title="The hourly query allowance is used up, so this is the last result that loaded. It updates by itself once the allowance refills."
+      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-muted-foreground ${className ?? ""}`}
+    >
+      <PauseCircle className="h-3 w-3" aria-hidden="true" />
+      Paused{updatedAt ? ` · as of ${formatClock(updatedAt)}` : ""} · query budget resets at {formatClock(state.resetsAtMs)}
+    </span>
+  );
+}
+
+const BILLING_USAGE_TAB = "usage" satisfies BillingTab;
+const BILLING_USAGE_HREF = `/settings/billing?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
+
+/**
+ * The one banner per page, said once instead of once per panel. Renders nothing
+ * while reads run normally. `onOpenUsage` / `usageHref` link to the usage page.
+ */
+export function ObsQuotaBanner({ usageHref = BILLING_USAGE_HREF, onOpenUsage }: { usageHref?: string; onOpenUsage?: () => void }) {
+  const state = useObsQuotaState();
+  if (state.kind === "ok") return null;
+  const resets = formatClock(state.resetsAtMs);
+  const exhausted = state.kind === "exhausted";
+  const own = state.lane === "interactive";
+  const usage =
+    usageHref || onOpenUsage ? (
+      usageHref ? (
+        <a href={usageHref} className="underline underline-offset-2" data-testid="obs-quota-usage">
+          See usage
+        </a>
+      ) : (
+        <button type="button" onClick={onOpenUsage} className="underline underline-offset-2" data-testid="obs-quota-usage">
+          See usage
+        </button>
+      )
+    ) : null;
+  return (
+    <div
+      role="status"
+      data-testid="obs-quota-banner"
+      data-state={state.kind}
+      className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground"
+    >
+      <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0 space-y-1">
+        <p className="font-medium">
+          {exhausted ? `Live updates are paused until ${resets}` : "Refresh slowed to protect your query allowance"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {exhausted
+            ? `${own ? "Your organization used this hour's query allowance for the console." : "Your organization used this hour's query allowance."} What is on screen is the last result that loaded; it updates by itself at ${resets}. `
+            : `Searches, and opening a trace or an issue, still work. Normal refresh returns at ${resets}. `}
+          Telemetry keeps arriving and nothing is lost.
+          {own ? " Alerts keep running on their own allowance." : ""} {usage}
+        </p>
+      </div>
     </div>
   );
 }

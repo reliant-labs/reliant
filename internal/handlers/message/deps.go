@@ -16,4 +16,5 @@ type Repository interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*db.Attachment, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
+	ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error)
 }

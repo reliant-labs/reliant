@@ -2,9 +2,12 @@
 package workflowref
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -33,6 +36,8 @@ func ScenarioPath(slug, name string) string {
 
 // ScenarioFile is one scenario file a project holds.
 type ScenarioFile struct {
+	// Repo is the nested repository this scenario belongs to, or the root.
+	Repo string
 	// WorkflowSlug is the directory it sits under: the slug of the workflow
 	// it tests.
 	WorkflowSlug string
@@ -63,18 +68,84 @@ func IsYAML(p string) bool {
 	return false
 }
 
+// Discovery bounds apply to workflows and scenarios together, per source.
+const (
+	MaxWorkflowFileBytes     = 1 << 20
+	MaxWorkflowLayoutBytes   = 8 << 20
+	MaxWorkflowLayoutEntries = 1024
+	MaxWorkflowLayoutDepth   = 4
+)
+
+// ReadSourceLayout confines discovery to a source repository, including when
+// .reliant/workflows itself is a symlink. os.Root prevents symlink escapes
+// during opens as well as during discovery (a pre-read path check cannot).
+func ReadSourceLayout(ctx context.Context, sourceDir string) (layout *Layout, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(sourceDir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow source %s: %w", sourceDir, closeErr))
+			layout = nil
+		}
+	}()
+	workflows, err := root.OpenRoot(Dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return NewLayout(nil), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open workflows in %s: %w", sourceDir, err)
+	}
+	defer func() {
+		if closeErr := workflows.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflows in %s: %w", sourceDir, closeErr))
+			layout = nil
+		}
+	}()
+	return ReadLayoutContext(ctx, workflows.FS())
+}
+
 // ReadLayout reads a workflows directory (Dir, or wherever --dir points). A
-// directory that does not exist holds nothing.
+// directory that does not exist holds nothing. Disk callers must use a
+// confined filesystem (ReadSourceLayout), not an unrestricted os.DirFS.
 func ReadLayout(fsys fs.FS) (*Layout, error) {
+	return ReadLayoutContext(context.Background(), fsys)
+}
+
+// ReadLayoutContext rejects symlinks and special files, limits the tree and
+// every content read, and returns no partial layout when a source is unsafe
+// or unreadable. Cancellation is checked between entries and content reads.
+func ReadLayoutContext(ctx context.Context, fsys fs.FS) (*Layout, error) {
 	var paths []string
-	err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+	entries := 0
+	err := walkLayout(ctx, fsys, ".", func(p string, d fs.DirEntry, err error) error {
+		if e := ctx.Err(); e != nil {
+			return e
+		}
 		if err != nil {
 			if p == "." && errors.Is(err, fs.ErrNotExist) {
 				return fs.SkipAll
 			}
 			return err
 		}
+		entries++
+		if entries > MaxWorkflowLayoutEntries {
+			return fmt.Errorf("workflow layout exceeds %d entries", MaxWorkflowLayoutEntries)
+		}
+		if strings.Count(p, "/")+1 > MaxWorkflowLayoutDepth {
+			return fmt.Errorf("%s: workflow layout exceeds depth %d", p, MaxWorkflowLayoutDepth)
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("%s: workflow layout symlinks are not allowed", p)
+		}
 		if !d.IsDir() && IsYAML(p) {
+			if !d.Type().IsRegular() {
+				return fmt.Errorf("%s: workflow YAML must be a regular file", p)
+			}
 			paths = append(paths, p)
 		}
 		return nil
@@ -83,14 +154,125 @@ func ReadLayout(fsys fs.FS) (*Layout, error) {
 		return nil, err
 	}
 	contents := make(map[string][]byte, len(paths))
+	total := 0
 	for _, p := range paths {
-		data, err := fs.ReadFile(fsys, p)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		data, err := readLayoutFile(ctx, fsys, p)
 		if err != nil {
 			return nil, err
+		}
+		total += len(data)
+		if total > MaxWorkflowLayoutBytes {
+			return nil, fmt.Errorf("workflow layout exceeds %d bytes", MaxWorkflowLayoutBytes)
 		}
 		contents[p] = data
 	}
 	return NewLayout(contents), nil
+}
+
+// Unlike fs.WalkDir, read directory entries in bounded batches: a malicious
+// directory containing millions of non-YAML files must not be allocated in
+// full before the entry-count guard gets a chance to run.
+func walkLayout(ctx context.Context, fsys fs.FS, p string, visit fs.WalkDirFunc) error {
+	err := walkLayoutDir(ctx, fsys, p, nil, visit)
+	if errors.Is(err, fs.SkipAll) {
+		return nil
+	}
+	return err
+}
+
+func walkLayoutDir(ctx context.Context, fsys fs.FS, p string, entry fs.DirEntry, visit fs.WalkDirFunc) (err error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if entry == nil {
+		st, err := fs.Stat(fsys, p)
+		if err != nil {
+			return visit(p, nil, err)
+		}
+		entry = fs.FileInfoToDirEntry(st)
+	}
+	if err := visit(p, entry, nil); err != nil {
+		return err
+	}
+	if !entry.IsDir() {
+		return nil
+	}
+	f, err := fsys.Open(p)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow directory %s: %w", p, closeErr))
+		}
+	}()
+	dir, ok := f.(fs.ReadDirFile)
+	if !ok {
+		return fmt.Errorf("%s: filesystem does not support bounded directory reads", p)
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		entries, err := dir.ReadDir(64)
+		for _, e := range entries {
+			if childErr := walkLayoutDir(ctx, fsys, path.Join(p, e.Name()), e, visit); childErr != nil {
+				return childErr
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+type contextLayoutReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextLayoutReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
+}
+
+func readLayoutFile(ctx context.Context, fsys fs.FS, p string) (data []byte, err error) {
+	f, err := fsys.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow YAML %s: %w", p, closeErr))
+			data = nil
+		}
+	}()
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: workflow YAML must be a regular file", p)
+	}
+	if st.Size() > MaxWorkflowFileBytes {
+		return nil, fmt.Errorf("%s: workflow YAML exceeds %d bytes", p, MaxWorkflowFileBytes)
+	}
+	data, err = io.ReadAll(io.LimitReader(contextLayoutReader{ctx: ctx, reader: f}, MaxWorkflowFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxWorkflowFileBytes {
+		return nil, fmt.Errorf("%s: workflow YAML exceeds %d bytes", p, MaxWorkflowFileBytes)
+	}
+	return data, nil
 }
 
 // NewLayout lays out files already read, keyed by their slash-separated path

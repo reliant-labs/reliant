@@ -320,7 +320,7 @@ export function DeveloperSettings() {
               <div className={`p-3 rounded-lg border ${
                 saveStatus === 'saved' ? 'border-success bg-success/5' :
                 saveStatus === 'error' ? 'border-destructive bg-destructive/5' :
-                'border-border bg-muted'
+                'border-border bg-background'
               }`}>
                 <div className="flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" />
@@ -337,7 +337,7 @@ export function DeveloperSettings() {
       </Card>
 
       {/* Additional Information */}
-      <div className="p-3 rounded-lg border border-border/40 bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="p-3 rounded-lg border border-border/60 bg-background">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5" />
           <div className="text-sm">

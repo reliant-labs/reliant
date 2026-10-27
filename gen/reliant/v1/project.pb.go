@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -3358,7 +3359,7 @@ var File_reliant_v1_project_proto protoreflect.FileDescriptor
 const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/project.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\xe7\x03\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -3631,33 +3632,61 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"!PROJECT_INSTALL_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" PROJECT_INSTALL_STATE_INSTALLING\x10\x01\x12#\n" +
 	"\x1fPROJECT_INSTALL_STATE_INSTALLED\x10\x02\x12 \n" +
-	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x032\xb6\x13\n" +
-	"\x0eProjectService\x12V\n" +
-	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"\x00\x12S\n" +
+	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x032\xeb\x1a\n" +
+	"\x0eProjectService\x12\x9b\x01\n" +
+	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"E\xa2\xbb\x18A:?\n" +
+	"\x06create\x125\n" +
+	"\aproject\x12\x13response.project.id\x1a\x15response.project.name\x12S\n" +
 	"\fListProjects\x12\x1f.reliant.v1.ListProjectsRequest\x1a .reliant.v1.ListProjectsResponse\"\x00\x12M\n" +
 	"\n" +
-	"GetProject\x12\x1d.reliant.v1.GetProjectRequest\x1a\x1e.reliant.v1.GetProjectResponse\"\x00\x12V\n" +
-	"\rUpdateProject\x12 .reliant.v1.UpdateProjectRequest\x1a!.reliant.v1.UpdateProjectResponse\"\x00\x12V\n" +
-	"\rDeleteProject\x12 .reliant.v1.DeleteProjectRequest\x1a!.reliant.v1.DeleteProjectResponse\"\x00\x12S\n" +
-	"\fTouchProject\x12\x1f.reliant.v1.TouchProjectRequest\x1a .reliant.v1.TouchProjectResponse\"\x00\x12e\n" +
-	"\x12GetProjectMetadata\x12%.reliant.v1.GetProjectMetadataRequest\x1a&.reliant.v1.GetProjectMetadataResponse\"\x00\x12n\n" +
-	"\x15UpdateProjectMetadata\x12(.reliant.v1.UpdateProjectMetadataRequest\x1a).reliant.v1.UpdateProjectMetadataResponse\"\x00\x12b\n" +
+	"GetProject\x12\x1d.reliant.v1.GetProjectRequest\x1a\x1e.reliant.v1.GetProjectResponse\"\x00\x12\x92\x01\n" +
+	"\rUpdateProject\x12 .reliant.v1.UpdateProjectRequest\x1a!.reliant.v1.UpdateProjectResponse\"<\xa2\xbb\x188:6\n" +
+	"\x06update\x12,\n" +
+	"\aproject\x12\n" +
+	"project_id\x1a\x15response.project.name\x12{\n" +
+	"\rDeleteProject\x12 .reliant.v1.DeleteProjectRequest\x1a!.reliant.v1.DeleteProjectResponse\"%\xa2\xbb\x18!:\x1f\n" +
+	"\x06delete\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id\x12\xb9\x01\n" +
+	"\fTouchProject\x12\x1f.reliant.v1.TouchProjectRequest\x1a .reliant.v1.TouchProjectResponse\"f\xa2\xbb\x18b:`:^bumps last_active when the project is opened: recency for sorting, not a change to the project\x12e\n" +
+	"\x12GetProjectMetadata\x12%.reliant.v1.GetProjectMetadataRequest\x1a&.reliant.v1.GetProjectMetadataResponse\"\x00\x12\xb3\x01\n" +
+	"\x15UpdateProjectMetadata\x12(.reliant.v1.UpdateProjectMetadataRequest\x1a).reliant.v1.UpdateProjectMetadataResponse\"E\xa2\xbb\x18A:?\n" +
+	"\x0fupdate_metadata\x12,\n" +
+	"\aproject\x12\n" +
+	"project_id\x1a\x15response.project.name\x12b\n" +
 	"\x11GetProjectGitInfo\x12$.reliant.v1.GetProjectGitInfoRequest\x1a%.reliant.v1.GetProjectGitInfoResponse\"\x00\x12n\n" +
 	"\x15GetProjectGitBranches\x12(.reliant.v1.GetProjectGitBranchesRequest\x1a).reliant.v1.GetProjectGitBranchesResponse\"\x00\x12k\n" +
-	"\x14GetProjectInitStatus\x12'.reliant.v1.GetProjectInitStatusRequest\x1a(.reliant.v1.GetProjectInitStatusResponse\"\x00\x12b\n" +
-	"\x11InitializeProject\x12$.reliant.v1.InitializeProjectRequest\x1a%.reliant.v1.InitializeProjectResponse\"\x00\x12b\n" +
+	"\x14GetProjectInitStatus\x12'.reliant.v1.GetProjectInitStatusRequest\x1a(.reliant.v1.GetProjectInitStatusResponse\"\x00\x12\xcf\x01\n" +
+	"\x11InitializeProject\x12$.reliant.v1.InitializeProjectRequest\x1a%.reliant.v1.InitializeProjectResponse\"m\xa2\xbb\x18i:g:ea no-op kept for old clients: projects are initialized when they are created, so it only reports that\x12b\n" +
 	"\x11GetProjectChanges\x12$.reliant.v1.GetProjectChangesRequest\x1a%.reliant.v1.GetProjectChangesResponse\"\x00\x12b\n" +
-	"\x11GetProjectPrompts\x12$.reliant.v1.GetProjectPromptsRequest\x1a%.reliant.v1.GetProjectPromptsResponse\"\x00\x12e\n" +
-	"\x12SaveProjectPrompts\x12%.reliant.v1.SaveProjectPromptsRequest\x1a&.reliant.v1.SaveProjectPromptsResponse\"\x00\x12b\n" +
-	"\x11InitializeGitRepo\x12$.reliant.v1.InitializeGitRepoRequest\x1a%.reliant.v1.InitializeGitRepoResponse\"\x00\x12\x80\x01\n" +
+	"\x11GetProjectPrompts\x12$.reliant.v1.GetProjectPromptsRequest\x1a%.reliant.v1.GetProjectPromptsResponse\"\x00\x12\x90\x01\n" +
+	"\x12SaveProjectPrompts\x12%.reliant.v1.SaveProjectPromptsRequest\x1a&.reliant.v1.SaveProjectPromptsResponse\"+\xa2\xbb\x18':%\n" +
+	"\fsave_prompts\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id\x12\xa2\x01\n" +
+	"\x11InitializeGitRepo\x12$.reliant.v1.InitializeGitRepoRequest\x1a%.reliant.v1.InitializeGitRepoResponse\"@\xa2\xbb\x18<::\n" +
+	"\binit_git\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\x17response.default_branch\x12\x80\x01\n" +
 	"\x1bListProjectDaemonsForDaemon\x12..reliant.v1.ListProjectDaemonsForDaemonRequest\x1a/.reliant.v1.ListProjectDaemonsForDaemonResponse\"\x00\x12e\n" +
-	"\x12ListProjectDaemons\x12%.reliant.v1.ListProjectDaemonsRequest\x1a&.reliant.v1.ListProjectDaemonsResponse\"\x00\x12k\n" +
-	"\x14MarkProjectInstalled\x12'.reliant.v1.MarkProjectInstalledRequest\x1a(.reliant.v1.MarkProjectInstalledResponse\"\x00\x12n\n" +
-	"\x15CreateProjectFromRepo\x12(.reliant.v1.CreateProjectFromRepoRequest\x1a).reliant.v1.CreateProjectFromRepoResponse\"\x00\x12z\n" +
-	"\x19ListRepositoriesForDaemon\x12,.reliant.v1.ListRepositoriesForDaemonRequest\x1a-.reliant.v1.ListRepositoriesForDaemonResponse\"\x00\x12h\n" +
-	"\x13PullProjectOnDaemon\x12&.reliant.v1.PullProjectOnDaemonRequest\x1a'.reliant.v1.PullProjectOnDaemonResponse\"\x00\x12t\n" +
-	"\x17RemoveProjectFromDaemon\x12*.reliant.v1.RemoveProjectFromDaemonRequest\x1a+.reliant.v1.RemoveProjectFromDaemonResponse\"\x00\x12q\n" +
-	"\x16RecloneProjectOnDaemon\x12).reliant.v1.RecloneProjectOnDaemonRequest\x1a*.reliant.v1.RecloneProjectOnDaemonResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x12ListProjectDaemons\x12%.reliant.v1.ListProjectDaemonsRequest\x1a&.reliant.v1.ListProjectDaemonsResponse\"\x00\x12\xef\x01\n" +
+	"\x14MarkProjectInstalled\x12'.reliant.v1.MarkProjectInstalledRequest\x1a(.reliant.v1.MarkProjectInstalledResponse\"\x83\x01\xa2\xbb\x18\x7f:}:{records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs\x12\xcf\x01\n" +
+	"\x15CreateProjectFromRepo\x12(.reliant.v1.CreateProjectFromRepoRequest\x1a).reliant.v1.CreateProjectFromRepoResponse\"a\xa2\xbb\x18]:[\n" +
+	"\x06create\x125\n" +
+	"\aproject\x12\x13response.project.id\x1a\x15response.project.name*\tdaemon_id*\x0fresponse.queued\x12z\n" +
+	"\x19ListRepositoriesForDaemon\x12,.reliant.v1.ListRepositoriesForDaemonRequest\x1a-.reliant.v1.ListRepositoriesForDaemonResponse\"\x00\x12\x96\x01\n" +
+	"\x13PullProjectOnDaemon\x12&.reliant.v1.PullProjectOnDaemonRequest\x1a'.reliant.v1.PullProjectOnDaemonResponse\".\xa2\xbb\x18*:(\n" +
+	"\x04pull\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\tdaemon_id\x12\xb0\x01\n" +
+	"\x17RemoveProjectFromDaemon\x12*.reliant.v1.RemoveProjectFromDaemonRequest\x1a+.reliant.v1.RemoveProjectFromDaemonResponse\"<\xa2\xbb\x188:6\n" +
+	"\x12remove_from_daemon\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\tdaemon_id\x12\xa2\x01\n" +
+	"\x16RecloneProjectOnDaemon\x12).reliant.v1.RecloneProjectOnDaemonRequest\x1a*.reliant.v1.RecloneProjectOnDaemonResponse\"1\xa2\xbb\x18-:+\n" +
+	"\areclone\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\tdaemon_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_project_proto_rawDescOnce sync.Once

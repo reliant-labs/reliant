@@ -21,9 +21,11 @@ type Deps struct {
 
 	// Repo stores attachments and their bytes.
 	Repo Repository
-	// MaxFileSize is the largest upload accepted, in bytes (the API server's
-	// MAX_UPLOAD_SIZE). Zero takes the default, 10 MB.
-	MaxFileSize int64
+	// API is the API server's config: max_upload_size (MAX_UPLOAD_SIZE) is
+	// the largest upload accepted, in bytes. Nil, or a zero size, takes the
+	// default, 10 MB.
+	//forge:optional-dep
+	API *config.ApiServerConfig
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -45,19 +47,22 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedAttachmentServiceHandler
 	deps Deps
+	// maxFileSize is Deps.API's max_upload_size, or the default.
+	maxFileSize int64
 }
 
 // New creates a new attachment service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field.
-// A zero Deps.MaxFileSize takes its default, 10 MB.
+// A nil Deps.API, or a zero max_upload_size, takes the default, 10 MB.
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	if deps.MaxFileSize == 0 {
-		deps.MaxFileSize = defaultMaxFileSize
+	maxFileSize := defaultMaxFileSize
+	if deps.API != nil && deps.API.GetMaxUploadSize() != 0 {
+		maxFileSize = deps.API.GetMaxUploadSize()
 	}
-	return &Service{deps: deps}, nil
+	return &Service{deps: deps, maxFileSize: maxFileSize}, nil
 }
 
 // Name returns the service name for logging and registry.

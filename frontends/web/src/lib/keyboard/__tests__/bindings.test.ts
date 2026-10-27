@@ -65,7 +65,7 @@ describe("shortcut definitions", () => {
     }
   });
 
-  it("never puts a tab or window command under a held sequence key on the web", () => {
+  it("never puts a browser-reserved chord under a held sequence key on the web", () => {
     // Cmd+K then W is commonly typed with Cmd still held, and the browser sees
     // that as Cmd+W before the page does: it closed Reliant's own tab. The
     // second key of a web sequence must survive being typed either way.
@@ -98,6 +98,9 @@ describe("shortcut definitions", () => {
       "reopenLastClosedFile",
       "toggleSettings",
       "focusChat",
+      // Cmd+Shift+[ / ] on desktop: Chrome's tab switching, never delivered.
+      "nextFileTab",
+      "prevFileTab",
     ];
 
     /** Type a canonical binding chord by chord, the way the dispatcher sees it. */
@@ -227,23 +230,93 @@ describe("shortcut definitions", () => {
   });
 
   describe("Cmd+F", () => {
-    it("searches chats outside the editor", () => {
-      const registry = buildRegistry(MAC_DESKTOP);
-      const result = registry.resolve(parseBinding("Cmd+F", true), ["global"]);
+    it.each([MAC_DESKTOP, MAC_WEB, PC_WEB])(
+      "searches the conversation on screen, wherever focus is",
+      (platform) => {
+        const registry = buildRegistry(platform);
+        const chord = parseBinding("Cmd+F", platform.isMac);
 
-      expect(result.shortcut?.id).toBe("chatSearch");
+        for (const contexts of [
+          ["chat-view", "global"],
+          ["chat-input", "chat-view", "global"],
+          ["right-sidebar", "chat-view", "global"],
+        ]) {
+          expect(registry.resolve(chord, contexts).shortcut?.id).toBe("chatSearch");
+        }
+      },
+    );
+
+    it.each([MAC_WEB, PC_WEB])(
+      "is left to the browser's find with no conversation on screen",
+      (platform) => {
+        // The dashboard, Settings, the Inbox, Runs: "find" there means the
+        // page, not chat history (Cmd+E is the chat switcher everywhere), and
+        // a browser tab has its own find bar for that.
+        const registry = buildRegistry(platform);
+        const chord = parseBinding("Cmd+F", platform.isMac);
+
+        expect(registry.resolve(chord, ["global"]).kind).toBe("none");
+        expect(registry.resolve(chord, ["chat-input", "global"]).kind).toBe("none");
+      },
+    );
+
+    it("finds in the page with no conversation on screen in the desktop app", () => {
+      // The desktop app has no browser find bar to leave the key to.
+      const registry = buildRegistry(MAC_DESKTOP);
+      const chord = parseBinding("Cmd+F", true);
+
+      for (const contexts of [["global"], ["chat-input", "global"], ["file-tree", "global"]]) {
+        expect(registry.resolve(chord, contexts).shortcut?.id).toBe("findInPage");
+      }
     });
 
-    it("defers to the editor's own find inside Monaco", () => {
-      const registry = buildRegistry(MAC_DESKTOP);
-      const result = registry.resolve(parseBinding("Cmd+F", true), [
-        "monaco",
-        "global",
-      ]);
-
-      expect(result.shortcut?.id).toBe("editorFind");
-      expect(result.shortcut?.passthrough).toBe(true);
+    it("leaves find-in-page out of a browser tab entirely", () => {
+      const shortcut = defaultShortcuts.findInPage;
+      expect(shortcut.desktopOnly).toBe(true);
+      expect(shortcut.defaultWebBinding).toBe("");
+      expect(shortcut.context).toBe("global");
     });
+
+    it.each([MAC_DESKTOP, MAC_WEB, PC_WEB])(
+      "defers to the editor's own find inside Monaco",
+      (platform) => {
+        const registry = buildRegistry(platform);
+        const result = registry.resolve(parseBinding("Cmd+F", platform.isMac), [
+          "monaco",
+          "chat-view",
+          "global",
+        ]);
+
+        expect(result.shortcut?.id).toBe("editorFind");
+        expect(result.shortcut?.passthrough).toBe(true);
+        expect(
+          registry.resolve(parseBinding("Cmd+F", platform.isMac), ["monaco", "global"])
+            .shortcut?.id,
+        ).toBe("editorFind");
+      },
+    );
+  });
+
+  describe("Cmd+L", () => {
+    it.each([MAC_DESKTOP, MAC_WEB, PC_WEB])(
+      "adds the selection to the chat from the editor, and focuses the chat elsewhere",
+      (platform) => {
+        const registry = buildRegistry(platform);
+        const shortcut = defaultShortcuts.focusChat;
+        const binding = parseBinding(
+          platform.isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding,
+          platform.isMac,
+        );
+        const [first, second] = binding.split(" ");
+        const resolve = (contexts: string[]) =>
+          second
+            ? registry.resolve(second, contexts, first).shortcut?.id
+            : registry.resolve(first, contexts).shortcut?.id;
+
+        expect(resolve(["monaco", "global"])).toBe("addSelectionToChat");
+        expect(resolve(["global"])).toBe("focusChat");
+      },
+    );
   });
 
   describe("clipboard", () => {
@@ -295,6 +368,11 @@ describe("shortcut definitions", () => {
       { chord: "Cmd+Y", owner: "ModernApp (file-operation redo)" },
       { chord: "PageUp", owner: "FileTree (scroll by viewport)" },
       { chord: "PageDown", owner: "FileTree (scroll by viewport)" },
+      // The find bar's next/previous match. It is a page of its own (in the
+      // desktop app's find-bar view), but a shortcut on these would put a
+      // second meaning on the chord Chrome users know as "find next".
+      { chord: "Cmd+G", owner: "FindBar (next match)" },
+      { chord: "Cmd+Shift+G", owner: "FindBar (previous match)" },
     ];
 
     it.each(RESERVED_FOR_COMPONENTS)(

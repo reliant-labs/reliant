@@ -96,6 +96,12 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 		return PreflightDaemonCheckOutput{DaemonAvailable: false}, nil
 	}
 
+	// Resumed workflows can carry inputs from before launch-time pinning.
+	// Wake/check the same durable machine their tools will use.
+	if input.DaemonSelector == nil {
+		input.DaemonSelector = toolDaemonSelector("", chatDaemonSelector(chat, nil))
+	}
+
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("failed to get project for preflight check: %w", err)

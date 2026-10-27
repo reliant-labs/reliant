@@ -19,6 +19,104 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
+// Run diagnostics is scoped to the workflow tree, not every root of a chat,
+// and never projects resolved inputs or arbitrary output fields.
+func TestListRunNodeExecutions(t *testing.T) {
+	env := storetest.New(t)
+	seedSteps(t, env)
+	rows, err := store.ListRunNodeExecutions(context.Background(), env.ORM, "wf-s1", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("got %d rows, want 4 graph attempts", len(rows))
+	}
+	for _, row := range rows {
+		if row.WorkflowID == "wf-other" || row.InputJSON.Valid || strings.Contains(row.OutputJSON.String, "tokens") || strings.Contains(row.OutputJSON.String, "answer") {
+			t.Fatalf("unwanted data: %+v", row)
+		}
+	}
+	rows, err = store.ListRunNodeExecutions(context.Background(), env.ORM, "wf-s2", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].WorkflowID != "wf-s2" {
+		t.Fatalf("subtree and limit: %+v", rows)
+	}
+}
+
+func TestRunDiagnosticsBoundsBeforeJSONAndPreservesSkip(t *testing.T) {
+	env := storetest.New(t)
+	seedSteps(t, env)
+	ctx := context.Background()
+	// A huge JSON string and huge malformed JSON must both be omitted before
+	// any JSON cast, never transferred whole to the API process.
+	for i, raw := range []string{`{"stdout":"` + strings.Repeat("secret", 400000) + `"}`, strings.Repeat("bad json", 300000), `{"skipped":true}`} {
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO step_executions(id,workflow_id,step_id,activity_name,output_json,created_at) VALUES($1,'wf-s1',$1,'CustomAction',$2,now())`, fmt.Sprintf("bounded-%d", i), raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundSkip := false
+	for _, row := range rows {
+		if len(row.OutputJSON.String) > 16384 {
+			t.Fatalf("unbounded fetch: %d", len(row.OutputJSON.String))
+		}
+		if row.ID == "bounded-2" {
+			foundSkip = strings.Contains(row.OutputJSON.String, `"skipped" : true`)
+		}
+		if row.ID == "bounded-0" || row.ID == "bounded-1" {
+			if row.OutputJSON.String != `{"_diagnostic_omitted":true}` {
+				t.Fatalf("unsafe output: %s", row.OutputJSON.String)
+			}
+		}
+	}
+	if !foundSkip {
+		t.Fatal("explicit skipped flag lost in SQL projection")
+	}
+	// Parent pointers alone must not grant access to another chat's records.
+	_, err = env.SQL.ExecContext(ctx, `UPDATE workflows SET parent_id='wf-s1' WHERE id='wf-other'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.WorkflowID == "wf-other" {
+			t.Fatal("cross-chat child leaked")
+		}
+	}
+	// Budget is cumulative as well as per-row. Empty errors stay empty,
+	// otherwise an omitted successful attempt could read as a failure.
+	for i := 0; i < 20; i++ {
+		_, err = env.SQL.ExecContext(ctx, `INSERT INTO step_executions(id,workflow_id,step_id,activity_name,output_json,created_at) VALUES($1,'wf-s1',$1,'ExecuteRunStep',$2,now())`, fmt.Sprintf("budget-%d", i), `{"stdout":"`+strings.Repeat("x", 14000)+`"}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err = store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	omitted := 0
+	for _, row := range rows {
+		total += len(row.OutputJSON.String) + len(row.ErrorMessage.String)
+		if strings.Contains(row.OutputJSON.String, "_diagnostic_omitted") {
+			omitted++
+		}
+	}
+	if total > 140000 || omitted == 0 {
+		t.Fatalf("fetch budget not enforced: bytes=%d omitted=%d", total, omitted)
+	}
+}
+
 type stepSeed struct {
 	id, workflow, step, activity, nodePath string
 	output                                 string
@@ -164,24 +262,13 @@ func TestStepExecutionLists(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		wf   string
-		step string // "" lists the workflow
 		want string
 	}{
-		{"every step of a workflow, oldest first", "wf-s1", "", "[s1 s2 s3 s7]"},
-		{"a second workflow", "wf-s2", "", "[s4 s5 s6]"},
-		{"a workflow with no steps", "wf-none", "", "[]"},
-		{"every attempt of one step, oldest first", "wf-s1", "agent", "[s1 s7]"},
-		{"a step with one attempt", "wf-s1", "call_llm", "[s3]"},
-		{"every iteration of a loop step", "wf-s2", "loop_body-save", "[s5 s6]"},
-		{"a step of another workflow", "wf-s2", "agent", "[]"},
+		{"every step of a workflow, oldest first", "wf-s1", "[s1 s2 s3 s7]"},
+		{"a second workflow", "wf-s2", "[s4 s5 s6]"},
+		{"a workflow with no steps", "wf-none", "[]"},
 	} {
-		var got []*core.StepExecution
-		var err error
-		if c.step == "" {
-			got, err = store.ListWorkflowStepExecutions(ctx, env.ORM, c.wf)
-		} else {
-			got, err = store.ListStepExecutionsByStep(ctx, env.ORM, c.wf, c.step)
-		}
+		got, err := store.ListWorkflowStepExecutions(ctx, env.ORM, c.wf)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
@@ -190,8 +277,8 @@ func TestStepExecutionLists(t *testing.T) {
 		}
 	}
 	// The list carries the whole row, not just the key.
-	byStep, _ := store.ListStepExecutionsByStep(ctx, env.ORM, "wf-s1", "agent")
-	if byStep[1].OutputJSON != nstr("not json") || byStep[1].InputJSON != nstr(`{"i":6}`) || byStep[0].NodePath != nstr("agent") {
+	byStep, _ := store.ListWorkflowStepExecutions(ctx, env.ORM, "wf-s1")
+	if byStep[3].OutputJSON != nstr("not json") || byStep[3].InputJSON != nstr(`{"i":6}`) || byStep[0].NodePath != nstr("agent") {
 		t.Fatalf("listed rows lost columns: %+v", byStep)
 	}
 }
@@ -349,40 +436,6 @@ func TestChatStepExecutionViews(t *testing.T) {
 		if len(full) != wantN || len(basic) != wantN {
 			t.Fatalf("%s: %d full, %d basic steps, want %d each", chat, len(full), len(basic), wantN)
 		}
-	}
-}
-
-func TestRemoveWorkflowStepExecutions(t *testing.T) {
-	env := storetest.New(t)
-	ctx := context.Background()
-	seedSteps(t, env)
-	remaining := func(wf string) int {
-		t.Helper()
-		rows, err := store.ListWorkflowStepExecutions(ctx, env.ORM, wf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return len(rows)
-	}
-
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s1"); err != nil {
-		t.Fatal(err)
-	}
-	if n1, n2, n3 := remaining("wf-s1"), remaining("wf-s2"), remaining("wf-other"); n1 != 0 || n2 != 3 || n3 != 1 {
-		t.Fatalf("after removing wf-s1: %d / %d / %d steps, want 0 / 3 / 1", n1, n2, n3)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s1"); err != nil {
-		t.Fatalf("removing the steps of an emptied workflow is a no-op: %v", err)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-none"); err != nil {
-		t.Fatalf("removing the steps of an unknown workflow is a no-op: %v", err)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s2"); err != nil {
-		t.Fatal(err)
-	}
-	left, _ := store.ListStepExecutionRecordsForChat(ctx, env.ORM, "chat-steps", "", 50)
-	if len(left) != 0 || remaining("wf-other") != 1 {
-		t.Fatalf("deletes left %d steps of the chat and %d of the other chat's, want 0 and 1", len(left), remaining("wf-other"))
 	}
 }
 

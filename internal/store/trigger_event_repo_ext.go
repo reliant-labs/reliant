@@ -210,6 +210,15 @@ WHERE id = (
 	LIMIT 1
 )`
 
+// SetLaunchEventRunFailureDetail records the launch run's diagnostic on its
+// own launch event, so a later human turn cannot change the failure health.
+func SetLaunchEventRunFailureDetail(ctx context.Context, db orm.Context, chatID, detail string) error {
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome_detail = ?0::text
+WHERE id = (SELECT id FROM trigger_events WHERE chat_id = ?1::text ORDER BY created_at ASC, id ASC LIMIT 1)
+AND outcome = 'launched'`, detail, chatID).Exec(ctx)
+	return err
+}
+
 // SetLaunchEventRunStatus records status (a core.TriggerRun* value) on
 // chatID's launch event. A chat with no launch event is not an error: there
 // is nothing to record against.

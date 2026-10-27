@@ -236,13 +236,22 @@ export default function DashboardsPreview() {
               search={{
                 range: rangeParam(search.range),
                 service: search.service,
+                rpcService: search.rpcService,
+                rpcMethod: search.rpcMethod,
+                rpcProcedure: search.rpcProcedure,
+                variables: search.variables,
+                breakdown: search.breakdown,
+                hiddenSections: search.hiddenSections,
+                hiddenPanels: search.hiddenPanels,
+                releases: search.releases,
+                alerts: search.alerts,
                 compare: search.compare ? compareParam(search.compare) : undefined,
                 refresh: search.refresh ? refreshParam(search.refresh) : undefined,
                 tv: !!search.tv || undefined,
                 version: typeof search.version === "number" ? search.version : undefined,
                 release: search.release,
               }}
-              onSearch={(next) => go(next as Partial<PreviewSearch>)}
+              onSearch={(next) => go(next as Partial<PreviewSearch>, false)}
               onEnvChange={(next) => go({ env: next })}
               hrefs={hrefs}
               navigateTo={navigateTo}

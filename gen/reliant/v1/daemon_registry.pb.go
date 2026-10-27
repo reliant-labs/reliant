@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1290,7 +1291,7 @@ var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\n" +
 	" reliant/v1/daemon_registry.proto\x12\n" +
-	"reliant.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"N\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"N\n" +
 	"\x19ClearMachineCachesRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x14\n" +
 	"\x05kinds\x18\x02 \x03(\tR\x05kinds\"t\n" +
@@ -1383,15 +1384,19 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xa3\x05\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xe8\a\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
-	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12V\n" +
-	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x00\x12S\n" +
-	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"\x00\x12e\n" +
-	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"\x00\x12q\n" +
-	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"\x00\x12e\n" +
-	"\x12ClearMachineCaches\x12%.reliant.v1.ClearMachineCachesRequest\x1a&.reliant.v1.ClearMachineCachesResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12Y\n" +
+	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x03\x90\x02\x01\x12\xc7\x01\n" +
+	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"t\xa2\xbb\x18p:n:lreports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does\x12\xd0\x01\n" +
+	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"k\xa2\xbb\x18g:e:cre-probes the machine's local model servers: refreshes an observed inventory and configures nothing\x12\xa7\x01\n" +
+	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"6\xa2\xbb\x182:0\n" +
+	"\x19set_local_model_endpoints\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_id\x12\x8e\x01\n" +
+	"\x12ClearMachineCaches\x12%.reliant.v1.ClearMachineCachesRequest\x1a&.reliant.v1.ClearMachineCachesResponse\")\xa2\xbb\x18%:#\n" +
+	"\fclear_caches\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_registry_proto_rawDescOnce sync.Once

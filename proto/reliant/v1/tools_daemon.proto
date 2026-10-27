@@ -21,18 +21,30 @@ service ToolsDaemonService {
   // - Server sends ToolRequest messages when tools need to be executed
   // - Client sends ToolResponse messages with execution results
   // - On connect, server streams any pending requests from the database
-  rpc ConnectDaemon(stream DaemonMessage) returns (stream ServerMessage) {}
+  rpc ConnectDaemon(stream DaemonMessage) returns (stream ServerMessage) {
+    option (forge.v1.method) = {
+      activity: {none: "the daemon's tool-execution transport stream: each tool call records its own outcome"}
+    };
+  }
 
   // ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
   // gRPC server and the gateway dials in. The gateway sends ServerMessages and
   // receives DaemonMessages — same message types, but the connection direction
   // is flipped.
-  rpc ConnectGateway(stream ServerMessage) returns (stream DaemonMessage) {}
+  rpc ConnectGateway(stream ServerMessage) returns (stream DaemonMessage) {
+    option (forge.v1.method) = {
+      activity: {none: "the gateway-dialed twin of ConnectDaemon: daemon transport, each tool call records its own outcome"}
+    };
+  }
 
   // ReportToolResult is a unary fallback for reporting tool execution results
   // when the bidirectional stream is unavailable. The daemon calls this when
   // a tool completes but the bidi stream send fails (e.g. temporary disconnect).
-  rpc ReportToolResult(ReportToolResultRequest) returns (ReportToolResultResponse) {}
+  rpc ReportToolResult(ReportToolResultRequest) returns (ReportToolResultResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "unary fallback delivery of one tool result: daemon transport, the tool call records its own outcome"}
+    };
+  }
 
   // WhoAmI names the account the presented daemon credential acts as, and
   // does nothing else: no daemon row is read or written and nothing connects.
@@ -46,7 +58,9 @@ service ToolsDaemonService {
   //
   // It answers only about the caller's own credential.
   //   - UNAUTHENTICATED: not a live daemon credential.
-  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {}
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 message WhoAmIRequest {}

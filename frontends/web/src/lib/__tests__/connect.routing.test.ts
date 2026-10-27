@@ -23,6 +23,7 @@ import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { SystemService } from "@/gen/reliant/v1/system_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
+import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 const state = vi.hoisted(() => ({ controlPlaneUrl: "" }));
 
@@ -193,6 +194,15 @@ describe("one transport per route, through the real chain", () => {
     expect(sent[0].headers.has("x-daemon-last-seen")).toBe(false);
   });
 
+  it("observability billing's separate proto package routes to the control-plane with its auth chain", async () => {
+    state.controlPlaneUrl = CP_URL;
+    const { connectClient } = await load();
+    await connectClient(ObservabilityBillingService).getObservabilityUsage({ orgId: "org" });
+    expect(sent[0].url).toBe(`${window.location.origin}/observability_billing.v1.ObservabilityBillingService/GetObservabilityUsage`);
+    expect(sent[0].headers.get("authorization")).toBe("Bearer test-token");
+    expect(sent[0].headers.has("x-daemon-last-seen")).toBe(false);
+  });
+
   it("control-plane without a configured URL fails the call, naming the variable", async () => {
     const { connectClient } = await load();
     await expect(connectClient(UserService).getCurrentUser({})).rejects.toThrow(
@@ -209,11 +219,13 @@ describe("packaged desktop app (absolute URLs, no proxy)", () => {
     const { connectClient } = await load();
 
     await connectClient(UserService).getCurrentUser({});
+    await connectClient(ObservabilityBillingService).getObservabilityUsage({ orgId: "org" });
     await connectClient(DaemonRegistryService).listDaemons({});
     await connectClient(TokenService).listTokens({});
 
     expect(sent.map((s) => s.url)).toEqual([
       `${CP_URL}/controlplane.v1.UserService/GetCurrentUser`,
+      `${CP_URL}/observability_billing.v1.ObservabilityBillingService/GetObservabilityUsage`,
       `${DAEMON_URL}/reliant.v1.DaemonRegistryService/ListDaemons`,
       `${DAEMON_URL}/reliant.v1.TokenService/ListTokens`,
     ]);

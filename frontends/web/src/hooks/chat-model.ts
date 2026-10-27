@@ -11,6 +11,7 @@
  */
 
 import { create, type JsonObject } from "@bufbuild/protobuf";
+import type { AgentMessageKind } from "../gen/reliant/v1/chat_pb";
 import { jsToProtoValue, type ProtoValue } from "../api/proto-utils";
 import { repairLegacyWorkflowParams } from "../lib/paramUtils";
 import {
@@ -24,7 +25,6 @@ export type {
   Chat,
   ArchivedChat,
   ContentBlock,
-  MatchedToolResult,
   Attachment,
   Message,
   WorkflowExecutionData,
@@ -56,13 +56,8 @@ import type {
 // nested proto types.
 
 function convertProtoContentBlock(b: ProtoContentBlock): ContentBlock {
-  const { $typeName: _, matchedResult, ...rest } = b;
-  return {
-    ...rest,
-    matchedResult: matchedResult
-      ? (() => { const { $typeName: _t, ...mr } = matchedResult; return mr; })()
-      : undefined,
-  };
+  const { $typeName: _, ...rest } = b;
+  return rest;
 }
 
 export function convertProtoMessage(m: ProtoMessage): Message {
@@ -81,8 +76,8 @@ export function convertProtoChat(proto: ProtoChat): Chat {
 /**
  * One undelivered entry in a running thread's mailbox.
  *
- * `sender_kind` mirrors the backend's AgentMessageKind: 5 is a message the
- * human queued from the composer, 1 is one a peer agent sent via spawn_send.
+ * `sender_kind` is the AgentMessageKind: HUMAN_MESSAGE is a message the
+ * human queued from the composer, MESSAGE is one a peer agent sent via spawn_send.
  * The strip above the composer only offers cancel/send-now on the human ones —
  * revoking another agent's message from a human UI would be a lie about who
  * owns it.
@@ -91,12 +86,9 @@ export interface QueuedAgentMessageView {
   id: string;
   body: string;
   created_at: string;
-  sender_kind: number;
+  sender_kind: AgentMessageKind;
   attachments: string[];
 }
-
-/** AgentMessageKind values the UI distinguishes. */
-export const QUEUED_SENDER_KIND_HUMAN = 5;
 
 // InputMessage for StartChat/SendMessage requests
 // Supports user and system messages.

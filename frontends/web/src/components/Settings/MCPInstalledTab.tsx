@@ -199,7 +199,7 @@ export function MCPInstalledTab({
             })}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-border/70 bg-muted/30 p-8 text-center">
+          <div className="rounded-xl border border-dashed border-border/70 bg-background p-8 text-center">
             <h3 className="text-sm font-semibold text-foreground">No servers match your current view</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Try a different search or filter, or install a new MCP server from Discover.

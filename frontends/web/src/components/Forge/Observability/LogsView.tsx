@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { AttributeTable } from "./AttributeTable";
 import { formatTimestamp } from "./format";
 import { severityParam, type ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { servicesFor, useSignalsIndex } from "./serviceSignals";
 import { useRovingFocus } from "./useRovingFocus";
 
@@ -148,6 +148,7 @@ export function LogsView({
         </p>
       )}
 
+      {logs.data && <ObsAsOf updatedAt={logs.dataUpdatedAt} />}
       {logs.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-logs-loading" />

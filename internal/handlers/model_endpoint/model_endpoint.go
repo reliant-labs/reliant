@@ -68,7 +68,10 @@ func (s *Service) ListModelEndpoints(ctx context.Context, _ *connect.Request[rel
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
-	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{Endpoints: eps}), nil
+	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{
+		Endpoints:            eps,
+		CredentialsAvailable: s.manager.CredentialsAvailable(),
+	}), nil
 }
 
 func (s *Service) CreateModelEndpoint(ctx context.Context, req *connect.Request[reliantv1.CreateModelEndpointRequest]) (*connect.Response[reliantv1.CreateModelEndpointResponse], error) {

@@ -8,11 +8,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { DashboardSource, DashboardViewKind, ListDashboardsResponseSchema, GetDashboardResponseSchema } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
+import { getDashboard, listDashboards } from "../dashboardsApi";
 
-import { listDashboards } from "../dashboardsApi";
-
-const client = { listDashboards: vi.fn() };
-
+const client = vi.hoisted(() => ({ listDashboards: vi.fn(), getDashboard: vi.fn() }));
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
 
 beforeEach(() => {
@@ -33,5 +33,20 @@ describe("listDashboards request", () => {
     expect(client.listDashboards.mock.calls[0]![0]).toMatchObject({ projectId: "shop", envId: "env-prod" });
     await listDashboards({ orgId: "org-1", projectId: "" });
     expect(client.listDashboards.mock.calls[1]![0]).toHaveProperty("projectId", "");
+  });
+});
+
+const summary = { ref: { source: DashboardSource.BUILTIN, projectId: "", key: "org-costs" }, source: DashboardSource.BUILTIN,
+  viewKind: DashboardViewKind.ORGANIZATION_COSTS, title: "Organization costs", readOnly: true };
+
+describe("builtin dashboard wire mapping", () => {
+  it("retains the typed view discriminator and org-only ref for discovery and detail", async () => {
+    client.listDashboards.mockResolvedValue(create(ListDashboardsResponseSchema, { dashboards: [summary] }));
+    const index = await listDashboards({ orgId: "org", projectId: "app", envId: "prod" });
+    expect(index.dashboards[0]).toMatchObject({ source: "builtin", ref: { kind: "builtin", projectId: "", key: "org-costs" }, viewKind: "organization-costs" });
+    client.getDashboard.mockResolvedValue(create(GetDashboardResponseSchema, { summary }));
+    const doc = await getDashboard({ orgId: "org", ref: index.dashboards[0].ref });
+    expect(doc.summary.viewKind).toBe("organization-costs");
+    expect(client.getDashboard).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org", ref: { source: DashboardSource.BUILTIN, projectId: "", key: "org-costs" } }));
   });
 });

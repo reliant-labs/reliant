@@ -30,6 +30,7 @@
       "QuestionService",
       "RepoService",
       "RunService",
+      "ScenarioService",
       "SettingsService",
       "SystemService",
       "TaskService",
@@ -66,6 +67,7 @@
     "@connectrpc/connect-web": "^2.1.1",
     "@hookform/resolvers": "^5.2.1",
     "@hyperdx/browser": "0.26.0",
+    "@monaco-editor/loader": "^1.7.0",
     "@monaco-editor/react": "^4.7.0",
     "@opentelemetry/api": "^1.9.1",
     "@reliantlabs/forge-web-runtime": "^0.12.0",
@@ -73,6 +75,7 @@
     "@sentry/react": "^10.47.0",
     "@stripe/react-stripe-js": "3.10.0",
     "@stripe/stripe-js": "5.10.0",
+    "@supabase/auth-js": "^2.90.1",
     "@supabase/supabase-js": "^2.58.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query": "^5.100.9",
@@ -91,6 +94,7 @@
     "diff": "^8.0.2",
     "dompurify": "^3.3.1",
     "highlight.js": "^11.11.1",
+    "js-yaml": "^4.3.2",
     "lucide-react": "^0.544.0",
     "prism-react-renderer": "^2.4.1",
     "prismjs": "^1.30.0",
@@ -124,6 +128,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.3.0",
+    "@types/prismjs": "^1.26.5",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.0",
@@ -144,5 +149,8 @@
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "pnpm": ">=12.15.0 <13"
   }
 }

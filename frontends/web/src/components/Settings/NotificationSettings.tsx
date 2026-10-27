@@ -70,7 +70,7 @@ export function NotificationSettings() {
   const renderPermissionStatus = () => {
     if (!isSupported) {
       return (
-        <div className="flex items-center gap-2 text-amber-500">
+        <div className="flex items-center gap-2 text-warning-ink">
           <AlertTriangle className="w-4 h-4" />
           <span className="text-sm">Notifications not supported in this browser</span>
         </div>
@@ -80,14 +80,14 @@ export function NotificationSettings() {
     switch (permission) {
       case "granted":
         return (
-          <div className="flex items-center gap-2 text-green-400">
+          <div className="flex items-center gap-2 text-success-ink">
             <CheckCircle className="w-4 h-4" />
             <span className="text-sm font-medium">Permission granted</span>
           </div>
         );
       case "denied":
         return (
-          <div className="flex items-center gap-2 text-red-500">
+          <div className="flex items-center gap-2 text-destructive-ink">
             <XCircle className="w-4 h-4" />
             <span className="text-sm">Permission denied - enable in system settings</span>
           </div>
@@ -123,7 +123,7 @@ export function NotificationSettings() {
 
       <div className="space-y-4">
         {/* Permission Status */}
-        <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="p-4 rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium mb-1">Browser Permission</h3>
@@ -141,7 +141,7 @@ export function NotificationSettings() {
         </div>
 
         {/* Notifications Toggle */}
-        <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
           <div className="flex-1 pr-4">
             <h3 className="text-sm font-medium mb-1">Desktop Notifications</h3>
             <p className="text-xs text-muted-foreground">
@@ -160,8 +160,8 @@ export function NotificationSettings() {
 
         {/* Warning if enabled but permission denied */}
         {notificationsEnabled && permission === "denied" && (
-          <div className="flex items-start gap-3 p-4 border border-red-500/40 bg-red-500/10 rounded-lg">
-            <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 border border-destructive/40 bg-destructive/10 rounded-lg">
+            <XCircle className="w-5 h-5 text-destructive-ink flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm text-foreground font-medium mb-1">
                 Permission Required
@@ -175,7 +175,7 @@ export function NotificationSettings() {
 
         {/* When to Notify Section */}
         {notificationsEnabled && permission === "granted" && (
-          <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] space-y-4">
+          <div className="p-4 rounded-lg border border-border bg-card space-y-4">
             <h3 className="text-sm font-semibold text-foreground">When to Notify</h3>
             
             {/* Notify when app is unfocused */}
@@ -244,7 +244,7 @@ export function NotificationSettings() {
 
         {/* Sound Settings */}
         <div className="border-t border-border/30 pt-5 mt-5"></div>
-        <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="flex items-start justify-between p-4 rounded-lg border border-border bg-card">
           <div className="flex-1 pr-4">
             <div className="flex items-center gap-2 mb-1">
               {soundEnabled ? (
@@ -268,7 +268,7 @@ export function NotificationSettings() {
         </div>
 
         {/* Test Notification Button */}
-        <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="p-4 rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium mb-1">Test Notification</h3>
@@ -288,7 +288,7 @@ export function NotificationSettings() {
 
         {/* Information notice */}
         <div className="border-t border-border/30 pt-5 mt-5"></div>
-        <div className="p-4 border border-border/40 rounded-lg bg-muted/30">
+        <div className="p-4 rounded-lg border border-border/60 bg-background">
           <p className="text-xs text-muted-foreground mb-2">
             <strong className="text-foreground">What triggers notifications?</strong>
           </p>

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,7 +35,7 @@ func TestResumeDaemonForRun_SpeaksControlPlanesWireContract(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(Deps{BaseURL: srv.URL + "/", Sign: signWith("s3")})
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL + "/"}, Sign: signWith("s3")})
 	resumed, err := c.ResumeDaemonForRun(context.Background(), "ext-user", "daemon-1")
 	require.NoError(t, err)
 	assert.True(t, resumed)
@@ -55,7 +57,7 @@ func TestResumeDaemonForRun_AnOlderControlPlaneIsUnsupported(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
-			c := New(Deps{BaseURL: srv.URL, Sign: signWith("s")})
+			c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
 			_, err := c.ResumeDaemonForRun(context.Background(), "u", "d")
 			assert.ErrorIs(t, err, toolexec.ErrRunResumeUnsupported)
 		})
@@ -70,7 +72,7 @@ func TestResumeDaemonForRun_ARefusalCarriesTheReason(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":"failed_precondition","message":"the machine failed to start; only its owner can retry it"}`))
 	}))
 	defer srv.Close()
-	c := New(Deps{BaseURL: srv.URL, Sign: signWith("s")})
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
 	_, err := c.ResumeDaemonForRun(context.Background(), "u", "d")
 	require.Error(t, err)
 	assert.False(t, errors.Is(err, toolexec.ErrRunResumeUnsupported))
@@ -87,6 +89,6 @@ func TestResumeDaemonForRun_WithoutAnIdentityIsUnsupported(t *testing.T) {
 		t.Error("an unsigned run resume reached the control plane")
 	}))
 	defer srv.Close()
-	_, err := New(Deps{BaseURL: srv.URL}).ResumeDaemonForRun(context.Background(), "u", "d")
+	_, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}}).ResumeDaemonForRun(context.Background(), "u", "d")
 	assert.ErrorIs(t, err, toolexec.ErrRunResumeUnsupported)
 }

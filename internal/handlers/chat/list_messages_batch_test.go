@@ -146,14 +146,17 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL, toolCallBlock.Type)
 	require.NotNil(t, toolCallBlock.ToolCallId)
 	assert.Equal(t, toolCallID, *toolCallBlock.ToolCallId)
-	require.NotNil(t, toolCallBlock.MatchedResult, "tool_call must be paired with its tool_result across messages")
-	assert.Equal(t, toolCallID, toolCallBlock.MatchedResult.ToolCallId)
-	require.NotNil(t, toolCallBlock.MatchedResult.Content)
-	assert.Equal(t, resultContent, *toolCallBlock.MatchedResult.Content)
+	assert.Nil(t, toolCallBlock.Content, "the result is not copied onto its call: the client joins them by tool_call_id")
 
-	// Message 3: the tool_result block itself, unaffected by pairing.
+	// Message 3: the tool_result block carries the result, under the same
+	// tool_call_id the call block names.
 	require.Len(t, resp.Msg.Messages[2].ContentBlocks, 1)
-	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, resp.Msg.Messages[2].ContentBlocks[0].Type)
+	resultBlock := resp.Msg.Messages[2].ContentBlocks[0]
+	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, resultBlock.Type)
+	require.NotNil(t, resultBlock.ToolCallId)
+	assert.Equal(t, toolCallID, *resultBlock.ToolCallId)
+	require.NotNil(t, resultBlock.Content)
+	assert.Equal(t, resultContent, *resultBlock.Content)
 
 	// Message 4: single text block, unrelated to the tool exchange.
 	require.Len(t, resp.Msg.Messages[3].ContentBlocks, 1)

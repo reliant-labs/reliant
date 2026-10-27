@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // createTestPlan inserts a plan into the test DB and returns it.
@@ -120,20 +119,6 @@ func TestPlanCRUD(t *testing.T) {
 			t.Errorf("expected project_id 'test-project', got %v", got.ProjectID)
 		}
 
-		// Test ListPlansByProject
-		plans, err := store.ListPlansByProject(ctx, repo.ORM(), "test-project")
-		if err != nil {
-			t.Fatalf("ListPlansByProject: %v", err)
-		}
-		found := false
-		for _, p := range plans {
-			if p.ID == plan.ID {
-				found = true
-			}
-		}
-		if !found {
-			t.Error("expected plan in ListPlansByProject results")
-		}
 	})
 
 	t.Run("update plan preserves fields", func(t *testing.T) {
@@ -171,49 +156,6 @@ func TestPlanCRUD(t *testing.T) {
 		}
 		if got.Complexity == nil || *got.Complexity != int32(reliantv1.PlanComplexity_PLAN_COMPLEXITY_MODERATE) {
 			t.Errorf("expected complexity 'moderate' preserved, got %v", got.Complexity)
-		}
-	})
-
-	t.Run("update plan status preserves other fields", func(t *testing.T) {
-		complexity := int32(reliantv1.PlanComplexity_PLAN_COMPLEXITY_SIMPLE)
-		desc := "My description"
-		plan := &Plan{
-			ID:          uuid.New().String(),
-			ThreadID:    chatID,
-			Title:       "Status Test",
-			Description: &desc,
-			Status:      int32(reliantv1.PlanStatus_PLAN_STATUS_PENDING),
-			Complexity:  &complexity,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}
-		if err := repo.CreatePlan(ctx, plan); err != nil {
-			t.Fatalf("CreatePlan: %v", err)
-		}
-
-		now := time.Now()
-		if err := store.UpdatePlanStatus(ctx, repo.ORM(), plan.ID, int32(reliantv1.PlanStatus_PLAN_STATUS_COMPLETED), &now); err != nil {
-			t.Fatalf("UpdatePlanStatus: %v", err)
-		}
-
-		got, err := repo.GetPlan(ctx, plan.ID)
-		if err != nil {
-			t.Fatalf("GetPlan: %v", err)
-		}
-		if got.Status != int32(reliantv1.PlanStatus_PLAN_STATUS_COMPLETED) {
-			t.Errorf("expected status completed, got %d", got.Status)
-		}
-		if got.Title != "Status Test" {
-			t.Errorf("expected title preserved, got %q", got.Title)
-		}
-		if got.Description == nil || *got.Description != "My description" {
-			t.Errorf("expected description preserved, got %v", got.Description)
-		}
-		if got.Complexity == nil || *got.Complexity != int32(reliantv1.PlanComplexity_PLAN_COMPLEXITY_SIMPLE) {
-			t.Errorf("expected complexity preserved, got %v", got.Complexity)
-		}
-		if got.CompletedAt == nil {
-			t.Error("expected completed_at to be set")
 		}
 	})
 
@@ -385,45 +327,6 @@ func TestTaskCRUD(t *testing.T) {
 		}
 		if got.Assignee == nil || *got.Assignee != "agent-2" {
 			t.Errorf("expected assignee preserved, got %v", got.Assignee)
-		}
-	})
-
-	t.Run("update task status preserves metadata", func(t *testing.T) {
-		metadata := `{"priority":"high"}`
-		task := &Task{
-			ID:        uuid.New().String(),
-			PlanID:    plan.ID,
-			Title:     "Status test",
-			Status:    int32(reliantv1.TaskStatus_TASK_STATUS_PENDING),
-			Position:  4,
-			Metadata:  &metadata,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		if err := repo.CreateTask(ctx, task); err != nil {
-			t.Fatalf("CreateTask: %v", err)
-		}
-
-		now := time.Now()
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), task.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), &now); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
-		}
-
-		got, err := repo.GetTask(ctx, task.ID)
-		if err != nil {
-			t.Fatalf("GetTask: %v", err)
-		}
-		if got.Status != int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED) {
-			t.Errorf("expected status completed, got %d", got.Status)
-		}
-		if got.Title != "Status test" {
-			t.Errorf("expected title preserved, got %q", got.Title)
-		}
-		if got.Metadata == nil || *got.Metadata != metadata {
-			t.Errorf("expected metadata preserved, got %v", got.Metadata)
-		}
-		if got.CompletedAt == nil {
-			t.Error("expected completed_at to be set")
 		}
 	})
 
@@ -677,31 +580,6 @@ func TestTaskDependencies(t *testing.T) {
 		}
 		if len(planDeps) != 3 {
 			t.Errorf("expected 3 deps, got %d", len(planDeps))
-		}
-	})
-
-	t.Run("delete dependency by id", func(t *testing.T) {
-		taskA := makeTask("DelA", 0)
-		taskB := makeTask("DelB", 1)
-
-		dep := &TaskDependency{
-			ID:             uuid.New().String(),
-			FromTaskID:     taskA.ID,
-			ToTaskID:       taskB.ID,
-			DependencyType: core.DependencyTypeBlocks,
-			CreatedAt:      time.Now(),
-		}
-		if err := repo.CreateTaskDependency(ctx, dep); err != nil {
-			t.Fatalf("CreateTaskDependency: %v", err)
-		}
-
-		if err := store.RemoveTaskDependency(ctx, repo.ORM(), dep.ID); err != nil {
-			t.Fatalf("DeleteTaskDependency: %v", err)
-		}
-
-		_, err := repo.GetTaskDependency(ctx, dep.ID)
-		if err == nil {
-			t.Error("expected error when getting deleted dependency")
 		}
 	})
 
@@ -966,8 +844,9 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete A -> B becomes ready
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
+		a.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
+		if err := repo.UpdateTask(ctx, a); err != nil {
+			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
 		if len(ready) != 1 || ready[0].ID != b.ID {
@@ -975,8 +854,9 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete B -> C becomes ready
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
+		b.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
+		if err := repo.UpdateTask(ctx, b); err != nil {
+			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
 		if len(ready) != 1 || ready[0].ID != c.ID {
@@ -1015,8 +895,9 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete A -> B and C ready, D still blocked
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
+		a.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
+		if err := repo.UpdateTask(ctx, a); err != nil {
+			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
 		readyIDs := map[string]bool{}
@@ -1028,8 +909,9 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete B only -> D still blocked (C not done)
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
+		b.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
+		if err := repo.UpdateTask(ctx, b); err != nil {
+			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
 		readyIDs = map[string]bool{}
@@ -1044,8 +926,9 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete C -> D now ready
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), c.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
-			t.Fatalf("UpdateTaskStatus: %v", err)
+		c.Status = int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED)
+		if err := repo.UpdateTask(ctx, c); err != nil {
+			t.Fatalf("UpdateTask: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
 		if len(ready) != 1 || ready[0].ID != d.ID {

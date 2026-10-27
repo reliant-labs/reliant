@@ -109,9 +109,13 @@ const (
 	ToolCELEval                = "cel_eval"
 
 	// Existing trigger inspection and manual firing; no activation writes.
-	ToolListTriggers      = "list_triggers"
-	ToolFireTrigger       = "fire_trigger"
-	ToolListTriggerEvents = "list_trigger_events"
+	ToolListTriggers            = "list_triggers"
+	ToolFireTrigger             = "fire_trigger"
+	ToolCreateTriggerActivation = "create_trigger_activation"
+	ToolUpdateTriggerActivation = "update_trigger_activation"
+	ToolEnableTrigger           = "enable_trigger"
+	ToolPauseTrigger            = "pause_trigger"
+	ToolListTriggerEvents       = "list_trigger_events"
 
 	// Integration discovery tools
 	ToolSearchIntegrations   = "search_integrations"
@@ -160,6 +164,7 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Trigger tools
 	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.

@@ -13,7 +13,7 @@ echo "🚀 Quick Installing Reliant..."
 cd "$PROJECT_ROOT"
 if [ ! -d "frontends/web/node_modules" ]; then
     echo "📦 Installing web dependencies..."
-    cd frontends/web && npm install && cd "$PROJECT_ROOT"
+    cd frontends/web && pnpm install && cd "$PROJECT_ROOT"
 fi
 
 # Ensure electron dependencies are installed

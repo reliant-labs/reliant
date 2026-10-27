@@ -53,6 +53,16 @@ func TestResolveRunExecutorContext_PinsWorktreeDaemon(t *testing.T) {
 	assert.Equal(t, "/home/u/.reliant/worktrees/feature", execCtx.WorktreePath)
 	require.NotNil(t, execCtx.DaemonSelector, "worktree-bound chat must pin a daemon selector")
 	assert.Equal(t, daemonID, execCtx.DaemonSelector.ID)
+
+	// Same precedence as ExecuteTools: a durable chat pin beats its chat
+	// worktree's fallback owner; an explicit run selector is applied later.
+	pin := "chat-pin"
+	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, chatID, &pin))
+	execCtx, err = resolveRunExecutorContext(ctx, repo, chatID)
+	require.NoError(t, err)
+	require.NotNil(t, execCtx.DaemonSelector)
+	assert.Equal(t, pin, execCtx.DaemonSelector.ID)
+	assert.Equal(t, worktreeID, execCtx.WorktreeID, "machine selection must not discard worktree binding")
 }
 
 // TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector verifies a plain chat

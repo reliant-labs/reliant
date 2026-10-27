@@ -364,20 +364,40 @@ func (s *shellTool) RequiresPermission(params ShellParams) (bool, error) {
 	return true, nil // Permission needed for potentially dangerous commands
 }
 
+// Execute runs one shell call and records it in the machine's shell audit log
+// (internal/shellaudit): what was asked, by which chat, where, and how it ended.
 func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolResponse, error) {
+	start := s.clock()
+	var outcome shellOutcome
+	resp, err := s.execute(rctx, params, &outcome)
+	outcome.record(rctx, params, start, s.clock(), err)
+	return resp, err
+}
+
+func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome *shellOutcome) (ToolResponse, error) {
 	if rctx.Daemon == nil {
 		return NewTextErrorResponse("command execution requires a connected daemon"), nil
+	}
+
+	// Refuse deleting the machine's shared caches and pruning its container
+	// engine before anything else: that state belongs to every agent on the
+	// machine. See shell_shared_state_guard.go.
+	if refusal := sharedStateRefusal(params.Command, params.Env); refusal != "" {
+		outcome.refused(sharedStateGuardName)
+		return NewTextErrorResponse(refusal), nil
 	}
 
 	// Refuse filesystem-wide scans before dispatch rather than letting them run
 	// to the timeout. See shell_search_guard.go.
 	if refusal := unscopedSearchRefusal(params.Command); refusal != "" {
+		outcome.refused("filesystem_scan")
 		return NewTextErrorResponse(refusal), nil
 	}
 
 	// Refuse `rg -r`, which is --replace and silently corrupts the output it
 	// prints. See shell_search_guard.go.
 	if refusal := ripgrepReplaceRefusal(params.Command); refusal != "" {
+		outcome.refused("rg_replace")
 		return NewTextErrorResponse(refusal), nil
 	}
 
@@ -385,6 +405,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	// directory. Workflow `run` steps reach the daemon through this tool too.
 	// See shell_destructive_guard.go.
 	if refusal := destructiveRootRefusal(params.Command); refusal != "" {
+		outcome.refused("destructive_root")
 		return NewTextErrorResponse(refusal), nil
 	}
 
@@ -452,6 +473,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		if err != nil {
 			return ToolResponse{}, fmt.Errorf("failed to start background process: %w", err)
 		}
+		outcome.backgrounded(processID)
 
 		metadata := ShellResponseMetadata{
 			StartTime: startTime.UnixMilli(),
@@ -482,6 +504,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	// background, or the workflow records a completion that never happened and
 	// the tool_calls row keeps a NULL background_process_id.
 	if result.Backgrounded {
+		outcome.backgrounded(result.ProcessID)
 		metadata := ShellResponseMetadata{
 			StartTime: startTime.UnixMilli(),
 			EndTime:   s.clock().UnixMilli(),
@@ -502,6 +525,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	stderr := result.Stderr
 	exitCode := result.ExitCode
 	interrupted := result.TimedOut
+	outcome.completed(exitCode, result.DurationMs, interrupted)
 
 	// Apply custom output limits if specified
 	maxOutput := MaxShellOutputLength

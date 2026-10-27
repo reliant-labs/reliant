@@ -28,6 +28,8 @@ import {
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
+import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
+import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
 import {
   useApproveToolRequest,
@@ -155,10 +157,7 @@ function findShellCallForProcess(messages: Message[], processId: string): Conten
       if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "shell") {
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(processId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         lastMatch = block;
       }
     }
@@ -181,10 +180,7 @@ function findSpawnCallForAgent(messages: Message[], agentId: string): ContentBlo
         fallback = block;
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(agentId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         fallback = block;
       }
     }
@@ -344,6 +340,29 @@ function ToolExecutionComponent({
       }
     }
   }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name, surface]);
+
+  // A large result arrives as a preview (truncated). The full output is
+  // fetched when the user asks for it, and then rendered in the preview's
+  // place by the same renderer; a copy fetches it too (loadFullResult).
+  const isTruncatedResult = !!toolResult?.truncated && !!chatId;
+  const [wantFullResult, setWantFullResult] = useState(false);
+  const fullResult = useFullToolResult(chatId, toolCall.id, isTruncatedResult && wantFullResult);
+  const fullResultContent = isTruncatedResult ? fullResult.data?.content : undefined;
+  const displayResult = useMemo<ToolResultData | undefined>(
+    () =>
+      toolResult && fullResultContent !== undefined
+        ? { ...toolResult, content: fullResultContent, truncated: false }
+        : toolResult,
+    [toolResult, fullResultContent],
+  );
+  const loadFullResult = useMemo(
+    () =>
+      isTruncatedResult && chatId
+        ? () => fetchFullToolResult(chatId, toolCall.id)
+        : undefined,
+    [isTruncatedResult, chatId, toolCall.id],
+  );
+  const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
 
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
@@ -743,7 +762,8 @@ function ToolExecutionComponent({
     // in every renderer: ToolCallData.input is absent until the call's
     // arguments arrive, but a renderer's contract is that `input` is present.
     input: resolvedWaitTarget.displayInput ?? {},
-    result: toolResult,
+    result: displayResult,
+    loadFullResult,
     worktreeId: chatWorktreeId,
     chatId,
     isExpanded,
@@ -1000,6 +1020,17 @@ function ToolExecutionComponent({
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
           <div className={contentClassName}>
             <ToolContentArea ctx={renderContext} />
+            {showTruncatedNotice && (
+              <TruncatedOutputNotice
+                originalSize={toolResult?.original_size}
+                isLoading={fullResult.isFetching}
+                error={fullResult.error ?? undefined}
+                onShowFull={() => {
+                  if (wantFullResult) void fullResult.refetch();
+                  else setWantFullResult(true);
+                }}
+              />
+            )}
           </div>
         )}
 

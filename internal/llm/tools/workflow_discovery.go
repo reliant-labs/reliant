@@ -140,12 +140,16 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 					if desc == "" {
 						desc = "(no description)"
 					}
-					name := entry.Slug
+					// The address a ref resolves to: "<repo>/<slug>" for a
+					// nested repo's workflow whose bare name is not its own.
+					name := entry.Address
 					if name == "" {
-						name = entry.Path
+						name = entry.Location()
 					}
 					if entry.Problem != nil {
 						desc = entry.Problem.Error()
+					} else if entry.Warning != nil {
+						desc += " (" + entry.Warning.Error() + ")"
 					}
 
 					workflows = append(workflows, workflowInfo{

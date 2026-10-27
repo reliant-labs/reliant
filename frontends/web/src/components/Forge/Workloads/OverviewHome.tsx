@@ -38,7 +38,10 @@ import Tag from "@/components/forge-ui/tag";
 import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
+import type { DomainsState } from "@/hooks/forge-domain-queries";
+import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -47,7 +50,7 @@ import { ENV_ALL } from "../Console/envScope";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
@@ -77,6 +80,7 @@ import {
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { LiveLinks } from "./LiveLinks";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
@@ -114,6 +118,12 @@ export interface OverviewHomeProps {
    * environment Reliant does not place.
    */
   hosted?: HostedByEnv;
+  /** GetStatus has not answered for every hosted environment yet. */
+  hostedLoading?: boolean;
+  /** The org's domains, to show which custom domains serve each frontend. Absent: not read (no domain column shown). */
+  domains?: DomainsState;
+  /** The Domains screen: where "Add a domain" lands. */
+  domainsHref?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -123,7 +133,21 @@ const NO_HOSTED: HostedByEnv = new Map();
 export const OVERVIEW_RANGE: RangePreset = "24h";
 const ACTIVITY_DAYS = 30;
 
-export function OverviewHome({ project, env, envs, envsLoading, search, onSearch, hrefs, onSelectEnv, navigateTo, hosted = NO_HOSTED }: OverviewHomeProps) {
+export function OverviewHome({
+  project,
+  env,
+  envs,
+  envsLoading,
+  search,
+  onSearch,
+  hrefs,
+  onSelectEnv,
+  navigateTo,
+  hosted = NO_HOSTED,
+  hostedLoading = false,
+  domains,
+  domainsHref = "",
+}: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
   const orgId = org.orgId;
@@ -229,15 +253,26 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
   return (
     <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">{header}</div>
+        <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
         <div className="pt-1">{rangeControl}</div>
       </div>
 
       <LiveLinks envs={envs} hosted={hosted} />
 
+      {!unrecorded && (
+        <FrontendsPanel
+          scope={env}
+          envs={envs}
+          hosted={hosted}
+          loading={envsLoading || hostedLoading}
+          domains={domains}
+          domainsHref={domainsHref}
+        />
+      )}
+
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error} onSelectEnv={onSelectEnv} />
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} onSelectEnv={onSelectEnv} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -249,7 +284,7 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               <NeedsAttention
                 items={attention}
                 loading={loading}
-                failed={!!listed.error}
+                failed={!!listed.error && !keepsLastResult(listed.error, listed.data)}
                 where={where}
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
@@ -266,7 +301,7 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
 
       {notSetUp ? (
         <ObsNotSetUp subject={project} />
-      ) : listed.error ? (
+      ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
         <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">
@@ -359,6 +394,47 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
         </div>
       )}
     </div>
+  );
+}
+
+// ── Frontends ───────────────────────────────────────────────────────────────
+
+/**
+ * The scope's frontends beside its services: the sites people open, each with
+ * the address it is live at. Read from the GetStatus observations the page
+ * already holds (`hosted`), so it costs no request of its own; omitted while a
+ * scope that only self-managed environments covers has nothing Reliant hosts.
+ */
+function FrontendsPanel({
+  scope,
+  envs,
+  hosted,
+  loading,
+  domains,
+  domainsHref,
+}: {
+  scope: string;
+  envs: StripEnv[];
+  hosted: HostedByEnv;
+  loading: boolean;
+  domains: DomainsState | undefined;
+  domainsHref: string;
+}) {
+  const covered = envs.filter((candidate) => candidate.placed && (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
+  if (covered.length === 0) return null;
+  const frontends = frontendsInScope(scope, envs, hosted, domains?.availability === "available" ? domains.domains : null);
+  return (
+    <Panel title="Frontends" meta="Websites Reliant hosts, and the address each is live at." flush testId="overview-frontends">
+      {loading && frontends.length === 0 ? (
+        <FrontendsLoading />
+      ) : frontends.length === 0 ? (
+        <div className="px-4 pb-4">
+          <FrontendsEmpty env={scope === ENV_ALL ? undefined : scope} />
+        </div>
+      ) : (
+        <FrontendList frontends={frontends} showEnv={scope === ENV_ALL} domainsHref={domainsHref} />
+      )}
+    </Panel>
   );
 }
 

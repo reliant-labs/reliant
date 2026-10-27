@@ -99,8 +99,8 @@ export function ProjectsSection() {
   const showFilter = projects.length > FILTER_THRESHOLD;
 
   return (
-    <div className="forge-ui h-full overflow-auto bg-background">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8 lg:px-8">
+    <div className="forge-ui">
+      <div className="flex flex-col gap-6">
         <SettingsPageHeader
           className="mb-0"
           title="Projects"
@@ -200,7 +200,7 @@ export function ProjectsSection() {
             project={currentProject}
             onChatOpened={() => goToProject(currentProject.id)}
             onManageWorkspaces={() =>
-              void navigate({ to: "/settings/$section", params: { section: "workspaces" } })
+              void navigate({ to: "/settings/$section", params: { section: "branches" } })
             }
           />
         )}

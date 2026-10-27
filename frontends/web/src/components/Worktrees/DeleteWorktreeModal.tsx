@@ -76,7 +76,7 @@ export function DeleteWorktreeModal({
     onClose();
     // Let the dialog unmount before the route changes underneath it.
     setTimeout(() => {
-      navigate({ to: "/settings/$section", params: { section: "workspaces" } });
+      navigate({ to: "/settings/$section", params: { section: "branches" } });
     }, 100);
   };
 

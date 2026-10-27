@@ -191,6 +191,7 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 	}
 
 	// Check if chat has a worktree
+	worktreeOwner := ""
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
 		worktree, err := repo.GetWorktree(ctx, *chat.WorktreeID)
 		if err != nil {
@@ -198,14 +199,13 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 		}
 		execCtx.WorktreeID = worktree.ID
 		execCtx.WorktreePath = worktree.Path
-		// A worktree's checkouts exist on disk only on the daemon that created
-		// it. Pin execution there so a worktree-bound (e.g. branch) chat runs
-		// against its actual branch, not a default daemon that lacks the path.
-		// A node/workflow-level selector still overrides this (see run_step.go).
-		if worktree.DaemonID != nil && *worktree.DaemonID != "" {
-			execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: *worktree.DaemonID}
-		}
+		worktreeOwner = ptrValue(worktree.DaemonID)
 	}
+	// Live workflow snapshots can predate launch-time pinning. The durable
+	// chat pin, not a newly connected default, places commands and log writes.
+	// A chat worktree's owner is the fallback when the chat has no pin; an
+	// explicit node/workflow selector overrides both (run_step.go).
+	execCtx.DaemonSelector = toolDaemonSelector(worktreeOwner, chatDaemonSelector(chat, nil))
 
 	return execCtx, nil
 }

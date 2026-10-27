@@ -67,7 +67,7 @@ export function resetDaemonHeartbeatReconcile(): void {
  *
  * Eight-plus components mount this hook simultaneously (ModernApp,
  * NewChatView, TabbedViewerPanel, DaemonStatusDot, ProjectPicker,
- * ConnectDaemonModal, WorkspacesSection, ComputeStep). Previously each
+ * ConnectDaemonModal, BranchesSection, ComputeStep). Previously each
  * instance ran its OWN `setInterval(check, 5000)`, multiplying ListDaemons
  * RPC traffic by the number of mounted consumers — the user observed 4x
  * fan-out per cycle in practice.

@@ -121,11 +121,6 @@ func TestPlanQueries(t *testing.T) {
 		t.Fatalf("ListPlansByChatID: %v", err)
 	}
 	wantIDs(t, "ListPlansByChatID", byChat, "plan-newer", "plan-older")
-	byProject, err := store.ListPlansByProject(ctx, env.ORM, storetest.SeedProjectID)
-	if err != nil {
-		t.Fatalf("ListPlansByProject: %v", err)
-	}
-	wantIDs(t, "ListPlansByProject", byProject, "plan-older")
 
 	// The Repository lists the same plans in the same order.
 	twinThread, err := env.Repo.ListPlansByThread(ctx, "thread-plans")
@@ -155,17 +150,6 @@ func TestPlanQueries(t *testing.T) {
 	}
 	if err := store.ReplacePlan(ctx, env.ORM, &core.Plan{ID: "plan-missing", Title: "x"}); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("ReplacePlan(missing) err = %v, want sql.ErrNoRows", err)
-	}
-
-	if err := store.UpdatePlanStatus(ctx, env.ORM, "plan-newer", int32(reliantv1.PlanStatus_PLAN_STATUS_IN_PROGRESS), nil); err != nil {
-		t.Fatalf("UpdatePlanStatus: %v", err)
-	}
-	twin, err = env.Repo.GetPlan(ctx, "plan-newer")
-	if err != nil {
-		t.Fatalf("Repo.GetPlan after UpdatePlanStatus: %v", err)
-	}
-	if twin.Status != int32(reliantv1.PlanStatus_PLAN_STATUS_IN_PROGRESS) || twin.Title != "newer" {
-		t.Fatalf("after UpdatePlanStatus Repo.GetPlan = %+v, want in-progress and the title kept", twin)
 	}
 
 	if err := store.RemovePlan(ctx, env.ORM, "plan-newer"); err != nil {
@@ -243,20 +227,6 @@ func TestTaskQueries(t *testing.T) {
 	if twin.Title != "second v2" || twin.Position != 5 || twin.Metadata != nil || twin.Assignee != nil || twin.Description != nil ||
 		twin.PlanID != "plan-t" || !twin.CompletedAt.Equal(done) || !sameInstant(twin.UpdatedAt, replace.UpdatedAt) {
 		t.Fatalf("after ReplaceTask Repo.GetTask = %+v, want the mutable columns replaced and plan_id kept", twin)
-	}
-
-	if err := store.UpdateTaskStatus(ctx, env.ORM, "task-1", int32(reliantv1.TaskStatus_TASK_STATUS_BLOCKED), nil); err != nil {
-		t.Fatalf("UpdateTaskStatus: %v", err)
-	}
-	twin, err = env.Repo.GetTask(ctx, "task-1")
-	if err != nil {
-		t.Fatalf("Repo.GetTask after UpdateTaskStatus: %v", err)
-	}
-	if twin.Status != int32(reliantv1.TaskStatus_TASK_STATUS_BLOCKED) || twin.Title != "first" || *twin.ParentTaskID != "task-2" {
-		t.Fatalf("after UpdateTaskStatus Repo.GetTask = %+v, want blocked with the rest kept", twin)
-	}
-	if err := store.UpdateTaskStatus(ctx, env.ORM, "task-missing", 1, nil); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("UpdateTaskStatus(missing) err = %v, want sql.ErrNoRows", err)
 	}
 
 	if err := store.RemoveTask(ctx, env.ORM, "task-1"); err != nil {
@@ -389,18 +359,12 @@ func TestTaskDependencyQueries(t *testing.T) {
 		t.Fatalf("d2 still there after DeleteTaskDependencyByPair")
 	}
 
-	if err := store.RemoveTaskDependency(ctx, env.ORM, "d3"); err != nil {
-		t.Fatalf("RemoveTaskDependency: %v", err)
-	}
-	if err := store.RemoveTaskDependency(ctx, env.ORM, "d3"); err != nil {
-		t.Fatalf("RemoveTaskDependency(again) = %v, want nil", err)
-	}
 	// Deleting a task cascades to its edges.
 	if err := store.RemoveTask(ctx, env.ORM, "a1"); err != nil {
 		t.Fatalf("RemoveTask(a1): %v", err)
 	}
 	left, err := store.ListTaskDependenciesByTask(ctx, env.ORM, "a2")
-	if err != nil || len(left) != 0 {
-		t.Fatalf("edges of a2 after deleting d2, d3 and task a1 = %v, %v; want none", ids(left), err)
+	if err != nil || len(left) != 1 || left[0].ID != "d3" {
+		t.Fatalf("edges of a2 after deleting d2 and task a1 = %v, %v; want [d3]", ids(left), err)
 	}
 }

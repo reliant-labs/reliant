@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -15,7 +17,7 @@ type GetRunParams struct {
 
 const (
 	GetRunToolName    = "get_run"
-	getRunDescription = `Check on one top-level run: its state, title, workflow, when it was created and last active, and an excerpt of the last thing its agent said.
+	getRunDescription = `Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
 The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
 
@@ -48,14 +50,16 @@ func (g *getRunTool) RequiresPermission(params GetRunParams) (bool, error) {
 
 // RunDetail is get_run's metadata.
 type RunDetail struct {
-	RunID        string `json:"run_id"`
-	Title        string `json:"title"`
-	Workflow     string `json:"workflow,omitempty"`
-	ProjectID    string `json:"project_id"`
-	State        string `json:"state"`
-	CreatedAt    string `json:"created_at"`
-	LastActiveAt string `json:"last_active_at"`
-	LastMessage  string `json:"last_message,omitempty"`
+	RunID          string                 `json:"run_id"`
+	Title          string                 `json:"title"`
+	Workflow       string                 `json:"workflow,omitempty"`
+	ProjectID      string                 `json:"project_id"`
+	State          string                 `json:"state"`
+	CreatedAt      string                 `json:"created_at"`
+	LastActiveAt   string                 `json:"last_active_at"`
+	LastMessage    string                 `json:"last_message,omitempty"`
+	Nodes          []*pb.RunNodeExecution `json:"nodes"`
+	NodesTruncated bool                   `json:"nodes_truncated,omitempty"`
 }
 
 func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolResponse, error) {
@@ -91,6 +95,19 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 		}
 	}
 
+	detail.Nodes = []*pb.RunNodeExecution{}
+	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
+		rows, err := g.repo.ListRunNodeExecutions(rctx.Context, *chat.WorkflowID, rundiagnostics.RecordLimit+1)
+		if err != nil {
+			return NewTextErrorResponse("Could not read the run's nodes: " + err.Error()), nil
+		}
+		detail.NodesTruncated = len(rows) > rundiagnostics.RecordLimit
+		if detail.NodesTruncated {
+			rows = rows[:rundiagnostics.RecordLimit]
+		}
+		detail.Nodes = rundiagnostics.Nodes(rows)
+	}
+
 	var sb strings.Builder
 	title := detail.Title
 	if title == "" {
@@ -104,7 +121,44 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 	} else {
 		sb.WriteString("\nNo assistant message yet.\n")
 	}
+	writeRunNodes(&sb, detail.Nodes, detail.NodesTruncated)
 	return WithResponseMetadata(NewTextResponse(sb.String()), detail), nil
+}
+
+func writeRunNodes(sb *strings.Builder, nodes []*pb.RunNodeExecution, truncated bool) {
+	sb.WriteString("\nNodes (newest attempts first):\n")
+	if len(nodes) == 0 {
+		sb.WriteString("No recorded nodes yet.\n")
+	}
+	for _, n := range nodes {
+		id := n.NodePath
+		if id == "" {
+			id = n.NodeId
+		}
+		fmt.Fprintf(sb, "- %s [%s] (workflow %s, attempt %d", id, n.Status, n.WorkflowId, n.Attempt)
+		if n.LoopIteration != nil {
+			fmt.Fprintf(sb, ", iteration %d", *n.LoopIteration)
+		}
+		if n.DurationMs != nil {
+			fmt.Fprintf(sb, ", %d ms", *n.DurationMs)
+		}
+		if n.ExitCode != nil {
+			fmt.Fprintf(sb, ", exit %d", *n.ExitCode)
+		}
+		sb.WriteString(")\n")
+		if n.Error != "" {
+			fmt.Fprintf(sb, "  Error: %s\n", n.Error)
+		}
+		if n.StdoutTail != "" {
+			fmt.Fprintf(sb, "  stdout (tail):\n%s\n", n.StdoutTail)
+		}
+		if n.StderrTail != "" {
+			fmt.Fprintf(sb, "  stderr (tail):\n%s\n", n.StderrTail)
+		}
+	}
+	if truncated {
+		sb.WriteString("Older node attempts omitted (response limit).\n")
+	}
 }
 
 // excerpt cuts s to at most limit runes, saying so when it cut.

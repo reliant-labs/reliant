@@ -64,26 +64,12 @@ func ListWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID 
 	})
 }
 
-// ListStepExecutionsByStep is every execution of one step of a workflow,
-// oldest first, for CEL history queries.
-func ListStepExecutionsByStep(ctx context.Context, db orm.Context, workflowID, stepID string) ([]*core.StepExecution, error) {
-	return selectStepExecutions(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("workflow_id = ?", workflowID).Where("step_id = ?", stepID).Order("created_at ASC")
-	})
-}
-
 func selectStepExecutions(ctx context.Context, db orm.Context, apply func(*bun.SelectQuery) *bun.SelectQuery) ([]*core.StepExecution, error) {
 	var rows []*StepExecution
 	if err := apply(db.Bun().NewSelect().Model(&rows)).Scan(ctx); err != nil {
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
-}
-
-// RemoveWorkflowStepExecutions deletes every step of a workflow.
-func RemoveWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewDelete().Model((*StepExecution)(nil)).Where("workflow_id = ?", workflowID).Exec(ctx)
-	return err
 }
 
 // stepExecutionRecordsForChatSQL is the full record of a chat's steps —
@@ -121,6 +107,49 @@ LIMIT ?2`
 func ListStepExecutionRecordsForChat(ctx context.Context, db orm.Context, chatID, nodePath string, limit int) ([]*core.StepExecution, error) {
 	var rows []*StepExecution
 	if err := db.Bun().NewRaw(stepExecutionRecordsForChatSQL, chatID, nodePath, limit).Scan(ctx, &rows); err != nil {
+		return nil, err
+	}
+	return stepExecutionsToCore(rows), nil
+}
+
+// ListRunNodeExecutions reads one workflow subtree, never a different root
+// run in the same chat. Inspect octet_length before any JSON cast: complete
+// output/error values over 16 KiB, or over the 128 KiB cumulative scan budget,
+// are omitted whole. Never take an unsanitized prefix/tail (it could split a
+// secret). Only then extract streams and the safe skipped boolean. Resolved
+// inputs and arbitrary output fields never leave Postgres.
+func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID string, limit int) ([]*core.StepExecution, error) {
+	if limit <= 0 || limit > 201 {
+		limit = 201
+	}
+	var rows []*StepExecution
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id, chat_id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
+), picked AS (
+ SELECT ` + columnsOf[StepExecution]("se") + ` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+ WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'SaveMessage', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
+ ORDER BY se.created_at DESC, se.id DESC LIMIT ?1
+), budgeted AS (
+ SELECT ` + columnsOf[StepExecution]("picked") + `, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
+ OVER (ORDER BY created_at DESC, id DESC) AS scan_bytes FROM picked
+)
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.exit_code, se.success, se.duration_ms, se.created_at,
+       se.loop_node_id, se.loop_iteration, se.attempt, se.node_path,
+       CASE WHEN coalesce(octet_length(se.error_message), 0) = 0 THEN se.error_message
+         WHEN octet_length(se.error_message) > 16384 OR se.scan_bytes > 131072
+         THEN '[error omitted: safe diagnostic limit]' ELSE se.error_message END AS error_message,
+       CASE WHEN octet_length(se.output_json) > 16384 OR se.scan_bytes > 131072
+         THEN '{"_diagnostic_omitted":true}'
+         WHEN se.output_json IS JSON OBJECT THEN json_build_object(
+           'skipped', se.output_json::jsonb->'skipped' = 'true'::jsonb,
+           'stdout', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stdout' END,
+           'stderr', CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL THEN se.output_json::jsonb->>'stderr' END)::text
+         ELSE NULL END AS output_json
+FROM budgeted se
+ORDER BY se.created_at DESC, se.id DESC`, workflowID, limit).Scan(ctx, &rows)
+	if err != nil {
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil

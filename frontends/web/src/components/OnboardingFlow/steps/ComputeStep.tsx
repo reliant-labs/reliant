@@ -38,7 +38,7 @@ import type {
   OnboardingIntent,
   StepProps,
 } from "../types";
-import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
 import { StepFooterAction } from "../StepFooter";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -890,10 +890,10 @@ export function ComputeStep({
             {/* Self-hosted connect instructions are shared with the
                 ProjectPicker's in-place "Connect a new daemon" flow. The
                 onboarding-specific auto-advance still happens via the
-                hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
+                hasUsableDaemon effect above; PairMachinePanel just owns
                 the download/token/start UI and the "waiting to connect"
                 state. */}
-            <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
+            <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
           </div>
         )}
 

@@ -149,7 +149,7 @@ test("CI's web-bundle job runs the task, on every change that can alter the bund
   const m = /if grep -qE '([^']+)' <<< "\$changed"; then web=true; fi/.exec(lanes);
   assert.ok(m, "scripts/ci-lanes.sh no longer classifies the web lane with `if grep -qE '<regex>' ...; then web=true; fi`; update this test");
   const webLane = new RegExp(m[1]);
-  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "frontends/web/src/App.tsx", "frontends/web/package-lock.json", "package.json"]) {
+  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "frontends/web/src/App.tsx", "frontends/web/pnpm-lock.yaml", "package.json"]) {
     assert.ok(webLane.test(path), `a change to ${path} must run the web-bundle job`);
   }
   for (const path of ["go.mod", "internal/db/db.go", "docs/index.mdx"]) {

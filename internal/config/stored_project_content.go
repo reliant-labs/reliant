@@ -168,8 +168,15 @@ func FindStoredSkillByPath(skills []StoredSkill, path string) *StoredSkill {
 func ProjectWorkflowIndex(workflows []StoredWorkflow) *workflowref.Index {
 	files := make([]workflowref.File, 0, len(workflows))
 	for _, w := range workflows {
+		// RelativePath is project-relative: ".reliant/workflows/<file>" for
+		// the root, "<repo>/.reliant/workflows/<file>" for a nested repo.
+		repo, p, ok := workflowref.SplitRelativePath(w.RelativePath)
+		if !ok {
+			repo, p = "", w.RelativePath
+		}
 		files = append(files, workflowref.File{
-			Path:    strings.TrimPrefix(w.RelativePath, workflowref.Dir+"/"),
+			Repo:    repo,
+			Path:    p,
 			Content: []byte(w.YAMLContent),
 		})
 	}

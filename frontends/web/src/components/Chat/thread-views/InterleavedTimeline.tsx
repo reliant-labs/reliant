@@ -20,6 +20,7 @@ import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide
 import Tooltip from "../../forge-ui/tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
+import { AgentMessageCard, isAgentMessage } from "../AgentMessageCard";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
 import { WorkflowInfoMessage } from "../WorkflowInfoMessage";
 import { SystemNotificationMessage } from "../SystemNotificationMessage";
@@ -938,7 +939,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
     for (let i = 0; i < timelineItems.length; i++) {
       const item = timelineItems[i];
-      if (item.type === "message" && item.message.role === MessageRole.USER) {
+      if (
+        item.type === "message" &&
+        item.message.role === MessageRole.USER &&
+        !isAgentMessage(item.message)
+      ) {
         currentUserIdx = i;
       }
       mapping.push(currentUserIdx);
@@ -1281,6 +1286,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // Message item (both user and assistant)
     const msg = item.message;
     const isLastItem = index === lastItemIndex;
+
+    // Checked before the USER branch: an inter-agent message is role USER for
+    // the model, but it is not the human's and must not look like it.
+    if (isAgentMessage(msg)) {
+      return <AgentMessageCard message={msg} chatId={chatId} onSelectThread={onSelectThread} />;
+    }
 
     if (msg.role === MessageRole.USER) {
       return (

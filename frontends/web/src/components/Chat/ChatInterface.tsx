@@ -49,8 +49,11 @@ export function ChatInterface({
   // would maintain stale state briefly, causing thread headers from other chats to flash.
   // NOTE: min-h-0 is critical for flex scrolling - without it, the flex child won't shrink
   // below its content height, breaking overflow-y-auto in ChatMessagesContainer.
+  // `data-context="chat-view"`: a conversation is on screen, which is what
+  // makes Cmd+F search it (lib/keyboard/contexts). The new-chat view above
+  // has nothing to search, so there Cmd+F stays the browser's.
   return (
-    <div className="h-full w-full min-h-0">
+    <div className="h-full w-full min-h-0" data-context="chat-view">
       <ChatContainer
         key={activeChatId}
         tabId={activeChatId}  // Use chatId as tabId for compatibility

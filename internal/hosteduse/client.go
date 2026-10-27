@@ -36,13 +36,14 @@ type Client struct {
 // loopback development, including for cluster Service names. Auth tokens are
 // minted at use; missing configuration fails closed.
 func New(d Deps) (Service, error) {
-	u, err := url.Parse(d.BaseURL)
+	baseURL, caFile := d.Worker.GetHostedActionsUrl(), d.Worker.GetHostedActionsCaFile()
+	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("hosted HTTP controller URL is invalid")
 	}
 	ip := net.ParseIP(u.Hostname())
 	loopback := u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
-	if u.Scheme != "https" && (u.Scheme != "http" || !loopback || d.CAFile != "") {
+	if u.Scheme != "https" && (u.Scheme != "http" || !loopback || caFile != "") {
 		return nil, errors.New("hosted HTTP controller requires HTTPS")
 	}
 	if d.Store == nil || d.Sign == nil {
@@ -55,15 +56,15 @@ func New(d Deps) (Service, error) {
 			h.Timeout = 45 * time.Second
 		}
 	}
-	if d.CAFile != "" {
-		transport, err := privateControllerTransport(d.CAFile)
+	if caFile != "" {
+		transport, err := privateControllerTransport(caFile)
 		if err != nil {
 			return nil, err
 		}
 		h.Transport = transport
 	}
 	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Client{store: d.Store, endpoint: strings.TrimRight(d.BaseURL, "/") + executePath, sign: d.Sign, http: &h}, nil
+	return &Client{store: d.Store, endpoint: strings.TrimRight(baseURL, "/") + executePath, sign: d.Sign, http: &h}, nil
 }
 
 // Issue accepts only the real Temporal Action activity context matching the

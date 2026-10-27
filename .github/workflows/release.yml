@@ -104,13 +104,18 @@ jobs:
             echo "channel=latest" >> $GITHUB_OUTPUT
           fi
 
+      - name: Install pnpm
+        # The version that wrote frontends/web/pnpm-lock.yaml (its engines.pnpm).
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            frontends/web/package-lock.json
             electron/package-lock.json
 
       - name: Extract Electron tool versions from package.json
@@ -139,7 +144,7 @@ jobs:
 
       - name: Install web dependencies
         working-directory: frontends/web
-        run: npm ci --legacy-peer-deps --prefer-offline
+        run: pnpm install --frozen-lockfile
 
       # NO CODE GENERATION HERE. Generated code is committed, and the gates
       # fail on any diff a regenerate makes: the merge gate whenever a change

@@ -11,6 +11,8 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
+import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
+
 import { createFixtureApi, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
 import { renderPanel } from "./obsTestUtils";
 
@@ -152,9 +154,20 @@ describe("ObservabilityPanel", () => {
     expect(harness.current().range).toBe("7d");
   });
 
-  it("explains a quota hit and offers to retry it", async () => {
+  it("says when the hourly allowance refills, neutrally, where a view has no result yet", async () => {
+    const resetsAtMs = Date.now() + 5 * 60_000;
+    renderPanel(createFixtureApi({ failError: quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs, soft: false }) }));
+    const state = await screen.findByTestId("obs-error-over-quota");
+    // Not the red error: nothing is broken and there is nothing to retry before the reset.
+    expect(state).toHaveAttribute("role", "status");
+    expect(state).toHaveTextContent(`Will load at ${formatClock(resetsAtMs)}`);
+    expect(state).toHaveTextContent("nothing is lost");
+    expect(within(state).queryByTestId("obs-retry")).not.toBeInTheDocument();
+  });
+
+  it("explains any other refusal and offers to retry it", async () => {
     renderPanel(createFixtureApi({ failWith: Code.ResourceExhausted }));
-    const error = await screen.findByTestId("obs-error-over-quota");
+    const error = await screen.findByTestId("obs-error-busy");
     expect(error).toHaveAttribute("role", "alert");
     expect(error).toHaveTextContent("shorter time range");
     expect(within(error).getByTestId("obs-retry")).toBeInTheDocument();

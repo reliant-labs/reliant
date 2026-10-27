@@ -3,6 +3,7 @@ package trigger
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,7 +14,123 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers"
 )
+
+// Exercise the creation boundary without a database: the source is already
+// resolved here for both inline sources and workflow-trigger declarations.
+func TestActingIdentityFor_SourceDefaultsAndStoredChoices(t *testing.T) {
+	github := &triggers.Source{Kind: core.TriggerKindIntegration, Integration: "github"}
+	for _, tc := range []struct {
+		name     string
+		source   *triggers.Source
+		chosen   reliantv1.ActingIdentity
+		existing *core.Trigger
+		hosted   bool
+		want     core.ActingIdentity
+		refused  bool
+	}{
+		{name: "new GitHub defaults app", source: github, hosted: true, want: core.ActingIdentityApp},
+		{name: "explicit app", source: github, chosen: reliantv1.ActingIdentity_ACTING_IDENTITY_APP, hosted: true, want: core.ActingIdentityApp},
+		{name: "explicit owner", source: github, chosen: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, want: core.ActingIdentityOwner},
+		{name: "stored owner unchanged", source: github, existing: &core.Trigger{ActingIdentity: core.ActingIdentityOwner}, hosted: true, want: core.ActingIdentityOwner},
+		{name: "legacy stored owner unchanged", source: github, existing: &core.Trigger{}, want: core.ActingIdentityOwner},
+		{name: "stored app unchanged", source: github, existing: &core.Trigger{ActingIdentity: core.ActingIdentityApp}, hosted: true, want: core.ActingIdentityApp},
+		{name: "other integration unchanged", source: &triggers.Source{Kind: core.TriggerKindIntegration, Integration: "slack"}, want: core.ActingIdentityOwner},
+		{name: "schedule unchanged", source: &triggers.Source{Kind: core.TriggerKindSchedule}, want: core.ActingIdentityOwner},
+		{name: "webhook unchanged", source: &triggers.Source{Kind: core.TriggerKindWebhook}, want: core.ActingIdentityOwner},
+		{name: "workflow event unchanged", source: &triggers.Source{Kind: core.TriggerKindWorkflowEvent}, want: core.ActingIdentityOwner},
+		{name: "missing bot infrastructure fails closed", source: github, refused: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &Service{}
+			if tc.hosted {
+				svc.deps.ControlPlane = &fakeControlPlaneClient{}
+			}
+			got, err := svc.actingIdentityFor(&reliantv1.TriggerDefinition{ActingIdentity: tc.chosen}, tc.existing, tc.source)
+			if tc.refused {
+				require.Error(t, err)
+				assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+				assert.Empty(t, got, "missing bot configuration must not resolve to owner")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestCreateTrigger_GitHubIdentityDefaultAndExplicitOwner(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		chosen reliantv1.ActingIdentity
+		want   reliantv1.ActingIdentity
+		hosted bool
+	}{
+		{"omitted", reliantv1.ActingIdentity_ACTING_IDENTITY_UNSPECIFIED, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, true},
+		{"explicit app", reliantv1.ActingIdentity_ACTING_IDENTITY_APP, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, true},
+		{"explicit owner without App", reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, _ := setupInboundTriggerTest(t)
+			if tc.hosted {
+				env.hosted(t)
+			}
+			env.configure(t, func(d *Deps) { d.Catalog = fakeCatalog{"github": true} })
+			conn := env.createConnection(t, env.userID, "github", "acct-1", core.ConnectionStatusActive)
+			got := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
+				d.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{Integration: "github", Events: []string{"issues.opened"}}}
+				d.ConnectionId = &conn.ID
+				d.ActingIdentity = tc.chosen
+			}))
+			assert.Equal(t, tc.want, got.GetActingIdentity())
+		})
+	}
+}
+
+func TestEnableWorkflow_IdentityDefaultsPerSourceAndPreservesStoredOwner(t *testing.T) {
+	t.Parallel()
+	env, _ := setupInboundTriggerTest(t)
+	env.hosted(t).configure(t, func(d *Deps) { d.Catalog = fakeCatalog{"github": true, "slack": true} })
+	yaml := strings.Replace(enableWorkflowYAML, "integration: test", "integration: github", 1)
+	yaml = strings.Replace(yaml, "entry: [a]", "  - name: slack-event\n    integration: {integration: slack, events: [message.channels]}\n    prompt: Handle it.\nentry: [a]", 1)
+	env.saveWorkflow(t, "triage", yaml)
+	github := env.createConnection(t, env.userID, "github", "acct-1", core.ConnectionStatusActive)
+	slack := env.createConnection(t, env.userID, "slack", "acct-2", core.ConnectionStatusActive)
+	req := env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"github": github.ID, "slack": slack.ID}
+	})
+	resp := env.enable(t, req)
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	for _, result := range resp.Results {
+		want := reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+		if result.Trigger == "new-issue" {
+			want = reliantv1.ActingIdentity_ACTING_IDENTITY_APP
+		}
+		assert.Equal(t, want, result.Activation.GetActingIdentity(), result.Trigger)
+	}
+	// An existing GitHub activation deliberately set to owner must stay owner
+	// when the workflow is enabled again without a shared identity choice.
+	for _, row := range env.storedTriggers(t) {
+		if row.WorkflowTrigger != nil && *row.WorkflowTrigger == "new-issue" {
+			row.ActingIdentity = core.ActingIdentityOwner
+			require.NoError(t, env.repo.UpdateTrigger(env.ctx, row))
+		}
+		if row.WorkflowTrigger != nil && *row.WorkflowTrigger == "nightly" {
+			row.ActingIdentity = core.ActingIdentityApp // explicitly chosen for a scheduled GitHub writer
+			require.NoError(t, env.repo.UpdateTrigger(env.ctx, row))
+		}
+	}
+	resp = env.enable(t, req)
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	for _, result := range resp.Results {
+		want := reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
+		if result.Trigger == "nightly" {
+			want = reliantv1.ActingIdentity_ACTING_IDENTITY_APP
+		}
+		assert.Equal(t, want, result.Activation.GetActingIdentity(), result.Trigger)
+	}
+}
 
 // hosted is a deployment with a control plane to mint the bot's tokens from.
 func (e *triggerTestEnv) hosted(t *testing.T) *triggerTestEnv {

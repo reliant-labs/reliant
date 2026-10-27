@@ -312,7 +312,7 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            navigate({ to: '/settings/$section', params: { section: 'general' } });
+            navigate({ to: '/settings/$section', params: { section: 'ai' } });
           }}
           title="Model preferences"
           aria-label="Model preferences"

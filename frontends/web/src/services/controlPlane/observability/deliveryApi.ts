@@ -24,6 +24,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import {
   RELEASES_LIMIT,
@@ -213,7 +214,7 @@ export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
  */
 export async function getReleaseHealth(req: ReleaseHealthRequest): Promise<ReleaseHealth> {
   const now = Date.now();
-  const res = await getControlPlaneClient(ObservabilityService).getReleaseHealth({
+  const res = await obsClient(ObservabilityService).getReleaseHealth({
     // time_range is required on every QueryScope and ignored here (the
     // promotion decides the windows): the last minute satisfies the validator.
     scope: { ...wireDeliveryScope(req, { startMs: now - 60_000, endMs: now }), services: [], filters: [] },

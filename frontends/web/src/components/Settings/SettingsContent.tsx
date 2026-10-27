@@ -7,17 +7,16 @@ import { AccountSettings } from "./AccountSettings";
 import { PrivacySettings } from "./PrivacySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { MCPSettings } from "./MCPSettings";
-import { WorkspacesSection } from "./WorkspacesSection";
+import { BranchesSection } from "./BranchesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { MemberPermissions } from "./cloud/MemberPermissions";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { PromptsSettings } from "./PromptsSettings";
 import { PresetsSettings } from "./PresetsSettings";
 import { useProjectStore } from "../../store/projectStore";
-import { api } from "../../api/client";
 import { ProjectsSection } from "./ProjectsSection";
 
 // Cloud settings sections are lazy-loaded so they code-split out of the main
@@ -32,171 +31,87 @@ const MachinesSection = lazy(() =>
 
 interface SettingsContentProps {
   activeSection: SettingsSection;
-  apiUrl: string;
 }
 
-interface ProviderStatus {
-  provider: string;
-  configured: boolean;
-  hasApiKey: boolean;
-  displayName: string;
+/**
+ * Every settings page in ONE layout: the page scrolls on the app background,
+ * its content sits in one column of one width, the section's
+ * SettingsPageHeader opens it on that background, and its blocks are bg-card
+ * panels under the header.
+ *
+ * This replaced five widths (a 700px card, 700px inside 7xl, max-w-4xl,
+ * max-w-5xl, 7xl, and full width), a generic card that wrapped whole pages —
+ * so every panel inside it was a card in a card — with a `[&_h3]:text-sm`
+ * parent selector that inverted the heading ladder, and a `.cloud-settings`
+ * scope that switched Billing and Machines to a different font. A section
+ * draws its own panels; nothing here wraps it in one.
+ */
+function SettingsLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="h-full overflow-auto bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div className="mx-auto w-full max-w-4xl" data-testid="settings-layout">
+        {children}
+      </div>
+    </div>
+  );
 }
 
-export function SettingsContent({
-  apiUrl,
-  activeSection,
-}: SettingsContentProps) {
-  const [providers, setProviders] = useState<ProviderStatus[]>([]);
+export function SettingsContent({ activeSection }: SettingsContentProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
 
-  useEffect(() => {
-    fetchProviderStatuses();
-  }, [apiUrl]);
-
-  const fetchProviderStatuses = async () => {
-    try {
-      const data = await api.settings.getProviders();
-      setProviders(data || []);
-    } catch (error) {
-      console.error("Failed to fetch provider statuses:", error);
-      setProviders([]);
-    }
-  };
-
   const renderContent = () => {
-    if (activeSection === "account") {
-      return <AccountSettings />;
-    }
-    if (activeSection === "shortcuts") {
-      return <KeyboardShortcutsSettings />;
-    }
-    if (activeSection === "about") {
-      return <AboutSection />;
-    }
-    if (activeSection === "appearance") {
-      return <AppearanceSettings />;
-    }
-    if (activeSection === "notifications") {
-      return <NotificationSettings />;
-    }
-    if (activeSection === "privacy") {
-      return <PrivacySettings />;
-    }
-    if (activeSection === "browser") {
-      return <BrowserSettings />;
-    }
-    if (activeSection === "prompts") {
-      return (
-        <PromptsSettings
-          projectId={currentProject?.id}
-        />
-      );
-    }
-
-    if (activeSection === "mcp") {
-      return <MCPSettings />;
-    }
-    if (activeSection === "tokens") {
-      return <TokenSettings />;
-    }
-    if (activeSection === "member-permissions") {
-      return <MemberPermissions />;
-    }
-    if (activeSection === "git-connections") {
-      return <GitConnectionsSettings />;
-    }
-    if (activeSection === "developer") {
-      return <DeveloperSettings />;
-    }
-    return null;
-  };
-
-  // Special handling for sections that need full height/width
-  if (activeSection === "about") {
-    return (
-      <div className="h-full overflow-auto px-8 py-8">
-        <div className="mx-auto max-w-5xl rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-          <AboutSection />
-        </div>
-      </div>
-    );
-  }
-
-  if (activeSection === "projects") {
-    return <ProjectsSection />;
-  }
-
-  // Presets draws its own panels (one per group), so it skips the shared card
-  // wrapper below rather than nesting cards inside it.
-  if (activeSection === "presets") {
-    return (
-      <div className="h-full overflow-auto bg-background">
-        <div className="mx-auto w-full max-w-4xl">
-          <PresetsSettings />
-        </div>
-      </div>
-    );
-  }
-
-  if (activeSection === "workspaces") {
-    return (
-      <div className="h-full overflow-hidden bg-background">
-        <WorkspacesSection />
-      </div>
-    );
-  }
-
-  // The "AI" section is a tabbed container (bring-your-own providers + managed
-  // Reliant AI). It gets its own full-height wrapper with a wider container so
-  // the Reliant AI tab's data tables have room; the providers tab renders inside
-  // its own narrow card (see AISettings).
-  if (activeSection === "general") {
-    return (
-      <div className="h-full overflow-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto w-full max-w-7xl">
-          <AISettings
-            providers={providers}
-            onProvidersUpdate={fetchProviderStatuses}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Cloud settings sections. Rendered inside the `.cloud-settings` scoped
-  // treatment (Inter + admin-like density) with a wider container than the
-  // generic settings card so their data tables and billing plan grids have room
-  // to breathe. The id → component map is the contract the vertical agents plug
-  // into:
-  //   billing        → <BillingSection/>      (./cloud/billing)
-  //   environments   → <MachinesSection/> (./cloud/machines)
-  if (activeSection === "billing" || activeSection === "environments") {
-    const CloudSection =
-      activeSection === "billing" ? BillingSection : MachinesSection;
-    return (
-      <div className="cloud-settings h-full overflow-auto bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto w-full max-w-7xl">
+    switch (activeSection) {
+      case "account":
+        return <AccountSettings />;
+      case "ai":
+        return <AISettings />;
+      case "shortcuts":
+        return <KeyboardShortcutsSettings />;
+      case "about":
+        return <AboutSection />;
+      case "appearance":
+        return <AppearanceSettings />;
+      case "notifications":
+        return <NotificationSettings />;
+      case "privacy":
+        return <PrivacySettings />;
+      case "browser":
+        return <BrowserSettings />;
+      case "prompts":
+        return <PromptsSettings projectId={currentProject?.id} />;
+      case "mcp":
+        return <MCPSettings />;
+      case "tokens":
+        return <TokenSettings />;
+      case "member-permissions":
+        return <MemberPermissions />;
+      case "git-connections":
+        return <GitConnectionsSettings />;
+      case "developer":
+        return <DeveloperSettings />;
+      case "projects":
+        return <ProjectsSection />;
+      case "presets":
+        return <PresetsSettings />;
+      case "branches":
+        return <BranchesSection />;
+      case "billing":
+      case "machines": {
+        const CloudSection = activeSection === "billing" ? BillingSection : MachinesSection;
+        return (
           <Suspense
             fallback={
-              <div className="flex h-full items-center justify-center">
-                <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
-                  Loading…
-                </div>
+              <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+                Loading…
               </div>
             }
           >
             <CloudSection />
           </Suspense>
-        </div>
-      </div>
-    );
-  }
+        );
+      }
+    }
+  };
 
-  return (
-    <div className="h-full overflow-auto px-8 py-8">
-      <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground">
-        {renderContent()}
-      </div>
-    </div>
-  );
+  return <SettingsLayout>{renderContent()}</SettingsLayout>;
 }

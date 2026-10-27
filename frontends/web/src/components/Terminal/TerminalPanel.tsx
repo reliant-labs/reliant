@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils";
 import { Terminal } from "./Terminal";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { resolveTerminalWorkingDir } from "../../lib/terminalWorkingDir";
 import Tooltip from "../forge-ui/tooltip";
@@ -28,6 +29,8 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   const [isResizingWidth, setIsResizingWidth] = useState(false);
   const setIsResizingGlobal = useSidebarStore((state) => state.setIsResizing);
   const panelRef = useRef<HTMLDivElement>(null);
+  const newTerminalLabel = withShortcut("New terminal", useShortcutLabel("newTerminal"));
+  const hideTerminalLabel = withShortcut("Hide terminal panel", useShortcutLabel("toggleTerminal"));
 
   const getWorktreeSessions = useTerminalStore(
     (state) => state.getWorktreeSessions
@@ -328,7 +331,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           )}
 
           {/* New Terminal Button */}
-          <Tooltip content="New terminal (Cmd+Shift+J)" side="bottom" delay={300}>
+          <Tooltip content={newTerminalLabel} side="bottom" delay={300}>
             <button
               aria-label="New terminal"
               onClick={handleNewTerminal}
@@ -340,7 +343,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
           </Tooltip>
 
           {/* Collapse Panel Button */}
-          <Tooltip content="Hide terminal panel (Cmd+J)" side="bottom" delay={300}>
+          <Tooltip content={hideTerminalLabel} side="bottom" delay={300}>
             <button
               onClick={hideTerminal}
               className="p-1 hover:bg-accent/20 rounded transition-all"

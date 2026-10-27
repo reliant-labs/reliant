@@ -20,10 +20,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
-// The stream's two catch-up contracts, each owned by the server because only
+// The streams' two catch-up contracts, each owned by the server because only
 // the server can see what the client cannot:
 //
-//   - chat_caught_up. A reopened chat shows its cached transcript under a
+//   - caught_up (StreamChatUpdates). A reopened chat shows its cached transcript under a
 //     "Syncing…" status until the initial sync is over. A replay of nothing
 //     sends no chat frame at all, and replay batches are 100 rows each, so no
 //     chat frame can tell the client it is the LAST one. The server says so
@@ -51,9 +51,9 @@ func (catchupChatRepo) GetLatestContextWindow(context.Context, string) (*db.Cont
 	return nil, sql.ErrNoRows
 }
 
-// userStreamEvents opens a stream with req and returns a channel of every
-// event the server sends. The stream is closed at test end.
-func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdatesRequest) <-chan *reliantv1.UserStreamEvent {
+// streamingTestClient serves svc over h2c, as the API server does, and
+// returns a client for it. Everything is torn down at test end.
+func streamingTestClient(t *testing.T, svc *Service) reliantv1connect.StreamingServiceClient {
 	t.Helper()
 
 	mux := http.NewServeMux()
@@ -63,16 +63,15 @@ func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdat
 	srv.EnableHTTP2 = true
 	srv.Start()
 	t.Cleanup(srv.Close)
+	return reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamUserUpdates(ctx, connect.NewRequest(req))
-	require.NoError(t, err)
+// receiveAll forwards every message of an open server stream to a channel,
+// closing it when the stream ends.
+func receiveAll[E any](t *testing.T, stream *connect.ServerStreamForClient[E]) <-chan *E {
+	t.Helper()
 	t.Cleanup(func() { _ = stream.Close() })
-
-	events := make(chan *reliantv1.UserStreamEvent, 256)
+	events := make(chan *E, 256)
 	go func() {
 		defer close(events)
 		for stream.Receive() {
@@ -82,8 +81,30 @@ func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdat
 	return events
 }
 
+// userStreamEvents opens a user stream with req and returns a channel of
+// every event the server sends. The stream is closed at test end.
+func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdatesRequest) <-chan *reliantv1.UserStreamEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	stream, err := streamingTestClient(t, svc).StreamUserUpdates(ctx, connect.NewRequest(req))
+	require.NoError(t, err)
+	return receiveAll(t, stream)
+}
+
+// chatStreamEvents opens a chat stream with req and returns a channel of
+// every event the server sends. The stream is closed at test end.
+func chatStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamChatUpdatesRequest) <-chan *reliantv1.ChatStreamEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	stream, err := streamingTestClient(t, svc).StreamChatUpdates(ctx, connect.NewRequest(req))
+	require.NoError(t, err)
+	return receiveAll(t, stream)
+}
+
 // nextEvent returns the next event matching pred, failing on timeout.
-func nextEvent(t *testing.T, events <-chan *reliantv1.UserStreamEvent, what string, pred func(*reliantv1.UserStreamEvent) bool) *reliantv1.UserStreamEvent {
+func nextEvent[E any](t *testing.T, events <-chan E, what string, pred func(E) bool) E {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
 	for {
@@ -102,8 +123,8 @@ func nextEvent(t *testing.T, events <-chan *reliantv1.UserStreamEvent, what stri
 }
 
 // chatFramesUntilCaughtUp collects every chat-carrying frame up to and
-// including the first chat_caught_up, then asserts a second never follows.
-func chatFramesUntilCaughtUp(t *testing.T, events <-chan *reliantv1.UserStreamEvent) (frames []*reliantv1.UserStreamEvent, caughtUp *reliantv1.ChatCaughtUp) {
+// including the first caught_up, then asserts a second never follows.
+func chatFramesUntilCaughtUp(t *testing.T, events <-chan *reliantv1.ChatStreamEvent) (frames []*reliantv1.ChatStreamEvent, caughtUp *reliantv1.ChatCaughtUp) {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
 	for caughtUp == nil {
@@ -113,9 +134,9 @@ func chatFramesUntilCaughtUp(t *testing.T, events <-chan *reliantv1.UserStreamEv
 				t.Fatal("stream ended without chat_caught_up — the client would show Syncing until its next heartbeat")
 			}
 			switch {
-			case ev.GetChatCaughtUp() != nil:
-				caughtUp = ev.GetChatCaughtUp()
-			case ev.GetChatSyncSnapshot() != nil, ev.GetChatUpdates() != nil:
+			case ev.GetCaughtUp() != nil:
+				caughtUp = ev.GetCaughtUp()
+			case ev.GetSnapshot() != nil, ev.GetUpdates() != nil:
 				frames = append(frames, ev)
 			}
 		case <-deadline:
@@ -131,76 +152,59 @@ func chatFramesUntilCaughtUp(t *testing.T, events <-chan *reliantv1.UserStreamEv
 			if !ok {
 				return frames, caughtUp
 			}
-			require.Nil(t, ev.GetChatCaughtUp(), "chat_caught_up must be sent exactly once per subscription")
+			require.Nil(t, ev.GetCaughtUp(), "caught_up must be sent exactly once per stream")
 		case <-quiet:
 			return frames, caughtUp
 		}
 	}
 }
 
-func TestStreamUserUpdates_ChatCaughtUpAfterSnapshot(t *testing.T) {
+func TestStreamChatUpdates_CaughtUpAfterSnapshot(t *testing.T) {
 	// Cursor ahead of the chat: the server answers with a snapshot.
 	repo := newCatchupChatRepo(50)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
-		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: 5000})
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
+		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: 5000})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
 
 	require.Len(t, frames, 1)
-	require.NotNil(t, frames[0].GetChatSyncSnapshot(), "the snapshot must precede chat_caught_up")
+	require.NotNil(t, frames[0].GetSnapshot(), "the snapshot must precede caught_up")
 	require.Equal(t, int64(50), caughtUp.GetLatestSequence(),
-		"chat_caught_up must carry the snapshot's high-water mark, which the live loop dedups from")
+		"caught_up must carry the snapshot's high-water mark, which the live loop dedups from")
 }
 
-func TestStreamUserUpdates_ChatCaughtUpAfterMultiBatchReplay(t *testing.T) {
+func TestStreamChatUpdates_CaughtUpAfterMultiBatchReplay(t *testing.T) {
 	// 250 updates is three replay batches. The client must not be told it
 	// caught up after the first.
 	const cursor = 10
 	repo := newCatchupChatRepo(cursor + 250)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
-		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: cursor})
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
+		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: cursor})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
 
-	require.Len(t, frames, 3, "chat_caught_up must follow the LAST replay batch, not the first")
-	last := frames[len(frames)-1].GetChatUpdates()
+	require.Len(t, frames, 3, "caught_up must follow the LAST replay batch, not the first")
+	last := frames[len(frames)-1].GetUpdates()
 	require.NotNil(t, last)
 	require.Equal(t, repo.latestChatSeq, last.GetUpdates()[len(last.GetUpdates())-1].GetSequenceNumber())
 	require.Equal(t, repo.latestChatSeq, caughtUp.GetLatestSequence())
 }
 
-func TestStreamUserUpdates_ChatCaughtUpWhenCursorIsCurrent(t *testing.T) {
+func TestStreamChatUpdates_CaughtUpWhenCursorIsCurrent(t *testing.T) {
 	// Nothing changed while the chat was closed: there is nothing to replay,
 	// so this signal is the ONLY chat frame the client gets.
 	repo := newCatchupChatRepo(77)
 	chatID := raceTestChatID
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
-		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: 77})
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
+		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: 77})
 
 	frames, caughtUp := chatFramesUntilCaughtUp(t, events)
 
 	require.Empty(t, frames)
 	require.Equal(t, int64(77), caughtUp.GetLatestSequence())
 	require.Zero(t, repo.replayReads.Load())
-}
-
-func TestStreamUserUpdates_NoChatCaughtUpWithoutChatSubscription(t *testing.T) {
-	repo := newCatchupChatRepo(0)
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
-		&reliantv1.StreamUserUpdatesRequest{})
-
-	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
-	quiet := time.After(300 * time.Millisecond)
-	for {
-		select {
-		case ev := <-events:
-			require.Nil(t, ev.GetChatCaughtUp(), "a stream with no chat subscription has no chat sync to complete")
-		case <-quiet:
-			return
-		}
-	}
 }
 
 // --- User-update cursor contract (DB-backed) ---

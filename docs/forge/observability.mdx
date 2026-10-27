@@ -18,7 +18,7 @@ Each organization has its own isolated database in Reliant's ClickHouse-based st
 | **Logs** | Your services' structured JSON logs on stdout, collected by the platform's node agent. A line logged with a request's context carries its trace ID, so a log entry links to the trace that produced it. |
 | **Workload metadata** | Collected by the platform without your app's help: CPU and memory against each container's limits, restarts and the last exit reason, Kubernetes events, and the image each pod runs. |
 | **Browser telemetry** | Uncaught errors and unhandled rejections, `console` output, fetch and XHR calls, page loads, web vitals (LCP, INP, CLS) and sessions, from the HyperDX browser SDK forge scaffolds into every Next.js and Vite frontend. |
-| **Profiles** | Continuous CPU, heap and goroutine profiles. Off on hosting unless the environment opts in (below); on by default in the local stack. |
+| **Profiles** | Continuous CPU and live-heap profiles, sampled sparsely (see [Profile volume](#profile-volume)). Off on hosting unless the environment opts in (below); on by default in the local stack. |
 | **Session replay** | Off unless you opt in, in two places (below). |
 
 Browser data travels to the store through your own site: the browser posts to `/_otel` on the origin that served the page, and the platform routes that path to its ingest. There is no third-party host for an ad blocker to block, no CORS preflight, and no secret in your JavaScript bundle.
@@ -150,12 +150,28 @@ The platform keeps telemetry for these periods:
 | Logs | 3 days at DEBUG, 14 days at INFO, 30 days at WARN and above |
 | Traces | 7 days |
 | Metrics | 30 days |
-| Profiles | 72 hours raw, 30 days aggregated |
+| Profiles | 24 hours raw, 30 days aggregated |
 | Browser errors | 30 days |
 | Session replays | 14 days |
 | Product events (funnels) | 90 days |
 
 Each organization has an included monthly observability allowance, shared by all its projects. **Project settings → Usage** in Apps (and **Settings → Billing**) shows this month's stored telemetry against it, by signal, measured hourly. Past the allowance, an organization with a payment method keeps everything and pays per GB up to its spend cap; one without starts dropping debug logs and routine traces while keeping errors and metrics, and past 150% keeps only error logs, error spans and metrics until the month resets. The `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alerts tell you when either threshold is crossed.
+
+### Profile volume
+
+Profiles are the most expensive signal per useful byte: every sample is stored as a row that repeats its whole stack, so a profile costs far more than its size on the wire. forge's defaults are therefore sparse, and a project gets them by pinning the forge release that ships them:
+
+| | Before | Now |
+|---|---|---|
+| CPU profile | 10 seconds, every minute | 5 seconds, every 5 minutes |
+| Live heap | every 15 minutes | every 2 hours |
+| Allocation, goroutine, mutex, block | off | off (opt in per workload) |
+| Raw retention (`--trace` lookups, short ranges) | 72 hours, then 48 | 24 hours |
+| Aggregates (range flamegraphs) | 30 days | 30 days |
+
+A model of Reliant's fleet predicts about **7.6× fewer expanded profile-row bytes** (2.56 GiB per day down to 0.336 GiB), excluding an older-pin staging service. This is not an achieved reduction or a compressed-disk/billing forecast; those depend on storage codecs, merges and workload behavior. Over an hour, a long-lived process has about a minute of wall-clock CPU capture, useful for sustained hotspots. Brief incidents or specific traces may have no samples at all. Captured trace-linked samples remain queryable in the raw tier for 24 hours; the aggregates retain range flamegraphs for 30 days.
+
+To sample faster for a while on one workload, set the cadence in its `env` and revert it afterwards: `FORGE_PROFILES_CPU_INTERVAL` (default `5m`, at least `30s`), `FORGE_PROFILES_CPU_DURATION` (default `5s`, at most half the interval) and `FORGE_PROFILES_HEAP_INTERVAL` (default `2h`). The `profiling` block of a workload picks which types are captured and the heap interval; agents can load the `observability/profiles` skill for the details. To keep profiles off entirely, leave `signals.profiles` unset on a hosted environment.
 
 ## Related topics
 

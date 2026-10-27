@@ -304,6 +304,20 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         />
       </Card>
 
+      <Card padding="none">
+        <CardHeader title="Configuration history" />
+        <div className="divide-y divide-border px-5">
+          {(trigger.changes ?? []).map((change) => (
+            <details key={change.id} className="py-3 text-sm">
+              <summary className="cursor-pointer text-foreground">{change.operation} · {formatAbsoluteTime(change.createdAt)} · {change.chatId ? `Agent in chat ${change.chatId}` : `User ${change.userId}`}</summary>
+              {change.chatId && <p className="mt-2 text-xs text-muted-foreground">Thread {change.runId} · Call {change.toolCallId}</p>}
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{`Before: ${change.beforeState || "(new activation)"}\nAfter: ${change.afterState}`}</pre>
+            </details>
+          ))}
+          {!trigger.changes?.length && <p className="py-4 text-sm text-muted-foreground">No configuration changes recorded yet.</p>}
+        </div>
+      </Card>
+
       <AutomationFormDialog
         open={editing}
         trigger={trigger}

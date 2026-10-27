@@ -202,15 +202,18 @@ func TestFinishRepoFailureRollsBackEverything(t *testing.T) {
 	assert.ElementsMatch(t, []string{"/w/demo/feat-1/a", "/w/demo/feat-1"}, deleted)
 }
 
-func TestFinishForceCleansEachRepo(t *testing.T) {
+func TestFinishForceDelegatesWithoutPrevalidationCleanup(t *testing.T) {
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/r"}
 	req := twoRepoReq()
 	req.Force = true
 	wt, _ := Insert(context.Background(), st, req)
 	require.NoError(t, Finish(context.Background(), st, m, req, wt))
-	fc := m.cmds("worktree.force_cleanup")
-	require.Len(t, fc, 2)
-	assert.Equal(t, "feat-x", fc[0].payload["branch"])
+	require.Empty(t, m.cmds("worktree.force_cleanup"), "cleanup before daemon validation can destroy stale-head work")
+	creates := m.cmds("worktree.create")
+	require.Len(t, creates, 2)
+	for _, c := range creates {
+		assert.Equal(t, true, c.payload["force"])
+	}
 }
 
 func TestFinishCopyFailureIsNonFatal(t *testing.T) {

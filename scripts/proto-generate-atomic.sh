@@ -42,6 +42,14 @@ for dir in "$@"; do
   esac
 done
 
+# Always execute the generator. Pins and version strings do not identify the
+# installed executable/runtime closure (local Node plugins, Go toolchain/module
+# replacements, GOWORK/GOFLAGS and arbitrary BUF commands). Until that closure
+# can be proven, a result cache is not evidence of current generation. Go's own
+# compiled-tool cache remains available; no generated-output verdict is reused.
+# Required inputs are read by buf/plugins and errors propagate without a
+# best-effort fingerprint that could bless a partially read input set.
+
 # The scratch dir lives inside the repo (gitignored tmp/) so the final mv is a
 # same-filesystem rename, not a cross-device copy.
 mkdir -p tmp

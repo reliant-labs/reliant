@@ -209,8 +209,8 @@ export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteP
         icon: <Bot className="w-4 h-4" />,
         category: "settings",
         keywords: ["api", "key", "openai", "anthropic", "claude"],
-        available: pathname !== "/settings/general",
-        action: goTo('general'),
+        available: pathname !== "/settings/ai",
+        action: goTo('ai'),
       },
       {
         id: "privacy",

@@ -116,7 +116,9 @@ describe("the panel drawer", () => {
     await user.click(within(drawer).getByTestId("panel-builder-add-group"));
     await user.type(within(drawer).getByTestId("panel-builder-group-0"), "span.name");
     await waitFor(() =>
-      expect(onCall).toHaveBeenCalledWith("QueryPanel", expect.objectContaining({ panel: expect.objectContaining({ title: "p95 by route", groupBy: ["span.name"] }) }))
+      // Presentation isn't query identity: the preview may reuse the dashboard's
+      // existing p95-by-route answer instead of spending quota to rename it.
+      expect(onCall).toHaveBeenCalledWith("QueryPanel", expect.objectContaining({ panel: expect.objectContaining({ groupBy: ["span.name"], series: [expect.objectContaining({ agg: "quantile", quantile: 0.95 })] }) }))
     );
     await user.click(within(drawer).getByTestId("panel-drawer-save"));
     await waitFor(() => expect(screen.queryByTestId("panel-drawer")).not.toBeInTheDocument());

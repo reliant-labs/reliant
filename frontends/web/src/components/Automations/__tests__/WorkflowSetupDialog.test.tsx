@@ -248,6 +248,23 @@ const sentRequest = () => enableWorkflow.mock.calls[0]![0] as EnableWorkflowRequ
 const machineReady = () => waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
 
 describe("WorkflowSetupDialog: set up", () => {
+  it.each([false, true])("new mixed GitHub/schedule/Slack setup leaves source defaults to the server (explicit owner: %s)", async (chooseOwner) => {
+    const user = userEvent.setup();
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true }));
+    const slack = { ...prOpened, name: "slack", source: { case: "integration", value: { integration: "slack", events: ["message.channels"] } } } as unknown as DeclaredTrigger;
+    render([prOpened, nightly, slack]);
+    await machineReady();
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Triage" } });
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "bug" } });
+    await user.click(screen.getByRole("button", { name: /Per-trigger exceptions/ }));
+    expect(screen.getByText(/New GitHub triggers default to Reliant bot/)).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Reliant bot/ })).not.toBeInTheDocument();
+    if (chooseOwner) await user.click(screen.getByRole("radio", { name: /You/ }));
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().actingIdentity).toBe(chooseOwner ? ActingIdentity.OWNER : ActingIdentity.UNSPECIFIED);
+  });
+
   it("turns every trigger on with one request, then says it is on and what happens next", async () => {
     const user = userEvent.setup();
     enableWorkflow.mockResolvedValue(
@@ -311,6 +328,7 @@ describe("WorkflowSetupDialog: set up", () => {
     render([prOpened], { workflowRef: "review", title: "PR review" });
 
     const watches = await screen.findByTestId("section-watches");
+    expect(screen.getByRole("radio", { name: /Reliant bot/ })).toBeChecked();
     expect(within(watches).getByText("What it watches")).toBeInTheDocument();
     const repos = await within(watches).findByRole("combobox", { name: /Repos/ });
     const label = within(watches).getByRole("combobox", { name: /Skip label/ });
@@ -429,6 +447,20 @@ describe("WorkflowSetupDialog: set up", () => {
 });
 
 describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
+  it("does not replace distinct stored owner and app identities with the first row's identity", async () => {
+    const user = userEvent.setup();
+    const owner = activation("nightly", { params: { label: "bug" } });
+    owner.actingIdentity = ActingIdentity.OWNER;
+    listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [owner, activation("pr-opened")] }));
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true }));
+    render([nightly, prOpened]);
+    await screen.findByRole("heading", { name: "Triage in Reliant" });
+    await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue("bug"));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().actingIdentity).toBe(ActingIdentity.UNSPECIFIED);
+  });
+
   it("finish: prefills what was chosen, says what changed, and focuses the missing field", async () => {
     getWorkflow.mockResolvedValue(reviewWorkflowResponse());
     listTriggers.mockResolvedValue(
@@ -467,7 +499,7 @@ describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
     expect(request.params.label?.kind).toEqual({ case: "stringValue", value: "bug" });
     expect(request.params.depth?.kind).toEqual({ case: "numberValue", value: 5 });
     expect(request.notifyOnComplete).toBe(true);
-    expect(request.actingIdentity).toBe(ActingIdentity.APP);
+    expect(request.actingIdentity).toBe(ActingIdentity.UNSPECIFIED); // preserve each stored identity
     expect(await screen.findByText("Triage in Reliant is saved")).toBeInTheDocument();
   });
 

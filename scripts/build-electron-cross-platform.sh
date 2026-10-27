@@ -88,7 +88,7 @@ cd "$WEB_DIR"
 
 if [ ! -d "node_modules" ]; then
     echo "Installing web dependencies..."
-    npm ci --legacy-peer-deps
+    pnpm install --frozen-lockfile
 fi
 
 echo "Building web application..."

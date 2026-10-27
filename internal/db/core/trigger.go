@@ -234,8 +234,9 @@ type Trigger struct {
 	// ProjectName and DaemonName are read-only display names joined in by
 	// GetTrigger and ListTriggers. Empty when the project or daemon row is
 	// gone or has no name; never written.
-	ProjectName string
-	DaemonName  string
+	ProjectName  string
+	DaemonName   string
+	MachineState string
 }
 
 // WebhookConfig is Trigger.Config for TriggerKindWebhook. The token hash and

@@ -147,7 +147,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if worktree != nil && worktree.DaemonID != nil {
 		worktreeDaemon = *worktree.DaemonID
 	}
-	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, rtx.DaemonSelector))
+	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, chatDaemonSelector(chat, rtx.DaemonSelector)))
 	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, selector, req)
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory; running it as is",

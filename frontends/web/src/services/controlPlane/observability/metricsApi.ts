@@ -20,7 +20,7 @@ import {
   type MetricInfo as WireMetricInfo,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { kindOfWire, msOf, wireScope } from "./api";
 import type {
   GetMetricRequest,
@@ -38,7 +38,7 @@ import { catalogGroup } from "./metricsTypes";
 import type { ObsScope, TimeWindow } from "./types";
 
 function client() {
-  return getControlPlaneClient(ObservabilityService);
+  return obsClient(ObservabilityService);
 }
 
 const WIRE_KIND: Partial<Record<MetricKind, WireMetricType>> = {

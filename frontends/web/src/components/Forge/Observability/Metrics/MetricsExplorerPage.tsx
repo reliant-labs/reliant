@@ -43,6 +43,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { cn } from "@/lib/utils";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { MetricCatalogEntry, MetricExemplar, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -59,7 +60,7 @@ import { deliveryScopeOf } from "../deliveryScope";
 import { filterParam, filterTokensOf, scopeFiltersOf, type FilterToken } from "../obsFilters";
 import type { ObsEnvironment } from "../obsPlace";
 import { ObsScopeBar } from "../ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNoData, ObsNoEnvironments, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, ObsNoEnvironments, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
 import { useNothingArrived } from "../serviceSignals";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { Breakdown } from "./Breakdown";
@@ -333,11 +334,12 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
       </p>
     );
   }
-  const catalogError = catalog.error;
+  const catalogError = keepsLastResult(catalog.error, catalog.data) ? null : catalog.error;
   if (catalogError && obsErrorKind(catalogError) === "not-set-up") return <ObsNotSetUp subject={subject} topic="metrics" env={env === ENV_ALL ? undefined : env} />;
 
   const toolbar = (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="metrics-toolbar">
+      {main.data && <ObsAsOf updatedAt={main.dataUpdatedAt} />}
       {scope && (
         <ObsScopeBar
           scope={scope}

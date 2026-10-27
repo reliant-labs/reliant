@@ -145,6 +145,17 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 	assert.Nil(t, secondBody.DisplayStyle, "a delivered body is an ordinary visible message")
 	assert.Equal(t, "first message", contentOf(firstBody))
 	assert.Equal(t, "second message", contentOf(secondBody))
+
+	// A peer's spawn_send is role USER for the model but attributed to the
+	// thread that sent it, so the transcript cannot mistake it for the human.
+	for _, body := range []*db.Message{firstBody, secondBody} {
+		assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role)
+		require.NotNil(t, body.SenderThreadID, "a spawn_send message must record its sender")
+		assert.Equal(t, fromThreadID, *body.SenderThreadID)
+		require.NotNil(t, body.SenderKind)
+		assert.Equal(t, core.AgentMessageKindMessage, *body.SenderKind)
+	}
+	assert.Nil(t, envelope.SenderThreadID, "the envelope is framing, not a message from the sender")
 	assert.Less(t, firstBody.Ordinal, secondBody.Ordinal,
 		"messages must be delivered in send order, oldest first")
 	assert.Less(t, envelope.Ordinal, firstBody.Ordinal,
@@ -650,6 +661,8 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 	assert.Equal(t, reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN, *body.DisplayStyle,
 		"a completion report must not render as a plain visible message")
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role)
+	assert.Nil(t, body.SenderThreadID, "the human has no sender")
+	assert.Nil(t, body.SenderKind, "the human has no sender")
 	bodyBlocks, err := h.Repo().ListContentBlocks(ctx, body.ID)
 	require.NoError(t, err)
 	require.Len(t, bodyBlocks, 1)

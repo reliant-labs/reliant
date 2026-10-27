@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -71,7 +72,7 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 	// Any session's still-fresh token beats a mint: the candidates are all
 	// this machine's, and a cached token is one the server already scoped.
 	for _, s := range sessions {
-		if tok, ok := c.lookup(endpoint, s, now); ok {
+		if tok, ok := c.lookup(endpoint, req.Scopes, s, now); ok {
 			return tok, nil
 		}
 	}
@@ -96,10 +97,27 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 		if got.ExpiresAt.IsZero() {
 			tok.ExpiresAt = nil
 		}
-		c.store(endpoint, s, tok, now)
+		// A token that came back narrower than asked (a grant the user lacks
+		// today, omitted by the server) is not remembered: the grant may be
+		// added any minute, and a cached narrow token would keep refusing for
+		// the rest of its life.
+		if grantedAll(req.Scopes, got.Scopes) {
+			c.store(endpoint, req.Scopes, s, tok, now)
+		}
 		return tok, nil
 	}
 	return cloudcred.Token{}, refusal(endpoint, attempts)
+}
+
+// grantedAll reports whether granted covers every scope in asked. An empty ask
+// means "the server's default", which has nothing to fall short of.
+func grantedAll(asked, granted []string) bool {
+	for _, want := range asked {
+		if !slices.Contains(granted, want) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *helper) ForgetServer(server string) error {

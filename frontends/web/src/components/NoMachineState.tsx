@@ -16,7 +16,7 @@ import { MonitorOff, Plus } from "lucide-react";
 
 import { cn } from "../lib/utils";
 import { useDaemonStatus } from "../hooks/useDaemonStatus";
-import { ConnectDaemonModal } from "./Layout/ConnectDaemonModal";
+import { AddMachineSheet } from "./Machines/AddMachineSheet";
 
 export interface NoMachineStateProps {
   /** What the machine is for here, completing "Connect a machine to …". */
@@ -52,9 +52,9 @@ export function NoMachineState({
         aria-hidden="true"
       />
       <div className="space-y-1">
-        <p className="text-sm font-medium text-foreground">No machine connected</p>
+        <p className="text-sm font-medium text-foreground">No machine yet</p>
         <p className="text-xs text-muted-foreground">
-          {`Connect a machine to ${purpose}. Chats work without one.`}
+          {`Add a machine to ${purpose}. Chats work without one.`}
         </p>
       </div>
       <button
@@ -63,9 +63,13 @@ export function NoMachineState({
         className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        Connect a machine
+        Add machine
       </button>
-      <ConnectDaemonModal isOpen={connecting} onClose={() => setConnecting(false)} />
+      {/* Mounted while open: this surface reloads itself the moment any
+          machine connects (above), so nothing needs the sheet afterwards. */}
+      {connecting && (
+        <AddMachineSheet open onClose={() => setConnecting(false)} onReady={() => onMachineConnected?.()} />
+      )}
     </>
   );
 

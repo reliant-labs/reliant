@@ -45,17 +45,17 @@ function useRecordedEnvs(): ObsEnvironment[] {
   );
 }
 
-/** Merge `next` into the current search without a history entry. */
-function useSearchUpdater<T extends object>() {
+/** Merge viewer state into the URL; dashboard controls keep browser history. */
+function useSearchUpdater<T extends object>(replace = true) {
   const navigate = useNavigate();
   return useCallback(
     (next: Partial<T>) =>
       void navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
-        replace: true,
+        replace,
       }),
-    [navigate]
+    [navigate, replace]
   );
 }
 
@@ -151,7 +151,15 @@ export function DashboardsPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   return (
-    <RosterGate testId="console-dashboards" topic="dashboards">
+    // Not behind RosterGate: organization costs are a builtin dashboard that
+    // needs no deployed environment, so the list stays reachable and the
+    // getting-started guidance sits above it instead of replacing it.
+    <div className="space-y-4" data-testid="console-dashboards">
+      {environments.length === 0 && (
+        <div data-testid="observability-no-envs">
+          <ObsNoEnvironments topic="dashboards" />
+        </div>
+      )}
       <DashboardsList
         project={forgeProject}
         env={env}
@@ -161,7 +169,7 @@ export function DashboardsPage() {
         hrefs={hrefs}
         navigateTo={navigateTo}
       />
-    </RosterGate>
+    </div>
   );
 }
 
@@ -169,17 +177,26 @@ export function DashboardPage() {
   const { forgeProject, env, setEnv } = useForgeConsole();
   const { kind, key = "" } = useParams({ strict: false }) as { kind?: string; key?: string };
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
-  const onSearch = useSearchUpdater<DashboardSearch>();
+  const onSearch = useSearchUpdater<DashboardSearch>(false);
   const environments = useRecordedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   const dashRef = useMemo<DashboardRef | null>(
-    () => (isDashboardPageKind(kind) ? { kind, projectId: forgeProject, key } : null),
+    () => (isDashboardPageKind(kind) ? { kind, projectId: kind === "builtin" ? "" : forgeProject, key } : null),
     [kind, forgeProject, key]
   );
   const search: DashboardSearch = {
     range: rangeParam(raw.range),
     service: typeof raw.service === "string" ? raw.service : undefined,
+    rpcService: typeof raw.rpcService === "string" ? raw.rpcService : undefined,
+    rpcMethod: typeof raw.rpcMethod === "string" ? raw.rpcMethod : undefined,
+    rpcProcedure: typeof raw.rpcProcedure === "string" ? raw.rpcProcedure : undefined,
+    variables: raw.variables && typeof raw.variables === "object" && !Array.isArray(raw.variables) ? raw.variables as Record<string, string> : undefined,
+    breakdown: typeof raw.breakdown === "string" ? raw.breakdown : undefined,
+    hiddenSections: Array.isArray(raw.hiddenSections) ? raw.hiddenSections.filter((id): id is string => typeof id === "string") : undefined,
+    hiddenPanels: Array.isArray(raw.hiddenPanels) ? raw.hiddenPanels.filter((id): id is string => typeof id === "string") : undefined,
+    releases: typeof raw.releases === "boolean" ? raw.releases : undefined,
+    alerts: typeof raw.alerts === "boolean" ? raw.alerts : undefined,
     compare: raw.compare === undefined ? undefined : compareParam(raw.compare),
     refresh: raw.refresh === undefined ? undefined : refreshParam(raw.refresh),
     tv: raw.tv === true || undefined,
@@ -187,6 +204,8 @@ export function DashboardPage() {
     release: typeof raw.release === "string" ? raw.release : undefined,
   };
   if (!dashRef) return null;
+  // Organization accounting is discoverable without a deployed environment.
+  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView

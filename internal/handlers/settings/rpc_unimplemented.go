@@ -11,8 +11,8 @@ import (
 // These rpcs were never implemented. Each answers exactly as before, through
 // the embedded Unimplemented handler rather than forge's scaffold stub.
 
-// TrackOnboardingEvent was never implemented (settings.go keeps the draft
-// commented out); it answers exactly as before.
+// TrackOnboardingEvent was never implemented (rpc_privacy_settings.go keeps
+// the draft commented out); it answers exactly as before.
 func (s *Service) TrackOnboardingEvent(ctx context.Context, req *connect.Request[pb.TrackOnboardingEventRequest]) (*connect.Response[pb.TrackOnboardingEventResponse], error) {
 	return s.UnimplementedSettingsServiceHandler.TrackOnboardingEvent(ctx, req)
 }

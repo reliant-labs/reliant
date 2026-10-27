@@ -188,6 +188,10 @@ type ObservabilityServiceClient interface {
 	// enforcing. It is a plain Postgres read of what the hourly meter wrote
 	// (nothing here queries ClickHouse), so it works when the tenant is
 	// unreachable. Membership-checked on org_id.
+	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+	// Kept until deployed clients have migrated; it remains Postgres-only.
+	//
+	// Deprecated: do not use.
 	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it
@@ -420,6 +424,8 @@ func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *con
 }
 
 // GetObservabilityUsage calls controlplane.v1.ObservabilityService.GetObservabilityUsage.
+//
+// Deprecated: do not use.
 func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, req *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
 	return c.getObservabilityUsage.CallUnary(ctx, req)
 }
@@ -532,6 +538,10 @@ type ObservabilityServiceHandler interface {
 	// enforcing. It is a plain Postgres read of what the hourly meter wrote
 	// (nothing here queries ClickHouse), so it works when the tenant is
 	// unreachable. Membership-checked on org_id.
+	// Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+	// Kept until deployed clients have migrated; it remains Postgres-only.
+	//
+	// Deprecated: do not use.
 	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
 	// GetReleaseHealth answers "did this release make things worse": for one
 	// environment and one promotion (default: the environment's current one) it

@@ -98,7 +98,7 @@ describe("a dashboard panel", () => {
     return renderWithApi(api, <Stateful />);
   }
 
-  it("opens in the explorer as the same query, filtered to the dashboard's service and carrying its compare", async () => {
+  it("opens the saved query with compare, ignoring an undeclared process URL filter", async () => {
     const user = userEvent.setup();
     renderDashboard({ service: "api", compare: "period", range: "6h" });
     await user.click(await screen.findByTestId("dashboard-panel-menu-goroutines", {}, SLOW));
@@ -109,7 +109,9 @@ describe("a dashboard panel", () => {
     expect(range).toBe("6h");
     expect(state.panel.signal).toBe("metrics");
     expect(state.panel.series).toEqual([{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }]);
-    expect(state.panel.where).toEqual([{ field: "service.name", op: "eq", value: "api" }]);
+    // daemon-fleet declares no service variable. A URL must not silently
+    // inject one, especially on mixed telemetry/financial dashboards.
+    expect(state.panel.where).toBeUndefined();
     expect(state.compare).toBe("period");
   });
 

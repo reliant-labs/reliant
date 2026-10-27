@@ -48,6 +48,24 @@ function assistantMessage(contentBlocks: Message["contentBlocks"]): Message {
   } as Message;
 }
 
+// The call's result as the server sends it: its own TOOL message, joined to
+// the call by tool_call_id (the call block does not carry it).
+function toolResultMessage(toolCallId: string, content: string): Message {
+  return {
+    id: `msg-result-${toolCallId}`,
+    chatId: "chat-1",
+    seq: BigInt(2),
+    thread: "chat-1",
+    role: MessageRole.TOOL,
+    contentBlocks: [
+      { id: `result-${toolCallId}`, index: 0, type: ContentBlockType.TOOL_RESULT, toolCallId, content, isError: false },
+    ],
+    createdAt: "2024-01-01T00:00:01.000Z",
+    updatedAt: "2024-01-01T00:00:01.000Z",
+    sequenceNumber: BigInt(2),
+  } as Message;
+}
+
 describe("ToolExecution status for spawn_status / spawn_send", () => {
   beforeEach(() => {
     mockAllWorkflows = [
@@ -149,14 +167,9 @@ describe("ToolExecution status for spawn_status / spawn_send", () => {
           toolName: "spawn",
           toolCallId: "toolu_spawn_generic",
           input: JSON.stringify({ preset: "researcher", title: "Map streaming thread titles" }),
-          matchedResult: {
-            toolCallId: "toolu_spawn_generic",
-            type: "tool_result",
-            content: JSON.stringify({ agent_id: "wf-generic" }),
-            isError: false,
-          },
         },
       ]),
+      toolResultMessage("toolu_spawn_generic", JSON.stringify({ agent_id: "wf-generic" })),
     ];
 
     render(
@@ -212,14 +225,9 @@ describe("ToolExecution status for spawn_status / spawn_send", () => {
           toolName: "shell",
           toolCallId: "toolu_shell_1",
           input: JSON.stringify({ command: "npm test -- --runInBand", description: "Run focused web tests" }),
-          matchedResult: {
-            toolCallId: "toolu_shell_1",
-            type: "tool_result",
-            content: JSON.stringify({ process_id: "proc-123", backgrounded: true }),
-            isError: false,
-          },
         },
       ]),
+      toolResultMessage("toolu_shell_1", JSON.stringify({ process_id: "proc-123", backgrounded: true })),
     ];
 
     render(

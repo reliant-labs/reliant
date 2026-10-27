@@ -4,6 +4,8 @@ import { useAuthStore } from '@/store/authStore'
 // The same-origin guard, shared: only relative paths are honored, so a crafted
 // `returnTo` cannot bounce the user to an attacker-controlled origin.
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { isClaimReturnTo } from '@/lib/claimLink'
+import { ExistingAccount } from './Claim/ExistingAccount'
 import { describeAuthError } from '@/lib/authErrors'
 import { LinkIdentityForm } from './LinkIdentityForm'
 import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
@@ -64,6 +66,7 @@ const goToReturnTo = (
 export function UpgradeAccount() {
   const navigate = useNavigate()
   const { returnTo } = useSearch({ from: '/upgrade' })
+  const forClaim = isClaimReturnTo(returnTo)
   const {
     user,
     initialized,
@@ -309,15 +312,27 @@ export function UpgradeAccount() {
   return (
     <AuthLayout>
       <div className="p-8 space-y-6">
-        <AuthHeader
-          title="Save your account"
-          description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
-        />
+        {forClaim ? (
+          <AuthHeader
+            title="Create your account"
+            description="Add an email or sign in with a provider and the site is yours. It's free, and nothing about the site changes."
+          />
+        ) : (
+          <AuthHeader
+            title="Save your account"
+            description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
+          />
+        )}
 
         <LinkIdentityForm
           returnTo={returnTo}
           onLinked={() => goToReturnTo(returnTo, navigate)}
+          submitLabel={forClaim ? 'Create account and claim' : undefined}
         />
+
+        {/* An email or provider that already belongs to a Reliant user cannot be
+            linked here; for a claim that person is told what to do instead. */}
+        {forClaim && <ExistingAccount />}
 
       </div>
     </AuthLayout>

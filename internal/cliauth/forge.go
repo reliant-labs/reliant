@@ -47,6 +47,7 @@ func ForgeScopes() []string {
 		string(fat.ScopeIdentityRead), string(fat.ScopeIdentityManage),
 		string(fat.ScopeObsRead), string(fat.ScopeObsTriage), string(fat.ScopeObsWrite),
 		string(fat.ScopeDBQuery),
+		string(fat.ScopeBillingRead),
 	}
 }
 

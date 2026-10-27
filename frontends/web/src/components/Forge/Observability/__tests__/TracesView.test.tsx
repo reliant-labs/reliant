@@ -26,16 +26,18 @@ describe("trace list", () => {
 
   it("sends root operation, errors-only and minimum duration as ListTraces filters", async () => {
     const user = userEvent.setup();
-    const onCall = vi.fn();
-    const harness = renderPanel(createFixtureApi({ onCall }), { view: "traces" });
+    const api = createFixtureApi();
+    // GetServiceSignals retries independently of the trace filters. Assert the
+    // latest ListTraces request, not the latest RPC across the whole panel.
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
     await screen.findAllByTestId("obs-trace-row");
     await user.type(screen.getByTestId("obs-trace-query"), "GetOrder{Enter}");
     await user.click(screen.getByTestId("obs-errors-only"));
     await user.selectOptions(screen.getByTestId("obs-min-duration"), "500ms");
     expect(harness.current()).toMatchObject({ q: "GetOrder", errors: true, minDuration: "500ms" });
     await waitFor(() =>
-      expect(onCall).toHaveBeenLastCalledWith(
-        "ListTraces",
+      expect(listTraces).toHaveBeenLastCalledWith(
         expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 })
       )
     );

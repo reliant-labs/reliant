@@ -829,6 +829,8 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
   failWith?: Code;
+  /** Every call fails with exactly this error. Read at call time, so a test may set or clear it later. */
+  failError?: unknown;
   /** An environment that has sent nothing. */
   empty?: boolean;
   /** Called for each RPC, with its request — tests assert on what was asked. */
@@ -844,6 +846,7 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
 export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi {
   const call = async <T>(rpc: string, request: unknown, answer: () => T): Promise<T> => {
     options.onCall?.(rpc, request);
+    if (options.failError !== undefined) throw options.failError;
     if (options.failWith !== undefined) {
       const message =
         options.failWith === Code.FailedPrecondition ? "observability is not set up for this organization yet" : "fixture failure";

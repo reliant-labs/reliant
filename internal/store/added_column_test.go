@@ -93,10 +93,6 @@ func TestPreparedQueriesSurviveAnAddedColumn(t *testing.T) {
 			_, err := store.SetWorkflowDraftStatus(ctx, env.ORM, "wd-none", core.WorkflowDraftStatusDraft)
 			return err
 		},
-		"RemoveWorkflowDraft": func() error {
-			_, err := store.RemoveWorkflowDraft(ctx, env.ORM, "wd-none")
-			return err
-		},
 		"ClaimRunEvents": func() error {
 			_, err := store.ClaimRunEvents(ctx, env.ORM, at, at.Add(time.Minute), 10)
 			return err

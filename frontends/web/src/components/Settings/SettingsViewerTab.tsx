@@ -110,18 +110,6 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
     };
   }, []);
 
-  // Get API URL for settings
-  const getApiUrl = () => {
-    if (
-      typeof window !== "undefined" &&
-      window.RELIANT_CONFIG?.isElectron &&
-      window.RELIANT_CONFIG?.grpcUrl
-    ) {
-      return window.RELIANT_CONFIG.grpcUrl;
-    }
-    return "";
-  };
-
   return (
     <div ref={containerRef} className="flex h-full min-w-[500px] bg-background">
       {/* Settings Navigation Sidebar */}
@@ -167,10 +155,7 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
             </div>
           }
         >
-          <SettingsContent
-            activeSection={section}
-            apiUrl={getApiUrl()}
-          />
+          <SettingsContent activeSection={section} />
         </Suspense>
       </main>
     </div>

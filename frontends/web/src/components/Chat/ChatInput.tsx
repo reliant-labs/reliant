@@ -39,7 +39,7 @@ import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
-import { QUEUED_SENDER_KIND_HUMAN } from "../../hooks/chat-model";
+import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
 import { useProjectStore } from "../../store/projectStore";
 import { useDefaultWorkflow, useHiddenItems } from "../../hooks/settings-queries";
 import { useChatStore } from "../../store/chatStore";
@@ -1411,7 +1411,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         id: clientMessageId,
         body: message,
         created_at: new Date().toISOString(),
-        sender_kind: QUEUED_SENDER_KIND_HUMAN,
+        sender_kind: AgentMessageKind.HUMAN_MESSAGE,
         attachments: attachmentIds,
       };
 

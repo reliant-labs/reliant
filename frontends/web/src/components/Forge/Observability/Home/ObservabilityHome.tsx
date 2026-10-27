@@ -25,6 +25,7 @@ import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useAlerts, useObservabilityOrg, useServiceOverview, useWorkloads } from "@/hooks/observability-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -36,10 +37,10 @@ import { ENV_KEY } from "../attributes";
 import { DashboardHeader } from "../Dashboards/DashboardHeader";
 import { INK_LINK, VariableSelect } from "../Dashboards/parts";
 import { describePromotion, useReleaseMarkers } from "../releaseMarkers";
-import { formatAgo, formatCores, formatDuration, formatPercent, formatRate } from "../format";
+import { formatAgo, formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
-import { ObsError, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
 import { useNothingArrived } from "../serviceSignals";
 import { HealthStrip } from "./HealthStrip";
 import { byAttention, serviceRows, type ServiceRow } from "./homeModel";
@@ -174,18 +175,20 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card padding="none" className="min-w-0 overflow-hidden" data-testid="observability-services">
           <div className="px-4 pt-3">
-            <h2 className="text-sm font-medium text-ink">Services</h2>
-            <p className="text-xs text-ink-muted">Sorted by what needs attention first.</p>
+            <h2 className="text-sm font-medium text-ink">Process health</h2>
+            <p className="text-sm text-ink-muted">Deployed processes (service.name), not RPC services. Open a process to investigate.</p>
+            {overview.data && <ObsAsOf updatedAt={overview.dataUpdatedAt} className="mt-1" />}
           </div>
           <ServicesTable
             rows={rows}
             loading={overview.isLoading}
-            error={overview.error}
+            error={keepsLastResult(overview.error, overview.data) ? null : overview.error}
             onRetry={() => void overview.refetch()}
             showEnv={env === ENV_ALL}
             range={range}
             project={project}
             workloadHref={hrefs.workload}
+            errorLogsHref={(name) => hrefs.logs({ range, service: name, severity: "error,fatal" })}
             navigateTo={navigateTo}
           />
         </Card>
@@ -264,6 +267,7 @@ function ServicesTable({
   range,
   project,
   workloadHref,
+  errorLogsHref,
   navigateTo,
 }: {
   rows: ServiceRow[];
@@ -274,6 +278,7 @@ function ServicesTable({
   range: RangePreset;
   project: string;
   workloadHref: (name: string, env: string | null) => string;
+  errorLogsHref: (name: string) => string;
   navigateTo: (href: string) => void;
 }) {
   if (loading) {
@@ -322,6 +327,8 @@ function ServicesTable({
           <th scope="col" className="hidden h-9 px-4 font-medium lg:table-cell">
             CPU
           </th>
+          <th scope="col" className="hidden h-9 px-4 font-medium lg:table-cell">Memory</th>
+          <th scope="col" className="h-9 px-4 text-right font-medium">Error logs</th>
           <th scope="col" className="h-9 px-4 text-right font-medium">
             Alerts
           </th>
@@ -331,6 +338,7 @@ function ServicesTable({
         {rows.map((row) => {
           const href = workloadHref(row.name, row.env);
           const cpu = row.workload ? worstUsage(row.workload, "cpu") : null;
+          const memory = row.workload ? worstUsage(row.workload, "memory") : null;
           return (
             <tr
               key={`${row.name}/${row.env ?? ""}`}
@@ -365,6 +373,14 @@ function ServicesTable({
               <td className="h-10 px-4 text-right tabular-nums text-ink">{row.health.requestCount ? formatDuration(row.health.p95Ms) : "—"}</td>
               <td className="hidden h-10 w-40 px-4 lg:table-cell">
                 {cpu ? <UsageMeter usage={cpu} format={formatCores} what="CPU" /> : <span className="text-xs text-ink-muted">—</span>}
+              </td>
+              <td className="hidden h-10 w-40 px-4 lg:table-cell">
+                {memory ? <UsageMeter usage={memory} format={formatBytes} what="Memory" /> : <span className="text-sm text-ink-muted">—</span>}
+              </td>
+              <td className="h-10 px-4 text-right tabular-nums">
+                <Link href={errorLogsHref(row.name)} className={INK_LINK} title={`Error logs from ${row.name}`}>
+                  {row.health.errorLogCount.toLocaleString()}
+                </Link>
               </td>
               <td className="h-10 px-4 text-right tabular-nums">
                 {row.alertsFiring > 0 ? <span className="text-warning-ink">{row.alertsFiring} firing</span> : <span className="text-ink-muted">·</span>}

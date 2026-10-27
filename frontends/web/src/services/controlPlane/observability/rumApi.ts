@@ -39,7 +39,7 @@ import {
   type SessionTimelineEntry as WireEntry,
 } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import { countOf } from "./issuesApi";
 import type {
@@ -59,7 +59,7 @@ import type {
 import type { TimeWindow } from "./types";
 
 function client() {
-  return getControlPlaneClient(RumService);
+  return obsClient(RumService);
 }
 
 function timestamp(ms: number): Timestamp {

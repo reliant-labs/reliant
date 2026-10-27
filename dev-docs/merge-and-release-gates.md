@@ -1,5 +1,14 @@
 # The merge gate and the release gate
 
+**Owner contract (supersedes historical measurements/policies below): ≤300s on an idle 16-CPU host.**
+Merge runs affected compile, vet/forge lint, `go test -short` (no race), and proto lint.
+Web typecheck + affected vitest run only for a web change; migration checks only for changed migrations.
+Full test fallbacks, docs, Electron, production renderer builds, full lint, integration and e2e run at release.
+`--regen` runs only for changed generator inputs; generated-output-only diffs do not force generation.
+`scripts/merge-gate-budgets.json` pins step budgets; overruns say **GATE-HEALTH / requirement NOT MET**, not PR blame.
+Summary starts with exact failing Go tests + packages and vitest files + test names, never a log tail.
+The historical 236s warm run is not proof of the idle-host requirement or cold/broad batches.
+
 reliant has two local gates. The **merge gate** runs before every merge and
 judges only what the change can affect. The **release gate** runs on main
 before a release and judges everything. The split is deliberate: **speed was
@@ -15,7 +24,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`) of the changed packages and their **direct** importers, `go build ./...`, the web `tsc -b` when a web file changed, `forge lint --scope <changed dirs>`, migration-safety when a migration changed, and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b --force` (checkout-local state) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration changed; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
@@ -26,7 +35,7 @@ task ci:merge -- --base <rev>    # a stacked branch
 ```
 
 It holds **one** host heavy slot for the whole run (`forge slot run`), and every
-phase nests inside that slot. It prints one row per phase:
+phase nests inside that slot, within a CPU budget (below). It prints one row per phase:
 
 ```
 ### merge-gate: PASSED          (#1427's own merge, load ~50 on 32 CPUs)
@@ -65,16 +74,38 @@ The phases:
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **typecheck**, **lint** and **migsafety** run alongside them:
-   - **build** is `go build ./...`.
-   - **test** is `tools/test-affected run -reach direct -lanes go,web,electron`.
-     It runs the changed packages and the packages that import one by name,
-     not the whole reverse-dependency closure (below).
-   - **typecheck** is frontends/web's `npm run typecheck` (`tsc -b`, which
+4. **build**, **test**, **typecheck**, **lint** and **migsafety** then run at
+   the same time (after the generators, when they may rewrite the tree; below):
+   - **build** compiles, without linking, every package whose build contains a
+     changed package (the plan's `go.build`, at any distance), or `./...` when
+     the Go lane is full: `go list -export`, which compiles each package for
+     its export data and fails naming any that does not compile, main
+     packages included. `go build ./...` also LINKED every main package (the
+     server, the CLI, a dozen generators): 41s with every package already
+     compiled, against 6s for `go list -export ./...` (2026-10-26). Link
+     errors are the release gate's `go build`.
+   - **test** is `tools/test-affected run -plan <plan.json> -lanes go,web,electron
+     -test-budget auto`. It runs the plan the plan phase wrote (re-planning
+     loaded the whole package graph again: 17-141s), so the changed packages
+     and the packages that import one by name, not the whole
+     reverse-dependency closure, and the vitest files within two imports of a
+     changed module (below). A Go test the change adds or edits that runs past
+     the per-test budget fails it (below). When `--amend` folded a
+     regenerate into HEAD first, the gate plans again (`plan-2`) and build
+     and test run that plan, since regenerated code can change what the diff
+     reaches. Saved plans require schema, exact base/head and a digest of
+     tracked and non-ignored untracked input bytes. Reuse after a source edit,
+     head/base change or incomplete JSON is refused. Selection, installs,
+     build/tests and closing verification all use the post-generation plan;
+     newly expanded generator obligations require a rerun rather than crediting
+     a narrower earlier generation result. The atomic control-plane generation
+     hook always executes: pins alone cannot identify installed plugin/runtime
+     bytes, so its former generated-output result cache is not reused.
+   - **typecheck** is `scripts/web-typecheck.sh`: frontends/web's
+     `npm run typecheck -- --force` (`tsc -b --force`, which
      includes `tsconfig.test.json`, so test files are type-checked). It runs
      when the plan selects the web lane or the diff touches anything under
-     `frontends/web/`, and again on the amended tree when a regenerate rewrote
-     a web file. The web test lane cannot stand in for it: vitest strips types
+     `frontends/web/`, or when a regenerate rewrote a web file. The web test lane cannot stand in for it: vitest strips types
      without checking them, and a changed module no test imports selects no
      test. #1556 merged a test type error because the gate had no such phase.
      Each file is type-checked once: `tsconfig.test.json` holds only the
@@ -82,11 +113,25 @@ The phases:
      emitted declarations. The build info and declarations live in
      `frontends/web/node_modules/.tmp/`, which the gate's `git clean -fdq`
      keeps (it is ignored) and `npm ci` drops with the rest of
-     `node_modules`, so a pool checkout re-checks what the squash changed
-     and what depends on it, and a lockfile change starts cold.
-   - **lint** is `forge lint --scope <every changed directory>`, or unscoped
-     when `go.mod`, `go.sum` or `forge.yaml` changed (a pin bump moves every
-     package).
+     `node_modules`. The script detaches hard-linked state before invoking
+     tsc and never restores or publishes another checkout's state. `--force`
+     prevents the solution-builder's timestamp shortcut from skipping a
+     backdated source edit or a copied installation. Dependency/config hashes
+     alone do not make cross-checkout state safe: tsc can declare the project
+     current before comparing source content. These correctness repairs
+     invalidate the earlier shared-cache timing claims.
+   - **lint** is forge lint's own lanes, named (`--contract --conventions
+     --generated-drift --go-markers --proto-markers --create-nullability
+     --computed-fields --read-only-fields --db-grants --column-markers
+     --closed-sets --tracing --guarded-fields`), with `--scope <every changed
+     directory>`, a pin move included. golangci-lint, buf lint, the
+     whole-project lanes and the deploy lanes run in the release gate's
+     unscoped `forge lint`: on one loaded host the same two-directory scope
+     took 331s with every default lane and 41s with these (golangci-lint is
+     the bulk), and a pin move made the merge queue's lint unscoped, up to
+     2735s. A pin bump's regenerated files are in its diff, so they are in
+     scope; what a new version breaks elsewhere in the module is the release
+     gate's to find.
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
    - **migorder** is `go run ./tools/test-affected migration-order`, and runs
@@ -96,12 +141,20 @@ The phases:
      `origin/main` as last fetched, and a branch reviewed while main moved
      passes it against a stale head.
 
-generate and docs run in scratch checkouts of HEAD, at the same time as the
-other phases. A regenerate that changes only generated paths (`--amend`) is
-copied back and amended after every phase has finished. If that regenerated
-code, build and test run again on the amended tree. A dirty tree (a local run
-with uncommitted edits) runs the generators in place, first, because a scratch
-checkout of HEAD would not see your edits.
+Where a regenerate becomes the tree the other phases judge, the generators run
+FIRST, in place, and build, test, typecheck, lint and migsafety start only once
+they are done. That is the merge queue's `--amend` mode: a regenerate that
+changes only generated paths is amended into the squash before anything builds
+or tests it, so a generated file the merge with main left a step behind (a
+stale mock) is never compiled or tested in its stale form. It is also a dirty
+tree (a local run with uncommitted edits), because a scratch checkout of HEAD
+would not see your edits. Ordering costs generate's wall time only when
+generate is selected at all.
+
+On a clean tree without `--amend` (`task ci:merge` on a committed branch) a
+regenerate cannot change what is judged: any change fails the generate phase.
+There, generate and docs run in scratch checkouts of HEAD, at the same time as
+the other phases.
 
 ### A skip is not a pass
 
@@ -119,6 +172,20 @@ as "not selected". reliant#1393 merged with docs-generate still queued; this is
 the check that stops that. The merge queue posts `merge-gate` SUCCESS only when
 the verdict is `OK`, and posts a FAILURE status carrying it otherwise.
 
+### The CPU budget
+
+Every Go command, test binary, golangci-lint and vitest sizes itself to the
+whole machine, and the gate runs up to six of them at once inside one slot
+of eight: on 2026-10-26 the host ran at a load of ~150 on 32 cores, and
+every phase, `tsc` included, was starved. The gate now takes the cores the
+host has free, but never less than half the machine (16 on that host; a
+floor of twice a slot's share, 8, starved lint's contract lane), as
+`MG_CPUS`, and splits it: the test phase gets half (`go test -p`,
+`GOMAXPROCS`) and a quarter for vitest's workers, the build, lint and a
+generator running beside the others a quarter each. A generator that runs
+first and alone (a dirty tree) gets all of it. `MG_CPUS=<n>` overrides the
+budget.
+
 ### Direct importers only
 
 A change to a hub package (`internal/logging`, `internal/observability`) reaches
@@ -131,9 +198,35 @@ deeper dependent is listed in the plan as `deferred` and runs in the release
 gate. `go build ./...` still compiles every package, so a deferred package can
 only fail at test time, never at compile time, before the merge.
 
+The web lane takes the same cut (`-reach direct`): a changed module runs the
+vitest files that import it, and those importing a module that imports it (two
+edges, as a Go package's own tests and its direct importers' tests are), and
+lists the rest as `deferred`. A **hub**, a module more than 60 test files reach
+within two edges (a store, the transport), runs only the tests that import or
+`vi.mock` it by name: chatStore.ts reached 298 test files at two edges. And
+when the change's modules together reach more than 150 test files at two
+edges (a UI change touching many modules selected 130-330 in the merge queue,
+at ~2s a file on the loaded host), every module runs only its by-name tests
+(the plan's `web.edges` says which cut it took). A
+**deleted** module no longer runs every vitest file (71 of the merge queue's 97
+full web runs on 2026-10-25/26, ~27 minutes each): its importers had to change
+too and select their own tests, and a module still importing it resolves
+against the base tree's file list and selects the tests that reach it (`tsc -b`
+fails on the dangling import first).
+
 `task test:affected` keeps the full closure (`-reach all`,
 the default), so a local run stays thorough. `MG_REACH=all task ci:merge` runs
 the merge gate with it.
+
+### What the release gate holds that the merge gate does not
+
+Nothing the merge gate skips is dropped. Every check below still runs, on
+main, in `task release:gate` (`scripts/release-gate.sh`): Docker-backed,
+integration and e2e/Playwright tests (none of which the merge gate ever ran),
+slow tests and the race detector (`task test`), golangci-lint and buf lint
+(the unscoped `forge lint`), link errors (`go build ./...`), deferred Go
+packages and vitest files (`task test` runs every one), and the whole
+`forge generate` where the merge gate ran only the generate hooks.
 
 ### What the merge gate does not catch
 
@@ -145,6 +238,9 @@ These are the trade-offs. Each is caught by the release gate:
 
 - **Slow tests.** A test marked `testkit.Slow` (or an older
   `testing.Short()` skip) never runs before a merge.
+- **Vitest files further from the change.** Those more than two imports away,
+  or more than one from a hub.
+- **golangci-lint and buf lint**, over any package, and **link errors**.
 - **The race detector.** Nothing before a merge runs `-race`.
 - **Whole-project lint lanes.** golangci over packages the diff did not touch,
   the frontend lint, the graph, component-drift and config-reach lanes cannot
@@ -190,6 +286,21 @@ left alone.
 
 So a DB-backed or git-backed test that is fast still runs on every merge. One
 that is slow runs before every release.
+
+### The per-test budget
+
+Nothing made a NEW slow test call `testkit.Slow`, so one merged silently and
+taxed every later change reaching its package. The merge gate's Go step now
+runs `go test -json` through a filter (`tools/test-affected/budget.go`) that
+prints what plain `go test` would and times every top-level test against a
+budget: 10s on an idle machine (five times the 2s line, so noise near it is
+not judged), scaled 1x to 6x by the load per core, as vitest's timeout is. A
+test **this change adds or edits** (the same list as the flake check) that
+runs over it fails the gate, naming `testkit.Slow`. Any other test over it is
+listed as `over-budget` and does not fail: the change did not write it, and
+failing it would fail the wrong author. Gate those as you find them.
+`MG_TEST_BUDGET=<duration>` (or `0`) overrides the budget;
+`tools/test-affected run -test-budget auto` applies it outside the gate.
 
 ## The release gate
 

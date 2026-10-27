@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Find in Page</title>
+    <!--
+      The desktop app's find bar (src/findBar/main.tsx), loaded into a view of
+      its own over a window. It reads no runtime configuration; config.js is
+      here because the CSP plugin derives every document's connect-src from
+      it and refuses a document without it (vite-plugin-csp.ts).
+    -->
+    <script src="%BASE_URL%config.js"></script>
+  </head>
+  <!-- Transparent: the view is a little larger than the bar, for its shadow. -->
+  <body class="overflow-hidden bg-transparent">
+    <div id="root" class="h-screen"></div>
+    <script type="module" src="/src/findBar/main.tsx"></script>
+  </body>
+</html>

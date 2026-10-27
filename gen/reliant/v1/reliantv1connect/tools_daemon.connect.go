@@ -113,6 +113,7 @@ func NewToolsDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			httpClient,
 			baseURL+ToolsDaemonServiceWhoAmIProcedure,
 			connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -206,6 +207,7 @@ func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect
 		ToolsDaemonServiceWhoAmIProcedure,
 		svc.WhoAmI,
 		connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.ToolsDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

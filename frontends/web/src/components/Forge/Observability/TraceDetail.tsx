@@ -20,6 +20,7 @@ import Card, { CardHeader } from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 
 import { AskReliantButton } from "./AskReliant/AskReliant";
 import { useObsAskContext } from "./AskReliant/askReliantContext";
@@ -30,7 +31,7 @@ import { tracePivot, useExploreHref } from "./Metrics/pivots";
 import { formatDuration, formatTimestamp } from "./format";
 import { shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
 import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionName } from "./Sessions/SessionName";
 import { rumScopeOf, rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
@@ -88,7 +89,7 @@ export function TraceDetail({
       </div>
     );
   }
-  if (trace.error) {
+  if (trace.error && !keepsLastResult(trace.error, trace.data)) {
     return (
       <div className="space-y-3">
         {back}
@@ -114,6 +115,7 @@ export function TraceDetail({
 
   return (
     <div className="space-y-4" data-testid="trace-detail">
+      <ObsAsOf updatedAt={trace.dataUpdatedAt} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {back}

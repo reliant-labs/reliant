@@ -1164,7 +1164,7 @@ function ModelDropdown({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate({ to: '/settings/$section', params: { section: 'general' } });
+                      navigate({ to: '/settings/$section', params: { section: 'ai' } });
                     }}
                     className="text-primary hover:underline text-xs"
                   >

@@ -232,7 +232,7 @@ reliant trigger create --name nightly-tests --workflow project://test-then-fix \
   --message "Run the nightly tests and fix anything that broke."
 ```
 
-`trigger list`, `get`, `fire` (run now), `events`, `enable`, `disable`, `update` and `delete` manage it afterwards. Turning an automation on is your decision, so `create`, `update` and `enable` refuse to run from an agent's shell. [Schedules](/automations/schedules) covers schedule options, catch-up after an outage, and overlapping runs.
+`trigger list`, `get`, `fire` (run now), `events`, `enable`, `disable`, `update` and `delete` manage it afterwards. Turning an automation on is your decision. In an interactive chat, an agent can call `create_trigger_activation`, `update_trigger_activation`, `enable_trigger` or `pause_trigger`; you approve the exact workflow, identity, privileges and machine before it changes anything. Unattended runs cannot use these tools. The CLI's `create`, `update` and `enable` still refuse to run from an agent's shell; use the approval-backed tools instead. [Schedules](/automations/schedules) covers schedule options, catch-up after an outage, and overlapping runs.
 
 ## Related topics
 

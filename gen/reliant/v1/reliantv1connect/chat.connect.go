@@ -73,6 +73,9 @@ const (
 	// ChatServiceListMessagesProcedure is the fully-qualified name of the ChatService's ListMessages
 	// RPC.
 	ChatServiceListMessagesProcedure = "/reliant.v1.ChatService/ListMessages"
+	// ChatServiceGetToolResultProcedure is the fully-qualified name of the ChatService's GetToolResult
+	// RPC.
+	ChatServiceGetToolResultProcedure = "/reliant.v1.ChatService/GetToolResult"
 	// ChatServiceUpdateChatStateProcedure is the fully-qualified name of the ChatService's
 	// UpdateChatState RPC.
 	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
@@ -214,6 +217,10 @@ type ChatServiceClient interface {
 	// ListMessages lists messages for a chat with content blocks
 	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
+	// GetToolResult returns one tool call's full result content. The transcript
+	// read paths send a truncated preview of a large result (ContentBlock.
+	// truncated); this is how the client gets the rest, on demand.
+	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -370,6 +377,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
 			connect.WithClientOptions(opts...),
 		),
+		getToolResult: connect.NewClient[v1.GetToolResultRequest, v1.GetToolResultResponse](
+			httpClient,
+			baseURL+ChatServiceGetToolResultProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+			connect.WithClientOptions(opts...),
+		),
 		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
 			httpClient,
 			baseURL+ChatServiceUpdateChatStateProcedure,
@@ -499,6 +512,7 @@ type chatServiceClient struct {
 	cancelQueuedAgentMessage *connect.Client[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse]
 	interruptThread          *connect.Client[v1.InterruptThreadRequest, v1.InterruptThreadResponse]
 	listMessages             *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
+	getToolResult            *connect.Client[v1.GetToolResultRequest, v1.GetToolResultResponse]
 	updateChatState          *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
 	terminateChat            *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
 	pauseChat                *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
@@ -597,6 +611,11 @@ func (c *chatServiceClient) InterruptThread(ctx context.Context, req *connect.Re
 // ListMessages calls reliant.v1.ChatService.ListMessages.
 func (c *chatServiceClient) ListMessages(ctx context.Context, req *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
 	return c.listMessages.CallUnary(ctx, req)
+}
+
+// GetToolResult calls reliant.v1.ChatService.GetToolResult.
+func (c *chatServiceClient) GetToolResult(ctx context.Context, req *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
+	return c.getToolResult.CallUnary(ctx, req)
 }
 
 // UpdateChatState calls reliant.v1.ChatService.UpdateChatState.
@@ -779,6 +798,10 @@ type ChatServiceHandler interface {
 	// ListMessages lists messages for a chat with content blocks
 	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
+	// GetToolResult returns one tool call's full result content. The transcript
+	// read paths send a truncated preview of a large result (ContentBlock.
+	// truncated); this is how the client gets the rest, on demand.
+	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -931,6 +954,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetToolResultHandler := connect.NewUnaryHandler(
+		ChatServiceGetToolResultProcedure,
+		svc.GetToolResult,
+		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
 		ChatServiceUpdateChatStateProcedure,
 		svc.UpdateChatState,
@@ -1073,6 +1102,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceInterruptThreadHandler.ServeHTTP(w, r)
 		case ChatServiceListMessagesProcedure:
 			chatServiceListMessagesHandler.ServeHTTP(w, r)
+		case ChatServiceGetToolResultProcedure:
+			chatServiceGetToolResultHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateChatStateProcedure:
 			chatServiceUpdateChatStateHandler.ServeHTTP(w, r)
 		case ChatServiceTerminateChatProcedure:
@@ -1180,6 +1211,10 @@ func (UnimplementedChatServiceHandler) InterruptThread(context.Context, *connect
 
 func (UnimplementedChatServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListMessages is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetToolResult is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error) {

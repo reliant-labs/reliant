@@ -173,7 +173,7 @@ export function MCPServerListItem({
           {settingsOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-xl"
             >
               <div className="space-y-3">
                 <div className="space-y-1.5">

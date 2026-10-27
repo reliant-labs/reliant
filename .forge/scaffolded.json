@@ -104,6 +104,9 @@
     "frontends/web/src/hooks/run-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
+    "frontends/web/src/hooks/scenario-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-26T23:14:44Z"
+    },
     "frontends/web/src/hooks/settings-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
@@ -237,6 +240,9 @@
     },
     "internal/handlers/chat/handlers_scaffold_get_thread_workflow_inputs_test.go": {
       "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_tool_result_test.go": {
+      "scaffolded_at": "2026-10-26T03:58:11Z"
     },
     "internal/handlers/chat/handlers_scaffold_get_workflow_executions_test.go": {
       "scaffolded_at": "2026-10-14T18:19:00Z"

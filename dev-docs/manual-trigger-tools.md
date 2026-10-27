@@ -1,6 +1,6 @@
 # Manually fire an existing trigger
 
-`fire_trigger({trigger_id})` delegates to the same owner-authorized `TriggerService.FireTrigger` used by Run now in the app. The owner comes from the calling chat, never from model input. The tool cannot create, enable, edit, delete or repoint an activation, or override its workflow, inputs, machine or connections.
+`fire_trigger({trigger_id})` delegates to the same owner-authorized `TriggerService.FireTrigger` used by Run now in the app. The owner comes from the calling chat, never from model input. The fire tool cannot create, enable, edit, delete or repoint an activation, or override its workflow, inputs, machine or connections. Interactive agents can use the separate approval-backed activation management tools described in [agent-trigger-management.md](agent-trigger-management.md).
 
 Manual semantics are intentionally the existing API's: enabled and overlap policies are bypassed for this one fire, including a paused activation. Configuration is unchanged. Setup validation and service ownership checks still apply. Each call is a new fire, not an idempotent retry: do not call again to poll.
 

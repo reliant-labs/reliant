@@ -175,6 +175,14 @@ export const authSearchSchema = z.object({
   redirect: z.string().optional(),
 });
 
+// Search params for `/apps`. `claimed` names the app (the forge project) a
+// finished claim just made the user's own, so the page can point at it. It is
+// a highlight, not a filter: every app is still listed, and the param is
+// dropped once the page has shown it.
+export const appsSearchSchema = z.object({
+  claimed: z.string().optional(),
+});
+
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
 // back to after they link a real identity (with an email) onto their existing
 // anonymous account — e.g. the admin billing page. Validated at the call site
@@ -270,10 +278,15 @@ export const workflowSearchSchema = z.object({
 // SettingsNavigation icon graph.
 export const SETTINGS_SECTION_IDS = [
   "account",
-  "general",
+  // AI providers, models, and local & custom models. Was `general`, a name
+  // that said nothing; /settings/general redirects here.
+  "ai",
   "shortcuts",
   "prompts",
-  "workspaces",
+  // Git worktrees for branched chats. Was `workspaces`, which collided with
+  // the product's other "workspace" (a cloud workspace); /settings/workspaces
+  // redirects here.
+  "branches",
   "projects",
   "browser",
   "appearance",
@@ -290,18 +303,17 @@ export const SETTINGS_SECTION_IDS = [
   "presets",
   "git-connections",
   "developer",
-  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
-  // that replaced the external "Manage cloud account" portal link. Routes:
-  // /settings/billing, /settings/environments. (Managed Reliant AI keys/spend
-  // now live as a tab inside the /settings/general "AI" section.)
+  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces.
+  // Billing also holds Reliant AI's managed keys and spend (`?tab=ai`).
   "billing",
   // Per-member org permissions. Cloud-only: a self-hosted deployment has no
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
   // Machines. Shown in every build: registered machines, and the outside AI
-  // apps granted access to each, exist without a control plane too.
-  "environments",
+  // apps granted access to each, exist without a control plane too. Was
+  // `environments`; /settings/environments redirects here.
+  "machines",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
@@ -311,14 +323,19 @@ export function isSettingsSection(value: string | undefined): value is SettingsS
 }
 
 /**
- * Slugs that are not section ids but that a person would reasonably type,
- * mapped to the section they mean. /settings/$section redirects them
- * (settingsSectionRoutes.tsx). Keys are lower case.
+ * Slugs that are not section ids but that a link may still carry, or a person
+ * would reasonably type, mapped to the section they mean. /settings/$section
+ * redirects them (settingsSectionRoutes.tsx). Keys are lower case.
  */
 export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>> = {
-  // The nav label of the `environments` section is "Machines".
-  machines: "environments",
-  machine: "environments",
+  // The ids sections had before they were named after their labels.
+  general: "ai",
+  environments: "machines",
+  workspaces: "branches",
+  // Singulars and near misses.
+  machine: "machines",
+  worktrees: "branches",
+  providers: "ai",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
@@ -338,6 +355,8 @@ export const BILLING_TAB_IDS = [
   "plans",
   "invoices",
   "usage",
+  "ai",
+  "limits",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -347,12 +366,12 @@ export type BillingTab = (typeof BILLING_TAB_IDS)[number];
  * were one tab pretending to be two, and reconciling a number meant checking
  * both.
  */
-export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage"] as const;
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as const;
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
 export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
-  return tab === "invoices" ? "usage" : (tab ?? "overview");
+  return tab === "invoices" || tab === "limits" ? "usage" : (tab ?? "overview");
 }
 
 /**
@@ -380,7 +399,11 @@ export const settingsSearchSchema = z.object({
   // mid-wizard had no way home. `forge`: an environment whose deploy is queued
   // on billing; the way back is its page. `connectors`: the retired
   // /settings/connectors redirect, so Machines can say where Connectors went.
-  from: z.enum(["onboarding", "forge", "connectors"]).optional(),
+  // Every other value is a surface that sent the user to billing
+  // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
+  from: z
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade"])
+    .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -389,8 +412,8 @@ export const settingsSearchSchema = z.object({
   // Validated at the point of use, not here: it is a URL from the address bar,
   // so it must be same-origin-checked before being navigated to.
   returnTo: z.string().optional(),
-  // The pre-path deep link into one machine. /settings/environments redirects
-  // it to /settings/environments/$machineId (settingsSectionRoutes.tsx);
+  // The pre-path deep link into one machine. /settings/machines redirects
+  // it to /settings/machines/$machineId (settingsSectionRoutes.tsx);
   // declared so validation does not strip it before that redirect reads it.
   daemon: z.string().optional(),
   // The slug of a /settings/<slug> URL that matched no section. Set only by
@@ -612,6 +635,15 @@ export const forgeConsoleDashboardSearchSchema = z.object({
   service: z.string().optional().catch(undefined),
   compare: z.enum(COMPARE_MODES).optional().catch(undefined),
   refresh: z.enum(REFRESH_INTERVALS).optional().catch(undefined),
+  rpcService: z.string().optional().catch(undefined),
+  rpcMethod: z.string().optional().catch(undefined),
+  rpcProcedure: z.string().optional().catch(undefined),
+  variables: z.record(z.string(), z.string()).optional().catch(undefined),
+  breakdown: z.string().optional().catch(undefined),
+  hiddenSections: z.array(z.string()).optional().catch(undefined),
+  hiddenPanels: z.array(z.string()).optional().catch(undefined),
+  releases: z.boolean().optional().catch(undefined),
+  alerts: z.boolean().optional().catch(undefined),
   tv: z.boolean().optional().catch(undefined),
   version: z.number().int().positive().optional().catch(undefined),
   release: z.string().optional().catch(undefined),

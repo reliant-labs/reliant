@@ -63,8 +63,9 @@ func InsertTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error {
 // namedTrigger is a triggers row with the display names its reads join in.
 type namedTrigger struct {
 	Trigger
-	ProjectName string `bun:"project_name"`
-	DaemonName  string `bun:"daemon_name"`
+	ProjectName  string `bun:"project_name"`
+	DaemonName   string `bun:"daemon_name"`
+	MachineState string `bun:"machine_state"`
 }
 
 func (n *namedTrigger) toCore() (*core.Trigger, error) {
@@ -72,7 +73,7 @@ func (n *namedTrigger) toCore() (*core.Trigger, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.ProjectName, t.DaemonName = n.ProjectName, n.DaemonName
+	t.ProjectName, t.DaemonName, t.MachineState = n.ProjectName, n.DaemonName, n.MachineState
 	return t, nil
 }
 
@@ -82,7 +83,15 @@ func (n *namedTrigger) toCore() (*core.Trigger, error) {
 // their WHERE and ORDER BY.
 var namedTriggerSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 	COALESCE(p.name, '')::text AS project_name,
-	COALESCE(d.hostname, '')::text AS daemon_name
+	COALESCE(NULLIF(d.name, ''), d.hostname, '')::text AS daemon_name,
+	CASE WHEN t.no_machine THEN 'none'
+	     WHEN d.id IS NULL THEN 'removed'
+	     WHEN EXISTS (SELECT 1 FROM daemon_attachment a WHERE a.daemon_id = d.id
+	       AND a.user_id = t.user_id AND a.last_stream_activity > now() - interval '90 seconds') THEN 'connected'
+	     WHEN d.lifecycle_phase IN ('provisioning', 'cloning') THEN 'starting'
+	     WHEN d.lifecycle_phase IN ('suspending', 'suspended') THEN 'suspended'
+	     WHEN d.lifecycle_phase = 'failed' THEN 'failed'
+	     ELSE 'disconnected' END::text AS machine_state
 FROM triggers t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN daemons d ON d.id = t.daemon_id AND d.user_id = t.user_id

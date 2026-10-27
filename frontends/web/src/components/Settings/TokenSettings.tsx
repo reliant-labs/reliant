@@ -162,20 +162,20 @@ export function TokenSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Access Tokens"
-        description="Create tokens that let a self-hosted machine or headless daemon connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
+        title="Access tokens"
+        description="Create tokens that let a self-hosted or headless machine connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
       />
 
       {shownError && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-          <p className="text-sm text-red-800 dark:text-red-200">{shownError}</p>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive-ink">{shownError}</p>
         </div>
       )}
 
       {/* Usage instructions */}
-      <div className="border border-border/40 rounded-lg p-4 bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground mb-2">
-          Use a token to connect a headless daemon:
+          Use a token to connect a headless machine:
         </p>
         <p className="text-sm font-mono">
           echo "your-token" | reliant daemon start --token
@@ -184,9 +184,9 @@ export function TokenSettings() {
 
       {/* New token reveal */}
       {newTokenRaw && (
-        <div className="border border-green-200 dark:border-green-800 rounded-lg p-6 space-y-3 bg-green-50 dark:bg-green-950/20">
-          <h3 className="font-medium text-green-800 dark:text-green-200">
-            Token Created
+        <div className="rounded-lg border border-success/30 bg-card p-6 space-y-3">
+          <h3 className="text-sm font-semibold text-success-ink">
+            Token created
           </h3>
           <div className="flex items-center gap-2">
             <Input
@@ -206,7 +206,7 @@ export function TokenSettings() {
               )}
             </Button>
           </div>
-          <p className="text-sm text-yellow-700 dark:text-yellow-400 font-medium">
+          <p className="text-sm text-warning-ink font-medium">
             This token will only be shown once. Copy it now.
           </p>
           <Button variant="ghost" size="sm" onClick={() => setNewTokenRaw(null)}>
@@ -216,8 +216,8 @@ export function TokenSettings() {
       )}
 
       {/* Create token */}
-      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
-        <h3 className="font-medium">Create Token</h3>
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <h3 className="text-sm font-semibold">Create token</h3>
         {creating ? (
           <div className="flex items-center gap-2">
             <Input
@@ -258,14 +258,14 @@ export function TokenSettings() {
             onClick={() => setCreating(true)}
             leftIcon={<Plus className="w-4 h-4" />}
           >
-            New Token
+            New token
           </Button>
         )}
       </div>
 
       {/* Token list */}
-      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
-        <h3 className="font-medium">Active Tokens</h3>
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <h3 className="text-sm font-semibold">Active tokens</h3>
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -278,7 +278,7 @@ export function TokenSettings() {
             {activeTokens.map((token) => (
               <div
                 key={token.id}
-                className="border border-border/40 rounded-lg p-3 space-y-3"
+                className="rounded-lg border border-border/60 bg-background p-3 space-y-3"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1 min-w-0">
@@ -295,7 +295,7 @@ export function TokenSettings() {
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span className="font-mono">{token.tokenPrefix}...</span>
                       {token.daemonId && (
-                        <span>Daemon {token.daemonId}</span>
+                        <span>Machine {token.daemonId}</span>
                       )}
                       <span>Created {formatDate(token.createdAt)}</span>
                       <span>Last used {formatDate(token.lastUsedAt)}</span>

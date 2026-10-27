@@ -1,8 +1,9 @@
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import Modal from "./forge-ui/modal";
 import { useAnonSignInNudge } from "@/hooks/useAnonSignInNudge";
 import { useSurface } from "@/lib/surfaceContext";
+import { isClaimPath } from "@/lib/claimLink";
 
 /**
  * Anonymous-session sign-in nudge.
@@ -29,8 +30,13 @@ export function AnonSignInNudge() {
   // flow it routes into is not part of the mobile surface — suppress it there
   // rather than showing a dead end.
   const surface = useSurface();
+  const { pathname } = useLocation();
 
   if (surface === "mobile" || surface === "embed") return null;
+  // Mid-claim the browser holds the anonymous session ON PURPOSE, and the page
+  // is already walking the person through the upgrade; a second prompt to do
+  // the same thing over it is noise.
+  if (isClaimPath(pathname)) return null;
   if (!open) return null;
 
   const handleSignIn = () => {

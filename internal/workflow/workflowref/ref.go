@@ -18,8 +18,13 @@
 //     field, compared as a Slug. The caller's own workflows are consulted
 //     first, then the project's. A workflow's FILE name is never an address.
 //   - A project's workflows are the top-level *.yaml / *.yml files in
-//     .reliant/workflows. Their scenarios live in
+//     .reliant/workflows — the project root's, and each nested repo's in a
+//     project made of several repositories. Their scenarios live in
 //     .reliant/workflows/<slug>/scenarios/<scenario>.yaml, one per file.
+//   - project://<repo>/<name> addresses a nested repo's workflow by its repo
+//     (the repo's path in the project). A bare name prefers the project
+//     root's workflow, then the one nested repo that declares it; a name two
+//     nested repos declare must be qualified (see Index).
 //
 // Anything a project gets wrong — two files with one name, a file with no
 // name, a name that is another file's file name, scenarios in the retired
@@ -108,7 +113,7 @@ func Parse(raw string) (Ref, error) {
 		return Ref{}, fmt.Errorf("workflow ref %q has unknown scheme %q: use %s<name> or %s<name>",
 			s, scheme+"://", BuiltinScheme, ProjectScheme)
 	}
-	if Slug(name) == "" {
+	if QualifiedSlug(name) == "" {
 		return Ref{}, fmt.Errorf("workflow ref %q names no workflow", s)
 	}
 	return Ref{Raw: s, Kind: Project, Name: name}, nil
@@ -120,7 +125,7 @@ func (r Ref) Key() string {
 	if r.Kind == Builtin {
 		return BuiltinScheme + r.Name
 	}
-	return ProjectScheme + Slug(r.Name)
+	return ProjectScheme + QualifiedSlug(r.Name)
 }
 
 // RefKey is Key for a raw ref, or the trimmed ref itself when it does not
@@ -133,14 +138,67 @@ func RefKey(raw string) string {
 	return ref.Key()
 }
 
-// ProjectSlug is the slug a project ref addresses, or "" when raw is not a
-// project ref (a builtin, a template, nothing).
+// ProjectSlug is the slug a project ref addresses — "<repo>/<slug>" when it
+// names a nested repo (QualifiedSlug) — or "" when raw is not a project ref
+// (a builtin, a template, nothing).
 func ProjectSlug(raw string) string {
 	ref, err := Parse(raw)
 	if err != nil || ref.Kind != Project {
 		return ""
 	}
-	return Slug(ref.Name)
+	return QualifiedSlug(ref.Name)
+}
+
+// QualifiedSlug is the form a project ref's name is compared in: Slug of the
+// name, prefixed by RepoKey of its repo when it names one
+// ("control-plane/Merge Steward" -> "control-plane/merge-steward"). A name
+// with no "/" is just its Slug.
+func QualifiedSlug(name string) string {
+	name = strings.TrimSpace(name)
+	repo, base := "", name
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		repo, base = name[:i], name[i+1:]
+	}
+	s := Slug(base)
+	if s == "" {
+		return ""
+	}
+	if repo != "" {
+		key := RepoKey(repo)
+		if key == "" {
+			return ""
+		}
+		return key + "/" + s
+	}
+	if strings.HasPrefix(name, "/") {
+		return ""
+	}
+	return s
+}
+
+// SplitQualifiedSlug splits a QualifiedSlug into its repo key and slug;
+// qualified is false for a bare slug.
+func SplitQualifiedSlug(slug string) (repo, base string, qualified bool) {
+	i := strings.LastIndex(slug, "/")
+	if i < 0 {
+		return "", slug, false
+	}
+	return slug[:i], slug[i+1:], true
+}
+
+// RepoKey preserves the exact project-relative repository path. Slugifying
+// repository names would silently merge distinct repos such as a_b and a-b.
+// Empty, absolute and traversal paths are never repository qualifiers.
+func RepoKey(repo string) string {
+	if repo == "" {
+		return ""
+	}
+	for _, seg := range strings.Split(repo, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return ""
+		}
+	}
+	return repo
 }
 
 var (

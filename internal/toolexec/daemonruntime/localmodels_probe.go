@@ -126,6 +126,7 @@ type localModelProber struct {
 
 	showCache *localprobe.ShowCache // /api/show by name|digest
 	vramFn    func() int64          // total GPU-addressable memory; 0 = unknown
+	now       func() time.Time
 }
 
 func newLocalModelProber() *localModelProber {
@@ -135,6 +136,7 @@ func newLocalModelProber() *localModelProber {
 		loadCfg:   loadLocalModelsConfig,
 		showCache: localprobe.NewShowCache(),
 		vramFn:    estimateLocalVRAMBytes,
+		now:       time.Now,
 	}
 }
 
@@ -193,7 +195,7 @@ func (p *localModelProber) probe(ctx context.Context) *localInventorySnapshot {
 	wg.Wait()
 
 	snap := &localInventorySnapshot{
-		inventory: &reliantv1.LocalModelInventory{ProbedAt: time.Now().UTC().Format(time.RFC3339)},
+		inventory: &reliantv1.LocalModelInventory{ProbedAt: p.now().UTC().Format(time.RFC3339)},
 		targets:   map[string]localEndpointTarget{},
 	}
 	for i, ep := range results {

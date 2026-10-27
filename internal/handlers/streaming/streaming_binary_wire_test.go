@@ -16,14 +16,13 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
-// TestStreamUserUpdates_BinaryConnectWire exercises the production stream
+// TestStreamChatUpdates_BinaryConnectWire exercises the production chat stream
 // implementation through the generated Connect handler and client over real
 // HTTP/2. The browser's dedicated stream transport uses binary framing (application/connect+proto), so
 // this catches codec changes that fake streams cannot see and proves snapshot
 // and heartbeat frames decode.
-func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
+func TestStreamChatUpdates_BinaryConnectWire(t *testing.T) {
 	contentTypes := make(chan string, 1)
-	chatID := raceTestChatID
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: newCatchupChatRepo(42), Deltas: noopHub{}}))
 	// The frame's encoding is what is under test, not the 30s production
 	// cadence, so the heartbeat comes fast. It still comes from the real
@@ -44,8 +43,8 @@ func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), svc.heartbeatInterval+10*time.Second)
 	t.Cleanup(cancel)
 	stream, err := reliantv1connect.NewStreamingServiceClient(server.Client(), server.URL).
-		StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{
-			SubscribeChatId: &chatID,
+		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+			ChatId: raceTestChatID,
 		}))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
@@ -55,7 +54,7 @@ func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	receivedSnapshot := false
 	for stream.Receive() {
 		event := stream.Msg()
-		if snapshot := event.GetChatSyncSnapshot(); snapshot != nil {
+		if snapshot := event.GetSnapshot(); snapshot != nil {
 			require.Equal(t, int64(42), snapshot.GetLatestSequence())
 			receivedSnapshot = true
 			continue

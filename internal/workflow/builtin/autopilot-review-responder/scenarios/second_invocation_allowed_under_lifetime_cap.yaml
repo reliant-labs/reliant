@@ -1,0 +1,145 @@
+description: 'After release the re-check finds feedback that arrived while the lease
+  was held: a second round runs, finds nothing new and stops.'
+events:
+- node: rounds.me
+  output:
+    data:
+      id: 225976313
+      login: reliant-01
+    is_error: false
+- node: rounds.pr
+  output:
+    data:
+      base:
+        ref: main
+        repo: reliant-labs/forge
+        sha: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      body: 'Closes #7'
+      head:
+        ref: autopilot/issue-7
+        repo: reliant-labs/forge
+        sha: 0123456789abcdef0123456789abcdef01234567
+      number: 55
+      state: open
+      title: 'fix: x'
+      user: reliant-01
+    is_error: false
+- node: rounds.issue
+  output:
+    data:
+      is_pull_request: true
+      labels:
+      - agent:authored
+      state: open
+    is_error: false
+- node: rounds.repo_info
+  output:
+    data:
+      default_branch: main
+    is_error: false
+- node: rounds.head_branch
+  output:
+    data:
+      exists: true
+      protected: false
+    is_error: false
+- node: rounds.reviews
+  output:
+    data:
+      items:
+      - body: Please handle the nil case.
+        html_url: r900
+        id: 900
+        state: CHANGES_REQUESTED
+        submitted_at: '2026-10-14T20:10:00Z'
+        user: reliant-01
+        user_id: 225976313
+    is_error: false
+- node: rounds.inline
+  output:
+    data:
+      items: []
+    is_error: false
+- node: rounds.convo
+  output:
+    data:
+      items:
+      - id: 700
+        user: reliant-01
+        user_id: 225976313
+        created_at: '2026-10-14T19:20:00Z'
+        body: '<!-- autopilot-respond round=1 started=2026-10-14T19:20:00Z -->
+
+          summary'
+        html_url: c
+    is_error: false
+- black_box: true
+  node: rounds.labels
+  output: {}
+- black_box: true
+  node: rounds.lease
+  output:
+    detail: ACQUIRE
+    expires: x
+    holder: ''
+    lease_id: 4242
+    started_at: '2026-10-14T20:20:00Z'
+    status: acquired
+    takeover_from: ''
+- node: rounds.wt
+  output:
+    base_branch: x
+    branch: b
+    id: w
+    name: n
+    path: /w/ws
+    status: active
+- node: rounds.dir
+  output:
+    exit_code: 0
+    stdout: 0123456789abcdef0123456789abcdef01234567 /w/ws/forge
+- black_box: true
+  node: rounds.agent
+  output:
+    completed: true
+    model: m
+    response:
+      outcome: no_change
+      replies:
+      - id: 900
+        kind: review
+        reply: Intended; see the comment.
+      summary: Answered.
+- node: rounds.summary
+  output:
+    data:
+      id: 9
+    is_error: false
+- black_box: true
+  node: rounds.release
+  output:
+    other_live_lease: false
+    recheck_found: 1
+expect:
+  completed:
+  - rounds.release
+  - rounds.summary
+  node_outputs:
+    rounds:
+      _iterations: 1
+    rounds.plan:
+      status: ready
+      round: 2
+  not_reached:
+  - rounds.exit_note
+  outcome: completed
+inputs:
+  event: review by x
+  max_passes_per_run: 1
+  owner_id: '225976313'
+  pr_number: 55
+  repo: reliant-labs/forge
+  repos:
+  - reliant-labs/forge
+  trusted_ids: []
+name: second_invocation_allowed_under_lifetime_cap

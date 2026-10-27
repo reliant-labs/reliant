@@ -121,6 +121,7 @@ describe('mobilePathFor', () => {
     expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows')
     expect(mobilePathFor('/settings')).toBe('/m/settings')
     expect(mobilePathFor('/settings/ai')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/machines/m_1')).toBe('/m/daemons')
     expect(mobilePathFor('/settings/environments/m_1')).toBe('/m/daemons')
   })
 

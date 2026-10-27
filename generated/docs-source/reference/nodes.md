@@ -273,6 +273,10 @@ Create a git worktree for isolated development
 | `base_branch` | string | No | - | The branch to start from. Empty uses the repository's default branch |
 | `copy_files` | string | No | - | Exact paths from the project root to copy into the new worktree, such as untracked config |
 | `force` | boolean | No | - | Force creation by deleting existing worktree |
+| `target_repo` | string | No | - | Registered repository relative path (for example control-plane); never an arbitrary filesystem path |
+| `base_branches` | map | No | - | Per-repo base overrides keyed by registered relative path; omitted siblings use their defaults |
+| `fetch_branch` | string | No | - | Target repo origin branch to fetch as data, not a shell command; requires target_repo and expected_head |
+| `expected_head` | string | No | - | Exact SHA expected after fetching fetch_branch; drift refuses creation before any checkout |
 
 ### Outputs
 

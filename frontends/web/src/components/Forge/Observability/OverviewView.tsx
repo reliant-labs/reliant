@@ -29,7 +29,7 @@ import { attributeLabel } from "./attributes";
 import { formatCount, formatDuration, formatPercent, formatRate } from "./format";
 import { groupLabel } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { signalState, useSignalsIndex, type SignalsIndex } from "./serviceSignals";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
@@ -68,7 +68,7 @@ export function OverviewView({
   const services = overview.data?.services ?? [];
   const selected = service ? services.filter((candidate) => candidate.name === service) : [];
   if (service && selected.length > 0) {
-    return <ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} scope={scope} range={range} />;
+    return <><ObsAsOf updatedAt={overview.dataUpdatedAt} /><ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} scope={scope} range={range} /></>;
   }
   if (services.length === 0) {
     return <ObsNoData what="telemetry" range={range} onWiden={() => navigate({ range: "7d" })} />;
@@ -76,6 +76,7 @@ export function OverviewView({
 
   return (
     <Card padding="none" data-testid="obs-overview">
+      <ObsAsOf updatedAt={overview.dataUpdatedAt} />
       <StackedTable className="w-full text-sm">
         <caption className="sr-only">
           Services in {subject}: request rate, error rate and 95th-percentile latency over the selected window

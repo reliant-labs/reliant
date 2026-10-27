@@ -107,9 +107,8 @@ func (r *Repo) ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolC
 	return calls, nil
 }
 
-// ListToolCallsByMessageIDs and ListToolCallResultsByMessageIDs are the batch
-// reads the message read path needs: loading a page of messages must not
-// issue one query per message.
+// ListToolCallsByMessageIDs batches the message read path's tool-call lookup:
+// loading a page of messages must not issue one query per message.
 func (r *Repo) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error) {
 	calls, err := store.ListToolCallsByMessageIDs(ctx, r.ORM(), messageIDs)
 	if err != nil {

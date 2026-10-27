@@ -25,6 +25,8 @@ import {
 } from "@tanstack/react-router";
 
 import type { CloudEnv } from "@/services/forge/cloudEnvs";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient } from "@/test/renderWithQuery";
 
 const state = vi.hoisted(() => ({
   envs: { isLoading: false, data: undefined as unknown },
@@ -82,7 +84,7 @@ async function mount(url: string) {
     routeTree: root.addChildren([layout.addChildren(pages)]),
     history: createMemoryHistory({ initialEntries: [url] }),
   });
-  render(<RouterProvider router={router} />);
+  render(<QueryClientProvider client={createTestQueryClient()}><RouterProvider router={router} /></QueryClientProvider>);
   await waitFor(() => expect(router.state.status).toBe("idle"));
   return router;
 }

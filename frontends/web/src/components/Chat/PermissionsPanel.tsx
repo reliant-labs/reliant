@@ -59,6 +59,11 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   // viewport, so narrow surfaces get a full-width, wrapping layout instead.
   return (
     <div className="flex w-full flex-col items-end">
+      <div className="mb-2 max-h-80 w-full overflow-auto rounded-lg border border-border bg-background p-3" aria-label="Pending approval details">
+        {pendingApprovals.map((approval) => (
+          <pre key={approval.id} className="whitespace-pre-wrap break-words py-2 text-xs text-foreground">{approval.title}</pre>
+        ))}
+      </div>
       <div
         className={cn(
           "flex items-center gap-3 px-4 py-3 mb-3 bg-primary/5 dark:bg-primary/10 border border-primary/30 rounded-lg elevation-3",

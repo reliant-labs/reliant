@@ -32,6 +32,10 @@
  * playing) until retry(); nothing is retried behind the reader's back.
  */
 
+import { focusManager } from "@tanstack/react-query";
+import { runAsPoll, SOFT_POLL_FACTOR } from "@/services/controlPlane/observability/quotaStore";
+import { quotaOf } from "@/services/controlPlane/observability/quota";
+
 import { RRWEB_FULL_SNAPSHOT, type ReplayPage, type RrwebEvent } from "@/services/controlPlane/observability/rumTypes";
 
 export type ReplayFeedPhase =
@@ -118,6 +122,7 @@ export class ReplayFeed {
   private stopped = false;
   private emptyPolls = 0;
   private pollHandle: unknown = null;
+  private pollFactor = 1;
 
   constructor(options: ReplayFeedOptions) {
     this.opts = {
@@ -185,8 +190,12 @@ export class ReplayFeed {
     if (this.stopped || this.pollHandle !== null) return;
     this.pollHandle = this.opts.timers.set(() => {
       this.pollHandle = null;
-      void this.fetch(this.resumeToken, true);
-    }, this.opts.pollMs);
+      if (!focusManager.isFocused()) {
+        this.schedulePoll();
+        return;
+      }
+      runAsPoll(() => void this.fetch(this.resumeToken, true));
+    }, this.opts.pollMs * this.pollFactor);
   }
 
   private async fetch(token: string | undefined, poll: boolean): Promise<void> {
@@ -197,6 +206,12 @@ export class ReplayFeed {
       page = await this.opts.fetchPage(token);
     } catch (error) {
       if (this.stopped) return;
+      if (poll && quotaOf(error)?.soft) {
+        this.pollFactor = SOFT_POLL_FACTOR;
+        this.emit({ fetching: false });
+        this.schedulePoll();
+        return;
+      }
       this.failedToken = token;
       this.failedWasPoll = poll;
       this.emit({ fetching: false, phase: "error", error });

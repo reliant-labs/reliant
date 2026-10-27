@@ -187,6 +187,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
 
 	// ========================================================================
