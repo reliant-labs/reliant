@@ -35759,6 +35759,23 @@
             "optional": true
           }
         ],
+        "reliant.v1.AwaitPRReviewArgs": [
+          {
+            "name": "repo",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "pr",
+            "kind": "message",
+            "type_name": "reliant.v1.CelInt"
+          },
+          {
+            "name": "expected_head",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          }
+        ],
         "reliant.v1.BooleanInputConfig": [
           {
             "name": "base",
@@ -37090,6 +37107,12 @@
             "kind": "message",
             "type_name": "reliant.v1.GitPublishArgs",
             "oneof": "args"
+          },
+          {
+            "name": "await_pr_review",
+            "kind": "message",
+            "type_name": "reliant.v1.AwaitPRReviewArgs",
+            "oneof": "args"
           }
         ],
         "reliant.v1.NodeRouterCandidate": [
@@ -38376,6 +38399,7 @@
         "reliant.v1.ArrayInputConfig": "reliant/v1/workflow_v2.proto",
         "reliant.v1.AskQuestionArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.AttachmentsInputConfig": "reliant/v1/workflow_v2.proto",
+        "reliant.v1.AwaitPRReviewArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.BooleanInputConfig": "reliant/v1/workflow_v2.proto",
         "reliant.v1.BoundParam": "reliant/v1/workflow_v2.proto",
         "reliant.v1.CallLLMArgs": "reliant/v1/workflow_v2.proto",

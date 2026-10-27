@@ -296,7 +296,35 @@ message Node {
     ActionArgs action = 26;
     ComputeArgs compute = 27;
     GitPublishArgs git_publish = 28;
+    AwaitPRReviewArgs await_pr_review = 29;
   }
+}
+
+// AwaitPRReviewArgs waits on a durable original-author PR review subscription.
+// It never accepts a destination run: server enrollment and verified Temporal
+// continuation history determine the exact recipient.
+message AwaitPRReviewArgs {
+  option (node_meta) = {
+    node_type: "await_pr_review"
+    is_structural: true
+    category: "git"
+    icon: "GitPullRequest"
+    display_name: "Await PR review"
+    description: "Durably wait for a trusted review of the original author's published head"
+  };
+  CelString repo = 1 [(reliant) = {description: "Enrolled GitHub repository, owner/name"}];
+  CelInt pr = 2 [(reliant) = {description: "Enrolled pull request number"}];
+  CelString expected_head = 3 [(reliant) = {description: "Exact full published source commit SHA for this review round"}];
+}
+
+// AwaitPRReviewOutput contains provider references, never raw review findings.
+message AwaitPRReviewOutput {
+  string state = 1;
+  string subscription_id = 2;
+  string provider_ref = 3;
+  string head_sha = 4;
+  int64 repo_id = 5;
+  int64 pr = 6;
 }
 
 // =============================================================================

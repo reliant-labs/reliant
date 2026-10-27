@@ -20,6 +20,7 @@ const (
 	NodeTypeInvokeTool     = "invoke_tool"
 	NodeTypeAction         = "action"
 	NodeTypeCompute        = "compute"
+	NodeTypeAwaitPRReview  = "await_pr_review"
 	NodeTypeGitPublish     = "git_publish"
 )
 

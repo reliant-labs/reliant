@@ -72,6 +72,15 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"metadata": {},
 		},
 	},
+	"await_pr_review": {
+		oneofFieldName: "await_pr_review",
+		isStructural:   true,
+		argFieldKeys: map[string]struct{}{
+			"expected_head": {},
+			"pr":            {},
+			"repo":          {},
+		},
+	},
 	"call_llm": {
 		oneofFieldName: "call_llm",
 		isStructural:   false,
