@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/osutil"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -105,10 +106,9 @@ type daemonClient struct {
 	// result finished while the daemon was between streams still arrives.
 	results resultOutbox
 
-	cancelMu       sync.Mutex
-	cancelByReq    map[string]context.CancelFunc
-	runExecutions  map[string]*ownedRunExecution
-	cancelledChats map[string]int64
+	cancelMu      sync.Mutex
+	cancelByReq   map[string]context.CancelFunc
+	runExecutions map[string]*ownedRunExecution
 	// backgroundByReq marks in-flight executions the user asked to detach into
 	// a background process. The executing command polls this by request id (see
 	// exec.Run) — the same correlation cancel uses, and the only handle the
@@ -1843,12 +1843,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap["user_id"] = d.currentUserID()
 	}
 	chatID, _ := contextMap["chat_id"].(string)
-	dispatchedAt, _ := contextMap["dispatched_at_ns"].(float64)
-	if finish, allowed := d.trackRunExecution(req.RequestId, chatID, int64(dispatchedAt), cancel); allowed {
-		defer finish()
-	} else {
-		cancel()
-	}
+	finish := d.trackRunExecution(req.RequestId, chatID, cancel)
+	defer finish()
+	execCtx = osutil.WithCancellationUncertainty(execCtx, func(err error) {
+		d.cancelMu.Lock()
+		defer d.cancelMu.Unlock()
+		if e := d.runExecutions[req.RequestId]; e != nil {
+			e.uncertainty = errors.Join(e.uncertainty, err)
+		}
+	})
 
 	// The worktree or project this call works in: recorded the first time it
 	// is seen, and refused while it (or $HOME) is no longer the directory the

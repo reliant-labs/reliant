@@ -3,7 +3,9 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync"
 )
 
 // CancelRunCommands drains this chat on every owned daemon, including node
@@ -18,17 +20,37 @@ func (r *NATSDaemonRouter) CancelRunCommands(ctx context.Context, userID, chatID
 		return err
 	}
 	payload, _ := json.Marshal(map[string]string{"chat_id": chatID})
+	ids := make([]string, 0, len(daemons))
 	for _, d := range daemons {
-		reply, err := r.SendDaemonCommandToDaemon(ctx, userID, d.ID, "run.cancel", payload, 15000)
-		if err != nil {
-			return fmt.Errorf("command cancellation unconfirmed on machine %s: %w", d.ID, err)
-		}
-		var ack struct {
-			Stopped bool `json:"stopped"`
-		}
-		if json.Unmarshal(reply, &ack) != nil || !ack.Stopped {
-			return fmt.Errorf("command cancellation unconfirmed on machine %s: missing stopped acknowledgment", d.ID)
-		}
+		ids = append(ids, d.ID)
 	}
-	return nil
+	return cancelOnMachines(ctx, ids, func(ctx context.Context, id string) ([]byte, error) {
+		return r.SendDaemonCommandToDaemon(ctx, userID, id, "run.cancel", payload, 15000)
+	})
+}
+
+// Each candidate is attempted independently. An offline machine must not
+// prevent an executing one receiving cancel; uncertainty is aggregated.
+func cancelOnMachines(ctx context.Context, ids []string, send func(context.Context, string) ([]byte, error)) error {
+	results := make([]error, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			reply, err := send(ctx, id)
+			if err != nil {
+				results[i] = fmt.Errorf("command cancellation unconfirmed on machine %s: %w", id, err)
+				return
+			}
+			var ack struct {
+				Stopped bool `json:"stopped"`
+			}
+			if json.Unmarshal(reply, &ack) != nil || !ack.Stopped {
+				results[i] = fmt.Errorf("command cancellation unconfirmed on machine %s: missing stopped acknowledgment", id)
+			}
+		}(i, id)
+	}
+	wg.Wait()
+	return errors.Join(results...)
 }

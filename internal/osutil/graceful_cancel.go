@@ -83,15 +83,21 @@ const DefaultGraceDelay = 3 * time.Second
 // outlive the command; the returned func is safe to call more than once and
 // is intended for defer.
 func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
+	finish := ApplyGracefulCancelChecked(cmd, grace)
+	return func() { _ = finish() }
+}
+
+// ApplyGracefulCancelChecked also returns uncertainty about complete group
+// shutdown. Daemon callers must propagate it before acknowledging run.cancel.
+func ApplyGracefulCancelChecked(cmd *exec.Cmd, grace time.Duration) (stop func() error) {
 	if grace <= 0 {
 		grace = DefaultGraceDelay
 	}
 
-	done := make(chan struct{})
-	var stopOnce sync.Once
 	var cancelMu sync.Mutex
 	var cancelled bool
 	escalated := make(chan struct{})
+	var proofErr error
 
 	cmd.Cancel = func() error {
 		proc := cmd.Process
@@ -118,23 +124,18 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		go func() {
 			timer := time.NewTimer(grace)
 			defer timer.Stop()
-			select {
-			case <-timer.C:
-			case <-done:
-			}
-			killGroup()
+			// Leader exit/Wait must not shorten a descendant's cleanup grace.
+			<-timer.C
+			proofErr = killGroup()
 			close(escalated)
 		}()
 
 		return err
 	}
 
-	// sync.Once rather than a bool: stop is documented as safe to call more
-	// than once, and the exec paths call it from whichever goroutine finishes
-	// the command, so an unsynchronized flag would be a data race and a
-	// double close would panic.
-	return func() {
-		stopOnce.Do(func() { close(done) })
+	// Multiple callers may join the same completed escalation. Channel close
+	// synchronizes the proof error; joining never shortens cleanup grace.
+	return func() error {
 		cancelMu.Lock()
 		wasCancelled := cancelled
 		cancelMu.Unlock()
@@ -142,6 +143,8 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		// completion until the captured descendants have received escalation.
 		if wasCancelled {
 			<-escalated
+			return proofErr
 		}
+		return nil
 	}
 }

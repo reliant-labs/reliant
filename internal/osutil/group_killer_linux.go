@@ -3,6 +3,8 @@
 package osutil
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -13,7 +15,7 @@ import (
 // Capture pidfds before TERM can reap/reparent the group leader. Each handle
 // names the original process even after PID recycling. This never signals a
 // numeric PID asynchronously, and never scans command names or other groups.
-func captureGroupKiller(proc *os.Process) func() {
+func captureGroupKiller(proc *os.Process) func() error {
 	var fds []int
 	leaderFD := -1
 	entries, _ := os.ReadDir("/proc")
@@ -46,12 +48,17 @@ func captureGroupKiller(proc *os.Process) func() {
 			leaderFD = fd
 		}
 	}
-	return func() {
+	return func() error {
 		// Signal the original group through its leader's pidfd where supported,
 		// plus every captured member for kernels that lack group pidfd signals or
 		// when the leader has already exited. Handles cannot target PID reuse.
+		var proofErr error
 		if leaderFD >= 0 {
-			_ = unix.PidfdSendSignal(leaderFD, unix.SIGKILL, nil, unix.PIDFD_SIGNAL_PROCESS_GROUP)
+			if err := unix.PidfdSendSignal(leaderFD, unix.SIGKILL, nil, unix.PIDFD_SIGNAL_PROCESS_GROUP); err != nil {
+				proofErr = fmt.Errorf("process-group escalation unconfirmed: %w", err)
+			}
+		} else {
+			proofErr = errors.New("process-group escalation unconfirmed: original leader unavailable")
 		}
 		for _, fd := range fds {
 			_ = unix.PidfdSendSignal(fd, unix.SIGKILL, nil, 0)
@@ -69,5 +76,8 @@ func captureGroupKiller(proc *os.Process) func() {
 			}
 			unix.Close(fd)
 		}
+		// A one-time member snapshot cannot prove absence of a later fork.
+		// Preserve best-effort cleanup but never advertise it as whole-tree exit.
+		return errors.Join(proofErr, errors.New("complete process-tree exit unconfirmed: snapshot cannot fence new descendants"))
 	}
 }

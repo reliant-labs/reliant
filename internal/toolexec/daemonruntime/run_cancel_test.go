@@ -11,12 +11,10 @@ func TestRunCancelWaitsForOwnedCompletionAndLeavesSibling(t *testing.T) {
 	d := &daemonClient{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	finish, ok := d.trackRunExecution("one", "chat", time.Now().UnixNano(), cancel)
-	require.True(t, ok)
+	finish := d.trackRunExecution("one", "chat", cancel)
 	sibling, cancelSibling := context.WithCancel(context.Background())
 	defer cancelSibling()
-	finishSibling, ok := d.trackRunExecution("two", "other", time.Now().UnixNano(), cancelSibling)
-	require.True(t, ok)
+	finishSibling := d.trackRunExecution("two", "other", cancelSibling)
 	defer finishSibling()
 	returned := make(chan error, 1)
 	go func() {
@@ -35,16 +33,31 @@ func TestRunCancelWaitsForOwnedCompletionAndLeavesSibling(t *testing.T) {
 	}
 	require.NoError(t, sibling.Err())
 	finish()
-	require.NoError(t, <-returned)
-	_, ok = d.trackRunExecution("late", "chat", 0, cancel)
-	require.False(t, ok)
-	resumed, ok := d.trackRunExecution("resume", "chat", time.Now().Add(time.Second).UnixNano(), cancel)
-	require.True(t, ok)
+	require.ErrorContains(t, <-returned, "late activity dispatch is not fenced")
+	// No cross-machine clock cutoff: neither a late dispatch nor a legitimate
+	// resumed conversation may be mistaken for proof of cancellation.
+	late := d.trackRunExecution("late", "chat", func() {})
+	late()
+	resumed := d.trackRunExecution("resume", "chat", func() {})
 	resumed()
 }
+func TestRunCancelEmptySnapshotDoesNotAcknowledgeLateDispatch(t *testing.T) {
+	d := &daemonClient{}
+	reply, err := d.cancelOwnedRun(context.Background(), []byte(`{"chat_id":"chat"}`))
+	require.Nil(t, reply)
+	require.ErrorContains(t, err, "late activity dispatch is not fenced")
+	// The delayed activity does not exist in the original snapshot. There is
+	// intentionally no timestamp assertion: independent worker/daemon clocks
+	// cannot establish execution ownership or justify a stopped:true response.
+	cancelled := false
+	finish := d.trackRunExecution("delayed", "chat", func() { cancelled = true })
+	defer finish()
+	require.False(t, cancelled)
+}
+
 func TestRunCancelTimeoutIsNotSuccess(t *testing.T) {
 	d := &daemonClient{}
-	finish, _ := d.trackRunExecution("one", "chat", 0, func() {})
+	finish := d.trackRunExecution("one", "chat", func() {})
 	defer finish()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancel()

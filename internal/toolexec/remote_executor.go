@@ -392,7 +392,6 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 	}
 
 	contextMap := req.toolContextMap()
-	contextMap["dispatched_at_ns"] = time.Now().UnixNano()
 
 	timeoutMs := 0
 	if req.Timeout > 0 {

@@ -3,28 +3,26 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"time"
 )
 
 type ownedRunExecution struct {
-	chat   string
-	cancel context.CancelFunc
-	done   chan struct{}
+	chat        string
+	cancel      context.CancelFunc
+	done        chan struct{}
+	uncertainty error
 }
 
-func (d *daemonClient) trackRunExecution(id, chat string, dispatchedAt int64, cancel context.CancelFunc) (func(), bool) {
+func (d *daemonClient) trackRunExecution(id, chat string, cancel context.CancelFunc) func() {
 	d.cancelMu.Lock()
 	defer d.cancelMu.Unlock()
-	if cutoff, ok := d.cancelledChats[chat]; ok && dispatchedAt <= cutoff {
-		return func() {}, false
-	}
 	if d.runExecutions == nil {
 		d.runExecutions = map[string]*ownedRunExecution{}
 	}
 	e := &ownedRunExecution{chat: chat, cancel: cancel, done: make(chan struct{})}
 	d.runExecutions[id] = e
-	return func() { d.cancelMu.Lock(); delete(d.runExecutions, id); close(e.done); d.cancelMu.Unlock() }, true
+	return func() { d.cancelMu.Lock(); delete(d.runExecutions, id); close(e.done); d.cancelMu.Unlock() }
 }
 
 // The reply acknowledges handler completion, not merely delivery of a signal.
@@ -37,10 +35,6 @@ func (d *daemonClient) cancelOwnedRun(ctx context.Context, payload []byte) ([]by
 		return nil, fmt.Errorf("run.cancel requires chat_id")
 	}
 	d.cancelMu.Lock()
-	if d.cancelledChats == nil {
-		d.cancelledChats = map[string]int64{}
-	}
-	d.cancelledChats[req.ChatID] = time.Now().UnixNano() // reject late deliveries while cancellation drains
 	var owned []*ownedRunExecution
 	for _, e := range d.runExecutions {
 		if e.chat == req.ChatID {
@@ -58,5 +52,14 @@ func (d *daemonClient) cancelOwnedRun(ctx context.Context, payload []byte) ([]by
 			return nil, fmt.Errorf("run cancellation unconfirmed: command still executing: %w", ctx.Err())
 		}
 	}
-	return []byte(`{"stopped":true}`), nil
+	// Without an execution-scoped dispatch fence, a terminated Temporal
+	// activity can still create a fresh request after this snapshot. Never
+	// claim stopped merely because the currently known handlers returned.
+	d.cancelMu.Lock()
+	defer d.cancelMu.Unlock()
+	errs := []error{errors.New("run cancellation unconfirmed: known handlers drained, late activity dispatch is not fenced")}
+	for _, e := range owned {
+		errs = append(errs, e.uncertainty)
+	}
+	return nil, errors.Join(errs...)
 }

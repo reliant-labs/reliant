@@ -854,7 +854,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// below, outliving this function, and the timer must stay armed for as long
 	// as cancellation can still fire. Stopped on every path where this function
 	// owns the command through to completion.
-	stopGrace := osutil.ApplyGracefulCancel(cmd, ExecGraceDelay)
+	finishGrace := osutil.ApplyGracefulCancelChecked(cmd, ExecGraceDelay)
+	stopGrace := func() { osutil.ReportCancellationUncertainty(ctx, finishGrace()) }
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
