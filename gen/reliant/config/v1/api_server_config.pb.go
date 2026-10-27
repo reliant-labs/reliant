@@ -88,10 +88,10 @@ type ApiServerConfig struct {
 	// finished (clean, merged or pushed, idle over 24h, not in use): dry-run
 	// logs them and archives nothing; on archives them; off never asks.
 	WorktreeAutoArchive string `protobuf:"bytes,36,opt,name=worktree_auto_archive,json=worktreeAutoArchive,proto3" json:"worktree_auto_archive,omitempty"`
-	// How long a LIVE worktree must be left alone — no chat running in it, no
-	// process working in it, no file changed outside its regenerable paths —
-	// before the worktree sweep has its daemon delete those regenerable files
-	// (node_modules, build output, pinned tools, tmp/). 0 turns it off.
+	// Idle floor for whole recoverable-worktree retirement. Requires clean
+	// pushed/merged work, no live chat/thread execution, no process use and no
+	// fresh files (including caches). Dirty/unique/uncertain trees retain every
+	// file. auto-archive on is required; 0 disables. Legacy config name only.
 	WorktreeLiveShedIdle *durationpb.Duration `protobuf:"bytes,81,opt,name=worktree_live_shed_idle,json=worktreeLiveShedIdle,proto3" json:"worktree_live_shed_idle,omitempty"`
 	// The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
 	// logs in through: its origin and its PUBLIC publishable key
@@ -334,7 +334,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x88\x1f\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9b\x1f\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -374,9 +374,9 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0fmax_upload_size\x18# \x01(\x03BM\xbaH\x04\"\x02 \x00\x82\xce\x18B\n" +
 	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\x9d\x01\n" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
-	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\xcd\x01\n" +
-	"\x17worktree_live_shed_idle\x18Q \x01(\v2\x19.google.protobuf.DurationB{\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18o\n" +
-	"\x1fRELIANT_WORKTREE_LIVE_SHED_IDLE\x1a\x0324h*GIdle time before a live worktree's regenerable files are shed (0 = off)R\x14worktreeLiveShedIdle\x12\x8e\x01\n" +
+	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\xe0\x01\n" +
+	"\x17worktree_live_shed_idle\x18Q \x01(\v2\x19.google.protobuf.DurationB\x8d\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18\x80\x01\n" +
+	"\x1fRELIANT_WORKTREE_LIVE_SHED_IDLE\x1a\x0324h*XIdle floor for whole recoverable-worktree retirement; auto-archive on required (0 = off)R\x14worktreeLiveShedIdle\x12\x8e\x01\n" +
 	"\x11auth_provider_url\x18% \x01(\tBb\x82\xce\x18^\n" +
 	"\x10RELIANT_AUTH_URL\x1a\x1bhttps://dash.reliantlabs.io*-OAuth provider origin for the desktop sign-inR\x0fauthProviderUrl\x12\xb5\x01\n" +
 	"\x11auth_provider_key\x18& \x01(\tB\x88\x01\x82\xce\x18\x83\x01\n" +

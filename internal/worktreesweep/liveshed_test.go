@@ -15,9 +15,17 @@ import (
 
 // runningStore is a RunningChatStore answering from a fixed set.
 type runningStore struct {
-	running map[string]bool
-	err     error
-	asked   [][]string
+	running      map[string]bool
+	err          error
+	asked        [][]string
+	archiveAsked []string
+	archiveOK    bool
+	archiveErr   error
+}
+
+func (r *runningStore) ArchiveRecoverableIdleWorktree(_ context.Context, id string, _ time.Time) (bool, error) {
+	r.archiveAsked = append(r.archiveAsked, id)
+	return r.archiveOK, r.archiveErr
 }
 
 func (r *runningStore) ListWorktreeIDsWithRunningChat(_ context.Context, ids []string) (map[string]bool, error) {
@@ -26,7 +34,7 @@ func (r *runningStore) ListWorktreeIDsWithRunningChat(_ context.Context, ids []s
 }
 
 // shedAsks describes every row of store and returns each row's
-// ShedIdleAfterSeconds.
+// ProbeRecoverableAfterSeconds.
 func shedAsks(t *testing.T, s *Sweeper, store *fakeStore, keep bool) map[string]int64 {
 	t.Helper()
 	cands, err := store.ListWorktreesForReclaim(context.Background())
@@ -34,7 +42,7 @@ func shedAsks(t *testing.T, s *Sweeper, store *fakeStore, keep bool) map[string]
 	req, _ := s.describe(context.Background(), cands, nil, keep)
 	out := map[string]int64{}
 	for _, w := range req.Worktrees {
-		out[w.ID] = w.ShedIdleAfterSeconds
+		out[w.ID] = w.ProbeRecoverableAfterSeconds
 	}
 	return out
 }
@@ -49,7 +57,7 @@ func TestDescribe_AsksToShedOnlyIdleLiveRows(t *testing.T) {
 	store.add("archived", true, nil)
 	store.add("main", false, nil).IsMain = true
 	rs := &runningStore{running: map[string]bool{"running": true}}
-	s := New(store, &scriptSender{answer: locked}).WithLiveShed(36*time.Hour, rs)
+	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(36*time.Hour, rs)
 
 	got := shedAsks(t, s, store, false)
 	assert.Equal(t, map[string]int64{"idle": 36 * 3600, "running": 0, "archived": 0, "main": 0}, got)
@@ -76,8 +84,25 @@ func TestDescribe_ShedsNothingWhenItCannotTell(t *testing.T) {
 			t.Parallel()
 			store := newFakeStore("d")
 			store.add("idle", false, nil)
-			s := New(store, &scriptSender{answer: locked}).WithLiveShed(tc.after, tc.rs)
+			s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(tc.after, tc.rs)
 			assert.Equal(t, map[string]int64{"idle": 0}, shedAsks(t, s, store, tc.keep))
+		})
+	}
+}
+
+func TestRecoverableIdleArchiveRequiresEnabledModeAndAtomicStoreAck(t *testing.T) {
+	for _, mode := range []AutoArchiveMode{AutoArchiveOff, AutoArchiveDryRun, AutoArchiveOn} {
+		t.Run(string(mode), func(t *testing.T) {
+			store := newFakeStore("d")
+			wt := store.add("idle", false, nil)
+			rs := &runningStore{archiveOK: true}
+			s := New(store, &scriptSender{answer: locked}).WithAutoArchive(mode, store, nil).WithIdleRetirement(time.Hour, rs)
+			s.archiveRecoverableIdle(context.Background(), "user", wt)
+			if mode == AutoArchiveOn {
+				require.Equal(t, []string{"idle"}, rs.archiveAsked)
+			} else {
+				require.Empty(t, rs.archiveAsked)
+			}
 		})
 	}
 }
@@ -87,6 +112,6 @@ func TestDescribe_DoesNotShedARowBeingRestored(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore("d")
 	store.add("restoring", false, nil).CleanupMetadata = &core.CleanupMetadata{RetireFence: "100"}
-	s := New(store, &scriptSender{answer: locked}).WithLiveShed(time.Hour, &runningStore{})
+	s := New(store, &scriptSender{answer: locked}).WithIdleRetirement(time.Hour, &runningStore{})
 	assert.Equal(t, map[string]int64{"restoring": 0}, shedAsks(t, s, store, false))
 }

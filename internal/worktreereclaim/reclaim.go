@@ -67,6 +67,11 @@ type Reclaimer struct {
 	// the locking that precedes it; zero means DefaultProbeBudget. A probe that
 	// runs out of it is OutcomeProbeInconclusive, not a "no".
 	ProbeBudget time.Duration
+	// Acquire excludes new runtime work through the final checks and shedding.
+	// Missing admission or process inspection fails closed: nothing is shed.
+	Acquire func(context.Context, []string) (RecoveryLease, error)
+	// ProcessUse checks executables, open and mapped files, not only cwd.
+	ProcessUse func(ctx context.Context, paths []string) error
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -100,7 +105,7 @@ type cachedSize struct {
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
 	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
-		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch}
+		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch, ProcessUse: CheckProcessUse}
 }
 
 // DefaultRoot is where reliant creates worktrees on this machine.
@@ -462,6 +467,10 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 // own git in the checkout for an earlier request — and it held an idle
 // worktree as in use on that alone.
 func (r *Reclaimer) inUse(ctx context.Context, w Worktree, fresh bool) *Result {
+	if selfWithin(w.Path) {
+		res := held(w, ReasonInUse, "the daemon itself runs from here")
+		return &res
+	}
 	cwds, err := r.cwds(ctx, fresh)
 	if err == nil && !fresh && cwdWithin(cwds, w.Path) {
 		cwds, err = r.cwds(ctx, true)
@@ -614,9 +623,8 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if w.Remove {
 		return r.autoRemove(ctx, w)
 	}
-	checkouts, sc, hold := r.structure(ctx, w, false)
+	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil {
-		r.shed(ctx, w, sc, hold)
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
@@ -647,9 +655,6 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		res.SnapshotRefs = saved
-		if v.Reason != ReasonDirty && v.Reason != ReasonUnpushed && v.Reason != ReasonUnreachable {
-			r.shed(ctx, w, sc, &res)
-		}
 		r.measure(ctx, &res, w.Path)
 		return res
 	}
@@ -693,7 +698,7 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
-	return r.removeWorkspace(ctx, w, checkouts, sc.Outside, false)
+	return r.retireWorkspace(ctx, w, checkouts, sc.Outside)
 }
 
 // classifyAll classifies every checkout of a workspace, concurrently: each is
@@ -914,9 +919,18 @@ func (r *Reclaimer) quarantined(id string) []string {
 		return nil
 	}
 	var out []string
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, filepath.Join(r.quarantineRoot(id), e.Name()))
+		name := e.Name()
+		if strings.HasSuffix(name, ".disposing") {
+			name = strings.TrimSuffix(name, ".disposing")
+		} else if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(r.quarantineRoot(id), name)
+		if !seen[path] {
+			out = append(out, path)
+			seen[path] = true
 		}
 	}
 	return out
@@ -1072,7 +1086,17 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
-	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
+		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
+			res.RecoverableIdle = true
+		}
+	}
+	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
+		r.probeLanded(ctx, w, &res)
+	}
+	// A landed worktree is the server's to decide on by its own rule; asking
+	// whether it is also "finished" would repeat the same checks.
+	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeRecoverableAfterSeconds <= 0 && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
 		switch r.finished(ctx, w) {
 		case probeFinished:
 			res.Outcome = OutcomeIdleDone
@@ -1082,7 +1106,6 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome = OutcomeProbeInconclusive
 		}
 	}
-	r.shedLive(ctx, w, &res)
 	return res
 }
 
@@ -1243,6 +1266,12 @@ func (r *Reclaimer) rowLock(ctx context.Context, id string) (func(), error) {
 func (r *Reclaimer) recoverLocked(ctx context.Context, rowID string) (restored, parked []string) {
 	r.dropStrayMarkers(rowID)
 	for _, q := range r.quarantined(rowID) {
+		// A partially disposed checkout is evidence/recovery state, never a
+		// complete workspace that automatic revival may silently move home.
+		if _, err := os.Lstat(q + ".disposing"); err == nil || !os.IsNotExist(err) {
+			parked = append(parked, q)
+			continue
+		}
 		orig, err := os.ReadFile(originMarker(q))
 		if err != nil || len(orig) == 0 {
 			parked = append(parked, q)
