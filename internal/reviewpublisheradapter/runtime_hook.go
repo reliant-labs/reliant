@@ -60,22 +60,24 @@ func (h TemporalEvidence) VerifyRecipient(ctx context.Context, a store.ReviewAut
 // workflow type. The ordinary public runtime.DynamicWorkflow has no hook.
 // No mutable per-run assignment is captured; a server activity resolves it.
 func PrivateReviewWorkflow(ctx workflow.Context, in runtime.WorkflowInput) (*runtime.WorkflowResult, error) {
-	return runtime.NewDynamicWorkflowWithHooks(runtime.WorkflowHooks{AfterGraph: func(ctx workflow.Context, done runtime.GraphCompletion) error {
-		if done.Loaded.HasTemplates {
-			return reviewpublisher.ErrUnauthorized
-		}
-		verdict, ok := done.Outputs["review_verdict"].(string)
-		if !ok || !validVerdict(reviewpublisher.Verdict(verdict)) {
-			return reviewpublisher.ErrUnauthorized
-		}
-		options := workflow.ActivityOptions{StartToCloseTimeout: 15 * time.Second}
-		activityCtx := workflow.WithActivityOptions(ctx, options)
-		var assignmentID string
-		if err := workflow.ExecuteActivity(activityCtx, ResolveAssignmentActivityName).Get(ctx, &assignmentID); err != nil {
-			return err
-		}
-		input := CompletionInput{AssignmentID: assignmentID, Runtime: types.RuntimeContext{WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID, StepID: ReviewCompletionPath, NodePath: ReviewCompletionPath}, Result: GraphResult{Verdict: reviewpublisher.Verdict(verdict)}}
-		options.ActivityID = "private-review-completion"
-		return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, options), CompletionActivityName, input).Get(ctx, nil)
-	}})(ctx, in)
+	return runtime.NewDynamicWorkflowWithHooks(runtime.WorkflowHooks{AfterGraph: privateReviewAfterGraph})(ctx, in)
+}
+
+func privateReviewAfterGraph(ctx workflow.Context, done runtime.GraphCompletion) error {
+	if err := validateReviewOutputExpressions(done.Loaded.YAML, done.Loaded.WorkflowJSON, done.Loaded.HasTemplates); err != nil {
+		return err
+	}
+	verdict, ok := done.Outputs["review_verdict"].(string)
+	if !ok || !validVerdict(reviewpublisher.Verdict(verdict)) {
+		return reviewpublisher.ErrUnauthorized
+	}
+	options := workflow.ActivityOptions{StartToCloseTimeout: 15 * time.Second}
+	activityCtx := workflow.WithActivityOptions(ctx, options)
+	var assignmentID string
+	if err := workflow.ExecuteActivity(activityCtx, ResolveAssignmentActivityName).Get(ctx, &assignmentID); err != nil {
+		return err
+	}
+	input := CompletionInput{AssignmentID: assignmentID, Runtime: types.RuntimeContext{WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID, StepID: ReviewCompletionPath, NodePath: ReviewCompletionPath}, Result: GraphResult{Verdict: reviewpublisher.Verdict(verdict)}}
+	options.ActivityID = "private-review-completion"
+	return workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, options), CompletionActivityName, input).Get(ctx, nil)
 }

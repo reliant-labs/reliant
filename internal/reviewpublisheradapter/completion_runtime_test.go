@@ -87,7 +87,7 @@ func TestActualTemporalCompletionActivityAndFailedBranch(t *testing.T) {
 		t.Run(map[bool]string{false: "approve", true: "failed_other_branch"}[failed], func(t *testing.T) {
 			taskQueue := "review-proof-" + uuid.NewString()
 			workflowID := "review-root-" + uuid.NewString()
-			graph := json.RawMessage(`{"name":"trusted","nodes":[{"id":"finish"}]}`)
+			graph := json.RawMessage(`{"name":"trusted"}`)
 			snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "PrivateReviewProof", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, YAML: map[string][]byte{"trusted": []byte("name: trusted\nnodes: []\n")}, CompletionNode: ReviewCompletionPath, CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
 			require.NoError(t, err)
 			digest, err := store.DigestReviewSnapshot(snapshot)
