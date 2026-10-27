@@ -128,8 +128,8 @@ var errActivityUnknown = errors.New("the checkout is too large, or partly unread
 //
 //   - no process has its working directory in the workspace (a fresh look);
 //   - no HEAD move, commit or checkout (idleSince);
-//   - no file or directory changed anywhere in a checkout outside the paths
-//     being shed, nor in the workspace outside its checkouts (lastActivity).
+//   - no file or directory changed anywhere in a checkout, INCLUDING paths
+//     being considered for deletion, or outside its checkouts (lastActivity).
 //
 // Only what shed deletes is deleted: ignored paths on the allow-list, in
 // checkouts this row's lock proves are its own, never a path holding a
@@ -172,7 +172,7 @@ func (r *Reclaimer) shedLive(ctx context.Context, w Worktree, res *Result) {
 		if len(targets) == 0 {
 			continue
 		}
-		last, err := lastActivity(ctx, c, targets)
+		last, err := lastActivity(ctx, c)
 		if err != nil || now.Sub(last) < floor {
 			return // one checkout in use keeps the whole workspace
 		}
@@ -193,16 +193,10 @@ func (r *Reclaimer) shedLive(ctx context.Context, w Worktree, res *Result) {
 	}
 }
 
-// lastActivity is the newest modification time of anything in checkout except
-// the .git entries and the regenerable paths skip (relative, as
-// regenerableTargets returns them): when a person or an agent last changed the
-// checkout itself, as opposed to the caches a build keeps beside it. Every
-// other path counts, ignored data and untracked files included.
-func lastActivity(ctx context.Context, checkout string, skip []string) (time.Time, error) {
-	skipped := make(map[string]bool, len(skip))
-	for _, s := range skip {
-		skipped[filepath.Join(checkout, filepath.FromSlash(strings.TrimSuffix(s, "/")))] = true
-	}
+// lastActivity includes every checkout entry except git administration.
+// Fresh writes inside a deletion candidate are activity too: a build may be
+// using its caches while no process has a cwd inside this worktree.
+func lastActivity(ctx context.Context, checkout string) (time.Time, error) {
 	var newest time.Time
 	entries := 0
 	err := filepath.WalkDir(checkout, func(p string, d fs.DirEntry, err error) error {
@@ -215,7 +209,7 @@ func lastActivity(ctx context.Context, checkout string, skip []string) (time.Tim
 		if entries%1024 == 0 && ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if p != checkout && (d.Name() == ".git" || skipped[p]) {
+		if p != checkout && d.Name() == ".git" {
 			if d.IsDir() {
 				return fs.SkipDir
 			}

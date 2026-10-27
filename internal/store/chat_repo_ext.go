@@ -61,18 +61,24 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 	return id, err
 }
 
-// ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a bound
-// chat with a run that is pending or active: a worktree an agent may be about
-// to write to, whatever its files' ages say.
+// ListWorktreeIDsWithRunningChat conservatively excludes both chat and
+// spawned-thread workspace bindings while their chat has a pending, active or
+// paused/resumable run. A thread can override its chat's workspace.
 func ListWorktreeIDsWithRunningChat(ctx context.Context, db orm.Context, worktreeIDs []string) (map[string]bool, error) {
 	out := make(map[string]bool)
 	if len(worktreeIDs) == 0 {
 		return out, nil
 	}
 	var ids []string
-	err := db.Bun().NewRaw(`SELECT DISTINCT c.worktree_id FROM chats c JOIN workflows w ON w.chat_id = c.id
-WHERE c.worktree_id = ANY(?0::text[]) AND w.state IN (?1, ?2)`,
-		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive).Scan(ctx, &ids)
+	err := db.Bun().NewRaw(`WITH bindings AS (
+ SELECT id AS chat_id, worktree_id FROM chats WHERE worktree_id = ANY(?0::text[])
+ UNION
+ SELECT chat_id, worktree_id FROM threads WHERE worktree_id = ANY(?0::text[])
+)
+SELECT DISTINCT b.worktree_id FROM bindings b JOIN workflows w ON w.chat_id = b.chat_id
+WHERE w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4)`,
+		pgdialect.Array(worktreeIDs), core.WorkflowStatePending, core.WorkflowStateActive,
+		core.WorkflowStateStopped, core.StopReasonPaused).Scan(ctx, &ids)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}

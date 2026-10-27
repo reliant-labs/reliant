@@ -42,8 +42,8 @@ func TestGetLiveChatIDForWorktree(t *testing.T) {
 	require.Empty(t, id)
 }
 
-// A worktree counts as running only while a bound chat has a pending or active
-// run; a stopped run, a paused one or no chat at all leaves it idle.
+// Pending, active and paused/resumable executions exclude every chat/thread
+// workspace binding. Completed runs and unbound workspaces are idle.
 func TestListWorktreeIDsWithRunningChat(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -62,10 +62,27 @@ func TestListWorktreeIDsWithRunningChat(t *testing.T) {
 	}
 	got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{"active", "pending", "done", "paused", "nochat", "missing"})
 	require.NoError(t, err)
-	require.Equal(t, map[string]bool{"active": true, "pending": true}, got)
+	require.Equal(t, map[string]bool{"active": true, "pending": true, "paused": true}, got)
 	got, err = env.Repo.ListWorktreeIDsWithRunningChat(ctx, nil)
 	require.NoError(t, err)
 	require.Empty(t, got)
+}
+
+func TestRunningChatExcludesSpawnedThreadWorkspaceOverride(t *testing.T) {
+	for _, status := range []core.WorkflowStatus{core.Pending(), core.Active(), core.Paused()} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			env := storetest.New(t)
+			ctx := context.Background()
+			chat := boundFixture(t, env, "chat-workspace-a", false)
+			child := &core.Worktree{ID: "thread-workspace-b", ProjectID: storetest.SeedProjectID, Name: "child", Path: "/tmp/child", Branch: "child"}
+			require.NoError(t, env.Repo.CreateWorktree(ctx, child))
+			require.NoError(t, env.Repo.CreateWorkflow(ctx, newWorkflow("wf-parent", chat.ID, nil, status, time.Now().UTC())))
+			mustExecConv(t, env, `INSERT INTO threads (id, chat_id, created_at, origin, status, worktree_id) VALUES ('spawn-child', $1, NOW(), 'spawn', 2, $2)`, chat.ID, child.ID)
+			got, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{*chat.WorktreeID, child.ID})
+			require.NoError(t, err)
+			require.Equal(t, map[string]bool{*chat.WorktreeID: true, child.ID: true}, got)
+		})
+	}
 }
 
 func TestChatWorktreeArchiveSymmetry(t *testing.T) {

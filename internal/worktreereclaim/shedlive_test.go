@@ -20,16 +20,12 @@ func age(t *testing.T, path string, at time.Time) {
 	}
 }
 
-// lastActivity reads only what a person or an agent changes: the regenerable
-// paths it is told to skip and every .git entry do not count, and everything
-// else does — tracked, untracked and ignored data alike, files and
-// directories, at any depth.
-func TestLastActivity_SkipsOnlyRegenerablePathsAndGit(t *testing.T) {
+// Every source/cache/tool/output/data write is activity, at any depth.
+// Only git administration is excluded; it has separate semantic HEAD checks.
+func TestLastActivity_IncludesRegenerablePaths(t *testing.T) {
 	t.Parallel()
 	old := time.Now().Add(-48 * time.Hour)
 	fresh := time.Now().Add(-time.Minute)
-	skip := []string{"web/node_modules/", "dist/", ".tools/"}
-
 	layout := func(t *testing.T) string {
 		c := t.TempDir()
 		for _, p := range []string{"main.go", "web/src/app.ts", "web/node_modules/pkg/index.js", "dist/app.js",
@@ -45,9 +41,9 @@ func TestLastActivity_SkipsOnlyRegenerablePathsAndGit(t *testing.T) {
 		wantIdle bool
 	}{
 		"nothing changed":                 {wantIdle: true},
-		"a cache changed":                 {touch: "web/node_modules/pkg/index.js", wantIdle: true},
-		"build output changed":            {touch: "dist/app.js", wantIdle: true},
-		"a pinned tool changed":           {touch: ".tools/bin/tool", wantIdle: true},
+		"a cache changed":                 {touch: "web/node_modules/pkg/index.js"},
+		"build output changed":            {touch: "dist/app.js"},
+		"a pinned tool changed":           {touch: ".tools/bin/tool"},
 		"the git pointer changed":         {touch: ".git", wantIdle: true},
 		"a source file changed":           {touch: "web/src/app.ts"},
 		"a top-level file changed":        {touch: "main.go"},
@@ -62,7 +58,7 @@ func TestLastActivity_SkipsOnlyRegenerablePathsAndGit(t *testing.T) {
 			if tc.touch != "" {
 				age(t, filepath.Join(c, filepath.FromSlash(tc.touch)), fresh)
 			}
-			last, err := lastActivity(context.Background(), c, skip)
+			last, err := lastActivity(context.Background(), c)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +82,7 @@ func TestLastActivity_UnreadableIsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-	if _, err := lastActivity(context.Background(), c, nil); err == nil {
+	if _, err := lastActivity(context.Background(), c); err == nil {
 		t.Fatal("an unreadable directory was read as idle")
 	}
 }
@@ -205,15 +201,15 @@ func TestReconcile_LiveShedOnlyWhenIdleAndAsked(t *testing.T) {
 	}
 }
 
-// A cache a build is writing to right now does not keep the worktree: only
-// the files a person or an agent works on do.
-func TestReconcile_LiveShedIgnoresActivityInsideCaches(t *testing.T) {
+// Fresh activity inside the target itself keeps the whole workspace: a build
+// can use its cache without any process having its cwd inside the workspace.
+func TestReconcile_LiveShedPreservesActivityInsideCaches(t *testing.T) {
 	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f, w, _ := liveFixture(t, "live-cache-busy")
 	age(t, filepath.Join(w.Path, "web", "node_modules", "pkg", "index.js"), f.r.now())
 	got := f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
-	if exists(filepath.Join(w.Path, "web", "node_modules")) || got.StrippedBytes == 0 {
-		t.Fatalf("got %+v; a fresh file inside node_modules kept an idle worktree's bulk", got)
+	if !exists(filepath.Join(w.Path, "web", "node_modules", "pkg", "index.js")) || got.StrippedBytes != 0 || len(got.Stripped) != 0 {
+		t.Fatalf("fresh cache activity failed to preserve workspace: %+v", got)
 	}
 }
