@@ -374,6 +374,9 @@ type WorkflowCheckpointStore interface {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
+	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)

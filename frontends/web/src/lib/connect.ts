@@ -74,9 +74,9 @@ export type TransportRoute =
 const CONTROL_PLANE_PACKAGE = "controlplane.v1.";
 
 /**
- * StreamUserUpdates carries snapshots and heartbeats, so StreamingService is
- * the one hot path kept on the binary wire format; unary RPCs stay JSON for
- * readable network inspection.
+ * StreamUserUpdates and StreamChatUpdates carry snapshots and heartbeats, so
+ * StreamingService is the one hot path kept on the binary wire format; unary
+ * RPCs stay JSON for readable network inspection.
  */
 const STREAMING_SERVICE = "reliant.v1.StreamingService";
 
@@ -102,7 +102,7 @@ const UNAUTH_PROCEDURES: ReadonlySet<string> = new Set([
 
 /** The route one procedure takes. Exported for the routing tests. */
 export function routeFor(serviceTypeName: string, methodName: string): TransportRoute {
-  if (serviceTypeName.startsWith(CONTROL_PLANE_PACKAGE)) return "control-plane";
+  if (serviceTypeName.startsWith(CONTROL_PLANE_PACKAGE) || serviceTypeName === "observability_billing.v1.ObservabilityBillingService") return "control-plane";
   if (UNAUTH_PROCEDURES.has(`${serviceTypeName}/${methodName}`)) return "reliant-unauth";
   if (serviceTypeName === STREAMING_SERVICE) return "reliant-stream";
   return "reliant-api";

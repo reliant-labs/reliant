@@ -28,10 +28,25 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/issues/v
 // environment. Triage is its own scope on purpose: a read-only token must not
 // be able to silence an issue.
 //
-// ERRORS: InvalidArgument (bad range, unknown status), PermissionDenied (not a
-// member / a credential without the scope or for another org), NotFound (no
-// such issue), Aborted (expected_version is stale), FailedPrecondition
-// (observability is not set up for the org), Unavailable (issues are not
+// DISCUSSION. An issue carries comments, one assignee and the chats started
+// from it. ListIssueTimeline merges them with the status changes into ONE
+// chronological timeline. The writes (AddIssueComment, UpdateIssueComment,
+// DeleteIssueComment, AssignIssue, LinkIssueChat) are triage: a person needs
+// org membership, a machine credential obs:triage. A comment belongs to a
+// person: it is edited by its author only, and deleted by its author or an org
+// admin; a credential that acts for no person cannot comment.
+//
+// MERGED ISSUES. Writes on an issue that was merged into another are refused
+// (FailedPrecondition, naming the target). ListIssueTimeline on a merged issue
+// FOLLOWS the merge to its target and returns the target's timeline, which
+// includes the entries of every issue merged into it, so a comment made before
+// a re-fingerprint is not lost; each entry says which issue it was made on.
+//
+// ERRORS: InvalidArgument (bad range, unknown status, an assignee outside the
+// org), PermissionDenied (not a member / a credential without the scope or for
+// another org / not the comment's author), NotFound (no such issue or comment),
+// Aborted (expected_version is stale), FailedPrecondition (observability is not
+// set up for the org, the issue was merged), Unavailable (issues are not
 // configured on this server).
 service IssuesService {
   option (forge.v1.service) = {
@@ -94,6 +109,118 @@ service IssuesService {
       }
     };
   }
+
+  // AddIssueComment adds a comment to an issue. The body is plain text or
+  // markdown, stored verbatim (at most 10000 characters); clients render it
+  // safely.
+  rpc AddIssueComment(AddIssueCommentRequest) returns (AddIssueCommentResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "comment"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+        }
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // UpdateIssueComment replaces the body of a comment. Its author only.
+  rpc UpdateIssueComment(UpdateIssueCommentRequest) returns (UpdateIssueCommentResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "comment_edit"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+        }
+        detail: ["comment_id"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // DeleteIssueComment removes a comment from the timeline (it is kept, hidden).
+  // Its author, or an owner or admin of the org.
+  rpc DeleteIssueComment(DeleteIssueCommentRequest) returns (DeleteIssueCommentResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "comment_delete"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+        }
+        detail: ["comment_id"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // AssignIssue sets or clears the issue's assignee. The assignee must be a
+  // member of the issue's org. It bumps Issue.version, and a stale
+  // expected_version is Aborted, exactly as UpdateIssueStatus.
+  rpc AssignIssue(AssignIssueRequest) returns (AssignIssueResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "assign"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+          label: "response.issue.title"
+        }
+        detail: ["assignee_user_id"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // LinkIssueChat records that a chat was started from the issue ("Ask
+  // Reliant"). Idempotent per (issue, chat): linking a chat again changes
+  // nothing but a non-empty title, and writes no new timeline entry.
+  rpc LinkIssueChat(LinkIssueChatRequest) returns (LinkIssueChatResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "link_chat"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+        }
+        detail: ["chat_id"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+
+  // ListAssignableUsers returns the people an issue of the org can be assigned
+  // to: its members, as {id, name} and nothing else, ordered by name. A person
+  // needs membership of the org (any role); a machine credential needs obs:read
+  // and to act for that org. Served from Postgres alone. This is the read an
+  // assignee picker uses; the member list with grants and emails
+  // (ListOrgMemberGrants) needs token:read.
+  rpc ListAssignableUsers(ListAssignableUsersRequest) returns (ListAssignableUsersResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListIssueTimeline returns the issue's timeline, oldest first: status changes
+  // (opened, resolved, ignored, reopened, regressed), comments, assignment
+  // changes and linked chats. Deleted comments are not in it. Served from
+  // Postgres alone. A person needs org membership, a machine credential
+  // obs:read.
+  rpc ListIssueTimeline(ListIssueTimelineRequest) returns (ListIssueTimelineResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // IssueTimeRange is a half-open range [start, end). Both ends are required when
@@ -135,6 +262,8 @@ enum IssueSort {
 }
 
 message ListIssuesRequest {
+  option (buf.validate.message).oneof = {fields: ["assignee", "unassigned"]};
+
   IssueScope scope = 1 [(buf.validate.field).required = true];
   // Only issues in one of these states. Empty = new, unresolved and regressed
   // (the open ones).
@@ -153,6 +282,31 @@ message ListIssuesRequest {
   // Only the issues of this issue source (Issue.source). Unset or empty: errors
   // only — a source's issues are never mixed into the error inbox.
   optional string source = 10 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_.-]{0,63})?$"];
+  // Only the issues assigned to this user: a user id, or "me" for the person
+  // the caller acts as (the signed-in user, or the user a CLI login or
+  // credential-helper token acts for). "me" on a credential that acts for no
+  // one (an organization automation token) is refused FAILED_PRECONDITION.
+  // Unset: every issue. Exclusive with unassigned.
+  optional string assignee = 12 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Only the issues assigned to no one. Set it to true or leave it unset;
+  // false is refused, since "not unassigned" would be a second spelling of
+  // "every issue". Exclusive with assignee.
+  optional bool unassigned = 13 [(buf.validate.field).bool.const = true];
+  // Only the issues of one incident: those whose Issue.incident_key is this.
+  // The key is derived at read time from the cause and the first-seen times of
+  // the environment's server error issues, so send the same
+  // incident_window_seconds that produced it. An unknown or stale key lists
+  // nothing. statuses still applies (the default hides resolved issues, which
+  // Issue.related_count counts), so pass every status to list the whole
+  // incident. Incidents are server errors: with a key, source is the error
+  // inbox and platform=BROWSER lists nothing.
+  optional string incident_key = 14 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
   IssueSort sort = 7 [(buf.validate.field).enum.defined_only = true];
   // Rows per page. Default 50, max 100.
   int32 page_size = 8 [
@@ -161,6 +315,12 @@ message ListIssuesRequest {
   ];
   // next_page_token from the previous page; valid only with the same request.
   string page_token = 9 [(buf.validate.field).string.max_len = 512];
+  // How close in first-seen time issues of one cause must be to share an
+  // incident (Issue.incident_key). Default 600 (ten minutes); max 3600.
+  int32 incident_window_seconds = 11 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 3600
+  ];
 }
 
 message ListIssuesResponse {
@@ -174,6 +334,11 @@ message GetIssueRequest {
   // The window the counts and the trend are over. Unset = the last 24 hours.
   // Max 30 days.
   IssueTimeRange time_range = 2;
+  // ListIssuesRequest.incident_window_seconds, for the incident this issue lists.
+  int32 incident_window_seconds = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 3600
+  ];
 }
 
 message GetIssueResponse {
@@ -190,6 +355,10 @@ message GetIssueResponse {
   // The release the issue first appeared in. Unset when the version is not a
   // release the ledger knows.
   IssueReleaseRef first_release = 6;
+  // The other issues of this issue's incident (issue.incident_key): the same
+  // cause, first seen close in time, in any service. Empty when it is part of
+  // none.
+  repeated string incident_issue_ids = 7;
 }
 
 // IssueEvent is one occurrence of an issue.
@@ -302,4 +471,201 @@ message UpdateIssueStatusRequest {
 
 message UpdateIssueStatusResponse {
   Issue issue = 1;
+}
+
+// ─── Discussion: comments, assignee, linked chats, the timeline ──────────────
+
+// IssueComment is one comment on an issue.
+message IssueComment {
+  string id = 1;
+  string issue_id = 2;
+  // The author. Unset when the account no longer exists.
+  controlplane.v1.IssueUser author = 3;
+  // Plain text or markdown, verbatim. Render it safely.
+  string body = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // Later than created_at once the comment was edited.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message AddIssueCommentRequest {
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  string body = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 10000
+  ];
+}
+
+message AddIssueCommentResponse {
+  IssueComment comment = 1;
+}
+
+message UpdateIssueCommentRequest {
+  // The issue the comment is on.
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  string comment_id = 2 [(buf.validate.field).string.min_len = 1];
+  string body = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 10000
+  ];
+}
+
+message UpdateIssueCommentResponse {
+  IssueComment comment = 1;
+}
+
+message DeleteIssueCommentRequest {
+  // The issue the comment is on.
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  string comment_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteIssueCommentResponse {}
+
+message AssignIssueRequest {
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The user to assign; empty clears the assignee. Must be a member of the
+  // issue's org.
+  string assignee_user_id = 2 [(buf.validate.field).string.max_len = 128];
+  // The Issue.version the caller read. Non-zero and stale = Aborted. Zero = do
+  // not check.
+  int32 expected_version = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message AssignIssueResponse {
+  Issue issue = 1;
+}
+
+message LinkIssueChatRequest {
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The chat started from the issue (an id in the reliant product).
+  string chat_id = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // The chat's title when it was linked. Optional.
+  string chat_title = 3 [(buf.validate.field).string.max_len = 256];
+}
+
+// IssueChatLink is a chat started from an issue.
+message IssueChatLink {
+  string issue_id = 1;
+  string chat_id = 2;
+  string chat_title = 3;
+  // Who linked it. Unset for a credential that acts for no person.
+  controlplane.v1.IssueUser linked_by = 4;
+  google.protobuf.Timestamp linked_at = 5;
+}
+
+message LinkIssueChatResponse {
+  IssueChatLink link = 1;
+  // False when the chat was already linked.
+  bool created = 2;
+}
+
+message ListIssueTimelineRequest {
+  // The issue whose timeline is listed. A merged issue's request is answered
+  // with the timeline of the issue it was merged into.
+  string issue_id = 1 [(buf.validate.field).required = true];
+  // Rows per page. Default 50, max 100.
+  int32 page_size = 2 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  // next_page_token from the previous page; valid only with the same issue.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListAssignableUsersRequest {
+  // The organization whose members are listed.
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Only the users whose name contains this (case-insensitive).
+  optional string text = 2 [(buf.validate.field).string.max_len = 256];
+  // Rows per page. Default 50, max 100.
+  int32 page_size = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  // next_page_token from the previous page; valid only with the same request.
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListAssignableUsersResponse {
+  // name is the user's display name, or their email when they have none (as
+  // IssueUser everywhere else); no other field of the user is returned.
+  repeated controlplane.v1.IssueUser users = 1;
+  string next_page_token = 2;
+}
+
+// IssueActor is who did something: a person, a machine credential or the
+// system (the issues worker).
+message IssueActor {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_USER = 1;
+    KIND_MACHINE = 2;
+    KIND_SYSTEM = 3;
+  }
+  Kind kind = 1;
+  string id = 2;
+  // A person's display name (their email when they have none); empty for a
+  // machine or the system.
+  string name = 3;
+}
+
+// IssueStatusEntry is a status change.
+message IssueStatusEntry {
+  // Unspecified for the issue's opening.
+  controlplane.v1.IssueStatus from = 1;
+  controlplane.v1.IssueStatus to = 2;
+  // With a resolve: the version it resolves in, when one was named.
+  string version = 3;
+  // With an ignore: when it is un-ignored, when bounded.
+  google.protobuf.Timestamp ignored_until = 4;
+}
+
+// IssueCommentEntry is a comment.
+message IssueCommentEntry {
+  IssueComment comment = 1;
+}
+
+// IssueAssignmentEntry is an assignment change.
+message IssueAssignmentEntry {
+  // Unset: it was unassigned.
+  controlplane.v1.IssueUser from = 1;
+  // Unset: it was unassigned.
+  controlplane.v1.IssueUser to = 2;
+}
+
+// IssueChatEntry is a chat started from the issue.
+message IssueChatEntry {
+  IssueChatLink link = 1;
+}
+
+// IssueTimelineEntry is one thing that happened to an issue.
+message IssueTimelineEntry {
+  // Unique and stable; a client keys on it.
+  string id = 1;
+  google.protobuf.Timestamp time = 2;
+  // The issue it happened on: the requested one, or an issue merged into it.
+  string issue_id = 3;
+  IssueActor actor = 4;
+  oneof entry {
+    IssueStatusEntry status = 10;
+    IssueCommentEntry comment = 11;
+    IssueAssignmentEntry assignment = 12;
+    IssueChatEntry chat = 13;
+  }
+}
+
+message ListIssueTimelineResponse {
+  // Oldest first.
+  repeated IssueTimelineEntry entries = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+  // The issue the timeline is of: issue_id, or the issue it was merged into.
+  string issue_id = 3;
 }

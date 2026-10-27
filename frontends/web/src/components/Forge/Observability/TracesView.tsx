@@ -41,7 +41,7 @@ import { formatCount, formatDuration, formatPercent, formatRate, formatTimestamp
 import { ServiceSelect } from "./LogsView";
 import { filterParam, formatFilterToken, groupLabel, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
 import { useRovingFocus } from "./useRovingFocus";
 import { StackedTable } from "@/components/Forge/StackedTable";
@@ -164,6 +164,7 @@ function TraceList({
           }}
         />
       )}
+      {traces.data && <ObsAsOf updatedAt={traces.dataUpdatedAt} />}
       {traces.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-traces-loading" />

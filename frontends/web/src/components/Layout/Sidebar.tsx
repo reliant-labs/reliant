@@ -56,6 +56,7 @@ import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention, useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import Tooltip from "../forge-ui/tooltip";
@@ -174,9 +175,11 @@ interface SidebarNavButtonProps {
   onClick?: () => void;
   testId?: string;
   onboardingId?: string;
+  /** The action's shortcut, formatted (useShortcutLabel); shown at the end. */
+  shortcut?: string;
 }
 
-function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: SidebarNavButtonProps) {
+function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut }: SidebarNavButtonProps) {
   return (
     <button
       type="button"
@@ -190,11 +193,18 @@ function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: Sideba
       )}
       data-testid={testId}
       data-onboarding={onboardingId}
+      // The label alone names the button; the key cap is a visual hint.
+      aria-label={label}
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
         {icon}
       </span>
       <span className="min-w-0 truncate">{label}</span>
+      {shortcut && (
+        <kbd aria-hidden="true" className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+          {shortcut}
+        </kbd>
+      )}
     </button>
   );
 }
@@ -711,6 +721,9 @@ function SidebarComponent({
   onOpenObservability,
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
+  // The chord differs by surface (⌘T on desktop, ⌘⌥N in a browser, where ⌘T
+  // opens a browser tab), so the button says which one works here.
+  const newChatShortcut = useShortcutLabel("newChat");
   const { data: chatList } = useChatListWithWorkspaces(currentProject?.id);
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and the project's main one, so the
@@ -1561,6 +1574,7 @@ function SidebarComponent({
             label="New chat"
             onClick={handleNewChat}
             testId="create-chat-button"
+            shortcut={newChatShortcut}
           />
           {/* Apps (/apps) is the org's index of every app it runs, each one a
               drill-in to its console (environments, releases, ...). It sits

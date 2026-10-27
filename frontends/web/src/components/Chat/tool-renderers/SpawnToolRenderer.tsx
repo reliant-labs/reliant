@@ -262,16 +262,13 @@ function SpawnPreview({ ctx }: ToolContentProps) {
               : trimmed;
           }
         } else if (block.type === ContentBlockType.TOOL_CALL && block.toolName) {
-          // Resolve the result by tool_call_id from the normalized store index
-          // (falling back to a backend-embedded matchedResult on loaded chats),
-          // mirroring processMessage — no longer read off the block.
+          // Resolve the result by tool_call_id from the normalized store index,
+          // mirroring processMessage: the call block does not carry it.
           const indexed = block.toolCallId
             ? toolResultsByCallId[block.toolCallId]
             : undefined;
-          const isError = indexed
-            ? indexed.is_error === true
-            : block.matchedResult?.isError === true;
-          const hasResult = indexed != null || block.matchedResult != null;
+          const isError = indexed?.is_error === true;
+          const hasResult = indexed != null;
           let detail = extractToolDetail(block.toolName, block.input);
           if (detail.length > MAX_DETAIL_LENGTH) detail = detail.slice(0, MAX_DETAIL_LENGTH) + "\u2026";
           toolCalls.push({

@@ -81,9 +81,28 @@ export const ERROR_REASONS = [
   "observability_not_configured",
   /** The caller is not a member of the organization asked about. */
   "not_org_member",
+  /** The org's hourly observability query quota is spent; the QueryQuotaExhausted detail says when it resets. */
+  "obs_query_quota",
+  /** A background poll refused early, to keep the last of the quota for a person's own query. */
+  "obs_query_quota_soft",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
+  // ── control-plane: claimable deploys (internal/claimable; the /claim page) ──
+  /** The deploy was already claimed: the first completion wins. */
+  "claimable_claimed",
+  /** Expired and purged, or past purge_after and no longer revivable. */
+  "claimable_expired",
+  /** Removed by an administrator; never claimable. */
+  "claimable_taken_down",
+  /** No such claim token: the same answer for "never existed" and "wrong". */
+  "claimable_not_found",
+  /** The anonymous session was already handed to a browser. */
+  "claimable_session_released",
+  /** CompleteClaim (PermissionDenied): the caller is still anonymous or has no verified email. Back to /upgrade. */
+  "claimable_upgrade_required",
+  /** CompleteClaim (PermissionDenied): the email already belongs to a Reliant account. */
+  "claimable_existing_account",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

@@ -67,7 +67,7 @@ function MCPInitialLoadingState() {
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-card bg-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-foreground">
+            <h2 className="text-sm font-semibold text-foreground">
               Loading MCP servers
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -130,7 +130,7 @@ function MCPRefreshStatus({
 
   if (isRefreshing) {
     return (
-      <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/60 bg-muted/50 px-3 py-1 text-xs text-muted-foreground sm:self-auto">
+      <div className="inline-flex items-center gap-2 self-start rounded-full border border-border/60 bg-background px-3 py-1 text-xs text-muted-foreground sm:self-auto">
         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
         Refreshing server status
       </div>
@@ -645,7 +645,7 @@ export function MCPSettings() {
 
       </div>
 
-      <div className="rounded-lg border border-border/40 bg-muted/40 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+      <div className="rounded-lg border border-border/60 bg-background p-3">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5 text-muted-foreground" />
           <div className="text-sm text-muted-foreground">

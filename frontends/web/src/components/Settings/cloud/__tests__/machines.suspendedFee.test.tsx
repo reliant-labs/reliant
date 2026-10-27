@@ -30,6 +30,9 @@ const mocks = vi.hoisted(() => ({
 // deriving it from the subscription, so this module must be mocked for the
 // section to render at all.
 // The server's per-daemon price list (ListPlans daemon_pricing).
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({

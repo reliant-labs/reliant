@@ -110,7 +110,7 @@ function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
-        Then click Test connection — the daemon re-probes and reads the new context.
+        Then click Test connection — the machine re-probes and reads the new context.
       </p>
     </CardInset>
   );
@@ -391,10 +391,10 @@ export function LocalModelsSection() {
 
   return (
     <div className="space-y-4">
+      {/* The tab already names the page, so no heading repeats it here. */}
       <div>
-        <h2 className="text-base font-semibold text-foreground">Custom &amp; local models</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Run models like Ollama or LM Studio on your own hardware. Each machine's Reliant daemon finds
+        <p className="text-sm text-muted-foreground">
+          Run models like Ollama or LM Studio on your own hardware. Reliant on each machine finds
           the servers running on it and relays chats to them, so nothing about them is sent through
           Reliant's cloud. Servers it can't find, like a GPU cluster, can be added as custom endpoints.
         </p>
@@ -404,7 +404,7 @@ export function LocalModelsSection() {
           <p className="text-sm text-muted-foreground">
             {loading
               ? "Loading machines…"
-              : "Local models run on your machine through the Reliant daemon. Connect a machine in Settings → Machines, then come back here to see the model servers it can reach."}
+              : "Local models run on a machine of yours that Reliant is connected to. Connect a machine in Settings → Machines, then come back here to see the model servers it can reach."}
           </p>
         </Card>
       ) : (

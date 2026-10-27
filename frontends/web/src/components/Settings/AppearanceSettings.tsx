@@ -12,6 +12,7 @@ import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type 
 import "./settings-range.css";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -125,7 +126,7 @@ function SettingSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+        className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -285,7 +286,7 @@ export function AppearanceSettings() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div data-onboarding="appearance-settings">
         <SettingsPageHeader
         title="Appearance"
@@ -294,16 +295,16 @@ export function AppearanceSettings() {
       </div>
 
       {/* Theme Toggle */}
-      <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <h3 className="text-sm font-semibold">Theme</h3>
-        <div className="flex items-center gap-4 p-3 bg-card border border-border/40 rounded-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="flex items-center gap-4 p-3 bg-background border border-border/60 rounded-md">
           <button
             onClick={() => setTheme('light')}
             className={cn(
               "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               theme === 'light'
                 ? "border-primary text-foreground shadow-md"
-                : "border-border text-muted-foreground hover:bg-muted/80"
+                : "border-border text-muted-foreground hover:bg-foreground/5"
             )}
             style={theme === 'light' ? {
               backgroundColor: 'hsl(var(--primary) / 0.1)',
@@ -319,7 +320,7 @@ export function AppearanceSettings() {
               "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               theme === 'dark'
                 ? "border-primary text-foreground shadow-md"
-                : "border-border text-muted-foreground hover:bg-muted/80"
+                : "border-border text-muted-foreground hover:bg-foreground/5"
             )}
             style={theme === 'dark' ? {
               backgroundColor: 'hsl(var(--primary) / 0.1)',
@@ -333,12 +334,12 @@ export function AppearanceSettings() {
       </div>
 
       {/* Color Scheme Selector */}
-      <div className="border-t border-border/40 pt-6">
+      <div className="rounded-lg border border-border bg-card p-4">
         <ColorSchemeSelector />
       </div>
 
       {/* File Browser Settings */}
-      <div className="border-t border-border/40 pt-6 space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold">File Browser</h3>
           <p className="text-xs text-muted-foreground mt-1">
@@ -356,7 +357,7 @@ export function AppearanceSettings() {
         </div>
       </div>
 
-      <div className="border-t border-border/40 pt-6">
+      <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-sm font-semibold">Font Settings</h3>
           <button
@@ -388,7 +389,7 @@ export function AppearanceSettings() {
               id="appearance-font"
               value={font}
               onChange={(e) => setFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="default">Inter (Default)</option>
               <option value="system">System Default</option>
@@ -416,7 +417,7 @@ export function AppearanceSettings() {
                 aria-label="Code font"
                 value={editorFont === "default" ? "mono" : editorFont}
                 onChange={(e) => setEditorFont(e.target.value)}
-                className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+                className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
               >
                 <option value="mono">JetBrains Mono</option>
                 <option value="inherit">Inherit from System</option>
@@ -437,7 +438,7 @@ export function AppearanceSettings() {
               id="font-size"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSize)}
-              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               {Object.entries(FONT_SIZE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -460,7 +461,7 @@ export function AppearanceSettings() {
                     "rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
                     chatTimelineVariant === variant.id
                       ? "border-primary bg-primary/10 text-foreground shadow-sm"
-                      : "border-border/40 bg-card text-muted-foreground hover:border-border/80 hover:bg-muted/50 hover:text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:border-border/80 hover:bg-foreground/5 hover:text-foreground"
                   )}
                   aria-pressed={chatTimelineVariant === variant.id}
                 >
@@ -475,7 +476,7 @@ export function AppearanceSettings() {
 
       {/* Editor (advanced) — Monaco editor knobs, language servers, and tool-call
           display defaults, collapsed by default to keep Appearance lean. */}
-      <div className="border-t border-border/40 pt-6">
+      <div className="rounded-lg border border-border bg-card p-4">
         <button
           type="button"
           onClick={() => setShowEditorAdvanced((v) => !v)}
@@ -514,22 +515,26 @@ export function AppearanceSettings() {
         )}
       </div>
 
+      {/* Response streaming — a chat preference, so it lives with the other
+          chat display settings rather than under AI providers. */}
+      <ResponseStreamingSetting />
+
       {/* Spawn Display Settings */}
-      <div className="border-t border-border/40 pt-6 space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold">Spawn Display</h3>
           <p className="text-xs text-muted-foreground mt-1">
             Configure how spawn thread content is displayed in the timeline
           </p>
         </div>
-        <div className="flex items-center gap-4 p-3 bg-card border border-border/40 rounded-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <div className="flex items-center gap-4 p-3 bg-background border border-border/60 rounded-md">
           <button
             onClick={() => setSpawnDisplayMode('inline')}
             className={cn(
               "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               spawnDisplayMode === 'inline'
                 ? "border-primary text-foreground shadow-md"
-                : "border-border text-muted-foreground hover:bg-muted/80"
+                : "border-border text-muted-foreground hover:bg-foreground/5"
             )}
             style={spawnDisplayMode === 'inline' ? {
               backgroundColor: 'hsl(var(--primary) / 0.1)',
@@ -545,7 +550,7 @@ export function AppearanceSettings() {
               "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               spawnDisplayMode === 'preview'
                 ? "border-primary text-foreground shadow-md"
-                : "border-border text-muted-foreground hover:bg-muted/80"
+                : "border-border text-muted-foreground hover:bg-foreground/5"
             )}
             style={spawnDisplayMode === 'preview' ? {
               backgroundColor: 'hsl(var(--primary) / 0.1)',
@@ -564,7 +569,7 @@ export function AppearanceSettings() {
       </div>
 
       {/* Workflow Viewer Settings */}
-      <div className="border-t border-border/40 pt-6 space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold">Workflow Viewer</h3>
           <p className="text-xs text-muted-foreground mt-1">
@@ -576,7 +581,7 @@ export function AppearanceSettings() {
           <select
             value={workflowViewerDefaultMode}
             onChange={(e) => setWorkflowViewerDefaultMode(e.target.value as 'inline' | 'side')}
-            className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+            className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
           >
             <option value="side">Side Panel (beside chat)</option>
             <option value="inline">Inline (above chat)</option>
@@ -802,7 +807,7 @@ function MonacoEditorSettings() {
             <select
               value={settings.diffSideBySide ? "side-by-side" : "inline"}
               onChange={(e) => updateSettings({ diffSideBySide: e.target.value === "side-by-side" })}
-              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-background border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="side-by-side">Side-by-side</option>
               <option value="inline">Inline</option>
@@ -831,7 +836,7 @@ function MonacoEditorSettings() {
           `dirScoped` + `requiresFiles`), so the honest pointer is below rather
           than a second, fake control surface. */}
       <div className="space-y-4">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <h4 className="text-xs font-medium text-muted-foreground">
           Language Servers
         </h4>
         <p className="text-xs text-muted-foreground">
@@ -840,6 +845,38 @@ function MonacoEditorSettings() {
           project gets its own index, and <code>requiresFiles</code> so it only starts
           in projects it can actually serve.
         </p>
+      </div>
+    </div>
+  );
+}
+
+/** Whether replies appear as they are generated or all at once when done. */
+function ResponseStreamingSetting() {
+  const { data, isPending } = usePreferences();
+  const update = useUpdatePreferences();
+  const enabled = data.streamingEnabled;
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <label htmlFor="streaming-toggle" className="text-sm font-semibold">
+            Response streaming
+          </label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Show replies as they are written. Off, each reply arrives all at once when it is done, which can be
+            faster for short replies.
+          </p>
+        </div>
+        <ToggleSwitch
+          id="streaming-toggle"
+          checked={enabled}
+          // The switch flips at once and back if the server refuses.
+          onChange={(next) => void update.mutateAsync({ streamingEnabled: next }).catch(() => {})}
+          disabled={isPending}
+          ariaLabel={`${enabled ? "Disable" : "Enable"} response streaming`}
+          size="lg"
+          className="forge-ui"
+        />
       </div>
     </div>
   );

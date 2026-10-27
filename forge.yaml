@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261026130931-884acf402596
+forge_version: v0.1.47-0.20261027025742-2372776cf3d4
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -64,6 +64,11 @@ lint:
         # fails the build. Both ship at warn; reliant has no findings left.
         forgeconv-no-handler-error-mapping: error
         forgeconv-handler-connect-error: error
+        # P7b A4 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.2):
+        # every handler file is under lint.handler_file_max_loc (1000), so a
+        # handler file that grows past it fails the build. Split it into
+        # rpc_<family>.go siblings rather than raising the limit.
+        forgeconv-handler-file-size: error
         # access_tokens' scopes and resource-kind CHECKs are declared
         # `forge:closed-set accesstoken.*`. The rule warns until v0.1.48, so a
         # forge bump that grew AllScopes (billing:read, forge #1566) passed the
@@ -71,6 +76,14 @@ lint:
         # the bump's own PR fails `forge lint --closed-sets` and is fixed with
         # `task db:migration` + `forge db migration new --closed-set <constraint>`.
         forge-closed-set: error
+        # P7b A5 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.3,
+        # §2.4): no component reads the process environment, no component's
+        # Deps carries a naked scalar (each takes its config block), and every
+        # optional dep is nil-checked where it is dereferenced. reliant has no
+        # findings left; at error a regression fails `forge lint`.
+        forgeconv-no-getenv: error
+        forge-config-deps: error
+        forge-optional-deps-guard: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them

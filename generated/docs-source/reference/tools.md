@@ -42,7 +42,7 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (22 tools)
+- [Workflow Management](#workflow-management) (26 tools)
 - [System & Execution](#system--execution) (4 tools)
 - [Other Tools](#other-tools) (69 tools)
 
@@ -1335,10 +1335,12 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`cel_eval`](#cel_eval) | workflow, readonly | Evaluates a CEL expression or {{ }} template against a context you supply, exactly as a workflow ... |
+| [`create_trigger_activation`](#create_trigger_activation) | workflow | Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validat... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
+| [`enable_trigger`](#enable_trigger) | workflow | Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Intera... |
 | [`fire_trigger`](#fire_trigger) | workflow, runs | Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Neve... |
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
 | [`get_integration_schema`](#get_integration_schema) | workflow, readonly | Get the full schema of one integration action (or trigger type) by ref. |
@@ -1351,8 +1353,10 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`list_trigger_events`](#list_trigger_events) | workflow, readonly | Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, laun... |
 | [`list_triggers`](#list_triggers) | workflow, readonly | List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integra... |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
+| [`pause_trigger`](#pause_trigger) | workflow | Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. Interac... |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
 | [`search_integrations`](#search_integrations) | workflow, readonly | Search the integration catalog for actions a workflow can run (and trigger types that can start o... |
+| [`update_trigger_activation`](#update_trigger_activation) | workflow | Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validat... |
 | [`view_scenario`](#view_scenario) | workflow, readonly | View a specific test scenario's full definition. |
 | [`write_scenario`](#write_scenario) | workflow | Create or update a test scenario with YAML content. |
 | [`write_workflow`](#write_workflow) | workflow | Replace an existing workflow draft with YAML content. |
@@ -1378,6 +1382,14 @@ RETURNS:
 JSON: value, type, kind (expression|template), and findings (reads the declared payload rules out, which a loose sample can hide: a filter that passes here can still fail on a real event if it reads a field the payload never has). On failure, error: phase (syntax|compile|eval|request), message, line, column, hint.
 
 Evaluation is bounded (CEL cost limit) and has no side effects.
+
+---
+
+### create_trigger_activation
+
+**Tags:** `workflow`
+
+Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
 
 ---
 
@@ -1485,6 +1497,14 @@ every current error and warning.
   "old_string": "  - id: agent\n    type: call_llm",
   "new_string": "  - id: agent\n    type: call_llm\n    model: \"{{inputs.model}}\""
 }
+
+---
+
+### enable_trigger
+
+**Tags:** `workflow`
+
+Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
 
 ---
 
@@ -1680,7 +1700,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 **Tags:** `workflow`, `readonly`
 
-List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
+List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
 Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).
 
@@ -1702,6 +1722,14 @@ A table of workflows with their descriptions and source (builtin, project, or us
 User workflows also list their draft UUID; builtin and project workflows have none.
 
 Any handle in the Workflow column can be passed straight to get_workflow as id.
+
+---
+
+### pause_trigger
+
+**Tags:** `workflow`
+
+Manage a declared workflow trigger activation (pause_trigger). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
 
 ---
 
@@ -1746,6 +1774,14 @@ Call get_integration_schema with a ref to read its parameters and output before 
       with: { ... }                    # keys from the params schema
 
 Core workflow nodes (call_llm, run, loop, ...) are not integrations; use get_schema for those.
+
+---
+
+### update_trigger_activation
+
+**Tags:** `workflow`
+
+Manage a declared workflow trigger activation (update_trigger_activation). Uses the app's validation. Interactive calls require a user approval card. Unattended calls are refused. No change happens until approved. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Changes are audit logged.
 
 ---
 
@@ -2080,7 +2116,7 @@ _Miscellaneous tools and utilities._
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
-| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
@@ -2316,7 +2352,7 @@ NOTES:
 
 **Tags:** `runs`, `readonly`
 
-Check on one top-level run: its state, title, workflow, when it was created and last active, and an excerpt of the last thing its agent said.
+Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
 The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
 

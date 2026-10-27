@@ -37,8 +37,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -187,21 +185,6 @@ func SetCompactionSummaryMessage(ctx context.Context, db orm.Context, cwID, mess
 		return nil, noRows("failed to set compaction summary message", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
-}
-
-// RemoveContextWindow deletes the window; one that does not exist is already
-// gone.
-func RemoveContextWindow(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteContextWindow(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	return nil
-}
-
-// DeleteContextWindowsByThread deletes every window of the thread.
-func DeleteContextWindowsByThread(ctx context.Context, db orm.Context, threadID string) error {
-	_, err := db.Bun().NewDelete().Model((*ContextWindow)(nil)).Where("thread_id = ?", threadID).Exec(ctx)
-	return err
 }
 
 func contextWindowToRow(cw *core.ContextWindow) *ContextWindow {

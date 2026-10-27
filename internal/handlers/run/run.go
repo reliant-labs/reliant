@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -307,7 +309,17 @@ func (s *Service) GetRun(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetRunResponse{Run: runToProto(run)}), nil
+	rows, err := s.deps.Repo.ListRunNodeExecutions(ctx, run.ID, rundiagnostics.RecordLimit+1)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read run nodes"))
+	}
+	truncated := len(rows) > rundiagnostics.RecordLimit
+	if truncated {
+		rows = rows[:rundiagnostics.RecordLimit]
+	}
+	return connect.NewResponse(&reliantv1.GetRunResponse{
+		Run: runToProto(run), Nodes: rundiagnostics.Nodes(rows), NodesTruncated: truncated,
+	}), nil
 }
 
 // ListRuns lists runs. With session_id or parent_id it lists that session's

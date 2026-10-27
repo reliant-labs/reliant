@@ -13,6 +13,12 @@
  */
 
 import { AlertTriangle, Info } from "lucide-react";
+import { Code, ConnectError } from "@connectrpc/connect";
+import type { GetObservabilityUsageResponse } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
+import { useObsBillingUsage } from "@/hooks/observability-billing-queries";
+import { ObservabilityUsageDetails, Loading } from "@/components/Settings/cloud/usage/ObservabilityUsageDetails";
+import { BillingUnavailable } from "@/components/Settings/cloud/usage/ObservabilityLimits";
+import { at, dollars, gb, usageStateSentence } from "@/components/Settings/cloud/usage/observabilityBillingModel";
 
 import Card, { CardHeader, CardInset } from "@/components/forge-ui/card";
 import { useObservabilityUsage } from "@/hooks/observability-queries";
@@ -46,6 +52,46 @@ function barTone(u: ObservabilityUsage): string {
 }
 
 export function UsageView({ orgId, subject = "" }: { orgId: string | null; subject?: string }) {
+  const usage = useObsBillingUsage(orgId);
+  if (!orgId) return <BillingUnavailable label="Organization usage (select an organization first)" />;
+  if (usage.isPending) return <Loading label="Loading observability billing…" />;
+  if (usage.error) {
+    if (usage.error instanceof ConnectError && usage.error.code === Code.Unimplemented) return <>
+      <BillingUnavailable label="Observability billing management" error={usage.error} retry={() => void usage.refetch()} />
+      <p className="text-sm text-muted-foreground">Showing legacy usage below, read-only. Actual charges, uncharged bytes, storage and editable limits are unavailable until the billing API is deployed.</p>
+      <LegacyUsageView orgId={orgId} subject={subject} />
+    </>;
+    return <BillingUnavailable label="Observability billing" error={usage.error} retry={() => void usage.refetch()} />;
+  }
+  if (!usage.data) return <BillingUnavailable label="Observability billing" />;
+  return <section aria-label="Observability usage and limits" className="space-y-4">
+    <ObservabilityMonth usage={usage.data} />
+    <ObservabilityUsageDetails orgId={orgId} />
+  </section>;
+}
+
+export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageResponse }) {
+  const fill = u.allowanceBytes > 0n ? Math.min(100, Number(u.usedBytes) / Number(u.allowanceBytes) * 100) : 0;
+  const projectionKnown = !!u.measuredThrough && !!u.periodStart && Number(u.measuredThrough.seconds - u.periodStart.seconds) >= 3600;
+  return <Card><CardHeader title="Observability" description="Ingested this month — not what's stored now. GB = 2^30 bytes of telemetry as stored, before compression, after sampling." />
+    <p className="text-2xl font-semibold tabular-nums">{gb(u.usedBytes)} <span className="text-sm font-normal text-muted-foreground">billable / {gb(u.allowanceBytes)} included</span></p>
+    <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/60" role="progressbar" aria-label="Observability included allowance" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill)}><div className="h-full bg-primary" style={{ width: `${fill}%` }} /></div>
+    <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+      <Stat label="Charged so far" testId="obs-billing-charged" value={u.exempt ? "Not billed" : `${dollars(u.chargedCents)} of ${dollars(u.spendCapCents)}`} hint={`${dollars(Number(u.rateCentsPerGb))} per GB beyond included`} />
+      <Stat label="Kept free above cap" testId="obs-billing-uncharged" value={gb(u.unchargedBytes)} hint="Counted in billable ingestion, not charged" />
+      <Stat label="Projected ingestion" testId="obs-billing-projection" value={projectionKnown ? gb(u.projectedBytes) : "Not available yet"} hint={projectionKnown ? `${dollars(u.projectedOverageCents)} projected overage before cap` : "Available after a full metered hour"} />
+    </dl>
+    <p className="mt-3 text-sm">Charged overage ingestion: {gb(u.exempt ? 0n : u.usedBytes > u.allowanceBytes + u.unchargedBytes ? u.usedBytes - u.allowanceBytes - u.unchargedBytes : 0n)}. The included allowance and bytes kept free above cap are not charged.</p>
+    <p className="mt-4 text-sm" role="status">{usageStateSentence(u)}</p>
+    <p className="mt-2 text-xs text-muted-foreground">{u.measuredThrough ? `Measured through ${at(u.measuredThrough)} (updated hourly; may lag by about 75 minutes).` : "No fully metered hour yet. Usage is not current; the first reading usually arrives within about 75 minutes."}</p>
+    <p className="mt-2 text-sm">Browser: {gb(u.browserBilledBytes)} of {gb(u.browserCapBytes)} billable; {gb(u.browserBytes > u.browserBilledBytes ? u.browserBytes - u.browserBilledBytes : 0n)} more kept free.</p>
+    <p className="mt-2 text-xs text-muted-foreground">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
+    <a className="mt-3 inline-block text-sm text-primary underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
+  </Card>;
+}
+
+/** Explicit rollout fallback; never use old overage figures as actual charges. */
+export function LegacyUsageView({ orgId, subject = "" }: { orgId: string | null; subject?: string }) {
   const usage = useObservabilityUsage(orgId);
 
   if (!orgId || usage.isLoading) return <ObsLoadingRows rows={4} testId="obs-usage-loading" />;
@@ -71,7 +117,7 @@ export function UsagePanel({ usage: u }: { usage: ObservabilityUsage }) {
       <Card>
         <CardHeader
           title="Observability usage"
-          description={`Stored telemetry this month, against your ${formatBytes(u.allowanceBytes)} included. Resets after ${periodEnd}.`}
+          description={`Legacy metered ingestion this month, against your ${formatBytes(u.allowanceBytes)} included. Resets after ${periodEnd}. Actual charges are unavailable on this API.`}
         />
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-2xl font-semibold tabular-nums text-foreground" data-testid="obs-usage-used">
@@ -94,7 +140,7 @@ export function UsagePanel({ usage: u }: { usage: ObservabilityUsage }) {
         </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-3">
-          <Stat label="Overage so far" testId="obs-usage-overage" value={u.exempt ? "Not billed" : formatDollars(u.overageCents)} hint={`${formatRate(u.rateCentsPerGb)} per GB beyond the allowance`} />
+          <Stat label="Accrued overage (before cap)" testId="obs-usage-overage" value={u.exempt ? "Not billed" : formatDollars(u.overageCents)} hint={`${formatRate(u.rateCentsPerGb)} per GB beyond the allowance`} />
           <Stat
             label="Projected this month"
             testId="obs-usage-projected"

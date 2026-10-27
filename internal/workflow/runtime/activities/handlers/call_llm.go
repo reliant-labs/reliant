@@ -344,6 +344,10 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}
 
+	// A running workflow may predate launch-time pinning. Its inputs are a
+	// snapshot, but the chat's durable pin must still keep this turn on disk.
+	rtx.DaemonSelector = chatDaemonSelector(chat, rtx.DaemonSelector)
+
 	// Add userID to context for API key loading
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, chat.UserID)
 

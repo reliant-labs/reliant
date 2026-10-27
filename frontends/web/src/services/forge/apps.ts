@@ -67,7 +67,7 @@ export interface AppProjectRow {
   forge_project_name?: string;
 }
 
-function hostOf(url: string): string {
+export function hostOf(url: string): string {
   return url.replace(/^[a-z]+:\/\//i, "").replace(/\/+$/, "");
 }
 

@@ -126,6 +126,24 @@ function render(declared: DeclaredTrigger) {
 }
 
 describe("ActivateTriggerDialog", () => {
+  it.each([
+    ["github", undefined, ActingIdentity.APP],
+    ["github", "owner", ActingIdentity.OWNER],
+    ["slack", undefined, ActingIdentity.OWNER],
+  ] as const)("defaults %s correctly and preserves explicit %s", async (integration, choice, expected) => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "identity" }) }));
+    render({ ...scheduleDeclared, source: { case: "integration", value: { integration, events: ["issues.opened"] } } } as unknown as DeclaredTrigger);
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    expect(screen.getByRole("radio", { name: integration === "github" ? /Reliant bot/ : /You/ })).toBeChecked();
+    if (integration !== "github") expect(screen.queryByRole("radio", { name: /Reliant bot/ })).not.toBeInTheDocument();
+    if (choice === "owner") await user.click(screen.getByRole("radio", { name: /You/ }));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Triage" } });
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    expect((createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!.actingIdentity).toBe(expected);
+  });
+
   it("creates an activation with the workflow_trigger arm and only unmapped inputs", async () => {
     const user = userEvent.setup();
     createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-1", name: "Triage · nightly", workflowTrigger: "nightly" }) }));

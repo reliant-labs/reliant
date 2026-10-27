@@ -153,12 +153,12 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
         {loading ? (
           <div className="p-6 text-sm text-muted-foreground">Loading prompts…</div>
         ) : filtered.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground border border-border/40 rounded-md">
+          <div className="p-6 text-sm text-muted-foreground rounded-lg border border-border bg-card">
             No prompts yet. Click New to add your first prompt.
           </div>
         ) : (
           filtered.map((p) => (
-            <div key={p.id} className="border border-border/40 rounded-lg p-3 bg-card">
+            <div key={p.id} className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2 mb-2">
 
                 <input

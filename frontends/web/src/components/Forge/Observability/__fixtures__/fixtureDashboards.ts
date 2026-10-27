@@ -83,7 +83,18 @@ function checkoutLatency(version: number): Dashboard {
     { id: "recent-errors", title: "Recent errors", description: "level ≥ error", kind: "search", signal: "logs", where: [{ field: "log.severity", op: "eq", value: "error" }], series: [], columns: ["timestamp", "service.name", "log.body"], width: 12, height: 4 },
   ];
   // v1–v3 had fewer panels: a history that restores to something visibly different.
-  return { id: "checkout-latency", title: "Checkout latency", description: "What a slow checkout looks like, and where it comes from.", filters: [{ id: "service", label: "Service", field: "service.name" }], annotations: [{ source: "releases", label: "Releases" }], panels: version >= 4 ? panels : panels.slice(0, 2 + version) };
+  const rpcPanels = ["p95", "orders", "error-rate", "latency-by-route", "slowest"];
+  return {
+    id: "checkout-latency", title: "Checkout latency", description: "What a slow checkout looks like, and where it comes from.",
+    sections: [{ id: "requests", title: "Requests" }, { id: "experience", title: "Experience" }],
+    filters: [
+      { id: "service", label: "Process", field: "service.name" },
+      { id: "rpc-service", label: "RPC service", field: "span.attr.rpc.service", signal: "traces", panelIds: rpcPanels },
+      { id: "rpc-method", label: "RPC method", field: "span.attr.rpc.method", signal: "traces", panelIds: rpcPanels },
+    ],
+    annotations: [{ source: "releases", label: "Releases" }],
+    panels: (version >= 4 ? panels : panels.slice(0, 2 + version)).map((panel) => ({ ...panel, section: rpcPanels.includes(panel.id) ? "requests" : "experience" })),
+  };
 }
 
 function daemonFleet(): Dashboard {

@@ -170,7 +170,7 @@ export function UpdateSection() {
 
   return (
     <>
-      <div className="bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 p-4">
+      <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-foreground">Updates</span>
@@ -203,7 +203,7 @@ export function UpdateSection() {
         {/* Progress bar for downloads */}
         {updateStatus?.type === 'download-progress' && updateStatus.progress && (
           <div className="mt-3">
-            <div className="h-1 bg-muted rounded-full overflow-hidden">
+            <div className="h-1 bg-foreground/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${updateStatus.progress.percent}%` }}

@@ -117,11 +117,11 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
   chatSearch: {
     id: 'chatSearch',
     name: 'Search Chats',
-    description: 'Search the current conversation and chat history',
+    description: 'Search the conversation on screen and chat history',
     category: 'Search & Navigation',
     defaultBinding: 'Cmd+F',
     defaultWebBinding: 'Cmd+F',
-    context: 'global',
+    context: 'chat-view',
     handler: 'onChatSearch'
   },
   editorFind: {
@@ -135,6 +135,17 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     handler: 'onEditorFind',
     passthrough: true
   },
+  findInPage: {
+    id: 'findInPage',
+    name: 'Find in Page',
+    description: 'Find text on the page',
+    category: 'Search & Navigation',
+    defaultBinding: 'Cmd+F',
+    defaultWebBinding: '',
+    context: 'global',
+    handler: 'onFindInPage',
+    desktopOnly: true
+  },
   focusChat: {
     id: 'focusChat',
     name: 'Focus Chat Input',
@@ -144,6 +155,16 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     defaultWebBinding: 'Cmd+K L',
     context: 'global',
     handler: 'onFocusChat'
+  },
+  addSelectionToChat: {
+    id: 'addSelectionToChat',
+    name: 'Add Selection to Chat',
+    description: 'Add the selected code to the chat composer',
+    category: 'Chat Control',
+    defaultBinding: 'Cmd+L',
+    defaultWebBinding: 'Cmd+K L',
+    context: 'monaco',
+    handler: 'onAddSelectionToChat'
   },
   focusTranscript: {
     id: 'focusTranscript',
@@ -359,7 +380,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Switch to the next open file tab',
     category: 'File Navigation',
     defaultBinding: 'Cmd+Shift+]',
-    defaultWebBinding: 'Cmd+Shift+]',
+    defaultWebBinding: 'Cmd+K ]',
     context: 'global',
     handler: 'onNextFileTab'
   },
@@ -369,7 +390,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Switch to the previous open file tab',
     category: 'File Navigation',
     defaultBinding: 'Cmd+Shift+[',
-    defaultWebBinding: 'Cmd+Shift+[',
+    defaultWebBinding: 'Cmd+K [',
     context: 'global',
     handler: 'onPrevFileTab'
   },

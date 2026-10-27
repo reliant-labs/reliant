@@ -14,7 +14,9 @@
  * and deploys it.
  */
 
-import { ArrowRight, Boxes, ExternalLink, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { ArrowRight, Boxes, CircleCheck, ExternalLink, Plus } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card, { CardInset } from "@/components/forge-ui/card";
@@ -40,6 +42,7 @@ export function AppsPage() {
 function AppsBody() {
   const { apps, loading, availability, detail } = useApps();
   const startBuilding = useStartBuildingApp();
+  const claimed = useClaimedApp(apps.map((a) => a.name), loading);
 
   const live = apps.filter(isLive).length;
   const header = (
@@ -73,7 +76,12 @@ function AppsBody() {
     body = (
       <div className="space-y-4" data-testid="apps-list">
         {apps.map((app) => (
-          <AppCard key={app.name} app={app} deploysKnown={availability === "available"} />
+          <AppCard
+            key={app.name}
+            app={app}
+            deploysKnown={availability === "available"}
+            highlighted={app.name === claimed.name}
+          />
         ))}
       </div>
     );
@@ -82,6 +90,7 @@ function AppsBody() {
   return (
     <div className="space-y-5" data-testid="apps-page">
       {header}
+      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {body}
     </div>
@@ -89,14 +98,66 @@ function AppsBody() {
 }
 
 /**
+ * What a finished claim did, said where its result is. The site is already in
+ * the user's own org by the time this shows; the list below may still be
+ * catching up, which the banner says rather than leaving the user to wonder.
+ */
+function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolean; loading: boolean }) {
+  return (
+    <p
+      className="flex items-start gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground"
+      role="status"
+      data-testid="apps-claimed"
+    >
+      <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-success-ink" aria-hidden="true" />
+      <span>
+        <strong className="font-semibold">{name}</strong> is yours now.
+        {!loading && !listed && " It can take a moment to appear in this list."}
+      </span>
+    </p>
+  );
+}
+
+/**
+ * The app a finished claim just made the user's own (`/apps?claimed=<project>`,
+ * set by components/Claim/useClaimFlow.ts). Remembered, then dropped from the
+ * URL, so a reload or a shared link does not highlight it again. Holds off
+ * until the list has loaded: the claim moved the site into the user's org, and
+ * the list is what shows it.
+ */
+function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean } {
+  const navigate = useNavigate();
+  const { claimed } = useSearch({ strict: false }) as { claimed?: string };
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!claimed) return;
+    setName(claimed);
+    void navigate({ to: "/apps", search: {}, replace: true });
+  }, [claimed, navigate]);
+
+  return { name, found: !loading && name !== null && names.includes(name) };
+}
+
+/**
  * `deploysKnown` is false when the control plane could not be read: the card
  * then cannot say "not deployed yet", only that it does not know.
  */
-function AppCard({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean }) {
+function AppCard({ app, deploysKnown, highlighted }: { app: AppSummary; deploysKnown: boolean; highlighted: boolean }) {
+  const anchor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlighted) anchor.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlighted]);
   const primary = primaryLink(app);
   const consoleHref = consolePath(app.name, { kind: "overview" });
   return (
-    <Card padding="md" data-testid={`app-card-${app.name}`}>
+    <div ref={anchor}>
+    <Card
+      padding="md"
+      data-testid={`app-card-${app.name}`}
+      data-highlighted={highlighted ? "true" : undefined}
+      className={highlighted ? "ring-2 ring-primary" : undefined}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -149,6 +210,7 @@ function AppCard({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean
         </p>
       )}
     </Card>
+    </div>
   );
 }
 

@@ -58,7 +58,7 @@ describe("TokenSettings", () => {
     renderTokens();
     await screen.findByText("build-box");
 
-    fireEvent.click(screen.getByText("New Token"));
+    fireEvent.click(screen.getByText("New token"));
     fireEvent.change(screen.getByPlaceholderText("Token name (e.g. my-server)"), {
       target: { value: "  laptop  " },
     });

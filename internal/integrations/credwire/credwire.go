@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -34,7 +36,8 @@ import (
 
 // New builds the credential source over resolver (nil answers every request
 // with a FailedPrecondition) and the brokers cp implies.
-func New(resolver *connections.Resolver, cp controlplane.Endpoint) (connauth.Service, error) {
+func New(resolver *connections.Resolver, cfg *configv1.ControlPlaneConfig) (connauth.Service, error) {
+	cp := controlplane.EndpointFrom(cfg)
 	var deps connauth.Deps
 	if resolver != nil {
 		deps.Resolver = resolver
@@ -49,8 +52,8 @@ func New(resolver *connections.Resolver, cp controlplane.Endpoint) (connauth.Ser
 	}
 	brokers := connauth.NewBrokers()
 	client := gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
-		BaseURL: cp.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	broker := ghdelegated.NewInstrumented(ghdelegated.Deps{Tokens: client, Installations: client, Logger: slog.Default().With("component", "ghdelegated")})
 	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {

@@ -9,8 +9,9 @@
  *   ...
  *   expect(server.calls("ListWorktrees")).toBe(1);
  *
- * Paging follows the real server: `limit` rows per page, main first, and an
- * opaque next_page_token (the next offset). Archive sets deleted_at; delete
+ * Paging follows the real server: `limit` rows per page (fewer when
+ * `options.pageSize` caps it), main first, and an opaque next_page_token (the
+ * next offset). Archive sets deleted_at; delete
  * archives a live row and removes an archived one; unarchive/recreate clear
  * deleted_at. `fail(rpc, error)` makes one rpc reject until `fail(rpc, null)`.
  */
@@ -35,7 +36,12 @@ export interface WorktreeServer {
 
 const now = "2026-01-01T00:00:00.000Z";
 
-export function worktreeServer(initial: Partial<Worktree>[] = [], options?: { createStatus?: WorktreeStatus }): WorktreeServer {
+export function worktreeServer(
+  initial: Partial<Worktree>[] = [],
+  // pageSize caps a page below the request's `limit`, as a real server may:
+  // a paging test then needs a handful of rows, not a hundred rendered ones.
+  options?: { createStatus?: WorktreeStatus; pageSize?: number },
+): WorktreeServer {
   const rows: Worktree[] = initial.map((w) => buildWorktree(w));
   const counts: Record<string, Req[]> = {};
   const failures = new Map<string, Error>();
@@ -49,7 +55,7 @@ export function worktreeServer(initial: Partial<Worktree>[] = [], options?: { cr
   const find = (id: unknown) => rows.find((w) => w.id === id);
   const notFound = (id: unknown) => new ConnectError(`worktree ${String(id)} not found`, Code.NotFound);
   const page = (list: Worktree[], req: Req) => {
-    const limit = Number(req.limit) || 100;
+    const limit = Math.min(Number(req.limit) || 100, options?.pageSize ?? Infinity);
     const offset = Number(req.pageToken || 0);
     const slice = list.slice(offset, offset + limit);
     const next = offset + limit < list.length ? String(offset + limit) : "";

@@ -50,6 +50,20 @@ function renderList(options: FixtureOptions = {}, env = "prod") {
 }
 
 describe("Dashboards", () => {
+  it("discovers organization accounting without any deployed environments or authoring rights", async () => {
+    const api = createFixtureApi();
+    api.listDashboards = vi.fn().mockResolvedValue({ canWrite: false, dashboards: [{
+      ref: { kind: "builtin", projectId: "", key: "org-costs" }, source: "builtin", viewKind: "organization-costs",
+      title: "Organization costs", description: "Canonical current-period accounting", readOnly: true, starred: false,
+      lastViewedAtMs: null, panelCount: 0, previewPanels: [], release: null, workspace: null, category: "organization",
+    }] });
+    renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
+    const builtin = await screen.findByTestId("dashboards-builtin");
+    expect(within(builtin).getByRole("link", { name: "Organization costs" })).toHaveAttribute("href", "/d/builtin/org-costs");
+    expect(builtin).toHaveTextContent("Requires cost-read permission, not billing management");
+    expect(screen.queryByTestId("dashboards-empty")).not.toBeInTheDocument();
+  });
+
   it("lists the project's dashboards for the scoped environment, on four shelves", async () => {
     const { onCall } = renderList();
     const starred = await screen.findByTestId("dashboards-starred");

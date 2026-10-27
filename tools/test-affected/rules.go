@@ -45,7 +45,13 @@ var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, l
 var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
 	"proto/**", "db/**",
-	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
+	"**/contract.go", "**/doc.go", "internal/handlers/**",
+	// Every forge output, as the merge gate's gen_re names them: a changed
+	// generated file runs generate, which re-renders it before build and
+	// test judge it (a merge with main can leave one a step behind, and
+	// frontends/web/src/hooks/*_gen.ts sits outside every directory below).
+	"**/*_gen.go", "**/*_gen_test.go", "**/*_gen.ts", "**/*_gen_test.ts", "**/*_gen.test.ts",
+	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client.
@@ -84,7 +90,25 @@ var forgeHookOf = map[string]string{
 	"tools/integrationgen":                                "integrations",
 }
 
+// forgeInputsExcept are paths under forgeInputs that forge generate neither
+// reads nor writes: a handler package's hand-written tests. forge scans a
+// handler package's non-test files for the rpcs already implemented
+// (codegen.ScanExistingMethods skips _test.go), and of its tests reads only
+// its own one-shot scaffold tests, to warn when one names a pb type that no
+// longer exists (a warning, never a write). The tests it generates
+// (*_gen_test.go) stay inputs: a hand edit to one is drift. A handler test
+// fix selected the whole forge generate, ~5 minutes on the loaded host.
+var forgeInputsExcept = []string{"internal/handlers/**/*_test.go"}
+
 func isForgeInput(p string) bool {
+	if strings.HasSuffix(p, "_gen_test.go") {
+		return true
+	}
+	for _, pat := range forgeInputsExcept {
+		if matchGlob(pat, p) {
+			return false
+		}
+	}
 	for _, pat := range forgeInputs {
 		if matchGlob(pat, p) {
 			return true
@@ -202,7 +226,7 @@ var rules = []rule{
 	{
 		id: "web-config",
 		patterns: []string{
-			"frontends/web/package.json", "frontends/web/package-lock.json", "frontends/web/.nvmrc",
+			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
 		},
@@ -215,12 +239,17 @@ var rules = []rule{
 		electron: true,
 	},
 	{
+		// buf's configuration reaches the tests only through the code buf
+		// generates. That code is committed: a change that regenerates it
+		// selects its own packages and clients, and one that does not is
+		// what the forge-generate lane (a no-op check) fails. Running every
+		// lane for it cost three merge-queue gates the whole web suite.
 		id: "global-config",
 		patterns: []string{
 			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
 		},
-		full:   allLanes,
-		reason: "build or generation configuration changed (a subset cannot judge it)",
+		full:   []lane{laneForgeGen},
+		reason: "buf's generation configuration changed: the generated code must match it",
 	},
 	{
 		// The Taskfile is what the codegen lanes run: `task generate:forge`

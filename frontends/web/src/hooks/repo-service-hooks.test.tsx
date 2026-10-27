@@ -73,13 +73,10 @@ describe("RepoService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useDiscoverRepos(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    // DiscoverRepos declares NO_SIDE_EFFECTS, so it is a query.
+    const { result } = renderHook(() => useDiscoverRepos({} as never), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useListRepos resolves a happy-path response", async () => {

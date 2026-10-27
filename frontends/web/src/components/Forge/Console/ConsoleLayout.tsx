@@ -40,6 +40,7 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 
 import { ForgeCloseButton } from "../ForgeHeader";
+import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
@@ -234,6 +235,9 @@ export function ConsoleLayout() {
     >
       {listed ? (
         <ForgeConsoleContext.Provider value={value}>
+          <div className="empty:hidden [&:not(:empty)]:mb-4">
+            <ObsQuotaBanner />
+          </div>
           <Outlet />
         </ForgeConsoleContext.Provider>
       ) : (

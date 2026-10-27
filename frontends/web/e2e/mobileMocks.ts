@@ -82,7 +82,6 @@ export const MESSAGES = [
         toolCallId: 'tc_1',
         input: JSON.stringify({ command: 'for i in $(seq 1 20); do npm test -- src/auth/login.test.ts --reporter=dot || break; done' }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_1', type: 'tool_result', content: `${LONG_LINE}\n`.repeat(6) },
       },
       {
         id: 'b4',
@@ -92,7 +91,6 @@ export const MESSAGES = [
         toolCallId: 'tc_2',
         input: JSON.stringify({ file_path: 'src/auth/providers/identity/retryingIdentityProviderClient.ts' }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_2', type: 'tool_result', content: 'export const RETRIES = 3;\n'.repeat(12) },
       },
       {
         // An async ask_user (the default): the timeline renders AskUserCard
@@ -104,8 +102,22 @@ export const MESSAGES = [
         toolCallId: 'tc_ask',
         input: JSON.stringify({ questions: ASK_USER_QUESTIONS }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_ask', type: 'tool_result', content: 'Question posted; carrying on.' },
       },
+    ],
+  },
+  {
+    // The calls' results, as the server sends them: their own TOOL message,
+    // joined to each call by tool_call_id.
+    id: 'msg_3',
+    seq: '3',
+    thread: 'main',
+    role: 4,
+    createdAt: minutesAgo(18),
+    updatedAt: minutesAgo(18),
+    contentBlocks: [
+      { id: 'r1', index: 0, type: 3, toolCallId: 'tc_1', content: `${LONG_LINE}\n`.repeat(6) },
+      { id: 'r2', index: 1, type: 3, toolCallId: 'tc_2', content: 'export const RETRIES = 3;\n'.repeat(12) },
+      { id: 'r3', index: 2, type: 3, toolCallId: 'tc_ask', content: 'Question posted; carrying on.' },
     ],
   },
 ];

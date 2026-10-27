@@ -27,6 +27,8 @@ package controlplane
 import (
 	"context"
 	"net/http"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
 // Service is every operation reliant performs against the control plane.
@@ -124,11 +126,12 @@ type Service interface {
 
 // Deps configures the adapter.
 type Deps struct {
-	// BaseURL is the control plane's origin. Empty dials the local default,
-	// for development against a control plane on this machine; a deployment
-	// that has no control plane does not build the adapter at all
-	// (Endpoint.Hosted).
-	BaseURL string
+	// ControlPlane is where the control plane is: its url
+	// (RELIANT_CONTROL_PLANE_URL) is the origin every call goes to. Nil, or
+	// an empty url, dials the local default, for development against a
+	// control plane on this machine; a deployment that has no control plane
+	// does not build the adapter at all (Endpoint.Hosted).
+	ControlPlane *configv1.ControlPlaneConfig
 	// Sign mints the internal-service bearer ResumeDaemonForRun presents.
 	// Nil — no INTERNAL_SERVICE_SECRET — leaves that one call unsupported;
 	// every other call presents the caller's own token.

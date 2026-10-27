@@ -385,6 +385,8 @@ export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
 export interface Panel {
   id: string;
+  /** Optional dashboard section; viewer visibility never edits this association. */
+  section?: string;
   title: string;
   description?: string;
   kind: PanelKind;
@@ -411,6 +413,8 @@ export interface Panel {
 }
 
 export interface DashboardFilter {
+  /** Empty or absent targets all panels. Never infer targeting from panel titles. */
+  panelIds?: string[];
   id: string;
   label: string;
   field: string;
@@ -429,6 +433,7 @@ export interface DashboardAnnotation {
 }
 
 export interface Dashboard {
+  sections?: { id: string; title: string }[];
   id: string;
   title: string;
   description?: string;

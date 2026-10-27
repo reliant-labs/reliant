@@ -874,7 +874,7 @@ function AutomationFormBody({
               </fieldset>
             )}
 
-            <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
+            <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} allowApp={!lockedSource || !inlineIntegration(lockedSource) || inlineIntegration(lockedSource) === "github"} />
 
             <div>
               <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">

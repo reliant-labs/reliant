@@ -28,13 +28,14 @@ export const SOURCE_LABELS: Record<DashboardSource, string> = {
   repo: "repo",
   workspace: "workspace",
   template: "template",
+  builtin: "built-in",
 };
 
 export type SourceFilter = "release" | "workspace";
 
 /** Who a dashboard belongs to, as the Owner filter names it: forge, the repo, or its author. */
 export function ownerOf(summary: DashboardSummary): string {
-  if (summary.source === "generated") return "forge";
+  if (summary.source === "generated" || summary.source === "builtin") return "forge";
   if (summary.source === "repo") return "repo";
   const user = summary.workspace?.createdBy;
   return user?.name || user?.email || "unknown";
@@ -46,7 +47,7 @@ export function ownersOf(dashboards: readonly DashboardSummary[]): string[] {
   let forge = false;
   let repo = false;
   for (const d of dashboards) {
-    if (d.source === "generated") forge = true;
+    if (d.source === "generated" || d.source === "builtin") forge = true;
     else if (d.source === "repo") repo = true;
     else people.add(ownerOf(d));
   }
@@ -94,7 +95,7 @@ export function sameRef(a: DashboardRef, b: DashboardRef): boolean {
 export type DashboardPageKind = Exclude<DashboardKind, "template">;
 
 export function isDashboardPageKind(value: string | undefined): value is DashboardPageKind {
-  return value === "release" || value === "workspace";
+  return value === "release" || value === "workspace" || value === "builtin";
 }
 
 /**
@@ -143,6 +144,19 @@ export function refreshMs(interval: RefreshInterval): number | false {
 export interface DashboardSearch {
   range?: RangePreset;
   service?: string;
+  /** RPC attributes, NOT the deployed process's service.name. */
+  rpcService?: string;
+  rpcMethod?: string;
+  rpcProcedure?: string;
+  /** Other explicitly declared filter ids and their viewer values. */
+  variables?: Record<string, string>;
+  /** Absent: saved grouping. "none": explicitly ungrouped. Otherwise a supported semantic field. */
+  breakdown?: string;
+  hiddenSections?: string[];
+  hiddenPanels?: string[];
+  /** Absent: on, when supported by the dashboard. */
+  releases?: boolean;
+  alerts?: boolean;
   compare?: CompareMode;
   refresh?: RefreshInterval;
   /** Full screen, for a wall display. */

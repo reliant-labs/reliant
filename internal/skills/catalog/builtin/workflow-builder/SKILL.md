@@ -263,8 +263,9 @@ edges:
 ## Triggers: when a workflow runs
 
 A workflow says WHEN it runs in a top-level `triggers:` list. Declaring a trigger fires nothing.
-The USER enables it in the app — never you: you have no tool that creates, enables or re-points an activation,
-and you must not try to get one by other means (the CLI, an HTTP call, a script). Enabling says AS WHOM and WHERE:
+In an interactive chat, use create_trigger_activation, update_trigger_activation, enable_trigger or pause_trigger
+when asked to manage an activation. Each change raises an approval card; nothing changes until the owner approves.
+Unattended runs cannot manage activations. Do not bypass approval through the CLI, HTTP or a script. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
 
@@ -346,7 +347,7 @@ suppressed, not a sliding guarantee. A key that cannot render for a delivery fal
 event declares (add `trigger_payload` to override only the fields your expression reads), and `scope: trigger` gives a
 filter's, inputs mapping's or prompt's view (only `trigger`, activation included; give it `activation_params` and `owner_github_id`). It returns the value and its type, or the error with its
 phase and position, plus `findings` for reads the declared payload rules out. Do this instead of waiting for a real
-event: you cannot enable the trigger, so a real event never comes from you. `reliant workflow eval` is the same on the command line, and `reliant workflow validate --trigger-payload`
+event: evaluation does not require enabling the trigger or waiting for a real event. `reliant workflow eval` is the same on the command line, and `reliant workflow validate --trigger-payload`
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with `--activation-params` and `--owner-github-id` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
@@ -417,12 +418,13 @@ exactly; an agent's own shell `gh`/`git` writes look like the person who owns th
 `edit_workflow` (validation reports bad cron, filters, inputs, events and match keys like any other error) →
 test its filter and inputs with `cel_eval` and its graph with `run_scenario` → tell the user the workflow is ready (below).
 
-**When the workflow is ready, hand it over; do not enable it.** Say that it is saved and validated, and give the
-user the path: **Workflows → Library → open the workflow → Enable**. One dialog turns on all of its declared
-triggers at once, and asks the user for the project, machine and connected accounts. Name the triggers it will
-turn on and anything they need first (a connection to GitHub, a webhook sender to configure). Never say, imply or
-log that you enabled, activated or turned on anything: until the user does, nothing fires. Once they say they
-have, `list_triggers` shows each activation's health (HEALTHY, or UNKNOWN until it first fires).
+**When the workflow is ready**, say it is saved and validated. If asked to activate it in an interactive chat,
+use create_trigger_activation with its declared trigger name, typed params, project_id, explicit machine_id (or
+no_machine) and connection_id. The approval card shows the resolved workflow, identity, machine and privileges.
+Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, and pause_trigger
+to pause. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
+The app remains an alternative: **Workflows → Library → open the workflow → Enable** turns on all declared triggers.
+Unattended runs are refused: they cannot grant themselves standing privileges.
 
 **Editing the YAML changes every activation.** An activation reads its declaration from the workflow
 each time it fires, so a new cron, filter or input mapping applies on the next event. Renaming or
@@ -430,8 +432,11 @@ removing a declaration, or changing its source kind or integration, leaves its a
 they fire nothing, report why in `list_triggers`, and recover when the declaration is restored (or are
 enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.
 
-**Who the run writes as.** When the user enables an automation they choose `acting_identity`: `owner` (default; GitHub
-comments, reviews and pull requests appear as the user) or `app` (they appear as the Reliant bot, `reliant-labs[bot]`). It is the
+**Who the run writes as.** New GitHub integration activations default to `acting_identity: app` (GitHub comments,
+reviews and pull requests appear as the Reliant bot, `reliant-labs[bot]`). Other sources, including schedules,
+webhooks and workflow events, still default to `owner` (writes appear as the user); a scheduled GitHub writer needs an
+explicit app choice. Existing activations retain their stored identity, and explicit owner choices stay owner.
+Only GitHub supports app identity; do not promise a bot identity for another integration. It is the
 ACTIVATION's choice, made in the app, not the workflow's and not yours: nothing in the YAML, an `action` node's `with:` or a prompt can
 switch it, and a person typing in the run's chat acts as themselves. It covers every integration action the run takes, an
 `action` node and an agent's integration tools alike, and only the writes: reads use the owner's access. Everything the bot
@@ -439,8 +444,8 @@ authors ends with a footer naming the automation and its owner, so do not write 
 repository the owner can push to, scoped to that one repository; if the owner cannot push, the Reliant GitHub App is not
 installed there, the App lacks a permission, the deployment has no App key, or minting fails, the write FAILS with the reason (it never falls back to the owner's name or to a saved connection; a write that names a saved connection on a bot run fails too, and a git_publish push is refused the same way),
 so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
-a reviewer or triager can be enabled as the bot so the owner can approve and merge what it opens; otherwise the default is
-fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire
+new GitHub triggers default to the bot; scheduled GitHub writers need the user to choose it explicitly. A deployment
+without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot trigger itself; other bots' comments do.
 
 ### When a run fails: `on_failure:`

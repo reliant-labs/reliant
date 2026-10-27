@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -750,7 +749,7 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 	msgs, err := repo.GetMessagesByContextWindow(ctx, cwID, nil)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
-	_, err = store.UpdateThreadForkPoint(ctx, repo.ORM(), threadID, &msgs[0].ID)
+	_, err = repo.ORM().Bun().NewUpdate().Table("threads").Set("fork_at_message_id = ?", msgs[0].ID).Where("id = ?", threadID).Exec(ctx)
 	require.NoError(t, err)
 
 	// Should return 0 without infinite loop

@@ -74,6 +74,9 @@ func toolNamed(names ...string) func(string) bool {
 // other run.
 func UnattendedWithholding(name string) string {
 	name = strings.TrimSpace(name)
+	if IsActivationManagementTool(name) {
+		return "unattended runs cannot manage trigger activations; an interactive owner approval is required"
+	}
 	for _, category := range unattendedWithheld {
 		if category.withholds(name) {
 			return category.reason

@@ -269,6 +269,22 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
           </Card>
         ) : (
           <>
+            {shown.some((dashboard) => dashboard.ref.kind === "builtin") && (
+              <Group title="Organization" meta="Canonical accounting · independent of environment and telemetry filters">
+                <Card padding="none" data-testid="dashboards-builtin">
+                  {shown.filter((dashboard) => dashboard.ref.kind === "builtin").map((dashboard) => (
+                    <div key={dashboard.ref.key} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <Link href={hrefs.dashboard(dashboard.ref)} className={INK_LINK}>{dashboard.title}</Link>
+                        <p className="text-sm text-muted-foreground">{dashboard.description}</p>
+                        <p className="text-sm text-muted-foreground">Requires cost-read permission, not billing management.</p>
+                      </div>
+                      <SourceTag source={dashboard.source} />
+                    </div>
+                  ))}
+                </Card>
+              </Group>
+            )}
             {starred.length > 0 && (
               <Group title="Starred" meta={`${starred.length} · the first ${NAV_STARRED} also sit in the nav`}>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="dashboards-starred">

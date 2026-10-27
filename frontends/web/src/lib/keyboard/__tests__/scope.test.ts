@@ -27,6 +27,7 @@ const MENU_DELIVERED = [
   "prevChat",
   "nextRightSidebarTab",
   "prevRightSidebarTab",
+  "findInPage",
 ];
 
 describe("off-workspace reach", () => {

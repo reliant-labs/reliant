@@ -30,6 +30,7 @@ import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { useAuthStore } from "@/store/authStore";
 
+import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
 import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgShell } from "./OrgShell";
@@ -101,6 +102,7 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       }
       brandCollapsed={<OrgMark />}
     >
+      <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>
       <Outlet />
     </OrgShell>
   );

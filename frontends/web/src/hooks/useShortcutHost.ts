@@ -64,6 +64,13 @@ export interface ShortcutHost {
 
 export const ShortcutHostContext = createContext<ShortcutHost | null>(null);
 
+/**
+ * The addSelectionToChat shortcut's request, a cancelable window event. The
+ * file viewer whose focused editor has a selection takes it (preventDefault)
+ * and adds that selection to the chat; untaken, the shortcut focuses the chat.
+ */
+export const ADD_SELECTION_TO_CHAT = "add-selection-to-chat";
+
 /** The app's keyboard host, or null outside it (tests, isolated previews). */
 export function useShortcutHost(): ShortcutHost | null {
   return useContext(ShortcutHostContext);

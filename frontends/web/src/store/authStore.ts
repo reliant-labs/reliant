@@ -128,6 +128,7 @@ interface AuthState {
     state?: OAuthRedirectState,
   ) => Promise<void>
   signInAnonymously: () => Promise<void>
+  adoptSession: (tokens: { accessToken: string; refreshToken: string }) => Promise<User>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
 
@@ -387,6 +388,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     trackAuthFunnelEvent('login_succeeded', {
       auth_method: 'anonymous',
     })
+  },
+
+  // Install a session the control plane released to this browser (the /claim
+  // page: OpenClaimSession hands over the anonymous user that deployed a site).
+  // Unlike `setSession` above, which only writes this store, this goes through
+  // supabase so the session is persisted and refreshed like any other, and
+  // every RPC after it carries the user's token. The tokens are never logged.
+  adoptSession: async ({ accessToken, refreshToken }) => {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    })
+    if (error) {
+      logger.error('[AuthStore] adoptSession failed', { code: (error as { code?: string }).code })
+      throw error
+    }
+    if (!data.user || !data.session) {
+      throw new Error('The released session could not be installed')
+    }
+    set({ user: data.user, session: data.session })
+    return data.user
   },
 
   signOut: async () => {

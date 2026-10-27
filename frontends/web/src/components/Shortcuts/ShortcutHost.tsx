@@ -42,11 +42,14 @@ import {
   type ShortcutHandlerLookup,
 } from "../../hooks/useAppKeyboardShortcuts";
 import {
+  ADD_SELECTION_TO_CHAT,
   ShortcutHostContext,
   type ShortcutHandlers,
   type ShortcutHost as ShortcutHostApi,
   type ShortcutLayer,
 } from "../../hooks/useShortcutHost";
+import { themeSnapshot } from "../../findBar/protocol";
+import { chatOnScreen } from "../../lib/keyboard/contexts";
 import { OFF_WORKSPACE } from "../../lib/keyboard/scope";
 import { surfaceForPath } from "../../lib/surface";
 import { lazyRoute } from "../../lib/lazyRoute";
@@ -150,6 +153,11 @@ function emit(name: string): void {
   window.dispatchEvent(new CustomEvent(name));
 }
 
+/** The desktop app's find bar is there to open (src/findBar/protocol.ts). */
+function findInPageAvailable(): boolean {
+  return typeof window.electronAPI?.findInPage?.open === "function";
+}
+
 /** A composer is mounted — the workspace's, a run's chat, the builder's. */
 function composerOnScreen(): boolean {
   return document.querySelector('[data-context="chat-input"]') !== null;
@@ -251,15 +259,36 @@ function createHostCore(
       else runInWorkspace(inWorkspace);
     };
 
+  /**
+   * Cmd+F's "find on the page", and Edit › Find in the desktop menu. The key
+   * reaches it only where neither a conversation nor the editor claims Cmd+F
+   * first; the menu reaches it from anywhere, and over a conversation does
+   * what the key does there — search the conversation.
+   */
+  const findInPage = () => {
+    if (chatOnScreen()) {
+      lookup("onChatSearch")?.();
+      return;
+    }
+    closeOverlays();
+    window.electronAPI.findInPage
+      ?.open({ theme: themeSnapshot() })
+      .catch((error: unknown) => logger.error("Failed to open the find bar", error));
+  };
+
   const here: ShortcutHandlers = {
     onCommandPalette: () => openOverlay({ kind: "palette" }),
+    // Cmd+F reaches this only over a conversation (its `chat-view` context);
+    // the slash menu runs it from anywhere, and with no conversation on
+    // screen there is nothing "current" to search, so it searches every chat.
     onChatSearch: () =>
       openOverlay({
         kind: "chat-search",
-        // "current" searches the open conversation; off the workspace none is
-        // open, so search every chat instead.
-        mode: live.current.workspace ? "current" : "history",
+        mode: chatOnScreen() ? "current" : "history",
       }),
+    // Desktop only: in a browser tab there is no handler — and no binding —
+    // so the key reaches the browser's own find bar.
+    onFindInPage: findInPageAvailable() ? findInPage : undefined,
     onSwitchChat: () => openOverlay({ kind: "chat-search", mode: "history" }),
     onToggleSettings: () => {
       if (live.current.pathname.startsWith("/settings")) navigateToWorkspace();
@@ -268,6 +297,14 @@ function createHostCore(
     onOpenWorkflows: () => void live.current.navigate({ to: "/workflows" }),
     onOpenProject: openProjectPicker,
     onSwitchProject: openProjectPicker,
+    // The file viewer whose editor has a selection claims the event and adds
+    // it to the chat; with no taker the chord means what it does everywhere
+    // else, focus the chat.
+    onAddSelectionToChat: () => {
+      const request = new CustomEvent(ADD_SELECTION_TO_CHAT, { cancelable: true });
+      window.dispatchEvent(request);
+      if (!request.defaultPrevented) lookup("onFocusChat")?.();
+    },
     // Passthrough claims for editing contexts: the editor does the work.
     onEditorFind: () => {},
     onNativeSelection: () => {},

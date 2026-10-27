@@ -218,7 +218,7 @@ describe("DaemonConnectingGate", () => {
       screen.getByRole("button", { name: /View machine/i }).click();
     });
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/environments/$machineId",
+      to: "/settings/machines/$machineId",
       params: { machineId: "daemon-abc-123" },
     });
 

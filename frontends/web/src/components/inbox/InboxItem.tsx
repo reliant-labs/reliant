@@ -620,7 +620,7 @@ export function WakeMachineAction({
   daemonName: string;
   label?: string;
 }) {
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("inbox");
   // The error itself, not its message: its reason decides whether Billing is
   // the fix (lib/daemon-resume); the copy is shared.
   const [error, setError] = useState<unknown>(null);

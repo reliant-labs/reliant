@@ -6,7 +6,7 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { Issue, IssuePlatform, IssueStatus } from "../../../controlplane/v1/issues_pb";
+import type { Issue, IssuePlatform, IssueStatus, IssueUser } from "../../../controlplane/v1/issues_pb";
 import { file_controlplane_v1_issues } from "../../../controlplane/v1/issues_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/issues/v1/issues.proto.
  */
 export const file_services_issues_v1_issues: GenFile = /*@__PURE__*/
-  fileDesc("Ch9zZXJ2aWNlcy9pc3N1ZXMvdjEvaXNzdWVzLnByb3RvEg9jb250cm9scGxhbmUudjEidAoOSXNzdWVUaW1lUmFuZ2USMQoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESLwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBIuABCgpJc3N1ZVNjb3BlEhcKBm9yZ19pZBgBIAEoCUIHukgEcgIQARIaCghzZXJ2aWNlcxgDIAMoCUIIukgFkgECEDISMwoKdGltZV9yYW5nZRgEIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVSYW5nZRIhCgpwcm9qZWN0X2lkGAUgASgJQgi6SAVyAxiAAUgAiAEBEhkKB2Vudl9pZHMYBiADKAlCCLpIBZIBAhAyQg0KC19wcm9qZWN0X2lkSgQIAhADSgQIBxAIUgZlbnZfaWRSB2ZpbHRlcnMitwQKEUxpc3RJc3N1ZXNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLklzc3VlU2NvcGVCBrpIA8gBARI/CghzdGF0dXNlcxgCIAMoDjIcLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVN0YXR1c0IPukgMkgEJEAUiBYIBAhABEj8KCHBsYXRmb3JtGAMgASgOMh4uY29udHJvbHBsYW5lLnYxLklzc3VlUGxhdGZvcm1CCLpIBYIBAhABSACIAQESKQoSZmlyc3Rfc2Vlbl9yZWxlYXNlGAQgASgJQgi6SAVyAxiAAkgBiAEBEikKEnNpbmNlX3Byb21vdGlvbl9pZBgFIAEoCUIIukgFcgMYgAFIAogBARIbCgR0ZXh0GAYgASgJQgi6SAVyAxiAAkgDiAEBEjoKBnNvdXJjZRgKIAEoCUIlukgiciAyHl4oW2EtejAtOV1bYS16MC05Xy4tXXswLDYzfSk/JEgEiAEBEjIKBHNvcnQYByABKA4yGi5jb250cm9scGxhbmUudjEuSXNzdWVTb3J0Qgi6SAWCAQIQARIcCglwYWdlX3NpemUYCCABKAVCCbpIBhoEGGQoABIcCgpwYWdlX3Rva2VuGAkgASgJQgi6SAVyAxiABEILCglfcGxhdGZvcm1CFQoTX2ZpcnN0X3NlZW5fcmVsZWFzZUIVChNfc2luY2VfcHJvbW90aW9uX2lkQgcKBV90ZXh0QgkKB19zb3VyY2UiVQoSTGlzdElzc3Vlc1Jlc3BvbnNlEiYKBmlzc3VlcxgBIAMoCzIWLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiYQoPR2V0SXNzdWVSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEjMKCnRpbWVfcmFuZ2UYAiABKAsyHy5jb250cm9scGxhbmUudjEuSXNzdWVUaW1lUmFuZ2UirgIKEEdldElzc3VlUmVzcG9uc2USJQoFaXNzdWUYASABKAsyFi5jb250cm9scGxhbmUudjEuSXNzdWUSMQoMbGF0ZXN0X2V2ZW50GAIgASgLMhsuY29udHJvbHBsYW5lLnYxLklzc3VlRXZlbnQSKwoGZnJhbWVzGAMgAygLMhsuY29udHJvbHBsYW5lLnYxLklzc3VlRnJhbWUSOgoKYnlfdmVyc2lvbhgEIAMoCzImLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVZlcnNpb25CcmVha2Rvd24SHgoWY29fb2NjdXJyaW5nX2lzc3VlX2lkcxgFIAMoCRI3Cg1maXJzdF9yZWxlYXNlGAYgASgLMiAuY29udHJvbHBsYW5lLnYxLklzc3VlUmVsZWFzZVJlZiKiAgoKSXNzdWVFdmVudBItCgl0aW1lc3RhbXAYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCHRyYWNlX2lkGAIgASgJEg8KB3NwYW5faWQYAyABKAkSFwoPc2VydmljZV92ZXJzaW9uGAQgASgJEg8KB21lc3NhZ2UYBSABKAkSPwoKYXR0cmlidXRlcxgGIAMoCzIrLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZUV2ZW50LkF0dHJpYnV0ZXNFbnRyeRISCgpzZXNzaW9uX2lkGAcgASgJEhAKCHVybF9wYXRoGAggASgJGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIloKCklzc3VlRnJhbWUSEAoIZnVuY3Rpb24YASABKAkSDAoEZmlsZRgCIAEoCRIMCgRsaW5lGAMgASgFEg4KBmNvbHVtbhgEIAEoBRIOCgZpbl9hcHAYBSABKAgixgEKFUlzc3VlVmVyc2lvbkJyZWFrZG93bhIPCgd2ZXJzaW9uGAEgASgJEg4KBmV2ZW50cxgCIAEoAxIQCghhZmZlY3RlZBgDIAEoAxIxCg1maXJzdF9zZWVuX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlZW5fYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWFmZmVjdGVkX3VuaXQYBiABKAkifQoPSXNzdWVSZWxlYXNlUmVmEg8KB3ZlcnNpb24YASABKAkSEgoKZ2l0X2NvbW1pdBgCIAEoCRIUCgxjb21taXRfcmFuZ2UYAyABKAkSLwoLcHJvbW90ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqMBChZMaXN0SXNzdWVFdmVudHNSZXF1ZXN0EhgKCGlzc3VlX2lkGAEgASgJQga6SAPIAQESMwoKdGltZV9yYW5nZRgCIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVSYW5nZRIcCglwYWdlX3NpemUYAyABKAVCCbpIBhoEGGQoABIcCgpwYWdlX3Rva2VuGAQgASgJQgi6SAVyAxiABCJfChdMaXN0SXNzdWVFdmVudHNSZXNwb25zZRIrCgZldmVudHMYASADKAsyGy5jb250cm9scGxhbmUudjEuSXNzdWVFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiZgoOSXNzdWVSZXNvbHZlSW4SOQoEa2luZBgBIAEoDjIhLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVJlc29sdmVLaW5kQgi6SAWCAQIQARIZCgd2ZXJzaW9uGAIgASgJQgi6SAVyAxiAAiLEAgoYVXBkYXRlSXNzdWVTdGF0dXNSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEhcKBmVudl9pZBgCIAEoCUIHukgEcgIQARI+CgZzdGF0dXMYAyABKA4yIi5jb250cm9scGxhbmUudjEuSXNzdWVTdGF0dXNDaGFuZ2VCCrpIB4IBBBABIAASOAoKcmVzb2x2ZV9pbhgEIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVJlc29sdmVJbkgAiAEBEjYKDWlnbm9yZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESIQoQZXhwZWN0ZWRfdmVyc2lvbhgGIAEoBUIHukgEGgIoAEINCgtfcmVzb2x2ZV9pbkIQCg5faWdub3JlZF91bnRpbCJCChlVcGRhdGVJc3N1ZVN0YXR1c1Jlc3BvbnNlEiUKBWlzc3VlGAEgASgLMhYuY29udHJvbHBsYW5lLnYxLklzc3VlKqABCglJc3N1ZVNvcnQSGgoWSVNTVUVfU09SVF9VTlNQRUNJRklFRBAAEh0KGUlTU1VFX1NPUlRfTEFTVF9TRUVOX0RFU0MQARIeChpJU1NVRV9TT1JUX0ZJUlNUX1NFRU5fREVTQxACEhoKFklTU1VFX1NPUlRfRVZFTlRTX0RFU0MQAxIcChhJU1NVRV9TT1JUX0FGRkVDVEVEX0RFU0MQBCqfAQoRSXNzdWVTdGF0dXNDaGFuZ2USIwofSVNTVUVfU1RBVFVTX0NIQU5HRV9VTlNQRUNJRklFRBAAEiAKHElTU1VFX1NUQVRVU19DSEFOR0VfUkVTT0xWRUQQARIfChtJU1NVRV9TVEFUVVNfQ0hBTkdFX0lHTk9SRUQQAhIiCh5JU1NVRV9TVEFUVVNfQ0hBTkdFX1VOUkVTT0xWRUQQAyqXAQoQSXNzdWVSZXNvbHZlS2luZBIiCh5JU1NVRV9SRVNPTFZFX0tJTkRfVU5TUEVDSUZJRUQQABIaChZJU1NVRV9SRVNPTFZFX0tJTkRfTk9XEAESIwofSVNTVUVfUkVTT0xWRV9LSU5EX05FWFRfUkVMRUFTRRACEh4KGklTU1VFX1JFU09MVkVfS0lORF9WRVJTSU9OEAMy0wQKDUlzc3Vlc1NlcnZpY2USXwoKTGlzdElzc3VlcxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVzUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVzUmVzcG9uc2UiCKK7GAQIARgBElkKCEdldElzc3VlEiAuY29udHJvbHBsYW5lLnYxLkdldElzc3VlUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRJc3N1ZVJlc3BvbnNlIgiiuxgECAEYARJuCg9MaXN0SXNzdWVFdmVudHMSJy5jb250cm9scGxhbmUudjEuTGlzdElzc3VlRXZlbnRzUmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVFdmVudHNSZXNwb25zZSIIorsYBAgBGAEStwEKEVVwZGF0ZUlzc3VlU3RhdHVzEikuY29udHJvbHBsYW5lLnYxLlVwZGF0ZUlzc3VlU3RhdHVzUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVJc3N1ZVN0YXR1c1Jlc3BvbnNlIkuiuxhHCAE6QwoGdHJpYWdlEicKBWlzc3VlEghpc3N1ZV9pZBoUcmVzcG9uc2UuaXNzdWUudGl0bGUaBmVudl9pZCoGc3RhdHVzMAIaXIK1GFgKDUlzc3Vlc1NlcnZpY2USBTEuMC4wGkBFcnJvciBpc3N1ZXM6IGdyb3VwaW5nLCB0cmlhZ2UgbGlmZWN5Y2xlIGFuZCByZWxlYXNlIGF0dHJpYnV0aW9uQtMBChNjb20uY29udHJvbHBsYW5lLnYxQgtJc3N1ZXNQcm90b1ABWlJnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvaXNzdWVzL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_controlplane_v1_issues, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("Ch9zZXJ2aWNlcy9pc3N1ZXMvdjEvaXNzdWVzLnByb3RvEg9jb250cm9scGxhbmUudjEidAoOSXNzdWVUaW1lUmFuZ2USMQoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESLwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBIuABCgpJc3N1ZVNjb3BlEhcKBm9yZ19pZBgBIAEoCUIHukgEcgIQARIaCghzZXJ2aWNlcxgDIAMoCUIIukgFkgECEDISMwoKdGltZV9yYW5nZRgEIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVSYW5nZRIhCgpwcm9qZWN0X2lkGAUgASgJQgi6SAVyAxiAAUgAiAEBEhkKB2Vudl9pZHMYBiADKAlCCLpIBZIBAhAyQg0KC19wcm9qZWN0X2lkSgQIAhADSgQIBxAIUgZlbnZfaWRSB2ZpbHRlcnMimQYKEUxpc3RJc3N1ZXNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLklzc3VlU2NvcGVCBrpIA8gBARI/CghzdGF0dXNlcxgCIAMoDjIcLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVN0YXR1c0IPukgMkgEJEAUiBYIBAhABEj8KCHBsYXRmb3JtGAMgASgOMh4uY29udHJvbHBsYW5lLnYxLklzc3VlUGxhdGZvcm1CCLpIBYIBAhABSACIAQESKQoSZmlyc3Rfc2Vlbl9yZWxlYXNlGAQgASgJQgi6SAVyAxiAAkgBiAEBEikKEnNpbmNlX3Byb21vdGlvbl9pZBgFIAEoCUIIukgFcgMYgAFIAogBARIbCgR0ZXh0GAYgASgJQgi6SAVyAxiAAkgDiAEBEjoKBnNvdXJjZRgKIAEoCUIlukgiciAyHl4oW2EtejAtOV1bYS16MC05Xy4tXXswLDYzfSk/JEgEiAEBEiEKCGFzc2lnbmVlGAwgASgJQgq6SAdyBRABGIABSAWIAQESIAoKdW5hc3NpZ25lZBgNIAEoCEIHukgEagIIAUgGiAEBEiQKDGluY2lkZW50X2tleRgOIAEoCUIJukgGcgQQARhASAeIAQESMgoEc29ydBgHIAEoDjIaLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVNvcnRCCLpIBYIBAhABEhwKCXBhZ2Vfc2l6ZRgIIAEoBUIJukgGGgQYZCgAEhwKCnBhZ2VfdG9rZW4YCSABKAlCCLpIBXIDGIAEEisKF2luY2lkZW50X3dpbmRvd19zZWNvbmRzGAsgASgFQgq6SAcaBRiQHCgAOhu6SBgiFgoIYXNzaWduZWUKCnVuYXNzaWduZWRCCwoJX3BsYXRmb3JtQhUKE19maXJzdF9zZWVuX3JlbGVhc2VCFQoTX3NpbmNlX3Byb21vdGlvbl9pZEIHCgVfdGV4dEIJCgdfc291cmNlQgsKCV9hc3NpZ25lZUINCgtfdW5hc3NpZ25lZEIPCg1faW5jaWRlbnRfa2V5IlUKEkxpc3RJc3N1ZXNSZXNwb25zZRImCgZpc3N1ZXMYASADKAsyFi5jb250cm9scGxhbmUudjEuSXNzdWUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIo4BCg9HZXRJc3N1ZVJlcXVlc3QSGQoIaXNzdWVfaWQYASABKAlCB7pIBHICEAESMwoKdGltZV9yYW5nZRgCIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVSYW5nZRIrChdpbmNpZGVudF93aW5kb3dfc2Vjb25kcxgDIAEoBUIKukgHGgUYkBwoACLKAgoQR2V0SXNzdWVSZXNwb25zZRIlCgVpc3N1ZRgBIAEoCzIWLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZRIxCgxsYXRlc3RfZXZlbnQYAiABKAsyGy5jb250cm9scGxhbmUudjEuSXNzdWVFdmVudBIrCgZmcmFtZXMYAyADKAsyGy5jb250cm9scGxhbmUudjEuSXNzdWVGcmFtZRI6CgpieV92ZXJzaW9uGAQgAygLMiYuY29udHJvbHBsYW5lLnYxLklzc3VlVmVyc2lvbkJyZWFrZG93bhIeChZjb19vY2N1cnJpbmdfaXNzdWVfaWRzGAUgAygJEjcKDWZpcnN0X3JlbGVhc2UYBiABKAsyIC5jb250cm9scGxhbmUudjEuSXNzdWVSZWxlYXNlUmVmEhoKEmluY2lkZW50X2lzc3VlX2lkcxgHIAMoCSKiAgoKSXNzdWVFdmVudBItCgl0aW1lc3RhbXAYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCHRyYWNlX2lkGAIgASgJEg8KB3NwYW5faWQYAyABKAkSFwoPc2VydmljZV92ZXJzaW9uGAQgASgJEg8KB21lc3NhZ2UYBSABKAkSPwoKYXR0cmlidXRlcxgGIAMoCzIrLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZUV2ZW50LkF0dHJpYnV0ZXNFbnRyeRISCgpzZXNzaW9uX2lkGAcgASgJEhAKCHVybF9wYXRoGAggASgJGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIloKCklzc3VlRnJhbWUSEAoIZnVuY3Rpb24YASABKAkSDAoEZmlsZRgCIAEoCRIMCgRsaW5lGAMgASgFEg4KBmNvbHVtbhgEIAEoBRIOCgZpbl9hcHAYBSABKAgixgEKFUlzc3VlVmVyc2lvbkJyZWFrZG93bhIPCgd2ZXJzaW9uGAEgASgJEg4KBmV2ZW50cxgCIAEoAxIQCghhZmZlY3RlZBgDIAEoAxIxCg1maXJzdF9zZWVuX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlZW5fYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDWFmZmVjdGVkX3VuaXQYBiABKAkifQoPSXNzdWVSZWxlYXNlUmVmEg8KB3ZlcnNpb24YASABKAkSEgoKZ2l0X2NvbW1pdBgCIAEoCRIUCgxjb21taXRfcmFuZ2UYAyABKAkSLwoLcHJvbW90ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqMBChZMaXN0SXNzdWVFdmVudHNSZXF1ZXN0EhgKCGlzc3VlX2lkGAEgASgJQga6SAPIAQESMwoKdGltZV9yYW5nZRgCIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVSYW5nZRIcCglwYWdlX3NpemUYAyABKAVCCbpIBhoEGGQoABIcCgpwYWdlX3Rva2VuGAQgASgJQgi6SAVyAxiABCJfChdMaXN0SXNzdWVFdmVudHNSZXNwb25zZRIrCgZldmVudHMYASADKAsyGy5jb250cm9scGxhbmUudjEuSXNzdWVFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiZgoOSXNzdWVSZXNvbHZlSW4SOQoEa2luZBgBIAEoDjIhLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVJlc29sdmVLaW5kQgi6SAWCAQIQARIZCgd2ZXJzaW9uGAIgASgJQgi6SAVyAxiAAiLEAgoYVXBkYXRlSXNzdWVTdGF0dXNSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEhcKBmVudl9pZBgCIAEoCUIHukgEcgIQARI+CgZzdGF0dXMYAyABKA4yIi5jb250cm9scGxhbmUudjEuSXNzdWVTdGF0dXNDaGFuZ2VCCrpIB4IBBBABIAASOAoKcmVzb2x2ZV9pbhgEIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVJlc29sdmVJbkgAiAEBEjYKDWlnbm9yZWRfdW50aWwYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESIQoQZXhwZWN0ZWRfdmVyc2lvbhgGIAEoBUIHukgEGgIoAEINCgtfcmVzb2x2ZV9pbkIQCg5faWdub3JlZF91bnRpbCJCChlVcGRhdGVJc3N1ZVN0YXR1c1Jlc3BvbnNlEiUKBWlzc3VlGAEgASgLMhYuY29udHJvbHBsYW5lLnYxLklzc3VlIsYBCgxJc3N1ZUNvbW1lbnQSCgoCaWQYASABKAkSEAoIaXNzdWVfaWQYAiABKAkSKgoGYXV0aG9yGAMgASgLMhouY29udHJvbHBsYW5lLnYxLklzc3VlVXNlchIMCgRib2R5GAQgASgJEi4KCmNyZWF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIk0KFkFkZElzc3VlQ29tbWVudFJlcXVlc3QSGQoIaXNzdWVfaWQYASABKAlCB7pIBHICEAESGAoEYm9keRgCIAEoCUIKukgHcgUQARiQTiJJChdBZGRJc3N1ZUNvbW1lbnRSZXNwb25zZRIuCgdjb21tZW50GAEgASgLMh0uY29udHJvbHBsYW5lLnYxLklzc3VlQ29tbWVudCJtChlVcGRhdGVJc3N1ZUNvbW1lbnRSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEhsKCmNvbW1lbnRfaWQYAiABKAlCB7pIBHICEAESGAoEYm9keRgDIAEoCUIKukgHcgUQARiQTiJMChpVcGRhdGVJc3N1ZUNvbW1lbnRSZXNwb25zZRIuCgdjb21tZW50GAEgASgLMh0uY29udHJvbHBsYW5lLnYxLklzc3VlQ29tbWVudCJTChlEZWxldGVJc3N1ZUNvbW1lbnRSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEhsKCmNvbW1lbnRfaWQYAiABKAlCB7pIBHICEAEiHAoaRGVsZXRlSXNzdWVDb21tZW50UmVzcG9uc2UidgoSQXNzaWduSXNzdWVSZXF1ZXN0EhkKCGlzc3VlX2lkGAEgASgJQge6SARyAhABEiIKEGFzc2lnbmVlX3VzZXJfaWQYAiABKAlCCLpIBXIDGIABEiEKEGV4cGVjdGVkX3ZlcnNpb24YAyABKAVCB7pIBBoCKAAiPAoTQXNzaWduSXNzdWVSZXNwb25zZRIlCgVpc3N1ZRgBIAEoCzIWLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZSJsChRMaW5rSXNzdWVDaGF0UmVxdWVzdBIZCghpc3N1ZV9pZBgBIAEoCUIHukgEcgIQARIbCgdjaGF0X2lkGAIgASgJQgq6SAdyBRABGIABEhwKCmNoYXRfdGl0bGUYAyABKAlCCLpIBXIDGIACIqQBCg1Jc3N1ZUNoYXRMaW5rEhAKCGlzc3VlX2lkGAEgASgJEg8KB2NoYXRfaWQYAiABKAkSEgoKY2hhdF90aXRsZRgDIAEoCRItCglsaW5rZWRfYnkYBCABKAsyGi5jb250cm9scGxhbmUudjEuSXNzdWVVc2VyEi0KCWxpbmtlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVgoVTGlua0lzc3VlQ2hhdFJlc3BvbnNlEiwKBGxpbmsYASABKAsyHi5jb250cm9scGxhbmUudjEuSXNzdWVDaGF0TGluaxIPCgdjcmVhdGVkGAIgASgIInAKGExpc3RJc3N1ZVRpbWVsaW5lUmVxdWVzdBIYCghpc3N1ZV9pZBgBIAEoCUIGukgDyAEBEhwKCXBhZ2Vfc2l6ZRgCIAEoBUIJukgGGgQYZCgAEhwKCnBhZ2VfdG9rZW4YAyABKAlCCLpIBXIDGIAEIpsBChpMaXN0QXNzaWduYWJsZVVzZXJzUmVxdWVzdBIbCgZvcmdfaWQYASABKAlCC7pICMgBAXIDGIABEhsKBHRleHQYAiABKAlCCLpIBXIDGIACSACIAQESHAoJcGFnZV9zaXplGAMgASgFQgm6SAYaBBhkKAASHAoKcGFnZV90b2tlbhgEIAEoCUIIukgFcgMYgARCBwoFX3RleHQiYQobTGlzdEFzc2lnbmFibGVVc2Vyc1Jlc3BvbnNlEikKBXVzZXJzGAEgAygLMhouY29udHJvbHBsYW5lLnYxLklzc3VlVXNlchIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkipgEKCklzc3VlQWN0b3ISLgoEa2luZBgBIAEoDjIgLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZUFjdG9yLktpbmQSCgoCaWQYAiABKAkSDAoEbmFtZRgDIAEoCSJOCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABINCglLSU5EX1VTRVIQARIQCgxLSU5EX01BQ0hJTkUQAhIPCgtLSU5EX1NZU1RFTRADIqwBChBJc3N1ZVN0YXR1c0VudHJ5EioKBGZyb20YASABKA4yHC5jb250cm9scGxhbmUudjEuSXNzdWVTdGF0dXMSKAoCdG8YAiABKA4yHC5jb250cm9scGxhbmUudjEuSXNzdWVTdGF0dXMSDwoHdmVyc2lvbhgDIAEoCRIxCg1pZ25vcmVkX3VudGlsGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJDChFJc3N1ZUNvbW1lbnRFbnRyeRIuCgdjb21tZW50GAEgASgLMh0uY29udHJvbHBsYW5lLnYxLklzc3VlQ29tbWVudCJoChRJc3N1ZUFzc2lnbm1lbnRFbnRyeRIoCgRmcm9tGAEgASgLMhouY29udHJvbHBsYW5lLnYxLklzc3VlVXNlchImCgJ0bxgCIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVVzZXIiPgoOSXNzdWVDaGF0RW50cnkSLAoEbGluaxgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZUNoYXRMaW5rIusCChJJc3N1ZVRpbWVsaW5lRW50cnkSCgoCaWQYASABKAkSKAoEdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIaXNzdWVfaWQYAyABKAkSKgoFYWN0b3IYBCABKAsyGy5jb250cm9scGxhbmUudjEuSXNzdWVBY3RvchIzCgZzdGF0dXMYCiABKAsyIS5jb250cm9scGxhbmUudjEuSXNzdWVTdGF0dXNFbnRyeUgAEjUKB2NvbW1lbnQYCyABKAsyIi5jb250cm9scGxhbmUudjEuSXNzdWVDb21tZW50RW50cnlIABI7Cgphc3NpZ25tZW50GAwgASgLMiUuY29udHJvbHBsYW5lLnYxLklzc3VlQXNzaWdubWVudEVudHJ5SAASLwoEY2hhdBgNIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZUNoYXRFbnRyeUgAQgcKBWVudHJ5InwKGUxpc3RJc3N1ZVRpbWVsaW5lUmVzcG9uc2USNAoHZW50cmllcxgBIAMoCzIjLmNvbnRyb2xwbGFuZS52MS5Jc3N1ZVRpbWVsaW5lRW50cnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhAKCGlzc3VlX2lkGAMgASgJKqABCglJc3N1ZVNvcnQSGgoWSVNTVUVfU09SVF9VTlNQRUNJRklFRBAAEh0KGUlTU1VFX1NPUlRfTEFTVF9TRUVOX0RFU0MQARIeChpJU1NVRV9TT1JUX0ZJUlNUX1NFRU5fREVTQxACEhoKFklTU1VFX1NPUlRfRVZFTlRTX0RFU0MQAxIcChhJU1NVRV9TT1JUX0FGRkVDVEVEX0RFU0MQBCqfAQoRSXNzdWVTdGF0dXNDaGFuZ2USIwofSVNTVUVfU1RBVFVTX0NIQU5HRV9VTlNQRUNJRklFRBAAEiAKHElTU1VFX1NUQVRVU19DSEFOR0VfUkVTT0xWRUQQARIfChtJU1NVRV9TVEFUVVNfQ0hBTkdFX0lHTk9SRUQQAhIiCh5JU1NVRV9TVEFUVVNfQ0hBTkdFX1VOUkVTT0xWRUQQAyqXAQoQSXNzdWVSZXNvbHZlS2luZBIiCh5JU1NVRV9SRVNPTFZFX0tJTkRfVU5TUEVDSUZJRUQQABIaChZJU1NVRV9SRVNPTFZFX0tJTkRfTk9XEAESIwofSVNTVUVfUkVTT0xWRV9LSU5EX05FWFRfUkVMRUFTRRACEh4KGklTU1VFX1JFU09MVkVfS0lORF9WRVJTSU9OEAMy5gwKDUlzc3Vlc1NlcnZpY2USXwoKTGlzdElzc3VlcxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVzUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVzUmVzcG9uc2UiCKK7GAQIARgBElkKCEdldElzc3VlEiAuY29udHJvbHBsYW5lLnYxLkdldElzc3VlUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRJc3N1ZVJlc3BvbnNlIgiiuxgECAEYARJuCg9MaXN0SXNzdWVFdmVudHMSJy5jb250cm9scGxhbmUudjEuTGlzdElzc3VlRXZlbnRzUmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVFdmVudHNSZXNwb25zZSIIorsYBAgBGAEStwEKEVVwZGF0ZUlzc3VlU3RhdHVzEikuY29udHJvbHBsYW5lLnYxLlVwZGF0ZUlzc3VlU3RhdHVzUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVJc3N1ZVN0YXR1c1Jlc3BvbnNlIkuiuxhHCAE6QwoGdHJpYWdlEicKBWlzc3VlEghpc3N1ZV9pZBoUcmVzcG9uc2UuaXNzdWUudGl0bGUaBmVudl9pZCoGc3RhdHVzMAISjAEKD0FkZElzc3VlQ29tbWVudBInLmNvbnRyb2xwbGFuZS52MS5BZGRJc3N1ZUNvbW1lbnRSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkFkZElzc3VlQ29tbWVudFJlc3BvbnNlIiaiuxgiCAE6HgoHY29tbWVudBIRCgVpc3N1ZRIIaXNzdWVfaWQwAhKmAQoSVXBkYXRlSXNzdWVDb21tZW50EiouY29udHJvbHBsYW5lLnYxLlVwZGF0ZUlzc3VlQ29tbWVudFJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuVXBkYXRlSXNzdWVDb21tZW50UmVzcG9uc2UiN6K7GDMIATovCgxjb21tZW50X2VkaXQSEQoFaXNzdWUSCGlzc3VlX2lkKgpjb21tZW50X2lkMAISqAEKEkRlbGV0ZUlzc3VlQ29tbWVudBIqLmNvbnRyb2xwbGFuZS52MS5EZWxldGVJc3N1ZUNvbW1lbnRSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUlzc3VlQ29tbWVudFJlc3BvbnNlIjmiuxg1CAE6MQoOY29tbWVudF9kZWxldGUSEQoFaXNzdWUSCGlzc3VlX2lkKgpjb21tZW50X2lkMAISpwEKC0Fzc2lnbklzc3VlEiMuY29udHJvbHBsYW5lLnYxLkFzc2lnbklzc3VlUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5Bc3NpZ25Jc3N1ZVJlc3BvbnNlIk2iuxhJCAE6RQoGYXNzaWduEicKBWlzc3VlEghpc3N1ZV9pZBoUcmVzcG9uc2UuaXNzdWUudGl0bGUqEGFzc2lnbmVlX3VzZXJfaWQwAhKRAQoNTGlua0lzc3VlQ2hhdBIlLmNvbnRyb2xwbGFuZS52MS5MaW5rSXNzdWVDaGF0UmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5MaW5rSXNzdWVDaGF0UmVzcG9uc2UiMaK7GC0IATopCglsaW5rX2NoYXQSEQoFaXNzdWUSCGlzc3VlX2lkKgdjaGF0X2lkMAISegoTTGlzdEFzc2lnbmFibGVVc2VycxIrLmNvbnRyb2xwbGFuZS52MS5MaXN0QXNzaWduYWJsZVVzZXJzUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5MaXN0QXNzaWduYWJsZVVzZXJzUmVzcG9uc2UiCKK7GAQIARgBEnQKEUxpc3RJc3N1ZVRpbWVsaW5lEikuY29udHJvbHBsYW5lLnYxLkxpc3RJc3N1ZVRpbWVsaW5lUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5MaXN0SXNzdWVUaW1lbGluZVJlc3BvbnNlIgiiuxgECAEYARpcgrUYWAoNSXNzdWVzU2VydmljZRIFMS4wLjAaQEVycm9yIGlzc3VlczogZ3JvdXBpbmcsIHRyaWFnZSBsaWZlY3ljbGUgYW5kIHJlbGVhc2UgYXR0cmlidXRpb25C0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0lzc3Vlc1Byb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9pc3N1ZXMvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_controlplane_v1_issues, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * IssueTimeRange is a half-open range [start, end). Both ends are required when
@@ -152,6 +152,40 @@ export type ListIssuesRequest = Message<"controlplane.v1.ListIssuesRequest"> & {
   source?: string | undefined;
 
   /**
+   * Only the issues assigned to this user: a user id, or "me" for the person
+   * the caller acts as (the signed-in user, or the user a CLI login or
+   * credential-helper token acts for). "me" on a credential that acts for no
+   * one (an organization automation token) is refused FAILED_PRECONDITION.
+   * Unset: every issue. Exclusive with unassigned.
+   *
+   * @generated from field: optional string assignee = 12;
+   */
+  assignee?: string | undefined;
+
+  /**
+   * Only the issues assigned to no one. Set it to true or leave it unset;
+   * false is refused, since "not unassigned" would be a second spelling of
+   * "every issue". Exclusive with assignee.
+   *
+   * @generated from field: optional bool unassigned = 13;
+   */
+  unassigned?: boolean | undefined;
+
+  /**
+   * Only the issues of one incident: those whose Issue.incident_key is this.
+   * The key is derived at read time from the cause and the first-seen times of
+   * the environment's server error issues, so send the same
+   * incident_window_seconds that produced it. An unknown or stale key lists
+   * nothing. statuses still applies (the default hides resolved issues, which
+   * Issue.related_count counts), so pass every status to list the whole
+   * incident. Incidents are server errors: with a key, source is the error
+   * inbox and platform=BROWSER lists nothing.
+   *
+   * @generated from field: optional string incident_key = 14;
+   */
+  incidentKey?: string | undefined;
+
+  /**
    * @generated from field: controlplane.v1.IssueSort sort = 7;
    */
   sort: IssueSort;
@@ -169,6 +203,14 @@ export type ListIssuesRequest = Message<"controlplane.v1.ListIssuesRequest"> & {
    * @generated from field: string page_token = 9;
    */
   pageToken: string;
+
+  /**
+   * How close in first-seen time issues of one cause must be to share an
+   * incident (Issue.incident_key). Default 600 (ten minutes); max 3600.
+   *
+   * @generated from field: int32 incident_window_seconds = 11;
+   */
+  incidentWindowSeconds: number;
 };
 
 /**
@@ -218,6 +260,13 @@ export type GetIssueRequest = Message<"controlplane.v1.GetIssueRequest"> & {
    * @generated from field: controlplane.v1.IssueTimeRange time_range = 2;
    */
   timeRange?: IssueTimeRange | undefined;
+
+  /**
+   * ListIssuesRequest.incident_window_seconds, for the incident this issue lists.
+   *
+   * @generated from field: int32 incident_window_seconds = 3;
+   */
+  incidentWindowSeconds: number;
 };
 
 /**
@@ -272,6 +321,15 @@ export type GetIssueResponse = Message<"controlplane.v1.GetIssueResponse"> & {
    * @generated from field: controlplane.v1.IssueReleaseRef first_release = 6;
    */
   firstRelease?: IssueReleaseRef | undefined;
+
+  /**
+   * The other issues of this issue's incident (issue.incident_key): the same
+   * cause, first seen close in time, in any service. Empty when it is part of
+   * none.
+   *
+   * @generated from field: repeated string incident_issue_ids = 7;
+   */
+  incidentIssueIds: string[];
 };
 
 /**
@@ -620,6 +678,693 @@ export const UpdateIssueStatusResponseSchema: GenMessage<UpdateIssueStatusRespon
   messageDesc(file_services_issues_v1_issues, 14);
 
 /**
+ * IssueComment is one comment on an issue.
+ *
+ * @generated from message controlplane.v1.IssueComment
+ */
+export type IssueComment = Message<"controlplane.v1.IssueComment"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string issue_id = 2;
+   */
+  issueId: string;
+
+  /**
+   * The author. Unset when the account no longer exists.
+   *
+   * @generated from field: controlplane.v1.IssueUser author = 3;
+   */
+  author?: IssueUser | undefined;
+
+  /**
+   * Plain text or markdown, verbatim. Render it safely.
+   *
+   * @generated from field: string body = 4;
+   */
+  body: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 5;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * Later than created_at once the comment was edited.
+   *
+   * @generated from field: google.protobuf.Timestamp updated_at = 6;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueComment.
+ * Use `create(IssueCommentSchema)` to create a new message.
+ */
+export const IssueCommentSchema: GenMessage<IssueComment> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 15);
+
+/**
+ * @generated from message controlplane.v1.AddIssueCommentRequest
+ */
+export type AddIssueCommentRequest = Message<"controlplane.v1.AddIssueCommentRequest"> & {
+  /**
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * @generated from field: string body = 2;
+   */
+  body: string;
+};
+
+/**
+ * Describes the message controlplane.v1.AddIssueCommentRequest.
+ * Use `create(AddIssueCommentRequestSchema)` to create a new message.
+ */
+export const AddIssueCommentRequestSchema: GenMessage<AddIssueCommentRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 16);
+
+/**
+ * @generated from message controlplane.v1.AddIssueCommentResponse
+ */
+export type AddIssueCommentResponse = Message<"controlplane.v1.AddIssueCommentResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueComment comment = 1;
+   */
+  comment?: IssueComment | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.AddIssueCommentResponse.
+ * Use `create(AddIssueCommentResponseSchema)` to create a new message.
+ */
+export const AddIssueCommentResponseSchema: GenMessage<AddIssueCommentResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 17);
+
+/**
+ * @generated from message controlplane.v1.UpdateIssueCommentRequest
+ */
+export type UpdateIssueCommentRequest = Message<"controlplane.v1.UpdateIssueCommentRequest"> & {
+  /**
+   * The issue the comment is on.
+   *
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * @generated from field: string comment_id = 2;
+   */
+  commentId: string;
+
+  /**
+   * @generated from field: string body = 3;
+   */
+  body: string;
+};
+
+/**
+ * Describes the message controlplane.v1.UpdateIssueCommentRequest.
+ * Use `create(UpdateIssueCommentRequestSchema)` to create a new message.
+ */
+export const UpdateIssueCommentRequestSchema: GenMessage<UpdateIssueCommentRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 18);
+
+/**
+ * @generated from message controlplane.v1.UpdateIssueCommentResponse
+ */
+export type UpdateIssueCommentResponse = Message<"controlplane.v1.UpdateIssueCommentResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueComment comment = 1;
+   */
+  comment?: IssueComment | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.UpdateIssueCommentResponse.
+ * Use `create(UpdateIssueCommentResponseSchema)` to create a new message.
+ */
+export const UpdateIssueCommentResponseSchema: GenMessage<UpdateIssueCommentResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 19);
+
+/**
+ * @generated from message controlplane.v1.DeleteIssueCommentRequest
+ */
+export type DeleteIssueCommentRequest = Message<"controlplane.v1.DeleteIssueCommentRequest"> & {
+  /**
+   * The issue the comment is on.
+   *
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * @generated from field: string comment_id = 2;
+   */
+  commentId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DeleteIssueCommentRequest.
+ * Use `create(DeleteIssueCommentRequestSchema)` to create a new message.
+ */
+export const DeleteIssueCommentRequestSchema: GenMessage<DeleteIssueCommentRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 20);
+
+/**
+ * @generated from message controlplane.v1.DeleteIssueCommentResponse
+ */
+export type DeleteIssueCommentResponse = Message<"controlplane.v1.DeleteIssueCommentResponse"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.DeleteIssueCommentResponse.
+ * Use `create(DeleteIssueCommentResponseSchema)` to create a new message.
+ */
+export const DeleteIssueCommentResponseSchema: GenMessage<DeleteIssueCommentResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 21);
+
+/**
+ * @generated from message controlplane.v1.AssignIssueRequest
+ */
+export type AssignIssueRequest = Message<"controlplane.v1.AssignIssueRequest"> & {
+  /**
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * The user to assign; empty clears the assignee. Must be a member of the
+   * issue's org.
+   *
+   * @generated from field: string assignee_user_id = 2;
+   */
+  assigneeUserId: string;
+
+  /**
+   * The Issue.version the caller read. Non-zero and stale = Aborted. Zero = do
+   * not check.
+   *
+   * @generated from field: int32 expected_version = 3;
+   */
+  expectedVersion: number;
+};
+
+/**
+ * Describes the message controlplane.v1.AssignIssueRequest.
+ * Use `create(AssignIssueRequestSchema)` to create a new message.
+ */
+export const AssignIssueRequestSchema: GenMessage<AssignIssueRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 22);
+
+/**
+ * @generated from message controlplane.v1.AssignIssueResponse
+ */
+export type AssignIssueResponse = Message<"controlplane.v1.AssignIssueResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.Issue issue = 1;
+   */
+  issue?: Issue | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.AssignIssueResponse.
+ * Use `create(AssignIssueResponseSchema)` to create a new message.
+ */
+export const AssignIssueResponseSchema: GenMessage<AssignIssueResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 23);
+
+/**
+ * @generated from message controlplane.v1.LinkIssueChatRequest
+ */
+export type LinkIssueChatRequest = Message<"controlplane.v1.LinkIssueChatRequest"> & {
+  /**
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * The chat started from the issue (an id in the reliant product).
+   *
+   * @generated from field: string chat_id = 2;
+   */
+  chatId: string;
+
+  /**
+   * The chat's title when it was linked. Optional.
+   *
+   * @generated from field: string chat_title = 3;
+   */
+  chatTitle: string;
+};
+
+/**
+ * Describes the message controlplane.v1.LinkIssueChatRequest.
+ * Use `create(LinkIssueChatRequestSchema)` to create a new message.
+ */
+export const LinkIssueChatRequestSchema: GenMessage<LinkIssueChatRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 24);
+
+/**
+ * IssueChatLink is a chat started from an issue.
+ *
+ * @generated from message controlplane.v1.IssueChatLink
+ */
+export type IssueChatLink = Message<"controlplane.v1.IssueChatLink"> & {
+  /**
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * @generated from field: string chat_id = 2;
+   */
+  chatId: string;
+
+  /**
+   * @generated from field: string chat_title = 3;
+   */
+  chatTitle: string;
+
+  /**
+   * Who linked it. Unset for a credential that acts for no person.
+   *
+   * @generated from field: controlplane.v1.IssueUser linked_by = 4;
+   */
+  linkedBy?: IssueUser | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp linked_at = 5;
+   */
+  linkedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueChatLink.
+ * Use `create(IssueChatLinkSchema)` to create a new message.
+ */
+export const IssueChatLinkSchema: GenMessage<IssueChatLink> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 25);
+
+/**
+ * @generated from message controlplane.v1.LinkIssueChatResponse
+ */
+export type LinkIssueChatResponse = Message<"controlplane.v1.LinkIssueChatResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueChatLink link = 1;
+   */
+  link?: IssueChatLink | undefined;
+
+  /**
+   * False when the chat was already linked.
+   *
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.LinkIssueChatResponse.
+ * Use `create(LinkIssueChatResponseSchema)` to create a new message.
+ */
+export const LinkIssueChatResponseSchema: GenMessage<LinkIssueChatResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 26);
+
+/**
+ * @generated from message controlplane.v1.ListIssueTimelineRequest
+ */
+export type ListIssueTimelineRequest = Message<"controlplane.v1.ListIssueTimelineRequest"> & {
+  /**
+   * The issue whose timeline is listed. A merged issue's request is answered
+   * with the timeline of the issue it was merged into.
+   *
+   * @generated from field: string issue_id = 1;
+   */
+  issueId: string;
+
+  /**
+   * Rows per page. Default 50, max 100.
+   *
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * next_page_token from the previous page; valid only with the same issue.
+   *
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListIssueTimelineRequest.
+ * Use `create(ListIssueTimelineRequestSchema)` to create a new message.
+ */
+export const ListIssueTimelineRequestSchema: GenMessage<ListIssueTimelineRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 27);
+
+/**
+ * @generated from message controlplane.v1.ListAssignableUsersRequest
+ */
+export type ListAssignableUsersRequest = Message<"controlplane.v1.ListAssignableUsersRequest"> & {
+  /**
+   * The organization whose members are listed.
+   *
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * Only the users whose name contains this (case-insensitive).
+   *
+   * @generated from field: optional string text = 2;
+   */
+  text?: string | undefined;
+
+  /**
+   * Rows per page. Default 50, max 100.
+   *
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize: number;
+
+  /**
+   * next_page_token from the previous page; valid only with the same request.
+   *
+   * @generated from field: string page_token = 4;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListAssignableUsersRequest.
+ * Use `create(ListAssignableUsersRequestSchema)` to create a new message.
+ */
+export const ListAssignableUsersRequestSchema: GenMessage<ListAssignableUsersRequest> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 28);
+
+/**
+ * @generated from message controlplane.v1.ListAssignableUsersResponse
+ */
+export type ListAssignableUsersResponse = Message<"controlplane.v1.ListAssignableUsersResponse"> & {
+  /**
+   * name is the user's display name, or their email when they have none (as
+   * IssueUser everywhere else); no other field of the user is returned.
+   *
+   * @generated from field: repeated controlplane.v1.IssueUser users = 1;
+   */
+  users: IssueUser[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListAssignableUsersResponse.
+ * Use `create(ListAssignableUsersResponseSchema)` to create a new message.
+ */
+export const ListAssignableUsersResponseSchema: GenMessage<ListAssignableUsersResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 29);
+
+/**
+ * IssueActor is who did something: a person, a machine credential or the
+ * system (the issues worker).
+ *
+ * @generated from message controlplane.v1.IssueActor
+ */
+export type IssueActor = Message<"controlplane.v1.IssueActor"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueActor.Kind kind = 1;
+   */
+  kind: IssueActor_Kind;
+
+  /**
+   * @generated from field: string id = 2;
+   */
+  id: string;
+
+  /**
+   * A person's display name (their email when they have none); empty for a
+   * machine or the system.
+   *
+   * @generated from field: string name = 3;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueActor.
+ * Use `create(IssueActorSchema)` to create a new message.
+ */
+export const IssueActorSchema: GenMessage<IssueActor> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 30);
+
+/**
+ * @generated from enum controlplane.v1.IssueActor.Kind
+ */
+export enum IssueActor_Kind {
+  /**
+   * @generated from enum value: KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: KIND_USER = 1;
+   */
+  USER = 1,
+
+  /**
+   * @generated from enum value: KIND_MACHINE = 2;
+   */
+  MACHINE = 2,
+
+  /**
+   * @generated from enum value: KIND_SYSTEM = 3;
+   */
+  SYSTEM = 3,
+}
+
+/**
+ * Describes the enum controlplane.v1.IssueActor.Kind.
+ */
+export const IssueActor_KindSchema: GenEnum<IssueActor_Kind> = /*@__PURE__*/
+  enumDesc(file_services_issues_v1_issues, 30, 0);
+
+/**
+ * IssueStatusEntry is a status change.
+ *
+ * @generated from message controlplane.v1.IssueStatusEntry
+ */
+export type IssueStatusEntry = Message<"controlplane.v1.IssueStatusEntry"> & {
+  /**
+   * Unspecified for the issue's opening.
+   *
+   * @generated from field: controlplane.v1.IssueStatus from = 1;
+   */
+  from: IssueStatus;
+
+  /**
+   * @generated from field: controlplane.v1.IssueStatus to = 2;
+   */
+  to: IssueStatus;
+
+  /**
+   * With a resolve: the version it resolves in, when one was named.
+   *
+   * @generated from field: string version = 3;
+   */
+  version: string;
+
+  /**
+   * With an ignore: when it is un-ignored, when bounded.
+   *
+   * @generated from field: google.protobuf.Timestamp ignored_until = 4;
+   */
+  ignoredUntil?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueStatusEntry.
+ * Use `create(IssueStatusEntrySchema)` to create a new message.
+ */
+export const IssueStatusEntrySchema: GenMessage<IssueStatusEntry> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 31);
+
+/**
+ * IssueCommentEntry is a comment.
+ *
+ * @generated from message controlplane.v1.IssueCommentEntry
+ */
+export type IssueCommentEntry = Message<"controlplane.v1.IssueCommentEntry"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueComment comment = 1;
+   */
+  comment?: IssueComment | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueCommentEntry.
+ * Use `create(IssueCommentEntrySchema)` to create a new message.
+ */
+export const IssueCommentEntrySchema: GenMessage<IssueCommentEntry> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 32);
+
+/**
+ * IssueAssignmentEntry is an assignment change.
+ *
+ * @generated from message controlplane.v1.IssueAssignmentEntry
+ */
+export type IssueAssignmentEntry = Message<"controlplane.v1.IssueAssignmentEntry"> & {
+  /**
+   * Unset: it was unassigned.
+   *
+   * @generated from field: controlplane.v1.IssueUser from = 1;
+   */
+  from?: IssueUser | undefined;
+
+  /**
+   * Unset: it was unassigned.
+   *
+   * @generated from field: controlplane.v1.IssueUser to = 2;
+   */
+  to?: IssueUser | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueAssignmentEntry.
+ * Use `create(IssueAssignmentEntrySchema)` to create a new message.
+ */
+export const IssueAssignmentEntrySchema: GenMessage<IssueAssignmentEntry> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 33);
+
+/**
+ * IssueChatEntry is a chat started from the issue.
+ *
+ * @generated from message controlplane.v1.IssueChatEntry
+ */
+export type IssueChatEntry = Message<"controlplane.v1.IssueChatEntry"> & {
+  /**
+   * @generated from field: controlplane.v1.IssueChatLink link = 1;
+   */
+  link?: IssueChatLink | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.IssueChatEntry.
+ * Use `create(IssueChatEntrySchema)` to create a new message.
+ */
+export const IssueChatEntrySchema: GenMessage<IssueChatEntry> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 34);
+
+/**
+ * IssueTimelineEntry is one thing that happened to an issue.
+ *
+ * @generated from message controlplane.v1.IssueTimelineEntry
+ */
+export type IssueTimelineEntry = Message<"controlplane.v1.IssueTimelineEntry"> & {
+  /**
+   * Unique and stable; a client keys on it.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp time = 2;
+   */
+  time?: Timestamp | undefined;
+
+  /**
+   * The issue it happened on: the requested one, or an issue merged into it.
+   *
+   * @generated from field: string issue_id = 3;
+   */
+  issueId: string;
+
+  /**
+   * @generated from field: controlplane.v1.IssueActor actor = 4;
+   */
+  actor?: IssueActor | undefined;
+
+  /**
+   * @generated from oneof controlplane.v1.IssueTimelineEntry.entry
+   */
+  entry: {
+    /**
+     * @generated from field: controlplane.v1.IssueStatusEntry status = 10;
+     */
+    value: IssueStatusEntry;
+    case: "status";
+  } | {
+    /**
+     * @generated from field: controlplane.v1.IssueCommentEntry comment = 11;
+     */
+    value: IssueCommentEntry;
+    case: "comment";
+  } | {
+    /**
+     * @generated from field: controlplane.v1.IssueAssignmentEntry assignment = 12;
+     */
+    value: IssueAssignmentEntry;
+    case: "assignment";
+  } | {
+    /**
+     * @generated from field: controlplane.v1.IssueChatEntry chat = 13;
+     */
+    value: IssueChatEntry;
+    case: "chat";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message controlplane.v1.IssueTimelineEntry.
+ * Use `create(IssueTimelineEntrySchema)` to create a new message.
+ */
+export const IssueTimelineEntrySchema: GenMessage<IssueTimelineEntry> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 35);
+
+/**
+ * @generated from message controlplane.v1.ListIssueTimelineResponse
+ */
+export type ListIssueTimelineResponse = Message<"controlplane.v1.ListIssueTimelineResponse"> & {
+  /**
+   * Oldest first.
+   *
+   * @generated from field: repeated controlplane.v1.IssueTimelineEntry entries = 1;
+   */
+  entries: IssueTimelineEntry[];
+
+  /**
+   * Empty on the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * The issue the timeline is of: issue_id, or the issue it was merged into.
+   *
+   * @generated from field: string issue_id = 3;
+   */
+  issueId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListIssueTimelineResponse.
+ * Use `create(ListIssueTimelineResponseSchema)` to create a new message.
+ */
+export const ListIssueTimelineResponseSchema: GenMessage<ListIssueTimelineResponse> = /*@__PURE__*/
+  messageDesc(file_services_issues_v1_issues, 36);
+
+/**
  * @generated from enum controlplane.v1.IssueSort
  */
 export enum IssueSort {
@@ -748,10 +1493,25 @@ export const IssueResolveKindSchema: GenEnum<IssueResolveKind> = /*@__PURE__*/
  * environment. Triage is its own scope on purpose: a read-only token must not
  * be able to silence an issue.
  *
- * ERRORS: InvalidArgument (bad range, unknown status), PermissionDenied (not a
- * member / a credential without the scope or for another org), NotFound (no
- * such issue), Aborted (expected_version is stale), FailedPrecondition
- * (observability is not set up for the org), Unavailable (issues are not
+ * DISCUSSION. An issue carries comments, one assignee and the chats started
+ * from it. ListIssueTimeline merges them with the status changes into ONE
+ * chronological timeline. The writes (AddIssueComment, UpdateIssueComment,
+ * DeleteIssueComment, AssignIssue, LinkIssueChat) are triage: a person needs
+ * org membership, a machine credential obs:triage. A comment belongs to a
+ * person: it is edited by its author only, and deleted by its author or an org
+ * admin; a credential that acts for no person cannot comment.
+ *
+ * MERGED ISSUES. Writes on an issue that was merged into another are refused
+ * (FailedPrecondition, naming the target). ListIssueTimeline on a merged issue
+ * FOLLOWS the merge to its target and returns the target's timeline, which
+ * includes the entries of every issue merged into it, so a comment made before
+ * a re-fingerprint is not lost; each entry says which issue it was made on.
+ *
+ * ERRORS: InvalidArgument (bad range, unknown status, an assignee outside the
+ * org), PermissionDenied (not a member / a credential without the scope or for
+ * another org / not the comment's author), NotFound (no such issue or comment),
+ * Aborted (expected_version is stale), FailedPrecondition (observability is not
+ * set up for the org, the issue was merged), Unavailable (issues are not
  * configured on this server).
  *
  * @generated from service controlplane.v1.IssuesService
@@ -809,6 +1569,92 @@ export const IssuesService: GenService<{
     methodKind: "unary";
     input: typeof UpdateIssueStatusRequestSchema;
     output: typeof UpdateIssueStatusResponseSchema;
+  },
+  /**
+   * AddIssueComment adds a comment to an issue. The body is plain text or
+   * markdown, stored verbatim (at most 10000 characters); clients render it
+   * safely.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.AddIssueComment
+   */
+  addIssueComment: {
+    methodKind: "unary";
+    input: typeof AddIssueCommentRequestSchema;
+    output: typeof AddIssueCommentResponseSchema;
+  },
+  /**
+   * UpdateIssueComment replaces the body of a comment. Its author only.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.UpdateIssueComment
+   */
+  updateIssueComment: {
+    methodKind: "unary";
+    input: typeof UpdateIssueCommentRequestSchema;
+    output: typeof UpdateIssueCommentResponseSchema;
+  },
+  /**
+   * DeleteIssueComment removes a comment from the timeline (it is kept, hidden).
+   * Its author, or an owner or admin of the org.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.DeleteIssueComment
+   */
+  deleteIssueComment: {
+    methodKind: "unary";
+    input: typeof DeleteIssueCommentRequestSchema;
+    output: typeof DeleteIssueCommentResponseSchema;
+  },
+  /**
+   * AssignIssue sets or clears the issue's assignee. The assignee must be a
+   * member of the issue's org. It bumps Issue.version, and a stale
+   * expected_version is Aborted, exactly as UpdateIssueStatus.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.AssignIssue
+   */
+  assignIssue: {
+    methodKind: "unary";
+    input: typeof AssignIssueRequestSchema;
+    output: typeof AssignIssueResponseSchema;
+  },
+  /**
+   * LinkIssueChat records that a chat was started from the issue ("Ask
+   * Reliant"). Idempotent per (issue, chat): linking a chat again changes
+   * nothing but a non-empty title, and writes no new timeline entry.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.LinkIssueChat
+   */
+  linkIssueChat: {
+    methodKind: "unary";
+    input: typeof LinkIssueChatRequestSchema;
+    output: typeof LinkIssueChatResponseSchema;
+  },
+  /**
+   * ListAssignableUsers returns the people an issue of the org can be assigned
+   * to: its members, as {id, name} and nothing else, ordered by name. A person
+   * needs membership of the org (any role); a machine credential needs obs:read
+   * and to act for that org. Served from Postgres alone. This is the read an
+   * assignee picker uses; the member list with grants and emails
+   * (ListOrgMemberGrants) needs token:read.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.ListAssignableUsers
+   */
+  listAssignableUsers: {
+    methodKind: "unary";
+    input: typeof ListAssignableUsersRequestSchema;
+    output: typeof ListAssignableUsersResponseSchema;
+  },
+  /**
+   * ListIssueTimeline returns the issue's timeline, oldest first: status changes
+   * (opened, resolved, ignored, reopened, regressed), comments, assignment
+   * changes and linked chats. Deleted comments are not in it. Served from
+   * Postgres alone. A person needs org membership, a machine credential
+   * obs:read.
+   *
+   * @generated from rpc controlplane.v1.IssuesService.ListIssueTimeline
+   */
+  listIssueTimeline: {
+    methodKind: "unary";
+    input: typeof ListIssueTimelineRequestSchema;
+    output: typeof ListIssueTimelineResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_issues_v1_issues, 0);

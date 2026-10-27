@@ -150,24 +150,21 @@ export function ColorSchemeSelector() {
               onClick={() => setSelectedScheme(scheme.id)}
               className={cn(
                 "relative p-4 rounded-lg border-2 transition-all text-left",
-                "elevation-1 hover:elevation-2",
+                // Options are insets in their panel: no shadow, the border
+                // and an accent wash say which is chosen.
                 isSelected
-                  ? "shadow-lg"
-                  : "border-border/40 hover:border-primary/40 bg-background hover:bg-muted/30"
+                  ? "border-primary bg-primary/10"
+                  : "border-border/60 hover:border-primary/40 bg-background hover:bg-foreground/5"
               )}
-              style={isSelected ? {
-                borderColor: 'hsl(var(--primary))',
-                backgroundColor: 'hsl(var(--primary) / 0.1)'
-              } : undefined}
             >
               {/* Color Preview */}
               <div className="flex items-center gap-2 mb-3">
                 <div
-                  className="w-8 h-8 rounded-md elevation-1"
+                  className="w-8 h-8 rounded-md border border-border/40"
                   style={{ backgroundColor: scheme.preview.primary }}
                 />
                 <div
-                  className="w-6 h-6 rounded-md elevation-1"
+                  className="w-6 h-6 rounded-md border border-border/40"
                   style={{ backgroundColor: scheme.preview.accent }}
                 />
                 <div
@@ -206,7 +203,7 @@ export function ColorSchemeSelector() {
         })}
       </div>
 
-      <div className="mt-4 p-3 elevation-1 rounded-lg border border-border/40 bg-muted/30">
+      <div className="mt-4 p-3 rounded-lg border border-border/60 bg-background">
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
           <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" aria-hidden />
           <span><strong>Tip:</strong> The color scheme affects buttons, links, active states, and focus indicators throughout the app.</span>

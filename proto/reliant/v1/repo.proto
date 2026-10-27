@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -11,11 +12,35 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // A project may contain 0..N repos. A repo with relative_path == "" is
 // a single-repo project at the project root (the legacy shape).
 service RepoService {
-  rpc DiscoverRepos(DiscoverReposRequest) returns (DiscoverReposResponse) {}
+  rpc DiscoverRepos(DiscoverReposRequest) returns (DiscoverReposResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // forge:custom — lists one project's repos after checking the caller owns the project
   rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
-  rpc AddRepo(AddRepoRequest) returns (AddRepoResponse) {}
-  rpc RemoveRepo(RemoveRepoRequest) returns (RemoveRepoResponse) {}
+  rpc AddRepo(AddRepoRequest) returns (AddRepoResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "add"
+        target: {
+          kind: "repo"
+          id: "response.repo.id"
+          label: "response.repo.name"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
+  rpc RemoveRepo(RemoveRepoRequest) returns (RemoveRepoResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "remove"
+        target: {
+          kind: "repo"
+          id: "repo_id"
+        }
+      }
+    };
+  }
   rpc GetRepoGitInfo(GetRepoGitInfoRequest) returns (GetRepoGitInfoResponse) {}
 }
 

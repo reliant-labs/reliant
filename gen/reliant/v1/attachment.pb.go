@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -557,7 +558,7 @@ var File_reliant_v1_attachment_proto protoreflect.FileDescriptor
 const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/attachment.proto\x12\n" +
-	"reliant.v1\"\xcc\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\xcc\x02\n" +
 	"\x0eAttachmentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +
@@ -601,12 +602,12 @@ const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\x1bCreateFileReferenceResponse\x12:\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\x1a.reliant.v1.AttachmentInfoR\n" +
-	"attachment2\x97\x03\n" +
-	"\x11AttachmentService\x12_\n" +
-	"\x10UploadAttachment\x12#.reliant.v1.UploadAttachmentRequest\x1a$.reliant.v1.UploadAttachmentResponse\"\x00\x12h\n" +
-	"\x13CreateFileReference\x12&.reliant.v1.CreateFileReferenceRequest\x1a'.reliant.v1.CreateFileReferenceResponse\"\x00\x12V\n" +
-	"\rGetAttachment\x12 .reliant.v1.GetAttachmentRequest\x1a!.reliant.v1.GetAttachmentResponse\"\x00\x12_\n" +
-	"\x10DeleteAttachment\x12#.reliant.v1.DeleteAttachmentRequest\x1a$.reliant.v1.DeleteAttachmentResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"attachment2\xa0\x05\n" +
+	"\x11AttachmentService\x12\xb0\x01\n" +
+	"\x10UploadAttachment\x12#.reliant.v1.UploadAttachmentRequest\x1a$.reliant.v1.UploadAttachmentResponse\"Q\xa2\xbb\x18M:K:Istages an image for the composer: the message that sends it is the record\x12\xc1\x01\n" +
+	"\x13CreateFileReference\x12&.reliant.v1.CreateFileReferenceRequest\x1a'.reliant.v1.CreateFileReferenceResponse\"Y\xa2\xbb\x18U:S:Qstages a file's content for the composer: the message that sends it is the record\x12V\n" +
+	"\rGetAttachment\x12 .reliant.v1.GetAttachmentRequest\x1a!.reliant.v1.GetAttachmentResponse\"\x00\x12\xbb\x01\n" +
+	"\x10DeleteAttachment\x12#.reliant.v1.DeleteAttachmentRequest\x1a$.reliant.v1.DeleteAttachmentResponse\"\\\xa2\xbb\x18X:V:Tremoves an attachment staged for the composer: draft state of a message not yet sentB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_attachment_proto_rawDescOnce sync.Once

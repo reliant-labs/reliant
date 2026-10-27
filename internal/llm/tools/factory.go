@@ -86,6 +86,7 @@ type ToolsOptions struct {
 	// Optional, as above: nil reports an unavailable runtime.
 	TriggerFirer       TriggerFirer
 	TriggerEventLister TriggerEventLister
+	ActivationManager  ActivationManager
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -492,6 +493,19 @@ func (f *ToolsFactory) ControlRun() Tool {
 
 func (f *ToolsFactory) SendToRun() Tool {
 	return NewSendToRunTool(f.store(), f.opts.RunMessenger)
+}
+
+func (f *ToolsFactory) CreateTriggerActivation() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolCreateTriggerActivation)
+}
+func (f *ToolsFactory) UpdateTriggerActivation() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolUpdateTriggerActivation)
+}
+func (f *ToolsFactory) EnableTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolEnableTrigger)
+}
+func (f *ToolsFactory) PauseTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolPauseTrigger)
 }
 
 func (f *ToolsFactory) ListTriggers() Tool {

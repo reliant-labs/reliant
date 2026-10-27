@@ -330,6 +330,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // accelerators track the user's remaps instead of silently overriding them.
   updateShortcutBindings: (bindings) => ipcRenderer.invoke('shortcuts:update', bindings),
 
+  // The find bar (find-bar.js): shown over this window and focused. The
+  // findInPage shortcut decides when; `request` carries the app's theme.
+  findInPage: {
+    open: (request) => ipcRenderer.invoke('find-bar:open', request),
+  },
+
   // Privacy settings
   updatePrivacySettings: (settings) => ipcRenderer.invoke('update-privacy-settings', settings),
   getPrivacySettings: () => ipcRenderer.invoke('get-privacy-settings'),

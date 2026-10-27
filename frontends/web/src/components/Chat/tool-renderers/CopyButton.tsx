@@ -4,30 +4,54 @@
  */
 
 import Tooltip from "../../forge-ui/tooltip";
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 interface CopyButtonProps {
   /** Text content to copy to clipboard */
   content: string;
+  /**
+   * Resolves the text to copy, used instead of `content` when given: a tool
+   * output the transcript holds only a preview of is fetched in full first.
+   */
+  resolveContent?: () => Promise<string>;
   /** Additional CSS classes */
   className?: string;
 }
 
-function CopyButtonComponent({ content, className }: CopyButtonProps) {
+function CopyButtonComponent({ content, resolveContent, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const mounted = useRef(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+    };
+  }, []);
 
   const handleCopy = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(content);
+      const text = resolveContent ? await resolveContent() : content;
+      if (!mounted.current) return;
+      await navigator.clipboard.writeText(text);
+      // An in-flight clipboard write can finish after the button unmounts.
+      if (!mounted.current) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => {
+        resetTimer.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       // Clipboard API may fail in some contexts
     }
-  }, [content]);
+  }, [content, resolveContent]);
 
   return (
     <Tooltip content={copied ? 'Copied!' : 'Copy to clipboard'} side="bottom" delay={300} triggerClassName="inline-flex">

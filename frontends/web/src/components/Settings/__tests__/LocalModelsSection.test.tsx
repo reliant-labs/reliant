@@ -151,7 +151,7 @@ describe("LocalModelsSection", () => {
   it("explains local models when there are no machines", () => {
     mocks.daemons = [];
     renderSection();
-    expect(screen.getByText(/run on your machine through the Reliant daemon/)).toBeTruthy();
+    expect(screen.getByText(/run on a machine of yours that Reliant is connected to/)).toBeTruthy();
   });
 
   it("shows a getting-started block when a machine has no endpoints", () => {

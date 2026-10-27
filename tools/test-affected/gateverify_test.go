@@ -33,9 +33,19 @@ func gateDir(t *testing.T, pl *Plan, rows map[string]int) string {
 
 func verify(t *testing.T, dir string) (int, string) {
 	t.Helper()
-	var out, errOut bytes.Buffer
-	code := runGateVerify([]string{"-plan", filepath.Join(dir, "plan.json"), "-dir", dir}, &out, &errOut)
-	return code, out.String() + errOut.String()
+	// These fixtures test obligation accounting independently of the CLI's
+	// checkout identity boundary (covered by plan_identity_test.go).
+	problems := verifyGate(filepath.Join(dir, "plan.json"), dir)
+	text := "OK"
+	code := 0
+	if len(problems) > 0 {
+		code = 1
+		text = "FAILED: " + strings.Join(problems, "; ")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "verdict"), []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return code, text
 }
 
 func verdict(t *testing.T, dir string) string {
@@ -136,6 +146,17 @@ func TestMigrationChangeRequiresMigsafetyAndLintOnAPinMove(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Fatalf("verdict %q does not name %s", v, want)
 		}
+	}
+}
+
+// A diff that moves only root pins has no directory to scope lint to: the
+// whole-module lint a pin needs runs in the release gate, so the merge gate is
+// not obliged to lint (migsafety still follows forge.yaml).
+func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
+	pl := &Plan{Files: []FileReport{{Path: "go.mod"}, {Path: "go.sum"}, {Path: "forge.yaml"}}}
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0})
+	if code, out := verify(t, dir); code != 0 {
+		t.Fatalf("a pin-only change must pass without a lint row: %s", out)
 	}
 }
 

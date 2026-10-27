@@ -39,7 +39,7 @@ export function MCPDiscoverTab({ recommendedServers, installingServers, onInstal
   return (
     <div className="space-y-4">
       {discoverServers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border/70 bg-muted/30 p-8 text-center">
+        <div className="rounded-xl border border-dashed border-border/70 bg-background p-8 text-center">
           <p className="text-sm text-muted-foreground">All recommended servers are already installed.</p>
         </div>
       ) : (

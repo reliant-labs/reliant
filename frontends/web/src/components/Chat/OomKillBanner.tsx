@@ -150,7 +150,7 @@ export function OomKillBanner() {
             onClick={() =>
               navigate({
                 to: "/settings/$section",
-                params: { section: "environments" },
+                params: { section: "machines" },
               })
             }
             className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/20 px-3 py-1 text-xs font-medium transition-colors hover:bg-amber-500/30"

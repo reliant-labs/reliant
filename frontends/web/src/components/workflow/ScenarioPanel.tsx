@@ -8,7 +8,8 @@
  * - Delete action
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { 
   Play, 
   Trash2, 
@@ -25,15 +26,14 @@ import {
   FolderOpen,
   FileCode,
 } from 'lucide-react'
-import { 
-  listScenarios, 
-  runScenario, 
-  deleteScenario,
-  uploadScenario,
-  exportScenario,
-  type Scenario,
-  type ScenarioResult,
-} from '../../api/scenarios'
+import type { Scenario, ScenarioResult } from '../../gen/reliant/v1/scenario_pb'
+import {
+  scenarioServiceQueries,
+  useDeleteScenario,
+  useListScenarios,
+  useRunScenario,
+  useUploadScenario,
+} from '../../hooks/scenario-service-hooks_gen'
 import { ScenarioDetailView } from './ScenarioDetails'
 import { toast } from 'sonner'
 import { cn } from '../../lib/utils'
@@ -280,45 +280,37 @@ function ScenarioItem({
 }
 
 export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioPanelProps) {
-  const [scenarios, setScenarios] = useState<Scenario[]>([])
-  const [scenariosDir, setScenariosDir] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [runningScenarioId, setRunningScenarioId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
-  // Load scenarios
-  const loadScenarios = useCallback(async () => {
-    if (!projectId || !workflowSlug) return
-    
-    setIsLoading(true)
-    setError(null)
-    
-    try {
-      const result = await listScenarios(projectId, workflowSlug)
-      setScenarios(result.scenarios)
-      setScenariosDir(result.scenariosDir)
-    } catch (err) {
-      console.error('Failed to load scenarios:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load tests')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [projectId, workflowSlug])
+  // Every scenario write invalidates scenarioServiceKeys.all, which refetches
+  // this list (and any mounted YAML view), so no handler reloads by hand.
+  const listQuery = useListScenarios(
+    { projectId, workflowSlug },
+    { enabled: !!projectId && !!workflowSlug },
+  )
+  const scenarios = listQuery.data?.scenarios ?? []
+  const scenariosDir = listQuery.data?.scenariosDir ?? ''
+  const isLoading = listQuery.isPending
+  const error = listQuery.error
+    ? listQuery.error.message || 'Failed to load tests'
+    : null
+  const loadScenarios = () => { void listQuery.refetch() }
 
-  // Load on mount and when workflow changes
-  useEffect(() => {
-    loadScenarios()
-  }, [loadScenarios])
+  const runScenario = useRunScenario()
+  const deleteScenario = useDeleteScenario()
+  const uploadScenario = useUploadScenario()
 
   // Run a scenario
   const handleRun = async (scenarioId: string) => {
     setRunningScenarioId(scenarioId)
     
     try {
-      const result = await runScenario({
+      const { result } = await runScenario.mutateAsync({
         projectId,
         scenarioId,
       })
+      if (!result) throw new Error('Run returned no result')
       
       // Show result toast
       if (result.status === 'passed') {
@@ -332,9 +324,6 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
           description: result.mismatches?.[0] || 'Unknown error'
         })
       }
-      
-      // Reload scenarios to get updated results
-      await loadScenarios()
     } catch (err) {
       console.error('Failed to run scenario:', err)
       toast.error('Failed to run test', {
@@ -350,9 +339,8 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
     if (!confirm(`Delete test "${scenarioName}"?`)) return
     
     try {
-      await deleteScenario(projectId, scenarioId)
+      await deleteScenario.mutateAsync({ projectId, scenarioId })
       toast.success('Test deleted')
-      await loadScenarios()
     } catch (err) {
       console.error('Failed to delete scenario:', err)
       toast.error('Failed to delete test', {
@@ -383,7 +371,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       const content = await file.text()
       const filename = file.name.replace(/\.(yaml|yml)$/, '')
 
-      const result = await uploadScenario({
+      const result = await uploadScenario.mutateAsync({
         projectId,
         workflowSlug,
         filename,
@@ -394,7 +382,6 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
         toast.success('Test uploaded', {
           description: `Saved to ${result.path}`,
         })
-        await loadScenarios()
       } else {
         toast.error('Upload failed', {
           description: result.message,
@@ -416,10 +403,11 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
   // Export scenario to YAML
   const handleExport = async (scenarioId: string) => {
     try {
-      const result = await exportScenario({
-        projectId,
-        scenarioId,
-      })
+      // Shares the cache entry ScenarioYamlView reads, so an expanded
+      // scenario's YAML is not fetched twice.
+      const result = await queryClient.fetchQuery(
+        scenarioServiceQueries.exportScenario({ projectId, scenarioId }),
+      )
 
       // Create a blob and trigger download
       const blob = new Blob([result.yamlContent], { type: 'application/x-yaml' })

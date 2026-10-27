@@ -51,6 +51,7 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 | `Cmd+Shift+H` |  | Find and Replace |
 | `Cmd+F` |  | Find in File |
 | `Cmd+Shift+F` |  | Find in Files |
+| `Cmd+F` | desktop app only | Find in Page |
 | `Cmd+P` | `Cmd+K P` | Quick File Open |
 | `Cmd+F` |  | Search Chats |
 
@@ -82,9 +83,9 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 |---------|---------|--------|
 | `Cmd+C` |  | Copy File |
 | `Cmd+X` |  | Cut File |
-| `Cmd+Shift+]` |  | Next File Tab |
+| `Cmd+Shift+]` | `Cmd+K ]` | Next File Tab |
 | `Cmd+V` |  | Paste File |
-| `Cmd+Shift+[` |  | Previous File Tab |
+| `Cmd+Shift+[` | `Cmd+K [` | Previous File Tab |
 | `Cmd+Shift+T` | `Cmd+K Z` | Reopen Last Closed File |
 
 ## Panel Navigation
@@ -125,6 +126,7 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 | Desktop | Browser | Action |
 |---------|---------|--------|
+| `Cmd+L` | `Cmd+K L` | Add Selection to Chat |
 | `Cmd+Enter` |  | Approve Tool Requests |
 | `Escape` |  | Dismiss Slash Menu |
 | `Cmd+Enter` |  | Insert Newline |

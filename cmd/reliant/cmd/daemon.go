@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -92,10 +93,16 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 	return cmd
 }
 
-// registerDaemon mints this machine's daemon credential by a browser login:
-// the OAuth code flow with PKCE against the control plane, asking for
-// daemon:connect. The resulting `rlat_` IS the daemon credential, written to
-// the daemon store keyed by conn's server.
+// registerDaemon pairs this machine with an account and stores the daemon
+// credential it is given: device authorization (RFC 8628) against the control
+// plane, asking for daemon:connect. It prints a short code and the page that
+// approves it; the person approves there, or types the code into the Add
+// machine sheet already waiting in the web app ("Approve machine <host>?").
+// Nothing travels back to this process, so it works over ssh on a headless
+// server as well as on a laptop. A control plane that does not offer device
+// authorization gets the older browser login (the OAuth code flow with PKCE
+// and a loopback redirect) instead. The resulting `rlat_` IS the daemon
+// credential, written to the daemon store keyed by conn's server.
 //
 // The login is consented in the browser, so no session JWT is kept on disk
 // (the retired reliant-auth.json). The token is named reliant-cli@<instance
@@ -137,25 +144,38 @@ func daemonNonInteractive(nonInteractive, managed bool) bool {
 // the same origin. Empty means the default account.
 func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
-	if !nonInteractive {
-		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine as a daemon — approve the login in your browser.")
+	if nonInteractive {
+		return fmt.Errorf("daemon login: %w", cliauth.ErrInteractiveRequired)
 	}
-	logging.InfoContext(ctx, "Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
+	logging.InfoContext(ctx, "Registering daemon via control-plane pairing", "api_url", apiURL, "instance_id", instanceid.ID())
 
-	cred, err := cliauth.Login{
-		Server: apiURL,
-		// daemon:connect, plus forge's control-plane authority as a CEILING
-		// the control plane clips to this user's grants — the same set
-		// control-plane provisions for a managed daemon. forge on this
-		// daemon exchanges it for an hour-long deploy token; without it
-		// there would be nothing to exchange, because a token may never
-		// grant authority it does not hold.
-		Scopes:         append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...),
-		Name:           "daemon-" + instanceid.Label(),
-		NonInteractive: nonInteractive,
-		Out:            cmd.OutOrStdout(),
-		OpenURL:        loginOpener,
+	// daemon:connect, plus forge's control-plane authority as a CEILING
+	// the control plane clips to this user's grants — the same set
+	// control-plane provisions for a managed daemon. forge on this daemon
+	// exchanges it for an hour-long deploy token; without it there would be
+	// nothing to exchange, because a token may never grant authority it
+	// does not hold.
+	scopes := append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...)
+	hostname, _ := os.Hostname()
+	cred, err := cliauth.DeviceLogin{
+		Server:   apiURL,
+		Scopes:   scopes,
+		Name:     "daemon-" + instanceid.Label(),
+		Hostname: hostname,
+		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+		Out:      cmd.OutOrStdout(),
+		OpenURL:  loginOpener,
 	}.Run(ctx)
+	if errors.Is(err, cliauth.ErrNoDeviceFlow) {
+		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine — approve the login in your browser.")
+		cred, err = cliauth.Login{
+			Server:  apiURL,
+			Scopes:  scopes,
+			Name:    "daemon-" + instanceid.Label(),
+			Out:     cmd.OutOrStdout(),
+			OpenURL: loginOpener,
+		}.Run(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("daemon login: %w", err)
 	}
@@ -723,9 +743,11 @@ Credential resolution order:
      Access Tokens in the app).
   2. The stored daemon credential in ~/.reliant/daemon.json (written by an
      earlier 'daemon start' or 'reliant daemon register').
-  3. Otherwise a browser login of its own that mints a daemon credential.
-     This is a separate credential from 'reliant auth login', which is never
-     reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
+  3. Otherwise it pairs the machine: it prints a short code and a link, and
+     you approve "this machine" in the Reliant app — on the link, or by typing
+     the code into the Add machine window. Nothing has to reach back to this
+     terminal, so it works over ssh. The credential it is given is separate
+     from 'reliant auth login', which is never reused here. With --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE)
      the daemon never opens a browser: it stays resident and idle, publishing
      "awaiting_credentials" in its runtime state (see 'reliant daemon
      status'), and polls for a credential to appear on disk. Electron spawns

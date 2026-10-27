@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -157,6 +159,9 @@ func (s *Service) sync(ctx context.Context, kind core.TriggerKind, id string) er
 	if !syncs(kind) || s.deps.Syncer == nil {
 		return nil
 	}
+	if deferActivationEffect(ctx, func(ctx context.Context) error { return s.sync(ctx, kind, id) }) {
+		return nil
+	}
 	return s.deps.Syncer.Sync(ctx, id)
 }
 
@@ -169,9 +174,15 @@ func (s *Service) GetTrigger(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.GetTriggerResponse{
-		Trigger: s.render(ctx, trigger),
-	}), nil
+	out := s.render(ctx, trigger)
+	changes, err := s.deps.Repo.ListTriggerChanges(ctx, trigger.UserID, trigger.ID)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+	for _, c := range changes {
+		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339)})
+	}
+	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
 }
 
 // ListTriggers returns the caller's triggers.
@@ -676,7 +687,7 @@ func (s *Service) triggerFromDefinition(
 		return nil, svcerr.InvalidArgument("filter: a schedule fires on time, not on an event, so there is nothing to filter")
 	}
 
-	identity, err := s.actingIdentityFor(def, existing)
+	identity, err := s.actingIdentityFor(def, existing, src)
 	if err != nil {
 		return nil, err
 	}
@@ -722,22 +733,25 @@ func (s *Service) triggerFromDefinition(
 
 // actingIdentityFor decides who a trigger's integration writes speak as.
 //
-// Unspecified means the owner on create and "unchanged" on update, so a client
-// that predates the field cannot flip an activation back to the owner by
-// omitting it. The app identity is refused where it could never work: with no
-// control plane there is no App key, and a write that would silently fall back
-// to the owner's own name is exactly what choosing a bot is meant to prevent.
-func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger) (core.ActingIdentity, error) {
+// Unspecified means app for a new GitHub integration activation, owner for
+// other sources, and "unchanged" on update. Use the resolved source so inline
+// triggers and workflow declarations agree. Never reinterpret a stored identity
+// using the creation default. Missing bot infrastructure is an error, not a
+// reason to silently write under the owner's name.
+func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger, src *triggers.Source) (core.ActingIdentity, error) {
 	identity, chosen := triggers.ActingIdentityFromProto(def.ActingIdentity)
 	if !chosen {
 		if existing != nil {
 			return existing.ActingIdentity.OrOwner(), nil
 		}
-		return core.ActingIdentityOwner, nil
+		identity = core.ActingIdentityOwner
+		if src.Kind == core.TriggerKindIntegration && src.Integration == "github" {
+			identity = core.ActingIdentityApp
+		}
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
 		return "", svcerr.FailedPrecondition("acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; " +
-			"this deployment has none, so its automations act as their owner")
+			"configure the App, or explicitly choose owner to write under your own name")
 	}
 	return identity, nil
 }
@@ -956,7 +970,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	}
 	switch t.Kind {
 	case core.TriggerKindWebhook:
-		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
+		webhookURL := triggers.WebhookURL(s.publicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
 		proto.WebhookManaged = s.managed(t)
 	case core.TriggerKindIntegration:
@@ -965,9 +979,29 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		// know it; an operator-registered app webhook does not.
 		if uc, ok := s.deps.Catalog.(userConfiguredCatalog); ok {
 			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
-				eventsURL := triggers.IntegrationEventsURL(s.deps.PublicURL, cfg.Integration)
+				eventsURL := triggers.IntegrationEventsURL(s.publicURL, cfg.Integration)
 				proto.WebhookUrl = &eventsURL
 			}
+		}
+	}
+	// Older firings predate the terminal detail write. Diagnose the FIRST
+	// root workflow (the one launch created), never the chat's current root:
+	// replying later must not change what failed in this activation.
+	if proto.Health != nil && (proto.Health.Status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING || proto.Health.Status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED) {
+		for _, f := range firings {
+			failed := f.Event.RunStatus == core.TriggerRunFailed || f.Event.RunStatus == "" && f.Run != nil && f.Run.DisplayState == core.RunDisplayFailed
+			if f.Event.Outcome != core.TriggerEventLaunched || !failed {
+				continue
+			}
+			if f.Event.OutcomeDetail == "" && f.Event.ChatID != nil {
+				// Launch allocates the chat id as its first root workflow id.
+				if rows, e := s.deps.Repo.ListRunNodeExecutions(ctx, *f.Event.ChatID, rundiagnostics.RecordLimit); e == nil {
+					if detail := rundiagnostics.Failure(rows); detail != "" {
+						proto.Health.LastFailureDetail = detail
+					}
+				}
+			}
+			break
 		}
 	}
 	return proto

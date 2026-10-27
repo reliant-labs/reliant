@@ -432,13 +432,6 @@ func TestMessageUpdates_AcrossLayers(t *testing.T) {
 		t.Fatalf("UpdateMessageUsage(absent) = %v; want nil", err)
 	}
 
-	if err := store.UpdateMessageFields(ctx, o, "m0", map[string]any{"model": "renamed", "token_count": 7}); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ = f.env.Repo.GetMessage(ctx, "m0"); *got.Model != "renamed" || *got.TokenCount != 7 || !got.UpdatedAt.After(t0.Add(time.Hour)) {
-		t.Fatalf("after UpdateMessageFields: model %v tokens %v updated %v", *got.Model, got.TokenCount, got.UpdatedAt)
-	}
-
 	if err := store.RemoveMessage(ctx, o, "n2"); err != nil {
 		t.Fatal(err)
 	}

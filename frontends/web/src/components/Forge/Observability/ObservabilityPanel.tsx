@@ -81,7 +81,7 @@ import {
 } from "./obsSearch";
 import { envIdsOf, orgPickerEnvironments, orgSelectionIsEmpty, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
+import { ObsQuotaBanner, ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
@@ -308,6 +308,9 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           </Button>
         </div>
       </div>
+
+      {/* In the console the layout says it once above the page; the env page's tab has no such layout. */}
+      {!consoleChrome && <ObsQuotaBanner />}
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
       {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}

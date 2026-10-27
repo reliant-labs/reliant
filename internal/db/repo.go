@@ -1053,6 +1053,14 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		enrichedData.DisplayStyle = &style
 	}
 
+	if msg.SenderThreadID != nil && msg.SenderKind != nil {
+		var title *string
+		if t, err := r.GetThread(ctx, *msg.SenderThreadID); err == nil && t != nil {
+			title = t.Title
+		}
+		enrichedData.Sender = NewMessageSenderPayload(*msg.SenderThreadID, title, *msg.SenderKind)
+	}
+
 	// Marshal back to JSON
 	enrichedJSON, err := json.Marshal(enrichedData)
 	if err != nil {

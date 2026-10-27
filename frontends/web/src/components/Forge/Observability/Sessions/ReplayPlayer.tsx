@@ -42,7 +42,10 @@ import { AlertTriangle, EyeOff, FastForward, Pause, Play, RefreshCw, Video } fro
 import Button from "@/components/forge-ui/button";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObsReadApi } from "@/hooks/observability-queries";
+import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
+import { quotaOf } from "@/services/controlPlane/observability/quota";
+import { ObsAsOf, ObsWillLoad } from "../ObsStates";
 import { RRWEB_FULL_SNAPSHOT, type RrwebEvent, type RumScope, type SessionSummary, type TimelineEntry } from "@/services/controlPlane/observability/rumTypes";
 import { cn } from "@/lib/utils";
 
@@ -109,7 +112,8 @@ function clamp(value: number, min: number, max: number): number {
 
 export function ReplayPlayer(props: ReplayPlayerProps) {
   const { session, seek, markers = [] } = props;
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
+  const quota = useObsQuotaState();
   const mountRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const replayerRef = useRef<ReplayerLike | null>(null);
@@ -277,6 +281,12 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
     };
   }, [session.sessionId, attempt, seekTo, setPlaying]);
 
+  // Resume only quota failures when the shared jittered reset ends. Buffered
+  // events and the player stay mounted throughout the pause.
+  useEffect(() => {
+    if (quota.kind === "ok" && quotaOf(feedRef.current?.snapshot.error)) feedRef.current?.retry();
+  }, [quota]);
+
   // A seek past the buffer that the feed can no longer reach lands on the end.
   useEffect(() => {
     if (!feed || pendingSeek === null || !ready) return;
@@ -370,6 +380,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 
   return (
     <div className="space-y-2" data-testid="replay-player" data-state={ready ? "ready" : (blocking?.id ?? "loading")} data-phase={feed?.phase ?? "loading"}>
+      {ready && <ObsAsOf updatedAt={feed?.lastMs ?? undefined} />}
       <div className="flex flex-wrap items-center gap-2">
         <Tag
           icon={<EyeOff />}
@@ -541,6 +552,9 @@ function blockingState(feed: ReplayFeedState | null, loadError: unknown, session
   if (!feed || feed.phase === "loading" || (feed.events >= 2 && feed.hasFullSnapshot && feed.phase !== "error")) {
     return { id: "loading", node: () => <p className="text-sm text-muted-foreground" data-testid="replay-loading">Loading the recording…</p> };
   }
+  if (feed.phase === "error" && quotaOf(feed.error)) {
+    return { id: "quota", node: () => <ObsWillLoad error={feed.error} /> };
+  }
   if (feed.phase === "error") {
     return {
       id: "error",
@@ -620,7 +634,7 @@ function Notices({ feed, partialGap, pendingSeek, onRetry }: { feed: ReplayFeedS
   if (!feed) return null;
   const notes: { id: string; tone?: "error"; text: ReactNode; action?: ReactNode }[] = [];
   if (pendingSeek !== null) notes.push({ id: "seeking", text: "Loading the recording up to that moment…" });
-  if (feed.phase === "error") {
+  if (feed.phase === "error" && !quotaOf(feed.error)) {
     notes.push({
       id: "error",
       tone: "error",

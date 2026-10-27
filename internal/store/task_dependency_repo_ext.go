@@ -123,14 +123,6 @@ func ListDependenciesByPlan(ctx context.Context, db orm.Context, planID string) 
 	return taskDependenciesToCore(rows), nil
 }
 
-// RemoveTaskDependency deletes the edge. A missing one is not an error.
-func RemoveTaskDependency(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteTaskDependency(ctx, db, id); err != nil && !errors.Is(err, orm.ErrNoRows) {
-		return err
-	}
-	return nil
-}
-
 // DeleteTaskDependencyByPair deletes the (from, to, type) edge, if any.
 func DeleteTaskDependencyByPair(ctx context.Context, db orm.Context, fromTaskID, toTaskID string, depType int32) error {
 	_, err := db.Bun().NewDelete().Model((*TaskDependency)(nil)).

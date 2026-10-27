@@ -118,6 +118,10 @@ message ModelEndpointModel {
 message ListModelEndpointsRequest {}
 message ListModelEndpointsResponse {
   repeated ModelEndpoint endpoints = 1;
+  // Whether this server can store an endpoint's API key and header values (a
+  // sealed credential store is configured). False, a create or update that
+  // carries a key is refused, so the form offers no key field.
+  bool credentials_available = 2;
 }
 
 message ModelEndpointInput {

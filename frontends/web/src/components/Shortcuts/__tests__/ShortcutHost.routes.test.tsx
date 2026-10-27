@@ -88,12 +88,16 @@ function installElectronMenu() {
     listeners.add(callback);
     return () => listeners.delete(callback);
   });
+  // The find bar's opener (electron/src/find-bar.js).
+  const openFindBar = vi.fn(async () => ({ success: true }));
   (window as unknown as Record<string, unknown>).electronAPI = {
     onMenuShortcut,
     updateShortcutBindings: vi.fn(async () => ({ success: true })),
+    findInPage: { open: openFindBar },
   };
   return {
     onMenuShortcut,
+    openFindBar,
     deliver: (shortcutId: string) =>
       act(() => listeners.forEach((listener) => listener(shortcutId))),
     subscribers: () => listeners.size,
@@ -110,6 +114,8 @@ const WORKSPACE_HANDLERS = Object.entries(OFF_WORKSPACE)
 let workspace: Record<string, ReturnType<typeof vi.fn>>;
 let workspaceReady = true;
 let setWorkspaceReady: (ready: boolean) => void = () => {};
+/** A chat is open: the workspace shows a conversation, as ChatInterface marks it. */
+let chatOpen = false;
 
 function Workspace() {
   const [ready, setReady] = useState(workspaceReady);
@@ -118,7 +124,12 @@ function Workspace() {
     { handlers: workspace as unknown as ShortcutHandlers, workspace: true },
     ready,
   );
-  return <div data-testid="workspace">workspace</div>;
+  return (
+    <div data-testid="workspace">
+      workspace
+      {chatOpen && <div data-context="chat-view" />}
+    </div>
+  );
 }
 
 function SettingsPage() {
@@ -204,6 +215,7 @@ const CMD_SHIFT_P = { key: "p", code: "KeyP", metaKey: true, shiftKey: true };
 /** New chat in a browser tab (Cmd+T belongs to the browser). Option+N is a dead key. */
 const NEW_CHAT_WEB = { key: "Dead", code: "KeyN", metaKey: true, altKey: true };
 const CMD_J = { key: "j", code: "KeyJ", metaKey: true };
+const CMD_F = { key: "f", code: "KeyF", metaKey: true };
 
 const PROJECT: Project = {
   id: "p1",
@@ -231,6 +243,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   setSurface({ electron: false });
   workspaceReady = true;
+  chatOpen = false;
   workspace = Object.fromEntries(WORKSPACE_HANDLERS.map((name) => [name, vi.fn()]));
   useShortcutsStore.setState({
     shortcuts: {},
@@ -343,12 +356,13 @@ describe("on /settings", () => {
     await waitFor(() => expect(workspace.onFocusTerminal).toHaveBeenCalledOnce());
   });
 
-  it("searches chat history, not a conversation that is not on screen", async () => {
+  it("leaves Cmd+F to the browser's find with no conversation on screen", async () => {
     await mountAt("/settings");
 
-    press({ key: "f", code: "KeyF", metaKey: true });
+    const event = press(CMD_F);
 
-    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("history");
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("chat-search")).not.toBeInTheDocument();
   });
 
   it("leaves Escape and Cmd+Enter to the page", async () => {
@@ -470,6 +484,25 @@ describe("in the workspace", () => {
 
     act(() => setWorkspaceReady(true));
     await waitFor(() => expect(workspace.onNewChat).toHaveBeenCalledOnce());
+  });
+
+  it("searches the conversation on screen with Cmd+F", async () => {
+    chatOpen = true;
+    await mountAt("/project/p1");
+
+    const event = press(CMD_F);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("current");
+  });
+
+  it("leaves Cmd+F to the browser on a project with no chat open", async () => {
+    await mountAt("/project/p1");
+
+    const event = press(CMD_F);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("chat-search")).not.toBeInTheDocument();
   });
 
   it("always runs the newest closure, without re-registering", async () => {
@@ -608,6 +641,110 @@ describe("the desktop menu", () => {
     });
     expect(menu.subscribers()).toBe(1);
     expect(menu.onMenuShortcut).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Find in page ───────────────────────────────────────────────────────────
+
+describe("Cmd+F in the desktop app", () => {
+  beforeEach(() => setSurface({ electron: true }));
+
+  it.each(["/settings", "/inbox", "/workflows", "/project/p1"])(
+    "opens the find bar on %s, with no conversation on screen",
+    async (path) => {
+      const menu = installElectronMenu();
+      document.documentElement.classList.add("dark");
+      document.documentElement.setAttribute("data-color-scheme", "pure-black");
+      await mountAt(path);
+
+      const event = press(CMD_F);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(menu.openFindBar).toHaveBeenCalledOnce();
+      expect(menu.openFindBar).toHaveBeenCalledWith({
+        theme: { dark: true, colorScheme: "pure-black" },
+      });
+      expect(screen.queryByTestId("chat-search")).not.toBeInTheDocument();
+      document.documentElement.classList.remove("dark");
+      document.documentElement.removeAttribute("data-color-scheme");
+    },
+  );
+
+  it("still searches the conversation on screen", async () => {
+    const menu = installElectronMenu();
+    chatOpen = true;
+    await mountAt("/project/p1");
+
+    press(CMD_F);
+
+    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("current");
+    expect(menu.openFindBar).not.toHaveBeenCalled();
+  });
+
+  it("still opens the editor's own find inside Monaco", async () => {
+    const menu = installElectronMenu();
+    await mountAt("/project/p1");
+    const editor = document.createElement("div");
+    editor.className = "monaco-editor";
+    const textarea = document.createElement("textarea");
+    editor.appendChild(textarea);
+    document.body.appendChild(editor);
+    textarea.focus();
+
+    const event = press(CMD_F, textarea);
+
+    // Passthrough: the editor's own keydown handler still sees it.
+    expect(event.defaultPrevented).toBe(false);
+    expect(menu.openFindBar).not.toHaveBeenCalled();
+  });
+
+  it("runs Edit › Find the way the key would: the find bar off a conversation", async () => {
+    const menu = installElectronMenu();
+    await mountAt("/settings");
+
+    menu.deliver("findInPage");
+
+    expect(menu.openFindBar).toHaveBeenCalledOnce();
+  });
+
+  it("runs Edit › Find the way the key would: the conversation search over one", async () => {
+    const menu = installElectronMenu();
+    chatOpen = true;
+    await mountAt("/project/p1");
+
+    menu.deliver("findInPage");
+
+    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("current");
+    expect(menu.openFindBar).not.toHaveBeenCalled();
+  });
+
+  it("drops the menu's echo of a Cmd+F it already handled", async () => {
+    const menu = installElectronMenu();
+    await mountAt("/inbox");
+
+    press(CMD_F);
+    menu.deliver("findInPage");
+
+    expect(menu.openFindBar).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Cmd+F in a browser tab", () => {
+  it("is the browser's own find, even remapped", async () => {
+    // A remap made in the desktop app follows the user into the browser; a
+    // desktop-only shortcut must not come with it.
+    getShortcuts.mockImplementation(async () => ({
+      shortcuts: JSON.stringify({ findInPage: { currentBinding: "Cmd+Shift+Y" } }),
+    }));
+    await mountAt("/settings");
+
+    expect(press(CMD_F).defaultPrevented).toBe(false);
+    expect(press({ key: "y", code: "KeyY", metaKey: true, shiftKey: true }).defaultPrevented).toBe(
+      false,
+    );
+    expect(
+      useShortcutsStore.getState().registry.get("findInPage")?.binding,
+    ).toBe("");
   });
 });
 

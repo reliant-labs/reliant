@@ -345,6 +345,9 @@ export function ForgeEnvPage() {
             onOpenDomains={() => selectTab("domains")}
             onManageDomains={openDomainsScreen}
             workloadsHref={href({ kind: "overview" }, { env: envName })}
+            cloudStatus={cloudStatus.data}
+            cloudStatusLoading={cloudStatus.isLoading}
+            domainsHref={href({ kind: "domains" })}
           />
         ) : tab === "identity" ? (
           <IdentityTab

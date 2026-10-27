@@ -48,6 +48,9 @@ type Shortcut struct {
 	AllowInInput bool `yaml:"allow_in_input"`
 	// Passthrough handles the chord without consuming it.
 	Passthrough bool `yaml:"passthrough"`
+	// DesktopOnly means the shortcut does not exist in a browser tab: it has
+	// no web binding, and a user's remap does not apply there either.
+	DesktopOnly bool `yaml:"desktop_only"`
 }
 
 // Context returns the declared context, defaulting to "global".
@@ -59,8 +62,11 @@ func (s Shortcut) EffectiveContext() string {
 }
 
 // EffectiveWebBinding returns the browser binding, falling back to the desktop
-// one when no override is declared.
+// one when no override is declared. A desktop-only shortcut has none.
 func (s Shortcut) EffectiveWebBinding() string {
+	if s.DesktopOnly {
+		return ""
+	}
 	if s.WebBinding == "" {
 		return s.Binding
 	}
@@ -88,6 +94,12 @@ func main() {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing YAML: %v\n", err)
 		os.Exit(1)
+	}
+	for _, s := range config.Shortcuts {
+		if s.DesktopOnly && s.WebBinding != "" {
+			fmt.Fprintf(os.Stderr, "Error: shortcut %q is desktop_only and also declares a web_binding\n", s.ID)
+			os.Exit(1)
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(tsOutput), 0o755); err != nil {
@@ -179,6 +191,9 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
 		if s.Passthrough {
 			sb.WriteString(",\n    passthrough: true")
 		}
+		if s.DesktopOnly {
+			sb.WriteString(",\n    desktopOnly: true")
+		}
 
 		sb.WriteString("\n  }")
 
@@ -254,7 +269,9 @@ A ` + "`Cmd+K`" + ` sequence's second key can be typed with ` + "`Cmd`" + ` rele
 		for _, s := range shortcuts {
 			desktop := fmt.Sprintf("`%s`", formatBindingForDocs(s.Binding))
 			web := ""
-			if s.WebBinding != "" && s.WebBinding != s.Binding {
+			if s.DesktopOnly {
+				web = "desktop app only"
+			} else if s.WebBinding != "" && s.WebBinding != s.Binding {
 				web = fmt.Sprintf("`%s`", formatBindingForDocs(s.WebBinding))
 			}
 			fmt.Fprintf(&sb, "| %s | %s | %s |\n", desktop, web, s.Name)

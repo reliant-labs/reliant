@@ -23,7 +23,7 @@ import { ObservabilityHome, type ObservabilityHomeHrefs } from "../Observability
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
 const hrefs: ObservabilityHomeHrefs = {
-  logs: (s = {}) => `/logs?range=${s.range}`,
+  logs: (s = {}) => `/logs?range=${s.range}&service=${s.service}&severity=${s.severity}`,
   traces: (s = {}) => `/traces?range=${s.range}&minDuration=${s.minDuration}`,
   profiles: () => "/profiles",
   alerts: "/alerts",
@@ -64,6 +64,9 @@ describe("the Observability home", () => {
     // The status is the workload's server-side verdict: prod's api restarted 3x with every replica ready, so degraded.
     expect(rows.map((r) => r.getAttribute("data-tone"))).toEqual(["warning", "success"]);
     expect(rows[0]).toHaveTextContent("Degraded");
+    expect(within(table).getByRole("heading", { name: "Process health" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Memory" })).toBeInTheDocument();
+    expect(within(rows[0]).getByTitle("Error logs from api")).toHaveAttribute("href", "/logs?range=1h&service=api&severity=error,fatal");
     await user.click(rows[1].querySelector("td:nth-child(4)")!);
     expect(navigateTo).toHaveBeenCalledWith("/workloads/worker");
   });

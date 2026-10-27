@@ -1,6 +1,6 @@
 /**
  * TanStack-Query hooks for the managed-Reliant AI settings surface (the
- * "Reliant AI" tab of the `/settings/general` AI section). Mirrors the pattern
+ * "Reliant AI" tab of Billing). Mirrors the pattern
  * in `useOnboardingQueries.ts`:
  * thin `useQuery`/`useMutation` wrappers over the `services/controlPlane`
  * async functions, with a shared `['reliantAI', ...]` query-key namespace so

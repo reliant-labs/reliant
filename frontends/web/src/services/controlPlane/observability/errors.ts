@@ -12,9 +12,11 @@
  *   invalid      InvalidArgument. Almost always the free-text query — the
  *                server's parse error is the message worth showing, next to
  *                the box that caused it.
- *   over-quota   ResourceExhausted. The org's ClickHouse query quota is used
- *                up for now; it refills on its own, and a narrower query
- *                spends less of it.
+ *   over-quota   ResourceExhausted carrying the quota answer (quota.ts). The
+ *                org's hourly ClickHouse query allowance is used up; it
+ *                refills at the top of the hour and the console says when.
+ *   busy         any other ResourceExhausted: too many reads in flight, or a
+ *                query that touched too much data. A narrower query fits.
  *   too-broad    DeadlineExceeded. The query ran out of time; a narrower
  *                window or filter usually fixes it.
  *   unavailable  everything else: the stack is down, a network blip.
@@ -24,7 +26,9 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { hasErrorReason } from "@/lib/errorReasons";
 
-export type ObsErrorKind = "not-set-up" | "denied" | "invalid" | "over-quota" | "too-broad" | "unavailable";
+import { quotaOf } from "./quota";
+
+export type ObsErrorKind = "not-set-up" | "denied" | "invalid" | "over-quota" | "busy" | "too-broad" | "unavailable";
 
 export function obsErrorKind(error: unknown): ObsErrorKind {
   if (!(error instanceof ConnectError)) return "unavailable";
@@ -37,7 +41,7 @@ export function obsErrorKind(error: unknown): ObsErrorKind {
     case Code.InvalidArgument:
       return "invalid";
     case Code.ResourceExhausted:
-      return "over-quota";
+      return quotaOf(error) ? "over-quota" : "busy";
     case Code.DeadlineExceeded:
       return "too-broad";
     default:

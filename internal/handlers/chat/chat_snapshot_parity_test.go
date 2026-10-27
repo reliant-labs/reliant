@@ -138,12 +138,12 @@ func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, cha
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID}))
+		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
 
 	for stream.Receive() {
-		if snapshot := stream.Msg().GetChatSyncSnapshot(); snapshot != nil {
+		if snapshot := stream.Msg().GetSnapshot(); snapshot != nil {
 			return snapshot
 		}
 	}

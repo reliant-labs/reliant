@@ -409,16 +409,28 @@ export interface UserUpdate {
   created_at: string;
 }
 
+// Callbacks of the user-wide stream (StreamUserUpdates).
 export interface GlobalWebSocketCallbacks {
   onUpdate: (updates: UserUpdate[]) => void;
   onError: (error: string) => void;
   onStatusChange: (status: ConnectionStatus) => void;
   onSync: (lastSequence: number) => void;
-  // Per-chat detail event callbacks (when subscribe_chat_id is set)
-  onChatUpdate?: (updates: ChatUpdate[]) => void;
-  onChatSnapshot?: (updates: ChatUpdate[]) => void;
-  onChatPaginationInfo?: (pagination: MessagePaginationInfo) => void;
-  onChatContextUsage?: (contextUsage: ContextUsageInfo) => void;
+}
+
+// Callbacks of the per-chat stream (StreamChatUpdates). Every chat event names
+// the chat it belongs to: the stream that delivered it, never a flag that may
+// have moved on since.
+export interface ChatStreamCallbacks {
+  onChatUpdate: (chatId: string, updates: ChatUpdate[]) => void;
+  onChatSnapshot: (chatId: string, updates: ChatUpdate[]) => void;
+  onChatPaginationInfo?: (chatId: string, pagination: MessagePaginationInfo) => void;
+  onChatContextUsage?: (chatId: string, contextUsage: ContextUsageInfo) => void;
+  // User-level updates about the open chat (or a chat it started) that the
+  // project-scoped user stream does not deliver because they belong to another
+  // project. Live only: they never move the user stream's cursor.
+  onUserUpdates?: (updates: UserUpdate[]) => void;
+  onStatusChange?: (status: ConnectionStatus) => void;
+  onError?: (error: string) => void;
   // Per-chat resume. The stream is leaving `chatId`, whose cached state is
   // current as of chat update `sequence` (0n: no state it can vouch for).
   onChatCursorRelease?: (chatId: string, sequence: bigint) => void;
@@ -427,9 +439,9 @@ export interface GlobalWebSocketCallbacks {
   // exactly the server's state as of that sequence may return non-zero.
   resolveChatResumeSequence?: (chatId: string) => bigint;
   // The chat whose initial sync is still outstanding for the current
-  // subscription (until the server's chat_caught_up), or null.
+  // subscription (until the server's caught_up), or null.
   onChatSyncPending?: (chatId: string | null) => void;
   // The server refused to stream `chatId` (gone, or not this user's). The
-  // service has already dropped it and reconnected without it.
+  // service has already dropped it and gone idle; the user stream is untouched.
   onChatSubscriptionRejected?: (chatId: string) => void;
 }

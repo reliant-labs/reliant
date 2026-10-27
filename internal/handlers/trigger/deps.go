@@ -13,6 +13,7 @@ package trigger
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -21,9 +22,14 @@ import (
 
 // Repository is everything the trigger handlers read and write.
 type Repository interface {
+	RunTx(context.Context, orm.TxPolicy, func(context.Context) error) error
+	LockActivationDependencies(context.Context, string, string) error
+	ListSettingsByKey(context.Context, string, string) ([]*db.Setting, error)
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	// Trigger rows and their webhook credentials.
 	CreateTrigger(ctx context.Context, t *core.Trigger) error
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error

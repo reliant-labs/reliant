@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { Panel, PanelResult } from "@/services/controlPlane/observability/types";
+import { quotaPausedError } from "@/services/controlPlane/observability/quota";
 
 import { fixtureBrowserPanel, fixturePanel, FIXTURE_TRACE_ID } from "../../__fixtures__/fixtureApi";
 import { alignShifted, describeChange, PanelBody } from "../PanelBody";
@@ -82,6 +83,18 @@ describe("states", () => {
     expect(screen.getByTestId("obs-panel-error")).toBeInTheDocument();
     rerender(<PanelBody panel={{ ...line, kind: "heatmap" }} query={ready(answer(line))} />);
     expect(screen.getByTestId("obs-panel-unknown-kind")).toHaveTextContent("heatmap");
+  });
+
+  it("keeps the last panel result on quota exhaustion, and shows a neutral wait when none loaded", () => {
+    const data = answer(line);
+    const error = quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: Date.now() + 60_000, soft: false });
+    const { rerender } = render(<PanelBody panel={line} query={{ data, isLoading: false, error }} />);
+    expect(screen.getByRole("group", { name: "Requests" })).toHaveTextContent("requests: latest");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error }} />);
+    expect(screen.getByTestId("obs-error-over-quota")).toHaveAttribute("role", "status");
+    expect(screen.getByTestId("obs-error-over-quota")).toHaveTextContent("Will load at");
+    expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
   });
 
   it("draws a metric with no data in the scope as empty, naming the metric and where", () => {

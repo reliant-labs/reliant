@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -116,7 +118,7 @@ func setup(t *testing.T, publicURL string) *env {
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo,
 		Syncer: e.backend, Fires: e.backend,
-		PublicURL: publicURL, Catalog: fakeCatalog{}, Intake: fakeIntake{},
+		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
 	e.svc = svc
@@ -184,15 +186,14 @@ func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	require.Len(t, listed, 2)
 }
 
-// No registered tool creates, enables, re-points or deletes an activation.
-// Manual firing is the only non-read-only trigger operation.
-func TestNoAgentToolActivates(t *testing.T) {
+// Activation management is explicit, orchestrator-tier and approval-backed.
+func TestTriggerToolMutationClassification(t *testing.T) {
 	var triggerTools []string
 	for _, def := range tools.GetToolRegistry() {
 		lower := strings.ToLower(def.Name)
 		if strings.Contains(lower, "trigger") || strings.Contains(lower, "activat") {
 			triggerTools = append(triggerTools, def.Name)
-			if def.Name == tools.ToolFireTrigger {
+			if def.Name == tools.ToolFireTrigger || tools.IsActivationManagementTool(def.Name) {
 				assert.False(t, slices.Contains(def.Tags, tools.TagReadOnly))
 				assert.Equal(t, tools.PermissionOrchestrator, tools.MinimumPermissionForTool(def.Name))
 			} else {
@@ -200,7 +201,7 @@ func TestNoAgentToolActivates(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolListTriggerEvents}, triggerTools)
+	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolCreateTriggerActivation, tools.ToolUpdateTriggerActivation, tools.ToolEnableTrigger, tools.ToolPauseTrigger, tools.ToolListTriggerEvents}, triggerTools)
 }
 
 // The adapter cannot create, enable or change an activation.

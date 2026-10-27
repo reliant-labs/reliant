@@ -101,6 +101,10 @@ type Request struct {
 	BaseBranch string
 	// BaseBranches overrides BaseBranch per repo ID.
 	BaseBranches map[string]string
+	// FetchRepoID selects the registered repo to refresh before checkout.
+	FetchRepoID  string
+	FetchBranch  string
+	ExpectedHead string
 	// Force cleans up a stale branch of the same name before each checkout.
 	Force bool
 	// CopyPaths are exact paths, relative to the workspace root, carried over
@@ -351,29 +355,26 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			return repoCreateResult{repo: repo, worktreePath: ex.Path, baseBranch: ex.Base}, nil
 		}
 
-		if req.Force && !adopting {
-			// Stale-branch cleanup; the workspace dir itself is fresh per create.
-			_ = m.Send(ctx, "worktree.force_cleanup", map[string]string{
-				"project_path":  repoPath,
-				"worktree_path": "",
-				"branch":        wt.Branch,
-			}, nil, commandTimeoutMs)
-		}
+		// Force is passed to the daemon's create operation, which validates
+		// the fetched head/start point before git worktree add -B. Never run
+		// a separate destructive cleanup before that validation.
 
 		type createReq struct {
-			ProjectPath string `json:"project_path"`
-			WorkspaceID string `json:"workspace_id"`
-			SubPath     string `json:"sub_path"`
-			Name        string `json:"name"`
-			Branch      string `json:"branch"`
-			BaseBranch  string `json:"base_branch"`
-			Force       bool   `json:"force"`
-			WorktreeID  string `json:"worktree_id"`
-			ReuseBranch bool   `json:"reuse_branch,omitempty"`
+			ProjectPath  string `json:"project_path"`
+			WorkspaceID  string `json:"workspace_id"`
+			SubPath      string `json:"sub_path"`
+			Name         string `json:"name"`
+			Branch       string `json:"branch"`
+			BaseBranch   string `json:"base_branch"`
+			FetchBranch  string `json:"fetch_branch,omitempty"`
+			ExpectedHead string `json:"expected_head,omitempty"`
+			Force        bool   `json:"force"`
+			WorktreeID   string `json:"worktree_id"`
+			ReuseBranch  bool   `json:"reuse_branch,omitempty"`
 		}
 		var createResp checkoutResponse
 
-		err := m.Send(ctx, "worktree.create", createReq{
+		payload := createReq{
 			WorktreeID:  wt.ID,
 			ProjectPath: repoPath,
 			WorkspaceID: workspaceID,
@@ -383,7 +384,11 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			BaseBranch:  repoBase,
 			Force:       req.Force && !adopting,
 			ReuseBranch: adopting,
-		}, &createResp, commandTimeoutMs)
+		}
+		if repo.ID == req.FetchRepoID {
+			payload.FetchBranch, payload.ExpectedHead = req.FetchBranch, req.ExpectedHead
+		}
+		err := m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
 			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)

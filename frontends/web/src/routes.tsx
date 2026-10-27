@@ -10,6 +10,7 @@ import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
+  appsSearchSchema,
   authSearchSchema,
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -71,6 +72,8 @@ const EmailVerification = lazyRoute(
   () => import('./components/EmailVerification'), 'EmailVerification')
 const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
+const ClaimPage = lazyRoute(
+  () => import('./components/Claim/ClaimPage'), 'ClaimPage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -86,6 +89,8 @@ const ForgePanePreview = lazyRoute(
 // no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
+const ObservabilityBillingPreview = lazyRoute(
+  () => import('./components/Forge/Observability/__preview__/ObservabilityBillingPreview'), 'default')
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
@@ -374,6 +379,15 @@ const cliLoginRoute = createRoute({
   component: lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin'),
 })
 
+// Self-hosted machine pairing (`reliant daemon start` prints this link with
+// its code). Root-level and unguarded like /oauth/cli: the page signs the user
+// in itself and keeps the code across that detour.
+const devicePairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/device',
+  component: lazyRoute(() => import('./components/Auth/DevicePairing'), 'DevicePairing'),
+})
+
 const proxyAuthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth/proxy',
@@ -433,6 +447,17 @@ const upgradeRoute = createRoute({
       <UpgradeAccount />
     </AuthGuard>
   ),
+})
+
+// Claim a no-signup deploy (`/claim#rcl_<token>`, handed over by an agent).
+// Root-level and unguarded: the page shows what is being claimed to someone
+// with no session, and a layout redirect to /auth would lose the claim. The
+// token never reaches the router: lib/claimLinkBoot moves it out of the
+// fragment before the router is built. See components/Claim/ClaimPage.tsx.
+const claimRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/claim',
+  component: ClaimPage,
 })
 
 // Pathless layout route that owns the App shell + its shared search schema.
@@ -532,7 +557,7 @@ const forgePanePreviewRoute = createRoute({
 const forgeObservabilityPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-observability-preview',
-  component: () => <DevOnlyRoute><ObservabilityPreview /></DevOnlyRoute>,
+  component: () => <DevOnlyRoute>{new URLSearchParams(window.location.search).has('billingCase') ? <ObservabilityBillingPreview /> : <ObservabilityPreview />}</DevOnlyRoute>,
 })
 
 const consolePrimitivesPreviewRoute = createRoute({
@@ -600,7 +625,7 @@ const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticate
   consent: ConnectorConsentPage,
 })
 
-// /settings/$section and /settings/environments/$machineId. Defined in
+// /settings/$section and /settings/machines/$machineId. Defined in
 // settingsSectionRoutes.tsx so the route tests mount the same definitions; an
 // unknown slug redirects to /settings with a notice rather than throwing.
 const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {
@@ -726,6 +751,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 const appsRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/apps',
+  validateSearch: appsSearchSchema,
   component: gated(AppsPage),
 })
 
@@ -876,10 +902,12 @@ const routeTree = rootRoute.addChildren([
   connectionOAuthCallbackRoute,
   oauthConsentRoute,
   cliLoginRoute,
+  devicePairingRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
   upgradeRoute,
+  claimRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   forgeSecretsPreviewRoute,

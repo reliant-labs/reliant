@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -21,7 +21,7 @@ import (
 
 func TestNewPicksExactlyOneStore(t *testing.T) {
 	t.Run("control-plane URL selects the hosted authority", func(t *testing.T) {
-		a, mode, err := New(Deps{ControlPlaneURL: "http://cp.invalid", InternalServiceSecret: "s3cret", DB: &orm.Client{}})
+		a, mode, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: "http://cp.invalid", InternalServiceSecret: "s3cret"}, DB: &orm.Client{}})
 		require.NoError(t, err)
 		require.Equal(t, ModeControlPlane, mode)
 		// The hosted store is accesstokenclient's, constructed through its
@@ -32,7 +32,7 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 	})
 
 	t.Run("control-plane URL without a secret is an error, never a local fallback", func(t *testing.T) {
-		a, _, err := New(Deps{ControlPlaneURL: "http://cp.invalid", DB: &orm.Client{}})
+		a, _, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: "http://cp.invalid"}, DB: &orm.Client{}})
 		require.Error(t, err)
 		require.Nil(t, a)
 		require.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
@@ -50,19 +50,6 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 		_, _, err := New(Deps{})
 		require.Error(t, err)
 	})
-}
-
-// The control plane comes from ServerProcessConfig (ControlPlaneConfig), loaded
-// and trimmed by the entrypoint; cmd/reliant/cmd
-// TestControlPlaneEnvContract pins the variables.
-func TestDepsFor(t *testing.T) {
-	cfg := DepsFor(controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"}, nil)
-	require.Equal(t, "http://admin-server:8090", cfg.ControlPlaneURL)
-	require.Equal(t, "s", cfg.InternalServiceSecret)
-
-	selfHosted := DepsFor(controlplane.Endpoint{}, nil)
-	require.Empty(t, selfHosted.ControlPlaneURL)
-	require.Empty(t, selfHosted.InternalServiceSecret)
 }
 
 // Both stores' inactive error is recognized by internal/auth without it
@@ -101,10 +88,11 @@ func runConformance(t *testing.T, a Authority) {
 		narrow := mint(t, MintRequest{UserID: user, Name: "restricted", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
 		binding := &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-full"}
 		wide := mint(t, MintRequest{UserID: user, Name: "full", Resource: binding,
-			Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeObsWrite}})
+			Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeObsWrite, fat.ScopeBillingRead}})
 		p, err := a.Introspect(ctx, wide.Plaintext)
 		require.NoError(t, err)
 		require.True(t, p.Scopes.Has(fat.ScopeObsWrite))
+		require.True(t, p.Scopes.Has(fat.ScopeBillingRead))
 		require.True(t, p.BoundTo(binding.Kind, binding.ID))
 		old, err := a.Introspect(ctx, narrow.Plaintext)
 		require.NoError(t, err)

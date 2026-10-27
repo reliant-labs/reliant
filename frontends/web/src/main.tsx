@@ -7,6 +7,9 @@ import "./lib/browser-log-boot";
 // any module that reads it evaluates, and on a document that cannot work it
 // shows what is wrong and stops the boot — see lib/configGuard.ts.
 import "./lib/configGuard";
+// THIRD: a claim link's token leaves the address bar before the router or any
+// telemetry SDK can read it — see lib/claimLink.ts.
+import "./lib/claimLinkBoot";
 
 import { createRoot } from "react-dom/client";
 import "./index.css";

@@ -4527,7 +4527,7 @@ func executeToolsWithSpawnSupport(
 				"loop_iteration", rtx.LoopIteration,
 			)
 
-			return workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(regularNode))
+			return executeWithActivationApprovals(ctx, activityCtx, rtx, regularNode, IsUnattended(workflowInputs))
 		}
 
 		// A run that recorded this batch behind the removed integration action

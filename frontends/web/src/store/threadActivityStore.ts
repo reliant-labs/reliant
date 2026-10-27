@@ -3,8 +3,8 @@
  *
  * Tracks which threads are active and their current activity for
  * currently-viewed chats. This data comes from per-chat detail events
- * delivered through the unified gRPC stream (when subscribe_chat_id is set)
- * and is only needed for the open chat view,
+ * delivered through the open chat's stream (StreamChatUpdates) and is only
+ * needed for the open chat view,
  * NOT for the sidebar (which uses activityStore).
  *
  * Previously this was part of chatStore.activeThreads — moved here

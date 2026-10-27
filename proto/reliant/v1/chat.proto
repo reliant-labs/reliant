@@ -85,6 +85,24 @@ enum DisplayStyle {
   DISPLAY_STYLE_HIDDEN = 4;
 }
 
+// AgentMessageKind identifies what a mailbox (agent_messages) row carries and,
+// on a saved message, how it reached the thread. Values are persisted in
+// agent_messages.kind and messages.sender_kind: never renumber one.
+enum AgentMessageKind {
+  AGENT_MESSAGE_KIND_UNSPECIFIED = 0;
+  // Free-form text between a parent and a running sub-agent (spawn_send).
+  AGENT_MESSAGE_KIND_MESSAGE = 1;
+  // A sub-agent finished successfully.
+  AGENT_MESSAGE_KIND_COMPLETION = 2;
+  // A sub-agent was cancelled.
+  AGENT_MESSAGE_KIND_CANCELLED = 3;
+  // A sub-agent failed.
+  AGENT_MESSAGE_KIND_FAILED = 4;
+  // Text the HUMAN user sent into a running thread (SendAgentMessage), as
+  // opposed to AGENT_MESSAGE_KIND_MESSAGE, which is agent-to-agent.
+  AGENT_MESSAGE_KIND_HUMAN_MESSAGE = 5;
+}
+
 // ContentBlockType identifies the kind of content in a message block
 enum ContentBlockType {
   CONTENT_BLOCK_TYPE_UNSPECIFIED = 0;
@@ -326,6 +344,11 @@ service ChatService {
   // ListMessages lists messages for a chat with content blocks
   // forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
+
+  // GetToolResult returns one tool call's full result content. The transcript
+  // read paths send a truncated preview of a large result (ContentBlock.
+  // truncated); this is how the client gets the rest, on demand.
+  rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
@@ -623,6 +646,19 @@ message Message {
   optional DisplayStyle display_style = 17;
   int64 sequence_number = 18;           // Streaming sync sequence number for tracking
   optional string node_id = 19;         // Workflow node/step that produced this message (for per-node supervision)
+  // sender is set when another agent, not the human, wrote this message. Such
+  // a message keeps role USER (every provider accepts it) but must not be
+  // presented as the user's own words. Unset means the human (or the model).
+  MessageSender sender = 20;
+}
+
+// MessageSender attributes a message to the agent thread that sent it.
+message MessageSender {
+  string thread_id = 1;
+  // title is the sender thread's title, resolved when the message is read; empty
+  // when the thread is untitled or no longer exists.
+  string title = 2;
+  AgentMessageKind kind = 3;
 }
 
 // ToolCallStatus is the durable lifecycle state of a tool call, mirroring
@@ -648,7 +684,11 @@ message ContentBlock {
   optional string tool_call_id = 6;    // For tool_call and tool_result blocks
   optional string input = 7;           // Tool input (JSON string)
   optional bool is_error = 8;          // For tool_result blocks
-  optional MatchedToolResult matched_result = 9; // For tool_call blocks with results
+  // 9 was matched_result: a copy of the tool_result block's content on its
+  // tool_call block, which put every tool output on the wire twice. The
+  // client joins a call to its result by tool_call_id instead.
+  reserved 9;
+  reserved "matched_result";
   optional ToolCallStatus tool_call_status = 10; // Durable status, for tool_call blocks
   optional string started_at = 11;     // Durable status timing, for tool_call blocks
   optional string completed_at = 12;   // Durable status timing, for tool_call blocks
@@ -663,14 +703,16 @@ message ContentBlock {
   // running). The renderer then showed "Starting..." over a child thread that
   // already had hundreds of messages.
   optional string child_workflow_id = 13; // For spawn tool_call blocks
-}
-
-// MatchedToolResult pairs a tool call with its result
-message MatchedToolResult {
-  string tool_call_id = 1;
-  string type = 2;                     // Always "tool_result"
-  optional string content = 3;
-  optional bool is_error = 4;
+  // A tool_result block's content was shortened for display: the transcript
+  // read paths (ListMessages, GetMessage, the stream snapshot and live
+  // message updates) cap tool output so a chat with large outputs opens
+  // fast. content then holds a preview (head and tail, or for a JSON object
+  // the same object with its long strings shortened) and GetToolResult
+  // returns the whole thing. Only what is sent to clients is shortened: the
+  // stored block and what the model sees are untouched.
+  optional bool truncated = 14;
+  // Byte length of the full content, set when truncated is.
+  optional int64 original_size = 15;
 }
 
 // Attachment represents a file attachment
@@ -1000,10 +1042,9 @@ message QueuedAgentMessage {
   string id = 1;
   string body = 2;
   string created_at = 3;
-  // sender_kind mirrors AgentMessageKind (core.AgentMessageKind): 1 =
-  // agent-to-agent (spawn_send), 5 = human (SendAgentMessage). It lets the
-  // UI distinguish a message the user queued from one a peer agent sent.
-  int32 sender_kind = 4;
+  // sender_kind lets the UI distinguish a message the user queued
+  // (HUMAN_MESSAGE) from one a peer agent sent (MESSAGE).
+  AgentMessageKind sender_kind = 4;
   repeated string attachments = 5;  // Attachment IDs
 }
 
@@ -1076,6 +1117,22 @@ message ListMessagesResponse {
   int32 count = 3;
   bool has_more = 4;
   int64 oldest_seq = 5;
+}
+
+// GetToolResultRequest names a tool call in a chat the caller owns. A
+// branch's inherited calls resolve too: their results live in the chat the
+// branch was taken from.
+message GetToolResultRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  string tool_call_id = 2 [(buf.validate.field).required = true];
+}
+
+// GetToolResultResponse is the tool call's stored result, in full.
+message GetToolResultResponse {
+  string tool_call_id = 1;
+  string content = 2;
+  bool is_error = 3;
+  int64 size = 4;                      // Byte length of content
 }
 
 // UpdateChatStateRequest changes chat state

@@ -30,7 +30,8 @@ on:
       - "go.mod"
       - "go.sum"
       - "frontends/web/package.json"
-      - "frontends/web/package-lock.json"
+      - "frontends/web/pnpm-lock.yaml"
+      - "frontends/web/pnpm-workspace.yaml"
       - ".license-allowlist"
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
@@ -43,7 +44,8 @@ on:
       - "go.mod"
       - "go.sum"
       - "frontends/web/package.json"
-      - "frontends/web/package-lock.json"
+      - "frontends/web/pnpm-lock.yaml"
+      - "frontends/web/pnpm-workspace.yaml"
       - ".license-allowlist"
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
@@ -91,7 +93,7 @@ jobs:
           go: "false"
           node: "true"
 
-      # `npm ci` installs from the lockfile, which is what the gate inspects,
+      # A frozen install installs from the lockfile, which is what the gate inspects,
       # so the tree checked here is the tree that ships.
       - name: task deps:web
         run: task deps:web

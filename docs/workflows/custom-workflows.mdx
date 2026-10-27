@@ -57,7 +57,7 @@ All three methods produce the same YAML format. A workflow created with the AI b
 
 ## Workflow File Location
 
-Reliant automatically discovers workflow files in your project's `.reliant/workflows/` directory.
+Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in the project root's `.reliant/workflows/` and in each discovered nested git repository's `.reliant/workflows/`. This uses the same repository discovery as memory files and skills; the project root need not itself be a git repository.
 
 <Tree>
   <Tree.Folder name="your-project" defaultOpen>
@@ -86,6 +86,28 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
 **Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike.
 
 Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
+
+### Projects with several repositories
+
+For a project at `/projects/labs` holding `control-plane/` and `forge/`, commit a shared workflow at `control-plane/.reliant/workflows/merge-steward.yaml`. It is discovered without copying it into `/projects/labs/.reliant/workflows/`.
+
+Names resolve deterministically:
+
+- A workflow in the **project root** wins its bare name over nested repositories.
+- If only one nested repository declares a name, its bare name works too.
+- If two nested repositories declare the same name and the root does not, the bare name **fails explicitly**. Both workflows are listed with qualified addresses, such as `control-plane/merge-steward` and `forge/merge-steward`, and a discovery warning. Use `project://control-plane/merge-steward` to choose one.
+- A qualified address always selects that repository, even when the root or one of your account's workflows has the same name. The repository qualifier is its exact, case-sensitive project-relative path; the workflow name is normalized as a slug.
+- Duplicate names within one repository's workflows directory remain errors. They are never resolved by file ordering.
+
+Scenarios stay beside their workflow in that repository's `<name>/scenarios/`. An orphan scenario or one whose local workflow name is invalid is reported as a source-directory error, never attached to a workflow in another repository. The CLI includes nested repositories when reading a conventional `.reliant/workflows` directory; an arbitrary `--dir` still reads only that directory. Newly added repositories may take up to a minute to enter the daemon's cached repository list.
+
+Discovery is confined to each source repository. Symlinks within the workflows tree and non-regular YAML files are rejected. Each source is limited to 1 MiB per YAML file, 8 MiB total YAML content, 1,024 filesystem entries (including the directory itself), and four path components below the workflows directory. If a source cannot be read safely or exceeds these bounds, the snapshot fails rather than uploading a partial or empty replacement catalog; fix the reported source and save again.
+
+### Missing workflows and machine snapshots
+
+The server stores the last synced workflow YAML, so disconnecting a machine alone does not remove it. **Currently, another machine's complete project snapshot replaces that project's catalog, including with an empty workflow list.** A machine whose files have not changed does not automatically resend them to undo that replacement. Durable source ownership/retention across machines is not implemented yet.
+
+If a workflow no longer resolves, the error identifies the last **project snapshot** machine (name or ID), whether it is online, offline or removed, and the workflow source path when still available. If an empty snapshot erased the definition, it reports the searched directories rather than inventing a filename or claiming to know the erased definition's original machine. Reconnect the machine holding the workflow, or save the workflow file again to trigger a normal sync. This does not enable or repoint any automation.
 
 ## Anatomy of a Workflow
 

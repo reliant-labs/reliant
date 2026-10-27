@@ -592,8 +592,256 @@ func (ExecutionLogLevel) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{7}
 }
 
+// StreamChatUpdatesRequest opens one chat's detail stream.
+type StreamChatUpdatesRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ChatId string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	// Chat-level sequence the client's cached state is current as of: the
+	// server replays (since_seq, latest]. 0 asks for a snapshot, and so does a
+	// cursor too far behind or ahead of the chat to replay from.
+	SinceSeq int64 `protobuf:"varint,2,opt,name=since_seq,json=sinceSeq,proto3" json:"since_seq,omitempty"`
+	// The project the client's user stream (StreamUserUpdates) is scoped to,
+	// or unset when it streams every project. See ChatUserUpdates.
+	ProjectId     *string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamChatUpdatesRequest) Reset() {
+	*x = StreamChatUpdatesRequest{}
+	mi := &file_reliant_v1_streaming_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamChatUpdatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamChatUpdatesRequest) ProtoMessage() {}
+
+func (x *StreamChatUpdatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_streaming_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamChatUpdatesRequest.ProtoReflect.Descriptor instead.
+func (*StreamChatUpdatesRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *StreamChatUpdatesRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *StreamChatUpdatesRequest) GetSinceSeq() int64 {
+	if x != nil {
+		return x.SinceSeq
+	}
+	return 0
+}
+
+func (x *StreamChatUpdatesRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
+// ChatStreamEvent is one frame of a chat's detail stream.
+type ChatStreamEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*ChatStreamEvent_Snapshot
+	//	*ChatStreamEvent_Updates
+	//	*ChatStreamEvent_CaughtUp
+	//	*ChatStreamEvent_Heartbeat
+	//	*ChatStreamEvent_UserUpdates
+	Event         isChatStreamEvent_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatStreamEvent) Reset() {
+	*x = ChatStreamEvent{}
+	mi := &file_reliant_v1_streaming_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatStreamEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatStreamEvent) ProtoMessage() {}
+
+func (x *ChatStreamEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_streaming_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatStreamEvent.ProtoReflect.Descriptor instead.
+func (*ChatStreamEvent) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ChatStreamEvent) GetEvent() isChatStreamEvent_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *ChatStreamEvent) GetSnapshot() *ChatSyncSnapshot {
+	if x != nil {
+		if x, ok := x.Event.(*ChatStreamEvent_Snapshot); ok {
+			return x.Snapshot
+		}
+	}
+	return nil
+}
+
+func (x *ChatStreamEvent) GetUpdates() *ChatUpdateBatch {
+	if x != nil {
+		if x, ok := x.Event.(*ChatStreamEvent_Updates); ok {
+			return x.Updates
+		}
+	}
+	return nil
+}
+
+func (x *ChatStreamEvent) GetCaughtUp() *ChatCaughtUp {
+	if x != nil {
+		if x, ok := x.Event.(*ChatStreamEvent_CaughtUp); ok {
+			return x.CaughtUp
+		}
+	}
+	return nil
+}
+
+func (x *ChatStreamEvent) GetHeartbeat() *Heartbeat {
+	if x != nil {
+		if x, ok := x.Event.(*ChatStreamEvent_Heartbeat); ok {
+			return x.Heartbeat
+		}
+	}
+	return nil
+}
+
+func (x *ChatStreamEvent) GetUserUpdates() *ChatUserUpdates {
+	if x != nil {
+		if x, ok := x.Event.(*ChatStreamEvent_UserUpdates); ok {
+			return x.UserUpdates
+		}
+	}
+	return nil
+}
+
+type isChatStreamEvent_Event interface {
+	isChatStreamEvent_Event()
+}
+
+type ChatStreamEvent_Snapshot struct {
+	Snapshot *ChatSyncSnapshot `protobuf:"bytes,1,opt,name=snapshot,proto3,oneof"` // Initial sync with assembled messages
+}
+
+type ChatStreamEvent_Updates struct {
+	Updates *ChatUpdateBatch `protobuf:"bytes,2,opt,name=updates,proto3,oneof"` // Replayed or live chat updates
+}
+
+type ChatStreamEvent_CaughtUp struct {
+	CaughtUp *ChatCaughtUp `protobuf:"bytes,3,opt,name=caught_up,json=caughtUp,proto3,oneof"` // Initial sync complete (once per stream)
+}
+
+type ChatStreamEvent_Heartbeat struct {
+	Heartbeat *Heartbeat `protobuf:"bytes,4,opt,name=heartbeat,proto3,oneof"` // Keepalive heartbeat
+}
+
+type ChatStreamEvent_UserUpdates struct {
+	UserUpdates *ChatUserUpdates `protobuf:"bytes,5,opt,name=user_updates,json=userUpdates,proto3,oneof"` // This chat's user-level updates the user stream filters out
+}
+
+func (*ChatStreamEvent_Snapshot) isChatStreamEvent_Event() {}
+
+func (*ChatStreamEvent_Updates) isChatStreamEvent_Event() {}
+
+func (*ChatStreamEvent_CaughtUp) isChatStreamEvent_Event() {}
+
+func (*ChatStreamEvent_Heartbeat) isChatStreamEvent_Event() {}
+
+func (*ChatStreamEvent_UserUpdates) isChatStreamEvent_Event() {}
+
+// ChatUserUpdates carries user-level updates about the streamed chat, or about
+// a chat it started (agent.start_run), that the client's project-scoped user
+// stream does not deliver because they belong to another project. A chat
+// opened outside the current project (a deep link, a notification) still gets
+// its status, activity and spawned runs this way. The two streams partition
+// the updates: one in the request's project goes to the user stream, never
+// here. Sent only when the request names a project_id. Live only: these carry
+// no cursor and do not advance the user stream's.
+type ChatUserUpdates struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Updates       []*UserUpdateData      `protobuf:"bytes,1,rep,name=updates,proto3" json:"updates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatUserUpdates) Reset() {
+	*x = ChatUserUpdates{}
+	mi := &file_reliant_v1_streaming_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatUserUpdates) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatUserUpdates) ProtoMessage() {}
+
+func (x *ChatUserUpdates) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_streaming_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatUserUpdates.ProtoReflect.Descriptor instead.
+func (*ChatUserUpdates) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ChatUserUpdates) GetUpdates() []*UserUpdateData {
+	if x != nil {
+		return x.Updates
+	}
+	return nil
+}
+
 // ChatSyncSnapshot provides the initial sync with pre-assembled messages.
-// Sent through the unified stream when subscribe_chat_id is set.
 type ChatSyncSnapshot struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Messages       []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
@@ -613,7 +861,7 @@ type ChatSyncSnapshot struct {
 
 func (x *ChatSyncSnapshot) Reset() {
 	*x = ChatSyncSnapshot{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[0]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -625,7 +873,7 @@ func (x *ChatSyncSnapshot) String() string {
 func (*ChatSyncSnapshot) ProtoMessage() {}
 
 func (x *ChatSyncSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[0]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -638,7 +886,7 @@ func (x *ChatSyncSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatSyncSnapshot.ProtoReflect.Descriptor instead.
 func (*ChatSyncSnapshot) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ChatSyncSnapshot) GetMessages() []*Message {
@@ -715,7 +963,7 @@ type ChatUpdateBatch struct {
 
 func (x *ChatUpdateBatch) Reset() {
 	*x = ChatUpdateBatch{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[1]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -727,7 +975,7 @@ func (x *ChatUpdateBatch) String() string {
 func (*ChatUpdateBatch) ProtoMessage() {}
 
 func (x *ChatUpdateBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[1]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -740,7 +988,7 @@ func (x *ChatUpdateBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatUpdateBatch.ProtoReflect.Descriptor instead.
 func (*ChatUpdateBatch) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ChatUpdateBatch) GetUpdates() []*ChatUpdateData {
@@ -772,7 +1020,7 @@ type ChatUpdateData struct {
 
 func (x *ChatUpdateData) Reset() {
 	*x = ChatUpdateData{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[2]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +1032,7 @@ func (x *ChatUpdateData) String() string {
 func (*ChatUpdateData) ProtoMessage() {}
 
 func (x *ChatUpdateData) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[2]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +1045,7 @@ func (x *ChatUpdateData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatUpdateData.ProtoReflect.Descriptor instead.
 func (*ChatUpdateData) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ChatUpdateData) GetUpdateType() ChatUpdateType {
@@ -842,20 +1090,18 @@ func (x *ChatUpdateData) GetCreatedAt() string {
 	return ""
 }
 
-// StreamUserUpdatesRequest initiates the unified update stream
+// StreamUserUpdatesRequest initiates the user-wide update stream
 type StreamUserUpdatesRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SinceSeq        int64                  `protobuf:"varint,1,opt,name=since_seq,json=sinceSeq,proto3" json:"since_seq,omitempty"`                             // User-level sequence number to start from
-	SubscribeChatId *string                `protobuf:"bytes,2,opt,name=subscribe_chat_id,json=subscribeChatId,proto3,oneof" json:"subscribe_chat_id,omitempty"` // Subscribe to per-chat detail events for this chat
-	ChatSinceSeq    int64                  `protobuf:"varint,3,opt,name=chat_since_seq,json=chatSinceSeq,proto3" json:"chat_since_seq,omitempty"`               // Chat-level sequence number to start from (0 for initial sync snapshot)
-	ProjectId       *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`                     // Scope updates to this project (omit for all projects)
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SinceSeq      int64                  `protobuf:"varint,1,opt,name=since_seq,json=sinceSeq,proto3" json:"since_seq,omitempty"`         // User-level sequence number to start from
+	ProjectId     *string                `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"` // Scope updates to this project (omit for all projects)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamUserUpdatesRequest) Reset() {
 	*x = StreamUserUpdatesRequest{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[3]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -867,7 +1113,7 @@ func (x *StreamUserUpdatesRequest) String() string {
 func (*StreamUserUpdatesRequest) ProtoMessage() {}
 
 func (x *StreamUserUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[3]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -880,26 +1126,12 @@ func (x *StreamUserUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamUserUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*StreamUserUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *StreamUserUpdatesRequest) GetSinceSeq() int64 {
 	if x != nil {
 		return x.SinceSeq
-	}
-	return 0
-}
-
-func (x *StreamUserUpdatesRequest) GetSubscribeChatId() string {
-	if x != nil && x.SubscribeChatId != nil {
-		return *x.SubscribeChatId
-	}
-	return ""
-}
-
-func (x *StreamUserUpdatesRequest) GetChatSinceSeq() int64 {
-	if x != nil {
-		return x.ChatSinceSeq
 	}
 	return 0
 }
@@ -911,8 +1143,7 @@ func (x *StreamUserUpdatesRequest) GetProjectId() string {
 	return ""
 }
 
-// UserStreamEvent represents a single event in the unified update stream.
-// Contains BOTH user-level events and per-chat detail events.
+// UserStreamEvent represents a single event in the user-wide update stream.
 type UserStreamEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Event:
@@ -920,12 +1151,6 @@ type UserStreamEvent struct {
 	//	*UserStreamEvent_Sync
 	//	*UserStreamEvent_Updates
 	//	*UserStreamEvent_Heartbeat
-	//	*UserStreamEvent_ChatSyncSnapshot
-	//	*UserStreamEvent_ChatUpdates
-	//	*UserStreamEvent_WorkflowEvent
-	//	*UserStreamEvent_NodeEvent
-	//	*UserStreamEvent_ExecutionLog
-	//	*UserStreamEvent_ChatCaughtUp
 	Event         isUserStreamEvent_Event `protobuf_oneof:"event"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -933,7 +1158,7 @@ type UserStreamEvent struct {
 
 func (x *UserStreamEvent) Reset() {
 	*x = UserStreamEvent{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[4]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -945,7 +1170,7 @@ func (x *UserStreamEvent) String() string {
 func (*UserStreamEvent) ProtoMessage() {}
 
 func (x *UserStreamEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[4]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -958,7 +1183,7 @@ func (x *UserStreamEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserStreamEvent.ProtoReflect.Descriptor instead.
 func (*UserStreamEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UserStreamEvent) GetEvent() isUserStreamEvent_Event {
@@ -995,66 +1220,11 @@ func (x *UserStreamEvent) GetHeartbeat() *Heartbeat {
 	return nil
 }
 
-func (x *UserStreamEvent) GetChatSyncSnapshot() *ChatSyncSnapshot {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_ChatSyncSnapshot); ok {
-			return x.ChatSyncSnapshot
-		}
-	}
-	return nil
-}
-
-func (x *UserStreamEvent) GetChatUpdates() *ChatUpdateBatch {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_ChatUpdates); ok {
-			return x.ChatUpdates
-		}
-	}
-	return nil
-}
-
-func (x *UserStreamEvent) GetWorkflowEvent() *WorkflowExecutionEvent {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_WorkflowEvent); ok {
-			return x.WorkflowEvent
-		}
-	}
-	return nil
-}
-
-func (x *UserStreamEvent) GetNodeEvent() *NodeExecutionEvent {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_NodeEvent); ok {
-			return x.NodeEvent
-		}
-	}
-	return nil
-}
-
-func (x *UserStreamEvent) GetExecutionLog() *ExecutionLog {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_ExecutionLog); ok {
-			return x.ExecutionLog
-		}
-	}
-	return nil
-}
-
-func (x *UserStreamEvent) GetChatCaughtUp() *ChatCaughtUp {
-	if x != nil {
-		if x, ok := x.Event.(*UserStreamEvent_ChatCaughtUp); ok {
-			return x.ChatCaughtUp
-		}
-	}
-	return nil
-}
-
 type isUserStreamEvent_Event interface {
 	isUserStreamEvent_Event()
 }
 
 type UserStreamEvent_Sync struct {
-	// User-level events (always delivered)
 	Sync *UserSyncInfo `protobuf:"bytes,1,opt,name=sync,proto3,oneof"` // Initial sync info
 }
 
@@ -1066,52 +1236,15 @@ type UserStreamEvent_Heartbeat struct {
 	Heartbeat *Heartbeat `protobuf:"bytes,3,opt,name=heartbeat,proto3,oneof"` // Keepalive heartbeat
 }
 
-type UserStreamEvent_ChatSyncSnapshot struct {
-	// Per-chat detail events (only when subscribe_chat_id is set)
-	ChatSyncSnapshot *ChatSyncSnapshot `protobuf:"bytes,4,opt,name=chat_sync_snapshot,json=chatSyncSnapshot,proto3,oneof"` // Initial chat sync with assembled messages
-}
-
-type UserStreamEvent_ChatUpdates struct {
-	ChatUpdates *ChatUpdateBatch `protobuf:"bytes,5,opt,name=chat_updates,json=chatUpdates,proto3,oneof"` // Incremental chat updates batch
-}
-
-type UserStreamEvent_WorkflowEvent struct {
-	WorkflowEvent *WorkflowExecutionEvent `protobuf:"bytes,6,opt,name=workflow_event,json=workflowEvent,proto3,oneof"` // Workflow lifecycle event
-}
-
-type UserStreamEvent_NodeEvent struct {
-	NodeEvent *NodeExecutionEvent `protobuf:"bytes,7,opt,name=node_event,json=nodeEvent,proto3,oneof"` // Node lifecycle event
-}
-
-type UserStreamEvent_ExecutionLog struct {
-	ExecutionLog *ExecutionLog `protobuf:"bytes,8,opt,name=execution_log,json=executionLog,proto3,oneof"` // Log entry from execution
-}
-
-type UserStreamEvent_ChatCaughtUp struct {
-	ChatCaughtUp *ChatCaughtUp `protobuf:"bytes,9,opt,name=chat_caught_up,json=chatCaughtUp,proto3,oneof"` // Initial chat sync complete (sent once per subscription)
-}
-
 func (*UserStreamEvent_Sync) isUserStreamEvent_Event() {}
 
 func (*UserStreamEvent_Updates) isUserStreamEvent_Event() {}
 
 func (*UserStreamEvent_Heartbeat) isUserStreamEvent_Event() {}
 
-func (*UserStreamEvent_ChatSyncSnapshot) isUserStreamEvent_Event() {}
-
-func (*UserStreamEvent_ChatUpdates) isUserStreamEvent_Event() {}
-
-func (*UserStreamEvent_WorkflowEvent) isUserStreamEvent_Event() {}
-
-func (*UserStreamEvent_NodeEvent) isUserStreamEvent_Event() {}
-
-func (*UserStreamEvent_ExecutionLog) isUserStreamEvent_Event() {}
-
-func (*UserStreamEvent_ChatCaughtUp) isUserStreamEvent_Event() {}
-
-// ChatCaughtUp marks the end of a subscription's initial chat sync. It is sent
-// exactly once per subscription, after the snapshot or the replay from
-// chat_since_seq — including a replay of nothing — and before any live chat
+// ChatCaughtUp marks the end of a chat stream's initial sync. It is sent
+// exactly once per stream, after the snapshot or the replay from
+// since_seq — including a replay of nothing — and before any live chat
 // event. Until it arrives, the client's cached transcript may still be behind
 // the server; no other frame can stand in for it, because a replay of nothing
 // sends no chat frame at all.
@@ -1126,7 +1259,7 @@ type ChatCaughtUp struct {
 
 func (x *ChatCaughtUp) Reset() {
 	*x = ChatCaughtUp{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[5]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1138,7 +1271,7 @@ func (x *ChatCaughtUp) String() string {
 func (*ChatCaughtUp) ProtoMessage() {}
 
 func (x *ChatCaughtUp) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[5]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1151,7 +1284,7 @@ func (x *ChatCaughtUp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatCaughtUp.ProtoReflect.Descriptor instead.
 func (*ChatCaughtUp) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ChatCaughtUp) GetLatestSequence() int64 {
@@ -1171,7 +1304,7 @@ type UserSyncInfo struct {
 
 func (x *UserSyncInfo) Reset() {
 	*x = UserSyncInfo{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[6]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1183,7 +1316,7 @@ func (x *UserSyncInfo) String() string {
 func (*UserSyncInfo) ProtoMessage() {}
 
 func (x *UserSyncInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[6]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1196,7 +1329,7 @@ func (x *UserSyncInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserSyncInfo.ProtoReflect.Descriptor instead.
 func (*UserSyncInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UserSyncInfo) GetLastSequence() int64 {
@@ -1225,7 +1358,7 @@ type UserUpdateBatch struct {
 
 func (x *UserUpdateBatch) Reset() {
 	*x = UserUpdateBatch{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[7]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1237,7 +1370,7 @@ func (x *UserUpdateBatch) String() string {
 func (*UserUpdateBatch) ProtoMessage() {}
 
 func (x *UserUpdateBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[7]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1250,7 +1383,7 @@ func (x *UserUpdateBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserUpdateBatch.ProtoReflect.Descriptor instead.
 func (*UserUpdateBatch) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UserUpdateBatch) GetUpdates() []*UserUpdateData {
@@ -1287,7 +1420,7 @@ type UserUpdateData struct {
 
 func (x *UserUpdateData) Reset() {
 	*x = UserUpdateData{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[8]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1432,7 @@ func (x *UserUpdateData) String() string {
 func (*UserUpdateData) ProtoMessage() {}
 
 func (x *UserUpdateData) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[8]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1445,7 @@ func (x *UserUpdateData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserUpdateData.ProtoReflect.Descriptor instead.
 func (*UserUpdateData) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UserUpdateData) GetId() string {
@@ -1402,7 +1535,7 @@ type Heartbeat struct {
 
 func (x *Heartbeat) Reset() {
 	*x = Heartbeat{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[9]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1414,7 +1547,7 @@ func (x *Heartbeat) String() string {
 func (*Heartbeat) ProtoMessage() {}
 
 func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[9]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1427,7 +1560,7 @@ func (x *Heartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
 func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Heartbeat) GetTimestamp() int64 {
@@ -1460,7 +1593,7 @@ type NodeExecutionState struct {
 
 func (x *NodeExecutionState) Reset() {
 	*x = NodeExecutionState{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[10]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1472,7 +1605,7 @@ func (x *NodeExecutionState) String() string {
 func (*NodeExecutionState) ProtoMessage() {}
 
 func (x *NodeExecutionState) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[10]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1485,7 +1618,7 @@ func (x *NodeExecutionState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeExecutionState.ProtoReflect.Descriptor instead.
 func (*NodeExecutionState) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *NodeExecutionState) GetNodeId() string {
@@ -1608,7 +1741,7 @@ type WorkflowExecutionState struct {
 
 func (x *WorkflowExecutionState) Reset() {
 	*x = WorkflowExecutionState{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[11]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1620,7 +1753,7 @@ func (x *WorkflowExecutionState) String() string {
 func (*WorkflowExecutionState) ProtoMessage() {}
 
 func (x *WorkflowExecutionState) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[11]
+	mi := &file_reliant_v1_streaming_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1633,7 +1766,7 @@ func (x *WorkflowExecutionState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowExecutionState.ProtoReflect.Descriptor instead.
 func (*WorkflowExecutionState) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WorkflowExecutionState) GetWorkflowId() string {
@@ -1727,235 +1860,27 @@ func (x *WorkflowExecutionState) GetOutputs() map[string]string {
 	return nil
 }
 
-// ExecutionLog represents a log entry from workflow/node execution
-type ExecutionLog struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                                                                   // Unique log entry ID
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`                                                 // Workflow UUID
-	NodeId        *string                `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3,oneof" json:"node_id,omitempty"`                                                       // Node ID if from a specific node
-	Level         ExecutionLogLevel      `protobuf:"varint,4,opt,name=level,proto3,enum=reliant.v1.ExecutionLogLevel" json:"level,omitempty"`                                          // Log severity
-	Message       string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`                                                                         // Log message content
-	Timestamp     int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                                                    // Unix timestamp
-	Source        *string                `protobuf:"bytes,7,opt,name=source,proto3,oneof" json:"source,omitempty"`                                                                     // Source identifier (e.g., "stdout", "stderr", "activity")
-	Fields        map[string]string      `protobuf:"bytes,8,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Structured log fields
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExecutionLog) Reset() {
-	*x = ExecutionLog{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExecutionLog) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExecutionLog) ProtoMessage() {}
-
-func (x *ExecutionLog) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExecutionLog.ProtoReflect.Descriptor instead.
-func (*ExecutionLog) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ExecutionLog) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *ExecutionLog) GetWorkflowId() string {
-	if x != nil {
-		return x.WorkflowId
-	}
-	return ""
-}
-
-func (x *ExecutionLog) GetNodeId() string {
-	if x != nil && x.NodeId != nil {
-		return *x.NodeId
-	}
-	return ""
-}
-
-func (x *ExecutionLog) GetLevel() ExecutionLogLevel {
-	if x != nil {
-		return x.Level
-	}
-	return ExecutionLogLevel_EXECUTION_LOG_LEVEL_UNSPECIFIED
-}
-
-func (x *ExecutionLog) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ExecutionLog) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-func (x *ExecutionLog) GetSource() string {
-	if x != nil && x.Source != nil {
-		return *x.Source
-	}
-	return ""
-}
-
-func (x *ExecutionLog) GetFields() map[string]string {
-	if x != nil {
-		return x.Fields
-	}
-	return nil
-}
-
-// NodeExecutionEvent represents a node lifecycle event (start, update, complete)
-type NodeExecutionEvent struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	EventType       NodeExecutionEventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=reliant.v1.NodeExecutionEventType" json:"event_type,omitempty"`
-	Node            *NodeExecutionState    `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`                                                      // Current node state
-	ProgressMessage *string                `protobuf:"bytes,3,opt,name=progress_message,json=progressMessage,proto3,oneof" json:"progress_message,omitempty"`   // Optional progress message for "progress" events
-	ProgressPercent *float64               `protobuf:"fixed64,4,opt,name=progress_percent,json=progressPercent,proto3,oneof" json:"progress_percent,omitempty"` // Optional progress percentage (0-100)
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *NodeExecutionEvent) Reset() {
-	*x = NodeExecutionEvent{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NodeExecutionEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NodeExecutionEvent) ProtoMessage() {}
-
-func (x *NodeExecutionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NodeExecutionEvent.ProtoReflect.Descriptor instead.
-func (*NodeExecutionEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *NodeExecutionEvent) GetEventType() NodeExecutionEventType {
-	if x != nil {
-		return x.EventType
-	}
-	return NodeExecutionEventType_NODE_EXECUTION_EVENT_TYPE_UNSPECIFIED
-}
-
-func (x *NodeExecutionEvent) GetNode() *NodeExecutionState {
-	if x != nil {
-		return x.Node
-	}
-	return nil
-}
-
-func (x *NodeExecutionEvent) GetProgressMessage() string {
-	if x != nil && x.ProgressMessage != nil {
-		return *x.ProgressMessage
-	}
-	return ""
-}
-
-func (x *NodeExecutionEvent) GetProgressPercent() float64 {
-	if x != nil && x.ProgressPercent != nil {
-		return *x.ProgressPercent
-	}
-	return 0
-}
-
-// WorkflowExecutionEvent represents a workflow lifecycle event
-type WorkflowExecutionEvent struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	EventType     WorkflowExecutionEventType `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=reliant.v1.WorkflowExecutionEventType" json:"event_type,omitempty"`
-	Workflow      *WorkflowExecutionState    `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"` // Current workflow state (may include nested state)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WorkflowExecutionEvent) Reset() {
-	*x = WorkflowExecutionEvent{}
-	mi := &file_reliant_v1_streaming_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WorkflowExecutionEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WorkflowExecutionEvent) ProtoMessage() {}
-
-func (x *WorkflowExecutionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_streaming_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WorkflowExecutionEvent.ProtoReflect.Descriptor instead.
-func (*WorkflowExecutionEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *WorkflowExecutionEvent) GetEventType() WorkflowExecutionEventType {
-	if x != nil {
-		return x.EventType
-	}
-	return WorkflowExecutionEventType_WORKFLOW_EXECUTION_EVENT_TYPE_UNSPECIFIED
-}
-
-func (x *WorkflowExecutionEvent) GetWorkflow() *WorkflowExecutionState {
-	if x != nil {
-		return x.Workflow
-	}
-	return nil
-}
-
 var File_reliant_v1_streaming_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\n" +
 	"\x1areliant/v1/streaming.proto\x12\n" +
-	"reliant.v1\x1a\x15reliant/v1/chat.proto\"\xad\x03\n" +
+	"reliant.v1\x1a\x15reliant/v1/chat.proto\"\x83\x01\n" +
+	"\x18StreamChatUpdatesRequest\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
+	"\tsince_seq\x18\x02 \x01(\x03R\bsinceSeq\x12\"\n" +
+	"\n" +
+	"project_id\x18\x03 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
+	"\v_project_id\"\xc1\x02\n" +
+	"\x0fChatStreamEvent\x12:\n" +
+	"\bsnapshot\x18\x01 \x01(\v2\x1c.reliant.v1.ChatSyncSnapshotH\x00R\bsnapshot\x127\n" +
+	"\aupdates\x18\x02 \x01(\v2\x1b.reliant.v1.ChatUpdateBatchH\x00R\aupdates\x127\n" +
+	"\tcaught_up\x18\x03 \x01(\v2\x18.reliant.v1.ChatCaughtUpH\x00R\bcaughtUp\x125\n" +
+	"\theartbeat\x18\x04 \x01(\v2\x15.reliant.v1.HeartbeatH\x00R\theartbeat\x12@\n" +
+	"\fuser_updates\x18\x05 \x01(\v2\x1b.reliant.v1.ChatUserUpdatesH\x00R\vuserUpdatesB\a\n" +
+	"\x05event\"G\n" +
+	"\x0fChatUserUpdates\x124\n" +
+	"\aupdates\x18\x01 \x03(\v2\x1a.reliant.v1.UserUpdateDataR\aupdates\"\xad\x03\n" +
 	"\x10ChatSyncSnapshot\x12/\n" +
 	"\bmessages\x18\x01 \x03(\v2\x13.reliant.v1.MessageR\bmessages\x12?\n" +
 	"\rother_updates\x18\x02 \x03(\v2\x1a.reliant.v1.ChatUpdateDataR\fotherUpdates\x12'\n" +
@@ -1978,27 +1903,19 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\achat_id\x18\x04 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tdata_json\x18\x05 \x01(\tR\bdataJson\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\tR\tcreatedAt\"\xd7\x01\n" +
+	"created_at\x18\x06 \x01(\tR\tcreatedAt\"\x99\x01\n" +
 	"\x18StreamUserUpdatesRequest\x12\x1b\n" +
-	"\tsince_seq\x18\x01 \x01(\x03R\bsinceSeq\x12/\n" +
-	"\x11subscribe_chat_id\x18\x02 \x01(\tH\x00R\x0fsubscribeChatId\x88\x01\x01\x12$\n" +
-	"\x0echat_since_seq\x18\x03 \x01(\x03R\fchatSinceSeq\x12\"\n" +
+	"\tsince_seq\x18\x01 \x01(\x03R\bsinceSeq\x12\"\n" +
 	"\n" +
-	"project_id\x18\x04 \x01(\tH\x01R\tprojectId\x88\x01\x01B\x14\n" +
-	"\x12_subscribe_chat_idB\r\n" +
-	"\v_project_id\"\xdb\x04\n" +
+	"project_id\x18\x04 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\x11subscribe_chat_idR\x0echat_since_seq\"\x9d\x02\n" +
 	"\x0fUserStreamEvent\x12.\n" +
 	"\x04sync\x18\x01 \x01(\v2\x18.reliant.v1.UserSyncInfoH\x00R\x04sync\x127\n" +
 	"\aupdates\x18\x02 \x01(\v2\x1b.reliant.v1.UserUpdateBatchH\x00R\aupdates\x125\n" +
-	"\theartbeat\x18\x03 \x01(\v2\x15.reliant.v1.HeartbeatH\x00R\theartbeat\x12L\n" +
-	"\x12chat_sync_snapshot\x18\x04 \x01(\v2\x1c.reliant.v1.ChatSyncSnapshotH\x00R\x10chatSyncSnapshot\x12@\n" +
-	"\fchat_updates\x18\x05 \x01(\v2\x1b.reliant.v1.ChatUpdateBatchH\x00R\vchatUpdates\x12K\n" +
-	"\x0eworkflow_event\x18\x06 \x01(\v2\".reliant.v1.WorkflowExecutionEventH\x00R\rworkflowEvent\x12?\n" +
-	"\n" +
-	"node_event\x18\a \x01(\v2\x1e.reliant.v1.NodeExecutionEventH\x00R\tnodeEvent\x12?\n" +
-	"\rexecution_log\x18\b \x01(\v2\x18.reliant.v1.ExecutionLogH\x00R\fexecutionLog\x12@\n" +
-	"\x0echat_caught_up\x18\t \x01(\v2\x18.reliant.v1.ChatCaughtUpH\x00R\fchatCaughtUpB\a\n" +
-	"\x05event\"7\n" +
+	"\theartbeat\x18\x03 \x01(\v2\x15.reliant.v1.HeartbeatH\x00R\theartbeatB\a\n" +
+	"\x05eventJ\x04\b\x04\x10\n" +
+	"R\x12chat_sync_snapshotR\fchat_updatesR\x0eworkflow_eventR\n" +
+	"node_eventR\rexecution_logR\x0echat_caught_up\"7\n" +
 	"\fChatCaughtUp\x12'\n" +
 	"\x0flatest_sequence\x18\x01 \x01(\x03R\x0elatestSequence\"3\n" +
 	"\fUserSyncInfo\x12#\n" +
@@ -2089,35 +2006,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x15\n" +
 	"\x13_parent_workflow_idB\r\n" +
 	"\v_started_atB\x0f\n" +
-	"\r_completed_at\"\xf7\x02\n" +
-	"\fExecutionLog\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
-	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1c\n" +
-	"\anode_id\x18\x03 \x01(\tH\x00R\x06nodeId\x88\x01\x01\x123\n" +
-	"\x05level\x18\x04 \x01(\x0e2\x1d.reliant.v1.ExecutionLogLevelR\x05level\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\x12\x1b\n" +
-	"\x06source\x18\a \x01(\tH\x01R\x06source\x88\x01\x01\x12<\n" +
-	"\x06fields\x18\b \x03(\v2$.reliant.v1.ExecutionLog.FieldsEntryR\x06fields\x1a9\n" +
-	"\vFieldsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\n" +
-	"\n" +
-	"\b_node_idB\t\n" +
-	"\a_source\"\x95\x02\n" +
-	"\x12NodeExecutionEvent\x12A\n" +
-	"\n" +
-	"event_type\x18\x01 \x01(\x0e2\".reliant.v1.NodeExecutionEventTypeR\teventType\x122\n" +
-	"\x04node\x18\x02 \x01(\v2\x1e.reliant.v1.NodeExecutionStateR\x04node\x12.\n" +
-	"\x10progress_message\x18\x03 \x01(\tH\x00R\x0fprogressMessage\x88\x01\x01\x12.\n" +
-	"\x10progress_percent\x18\x04 \x01(\x01H\x01R\x0fprogressPercent\x88\x01\x01B\x13\n" +
-	"\x11_progress_messageB\x13\n" +
-	"\x11_progress_percent\"\x9f\x01\n" +
-	"\x16WorkflowExecutionEvent\x12E\n" +
-	"\n" +
-	"event_type\x18\x01 \x01(\x0e2&.reliant.v1.WorkflowExecutionEventTypeR\teventType\x12>\n" +
-	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xb3\x05\n" +
+	"\r_completed_at*\xb3\x05\n" +
 	"\x0eChatUpdateType\x12 \n" +
 	"\x1cCHAT_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_MESSAGE\x10\x01\x12\x1d\n" +
@@ -2204,9 +2093,10 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x19EXECUTION_LOG_LEVEL_DEBUG\x10\x01\x12\x1c\n" +
 	"\x18EXECUTION_LOG_LEVEL_INFO\x10\x02\x12\x1c\n" +
 	"\x18EXECUTION_LOG_LEVEL_WARN\x10\x03\x12\x1d\n" +
-	"\x19EXECUTION_LOG_LEVEL_ERROR\x10\x042q\n" +
+	"\x19EXECUTION_LOG_LEVEL_ERROR\x10\x042\xd0\x01\n" +
 	"\x10StreamingService\x12]\n" +
-	"\x11StreamUserUpdates\x12$.reliant.v1.StreamUserUpdatesRequest\x1a\x1b.reliant.v1.UserStreamEvent\"\x03\x90\x02\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x11StreamUserUpdates\x12$.reliant.v1.StreamUserUpdatesRequest\x1a\x1b.reliant.v1.UserStreamEvent\"\x03\x90\x02\x010\x01\x12]\n" +
+	"\x11StreamChatUpdates\x12$.reliant.v1.StreamChatUpdatesRequest\x1a\x1b.reliant.v1.ChatStreamEvent\"\x03\x90\x02\x010\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_streaming_proto_rawDescOnce sync.Once
@@ -2221,7 +2111,7 @@ func file_reliant_v1_streaming_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_streaming_proto_enumTypes = make([]protoimpl.EnumInfo, 8)
-var file_reliant_v1_streaming_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_reliant_v1_streaming_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_reliant_v1_streaming_proto_goTypes = []any{
 	(ChatUpdateType)(0),              // 0: reliant.v1.ChatUpdateType
 	(UserUpdateType)(0),              // 1: reliant.v1.UserUpdateType
@@ -2231,65 +2121,60 @@ var file_reliant_v1_streaming_proto_goTypes = []any{
 	(NodeExecutionStatus)(0),         // 5: reliant.v1.NodeExecutionStatus
 	(WorkflowExecutionStatus)(0),     // 6: reliant.v1.WorkflowExecutionStatus
 	(ExecutionLogLevel)(0),           // 7: reliant.v1.ExecutionLogLevel
-	(*ChatSyncSnapshot)(nil),         // 8: reliant.v1.ChatSyncSnapshot
-	(*ChatUpdateBatch)(nil),          // 9: reliant.v1.ChatUpdateBatch
-	(*ChatUpdateData)(nil),           // 10: reliant.v1.ChatUpdateData
-	(*StreamUserUpdatesRequest)(nil), // 11: reliant.v1.StreamUserUpdatesRequest
-	(*UserStreamEvent)(nil),          // 12: reliant.v1.UserStreamEvent
-	(*ChatCaughtUp)(nil),             // 13: reliant.v1.ChatCaughtUp
-	(*UserSyncInfo)(nil),             // 14: reliant.v1.UserSyncInfo
-	(*UserUpdateBatch)(nil),          // 15: reliant.v1.UserUpdateBatch
-	(*UserUpdateData)(nil),           // 16: reliant.v1.UserUpdateData
-	(*Heartbeat)(nil),                // 17: reliant.v1.Heartbeat
-	(*NodeExecutionState)(nil),       // 18: reliant.v1.NodeExecutionState
-	(*WorkflowExecutionState)(nil),   // 19: reliant.v1.WorkflowExecutionState
-	(*ExecutionLog)(nil),             // 20: reliant.v1.ExecutionLog
-	(*NodeExecutionEvent)(nil),       // 21: reliant.v1.NodeExecutionEvent
-	(*WorkflowExecutionEvent)(nil),   // 22: reliant.v1.WorkflowExecutionEvent
+	(*StreamChatUpdatesRequest)(nil), // 8: reliant.v1.StreamChatUpdatesRequest
+	(*ChatStreamEvent)(nil),          // 9: reliant.v1.ChatStreamEvent
+	(*ChatUserUpdates)(nil),          // 10: reliant.v1.ChatUserUpdates
+	(*ChatSyncSnapshot)(nil),         // 11: reliant.v1.ChatSyncSnapshot
+	(*ChatUpdateBatch)(nil),          // 12: reliant.v1.ChatUpdateBatch
+	(*ChatUpdateData)(nil),           // 13: reliant.v1.ChatUpdateData
+	(*StreamUserUpdatesRequest)(nil), // 14: reliant.v1.StreamUserUpdatesRequest
+	(*UserStreamEvent)(nil),          // 15: reliant.v1.UserStreamEvent
+	(*ChatCaughtUp)(nil),             // 16: reliant.v1.ChatCaughtUp
+	(*UserSyncInfo)(nil),             // 17: reliant.v1.UserSyncInfo
+	(*UserUpdateBatch)(nil),          // 18: reliant.v1.UserUpdateBatch
+	(*UserUpdateData)(nil),           // 19: reliant.v1.UserUpdateData
+	(*Heartbeat)(nil),                // 20: reliant.v1.Heartbeat
+	(*NodeExecutionState)(nil),       // 21: reliant.v1.NodeExecutionState
+	(*WorkflowExecutionState)(nil),   // 22: reliant.v1.WorkflowExecutionState
 	nil,                              // 23: reliant.v1.NodeExecutionState.MetadataEntry
 	nil,                              // 24: reliant.v1.WorkflowExecutionState.ParamsEntry
 	nil,                              // 25: reliant.v1.WorkflowExecutionState.OutputsEntry
-	nil,                              // 26: reliant.v1.ExecutionLog.FieldsEntry
-	(*Message)(nil),                  // 27: reliant.v1.Message
+	(*Message)(nil),                  // 26: reliant.v1.Message
 }
 var file_reliant_v1_streaming_proto_depIdxs = []int32{
-	27, // 0: reliant.v1.ChatSyncSnapshot.messages:type_name -> reliant.v1.Message
-	10, // 1: reliant.v1.ChatSyncSnapshot.other_updates:type_name -> reliant.v1.ChatUpdateData
-	19, // 2: reliant.v1.ChatSyncSnapshot.active_workflows:type_name -> reliant.v1.WorkflowExecutionState
-	10, // 3: reliant.v1.ChatUpdateBatch.updates:type_name -> reliant.v1.ChatUpdateData
-	0,  // 4: reliant.v1.ChatUpdateData.update_type:type_name -> reliant.v1.ChatUpdateType
-	14, // 5: reliant.v1.UserStreamEvent.sync:type_name -> reliant.v1.UserSyncInfo
-	15, // 6: reliant.v1.UserStreamEvent.updates:type_name -> reliant.v1.UserUpdateBatch
-	17, // 7: reliant.v1.UserStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
-	8,  // 8: reliant.v1.UserStreamEvent.chat_sync_snapshot:type_name -> reliant.v1.ChatSyncSnapshot
-	9,  // 9: reliant.v1.UserStreamEvent.chat_updates:type_name -> reliant.v1.ChatUpdateBatch
-	22, // 10: reliant.v1.UserStreamEvent.workflow_event:type_name -> reliant.v1.WorkflowExecutionEvent
-	21, // 11: reliant.v1.UserStreamEvent.node_event:type_name -> reliant.v1.NodeExecutionEvent
-	20, // 12: reliant.v1.UserStreamEvent.execution_log:type_name -> reliant.v1.ExecutionLog
-	13, // 13: reliant.v1.UserStreamEvent.chat_caught_up:type_name -> reliant.v1.ChatCaughtUp
-	16, // 14: reliant.v1.UserUpdateBatch.updates:type_name -> reliant.v1.UserUpdateData
+	11, // 0: reliant.v1.ChatStreamEvent.snapshot:type_name -> reliant.v1.ChatSyncSnapshot
+	12, // 1: reliant.v1.ChatStreamEvent.updates:type_name -> reliant.v1.ChatUpdateBatch
+	16, // 2: reliant.v1.ChatStreamEvent.caught_up:type_name -> reliant.v1.ChatCaughtUp
+	20, // 3: reliant.v1.ChatStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
+	10, // 4: reliant.v1.ChatStreamEvent.user_updates:type_name -> reliant.v1.ChatUserUpdates
+	19, // 5: reliant.v1.ChatUserUpdates.updates:type_name -> reliant.v1.UserUpdateData
+	26, // 6: reliant.v1.ChatSyncSnapshot.messages:type_name -> reliant.v1.Message
+	13, // 7: reliant.v1.ChatSyncSnapshot.other_updates:type_name -> reliant.v1.ChatUpdateData
+	22, // 8: reliant.v1.ChatSyncSnapshot.active_workflows:type_name -> reliant.v1.WorkflowExecutionState
+	13, // 9: reliant.v1.ChatUpdateBatch.updates:type_name -> reliant.v1.ChatUpdateData
+	0,  // 10: reliant.v1.ChatUpdateData.update_type:type_name -> reliant.v1.ChatUpdateType
+	17, // 11: reliant.v1.UserStreamEvent.sync:type_name -> reliant.v1.UserSyncInfo
+	18, // 12: reliant.v1.UserStreamEvent.updates:type_name -> reliant.v1.UserUpdateBatch
+	20, // 13: reliant.v1.UserStreamEvent.heartbeat:type_name -> reliant.v1.Heartbeat
+	19, // 14: reliant.v1.UserUpdateBatch.updates:type_name -> reliant.v1.UserUpdateData
 	1,  // 15: reliant.v1.UserUpdateData.update_type:type_name -> reliant.v1.UserUpdateType
 	2,  // 16: reliant.v1.UserUpdateData.entity_type:type_name -> reliant.v1.EntityType
 	5,  // 17: reliant.v1.NodeExecutionState.status:type_name -> reliant.v1.NodeExecutionStatus
 	23, // 18: reliant.v1.NodeExecutionState.metadata:type_name -> reliant.v1.NodeExecutionState.MetadataEntry
 	6,  // 19: reliant.v1.WorkflowExecutionState.status:type_name -> reliant.v1.WorkflowExecutionStatus
-	18, // 20: reliant.v1.WorkflowExecutionState.nodes:type_name -> reliant.v1.NodeExecutionState
-	19, // 21: reliant.v1.WorkflowExecutionState.children:type_name -> reliant.v1.WorkflowExecutionState
+	21, // 20: reliant.v1.WorkflowExecutionState.nodes:type_name -> reliant.v1.NodeExecutionState
+	22, // 21: reliant.v1.WorkflowExecutionState.children:type_name -> reliant.v1.WorkflowExecutionState
 	24, // 22: reliant.v1.WorkflowExecutionState.params:type_name -> reliant.v1.WorkflowExecutionState.ParamsEntry
 	25, // 23: reliant.v1.WorkflowExecutionState.outputs:type_name -> reliant.v1.WorkflowExecutionState.OutputsEntry
-	7,  // 24: reliant.v1.ExecutionLog.level:type_name -> reliant.v1.ExecutionLogLevel
-	26, // 25: reliant.v1.ExecutionLog.fields:type_name -> reliant.v1.ExecutionLog.FieldsEntry
-	3,  // 26: reliant.v1.NodeExecutionEvent.event_type:type_name -> reliant.v1.NodeExecutionEventType
-	18, // 27: reliant.v1.NodeExecutionEvent.node:type_name -> reliant.v1.NodeExecutionState
-	4,  // 28: reliant.v1.WorkflowExecutionEvent.event_type:type_name -> reliant.v1.WorkflowExecutionEventType
-	19, // 29: reliant.v1.WorkflowExecutionEvent.workflow:type_name -> reliant.v1.WorkflowExecutionState
-	11, // 30: reliant.v1.StreamingService.StreamUserUpdates:input_type -> reliant.v1.StreamUserUpdatesRequest
-	12, // 31: reliant.v1.StreamingService.StreamUserUpdates:output_type -> reliant.v1.UserStreamEvent
-	31, // [31:32] is the sub-list for method output_type
-	30, // [30:31] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	14, // 24: reliant.v1.StreamingService.StreamUserUpdates:input_type -> reliant.v1.StreamUserUpdatesRequest
+	8,  // 25: reliant.v1.StreamingService.StreamChatUpdates:input_type -> reliant.v1.StreamChatUpdatesRequest
+	15, // 26: reliant.v1.StreamingService.StreamUserUpdates:output_type -> reliant.v1.UserStreamEvent
+	9,  // 27: reliant.v1.StreamingService.StreamChatUpdates:output_type -> reliant.v1.ChatStreamEvent
+	26, // [26:28] is the sub-list for method output_type
+	24, // [24:26] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_streaming_proto_init() }
@@ -2298,30 +2183,30 @@ func file_reliant_v1_streaming_proto_init() {
 		return
 	}
 	file_reliant_v1_chat_proto_init()
-	file_reliant_v1_streaming_proto_msgTypes[3].OneofWrappers = []any{}
-	file_reliant_v1_streaming_proto_msgTypes[4].OneofWrappers = []any{
+	file_reliant_v1_streaming_proto_msgTypes[0].OneofWrappers = []any{}
+	file_reliant_v1_streaming_proto_msgTypes[1].OneofWrappers = []any{
+		(*ChatStreamEvent_Snapshot)(nil),
+		(*ChatStreamEvent_Updates)(nil),
+		(*ChatStreamEvent_CaughtUp)(nil),
+		(*ChatStreamEvent_Heartbeat)(nil),
+		(*ChatStreamEvent_UserUpdates)(nil),
+	}
+	file_reliant_v1_streaming_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_streaming_proto_msgTypes[7].OneofWrappers = []any{
 		(*UserStreamEvent_Sync)(nil),
 		(*UserStreamEvent_Updates)(nil),
 		(*UserStreamEvent_Heartbeat)(nil),
-		(*UserStreamEvent_ChatSyncSnapshot)(nil),
-		(*UserStreamEvent_ChatUpdates)(nil),
-		(*UserStreamEvent_WorkflowEvent)(nil),
-		(*UserStreamEvent_NodeEvent)(nil),
-		(*UserStreamEvent_ExecutionLog)(nil),
-		(*UserStreamEvent_ChatCaughtUp)(nil),
 	}
-	file_reliant_v1_streaming_proto_msgTypes[8].OneofWrappers = []any{}
-	file_reliant_v1_streaming_proto_msgTypes[10].OneofWrappers = []any{}
 	file_reliant_v1_streaming_proto_msgTypes[11].OneofWrappers = []any{}
-	file_reliant_v1_streaming_proto_msgTypes[12].OneofWrappers = []any{}
 	file_reliant_v1_streaming_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_streaming_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_streaming_proto_rawDesc), len(file_reliant_v1_streaming_proto_rawDesc)),
 			NumEnums:      8,
-			NumMessages:   19,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

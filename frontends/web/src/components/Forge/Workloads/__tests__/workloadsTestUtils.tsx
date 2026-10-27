@@ -13,6 +13,7 @@ import { render, type RenderResult } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 
+import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
@@ -22,7 +23,7 @@ import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFix
 import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
-import { FIXTURE_HOSTED, STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture, createWorkloadsFixtureApi, fixtureHostedObservation } from "../__fixtures__/workloadFixtures";
+import { FIXTURE_DOMAINS, FIXTURE_HOSTED, STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture, createWorkloadsFixtureApi, fixtureHostedObservation } from "../__fixtures__/workloadFixtures";
 
 export function WorkloadsProviders({ obs, repoMeta = createRepoMetaFixture(), children }: { obs: ObservabilityApi; repoMeta?: RepoMetaApi; children: ReactElement }) {
   return (
@@ -54,7 +55,17 @@ export function renderOverview({
   search = {},
   obs = createWorkloadsFixtureApi(),
   hosted = FIXTURE_HOSTED,
-}: { env?: string; envs?: StripEnv[]; search?: OverviewSearch; obs?: ObservabilityApi; hosted?: HostedByEnv } = {}): Harness<OverviewSearch> & { selectEnv: ReturnType<typeof vi.fn>; navigateTo: ReturnType<typeof vi.fn> } {
+  hostedLoading = false,
+  domains = { availability: "available", domains: FIXTURE_DOMAINS, detail: "" },
+}: {
+  env?: string;
+  envs?: StripEnv[];
+  search?: OverviewSearch;
+  obs?: ObservabilityApi;
+  hosted?: HostedByEnv;
+  hostedLoading?: boolean;
+  domains?: DomainsState;
+} = {}): Harness<OverviewSearch> & { selectEnv: ReturnType<typeof vi.fn>; navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
   const selectEnv = vi.fn();
   const navigateTo = vi.fn();
@@ -83,6 +94,9 @@ export function renderOverview({
         onSelectEnv={selectEnv}
         navigateTo={navigateTo}
         hosted={hosted}
+        hostedLoading={hostedLoading}
+        domains={domains}
+        domainsHref="/domains"
       />
     );
   }

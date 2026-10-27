@@ -38,16 +38,23 @@ const (
 	// StreamingServiceStreamUserUpdatesProcedure is the fully-qualified name of the StreamingService's
 	// StreamUserUpdates RPC.
 	StreamingServiceStreamUserUpdatesProcedure = "/reliant.v1.StreamingService/StreamUserUpdates"
+	// StreamingServiceStreamChatUpdatesProcedure is the fully-qualified name of the StreamingService's
+	// StreamChatUpdates RPC.
+	StreamingServiceStreamChatUpdatesProcedure = "/reliant.v1.StreamingService/StreamChatUpdates"
 )
 
 // StreamingServiceClient is a client for the reliant.v1.StreamingService service.
 type StreamingServiceClient interface {
-	// StreamUserUpdates opens a server-streaming connection for all real-time updates.
-	// Always delivers user-level events (chat state, projects, processes, etc.).
-	// When subscribe_chat_id is set, ALSO delivers per-chat detail events
-	// (messages, approvals, tool calls, streaming deltas, workflow/node events).
-	// To switch chat subscriptions, the client disconnects and reconnects with a new request.
+	// StreamUserUpdates opens the user-wide stream: chat state, projects,
+	// processes, daemon signals and every other user-level event. It carries no
+	// per-chat detail; that is StreamChatUpdates.
 	StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest]) (*connect.ServerStreamForClient[v1.UserStreamEvent], error)
+	// StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
+	// or a cursor the server will not replay from) or a replay of
+	// (since_seq, latest], then exactly one caught_up, then live chat updates
+	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
+	// for a chat that does not exist or is not the caller's.
+	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error)
 }
 
 // NewStreamingServiceClient constructs a client for the reliant.v1.StreamingService service. By
@@ -68,12 +75,20 @@ func NewStreamingServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		streamChatUpdates: connect.NewClient[v1.StreamChatUpdatesRequest, v1.ChatStreamEvent](
+			httpClient,
+			baseURL+StreamingServiceStreamChatUpdatesProcedure,
+			connect.WithSchema(streamingServiceMethods.ByName("StreamChatUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // streamingServiceClient implements StreamingServiceClient.
 type streamingServiceClient struct {
 	streamUserUpdates *connect.Client[v1.StreamUserUpdatesRequest, v1.UserStreamEvent]
+	streamChatUpdates *connect.Client[v1.StreamChatUpdatesRequest, v1.ChatStreamEvent]
 }
 
 // StreamUserUpdates calls reliant.v1.StreamingService.StreamUserUpdates.
@@ -81,14 +96,23 @@ func (c *streamingServiceClient) StreamUserUpdates(ctx context.Context, req *con
 	return c.streamUserUpdates.CallServerStream(ctx, req)
 }
 
+// StreamChatUpdates calls reliant.v1.StreamingService.StreamChatUpdates.
+func (c *streamingServiceClient) StreamChatUpdates(ctx context.Context, req *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error) {
+	return c.streamChatUpdates.CallServerStream(ctx, req)
+}
+
 // StreamingServiceHandler is an implementation of the reliant.v1.StreamingService service.
 type StreamingServiceHandler interface {
-	// StreamUserUpdates opens a server-streaming connection for all real-time updates.
-	// Always delivers user-level events (chat state, projects, processes, etc.).
-	// When subscribe_chat_id is set, ALSO delivers per-chat detail events
-	// (messages, approvals, tool calls, streaming deltas, workflow/node events).
-	// To switch chat subscriptions, the client disconnects and reconnects with a new request.
+	// StreamUserUpdates opens the user-wide stream: chat state, projects,
+	// processes, daemon signals and every other user-level event. It carries no
+	// per-chat detail; that is StreamChatUpdates.
 	StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest], *connect.ServerStream[v1.UserStreamEvent]) error
+	// StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
+	// or a cursor the server will not replay from) or a replay of
+	// (since_seq, latest], then exactly one caught_up, then live chat updates
+	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
+	// for a chat that does not exist or is not the caller's.
+	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error
 }
 
 // NewStreamingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -105,10 +129,19 @@ func NewStreamingServiceHandler(svc StreamingServiceHandler, opts ...connect.Han
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	streamingServiceStreamChatUpdatesHandler := connect.NewServerStreamHandler(
+		StreamingServiceStreamChatUpdatesProcedure,
+		svc.StreamChatUpdates,
+		connect.WithSchema(streamingServiceMethods.ByName("StreamChatUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.StreamingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StreamingServiceStreamUserUpdatesProcedure:
 			streamingServiceStreamUserUpdatesHandler.ServeHTTP(w, r)
+		case StreamingServiceStreamChatUpdatesProcedure:
+			streamingServiceStreamChatUpdatesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -120,4 +153,8 @@ type UnimplementedStreamingServiceHandler struct{}
 
 func (UnimplementedStreamingServiceHandler) StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest], *connect.ServerStream[v1.UserStreamEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamUserUpdates is not implemented"))
+}
+
+func (UnimplementedStreamingServiceHandler) StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamChatUpdates is not implemented"))
 }

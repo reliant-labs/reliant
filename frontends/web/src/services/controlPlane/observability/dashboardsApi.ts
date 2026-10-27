@@ -22,6 +22,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   DashboardService,
   DashboardSource as WireSource,
+  DashboardViewKind as WireViewKind,
   type DashboardRef as WireRef,
   type DashboardSummary as WireSummary,
   type DashboardUser as WireUser,
@@ -61,6 +62,7 @@ const SOURCE_OF_WIRE: Record<WireSource, DashboardSource | null> = {
   [WireSource.REPO]: "repo",
   [WireSource.WORKSPACE]: "workspace",
   [WireSource.TEMPLATE]: "template",
+  [WireSource.BUILTIN]: "builtin",
 };
 
 /** A release ref is sent as GENERATED: the server resolves a release dashboard by key whichever of the two it is. */
@@ -68,6 +70,7 @@ const WIRE_OF_KIND: Record<DashboardKind, WireSource> = {
   release: WireSource.GENERATED,
   workspace: WireSource.WORKSPACE,
   template: WireSource.TEMPLATE,
+  builtin: WireSource.BUILTIN,
 };
 
 function refInit(ref: DashboardRef) {
@@ -88,6 +91,7 @@ function mapSummary(s: WireSummary): DashboardSummary {
   return {
     ref: mapRef(s.ref, source),
     source,
+    viewKind: s.viewKind === WireViewKind.ORGANIZATION_COSTS ? "organization-costs" : undefined,
     title: s.title,
     description: s.description,
     readOnly: s.readOnly,

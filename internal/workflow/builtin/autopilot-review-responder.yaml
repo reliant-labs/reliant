@@ -38,6 +38,12 @@ inputs:
     min: 1
     max: 10
     description: Rounds of changes per PR before it is labelled blocked and left to a human
+  max_passes_per_run:
+    type: integer
+    default: 3
+    min: 1
+    max: 10
+    description: Maximum lease passes in this invocation; a caller reserving durable repair attempts sets 1. Does not reset the per-PR max_review_rounds history.
   authored_label:
     type: github.label
     scope: {repository: repos}
@@ -191,7 +197,7 @@ nodes:
   # while the lease was held; the round cap bounds the total.
   - id: rounds
     type: loop
-    while: "outputs.again == true && iter.iteration < inputs.max_review_rounds"
+    while: "outputs.again == true && iter.iteration < inputs.max_review_rounds && iter.iteration < inputs.max_passes_per_run"
     inline:
       entry: [me]
       outputs:
@@ -400,7 +406,13 @@ nodes:
           type: create_worktree
           args:
             name: "autopilot-pr-{{ inputs.pr_number }}-{{ nodes.plan.run8 }}-{{ iter.iteration }}"
+            # Only this registered project repo starts on the PR branch;
+            # sibling repos keep their own defaults. Fetch and compare before
+            # checkout, never execute a shell containing an untrusted ref.
+            target_repo: "{{ inputs.repo.split('/')[1] }}"
             base_branch: "{{ nodes.plan.head_ref }}"
+            fetch_branch: "{{ nodes.plan.head_ref }}"
+            expected_head: "{{ nodes.plan.head_sha }}"
             force: true
 
         # The repo's checkout inside the worktree, and the commit it is on.

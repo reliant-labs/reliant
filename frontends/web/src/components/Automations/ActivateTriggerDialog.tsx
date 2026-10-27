@@ -123,7 +123,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const [message, setMessage] = useState(!declaredPrompt && declared.description ? `${declared.description}.` : "");
   const [enabled, setEnabled] = useState(true);
   const [notify, setNotify] = useState(false);
-  const [actingIdentity, setActingIdentity] = useState<ActingIdentityKey>("owner");
+  const [chosenIdentity, setActingIdentity] = useState<ActingIdentityKey>();
+  const actingIdentity = chosenIdentity ?? (integration?.integration === "github" ? "app" : "owner");
   // A personal trigger's own filter ("Only from" writes it); an activation's
   // is its declaration's.
   const [filter, setFilter] = useState(personal ? (initialDeclared.filter ?? "") : "");
@@ -219,7 +220,10 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         {personal && (
           <fieldset className="space-y-2">
             <legend className={labelClass}>When it runs</legend>
-            <TriggerSourceFields trigger={declared} onChange={setDeclared} catalogRef={catalogRef} />
+            <TriggerSourceFields trigger={declared} onChange={(next) => {
+              if (chosenIdentity === "app" && integrationOf(next)?.integration && integrationOf(next)?.integration !== "github") setActingIdentity(undefined);
+              setDeclared(next);
+            }} catalogRef={catalogRef} />
           </fieldset>
         )}
 
@@ -347,7 +351,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         )}
         {show("inputs") && !inputsStatus?.missingRequired.length && <p className={errorTextClass} role="alert">{errors.inputs}</p>}
 
-        <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
+        <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} allowApp={!integration || integration.integration === "github"} />
 
         <div className="flex flex-wrap items-center gap-6">
           <ToggleSwitch checked={enabled} onChange={setEnabled} label="Enabled" size="lg" className="forge-ui" />

@@ -19,8 +19,9 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
@@ -363,7 +364,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 
 	// Select the authority from the configured control plane, exactly as the
 	// api-server and the gateway do. A configured control-plane MUST win.
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL, InternalServiceSecret: secret}})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
@@ -425,7 +426,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 	dead.Close()
 
 	authority, mode, err := tokenauthority.New(tokenauthority.Deps{
-		ControlPlaneURL: deadURL, InternalServiceSecret: "s", DB: nil,
+		ControlPlane: &configv1.ControlPlaneConfig{Url: deadURL, InternalServiceSecret: "s"}, DB: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
@@ -445,7 +446,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{}, repo.ORM()))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{DB: repo.ORM()})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 

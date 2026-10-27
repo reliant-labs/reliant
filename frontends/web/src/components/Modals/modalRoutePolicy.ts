@@ -17,6 +17,7 @@
  * router and so adding a route means editing one list.
  */
 
+import { isClaimPath } from "@/lib/claimLink";
 import type { ModalId } from "@/store/modalStore";
 
 /**
@@ -33,6 +34,9 @@ import type { ModalId } from "@/store/modalStore";
  */
 const SUPPRESSED_ON_ONBOARDING: readonly ModalId[] = ["api-key-setup"];
 
+/** The claim page is mid-way through a one-purpose flow; a provider-key ask would hijack it. */
+const SUPPRESSED_ON_CLAIM: readonly ModalId[] = ["api-key-setup"];
+
 /**
  * True when `modalId` is allowed to render on `pathname`.
  *
@@ -44,6 +48,10 @@ export function isModalAllowedOnRoute(
   pathname: string,
 ): boolean {
   if (isOnboardingRoute(pathname) && SUPPRESSED_ON_ONBOARDING.includes(modalId)) {
+    return false;
+  }
+  // /claim: a person taking over a site is not being asked for a provider key.
+  if (isClaimPath(pathname) && SUPPRESSED_ON_CLAIM.includes(modalId)) {
     return false;
   }
   return true;

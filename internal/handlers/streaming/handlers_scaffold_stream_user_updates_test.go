@@ -17,7 +17,7 @@ import (
 	streaming "github.com/reliant-labs/reliant/internal/handlers/streaming"
 )
 
-// The stream's catch-up, replay and live-delivery contracts are pinned by the
+// The streams' catch-up, replay and live-delivery contracts are pinned by the
 // streaming_*_test.go files beside this one. These pin who may open a stream,
 // through the generated harness's server, which installs the caller the way
 // the API server's auth interceptor does.
@@ -36,6 +36,18 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 		}
 		return stream.Err()
 	}
+	openChat := func(t *testing.T, client reliantv1connect.StreamingServiceClient, req *pb.StreamChatUpdatesRequest) error {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(req))
+		require.NoError(t, err)
+		defer func() { _ = stream.Close() }()
+		for stream.Receive() {
+			// A refused stream sends no frame.
+		}
+		return stream.Err()
+	}
 
 	t.Run("anonymous caller is unauthenticated", func(t *testing.T) {
 		t.Parallel()
@@ -46,14 +58,31 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	})
 
+	t.Run("anonymous caller cannot open a chat stream", func(t *testing.T) {
+		t.Parallel()
+		_, client := streaming.NewTestStreamingServer(t,
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithoutPrincipal())
+		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-1"})
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	})
+
 	t.Run("another user's chat is not found", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
-		chatID := "chat-of-someone-else"
-		err := open(t, client, &pb.StreamUserUpdatesRequest{SubscribeChatId: &chatID})
+		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-of-someone-else"})
 		require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	})
+
+	t.Run("a chat stream names its chat", func(t *testing.T) {
+		t.Parallel()
+		_, client := streaming.NewTestStreamingServer(t,
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
+			streaming.WithPrincipal(testkit.WithUserID("test-user")))
+		err := openChat(t, client, &pb.StreamChatUpdatesRequest{})
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	})
 }
 

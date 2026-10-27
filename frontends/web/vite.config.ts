@@ -95,6 +95,12 @@ export default defineConfig({
   build: {
     // Optimize build output
     rollupOptions: {
+      // Two documents: the app, and the desktop app's find bar, which Electron
+      // loads into a view of its own over a window (src/findBar/protocol.ts).
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        findBar: path.resolve(__dirname, "find-bar.html"),
+      },
       output: {
         // Create manual chunks for better code splitting
         manualChunks: {
@@ -212,6 +218,11 @@ export default defineConfig({
       // top-level browser navigation (full-page redirect to GitHub), not an XHR
       // through Vite, so it needs no proxy entry either.
       "/controlplane.v1.": {
+        target: process.env.VITE_CONTROL_PLANE_API_URL || "http://127.0.0.1:8090",
+        changeOrigin: true,
+        ws: false,
+      },
+      "/observability_billing.v1.": {
         target: process.env.VITE_CONTROL_PLANE_API_URL || "http://127.0.0.1:8090",
         changeOrigin: true,
         ws: false,

@@ -234,8 +234,9 @@ func MetadataHandler(issuer string) http.Handler {
 		"issuer":                                issuer,
 		"authorization_endpoint":                issuer + "/oauth/authorize",
 		"token_endpoint":                        issuer + "/oauth/token",
+		"device_authorization_endpoint":         issuer + "/oauth/device_authorization",
 		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code"},
+		"grant_types_supported":                 []string{"authorization_code", DeviceGrantType},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 	}

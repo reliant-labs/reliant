@@ -22,6 +22,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -55,6 +57,8 @@ func main() {
 		os.Exit(runMigrationOrder(args, os.Stdout, os.Stderr))
 	case "gate-verify":
 		os.Exit(runGateVerify(args, os.Stdout, os.Stderr))
+	case "gate-report":
+		os.Exit(runGateReport(args, os.Stdout, os.Stderr))
 	case "plan", "run":
 	default:
 		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order or changed-tests)\n", cmd)
@@ -65,12 +69,15 @@ func main() {
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
 	full := fs.Bool("full", false, "run everything (also TEST_FULL=1)")
+	merge := fs.Bool("merge", false, "merge policy: no release-only lanes or full test fallbacks")
 	lanes := fs.String("lanes", defaultLanes, "comma-separated lanes to consider")
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
 	jobs := fs.Int("jobs", 2, "maximum concurrent test steps (1 serializes; prerequisites always run first)")
-	reachFlag := fs.String("reach", "", "Go lane fan-out: all (every package whose test binary contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers: the merge tier)")
+	planFile := fs.String("plan", "", "with run: run this plan (the -json output of an earlier plan) instead of computing one; the merge gate's plan phase already wrote it")
+	budgetFlag := fs.String("test-budget", "", "with run: fail a Go test this change adds or edits that runs longer than this (a duration; \"auto\" is 10s scaled by the load per core; empty or 0 is off), and report every other test over it")
+	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -97,10 +104,25 @@ func main() {
 	}
 
 	ctx := context.Background()
-	pl, err := plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
+	var pl *Plan
+	var err error
+	if *planFile != "" {
+		pl, err = readPlan(ctx, *root, *baseFlag, *planFile)
+	} else {
+		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
 		os.Exit(1)
+	}
+	if *merge {
+		for _, reason := range pl.Go.Reasons {
+			if strings.HasPrefix(reason, "cannot ") {
+				fmt.Fprintln(os.Stderr, "merge plan unavailable:", reason)
+				os.Exit(1)
+			}
+		}
+		mergeTier(pl)
 	}
 	enabled := laneSet(*lanes)
 	if *asJSON {
@@ -114,6 +136,14 @@ func main() {
 	if cmd == "run" {
 		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
+		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
+			fmt.Fprintln(os.Stderr, "test-affected:", err)
+			os.Exit(2)
+		}
+		// Merge timing is gate health, never attribution to the batched PRs.
+		if pl.Merge {
+			r.owned = nil
+		}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
 }
@@ -159,8 +189,22 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (*Plan, error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (result *Plan, resultErr error) {
 	root = mustAbs(root)
+	before, err := checkoutDigest(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		// What-if decisions are not executable evidence of this checkout.
+		if resultErr == nil && result != nil && len(whatIf) == 0 {
+			result.Schema = planSchema
+			result.InputDigest, resultErr = checkoutDigest(ctx, root)
+			if resultErr == nil && result.InputDigest != before {
+				resultErr = errors.New("checkout changed while planning; replan")
+			}
+		}
+	}()
 	module, err := moduleOf(root)
 	if err != nil {
 		return nil, err
@@ -201,6 +245,57 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 		}
 	}
 	return pl, nil
+}
+
+// readPlan reads a plan `plan -json` wrote. Planning loads the whole module's
+// package graph (`go list -test -json ./...`: 17-141s in the merge queue on a
+// loaded host), so a gate that has planned once runs that plan.
+func readPlan(ctx context.Context, root, base, file string) (*Plan, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+	// plan's output may follow lines a wrapper printed: start at the JSON.
+	if i := bytes.IndexByte(b, '{'); i > 0 {
+		b = b[i:]
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+		value, ok := fields[key]
+		if !ok || (key != "files" && bytes.Equal(value, []byte("null"))) {
+			return nil, fmt.Errorf("%s: missing plan field %s", file, key)
+		}
+	}
+	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+		var laneFields map[string]json.RawMessage
+		if err := json.Unmarshal(fields[key], &laneFields); err != nil {
+			return nil, err
+		}
+		var full bool
+		value, ok := laneFields["full"]
+		if !ok || bytes.Equal(value, []byte("null")) {
+			return nil, fmt.Errorf("%s: missing %s.full", file, key)
+		}
+		if err := json.Unmarshal(value, &full); err != nil {
+			return nil, err
+		}
+	}
+	var pl Plan
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&pl); err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("%s: trailing plan data", file)
+	}
+	if err := validatePlanIdentity(ctx, root, base, &pl); err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+	return &pl, nil
 }
 
 // hookCommands reads each named hook's command from forge.yaml's
@@ -412,6 +507,14 @@ func goLine(gp GoPlan) string {
 	return fmt.Sprintf("%d package(s)", len(gp.Packages))
 }
 
+// webLine heads the web lane, like goLine.
+func webLine(wp WebPlan) string {
+	if wp.Reach == ReachDirect {
+		return fmt.Sprintf("%d vitest file(s), reach direct, %d import edge(s) (%d further importer test(s) left to the full lane)", len(wp.Tests), wp.Edges, len(wp.Deferred))
+	}
+	return fmt.Sprintf("%d vitest file(s)", len(wp.Tests))
+}
+
 func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 	p := &printer{w: w}
 	p.f("== test-affected: base %s -> %s (%d changed path(s))\n", short(pl.Base), short(pl.Head), len(pl.Files))
@@ -438,7 +541,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		why  map[string]string
 	}{
 		{laneGo, pl.Go.LaneFull, goLine(pl.Go), pl.Go.Packages, pl.Go.Why},
-		{laneWeb, pl.Web.LaneFull, fmt.Sprintf("%d vitest file(s)", len(pl.Web.Tests)), pl.Web.Tests, pl.Web.Why},
+		{laneWeb, pl.Web.LaneFull, webLine(pl.Web), pl.Web.Tests, pl.Web.Why},
 		{laneElectron, pl.Electron.LaneFull, "electron tests", nil, nil},
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
 		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
@@ -475,7 +578,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 	}
 	for _, lc := range pl.Lockfiles {
 		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
-			p.f("\n[npm-lockfile] %s: npm ci --dry-run (%s)\n", lc.Dir, lc.Why)
+			p.f("\n[npm-lockfile] %s: %s (%s)\n", lc.Dir, strings.Join(lockfileArgv(lc.Lockfile), " "), lc.Why)
 		}
 	}
 	return p.err
@@ -491,6 +594,10 @@ type runner struct {
 	goP     int
 	jobs    int
 	execute func(context.Context, step, io.Writer, io.Writer) error
+	// budget is the per-test time budget of the Go step (budget.go); 0 is
+	// none. owned are the tests the diff adds or edits, which it fails.
+	budget time.Duration
+	owned  map[string]bool
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
 	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
@@ -504,6 +611,34 @@ func (r *runner) heavy(argv []string) []string {
 	return append(append([]string{}, r.slot...), argv...)
 }
 
+// setBudget reads -test-budget: a duration, "auto" (defaultTestBudget), or
+// empty / 0 for none.
+func (r *runner) setBudget(ctx context.Context, spec, base string) error {
+	switch spec {
+	case "", "0":
+		return nil
+	case "auto":
+		r.budget = defaultTestBudget()
+	default:
+		d, err := time.ParseDuration(spec)
+		if err != nil || d < 0 {
+			return fmt.Errorf("-test-budget %q: want a duration, auto, or 0", spec)
+		}
+		r.budget = d
+	}
+	module, err := moduleOf(r.root)
+	if err != nil {
+		return err
+	}
+	pkgs, err := changedTests(ctx, r.root, base)
+	if err != nil {
+		// Without the list every over-budget test is reported, none failed.
+		fmt.Fprintln(r.errOut, "test-affected: cannot list the tests this change edits ("+firstLine(err.Error())+"); over-budget tests are reported, not failed")
+	}
+	r.owned = ownedTests(module, pkgs)
+	return nil
+}
+
 type step struct {
 	name         string
 	dir          string
@@ -512,13 +647,21 @@ type step struct {
 	prerequisite bool
 	// exclusive tests temporarily rewrite repository inputs used by other lanes.
 	exclusive bool
+	// budget, when set, times the step's `go test -json` output (budget.go).
+	budget *budgetFilter
 }
 
 // lockfileArgv proves a project's lockfile still installs without touching
 // its node_modules: `npm ci` validates package.json against the lockfile
 // before it reifies anything, and --dry-run stops it there (~10s, offline for
-// a lockfile in sync).
-var lockfileArgv = []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+// a lockfile in sync). pnpm's --frozen-lockfile --lockfile-only asks the same
+// question and writes nothing (~3s).
+func lockfileArgv(lockfile string) []string {
+	if lockfile == pnpmLock {
+		return []string{"pnpm", "install", "--frozen-lockfile", "--lockfile-only", "--ignore-scripts"}
+	}
+	return []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+}
 
 func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	var out []step
@@ -526,7 +669,7 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	// against a node_modules a fresh install can no longer produce.
 	for _, lc := range pl.Lockfiles {
 		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
-			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv, prerequisite: true})
+			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv(lc.Lockfile), prerequisite: true})
 		}
 	}
 	// Cheapest of all (a fetch and a directory listing) and the one that
@@ -570,7 +713,14 @@ func (r *runner) goSteps(pl *Plan) []step {
 	case len(pl.Go.Packages) == 0:
 		return nil
 	}
-	return []step{{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}}
+	s := step{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}
+	if r.budget > 0 || pl.Merge {
+		// -json right after "test": the filter turns it back into plain
+		// go test output and times each test.
+		s.argv = append([]string{"go", "test", "-json"}, s.argv[2:]...)
+		s.budget = newBudgetFilter(r.budget, r.owned, nil)
+	}
+	return []step{s}
 }
 
 func (r *runner) webSteps(pl *Plan) []step {

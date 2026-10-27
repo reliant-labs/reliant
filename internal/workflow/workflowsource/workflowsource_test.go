@@ -51,6 +51,21 @@ func (f fakeStore) GetProjectWorkflowsJSON(context.Context, string) (*string, er
 	return &s, nil
 }
 
+type diagnosticStore struct{ fakeStore }
+
+func (diagnosticStore) WorkflowSourceDiagnostic(context.Context, string, string) (string, error) {
+	return `last project snapshot: machine "cicd" (daemon-id, offline), path /projects/labs/.reliant/workflows; save the committed workflow again to sync it`, nil
+}
+
+func TestResolveMissingWorkflowIncludesSourceDiagnostic(t *testing.T) {
+	_, err := Resolve(context.Background(), diagnosticStore{}, Options{UserID: "u", ProjectID: "p"}, "merge-steward")
+	require.ErrorIs(t, err, workflowref.ErrNotFound)
+	require.ErrorContains(t, err, `no project workflow is named "merge-steward"`)
+	require.ErrorContains(t, err, `machine "cicd" (daemon-id, offline)`)
+	require.ErrorContains(t, err, "/projects/labs/.reliant/workflows")
+	require.ErrorContains(t, err, "save the committed workflow again")
+}
+
 var opts = Options{UserID: "u", ProjectID: "p"}
 
 func TestResolve_ProjectWorkflowByName(t *testing.T) {

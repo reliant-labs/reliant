@@ -39,7 +39,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -123,17 +122,6 @@ func ListPlansByChatID(ctx context.Context, db orm.Context, chatID string) ([]*c
 	return plansToCore(rows), nil
 }
 
-// ListPlansByProject returns the plans shared under the project, newest first.
-func ListPlansByProject(ctx context.Context, db orm.Context, projectID string) ([]*core.Plan, error) {
-	rows, err := ListPlan(ctx, db,
-		orm.WhereEq(PlanFieldProjectID, projectID),
-		orm.WithOrderBy(PlanFieldCreatedAt, orm.Desc))
-	if err != nil {
-		return nil, fmt.Errorf("failed to list plans by project: %w", err)
-	}
-	return plansToCore(rows), nil
-}
-
 // ReplacePlan rewrites the plan's mutable columns (title, description,
 // status, complexity, completed_at) from p and stamps updated_at, which is
 // written back onto p. A missing plan is orm.ErrNoRows.
@@ -155,14 +143,6 @@ func ReplacePlan(ctx context.Context, db orm.Context, p *core.Plan) error {
 	}
 	p.UpdatedAt = row.UpdatedAt
 	return nil
-}
-
-// UpdatePlanStatus moves the plan to status, setting completed_at as given
-// (nil clears it). A missing plan is orm.ErrNoRows.
-func UpdatePlanStatus(ctx context.Context, db orm.Context, id string, status int32, completedAt *time.Time) error {
-	s := reliantv1.PlanStatus(status)
-	return UpdatePlanMasked(ctx, db, &Plan{ID: id, Status: &s, CompletedAt: completedAt},
-		[]string{PlanFieldStatus, PlanFieldCompletedAt})
 }
 
 // RemovePlan deletes the plan row alone (tasks.plan_id has no foreign key).

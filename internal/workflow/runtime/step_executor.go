@@ -1168,6 +1168,7 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		key := e.providerPinsKey()
 		rtx.ClearProviderPins = !e.childTracker.providerPinCleanups[key]
 	}
+	rtx.Unattended = IsUnattended(e.workflowInputs)
 	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
 	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
 

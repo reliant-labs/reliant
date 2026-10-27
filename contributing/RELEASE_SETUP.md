@@ -11,6 +11,29 @@ Electron app releases are built and published by the [control-plane](https://git
 
 To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
 
+## Who cuts a release: the release train
+
+**Nobody cuts reliant by hand.** The release train in control-plane
+(`control-plane/scripts/release-train.sh`, run by the Reliant workflow `release-train`
+weekdays at 18:00 UTC, on a merged PR labelled `release:asap`, and on demand) does
+both steps below:
+
+1. When main has commits since the last tag and a green release-gate record past it,
+   it writes the release notes (`docs/data/releases/vX.Y.Z.yaml`, drafted by the
+   workflow's notes agent from the PRs since the last tag) and runs
+   `./scripts/release.sh patch` from a private checkout of the green commit. The bump
+   PR is labelled `merge:queue` and `merge:priority`; the merge steward lands it.
+2. When that bump has merged, it runs `./scripts/release-tag.sh`, which tags it once
+   its release-gate record is green. The train's tick runs `scripts/release-gate.sh
+   run` on the bump commit (or main's tip) every few hours, so no chat runs the
+   40-70-minute gate itself.
+
+**To get a change released sooner, label its PR `release:asap`.** Both scripts take
+the machine-wide release lock (`scripts/lib/release-lock.sh`, in
+`~/fm-logs/release-locks/reliant.lock`): a second release fails at once, naming who
+holds the lock. The commands below are what the train runs, documented for whoever
+fixes it or cuts by hand in a prod incident (and says so to the owner).
+
 ## Quick Release Commands
 
 ```bash

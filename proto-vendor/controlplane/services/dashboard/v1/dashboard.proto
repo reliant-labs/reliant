@@ -238,6 +238,14 @@ enum DashboardSource {
   DASHBOARD_SOURCE_WORKSPACE = 3;
   // A built-in starting point. Read-only; SaveAsCopy instantiates it.
   DASHBOARD_SOURCE_TEMPLATE = 4;
+  // Server-owned view, discovered without release or workspace copy.
+  DASHBOARD_SOURCE_BUILTIN = 5;
+}
+
+// Dedicated typed views do not execute an observability SQL/spec panel.
+enum DashboardViewKind {
+  DASHBOARD_VIEW_KIND_UNSPECIFIED = 0;
+  DASHBOARD_VIEW_KIND_ORGANIZATION_COSTS = 1;
 }
 
 // DashboardRef addresses one dashboard.
@@ -310,6 +318,9 @@ message DashboardSummary {
   DashboardWorkspaceInfo workspace = 11;
   // Templates: "generated" (derived from what forge generates) or "platform".
   string category = 12;
+  // ORGANIZATION_COSTS calls BillingService.GetOrganizationCostSummary.
+  // Such a view has no SQL panel spec and cannot be copied into one.
+  DashboardViewKind view_kind = 13;
 }
 
 message DashboardVersionInfo {

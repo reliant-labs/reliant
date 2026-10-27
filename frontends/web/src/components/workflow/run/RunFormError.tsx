@@ -4,7 +4,7 @@
  * Why a run did not start, at the top of the Run… dialog and the builder's
  * Test run panel. The server's own wording, plus a way out when the fix lives
  * elsewhere: a run with no model provider stops at "no API keys configured",
- * and the place to add one is Settings → AI → Your providers
+ * and the place to add one is Settings → AI → Providers
  * (research/WORKFLOW_EDITOR_UX_REVIEW.md §3 quick win 13).
  */
 
@@ -31,11 +31,11 @@ export function RunFormError({ message, onNavigate }: { message: string; onNavig
         <p className="mt-1.5">
           <Link
             to="/settings/$section"
-            params={{ section: "general" }}
+            params={{ section: "ai" }}
             onClick={onNavigate}
             className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
-            Add a provider in Settings → AI → Your providers
+            Add a provider in Settings → AI → Providers
           </Link>
         </p>
       )}

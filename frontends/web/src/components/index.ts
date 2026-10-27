@@ -26,8 +26,6 @@ export { SettingsNavigation } from "./Settings/SettingsNavigation";
 export { SettingsContent } from "./Settings/SettingsContent";
 export { SettingsHeader } from "./Settings/SettingsHeader";
 export { SettingsPage } from "./Settings/SettingsPage";
-export { CombinedGeneralSettings } from "./Settings/CombinedGeneralSettings";
-export { ProjectSettings } from "./Settings/ProjectSettings";
 
 // Worktree components
 export { WorktreesPanel } from "./Worktrees/WorktreesPanel";

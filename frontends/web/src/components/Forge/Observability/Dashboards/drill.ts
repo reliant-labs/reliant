@@ -77,6 +77,15 @@ export function drillSearches(panel: Panel, group: Record<string, string>, conte
     const key = scopeKeyOf(field);
     if (key) tokens.push({ key, op: "eq", value });
   }
+  // Carry temporary trace/resource predicates into the explorers. Metric-only
+  // attributes (for example procedure) must not become nonexistent trace keys.
+  for (const predicate of panel.where ?? []) {
+    if (predicate.op !== "eq" || !predicate.value) continue;
+    if (predicate.field === "span.name") operation ??= predicate.value;
+    if (!predicate.field.startsWith("span.attr.") && !predicate.field.startsWith("resource.attr.")) continue;
+    const key = scopeKeyOf(predicate.field);
+    if (key && !tokens.some((token) => token.key === key)) tokens.push({ key, op: "eq", value: predicate.value });
+  }
   const errors = countsErrors(panel);
   const f = filterParam(tokens);
   return {

@@ -239,6 +239,9 @@ describe("Sidebar forge nav entry", () => {
     });
   });
 
+  /** A nav entry's name: its label, without the key cap New chat shows. */
+  const navLabel = (b: Element) => b.getAttribute("aria-label") ?? b.textContent?.trim();
+
   // Apps (the forge entry) sits directly under New chat: after writing code,
   // the next place to go is what that code runs as. Pinned because the
   // position is the product decision, not an accident of where the JSX was
@@ -249,7 +252,7 @@ describe("Sidebar forge nav entry", () => {
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
-    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    const text = Array.from(labels).map(navLabel);
     expect(text.slice(0, 2)).toEqual(["New chat", "Apps"]);
   });
 
@@ -262,7 +265,7 @@ describe("Sidebar forge nav entry", () => {
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
-    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    const text = Array.from(labels).map(navLabel);
     expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Projects", "Search"]);
   });
 
@@ -273,7 +276,7 @@ describe("Sidebar forge nav entry", () => {
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
-    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    const text = Array.from(labels).map(navLabel);
     expect(text).toEqual(["New chat", "Inbox", "Workflows", "Projects", "Search"]);
   });
 
@@ -295,7 +298,7 @@ describe("Sidebar forge nav entry", () => {
       renderSidebar({ onOpenObservability });
       const text = Array.from(
         screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
-      ).map((b) => b.textContent?.trim());
+      ).map(navLabel);
       expect(text).toEqual(["New chat", "Apps", "Observability", "Inbox", "Workflows", "Projects", "Search"]);
       screen.getByTestId("sidebar-observability-button").click();
       expect(onOpenObservability).toHaveBeenCalledTimes(1);

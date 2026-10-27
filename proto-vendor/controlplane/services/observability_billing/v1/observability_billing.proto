@@ -1,0 +1,381 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/README.md for stability/versioning policy.
+
+package observability_billing.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/observability_billing/v1;observability_billingv1";
+
+// === ObservabilityBillingService ===
+//
+// What an org is billed for observability, and every limit that governs it: the
+// month-to-date picture, the itemized history, what is stored right now, the
+// spend cap, usage-alert thresholds and the query fair-use allowance. The
+// design is research/obs-billing-management-design-2026-10-26.md (§4.1).
+//
+// NOT ObservabilityService. The telemetry reads there are admitted by
+// RequireObsRead plus environment scoping and spend the org's ClickHouse query
+// quota; these RPCs are admitted by org role and read POSTGRES ONLY, so the page
+// that explains an exhausted query quota can never be blanked by it.
+//
+// ORG-SCOPED, AND org_id IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
+// checks the caller's admission to org_id first and touches data only after it
+// passes, so an outsider learns nothing about whether the org has usage.
+//   - Reads: any member of the org, or a machine credential holding obs:read in
+//     it.
+//   - UpdateObservabilityLimits: an org owner or admin (owner implies admin).
+//     Machine credentials are refused: a limit that moves money is human-only.
+//
+// ERRORS: InvalidArgument (a bad range or limit; the message names the bound),
+// PermissionDenied (not a member / not an admin), Aborted (stale
+// expected_version: re-read and retry), Unavailable (not configured on this
+// server).
+service ObservabilityBillingService {
+  option (forge.v1.service) = {
+    name: "ObservabilityBillingService"
+    version: "1.0.0"
+    description: "Observability usage, storage, spend cap and fair-use limits per org"
+  };
+
+  // GetObservabilityUsage returns the org's month-to-date observability usage
+  // against its included allowance: billed bytes, what was actually charged, the
+  // part the spend cap kept off the bill, projected overage, a per-signal and
+  // per-service breakdown, and the quota state the gateway is enforcing.
+  rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListObservabilityUsage is the itemized history: hour or day buckets by
+  // signal (and optionally service), read from what the hourly meter wrote.
+  // Max range 400 days; hour granularity at most 31 days. Day buckets are UTC
+  // days. Buckets are ordered by bucket_start, signal, service; page with
+  // next_page_token. The console builds its CSV from this at day granularity.
+  rpc ListObservabilityUsage(ListObservabilityUsageRequest) returns (ListObservabilityUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetObservabilityStorage is what is stored right now, per signal, from the
+  // latest storage snapshot. Empty until a snapshot exists. Stored bytes are
+  // uncompressed, like the billed quantity; compressed size is Reliant's cost
+  // and is never returned.
+  rpc GetObservabilityStorage(GetObservabilityStorageRequest) returns (GetObservabilityStorageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetObservabilityLimits returns every limit that governs the org's
+  // observability: the spend cap with its bounds, usage-alert thresholds, the
+  // query fair-use allowance, per-query limits and retention. version is the
+  // token UpdateObservabilityLimits compares; it is 0 while the org has no
+  // settings and runs on the defaults.
+  rpc GetObservabilityLimits(GetObservabilityLimitsRequest) returns (GetObservabilityLimitsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // UpdateObservabilityLimits changes the spend cap and/or alert settings.
+  // Owner or admin only. Optimistic concurrency: expected_version must equal the
+  // stored version (0 for an org with no settings yet) or the call fails
+  // Aborted and changes nothing. Not idempotent by design: a stale UI's write
+  // fails loudly rather than overwriting a teammate's change. Each changed
+  // field is recorded in the org's limit history in the same transaction.
+  //
+  // The cap cannot be set below what the org has already been charged this
+  // month: it is raised to that amount and spend_cap_raised_to_charged is set.
+  rpc UpdateObservabilityLimits(UpdateObservabilityLimitsRequest) returns (UpdateObservabilityLimitsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+    };
+  }
+}
+
+// === Usage ===
+
+message GetObservabilityUsageRequest {
+  // The org whose usage to return.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+// QuotaState is what the gateway does with the org's telemetry right now.
+enum ObservabilityQuotaState {
+  OBSERVABILITY_QUOTA_STATE_UNSPECIFIED = 0;
+  // Under the allowance, or billed (funded) / exempt: nothing is dropped.
+  OBSERVABILITY_QUOTA_STATE_OK = 1;
+  // At or over 100% with no way to bill the overage: debug logs and routine
+  // traces are dropped; errors and metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_100 = 2;
+  // At the spend cap, or at or over 150%: only error logs, error spans and
+  // metrics are kept.
+  OBSERVABILITY_QUOTA_STATE_OVER_150 = 3;
+}
+
+message GetObservabilityUsageResponse {
+  // The billing period: the UTC calendar month. period_end is exclusive.
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+  // The end of the last fully metered hour. Usage lags real time by up to
+  // about an hour and a quarter; the page must say so.
+  google.protobuf.Timestamp measured_through = 3;
+
+  // Billed bytes this period (uncompressed bytes stored, after the browser cap),
+  // and the included allowance. 1 GB = 2^30 bytes in the product. This is true
+  // usage: it includes the bytes the spend cap kept off the bill.
+  int64 used_bytes = 4;
+  int64 allowance_bytes = 5;
+
+  // Overage accrued so far, and projected for the whole period at the current
+  // rate of use, in cents. Zero for an exempt org.
+  int64 overage_cents = 6;
+  int64 projected_bytes = 7;
+  int64 projected_overage_cents = 8;
+  // Cents per GB above the allowance, as a decimal string ("25.0000").
+  string rate_cents_per_gb = 9;
+
+  // What the gateway enforces, and the state usage alone implies. They differ
+  // for an org that pays (enforced ok, usage over_100) or is exempt.
+  ObservabilityQuotaState state = 10;
+  ObservabilityQuotaState usage_state = 11;
+  bool funded = 12;
+  bool exempt = 13;
+  // The org's effective spend cap in cents (its setting, else the default): a
+  // funded org is never charged more than this in a month. 0 means no overage.
+  int64 spend_cap_cents = 14;
+  bool spend_cap_reached = 15;
+
+  // Anonymous browser telemetry is billed only up to a share of the allowance.
+  int64 browser_bytes = 16;
+  int64 browser_billed_bytes = 17;
+  int64 browser_cap_bytes = 18;
+
+  repeated SignalUsage by_signal = 19;
+  repeated ServiceUsage by_service = 20;
+
+  // Bytes stored that were never billed because they are Reliant's own telemetry
+  // (workspace/daemon and platform logs). Zero for every customer in normal
+  // operation: that data is routed to Reliant's own org.
+  int64 operator_bytes = 21;
+  // Billed bytes that are customer metadata: per-workload container data about the
+  // org's own deployments (pod CPU and memory, restarts, k8s events, image and
+  // version). Billed like any other data and included in used_bytes; reported on
+  // its own line.
+  int64 metadata_bytes = 22;
+
+  // What the org is actually charged this period, in cents, after the spend-cap
+  // clamp. Never above spend_cap_cents.
+  int64 charged_cents = 23;
+  // Bytes stored above the spend cap: counted in used_bytes, free to the
+  // customer.
+  int64 uncharged_bytes = 24;
+  // When the cap was first reached this period; unset before.
+  google.protobuf.Timestamp cap_reached_at = 25;
+}
+
+message SignalUsage {
+  // "logs", "traces", "metrics" or "profiles".
+  string signal = 1;
+  int64 billed_bytes = 2;
+  int64 stored_bytes = 3;
+  int64 rows = 4;
+}
+
+message ServiceUsage {
+  // The service.name; empty for data that carried none.
+  string service = 1;
+  string signal = 2;
+  int64 billed_bytes = 3;
+}
+
+message ListObservabilityUsageRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // [start, end). Both required; end after start.
+  google.protobuf.Timestamp start = 2;
+  google.protobuf.Timestamp end = 3;
+
+  enum Granularity {
+    GRANULARITY_UNSPECIFIED = 0;
+    GRANULARITY_HOUR = 1;
+    GRANULARITY_DAY = 2;
+  }
+  // Unspecified is day.
+  optional Granularity granularity = 4;
+
+  enum GroupBy {
+    GROUP_BY_UNSPECIFIED = 0;
+    GROUP_BY_SIGNAL = 1;
+    GROUP_BY_SIGNAL_SERVICE = 2;
+  }
+  // Unspecified is signal.
+  optional GroupBy group_by = 5;
+
+  // At most 5000; unspecified is 1000.
+  int32 page_size = 6;
+  string page_token = 7;
+}
+
+message UsageBucket {
+  google.protobuf.Timestamp bucket_start = 1;
+  string signal = 2;
+  // Empty unless grouped by service (and for data that carried no service).
+  string service = 3;
+  // Bytes that arrived and were stored, before the browser cap.
+  int64 ingested_bytes = 4;
+  // True billable bytes (after the browser cap), including what the spend cap
+  // kept off the bill.
+  int64 billed_bytes = 5;
+  int64 rows = 6;
+  int64 browser_bytes = 7;
+  int64 browser_billed_bytes = 8;
+  int64 metadata_bytes = 9;
+  // The part of billed_bytes the spend cap kept off the bill.
+  int64 uncharged_bytes = 10;
+}
+
+message ListObservabilityUsageResponse {
+  repeated UsageBucket buckets = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+  // Cents per GB above the allowance, as a decimal string ("25.0000").
+  string rate_cents_per_gb = 3;
+}
+
+// === Storage ===
+
+message GetObservabilityStorageRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ServiceStorageEstimate {
+  string service = 1;
+  // An estimate: the service's share of what arrived within the signal's
+  // retention, applied to the signal's exact stored bytes.
+  int64 estimated_bytes = 2;
+}
+
+message SignalStorage {
+  string signal = 1;
+  int64 stored_bytes = 2;
+  int64 rows = 3;
+  // The oldest row still stored; unset when nothing is.
+  google.protobuf.Timestamp oldest_at = 4;
+  repeated ServiceStorageEstimate services = 5;
+}
+
+message GetObservabilityStorageResponse {
+  // When the snapshot was taken; unset when none exists yet.
+  google.protobuf.Timestamp as_of = 1;
+  repeated SignalStorage signals = 2;
+  int64 total_stored_bytes = 3;
+}
+
+// === Limits ===
+
+message SpendCapBounds {
+  // The self-serve range in cents. 0 is "no overage".
+  int64 min_cents = 1;
+  int64 max_cents = 2;
+  // The cap of an org with no settings.
+  int64 default_cents = 3;
+  // Charged this period so far: the cap cannot be lowered below it this month.
+  int64 charged_this_period_cents = 4;
+}
+
+// QueryLane is one fair-use query allowance. Queries are included in the
+// plan; these limits keep the shared cluster fast for everyone, and they are
+// the same for every org.
+message QueryLane {
+  // "interactive", "automation" or "agent".
+  string lane = 1;
+  int64 queries_per_hour = 2;
+  int64 queries_used = 3;
+  int64 read_bytes_per_hour = 4;
+  int64 read_bytes_used = 5;
+  int64 execution_seconds_per_hour = 6;
+  int64 execution_seconds_used = 7;
+  // When the current hour's allowance resets; unset when unknown.
+  google.protobuf.Timestamp resets_at = 8;
+  bool exhausted = 9;
+  // False when only the limits are known and every *_used is 0 because it was
+  // not measured (billing reads never spend the org's query quota).
+  bool usage_known = 10;
+}
+
+message RetentionTier {
+  // What the tier covers: "debug", "info", "warn and above", "raw", "aggregated".
+  string label = 1;
+  google.protobuf.Duration keep = 2;
+}
+
+message SignalRetention {
+  // "logs", "traces", "metrics" or "profiles".
+  string signal = 1;
+  repeated RetentionTier tiers = 2;
+}
+
+message GetObservabilityLimitsRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message GetObservabilityLimitsResponse {
+  // The org's monthly spend cap in cents; 0 is "no overage". The same value
+  // GetObservabilityUsage reports as spend_cap_cents.
+  int64 spend_cap_cents = 1;
+  SpendCapBounds bounds = 2;
+  // Whole percents of the allowance at which the org is told its usage.
+  repeated int32 alert_thresholds_percent = 3;
+  // Also tell the org when the spend cap is reached.
+  bool alert_on_cap = 4;
+  repeated QueryLane query_lanes = 5;
+  // Per-query limits.
+  int64 max_query_memory_bytes = 6;
+  int32 max_query_seconds = 7;
+  google.protobuf.Duration max_query_range = 8;
+  repeated SignalRetention retention = 9;
+  // The concurrency token for UpdateObservabilityLimits; 0 = no settings row yet.
+  int64 version = 10;
+  // When and by whom the settings last changed; unset / empty before the first change.
+  google.protobuf.Timestamp updated_at = 11;
+  string updated_by_email = 12;
+  // Whether the caller may call UpdateObservabilityLimits for this org.
+  bool can_update = 13;
+}
+
+message UpdateObservabilityLimitsRequest {
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The version the caller last read (0 when the org had no settings).
+  int64 expected_version = 2 [(buf.validate.field).int64.gte = 0];
+  // Cents, 0..100000. Unset leaves the cap as it is.
+  optional int64 spend_cap_cents = 3;
+  // Only read when set_alert_thresholds is true (an empty list is "no
+  // threshold alerts"). Whole percents 1..100, at most 10.
+  repeated int32 alert_thresholds_percent = 4;
+  bool set_alert_thresholds = 5;
+  // Unset leaves it as it is.
+  optional bool alert_on_cap = 6;
+}
+
+message UpdateObservabilityLimitsResponse {
+  // The limits after the change.
+  GetObservabilityLimitsResponse limits = 1;
+  // The requested cap was below what is already charged this period, so the
+  // cap was set to the charged amount instead.
+  bool spend_cap_raised_to_charged = 2;
+}

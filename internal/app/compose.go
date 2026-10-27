@@ -552,8 +552,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		// names them (pkg/config Roots).
 		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
-		HostedActionsURL:    g.WorkerConfig.GetHostedActionsUrl(),
-		HostedActionsCAFile: g.WorkerConfig.GetHostedActionsCaFile(),
+		Worker:              g.WorkerConfig,
 	})
 }
 
@@ -905,10 +904,10 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 // newAttachment constructs the attachment handler (internal/handlers/attachment).
 func (g *Graph) newAttachment() (*attachment.Service, error) {
 	return attachment.New(attachment.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		MaxFileSize: g.APISettings().MaxUploadSize,
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		API:    g.ApiServerConfig,
 	})
 }
 
@@ -957,7 +956,6 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Repo:        g.Database(),
 		Temporal:    g.TemporalClient().Client,
 		Pause:       g.PauseService(),
-		TaskQueue:   v2workflow.SharedTaskQueue,
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		LocalModels: local.NewRepoDirectory(g.Database()),
 	})
@@ -990,7 +988,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		PublicURL:    in.PublicURL,
+		Integrations: g.IntegrationSettings().Config,
 		Sealer:       in.Vault,
 		Catalog:      in.Registry,
 		Intake:       in.Intake,
@@ -1006,11 +1004,11 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 // redeems them from.
 func (g *Graph) newConnector() (*connector.Service, error) {
 	return connector.New(connector.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Grants:    g.ConnectorGrants(),
-		Tokens:    g.TokenAuthority(),
-		PublicURL: g.IntegrationSettings().PublicURL,
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Grants:       g.ConnectorGrants(),
+		Tokens:       g.TokenAuthority(),
+		Integrations: g.IntegrationSettings().Config,
 	})
 }
 

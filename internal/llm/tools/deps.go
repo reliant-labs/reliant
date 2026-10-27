@@ -240,6 +240,7 @@ type listRunsStore interface {
 type getRunStore interface {
 	threads.Repository
 	runCallerStore
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 }
 
 // bugReportLookup is what report_bug reads to say where a report came from.

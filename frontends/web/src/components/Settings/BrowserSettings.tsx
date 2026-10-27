@@ -68,13 +68,14 @@ export function BrowserSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Web Browser"
+        title="Web browser"
         description="Controls Reliant's built-in browser, which you and agents use to preview and test pages. Choose where links open and which page new browser tabs start on."
       />
 
+      <div className="rounded-lg border border-border bg-card p-4 space-y-6">
       {/* Link Opening Preference */}
       <div className="space-y-4">
-        <label className="flex items-start gap-3 cursor-pointer group hover:bg-muted/30 p-3 rounded-lg transition-colors -mx-3">
+        <label className="flex items-start gap-3 cursor-pointer group hover:bg-foreground/5 p-3 rounded-lg transition-colors -mx-3">
           <div className="relative flex items-center justify-center mt-0.5">
             <input
               type="checkbox"
@@ -91,7 +92,7 @@ export function BrowserSettings() {
               )}
             >
               {openLinksInApp && (
-                <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                <Check className="w-3.5 h-3.5 text-primary-foreground" strokeWidth={3} />
               )}
             </div>
           </div>
@@ -113,7 +114,7 @@ export function BrowserSettings() {
       <div className="space-y-4">
         <div>
           <label className="text-sm font-medium mb-2 block">
-            Default Homepage
+            Default homepage
           </label>
           <p className="text-xs text-muted-foreground mb-3">
             The page that opens when you create a new browser tab. You can enter a domain (e.g., "github.com") or a full URL.
@@ -141,12 +142,13 @@ export function BrowserSettings() {
           </div>
         </div>
       </div>
+      </div>
 
       {/* UI Context Capture Feature Info */}
-      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border/40">
+      <div className="p-4 rounded-lg border border-border bg-card">
         <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Globe className="w-4 h-4" />
-          UI Context Capture
+          UI context capture
         </h4>
         <p className="text-sm text-muted-foreground mb-3">
           Click the "Ask about this page" button in the browser toolbar to capture the current webpage's content and send it directly to your chat.

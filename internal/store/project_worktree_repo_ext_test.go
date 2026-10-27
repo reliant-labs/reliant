@@ -186,15 +186,6 @@ func TestRepoQueries(t *testing.T) {
 		t.Fatalf("ListReposByProject = %v, %v; want [root a b]", list, err)
 	}
 
-	if err := store.ReplaceRepo(ctx, env.ORM, &core.Repo{ID: "repo-a", Name: "a2", RemoteURL: strp("https://t@github.com/acme/a.git")}); err != nil {
-		t.Fatalf("ReplaceRepo: %v", err)
-	}
-	if r, _ := env.Repo.GetRepo(ctx, "repo-a"); r.Name != "a2" || *r.RemoteURL != "https://github.com/acme/a.git" || r.RelativePath != "a" || !r.UpdatedAt.After(base) {
-		t.Fatalf("after ReplaceRepo = %+v", r)
-	}
-	if err := store.ReplaceRepo(ctx, env.ORM, &core.Repo{ID: "repo-missing", Name: "x"}); err != nil {
-		t.Fatalf("ReplaceRepo(missing): %v", err)
-	}
 	if err := store.RemoveRepo(ctx, env.ORM, "repo-a"); err != nil {
 		t.Fatalf("RemoveRepo: %v", err)
 	}
@@ -313,12 +304,6 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 	m, err := store.ListVisibilityOverrides(ctx, env.ORM, "u", wf)
 	if err != nil || len(m) != 2 || m["s0"] || !m["s1"] {
 		t.Fatalf("ListVisibilityOverrides = %v, %v", m, err)
-	}
-	if err := store.RemoveVisibilityOverride(ctx, env.ORM, "u", wf, "s1"); err != nil {
-		t.Fatalf("RemoveVisibilityOverride: %v", err)
-	}
-	if v, _ := env.Repo.GetVisibilityOverride(ctx, "u", int32(wf), "s1"); v != nil {
-		t.Fatalf("override survived RemoveVisibilityOverride: %v", *v)
 	}
 
 	p := storetest.SeedProjectID

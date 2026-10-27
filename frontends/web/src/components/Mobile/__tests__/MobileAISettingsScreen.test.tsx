@@ -1,9 +1,7 @@
 /**
- * MobileAISettingsScreen hosts `MobileAIProvidersPanel`, the mobile-native
- * rebuild that replaced this screen's previous wholesale import of desktop
- * `CombinedGeneralSettings`. Pins that the static Claude/Codex OAuth notice
- * always renders (it's not gated on a live probe — see the module comment)
- * and that provider fetching wires through to the panel.
+ * MobileAISettingsScreen hosts `MobileAIProvidersPanel`. Pins that the static
+ * browser sign-in notice always renders (it's not gated on a live probe — see
+ * the panel's module comment) and that the header's back button works.
  */
 
 import { screen } from "@testing-library/react";
@@ -65,30 +63,31 @@ vi.mock("../../../services/controlPlane/onboarding", () => ({
 }));
 
 const { MobileAISettingsScreen } = await import("../MobileAISettingsScreen");
+const { setTransport } = await import("../../../lib/connect");
+const { mockTransport } = await import("../../../lib/test-utils");
 
 beforeEach(() => {
-  mocks.getProviders.mockReset();
-  mocks.getProviders.mockResolvedValue([]);
+  setTransport(
+    mockTransport({
+      "SettingsService.GetPreferences": () => ({}),
+      "SettingsService.GetProviderStatuses": () => ({ providers: [] }),
+      "ProviderAccountService.ListProviderAccounts": () => ({ accounts: [] }),
+    }),
+  );
 });
 
 describe("MobileAISettingsScreen", () => {
-  it("always shows the desktop-only Claude/Codex OAuth notice", async () => {
+  it("always shows the desktop-only browser sign-in notice", async () => {
     render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    const notice = await screen.findByText(/claude, codex and antigravity sign-in needs/i);
+    const notice = await screen.findByText(/claude, chatgpt and google sign-in needs/i);
     expect(notice).toBeInTheDocument();
     // Not gated on live availability — Copilot is named as the on-device path.
     expect(notice.textContent).toMatch(/github copilot/i);
   });
 
-  it("fetches provider statuses on mount", async () => {
+  it("offers Add provider", async () => {
     render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    await screen.findByText(/claude, codex and antigravity sign-in needs/i);
-    expect(mocks.getProviders).toHaveBeenCalled();
-  });
-
-  it("offers an Add a provider card once statuses load", async () => {
-    render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    expect(await screen.findByText("Add a provider")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add provider" })).toBeInTheDocument();
   });
 
   it("calls onBack from the header", async () => {

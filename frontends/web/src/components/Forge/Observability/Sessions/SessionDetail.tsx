@@ -1,3 +1,4 @@
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -21,7 +22,7 @@ import type { RumScope, SessionSummary } from "@/services/controlPlane/observabi
 
 import { formatAgo, formatCount, formatDuration, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
 import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
@@ -54,7 +55,7 @@ export function SessionDetail({ scope, sessionId, subject, atMs, navigate, onBac
       </div>
     );
   }
-  if (session.error || !session.data) {
+  if ((session.error && !keepsLastResult(session.error, session.data)) || !session.data) {
     const kind = rumErrorKind(session.error);
     return (
       <div className="space-y-3" data-testid="session-detail" data-state="error">
@@ -80,7 +81,7 @@ export function SessionDetail({ scope, sessionId, subject, atMs, navigate, onBac
       </div>
     );
   }
-  return <SessionBody scope={scope} session={session.data} subject={subject} atMs={atMs} navigate={navigate} back={back} loadReplayer={loadReplayer} />;
+  return <><ObsAsOf updatedAt={session.dataUpdatedAt} /><SessionBody scope={scope} session={session.data} subject={subject} atMs={atMs} navigate={navigate} back={back} loadReplayer={loadReplayer} /></>;
 }
 
 function SessionBody({

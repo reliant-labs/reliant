@@ -182,15 +182,28 @@ func runChangedTests(args []string, stdout io.Writer) error {
 	if *baseFlag == "" {
 		*baseFlag = os.Getenv("TEST_BASE")
 	}
-	ctx := context.Background()
-	rootDir := mustAbs(*root)
-	changes, base, _, err := diff(ctx, rootDir, *baseFlag)
+	pkgs, err := changedTests(context.Background(), mustAbs(*root), *baseFlag)
 	if err != nil {
 		return err
 	}
+	for _, p := range pkgs {
+		if _, err := fmt.Fprintf(stdout, "%s\t%s\n", p.Dir, p.runPattern()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// changedTests is the Test functions the diff from baseFlag (the merge-base
+// with origin/main when empty) adds or edits, per package.
+func changedTests(ctx context.Context, rootDir, baseFlag string) ([]changedPkg, error) {
+	changes, base, _, err := diff(ctx, rootDir, baseFlag)
+	if err != nil {
+		return nil, err
+	}
 	text, err := git(ctx, rootDir, "diff", "-U0", "--no-renames", "--no-color", base, "--", "*_test.go")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	touched := parseZeroContextDiff(text)
 	// An untracked test file is new in its entirety.
@@ -210,14 +223,5 @@ func runChangedTests(args []string, stdout io.Writer) error {
 		ok, err := ctxBuild.MatchFile(filepath.Join(rootDir, filepath.FromSlash(path.Dir(p))), path.Base(p))
 		return err == nil && ok
 	}
-	pkgs, err := selectChangedTests(touched, read, builds)
-	if err != nil {
-		return err
-	}
-	for _, p := range pkgs {
-		if _, err := fmt.Fprintf(stdout, "%s\t%s\n", p.Dir, p.runPattern()); err != nil {
-			return err
-		}
-	}
-	return nil
+	return selectChangedTests(touched, read, builds)
 }

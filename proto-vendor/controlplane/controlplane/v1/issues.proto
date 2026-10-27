@@ -103,4 +103,24 @@ message Issue {
   // What affected counted: "users", "chats", "threads", "workflows", "traces" or
   // "sessions". Empty on a control plane older than the field.
   string affected_unit = 28;
+  // Shared by the issues of one incident: issues of the environment that share a
+  // cause (the SQLSTATE or refused connection target their error carries, else its
+  // normalized error class) and first fired within the request's incident window of
+  // one another, in any service. One dead dependency fails every caller, and each
+  // caller is its own issue; the key marks them as one outage. Empty when the issue
+  // is part of none, and for browser issues. Issues are never merged: each keeps its
+  // own counts and state.
+  string incident_key = 29;
+  // How many OTHER issues carry the same incident_key.
+  int32 related_count = 30;
+  // The person the issue is assigned to; unset when unassigned. Changed by
+  // IssuesService.AssignIssue, which bumps version.
+  IssueUser assignee = 31;
+}
+
+// IssueUser is a person as an issue shows them: an assignee. name is the
+// user's display name, or their email when they have none, as of the read.
+message IssueUser {
+  string id = 1;
+  string name = 2;
 }

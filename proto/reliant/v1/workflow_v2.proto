@@ -1073,6 +1073,29 @@ message CreateWorktreeArgs {
   }];
   // Force deletes existing worktree/branch if they exist.
   CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
+  // TargetRepo is a registered repo's relative path within THIS chat's project.
+  // When set, base_branch applies only to that repo; siblings use their defaults.
+  CelString target_repo = 6 [(reliant) = {
+    description: "Registered repository relative path (for example control-plane); never an arbitrary filesystem path"
+    example: "control-plane"
+  }];
+  // Per-repository starting branches, keyed by registered relative path.
+  // A target_repo base_branch wins for its target; unknown keys are refused.
+  map<string, string> base_branches = 7 [(reliant) = {
+    description: "Per-repo base overrides keyed by registered relative path; omitted siblings use their defaults"
+    example: "{\"forge\": \"main\"}"
+  }];
+  // FetchBranch refreshes this ONE branch from origin in target_repo before
+  // choosing the start point. ExpectedHead is mandatory with it; the daemon
+  // refuses if the fetched branch moved since the caller read the PR.
+  CelString fetch_branch = 8 [(reliant) = {
+    description: "Target repo origin branch to fetch as data, not a shell command; requires target_repo and expected_head"
+    example: "feat/review-repair"
+  }];
+  CelString expected_head = 9 [(reliant) = {
+    description: "Exact SHA expected after fetching fetch_branch; drift refuses creation before any checkout"
+    example: "{{ nodes.pr.data.head.sha }}"
+  }];
 }
 
 // =============================================================================

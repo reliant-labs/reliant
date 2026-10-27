@@ -16,7 +16,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { rumRetry } from "@/services/controlPlane/observability/errors";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObsReadApi } from "./observability-queries";
 import type { RumScope, SessionList, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
@@ -48,7 +48,7 @@ export const sessionKeys = {
 
 /** One page of the scope's sessions. The previous page stays on screen while the next one loads. */
 export function useSessions(scope: RumScope | null, filters: SessionFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: sessionKeys.list(scope, filters),
     queryFn: (): Promise<SessionList> =>
@@ -72,7 +72,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
 
 /** One session's summary. */
 export function useSession(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: sessionKeys.detail(scope, sessionId ?? ""),
     queryFn: () => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }),
@@ -84,7 +84,7 @@ export function useSession(scope: RumScope | null, sessionId: string | undefined
 
 /** One session's timeline, oldest first, a page at a time. */
 export function useSessionTimeline(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: sessionKeys.timeline(scope, sessionId ?? ""),
     queryFn: ({ pageParam }): Promise<Timeline> =>

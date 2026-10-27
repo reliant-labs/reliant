@@ -10,7 +10,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -192,11 +191,13 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 	result.UpdatedAt = time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
-	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), []string{f.messageID})
+	got, err := repo.GetToolCallResult(ctx, call.ID)
 	require.NoError(t, err)
-	require.Len(t, results, 1, "a second result for the same call must replace, not duplicate")
-	require.Equal(t, "second", results[0].Content)
-	require.True(t, results[0].IsError)
+	require.Equal(t, "second", got.Content)
+	require.True(t, got.IsError)
+	var count int
+	require.NoError(t, repo.ORM().Bun().NewSelect().Table("tool_call_results").ColumnExpr("count(*)").Where("tool_call_id = ?", call.ID).Scan(ctx, &count))
+	require.Equal(t, 1, count, "a second result for the same call must replace, not duplicate")
 }
 
 // The primary key + foreign key on tool_call_results is what makes an orphan
@@ -290,9 +291,6 @@ func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, calls, 3, "every message id in the batch must match, not just the first")
 
-	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), ids)
-	require.NoError(t, err)
-	require.Len(t, results, 3)
 }
 
 func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
@@ -306,9 +304,6 @@ func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, calls)
 
-	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), nil)
-	require.NoError(t, err)
-	require.Empty(t, results)
 }
 
 func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {

@@ -192,6 +192,12 @@ describe("a dashboard's link (Share)", () => {
     expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
   });
 
+  it("round-trips independent viewer controls including false and array selections", () => {
+    const search = { env: "prod", service: "worker", rpcService: "orders.v1.OrdersService", rpcMethod: "CreateOrder", rpcProcedure: "/orders.v1.OrdersService/CreateOrder", variables: { client: "web" }, breakdown: "none", hiddenSections: ["resources"], hiddenPanels: ["p95", "errors"], releases: false, alerts: false };
+    expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
+    expect(forgeConsoleDashboardSearchSchema.parse({ hiddenSections: "resources", alerts: "false" })).toEqual({});
+  });
+
   it("opens an older version or the release it shipped in", () => {
     expect(throughTheUrl({ version: 3 }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ version: 3 });
     expect(throughTheUrl({ release: "v1.8.2" }, forgeConsoleDashboardSearchSchema as never).parsed).toEqual({ release: "v1.8.2" });

@@ -11,7 +11,7 @@
  */
 
 import { ContentBlockType, ToolCallStatus } from "../gen/reliant/v1/chat_pb";
-import type { Attachment, Message } from "../types/chat";
+import type { Attachment, ContentBlock, Message } from "../types/chat";
 import type { Approval } from "../gen/reliant/v1/approval_pb";
 
 export interface ToolCallData {
@@ -46,6 +46,13 @@ export interface ToolResultData {
   is_error?: boolean;
   /** Images the tool produced, rendered inside the tool card. */
   attachments?: Attachment[];
+  /**
+   * The server sent a preview of a large result, not the whole thing (the
+   * transcript caps tool output; see ContentBlock.truncated). original_size is
+   * the full content's byte length; GetToolResult returns the content.
+   */
+  truncated?: boolean;
+  original_size?: number;
 }
 
 export interface ToolExecution {
@@ -75,9 +82,34 @@ export interface ResolvedToolResult {
    * while remaining invisible to the user.
    */
   attachments?: Attachment[];
+  /**
+   * The server sent a preview of a large result, not the whole thing (the
+   * transcript caps tool output; see ContentBlock.truncated). original_size is
+   * the full content's byte length; GetToolResult returns the content.
+   */
+  truncated?: boolean;
+  original_size?: number;
 }
 
 export type ToolResultsByCallId = Record<string, ResolvedToolResult>;
+
+/**
+ * The index entry for one TOOL_RESULT block. The one place a result block's
+ * fields are copied into the index, so every path that folds results (load,
+ * scroll-back, stream batches) carries the same ones.
+ */
+export function resolvedToolResultFromBlock(block: ContentBlock): ResolvedToolResult {
+  const resolved: ResolvedToolResult = {
+    content: block.content || "",
+    is_error: block.isError,
+    tool_name: block.toolName,
+  };
+  if (block.truncated) {
+    resolved.truncated = true;
+    resolved.original_size = block.originalSize !== undefined ? Number(block.originalSize) : undefined;
+  }
+  return resolved;
+}
 
 /**
  * Fold one TOOL-role message into the tool-result index.
@@ -96,11 +128,7 @@ export function foldToolResultMessage(
 ): void {
   for (const block of message.contentBlocks || []) {
     if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-      into[block.toolCallId] = {
-        content: block.content || "",
-        is_error: block.isError,
-        tool_name: block.toolName,
-      };
+      into[block.toolCallId] = resolvedToolResultFromBlock(block);
     }
   }
   foldToolResultImages(message, into);
@@ -262,14 +290,11 @@ export function processMessage(
       toolCallOrder.push(callId);
       timeline.push({ type: "call", id: callId });
 
-      // Resolve this call's result by id. Preferred source is the external
-      // results index the store injects (live-normalized TOOL messages);
-      // fall back to a backend-embedded matchedResult (snapshot / REST loads,
-      // where the server pairs the result — see proto_converters.go). Same
-      // shape either way; name is the call id, matching the historical
-      // matchedResult projection (no renderer reads result.name here).
+      // Resolve this call's result by id from the results index the store
+      // injects. Results arrive as their own TOOL messages and the server does
+      // not copy them onto the call block, so the join by tool_call_id is the
+      // only source. Name is the call id (no renderer reads result.name here).
       const indexed = resultsByCallId[call.id];
-      const mr = block.matchedResult;
       if (indexed) {
         toolResultsById.set(call.id, {
           tool_call_id: call.id,
@@ -277,21 +302,19 @@ export function processMessage(
           content: indexed.content || "",
           is_error: Boolean(indexed.is_error),
           attachments: indexed.attachments,
-        });
-      } else if (mr) {
-        toolResultsById.set(call.id, {
-          tool_call_id: mr.toolCallId,
-          name: mr.toolCallId,
-          content: mr.content || "",
-          is_error: Boolean(mr.isError),
+          truncated: indexed.truncated,
+          original_size: indexed.original_size,
         });
       }
     } else if (block.type === ContentBlockType.TOOL_RESULT) {
+      const resolved = resolvedToolResultFromBlock(block);
       const result: ToolResultData = {
         tool_call_id: block.toolCallId || "",
         name: block.toolName || "",
-        content: block.content || "",
+        content: resolved.content,
         is_error: Boolean(block.isError),
+        truncated: resolved.truncated,
+        original_size: resolved.original_size,
       };
 
       if (result.tool_call_id && !toolResultsById.has(result.tool_call_id)) {

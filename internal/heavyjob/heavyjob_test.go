@@ -37,6 +37,11 @@ func TestHeavyClassification(t *testing.T) {
 		"golangci-lint run ./...",
 	}
 	light := []string{
+		// Heredoc bodies are data: a note-taking command that mentions a heavy
+		// command is not a heavy command.
+		"cat >> notes.md <<'EOF'\nrun forge lint before pushing\ngo test ./...\nEOF",
+		"cat > x <<EOF\nforge generate\nEOF\nls",
+		"cat >> notes.md <<-EOF\n\tnpm ci\n\tEOF",
 		"ls -la",
 		"git status",
 		"go version",
@@ -56,6 +61,11 @@ func TestHeavyClassification(t *testing.T) {
 		"gotest ./...",
 		"echo $(go env GOPATH)",
 	}
+	heavy = append(heavy,
+		// ...but a heavy command on the opening line, or after the heredoc, is.
+		"cat <<EOF && go test ./...\nbody\nEOF",
+		"cat > x <<'EOF'\nbody\nEOF\ngo build ./...",
+	)
 	for _, line := range heavy {
 		if !g.Heavy(Job{Command: line}) {
 			t.Errorf("heavy: %q classified light", line)

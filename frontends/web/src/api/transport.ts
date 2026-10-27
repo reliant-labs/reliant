@@ -208,6 +208,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Streaming methods should not have client-side timeout
   // These are server-streaming RPCs that manage their own lifecycle via AbortController
   StreamUserUpdates: 0,
+  StreamChatUpdates: 0,
   StreamProcessOutput: 0,
 };
 

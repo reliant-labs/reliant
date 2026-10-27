@@ -14,9 +14,17 @@ import { ChatMessage } from "../ChatMessage";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
 import type { Message } from "../../../types/chat";
 
+// Each call's result, as the store's index holds it: the server sends a
+// result as its own TOOL message, and the call finds it by tool_call_id.
+const resultsByCallId: Record<string, { content: string; is_error: boolean }> = {
+  "call-async": { content: "Question posted to the user without waiting.", is_error: false },
+  "call-blocking": { content: "Question posted to the user without waiting.", is_error: false },
+  "call-old-blocking": { content: "Question posted to the user without waiting.", is_error: false },
+};
+
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useToolResultsByCallId: () => ({}),
+  useToolResultsByCallId: () => resultsByCallId,
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
   useChatMessages: () => [],
@@ -80,7 +88,6 @@ function assistantAsking(id: string, input: Record<string, unknown>): Message {
         toolCallId: id,
         toolName: "ask_user",
         input: JSON.stringify(input),
-        matchedResult: { toolCallId: id, content: "Question posted to the user without waiting.", isError: false },
       },
     ],
     createdAt: "2024-01-01T00:00:00.000Z",
@@ -129,12 +136,10 @@ describe("ask_user in the transcript", () => {
 
   // The exact prod shape (chat 641e33c9, 2026-10-22): `questions` is a
   // JSON-encoded string, there is no blocking flag, and the result is in a
-  // separate tool message, so the call block carries none.
+  // separate tool message the store has not indexed yet.
   it("renders the prod ask_user: string-encoded questions, async row found by tool call id", async () => {
     const id = "toolu_015apcEoACxzEnwZDGZw4LBo";
     const message = assistantAsking(id, { questions: JSON.stringify(questions) });
-    const block = message.contentBlocks![1] as unknown as Record<string, unknown>;
-    delete block.matchedResult;
     message.contentBlocks = [message.contentBlocks![1]];
     renderMessage(message);
 

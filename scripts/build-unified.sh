@@ -164,7 +164,7 @@ print_step "Installing web dependencies..."
 cd "$WEB_DIR"
 if [ ! -d "node_modules" ]; then
     echo "Installing web dependencies..."
-    run_cmd npm ci --legacy-peer-deps
+    run_cmd pnpm install --frozen-lockfile
 fi
 
 # Generate protobuf code with the pinned buf and local plugins
@@ -241,7 +241,7 @@ if [[ "$SKIP_WEB_BUILD" != "true" ]]; then
     
     if [ ! -d "node_modules" ]; then
         echo "Installing web dependencies..."
-        run_cmd npm ci --legacy-peer-deps
+        run_cmd pnpm install --frozen-lockfile
     fi
     
     echo "Building web application..."

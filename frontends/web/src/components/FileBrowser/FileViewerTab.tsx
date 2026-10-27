@@ -40,6 +40,8 @@ import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
 import { toast } from "sonner";
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
+import { ADD_SELECTION_TO_CHAT } from "../../hooks/useShortcutHost";
+import { useShortcutLabel } from "../../store/shortcutsStore";
 
 interface FileViewerTabProps {
   file: FileNode;
@@ -105,6 +107,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const loadRequestIdRef = useRef(0);
 
   const [showAddToChatPopup, setShowAddToChatPopup] = useState(false);
+  const addToChatShortcut = useShortcutLabel("addSelectionToChat");
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [selectedRange, setSelectedRange] = useState<{
     startLine: number;
@@ -583,41 +586,23 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [handleSave, hasChanges]);
 
+  // The addSelectionToChat shortcut (Cmd+L in the editor; Cmd+K L in a
+  // browser): taken by the viewer whose editor has focus and a selection. Any
+  // other viewer may be mounted too, so focus is what decides.
   useEffect(() => {
-    const handleCmdL = (e: Event) => {
-      if (!isTextPreview) {
-        return;
-      }
+    const handleAddSelection = (e: Event) => {
+      const editor = editorRef.current;
+      if (!isTextPreview || !editor?.hasTextFocus()) return;
 
-      const customEvent = e as CustomEvent<{ originalEvent: KeyboardEvent }>;
-      const originalEvent = customEvent.detail?.originalEvent;
-      if (!originalEvent || !editorRef.current) return;
+      const selection = editor.getSelection();
+      if (!selection || selection.isEmpty()) return;
 
-      const activeElement = document.activeElement;
-      const isMonacoFocused =
-        activeElement?.closest(".monaco-editor") !== null ||
-        activeElement?.classList.contains("inputarea") ||
-        activeElement?.closest(".monaco-editor .inputarea") !== null;
-
-      if (!isMonacoFocused) {
-        return;
-      }
-
-      const selection = editorRef.current.getSelection();
-      if (selection && !selection.isEmpty()) {
-        originalEvent.preventDefault();
-        originalEvent.stopPropagation();
-        originalEvent.stopImmediatePropagation();
-        e.preventDefault();
-        void handleAddToChat(selection);
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("focus-chat-input"));
-        }, 100);
-      }
+      e.preventDefault();
+      void handleAddToChat(selection);
     };
 
-    window.addEventListener("cmd-l-in-monaco", handleCmdL as EventListener);
-    return () => window.removeEventListener("cmd-l-in-monaco", handleCmdL as EventListener);
+    window.addEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
+    return () => window.removeEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
   }, [handleAddToChat, isTextPreview]);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
@@ -1190,7 +1175,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           x={popupPosition.x}
           y={popupPosition.y}
           onAdd={() => void handleAddToChat()}
-          shortcut={window.navigator.platform.includes("Mac") ? "⌘L" : "Ctrl+L"}
+          shortcut={addToChatShortcut}
           container={popupContainerRef.current}
         />
       )}

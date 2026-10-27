@@ -105,14 +105,3 @@ func SetVisibilityOverride(ctx context.Context, db orm.Context, userID string, i
 		Exec(ctx)
 	return err
 }
-
-// RemoveVisibilityOverride removes the user's override for an item; a
-// missing one is not an error.
-func RemoveVisibilityOverride(ctx context.Context, db orm.Context, userID string, itemType reliantv1.HiddenItemType, slug string) error {
-	_, err := db.Bun().NewDelete().Model((*VisibilityOverride)(nil)).
-		Where("user_id = ?", userID).
-		Where("item_type = ?", itemType).
-		Where("slug = ?", slug).
-		Exec(ctx)
-	return err
-}

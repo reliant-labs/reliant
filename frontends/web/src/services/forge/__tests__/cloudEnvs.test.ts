@@ -77,6 +77,35 @@ describe("listProjectEnvironments", () => {
   });
 });
 
+describe("getEnvironmentStatus: a hosted frontend", () => {
+  it("carries a static site's platform URL through as the live address, with its tier", async () => {
+    getStatus.mockResolvedValue(
+      create(GetDeploymentStatusResponseSchema, {
+        deployments: [
+          create(DeploymentStatusSchema, {
+            deployment: create(DeploymentSchema, {
+              name: "web",
+              tier: DeployTier.STATIC,
+              observed: create(DeployObservedStateDetailSchema, {
+                state: DeployObservedState.READY,
+                url: "https://valiant-caribou.sites.reliantlabs.dev",
+              }),
+            }),
+            verdict: DeployVerdict.CONVERGED,
+          }),
+        ],
+      })
+    );
+    const status = await getEnvironmentStatus("env-prod");
+    expect(status.workloads[0]).toMatchObject({
+      name: "web",
+      tier: "static",
+      url: "https://valiant-caribou.sites.reliantlabs.dev",
+      verdict: "converged",
+    });
+  });
+});
+
 describe("getEnvironmentStatus", () => {
   it("converts deployments into the hosted-workload shape, verdicts in forge's vocabulary", async () => {
     getStatus.mockResolvedValue(

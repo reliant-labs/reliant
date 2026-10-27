@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/cloudcred"
@@ -39,7 +41,12 @@ type cacheFile struct {
 }
 
 type cacheEntry struct {
-	Endpoint  string    `json:"endpoint"`
+	Endpoint string `json:"endpoint"`
+	// Asked is the scope set forge requested (sorted, comma-joined). A token
+	// minted for one request is never handed out for another: the server may
+	// have omitted a scope the user lacked, and a deploy-only token must not
+	// answer an `obs:read` request.
+	Asked     string    `json:"asked,omitempty"`
 	Server    string    `json:"server"`
 	Subject   string    `json:"subject"`
 	Token     string    `json:"token"`
@@ -53,6 +60,13 @@ type cacheEntry struct {
 func fingerprint(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:16])
+}
+
+// askedKey canonicalises a request's scopes. Empty means "the server's default".
+func askedKey(scopes []string) string {
+	sorted := slices.Clone(scopes)
+	slices.Sort(sorted)
+	return strings.Join(slices.Compact(sorted), ",")
 }
 
 func serverKey(server string) string {
@@ -79,10 +93,10 @@ func (c tokenCache) load() cacheFile {
 
 // lookup returns s's cached token for endpoint while reuseWhileRemaining of
 // its life is left.
-func (c tokenCache) lookup(endpoint string, s Session, now time.Time) (cloudcred.Token, bool) {
-	server, subject := serverKey(s.Server), fingerprint(s.Token)
+func (c tokenCache) lookup(endpoint string, asked []string, s Session, now time.Time) (cloudcred.Token, bool) {
+	server, subject, want := serverKey(s.Server), fingerprint(s.Token), askedKey(asked)
 	for _, e := range c.load().Entries {
-		if e.Endpoint != endpoint || e.Server != server || e.Subject != subject {
+		if e.Endpoint != endpoint || e.Server != server || e.Subject != subject || e.Asked != want {
 			continue
 		}
 		if e.ExpiresAt.Sub(now) < reuseWhileRemaining {
@@ -97,21 +111,21 @@ func (c tokenCache) lookup(endpoint string, s Session, now time.Time) (cloudcred
 // store records tok as s's token for endpoint, replacing the previous one and
 // dropping every expired entry. A token with no known expiry is not cached:
 // there would be no way to know when it stopped being safe to hand out.
-func (c tokenCache) store(endpoint string, s Session, tok cloudcred.Token, now time.Time) {
+func (c tokenCache) store(endpoint string, asked []string, s Session, tok cloudcred.Token, now time.Time) {
 	if c.path == "" || tok.ExpiresAt == nil {
 		return
 	}
-	server, subject := serverKey(s.Server), fingerprint(s.Token)
+	server, subject, key := serverKey(s.Server), fingerprint(s.Token), askedKey(asked)
 	f := c.load()
 	kept := f.Entries[:0]
 	for _, e := range f.Entries {
-		if !e.ExpiresAt.After(now) || (e.Endpoint == endpoint && e.Server == server && e.Subject == subject) {
+		if !e.ExpiresAt.After(now) || (e.Endpoint == endpoint && e.Server == server && e.Subject == subject && e.Asked == key) {
 			continue
 		}
 		kept = append(kept, e)
 	}
 	f.Entries = append(kept, cacheEntry{
-		Endpoint: endpoint, Server: server, Subject: subject,
+		Endpoint: endpoint, Asked: key, Server: server, Subject: subject,
 		Token: tok.Token, ExpiresAt: tok.ExpiresAt.UTC(), Scopes: tok.Scopes, Source: tok.Source,
 	})
 	_ = c.save(f)

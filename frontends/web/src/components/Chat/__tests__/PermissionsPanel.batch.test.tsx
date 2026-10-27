@@ -62,6 +62,8 @@ describe("PermissionsPanel", () => {
     mocks.pending = [stepApproval, retiredToolApproval];
     renderPanel();
     expect(screen.getByText("2 Pending")).toBeInTheDocument();
+    expect(screen.getByText("Deploy to production?")).toBeInTheDocument();
+    expect(screen.getByText("Post message in #general?")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /approve all/i }));
     expect(mocks.batchApprove).toHaveBeenCalledWith("chat-1", { requestIds: ["appr-step", "appr-tool"] });
     fireEvent.click(screen.getByRole("button", { name: /deny all/i }));

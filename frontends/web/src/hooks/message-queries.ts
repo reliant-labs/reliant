@@ -7,6 +7,7 @@ import {
 import type { Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
 import { isLocalOnlyMessageId } from "../lib/pendingSends";
+import { recordToolResults } from "../lib/toolResultSink";
 import { chatKeys, seedChatDetail } from "./chat-queries";
 import * as chatActions from "./chat-actions";
 
@@ -367,6 +368,9 @@ async function fetchThreadMessages(
   if (owner) pendingThreadMessages.set(pendingKey, []);
   try {
     const result = await chatActions.listMessages(chatId, { threadId, recent });
+    // A spawn thread's messages reach the client only through this read, so
+    // its tool results join the index here.
+    recordToolResults(chatId, result.messages);
     return upsertMessagesById(
       result.messages,
       pendingThreadMessages.get(pendingKey) ?? EMPTY_MESSAGES
@@ -411,6 +415,10 @@ async function seedChatMessages(
   // bounded snapshot was introduced to avoid. Older messages are reachable via
   // chatStore.loadOlderMessages.
   const fetched = await chatActions.listMessages(chatId, { recent });
+  // The tool calls in this page find their results through the store's
+  // index, by tool_call_id; whichever copy of the window wins below, the
+  // results it renders must be in it.
+  recordToolResults(chatId, fetched.messages);
   const current = client.getQueryData<MessageListResult>(
     messageKeys.list(chatId)
   );

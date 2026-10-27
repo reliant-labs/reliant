@@ -46,6 +46,8 @@ export const CONTEXTS = [
   "file-tree",
   "workflow-canvas",
   "right-sidebar",
+  // What is on screen rather than where focus is: a workspace conversation.
+  "chat-view",
   // Outermost: always active, lowest precedence.
   "global",
 ] as const;
@@ -109,6 +111,7 @@ export function detectActiveContexts(
     if (document.querySelector('[data-slash-menu-open="true"]')) {
       active.push("slash-menu");
     }
+    if (chatOnScreen()) active.push("chat-view");
   }
 
   if (target) {
@@ -126,6 +129,22 @@ export function detectActiveContexts(
 
   active.push("global");
   return sortByPrecedence(active) as ShortcutContext[];
+}
+
+/**
+ * True while the workspace shows a conversation — what Cmd+F searches.
+ *
+ * A document-level fact like `modal`: the conversation is what the user is
+ * looking at whether focus is in the composer, the transcript or a sidebar.
+ * The marker sits on the workspace's open chat only (ChatInterface, not the
+ * empty new-chat view), and a hidden one (display: none) does not count.
+ */
+export function chatOnScreen(): boolean {
+  if (typeof document === "undefined") return false;
+  const view = document.querySelector('[data-context="chat-view"]');
+  if (!view) return false;
+  // Not in jsdom, which renders nothing; presence is the best it can say.
+  return typeof view.checkVisibility === "function" ? view.checkVisibility() : true;
 }
 
 /**

@@ -94,7 +94,6 @@ func TestThreadQueries(t *testing.T) {
 	// internal/threads branches on.
 	misses := map[string]func() error{
 		"GetThread":           func() error { _, err := store.GetThread(ctx, env.ORM, "th-none"); return err },
-		"GetThreadByWorkflow": func() error { _, err := store.GetThreadByWorkflow(ctx, env.ORM, "wf-none"); return err },
 		"GetRootThread":       func() error { _, err := store.GetRootThread(ctx, env.ORM, "chat-none"); return err },
 		"GetThreadWithParent": func() error { _, _, err := store.GetThreadWithParent(ctx, env.ORM, "th-none"); return err },
 		"UpdateThreadStatus": func() error {
@@ -109,9 +108,6 @@ func TestThreadQueries(t *testing.T) {
 		}
 	}
 
-	if got, err := store.GetThreadByWorkflow(ctx, env.ORM, "wf-root"); err != nil || got.ID != "th-root" {
-		t.Fatalf("GetThreadByWorkflow = %v, %v", got, err)
-	}
 	if got, err := store.GetRootThread(ctx, env.ORM, "th-chat"); err != nil || got.ID != "th-root" {
 		t.Fatalf("GetRootThread = %v, %v", got, err)
 	}
@@ -177,17 +173,6 @@ func TestThreadQueries(t *testing.T) {
 	if got, err := store.UpdateThreadWorkflow(ctx, env.ORM, "th-child", ""); err != nil || got.WorkflowID != nil {
 		t.Fatalf("UpdateThreadWorkflow(\"\") = %+v, %v; want workflow cleared", got, err)
 	}
-	// fork_at_message_id references messages, so the fork point moves to a
-	// real message, then clears.
-	mustExecConv(t, env, `INSERT INTO context_windows (id, thread_id, sequence, created_at) VALUES ('th-cw', 'th-root', 0, NOW())`)
-	mustExecConv(t, env, `INSERT INTO messages (id, chat_id, thread_id, context_window_id, role, ordinal, seq, created_at, updated_at)
-		VALUES ('th-msg', 'th-chat', 'th-root', 'th-cw', 1, 0, 1, NOW(), NOW())`)
-	if got, err := store.UpdateThreadForkPoint(ctx, env.ORM, "th-fork", convStr("th-msg")); err != nil || got.ForkAtMessageID == nil || *got.ForkAtMessageID != "th-msg" || got.ChatID != "th-branch" {
-		t.Fatalf("UpdateThreadForkPoint = %+v, %v", got, err)
-	}
-	if got, err := store.UpdateThreadForkPoint(ctx, env.ORM, "th-fork", nil); err != nil || got.ForkAtMessageID != nil {
-		t.Fatalf("UpdateThreadForkPoint(nil) = %+v, %v", got, err)
-	}
 	done := time.Now().UTC().Truncate(time.Microsecond)
 	got, err = store.UpdateThreadStatus(ctx, env.ORM, "th-spawn", core.ThreadStatusCompleted, &done)
 	if err != nil || got.Status != core.ThreadStatusCompleted || !got.CompletedAt.Equal(done) {
@@ -206,24 +191,6 @@ func TestThreadQueries(t *testing.T) {
 		t.Fatalf("ReviveThread(running) = %d, %v; want 0", n, err)
 	}
 
-	// Delete: the store's of a Repository row, then a whole conversation.
-	if err := store.RemoveThread(ctx, env.ORM, "th-fork"); err != nil {
-		t.Fatalf("RemoveThread: %v", err)
-	}
-	if err := store.RemoveThread(ctx, env.ORM, "th-fork"); err != nil {
-		t.Fatalf("RemoveThread(again) = %v, want a no-op", err)
-	}
-	if _, err := env.Repo.GetThread(ctx, "th-fork"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("Repo.GetThread after RemoveThread err = %v", err)
-	}
-	mustExecConv(t, env, `DELETE FROM messages WHERE id = 'th-msg'`)
-	mustExecConv(t, env, `DELETE FROM context_windows WHERE id = 'th-cw'`)
-	if err := store.DeleteThreadsByConversation(ctx, env.ORM, "th-chat"); err != nil {
-		t.Fatalf("DeleteThreadsByConversation: %v", err)
-	}
-	if n, err := env.Repo.CountThreadsInConversation(ctx, "th-chat"); err != nil || n != 0 {
-		t.Fatalf("Repo.CountThreadsInConversation after delete = %d, %v", n, err)
-	}
 }
 
 func mustThread(t *testing.T, env *storetest.Env, id string) *core.Thread {

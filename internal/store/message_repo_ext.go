@@ -27,7 +27,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/uptrace/bun"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -294,21 +293,6 @@ func UpdateMessageUsage(ctx context.Context, db orm.Context, id string, tokenCou
 	return err
 }
 
-// UpdateMessageFields sets the named columns of one message (and stamps
-// updated_at, which the live view polls for). Column names are the caller's,
-// quoted as identifiers.
-func UpdateMessageFields(ctx context.Context, db orm.Context, id string, fields map[string]any) error {
-	if len(fields) == 0 {
-		return nil
-	}
-	q := db.Bun().NewUpdate().Model((*Message)(nil))
-	for _, col := range sortedKeys(fields) {
-		q = q.Set("? = ?", bun.Ident(col), fields[col])
-	}
-	_, err := q.Set("updated_at = CURRENT_TIMESTAMP").Where("id = ?", id).Exec(ctx)
-	return err
-}
-
 // RemoveMessage deletes one message; its content blocks go with it (ON
 // DELETE CASCADE). A message that does not exist is not an error.
 func RemoveMessage(ctx context.Context, db orm.Context, id string) error {
@@ -383,6 +367,8 @@ func messageRow(msg *core.Message) *Message {
 		NodePath:          validUTF8Ptr(msg.NodePath),
 		ActivityID:        validUTF8Ptr(msg.ActivityID),
 		ProviderAccountID: msg.ProviderAccountID,
+		SenderThreadID:    msg.SenderThreadID,
+		SenderKind:        msg.SenderKind,
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -408,6 +394,8 @@ func messageFromRow(row *Message) *core.Message {
 		NodePath:          row.NodePath,
 		ActivityID:        row.ActivityID,
 		ProviderAccountID: row.ProviderAccountID,
+		SenderThreadID:    row.SenderThreadID,
+		SenderKind:        row.SenderKind,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}
@@ -464,15 +452,6 @@ func int64ToIntPtr(i *int64) *int {
 	}
 	v := int(*i)
 	return &v
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
 }
 
 // MessageExtra carries fields on Message that are NOT columns — computed

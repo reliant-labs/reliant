@@ -63,7 +63,7 @@ export function UpdateModal({
                   Version {updateStatus.version} is ready to download. This update includes new features, improvements, and bug fixes.
                 </p>
                 {updateStatus.releaseNotes && (
-                  <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-border/50">
+                  <div className="mt-4 p-4 rounded-lg border border-border/60 bg-background">
                     <p className="text-xs font-medium text-foreground mb-2">Release Notes:</p>
                     <div className="text-xs text-muted-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
                       {updateStatus.releaseNotes}

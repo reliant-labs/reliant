@@ -195,6 +195,15 @@ describe("drill-down", () => {
     expect(drillSearches({ ...panel, where: [] }, {}, { range: "1h", service: "api" }).service).toBe("api");
   });
 
+  it("carries viewer trace predicates into drills without inventing metric-only trace keys", () => {
+    const { traces } = drillSearches({ ...panel, where: [
+      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service" },
+      { field: "span.attr.rpc.method", op: "eq", value: "Get" },
+      { field: "metric.attr.procedure", op: "eq", value: "/pkg.Service/Get" },
+    ] }, {}, { range: "1h" });
+    expect(traces.f).toEqual(["rpc.service:pkg.Service", "rpc.method:Get"]);
+  });
+
   it("knows which fields the scope can filter on", () => {
     expect(scopeKeyOf("span.attr.http.route")).toBe("http.route");
     expect(scopeKeyOf("deployment.environment.name")).toBeNull();

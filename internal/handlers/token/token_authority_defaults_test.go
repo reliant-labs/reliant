@@ -19,7 +19,7 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	want := fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeClusterManage,
 		fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery)
+		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}
@@ -36,6 +36,29 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	}
 	if !reflect.DeepEqual(p.Scopes, want) {
 		t.Fatalf("child = %s, want %s", p.Scopes, want)
+	}
+}
+
+func TestExchangeToken_BillingReadRequiresHeldExplicitScope(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
+	bearer := mintSession(t, authority, "restricted-user", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
+	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+		Audience: testControlPlane, Scopes: []string{string(fat.ScopeBillingRead)},
+	}))
+	if svcerr.Code(err) != connect.CodePermissionDenied {
+		t.Fatalf("unheld billing:read was delegated: %v", err)
+	}
+	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Scopes.Has(fat.ScopeBillingRead) {
+		t.Fatal("default exchange widened an existing restricted token")
 	}
 }
 
@@ -76,7 +99,7 @@ func TestExchangeToken_RefreshPreservesOptInRestrictions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, keep := range []fat.Scope{fat.ScopeObsRead, fat.ScopeDBQuery} {
+	for _, keep := range []fat.Scope{fat.ScopeObsRead, fat.ScopeDBQuery, fat.ScopeBillingRead} {
 		_, err := authority.UpdateForUser(context.Background(), "user-1", parent.TokenID, nil, fat.SetOf(fat.ScopeDaemonConnect, keep))
 		if err != nil {
 			t.Fatal(err)

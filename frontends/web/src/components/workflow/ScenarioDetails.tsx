@@ -8,7 +8,7 @@
  * - YamlView: raw YAML with copy button
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import {
   AlertTriangle,
   Target,
@@ -24,8 +24,8 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { exportScenario, type Scenario } from '../../api/scenarios'
-import type { SimulatedEvent, ScenarioExpectation } from '../../gen/reliant/v1/scenario_pb'
+import type { Scenario, SimulatedEvent, ScenarioExpectation } from '../../gen/reliant/v1/scenario_pb'
+import { useExportScenario } from '../../hooks/scenario-service-hooks_gen'
 
 // ─── EventSequence ──────────────────────────────────────────────────────────
 
@@ -251,36 +251,13 @@ export function InputsView({ inputsJson }: { inputsJson: string | undefined }) {
 // ─── ScenarioYamlView ───────────────────────────────────────────────────────
 
 export function ScenarioYamlView({ scenario, projectId }: { scenario: Scenario; projectId: string }) {
-  const [yaml, setYaml] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const exportQuery = useExportScenario({ projectId, scenarioId: scenario.id })
+  const yaml = exportQuery.data?.yamlContent || null
+  const isLoading = exportQuery.isPending
+  const error = exportQuery.error
+    ? exportQuery.error.message || 'Failed to load YAML'
+    : null
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function fetchYaml() {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const result = await exportScenario({ projectId, scenarioId: scenario.id })
-        if (!cancelled) {
-          setYaml(result.yamlContent)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load YAML')
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    fetchYaml()
-    return () => { cancelled = true }
-  }, [projectId, scenario.id])
 
   const handleCopy = async () => {
     if (!yaml) return

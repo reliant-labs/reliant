@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
@@ -91,6 +91,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   return (
     <div className="space-y-3" data-testid="obs-errors">
       <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} navigate={navigate} />
+      {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {issues.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-errors-loading" />

@@ -16,7 +16,7 @@ export function SettingsPage() {
   // capture, so we don't fight it: this handler only fires for Escape.
   // `section` is the URL — bare /settings yields no param and falls back to
   // DEFAULT_SETTINGS_SECTION. /settings/$section provides it, and
-  // /settings/environments/$machineId is the Machines section with one machine
+  // /settings/machines/$machineId is the Machines section with one machine
   // open. An unknown slug never gets here: the route redirects it to bare
   // /settings with `notFound=<slug>` (settingsSectionRoutes.tsx).
   const params = useParams({ strict: false }) as { section?: string; machineId?: string };
@@ -25,7 +25,7 @@ export function SettingsPage() {
   const onClose = useSettingsClose();
 
   const section: SettingsSection = params.machineId
-    ? "environments"
+    ? "machines"
     : isSettingsSection(params.section)
       ? params.section
       : DEFAULT_SETTINGS_SECTION;

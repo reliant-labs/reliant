@@ -1,6 +1,6 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef, type ReactNode } from "react";
-import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
+import { AddMachineSheet } from "../Machines/AddMachineSheet";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -97,7 +97,7 @@ export function NewChatView({
   useEffect(() => {
     setRestoredPrefill(null);
   }, [composerPrefill?.id]);
-  const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
+  const [showAddMachine, setShowAddMachine] = useState(false);
   const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
   const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
@@ -563,7 +563,7 @@ export function NewChatView({
             onRetry={
               capabilities.cloudDaemons
                 ? daemonWait.retryNow
-                : () => setShowConnectDaemonModal(true)
+                : () => setShowAddMachine(true)
             }
           />
           {/* The machine is unavailable; the chat does not have to wait for it. */}
@@ -626,10 +626,9 @@ export function NewChatView({
         </>
       )}
 
-      <ConnectDaemonModal
-        isOpen={showConnectDaemonModal}
-        onClose={() => setShowConnectDaemonModal(false)}
-      />
+      {showAddMachine && (
+        <AddMachineSheet open onClose={() => setShowAddMachine(false)} onReady={() => refreshDaemons()} />
+      )}
     </div>
   );
 }

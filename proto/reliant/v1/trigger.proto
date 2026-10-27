@@ -276,7 +276,8 @@ enum TriggerEventOutcome {
 enum ActingIdentity {
   ACTING_IDENTITY_UNSPECIFIED = 0;
   // OWNER: the activation's owner, through their own GitHub App user token. What
-  // every activation did before identities existed; the default.
+  // every activation did before identities existed; still the default for
+  // new sources other than GitHub integration triggers.
   ACTING_IDENTITY_OWNER = 1;
   // APP: the GitHub App's bot (`reliant-labs[bot]`), through a per-repository
   // installation token. control-plane mints it only when the owner's own token
@@ -634,6 +635,9 @@ message Trigger {
   // it has never fired.
   optional TriggerEvent last_event = 13;
 
+  // Configuration history (newest 100), distinct from firing health.
+  repeated TriggerChange changes = 31;
+
   // The daemon every tool call in each launched run executes on. Empty exactly
   // when no_machine is set.
   string daemon_id = 14;
@@ -651,6 +655,10 @@ message Trigger {
   // Read-only: display name (hostname) of the daemon the runs execute on.
   // Empty when the daemon has not reported one.
   string daemon_name = 17;
+
+  // Read-only registry state: connected, disconnected, starting, suspended,
+  // failed, removed, or none for a no-machine activation.
+  string machine_state = 30;
 
   // When true, a completed run of this trigger marks its chat unread
   // (raising the OS notification) and appears in the Inbox as "Run finished".
@@ -711,6 +719,19 @@ message Trigger {
   // the user to configure, and RotateWebhookToken re-provisions rather than
   // returning a token.
   bool webhook_managed = 29;
+}
+
+// TriggerChange is a configuration audit entry, not a firing.
+message TriggerChange {
+  string id = 1;
+  string user_id = 2;
+  string chat_id = 3;
+  string run_id = 4;
+  string tool_call_id = 5;
+  string operation = 6;
+  string before_state = 7;
+  string after_state = 8;
+  string created_at = 9;
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -866,7 +887,8 @@ message TriggerDefinition {
   }
 
   // Who the integration writes of this trigger's runs speak as. UNSPECIFIED
-  // means OWNER on create and "unchanged" on update. APP is refused on a
+  // means APP on create for a resolved GitHub integration source, OWNER for
+  // other new sources, and "unchanged" on update. APP is refused on a
   // deployment with no control plane to mint installation tokens from, and
   // for a trigger whose owner cannot push to a repository it writes to the
   // write fails when it happens (never silently as the owner).
@@ -1029,8 +1051,9 @@ message EnableWorkflowRequest {
   repeated WorkflowTriggerOverride overrides = 12;
 
   // Who the integration writes of every run speak as, as
-  // TriggerDefinition.acting_identity. Unspecified means the owner for a new
-  // activation and "unchanged" for an existing one.
+  // TriggerDefinition.acting_identity. Unspecified defaults each new source
+  // separately (APP for GitHub integration, OWNER otherwise) and preserves an
+  // existing activation's stored identity.
   ActingIdentity acting_identity = 13;
 }
 

@@ -8,6 +8,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
@@ -66,7 +67,7 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 			skipStreak = false
 		}
 	}
-	health.LastFailureDetail = lastFailure
+	health.LastFailureDetail = rundiagnostics.ErrorText(lastFailure)
 	health.ConsecutiveFailures = FailureStreak(firings).Count
 
 	switch {
@@ -226,6 +227,9 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 		}
 		switch f.Run.DisplayState {
 		case core.RunDisplayFailed:
+			if f.Event.OutcomeDetail != "" {
+				return resultFailure, f.Event.OutcomeDetail
+			}
 			title := f.Run.Title
 			if title == "" {
 				return resultFailure, "the launched run failed"
@@ -244,6 +248,9 @@ func resolveRecordedRun(f *core.TriggerEventWithRun) (firingResult, string) {
 	case core.TriggerRunCompleted:
 		return resultSuccess, ""
 	case core.TriggerRunFailed:
+		if f.Event.OutcomeDetail != "" {
+			return resultFailure, f.Event.OutcomeDetail
+		}
 		if f.Run == nil || f.Run.Title == "" {
 			return resultFailure, "the launched run failed"
 		}

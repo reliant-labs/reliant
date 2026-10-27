@@ -117,8 +117,8 @@ const (
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
 
-	// list_triggers shows the user's triggers. There is no tool that creates
-	// or enables one: the user does that in the app.
+	// Activation mutations require an interactive owner approval. These
+	// constants are the read/manual-fire half; activation_tools.go owns writes.
 	ToolListTriggers      = "list_triggers"
 	ToolFireTrigger       = "fire_trigger"
 	ToolListTriggerEvents = "list_trigger_events"
@@ -792,6 +792,10 @@ func GetToolRegistry() []ToolDefinition {
 		// triggers: block reaches for it next.
 		{ToolListTriggers, (*ToolsFactory).ListTriggers, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 		{ToolFireTrigger, (*ToolsFactory).FireTrigger, []ToolTag{TagWorkflow, TagRuns}, PlacementServer, false},
+		{ToolCreateTriggerActivation, (*ToolsFactory).CreateTriggerActivation, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolUpdateTriggerActivation, (*ToolsFactory).UpdateTriggerActivation, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolEnableTrigger, (*ToolsFactory).EnableTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
+		{ToolPauseTrigger, (*ToolsFactory).PauseTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolListTriggerEvents, (*ToolsFactory).ListTriggerEvents, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
 
 		// Workflow discovery tools

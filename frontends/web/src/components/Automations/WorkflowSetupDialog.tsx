@@ -239,7 +239,15 @@ function SetupBody({
   const [machine, setMachine] = useState("");
   const [machineChosen, setMachineChosen] = useState(false);
   const [connections, setConnections] = useState<Record<string, string>>({});
-  const [actingIdentity, setActingIdentity] = useState<ActingIdentityKey>("owner");
+  const [chosenIdentity, setChosenIdentity] = useState<ActingIdentityKey>();
+  const allGitHub = declared.length > 0 && declared.every((d) => integrationOf(d)?.integration === "github");
+  const hasOtherIntegration = declared.some((d) => {
+    const integration = integrationOf(d)?.integration;
+    return integration && integration !== "github";
+  });
+  const storedIdentity = existing[0]?.actingIdentity;
+  const uniformStoredIdentity = existing.length > 0 && existing.every((t) => t.actingIdentity === storedIdentity) ? storedIdentity : undefined;
+  const actingIdentity = chosenIdentity ?? (existing.length > 0 ? uniformStoredIdentity : allGitHub ? "app" : declared.some((d) => integrationOf(d)?.integration === "github") ? undefined : "owner");
   const [value, setValue] = useState<RunWorkflowValue>({ presets: {}, params: {} });
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -266,13 +274,13 @@ function SetupBody({
   useEffect(() => {
     if (!triggersQuery.isSuccess || prefilledFor.current === projectId) return;
     prefilledFor.current = projectId;
+    setChosenIdentity(undefined);
     if (existing.length === 0) return;
     const p = prefillFromActivations(existing, declared);
     setPrefill(p);
     setMachine(p.machine);
     setMachineChosen(true);
     setConnections(p.connections);
-    setActingIdentity(p.actingIdentity);
     setValue(p.value);
     setMessage(p.message);
     setNotify(p.notify);
@@ -420,7 +428,10 @@ function SetupBody({
       message: message.trim(),
       namePrefix: workflowTitle || undefined,
       overrides: overrideInputs,
-      actingIdentity,
+      // Omission preserves each existing activation's own identity and lets
+      // the server default each new source separately. Never copy the first
+      // stored row's identity across a mixed workflow.
+      actingIdentity: chosenIdentity,
     };
   };
 
@@ -624,7 +635,14 @@ function SetupBody({
                   onConnect={() => setConnectTarget(integration)}
                 />
               </div>
-              {index === 0 && <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />}
+              {index === 0 && <ActingIdentityField
+                value={actingIdentity}
+                onChange={setChosenIdentity}
+                allowApp={!hasOtherIntegration}
+                defaultHint={chosenIdentity ? undefined : existing.length > 0
+                  ? "Each existing trigger keeps its stored identity unless you choose a shared identity here."
+                  : "New GitHub triggers default to Reliant bot; other triggers write as you. Bot writes never fall back to your account."}
+              />}
             </SetupSection>
           ))}
 

@@ -229,8 +229,8 @@ export function DaemonConnectingGate({
     // machine's detail view when we know its id.
     const goToEnvironments = () =>
       daemon?.daemonId
-        ? navigate({ to: "/settings/environments/$machineId", params: { machineId: daemon.daemonId } })
-        : navigate({ to: "/settings/$section", params: { section: "environments" } });
+        ? navigate({ to: "/settings/machines/$machineId", params: { machineId: daemon.daemonId } })
+        : navigate({ to: "/settings/$section", params: { section: "machines" } });
 
     return (
       <div

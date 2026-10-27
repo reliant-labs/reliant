@@ -332,6 +332,31 @@ message GetRunRequest {
 
 message GetRunResponse {
   Run run = 1;
+  // Newest attempts first, including nested workflows. Inputs and arbitrary
+  // outputs are never included; command streams are redacted, bounded tails.
+  repeated RunNodeExecution nodes = 2;
+  bool nodes_truncated = 3;
+}
+
+// One recorded node attempt, not an aggregate that hides earlier failures.
+message RunNodeExecution {
+  string id = 1;
+  string workflow_id = 2;
+  string node_id = 3;
+  string node_path = 4;
+  string activity = 5;
+  // completed, failed, or skipped. These are persisted attempts, not live events.
+  string status = 6;
+  optional int64 duration_ms = 7;
+  string error = 8;
+  optional int32 exit_code = 9;
+  string stdout_tail = 10;
+  string stderr_tail = 11;
+  string started_at = 12;
+  string completed_at = 13;
+  int32 attempt = 14;
+  string loop_node_id = 15;
+  optional int32 loop_iteration = 16;
 }
 
 message ListRunsRequest {

@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from "react";
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -15,9 +16,10 @@
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
@@ -42,6 +44,13 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
+// Presentation never changes QueryPanel's computation: two dashboard tiles
+// with different ids/titles/layout but the same query share one in-flight read.
+function panelRequestKey(panel: Panel) {
+  const { id: _id, title: _title, description: _description, width: _width, height: _height, ...request } = panel;
+  return request;
+}
+
 /**
  * Every key starts with the whole scope — org, project, environments and
  * attribute filters — so Refresh (invalidate `all(scope)`) re-reads exactly
@@ -57,7 +66,7 @@ export const obsKeys = {
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
   trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
-    [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
+    [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
   serviceSignals: (scope: ObsScope | null, range: RangePreset) => [...obsKeys.all(scope), "service-signals", range] as const,
@@ -69,6 +78,55 @@ export const obsKeys = {
     [...obsKeys.all(scope), "workload", range, workload, container] as const,
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
+
+// ── Quota-aware reads and polls ──────────────────────────────────────────────
+//
+// Every read that spends the org's ClickHouse query quota (logs, traces,
+// metrics, profiles, workloads, issues, release health) goes through
+// `useReadApi`, and every poll of one through `usePolled`. Alerts, notifications,
+// usage, delivery and activity read Postgres and are left alone: a quota pause
+// must not stop them.
+
+/**
+ * The observability API with every call guarded by the org's quota state: while
+ * the quota is gone a call answers with the quota error at once, without a
+ * request. Hooks that make a ClickHouse read use this instead of
+ * useObservabilityApi.
+ */
+export function useObsReadApi(): ObservabilityApi {
+  const api = useObservabilityApi();
+  const { store } = useObsQuota();
+  return useMemo(
+    () =>
+      new Proxy(api, {
+        get(target, prop, receiver) {
+          const member = Reflect.get(target, prop, receiver) as unknown;
+          if (typeof member !== "function") return member;
+          return (...args: unknown[]) => store.guard(() => (member as (...a: unknown[]) => Promise<unknown>).apply(target, args));
+        },
+      }),
+    [api, store]
+  );
+}
+
+/**
+ * Polls `queryKey` every `intervalMs` through the console's ONE poll scheduler
+ * (pollRegistry.ts): a single timer per key however many panels watch it,
+ * stopped while the quota is gone, a quarter as fast while it is tight, idle in
+ * a hidden tab, and each poll marked `Forge-Poll` for the server. `false` or a
+ * disabled query does not poll.
+ */
+function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true) {
+  const client = useQueryClient();
+  const { polls } = useObsQuota();
+  const keyHash = hashKey(queryKey);
+  useEffect(() => {
+    if (!enabled || intervalMs === false) return;
+    return polls.subscribe(client, queryKey, intervalMs);
+    // The key is compared by hash: a new array with the same content is the same key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, polls, keyHash, intervalMs, enabled]);
+}
 
 interface PageParam {
   cursor: string;
@@ -96,15 +154,17 @@ export function useObservabilityOrg() {
 // ── Overview ─────────────────────────────────────────────────────────────────
 
 export function useServiceOverview(scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.overview(scope, range, services, groupBy),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.overview(scope, range, services, groupBy);
+  const query = useQuery({
+    queryKey,
     queryFn: () => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }),
     enabled: !!scope,
     staleTime: 30_000,
-    refetchInterval: 60_000,
     retry: obsRetry,
   });
+  usePolled(queryKey, 60_000, !!scope);
+  return query;
 }
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
@@ -123,9 +183,10 @@ export const LOG_PAGE_SIZE = 200;
 export const LIVE_TAIL_MS = 5_000;
 
 export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live: boolean) {
-  const api = useObservabilityApi();
-  return useInfiniteQuery({
-    queryKey: obsKeys.logs(scope, filters),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.logs(scope, filters);
+  const query = useInfiniteQuery({
+    queryKey,
     queryFn: async ({ pageParam }): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.searchLogs({
@@ -146,10 +207,11 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
     enabled: !!scope,
     // While tailing, older pages would be re-fetched on every tick; keep just the newest.
     maxPages: live ? 1 : undefined,
-    refetchInterval: live ? LIVE_TAIL_MS : false,
     staleTime: 10_000,
     retry: obsRetry,
   });
+  usePolled(queryKey, live ? LIVE_TAIL_MS : false, !!scope);
+  return query;
 }
 
 // ── Traces ───────────────────────────────────────────────────────────────────
@@ -166,7 +228,7 @@ export interface TraceFilters {
 export const TRACE_PAGE_SIZE = 100;
 
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: obsKeys.traces(scope, filters),
     queryFn: async ({ pageParam }): Promise<ListTracesResult & { window: TimeWindow }> => {
@@ -198,7 +260,7 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
  * trace linked from a log may be older than the window the reader is in.
  */
 export function useTrace(scope: ObsScope | null, traceId: string | null) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.trace(scope, traceId ?? ""),
     queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow("7d") }),
@@ -240,18 +302,21 @@ export function usePanelQuery(
   groupBy: string[] = [],
   options: PanelQueryOptions = {}
 ) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? ""),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
+  const enabled = !!scope && panel.kind !== "search" && (options.enabled ?? true);
+  const query = useQuery({
+    queryKey,
     queryFn: () => {
       const offset = options.offsetMs?.() ?? 0;
       return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy });
     },
-    enabled: !!scope && panel.kind !== "search" && (options.enabled ?? true),
+    enabled,
     staleTime: 30_000,
-    refetchInterval: options.refetchInterval ?? false,
     retry: obsRetry,
   });
+  usePolled(queryKey, options.refetchInterval ?? false, enabled);
+  return query;
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
@@ -264,7 +329,7 @@ export interface FlamegraphFilters {
 }
 
 export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.flamegraph(scope, filters),
     queryFn: () =>
@@ -292,7 +357,7 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
  * RPC): the caller treats an error as "unknown" and offers every view.
  */
 export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
   return useQuery({
     queryKey: obsKeys.serviceSignals(unfiltered, range),
@@ -336,7 +401,7 @@ export function useAttributeValues(
   prefix: string,
   signal?: "traces" | "logs" | "metrics"
 ) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
     queryFn: () =>
@@ -380,7 +445,7 @@ function catalogRange(range: RangePreset): RangePreset {
  * server caches the answer a minute; the client keeps it as long.
  */
 export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, name = "", limit = 0) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.catalog(scope, window, name, limit),
@@ -394,7 +459,7 @@ export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, nam
 
 /** One metric's detail: attributes with cardinality, export interval and suggested breakdowns. */
 export function useMetric(scope: ObsScope | null, range: RangePreset, name: string | undefined, kind?: GetMetricRequest["kind"]) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
@@ -411,7 +476,7 @@ export type ExemplarsQuery = ListMetricExemplarsRequest;
 
 /** Exemplars of one metric (a sampled observation and its trace), stored traces first. Maximum range 7 days. */
 export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery | null, options: { enabled?: boolean } = {}) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
     queryFn: () => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }),
@@ -424,19 +489,21 @@ export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, r
 // ── Workloads (customer metadata) ────────────────────────────────────────────
 
 export function useWorkloads(scope: ObsScope | null, range: RangePreset, services: string[] = []) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.workloads(scope, range, services),
+  const api = useObsReadApi();
+  const queryKey = obsKeys.workloads(scope, range, services);
+  const query = useQuery({
+    queryKey,
     queryFn: () => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }),
     enabled: !!scope,
     staleTime: 30_000,
-    refetchInterval: 60_000,
     retry: obsRetry,
   });
+  usePolled(queryKey, 60_000, !!scope);
+  return query;
 }
 
 export function useWorkload(scope: ObsScope | null, range: RangePreset, workload: string | undefined, container?: string) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
     queryFn: () =>
@@ -595,15 +662,18 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
  * it is re-read every minute until the server says the window is complete.
  */
 export function useReleaseHealth(scope: DeliveryScope | null, promotionId: string, windowMs: number) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
+  const api = useObsReadApi();
+  const queryKey = [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const;
+  const enabled = !!scope && !!promotionId;
+  const query = useQuery({
+    queryKey,
     queryFn: () => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }),
-    enabled: !!scope && !!promotionId,
+    enabled,
     staleTime: 30_000,
-    refetchInterval: (query) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
     retry: releaseHealthRetry,
   });
+  usePolled(queryKey, query.data && !query.data.afterComplete ? 60_000 : false, enabled);
+  return query;
 }
 
 // ── Issues (IssuesService) ────────────────────────────────────────────────────
@@ -635,7 +705,7 @@ export const issueKeys = {
 
 /** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
 export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: issueKeys.list(scope, filters),
     queryFn: async ({ pageParam }): Promise<IssueList & { window: TimeWindow }> => {
@@ -663,7 +733,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
 
 /** One issue with its latest event, frames, versions and first release; counts over `range`. */
 export function useIssue(issueId: string | undefined, range: RangePreset) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: issueKeys.detail(issueId ?? "", range),
     queryFn: () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }),
@@ -677,7 +747,7 @@ export const ISSUE_EVENTS_PAGE_SIZE = 20;
 
 /** One issue's events, newest first. */
 export function useIssueEvents(issueId: string | undefined) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: issueKeys.events(issueId ?? ""),
     queryFn: ({ pageParam }): Promise<IssueEventList> =>

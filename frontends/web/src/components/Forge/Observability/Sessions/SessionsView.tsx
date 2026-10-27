@@ -32,7 +32,7 @@ import { StackedTable } from "@/components/Forge/StackedTable";
 import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { rumScopeOf, sessionTitle } from "./sessionModel";
@@ -95,6 +95,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
   return (
     <div className="space-y-3" data-testid="obs-sessions">
       <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} hasReplay={hasReplay} user={user} navigate={navigate} />
+      {sessions.data && <ObsAsOf updatedAt={sessions.dataUpdatedAt} />}
       {sessions.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-sessions-loading" />

@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -29,7 +30,11 @@ service ForgeService {
   rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {}
 
   // VerifyEnv reconciles one environment against its live cluster.
-  rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {}
+  rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS"}
+    };
+  }
 
   // ListSecrets returns declared/present/inert secrets for an environment.
   // The report carries NAMES and BOOLEANS only, never a secret value.
@@ -80,7 +85,19 @@ service ForgeService {
   // The request carries a confirmation token (see PromoteForgeEnvRequest). The
   // server re-plans and REFUSES if the binding no longer matches what the
   // caller last saw.
-  rpc ApplyPromote(PromoteForgeEnvRequest) returns (PromoteForgeEnvResponse) {}
+  rpc ApplyPromote(PromoteForgeEnvRequest) returns (PromoteForgeEnvResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "promote"
+        target: {
+          kind: "release"
+          id: "release"
+        }
+        env: "env"
+        detail: ["project_id", "expected_current_release"]
+      }
+    };
+  }
 
   // PlanDeploy previews deploying an environment. READ-ONLY: it runs
   // `forge env deploy <env> --dry-run --json`, which renders the env, evaluates
@@ -110,7 +127,11 @@ service ForgeService {
   //
   // What comes back is the plan plus its digest. Show the plan, let a human
   // approve THAT, and send the digest to StartDeploy.
-  rpc StartDeployPlan(StartForgeDeployPlanRequest) returns (StartForgeDeployResponse) {}
+  rpc StartDeployPlan(StartForgeDeployPlanRequest) returns (StartForgeDeployResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "builds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event"}
+    };
+  }
 
   // StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
   // and returns a handle immediately. Poll it with GetDeployStatus.
@@ -130,7 +151,19 @@ service ForgeService {
   // The request carries a confirmation token (see StartForgeDeployRequest). The
   // server re-plans and REFUSES if the declared cluster or the bound release is
   // no longer what the caller saw.
-  rpc StartDeploy(StartForgeDeployRequest) returns (StartForgeDeployResponse) {}
+  rpc StartDeploy(StartForgeDeployRequest) returns (StartForgeDeployResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "deploy"
+        target: {
+          kind: "release"
+          id: "release_version"
+        }
+        env: "env"
+        detail: ["project_id", "response.handle"]
+      }
+    };
+  }
 
   // GetDeployStatus polls a running or finished deploy by handle.
   //

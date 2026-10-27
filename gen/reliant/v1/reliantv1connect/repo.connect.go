@@ -74,6 +74,7 @@ func NewRepoServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+RepoServiceDiscoverReposProcedure,
 			connect.WithSchema(repoServiceMethods.ByName("DiscoverRepos")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listRepos: connect.NewClient[v1.ListReposRequest, v1.ListReposResponse](
@@ -158,6 +159,7 @@ func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption
 		RepoServiceDiscoverReposProcedure,
 		svc.DiscoverRepos,
 		connect.WithSchema(repoServiceMethods.ByName("DiscoverRepos")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	repoServiceListReposHandler := connect.NewUnaryHandler(

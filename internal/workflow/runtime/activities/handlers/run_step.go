@@ -153,9 +153,9 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	}
 
 	// Propagate daemon selector from workflow input. Priority: explicit
-	// node/workflow-level selector > the worktree's owning daemon (set by
-	// resolveRunExecutorContext) > default resolution. Only override the
-	// worktree pin when the input actually carries a selector.
+	// node/workflow-level selector > durable chat pin > worktree owner
+	// (set by resolveRunExecutorContext) > default resolution. Override the
+	// resolved binding only when the input actually carries a selector.
 	if input.DaemonSelector != nil {
 		execCtx.DaemonSelector = input.DaemonSelector
 	}

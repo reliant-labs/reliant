@@ -39,8 +39,9 @@ import {
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
 import { obsRetry, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObsReadApi } from "@/hooks/observability-queries";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +49,7 @@ import { changeText, formatSpan, movement, shortCommit, type CompareRef, type Mo
 import { StatusBadge } from "./Errors/IssueBits";
 import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, formatPercent, formatRate, formatWhen } from "./format";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows } from "./ObsStates";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 const WORKLOAD = "resource.attr.k8s.workload.name";
@@ -89,7 +90,7 @@ export function compareWorkloads(before: PanelResult | undefined, after: PanelRe
 }
 
 function useResources(scope: ObsScope, side: "before" | "after", window: TimeWindow | null) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
@@ -139,12 +140,13 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
   const frame = (state: string, body: ReactNode) => (
     <div className="space-y-3" data-testid="obs-compare" data-state={state}>
       {back}
+      {health.data && <ObsAsOf updatedAt={health.dataUpdatedAt} />}
       {body}
     </div>
   );
 
   if (health.isLoading) return frame("loading", <ObsLoadingRows testId="obs-compare-loading" rows={4} />);
-  if (health.error || !health.data) {
+  if ((health.error && !keepsLastResult(health.error, health.data)) || !health.data) {
     const kind = releaseHealthErrorKind(health.error);
     if (kind === "not-available") {
       return frame(
@@ -229,7 +231,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
           <div className="p-4">
             <ObsLoadingRows rows={2} testId="obs-compare-resources-loading" />
           </div>
-        ) : resBefore.error || resAfter.error ? (
+        ) : (resBefore.error && !keepsLastResult(resBefore.error, resBefore.data)) || (resAfter.error && !keepsLastResult(resAfter.error, resAfter.data)) ? (
           <div className="p-4">
             <ObsError error={resBefore.error ?? resAfter.error} subject={subject} />
           </div>

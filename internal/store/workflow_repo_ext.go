@@ -117,16 +117,6 @@ func ListWorkflowsByStatus(ctx context.Context, db orm.Context, status core.Work
 	})
 }
 
-// ListRootWorkflowsByStatus is ListWorkflowsByStatus narrowed to roots, the
-// entry points that need dedicated workers.
-func ListRootWorkflowsByStatus(ctx context.Context, db orm.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	return selectWorkflows(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("parent_id IS NULL").
-			Where("state = ?", status.State).Where("stop_reason = ?", status.StopReason).
-			Order("created_at ASC")
-	})
-}
-
 func selectWorkflows(ctx context.Context, db orm.Context, apply func(*bun.SelectQuery) *bun.SelectQuery) ([]*core.Workflow, error) {
 	var rows []*Workflow
 	if err := apply(db.Bun().NewSelect().Model(&rows)).Scan(ctx); err != nil {
@@ -530,38 +520,6 @@ func ResumeWorkflowsByChat(ctx context.Context, db orm.Context, chatID string) e
 		Where("state = ?", core.WorkflowStateStopped).
 		Where("stop_reason = ?", core.StopReasonPaused).
 		Exec(ctx)
-	return err
-}
-
-// MarkWorkflowWorkerStarted records that a worker started for the workflow
-// and clears its stop stamp. The reconciler skips the stuck check for a
-// recently started worker.
-func MarkWorkflowWorkerStarted(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
-		Set("worker_started_at = NOW()").
-		Set("worker_stopped_at = NULL").
-		Where("id = ?", workflowID).
-		Exec(ctx)
-	return err
-}
-
-// MarkWorkflowWorkerStopped records that the workflow's worker stopped.
-func MarkWorkflowWorkerStopped(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
-		Set("worker_stopped_at = NOW()").
-		Where("id = ?", workflowID).
-		Exec(ctx)
-	return err
-}
-
-// RemoveWorkflow deletes one workflow; a missing one is not an error.
-func RemoveWorkflow(ctx context.Context, db orm.Context, id string) error {
-	return ignoreNotFound(DeleteWorkflow(ctx, db, id))
-}
-
-// RemoveChatWorkflows deletes every workflow of a chat.
-func RemoveChatWorkflows(ctx context.Context, db orm.Context, chatID string) error {
-	_, err := db.Bun().NewDelete().Model((*Workflow)(nil)).Where("chat_id = ?", chatID).Exec(ctx)
 	return err
 }
 

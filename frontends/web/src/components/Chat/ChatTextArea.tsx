@@ -12,6 +12,7 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useSurface } from "../../lib/surfaceContext";
 import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { composerMaxHeight } from "./composerHeight";
+import { takeSwitchFocus } from "./composerSwitchFocus";
 import { CodeContextChip } from "./CodeContextChip";
 import type { CodeContext } from "./useCodeContexts";
 import {
@@ -122,6 +123,12 @@ const EXAMPLE_PROMPTS = [
   "Add WebSocket support",
 ];
 
+/** Focus the composer with the caret after any draft, ready to keep typing. */
+function focusAtEnd(el: HTMLTextAreaElement): void {
+  el.focus();
+  el.setSelectionRange(el.value.length, el.value.length);
+}
+
 export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
   function ChatTextArea(
     {
@@ -133,7 +140,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       disabled = false,
       isStreaming = false,
       placeholder,
-      chatId: _chatId,
+      chatId,
       slashCommands,
       contexts,
       onRemoveContext,
@@ -264,15 +271,23 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
     useEffect(() => {
       const handleFocusEvent = () => {
         const el = textareaRef.current;
-        if (!el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
+        if (el) focusAtEnd(el);
       };
 
       window.addEventListener("focus-chat-input", handleFocusEvent);
       return () =>
         window.removeEventListener("focus-chat-input", handleFocusEvent);
     }, []);
+
+    // Switching to this chat puts the cursor here, once the composer is
+    // mounted and enabled. The decision (and its guards) lives in
+    // composerSwitchFocus; re-checked when the active chat changes in case
+    // this composer mounted before its chat became active.
+    useEffect(() => {
+      const el = textareaRef.current;
+      if (!chatId || disabled || !el) return;
+      if (takeSwitchFocus(chatId)) focusAtEnd(el);
+    }, [chatId, activeChatId, disabled]);
 
     // Cmd+Enter inserts a newline while the composer has focus.
     //

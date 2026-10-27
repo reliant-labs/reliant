@@ -22,7 +22,9 @@ export function Table({
 }: TableProps) {
   const table = (
     <table
-      className={cn("min-w-full divide-y divide-border", className)}
+      // Tabular figures line up the money and usage columns (this was a
+      // `.cloud-settings table` rule, retired with that font scope).
+      className={cn("min-w-full divide-y divide-border tabular-nums", className)}
       {...rest}
     >
       {children}

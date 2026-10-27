@@ -20,12 +20,14 @@ import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
-import type { CloudPromotion } from "@/services/forge/cloudEnvs";
+import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
+import { frontendsOf } from "@/services/forge/frontends";
 import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type LiveEnv } from "@/services/forge/live";
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
 import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 
+import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { formatTimestamp } from "../Overview/EnvironmentTable";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
@@ -91,6 +93,11 @@ export interface OverviewTabProps {
   onManageDomains: () => void;
   /** The Overview scoped to this environment: where its services and jobs are. */
   workloadsHref: string;
+  /** The control plane's GetStatus for this environment: where its frontends and their URLs come from. */
+  cloudStatus?: CloudEnvStatus;
+  cloudStatusLoading?: boolean;
+  /** The Domains screen, where "Add a domain" lands. */
+  domainsHref?: string;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -175,6 +182,26 @@ export function OverviewTab(props: OverviewTabProps) {
         )}
       </Panel>
 
+      {/* Frontends: the sites people open. Each is live at its generated
+          address already; a custom domain only adds a second one. Omitted for
+          an env the platform does not run — it has no generated addresses. */}
+      {isPlacedKind(live.kind) && (
+        <Panel
+          title="Frontends"
+          description="Websites Reliant hosts for this environment, and the address each is live at."
+          testId="env-frontends"
+          flush
+        >
+          <EnvFrontends
+            env={live}
+            status={props.cloudStatus}
+            loading={props.cloudStatusLoading ?? false}
+            domains={props.domains}
+            domainsHref={props.domainsHref ?? props.workloadsHref}
+          />
+        </Panel>
+      )}
+
       {/* The workloads themselves — health, pods, releases, restarts — are the
           Overview's (one place, every environment), not a second copy here. */}
       <Panel title="Workloads" testId="section-workloads">
@@ -212,6 +239,43 @@ export function OverviewTab(props: OverviewTabProps) {
       )}
     </div>
   );
+}
+
+function EnvFrontends({
+  env,
+  status,
+  loading,
+  domains,
+  domainsHref,
+}: {
+  env: LiveEnv;
+  status: CloudEnvStatus | undefined;
+  loading: boolean;
+  domains: DomainsState | undefined;
+  domainsHref: string;
+}) {
+  if (!status) {
+    return loading ? (
+      <FrontendsLoading />
+    ) : (
+      <p className="px-4 pb-4 text-sm text-muted-foreground" data-testid="env-frontends-unavailable">
+        Reliant could not read this environment&apos;s deployments just now, so its frontends are not shown. They will appear when the next read succeeds.
+      </p>
+    );
+  }
+  const frontends = frontendsOf(
+    { id: env.id, name: env.name, release: env.release },
+    status.workloads,
+    domains?.availability === "available" ? domains.domains : null
+  );
+  if (frontends.length === 0) {
+    return (
+      <div className="px-4 pb-4">
+        <FrontendsEmpty env={env.name} />
+      </div>
+    );
+  }
+  return <FrontendList frontends={frontends} domainsHref={domainsHref} />;
 }
 
 /** What forge's own (file) ledger says, for an env Reliant has no record of. */

@@ -25,10 +25,10 @@ import type { Dashboard } from "./types";
  * Where a dashboard lives. `generated` and `repo` are both release dashboards
  * (one addressing space on the server); they differ only in who wrote them.
  */
-export type DashboardSource = "generated" | "repo" | "workspace" | "template";
+export type DashboardSource = "generated" | "repo" | "workspace" | "template" | "builtin";
 
 /** The three addressing spaces: what a URL has to name to find a dashboard again. */
-export type DashboardKind = "release" | "workspace" | "template";
+export type DashboardKind = "release" | "workspace" | "template" | "builtin";
 
 export function kindOfSource(source: DashboardSource): DashboardKind {
   return source === "generated" || source === "repo" ? "release" : source;
@@ -72,6 +72,8 @@ export interface DashboardWorkspaceInfo {
 
 /** One row of the index. Never a full spec. */
 export interface DashboardSummary {
+  /** Absent/standard: spec renderer; organization-costs: canonical billing view. */
+  viewKind?: "standard" | "organization-costs";
   ref: DashboardRef;
   source: DashboardSource;
   title: string;

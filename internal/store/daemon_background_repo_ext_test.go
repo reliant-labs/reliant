@@ -392,12 +392,6 @@ func TestBackgroundProcessQueries(t *testing.T) {
 	if p, _ := env.Repo.GetBackgroundProcess(ctx, "p1"); p.Status != completed || *p.ExitCode != 0 || !p.EndedAt.Equal(ended) || !p.UpdatedAt.After(base) {
 		t.Fatalf("after status = %+v", p)
 	}
-	if err := store.SetBackgroundProcessPID(ctx, env.ORM, "p2", 77, "sig"); err != nil {
-		t.Fatalf("SetBackgroundProcessPID: %v", err)
-	}
-	if p, _ := env.Repo.GetBackgroundProcess(ctx, "p2"); *p.PID != 77 || *p.Signature != "sig" {
-		t.Fatalf("after pid = %+v", p)
-	}
 	runningRows, err := store.ListRunningBackgroundProcesses(ctx, env.ORM)
 	if err != nil || len(runningRows) != 1 || runningRows[0].ID != "p2" {
 		t.Fatalf("ListRunningBackgroundProcesses = %+v, %v", runningRows, err)

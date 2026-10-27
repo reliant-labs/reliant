@@ -55,6 +55,7 @@ vi.mock('@/hooks/useAnonSignInNudge', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/' }),
 }))
 
 vi.mock('../../forge-ui/modal', () => ({
