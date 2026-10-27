@@ -423,6 +423,9 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	case model.NodeTypeAskQuestion:
 		future, activityName = e.startAskQuestion(node, evalResult)
 
+	case model.NodeTypeAwaitPRReview:
+		future, activityName = e.startPRReviewWait(node, evalResult)
+
 	case model.NodeTypeCompute:
 		future, activityName = e.startCompute(node, evalResult)
 
