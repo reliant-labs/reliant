@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -47,36 +46,21 @@ func newResources(t *testing.T) *resources {
 	// Resolve before allocating SQL. An opted-in run must not silently skip or
 	// download a CLI over the network when the local prerequisite is missing.
 	binary := os.Getenv("TEMPORAL_CLI_PATH")
-	if binary == "" {
-		binary = "temporal"
+	if !filepath.IsAbs(binary) {
+		t.Fatal("TEMPORAL_CLI_PATH must explicitly name the verified absolute pinned binary")
 	}
-	path, err := exec.LookPath(binary)
-	if err != nil {
-		t.Fatalf("local Temporal CLI required (TEMPORAL_CLI_PATH): %v", err)
+	if err := validateTemporalExecutable(binary); err != nil {
+		t.Fatal(err)
 	}
 	// This API creates/migrates a private clone and registers cleanup. It ignores
 	// DATABASE_URL, so an inherited production/dev DSN cannot select real data.
 	raw, _ := db.NewTestDatabase(t)
 	id := uuid.NewString()
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
-	srv, err := testsuite.StartDevServer(ctx, testsuite.DevServerOptions{
-		ExistingPath: path,
-		LogLevel:     "never",
-		DBFilename:   filepath.Join(t.TempDir(), "temporal.sqlite"),
-		ClientOptions: &client.Options{
-			Namespace: "futurechat-b-" + id,
-		},
-	})
+	c, err := startTemporalProcess(t, binary, "futurechat-b-"+id, filepath.Join(t.TempDir(), "temporal.sqlite"))
 	if err != nil {
 		t.Fatalf("start private Temporal server: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := srv.Stop(); err != nil {
-			t.Errorf("stop owned Temporal server: %v", err)
-		}
-	})
-	return &resources{SQL: raw, Temporal: srv.Client(), Queue: "futurechat-b-" + id, Namespace: "futurechat-b-" + id}
+	return &resources{SQL: raw, Temporal: c, Queue: "futurechat-b-" + id, Namespace: "futurechat-b-" + id}
 }
 
 type observedExecution struct {

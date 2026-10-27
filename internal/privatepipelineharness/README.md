@@ -35,7 +35,20 @@ asset `temporal_cli_1.5.1_linux_amd64.tar.gz`, SHA256
 Official same-release `checksums.txt` SHA256
 `1b674a6e62e2e582cfd5cd84fa09f58844a2507d4621e0f4278a587ef9095a90`.
 Both were verified before extracting only `temporal`, after rejecting unsafe tar
-paths/symlinks. This is a temporary dev dependency, not a system installation.
+paths/symlinks. The fixture enforces the extracted executable's SHA256 at runtime:
+`eb4f6ddaa41cadf58c7a77aa50c4bd932d6739fcef04ac76c7a679eaff2f5e6a`,
+plus `--version`=1.5.1 BEFORE allocating SQL. Only linux/amd64 is supported; an
+unknown platform, missing absolute path or changed binary fails explicitly.
+This is a temporary dev dependency, not a system installation.
+
+The fixture does not use SDK StartDevServer: it starts its owned CLI directly in
+a fresh process group, registers cleanup before starting, bounds startup readiness,
+and terminates/waits its own group on startup failure or teardown. A never-ready
+owned subprocess regression and binary-mismatch regression passed 0.224s. Repaired
+lifecycle actual server+CAN+DynamicWorkflow SQL tests passed together in 20.819s.
+DynamicWorkflow uses concrete SQL status/checkpoint/cleanup activities; its
+immutable definition loader is an explicit trusted-fixture boundary, not a mock
+review-completion result. Full reviewer/author pipeline is still unproven.
 
 Real server infrastructure passed 3.247s; actual CAN history/namespace fencing/
 exact-run successor and terminal proof passed 17.621s. These still are NOT an
