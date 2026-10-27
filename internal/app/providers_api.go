@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/runcontinuity"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -1035,7 +1036,7 @@ type TriggerRedriverDeps struct {
 //
 //forge:root-only api
 func NewTriggerRedriver(d TriggerRedriverDeps) (*TriggerRedriver, error) {
-	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
+	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue).WithContinuity(runcontinuity.TemporalReader{Service: d.Temporal.Client.WorkflowService(), Namespace: d.Temporal.Namespace})}, nil
 }
 
 // Run redrives until ctx ends.

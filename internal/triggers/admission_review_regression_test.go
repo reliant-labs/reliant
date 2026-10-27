@@ -102,7 +102,7 @@ func TestAdmissionHardDeletedChatStillReleasesExactTemporalRoot(t *testing.T) {
 		t.Fatal("immutable Temporal root lost with chat")
 	}
 	probe := &admissionTemporalProbe{desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: root, RunId: run}, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}}}
-	r := NewRedriver(env.Repo, probe, "")
+	r := NewRedriver(env.Repo, probe, "").WithContinuity(singleAdmissionHistory{probe})
 	if err := r.redriveAdmissions(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestAdmissionHighWaterSweepRevisitsOldRowsUnderContinuousIntake(t *testing.
 		reviewAdmissionEvent(t, env, fmt.Sprint("initial", i), fmt.Sprint("initial", i), nil)
 	}
 	probe := &admissionTemporalProbe{desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: root, RunId: run}, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}}}
-	r := NewRedriver(env.Repo, probe, "")
+	r := NewRedriver(env.Repo, probe, "").WithContinuity(singleAdmissionHistory{probe})
 	r.admissionBatch = 1
 	if err := r.redriveAdmissions(ctx); err != nil {
 		t.Fatal(err)
