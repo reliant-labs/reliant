@@ -23,9 +23,14 @@ import (
 	adapter "github.com/reliant-labs/reliant/internal/reviewpublisheradapter"
 	"github.com/reliant-labs/reliant/internal/runcontinuity"
 	"github.com/reliant-labs/reliant/internal/store"
+	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // External-provider credential fixture only; no review/intent/journal authority.
@@ -59,6 +64,14 @@ func (a cpAuthentication) Apply(r *http.Request) error {
 // input. It is NOT a graph-completion/whole-pipeline proof. All source/intent/
 // publication/wait-policy adapters, SQL stores, provider reads and CP HTTP are real.
 func TestFutureChatBPublisherConfirmedInboxBoundary(t *testing.T) {
+	runPublisherInbox(t, false)
+}
+
+func TestFutureChatBActualReviewGraphToAuthorWait(t *testing.T) {
+	runPublisherInbox(t, true)
+}
+
+func runPublisherInbox(t *testing.T, actualGraph bool) {
 	f := newResources(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
@@ -121,16 +134,54 @@ func TestFutureChatBPublisherConfirmedInboxBoundary(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.BindTriggerAdmissionRun(ctx, event.ID, "boundary-review-run"); err != nil {
+	state := store.ReviewAuthorityStore{DB: repo.ORM()}
+	reviewRunID := "boundary-review-run"
+	completionNode := "finish"
+	var reviewerRun client.WorkflowRun
+	var reviewerWorker worker.Worker
+	var completion adapter.CompletionActivity
+	snapshot, _ := json.Marshal(map[string]any{"root_ref": "trusted", "admission_key": store.ReviewAdmissionKeyExpression, "graphs": map[string]any{"trusted": map[string]any{"concurrency": map[string]any{"key": store.ReviewAdmissionKeyExpression}}}})
+	if actualGraph {
+		definition := "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [finish]\nnodes:\n  - id: finish\n    type: compute\n    outcome: success\noutputs:\n  review_verdict: approve\n"
+		wf, err := wfyaml.ParseWorkflow([]byte(definition))
+		if err != nil {
+			t.Fatal(err)
+		}
+		graph, err := protojson.Marshal(wf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		completionNode = adapter.ReviewCompletionPath
+		snapshot, err = json.Marshal(adapter.GraphSnapshot{AdmissionKey: store.ReviewAdmissionKeyExpression, WorkflowType: "PrivateTrustedReviewer", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, YAML: map[string][]byte{"trusted": []byte(definition)}, CompletionNode: completionNode, CompletionActivity: adapter.CompletionActivityName, OutputSchema: adapter.CompletionSchema})
+		if err != nil {
+			t.Fatal(err)
+		}
+		reviewQueue := f.Queue + "-review"
+		reviewerRun, err = f.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: reviewer, TaskQueue: reviewQueue}, "PrivateTrustedReviewer", runtime.WorkflowInput{ChatID: reviewer, WorkflowName: "trusted", Inputs: map[string]any{}, ExecContext: &runtime.ExecutionContext{ChatID: reviewer, Thread: reviewer, ThreadMode: "new", WorkflowName: "trusted"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		reviewRunID = reviewerRun.GetRunID()
+		reviewerWorker = worker.New(f.Temporal, reviewQueue, worker.Options{})
+		reviewerWorker.RegisterWorkflowWithOptions(adapter.PrivateReviewWorkflow, workflow.RegisterOptions{Name: "PrivateTrustedReviewer"})
+		reviewerWorker.RegisterActivityWithOptions(func(context.Context, handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
+			return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: graph}, nil
+		}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
+		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowStatusActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowStatus"})
+		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowCheckpointActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+		reviewerWorker.RegisterActivityWithOptions(handlers.NewCleanupActivity(repo).Execute, activity.RegisterOptions{Name: "Cleanup"})
+		completion = adapter.CompletionActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}
+		reviewerWorker.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: adapter.CompletionActivityName})
+		reviewerWorker.RegisterActivityWithOptions((adapter.ResolveAssignmentActivity{Store: state}).Execute, activity.RegisterOptions{Name: adapter.ResolveAssignmentActivityName})
+	}
+	if err := repo.BindTriggerAdmissionRun(ctx, event.ID, reviewRunID); err != nil {
 		t.Fatal(err)
 	}
-	state := store.ReviewAuthorityStore{DB: repo.ORM()}
-	snapshot, _ := json.Marshal(map[string]any{"root_ref": "trusted", "admission_key": store.ReviewAdmissionKeyExpression, "graphs": map[string]any{"trusted": map[string]any{"concurrency": map[string]any{"key": store.ReviewAdmissionKeyExpression}}}})
 	digest, err := store.DigestReviewSnapshot(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := state.ProvisionReviewPolicy(ctx, store.ReviewPolicyConfig{ID: "policy", OwnerID: endpoint.OwnerID, ProjectID: "test-project", WorkflowRef: "trusted", RepositoryID: 42, Revision: 1, Enabled: true, WorkflowDigest: digest, GraphSnapshot: snapshot, CompletionNode: "finish", CheckName: "ReliantReview", AuthorizedBy: "fixture-owner"}); err != nil {
+	if err := state.ProvisionReviewPolicy(ctx, store.ReviewPolicyConfig{ID: "policy", OwnerID: endpoint.OwnerID, ProjectID: "test-project", WorkflowRef: "trusted", RepositoryID: 42, Revision: 1, Enabled: true, WorkflowDigest: digest, GraphSnapshot: snapshot, CompletionNode: completionNode, CheckName: "ReliantReview", AuthorizedBy: "fixture-owner"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, ref := range []string{"github/repo.get@1", "github/pr.get@1"} {
@@ -155,9 +206,30 @@ func TestFutureChatBPublisherConfirmedInboxBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Explicit fixture seed, not an attestation from a model or fake ReviewSource.
-	if err := state.RecordReviewEvidence(ctx, store.ReviewEvidence{AssignmentID: a.ID, Digest: "sha256:" + strings.Repeat("b", 64), ActivityID: "fixture-terminal", RunID: "boundary-review-run", Verdict: reviewpublisher.Approve, Terminal: true, GraphSucceeded: true}); err != nil {
-		t.Fatal(err)
+	if actualGraph {
+		if err := reviewerWorker.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(reviewerWorker.Stop)
+		var result runtime.WorkflowResult
+		if err := reviewerRun.Get(ctx, &result); err != nil {
+			t.Fatal(err)
+		}
+		if err := completion.Reconcile(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		a, err = state.LoadReviewAuthority(ctx, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !a.Completion.Final || !a.Completion.GraphSucceeded || a.Completion.Verdict != reviewpublisher.Approve {
+			t.Fatalf("actual graph history did not attest completion: %+v", a.Completion)
+		}
+	} else {
+		// Boundary-only test's explicit fixture seed; full-graph path NEVER calls this.
+		if err := state.RecordReviewEvidence(ctx, store.ReviewEvidence{AssignmentID: a.ID, Digest: "sha256:" + strings.Repeat("b", 64), ActivityID: "fixture-terminal", RunID: "boundary-review-run", Verdict: reviewpublisher.Approve, Terminal: true, GraphSucceeded: true}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	coreService, err := reviewpublisher.New(reviewpublisher.Deps{Reviews: adapter.SQL{Store: state}, Heads: heads, Intents: adapter.SQL{Store: state}, RunOrigin: "https://app.reliant.test"})
 	if err != nil {
@@ -170,7 +242,7 @@ func TestFutureChatBPublisherConfirmedInboxBoundary(t *testing.T) {
 	provider.mu.Lock()
 	provider.externalID = store.ReviewExternalID(a, intent.IntentID)
 	provider.mu.Unlock()
-	wait, err := prreviewwait.New(prreviewwait.Deps{Policy: adapter.WaitPolicy{Store: state}, Store: store.PRReviewWaitStore{DB: repo.ORM()}, Continuity: prreviewwait.ContinuityReader{Reader: runcontinuity.TemporalReader{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}, Signals: prreviewwait.TemporalSignaler{Client: f.Temporal}})
+	wait, err := prreviewwait.New(prreviewwait.Deps{Policy: adapter.WaitPolicy{Store: state}, Store: adapter.GuardedWaitStore{PRReviewWaitStore: store.PRReviewWaitStore{DB: repo.ORM()}}, Continuity: prreviewwait.ContinuityReader{Reader: runcontinuity.TemporalReader{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}, Signals: prreviewwait.TemporalSignaler{Client: f.Temporal}})
 	if err != nil {
 		t.Fatal(err)
 	}
