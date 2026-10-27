@@ -181,6 +181,22 @@ message ApiServerConfig {
     description: "Worktree auto-archive: dry-run, on or off"
   }];
 
+  // Reclaim on merge, under the same mode as worktree_auto_archive: a live
+  // worktree whose work has landed (every checkout clean and merged into its
+  // base branch on the remote) has its rebuildable files (node_modules, tool
+  // installs, caches) shed at once, and is archived, its checkout removed,
+  // once no chat has done anything in it for this long. Its chats stay live
+  // and get the worktree back, recreated from its branch, the next time they
+  // run a tool. Zero turns reclaim-on-merge off.
+  google.protobuf.Duration worktree_landed_idle = 81 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKTREE_LANDED_IDLE"
+      default_value: "3h"
+      description: "How long a landed worktree's chats must be quiet before it is archived (0 = off)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
   // The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
   // logs in through: its origin and its PUBLIC publishable key
   // (sb_publishable_*, the browser-facing anon identity, not a service-role

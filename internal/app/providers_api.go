@@ -90,6 +90,10 @@ type APISettings struct {
 	// WorktreeAutoArchive is what the worktree sweep does with finished
 	// worktrees (RELIANT_WORKTREE_AUTO_ARCHIVE); see worktreesweep.
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
+	// WorktreeLandedIdle is how long a landed worktree's chats must be quiet
+	// before the sweep archives it (RELIANT_WORKTREE_LANDED_IDLE); zero is
+	// off. See worktreesweep.WithLandedIdle.
+	WorktreeLandedIdle time.Duration
 	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
 	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 	PayloadGCHorizon time.Duration
@@ -127,6 +131,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		AuthorizationServer: strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:       auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
 		WorktreeAutoArchive: worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
+		WorktreeLandedIdle:  api.GetWorktreeLandedIdle().AsDuration(),
 		PayloadGCHorizon:    api.GetPayloadBlobGcHorizon().AsDuration(),
 	}
 	logging.Info("Starting Reliant API server (stateless)",
@@ -897,6 +902,11 @@ type WorktreeSweepDeps struct {
 // evidence. Every capture still requires its own eligibility/secret gates and
 // independent remote proof. "off" disables automatic enrollment.
 //
+// The same mode governs reclaim on merge (RELIANT_WORKTREE_LANDED_IDLE): a
+// live worktree whose work has landed has its rebuildable files shed ("on")
+// and is archived once its chats have been quiet that long, leaving the chats
+// live; dry-run only logs the candidates.
+//
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	database := d.DB
@@ -914,7 +924,8 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
-			}), nil
+			}).
+		WithLandedIdle(d.Settings.WorktreeLandedIdle), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its
