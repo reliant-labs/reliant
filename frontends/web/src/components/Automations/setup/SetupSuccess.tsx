@@ -17,6 +17,7 @@ import { describeDeclaredSource, integrationOf, scheduleOf, type DeclaredTrigger
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import Button from "@/components/forge-ui/button";
 import { WebhookCredentialPanel } from "../dialog/WebhookCredentialPanel";
+import { TestEventPreview } from "../dialog/TestEventPreview";
 
 export interface SetupSuccessProps {
   workflowTitle: string;
@@ -106,6 +107,10 @@ export function SetupSuccess({
           </p>
           <WebhookCredentialPanel trigger={r.activation!} credential={r.webhook} />
         </div>
+      ))}
+
+      {result.results.filter((r) => r.activation && integrationOf(declared.find((d) => d.name === r.trigger) ?? {})).map((r) => (
+        <TestEventPreview key={r.trigger} trigger={r.activation!} />
       ))}
 
       <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">

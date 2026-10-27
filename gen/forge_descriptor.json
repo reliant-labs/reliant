@@ -10793,6 +10793,11 @@
             "ProtoType": "message",
             "IsOptional": true,
             "MessageType": "reliant.v1.TriggerSender"
+          },
+          {
+            "Name": "trigger_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PreviewReplayResponse": [
@@ -11234,6 +11239,11 @@
             "name": "sender",
             "kind": "message",
             "type_name": "reliant.v1.TriggerSender",
+            "optional": true
+          },
+          {
+            "name": "trigger_id",
+            "kind": "string",
             "optional": true
           }
         ],
@@ -41851,7 +41861,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
-    "reliant/v1/trigger.proto": "fe695d7df2de13bbfda0806758bce8b42e0887eae2e209b6679f1131901e2344",
+    "reliant/v1/trigger.proto": "5cd5a51d49cf10ad9d13833974f4359fb4b24bb8d66c9878f428b3bf2dbc9777",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
