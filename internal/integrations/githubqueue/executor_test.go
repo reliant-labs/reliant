@@ -52,7 +52,7 @@ type fake struct {
 func newFake(t *testing.T) *fake {
 	t.Helper()
 	f := &fake{t: t}
-	f.pr = map[string]any{"id": "PR_42", "number": 42, "state": "OPEN", "isDraft": false, "headRefOid": testSHA,
+	f.pr = map[string]any{"id": "PR_42", "databaseId": 987654, "url": "https://github.com/acme/widgets/pull/42", "number": 42, "state": "OPEN", "isDraft": false, "headRefOid": testSHA,
 		"baseRefName": "main", "isMergeQueueEnabled": true,
 		"repository":     map[string]any{"id": "R_101", "databaseId": 101},
 		"headRepository": map[string]any{"id": "R_101", "databaseId": 101}, "mergeQueueEntry": nil}
@@ -156,8 +156,34 @@ func TestEnqueueExactMutation(t *testing.T) {
 	require.Equal(t, 1, f.mutations, "retry must read membership before mutation")
 }
 
+func TestAcceptedReturnsAuthenticatedPRIdentityDistinctFromQueueReceipt(t *testing.T) {
+	for _, mode := range []string{"new", "existing", "reconciled"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newFake(t)
+			// These provider facts deliberately differ from the requested PR number
+			// and from the queue entry ID. None may be fabricated from params.
+			f.pr["databaseId"] = 7654321
+			f.pr["url"] = "https://github.com/Acme/Widgets/pull/42"
+			if mode == "existing" {
+				f.pr["mergeQueueEntry"] = queueEntry()
+			} else if mode == "reconciled" {
+				f.mutationStatus = 504
+				f.commitOnFailure = true
+			}
+			res := invoke(t, f)
+			require.False(t, res.IsError)
+			require.Equal(t, int64(7654321), res.Data["id"])
+			require.Equal(t, "PR_42", res.Data["node_id"])
+			require.Equal(t, "https://github.com/Acme/Widgets/pull/42", res.Data["html_url"])
+			require.Equal(t, "MQE_1", res.Data["queue_entry_id"])
+		})
+	}
+}
+
 func TestRejectSubjectConfusion(t *testing.T) {
 	cases := map[string]func(*fake){
+		"missing PR database ID": func(f *fake) { delete(f.pr, "databaseId") },
+		"missing PR URL":         func(f *fake) { delete(f.pr, "url") },
 		"wrong repository ID":    func(f *fake) { f.repo["databaseId"] = 102 },
 		"wrong repository name":  func(f *fake) { f.repo["nameWithOwner"] = "other/widgets" },
 		"cross repo PR":          func(f *fake) { f.pr["repository"] = map[string]any{"id": "R_102", "databaseId": 102} },

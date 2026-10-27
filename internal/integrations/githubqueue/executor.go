@@ -23,7 +23,7 @@ const subjectQuery = `query ReliantQueueSubject($owner: String!, $repo: String!,
   repository(owner: $owner, name: $repo) {
     id databaseId nameWithOwner defaultBranchRef { name }
     pullRequest(number: $number) {
-      id number state isDraft headRefOid baseRefName isMergeQueueEnabled
+      id databaseId url number state isDraft headRefOid baseRefName isMergeQueueEnabled
       repository { id databaseId }
       headRepository { id databaseId }
       mergeQueueEntry { id position pullRequest { id headRefOid repository { id } } }
@@ -60,6 +60,8 @@ type subject struct {
 	DefaultBranchRef *struct{ Name string }
 	PullRequest      *struct {
 		ID                  string
+		DatabaseID          int64
+		URL                 string
 		Number              int64
 		State               string
 		IsDraft             *bool
@@ -105,9 +107,13 @@ func failedResponse(f *failure) (*httpaction.Result, error) {
 	return res, err
 }
 
-func accepted(e *entry, existing bool) (*httpaction.Result, error) {
+func accepted(s *subject, e *entry, existing bool) (*httpaction.Result, error) {
+	// Common write identifiers describe the authenticated PR subject. The
+	// separately named queue receipt is not the PR's numeric or node identity.
+	p := s.PullRequest
 	return &httpaction.Result{StatusCode: http.StatusOK, Content: "Pull request is accepted in GitHub's native merge queue; it has not necessarily merged.",
-		Data: map[string]any{"outcome": "accepted", "accepted": true, "queue_entry_id": e.ID, "position": *e.Position, "already_queued": existing}}, nil
+		Data: map[string]any{"outcome": "accepted", "accepted": true, "id": p.DatabaseID, "node_id": p.ID, "html_url": p.URL,
+			"queue_entry_id": e.ID, "position": *e.Position, "already_queued": existing}}, nil
 }
 
 func enqueue(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Result, error) {
@@ -140,7 +146,7 @@ func enqueue(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Res
 			return nil, &failure{code: "failed", status: http.StatusConflict}
 		}
 		p := s.PullRequest
-		if p.ID == "" || p.Number != number || p.Repository == nil || p.Repository.ID != s.ID || p.Repository.DatabaseID != repositoryID ||
+		if p.ID == "" || p.DatabaseID <= 0 || p.URL == "" || p.Number != number || p.Repository == nil || p.Repository.ID != s.ID || p.Repository.DatabaseID != repositoryID ||
 			p.HeadRepository == nil || p.HeadRepository.ID != s.ID || p.HeadRepository.DatabaseID != repositoryID ||
 			p.State != "OPEN" || p.IsDraft == nil || *p.IsDraft || p.BaseRefName != s.DefaultBranchRef.Name || !p.IsMergeQueueEnabled {
 			return nil, &failure{code: "failed", status: http.StatusConflict}
@@ -158,7 +164,7 @@ func enqueue(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Res
 		return failedResponse(f)
 	}
 	if e := s.PullRequest.MergeQueueEntry; e != nil {
-		return accepted(e, true)
+		return accepted(s, e, true)
 	}
 	var out struct {
 		EnqueuePullRequest *struct{ MergeQueueEntry *entry }
@@ -167,7 +173,7 @@ func enqueue(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Res
 		"pullRequestId": s.PullRequest.ID, "expectedHeadOid": sha,
 	}}, &out)
 	if f == nil && out.EnqueuePullRequest != nil && validEntry(out.EnqueuePullRequest.MergeQueueEntry, s.ID, s.PullRequest.ID, sha) {
-		return accepted(out.EnqueuePullRequest.MergeQueueEntry, false)
+		return accepted(s, out.EnqueuePullRequest.MergeQueueEntry, false)
 	}
 	// A timeout or GraphQL error can follow a committed mutation. Read current
 	// membership once, never blindly replay the mutation. Every later invocation
@@ -178,7 +184,7 @@ func enqueue(ctx context.Context, call httpaction.ExecutorCall) (*httpaction.Res
 	}
 	if refreshed, readFailure := read(); readFailure == nil {
 		if e := refreshed.PullRequest.MergeQueueEntry; e != nil {
-			return accepted(e, true)
+			return accepted(refreshed, e, true)
 		}
 	} else {
 		return failedResponse(readFailure)

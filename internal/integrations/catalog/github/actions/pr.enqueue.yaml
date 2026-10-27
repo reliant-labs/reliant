@@ -52,6 +52,15 @@ output:
   schema:
     type: object
     properties:
+      id:
+        type: integer
+        description: Authenticated pull request database ID, not its number or queue entry ID.
+      node_id:
+        type: string
+        description: Authenticated pull request GraphQL node ID.
+      html_url:
+        type: string
+        description: Pull request URL returned by the authenticated GitHub subject read.
       outcome: { type: string }
       accepted: { type: boolean }
       queue_entry_id: { type: string }
