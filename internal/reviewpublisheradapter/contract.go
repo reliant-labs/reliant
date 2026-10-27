@@ -25,7 +25,9 @@ type AuthorityStore interface {
 // validated graph, not a re-read of current mutable source. Dynamic/unpinned
 // dependencies are refused because every observed load must match this map.
 type GraphSnapshot struct {
+	AdmissionKey       string                     `json:"admission_key"`
 	RootRef            string                     `json:"root_ref"`
+	WorkflowType       string                     `json:"workflow_type"`
 	Graphs             map[string]json.RawMessage `json:"graphs"`
 	CompletionNode     string                     `json:"completion_node"`
 	CompletionActivity string                     `json:"completion_activity"`
