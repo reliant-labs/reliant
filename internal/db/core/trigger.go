@@ -394,6 +394,11 @@ type TriggerEvent struct {
 	OutcomeDetail string
 	ChatID        *string // the chat this firing launched, when it launched one
 	CreatedAt     time.Time
+	// CapacityOrder is non-nil only for intentionally queued workflow triggers.
+	// Such events have no delivery-age expiry. Scope survives activation deletion.
+	CapacityOrder       *int64
+	CapacityProjectID   *string
+	CapacityWorkflowRef *string
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for

@@ -846,6 +846,9 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		return nil, &InternalError{Reason: "failed to claim the start", Err: err}
 	}
 	if !stillPending {
+		if err := l.recoverAdmission(ctx, recorded.ID, chat.MainThreadID(), spec); err != nil {
+			return nil, &InternalError{Reason: "failed to recover admitted execution", Err: err}
+		}
 		return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: recorded.ID}
 	}
 
@@ -888,6 +891,9 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 			spec.WorktreeID = nil
 			return l.launchPending(ctx, ev, spec, seed)
 		}
+	}
+	if err := l.recoverAdmission(ctx, existing.ID, chat.MainThreadID(), spec); err != nil {
+		return nil, &InternalError{Reason: "failed to recover admitted execution", Err: err}
 	}
 	return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: existing.ID}
 }
@@ -1131,6 +1137,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		ID:                       workflowID,
 		TaskQueue:                l.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		Memo:                     map[string]interface{}{"trigger_event_id": p.eventID},
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
@@ -1202,6 +1209,9 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	}
 
 	runID := workflowRun.GetRunID()
+	if err := l.recoverAdmission(ctx, p.eventID, workflowID, p.spec); err != nil {
+		return nil, &InternalError{Reason: "failed to record admitted execution", Err: err}
+	}
 	l.runs.RecordRun(ctx, chatID, workflowID, runID)
 
 	// Close the pending window now rather than waiting for the run's own

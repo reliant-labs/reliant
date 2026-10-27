@@ -243,7 +243,9 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 		limit = defaultTriggerEventLimit
 	}
 	rows, err := ListTriggerEvent(ctx, db,
-		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
+		func(q *bun.SelectQuery) {
+			q.Where("outcome = 'pending' OR (capacity_order IS NOT NULL AND outcome = 'launched' AND capacity_first_run_id IS NULL)")
+		},
 		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
 		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
 		orm.WithLimit(limit))
@@ -603,19 +605,22 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		}
 	}
 	ev := &core.TriggerEvent{
-		ID:            row.ID,
-		TriggerID:     row.TriggerID,
-		UserID:        row.UserID,
-		Kind:          row.Kind,
-		DedupeKey:     row.DedupeKey,
-		OccurredAt:    row.OccurredAt,
-		Payload:       payload,
-		Outcome:       row.Outcome,
-		OutcomeDetail: row.OutcomeDetail,
-		ChatID:        row.ChatID,
-		CreatedAt:     row.CreatedAt,
-		Sender:        sender,
-		Origin:        origin,
+		ID:                  row.ID,
+		TriggerID:           row.TriggerID,
+		UserID:              row.UserID,
+		Kind:                row.Kind,
+		DedupeKey:           row.DedupeKey,
+		OccurredAt:          row.OccurredAt,
+		Payload:             payload,
+		Outcome:             row.Outcome,
+		OutcomeDetail:       row.OutcomeDetail,
+		ChatID:              row.ChatID,
+		CreatedAt:           row.CreatedAt,
+		Sender:              sender,
+		Origin:              origin,
+		CapacityOrder:       row.CapacityOrder,
+		CapacityProjectID:   row.CapacityProjectID,
+		CapacityWorkflowRef: row.CapacityWorkflowRef,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus
