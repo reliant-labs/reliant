@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/converter"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/runcontinuity"
 )
 
 // AdmissionDescriber is execution truth, not the DB's terminal-status cache.
@@ -84,7 +85,17 @@ func (r *Redriver) redriveAdmissions(ctx context.Context) error {
 			if info.GetExecution().GetWorkflowId() != a.ChatID || info.GetExecution().GetRunId() != a.RunID {
 				continue
 			}
-			if admissionTerminal(info.GetStatus()) {
+			if r.continuity == nil {
+				continue
+			}
+			// Resolve from the immutable ORIGINAL admission execution, never the
+			// chat's current pointer. A CAN close is an edge, not logical closure.
+			logical, proofErr := runcontinuity.Resolve(ctx, r.continuity, runcontinuity.Execution{WorkflowID: a.ChatID, RunID: a.RunID})
+			if proofErr != nil {
+				continue
+			} // unknown/cycle/retention/64-hop bound: hold
+			if !logical.Live && admissionTerminal(logical.Terminal) {
+				// CAS still names the original reservation, not its successor.
 				if _, err = repo.ReleaseTriggerAdmission(ctx, a.EventID, a.ChatID, a.RunID); err != nil {
 					return err
 				}

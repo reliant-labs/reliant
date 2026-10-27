@@ -1,6 +1,6 @@
 # Private automation admission: Stage 1 review handoff
 
-Base: `8c0018501b03b574620ac90253162aacd0581672`. No activation, merge, release or PR yet.
+Base: `8c0018501b03b574620ac90253162aacd0581672`. Draft PR #1710; no queue, activation, merge or release.
 
 ## Contract
 
@@ -22,7 +22,7 @@ Existing trigger_events are queue and audit history. A short scoped advisory-loc
 
 Server `RELIANT_ADMISSION_PENDING_LIMIT` has proposed configurable default 1000 distinct queued keys per scope (not an owner-fixed product contract). At overflow, event remains durably failed with explicit admission overload detail. Existing ERROR-log metrics pipeline receives an overload record without payload/key; downstream alert delivery is **not yet verified**. Every acknowledged intake has durable storage.
 
-Reservation is acquired within the launch transaction, atomically with chat/event claim. Half-start holds capacity. `Spec.OnStarted` binds original execution ID before run-recorder update. Temporal start memo contains only immutable admission event ID, used to recover acceptance-before-callback crash. Known IDs are described exactly; unknown run ID can bind only if root ID and typed memo generation match. Missing/different memo and NotFound hold capacity, never guess. Only actual Temporal terminal statuses release through exact event/root/run CAS; continued-as-new is conservatively retained. Paused/waiting and cancelling remain reserved.
+Reservation is acquired within the launch transaction, atomically with chat/event claim. Half-start holds capacity. `Spec.OnStarted` binds original execution ID before run-recorder update. Temporal start memo contains only immutable admission event ID, used to recover acceptance-before-callback crash. Known IDs are described exactly; unknown run ID can bind only if root ID and typed memo generation match. Missing/different memo and NotFound hold capacity, never guess. The shared `runcontinuity` resolver proves authenticated internal Continue-As-New edges from that immutable original execution (maximum 64 hops, ten-second deadline). A live successor retains the permit; only a verified logical terminal result releases through CAS against the ORIGINAL event/root/run. Original admission identity is never overwritten by the successor. Retry/reset/unrelated followup, unavailable history, cycles, missing reader and exceeded bounds retain capacity for investigation. Production wiring supplies the raw Temporal history service and trusted dial namespace explicitly. Paused/waiting and cancelling remain reserved.
 
 Existing redriver polls admission events independently of ordinary pending-event 24h expiry. Each bounded keyset sweep captures a fixed high-water ordinal and resets at that boundary, so continuous new intake cannot starve old reservations or queued replacements. The cursor is not ownership and loses no durable intent on restart. Deleted activations' queued orphan events settle durably failed under a queued-only CAS; reserved orphans retain capacity. `admission_workflow_id` persists the immutable Temporal root independently of the deletable chat FK, atomically with launch attachment, so hard chat deletion cannot leak a permit or change exact-execution reconciliation. No new bus or long-lived Temporal coordinator. Periodic reconciliation supplies recovery; terminal wakeup optimization deliberately deferred.
 
