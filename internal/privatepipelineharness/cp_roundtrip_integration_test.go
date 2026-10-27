@@ -18,10 +18,11 @@ import (
 // checkProvider implements the external provider boundary only. The actual
 // CP journal, credential store/service, internal handler and bridge run unchanged.
 type checkProvider struct {
-	mu     sync.Mutex
-	writes int
-	check  map[string]any
-	t      *testing.T
+	mu         sync.Mutex
+	writes     int
+	check      map[string]any
+	externalID string
+	t          *testing.T
 }
 
 func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +36,11 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer ghp_futurechat_b_fixture_owner" {
 			f.t.Error("CP did not use its actual persisted owner credential")
 		}
-		out = map[string]any{"id": 42, "full_name": "acme/example", "permissions": map[string]bool{"push": true}}
+		out = map[string]any{"id": 42, "full_name": "acme/example", "name": "example", "owner": map[string]any{"login": "acme"}, "private": true, "default_branch": "main", "html_url": "https://github.com/acme/example", "permissions": map[string]bool{"push": true}}
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/pulls/7":
+		out = map[string]any{"id": 700, "number": 7, "title": "private", "body": "", "state": "open", "draft": false, "merged": false, "html_url": "https://github.com/acme/example/pull/7",
+			"head": map[string]any{"ref": "fix", "sha": strings.Repeat("a", 40), "repo": map[string]any{"id": 42, "full_name": "acme/example"}},
+			"base": map[string]any{"ref": "main", "sha": strings.Repeat("b", 40), "repo": map[string]any{"id": 42, "full_name": "acme/example"}}}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/installation":
 		out = map[string]any{"id": 8, "app_id": 7}
 	case r.Method == http.MethodPost && r.URL.Path == "/app/installations/8/access_tokens":
@@ -57,7 +62,11 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if check["head_sha"] != strings.Repeat("a", 40) || check["name"] != "ReliantReview" || check["external_id"] != "fixture/assignment/1" || check["conclusion"] != "success" {
+		externalID := f.externalID
+		if externalID == "" {
+			externalID = "fixture/assignment/1"
+		}
+		if check["head_sha"] != strings.Repeat("a", 40) || check["name"] != "ReliantReview" || check["external_id"] != externalID || check["conclusion"] != "success" {
 			f.t.Error("check mutation was not exact-head, exact-intent review")
 		}
 		f.writes++

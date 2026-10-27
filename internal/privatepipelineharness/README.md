@@ -102,6 +102,16 @@ fallback are checked. The clone path therefore remains authoritative.
 Pure `TestPrivatePostgresGuard` cases never connect or migrate any supplied URI.
 No Go workspace or production module pins are edited.
 
+Publisher-to-inbox boundary (PASS25.199s): run
+`TestFutureChatBPublisherConfirmedInboxBoundary` with the same opt-in environment,
+CP checkout and verified CLI. It uses real SQL policy/assignment/intent stores,
+real catalog/provider head reads, core Prepare, actual CP HTTP credentials/claim/
+bridge, confirmed receipt, WaitPolicy/WaitOutcome, exact-author server history and
+SQL inbox consume. **Reviewer terminal evidence is explicitly seeded trusted SQL
+fixture input**: this is NOT actual reviewer graph completion or full E2E.
+Admission projection uses actual Enqueue/Reserve/UpdateOutcome/BindRun APIs; no
+mock ReviewSource, IntentStore, CreateJournal, HeadSource or CheckBridge is used.
+
 Remaining prerequisites are tracked in
 `docs/research/futurechat-b-integration-harness-plan.md`: reviewed REL487 publisher
 SQL authority and trusted completion/publication/outcome adapters. The reviewed
