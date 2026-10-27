@@ -40,9 +40,13 @@ No PR-specific subjects, verdicts, author registries or review tables are used.
   claim retries, paused/deleted chats and wrong-chain release refusal.
 - Boundary tests reject running, continued, missing/mismatched chain and API
   outage as release evidence.
+- A real Temporal dev-server test passed: an actual Continue-As-New successor
+  keeps the initial execution's slot, then a matching terminal successor releases
+  it. That test uses a deterministic storage boundary; the separate FIFO launch
+  test uses real PostgreSQL.
 - Scoped convention and migration-safety lint passed.
 
 Draft PR #1734 is not activated, merged or released. Independent review,
-current-main integration, actual Temporal restart/chain tests, complete manual
+current-main integration, actual Temporal restart/retention tests, complete manual
 start/alias semantics and retention/deletion audit remain acceptance work. Do
 not call this finished or enable the workflow cap before those checks.
