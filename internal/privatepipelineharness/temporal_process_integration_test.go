@@ -54,11 +54,12 @@ func validateTemporalExecutable(path string) error {
 // ownedProcess is test infrastructure, not an authorization adapter. The
 // command is always started in a fresh group; signals target only that group.
 type ownedProcess struct {
-	cmd     *exec.Cmd
-	done    chan struct{}
-	request chan struct{}
-	err     error
-	once    sync.Once
+	cmd         *exec.Cmd
+	done        chan struct{}
+	request     chan struct{}
+	err         error
+	identityErr error
+	once        sync.Once
 }
 
 type processObservationHooks struct {
@@ -110,6 +111,8 @@ func (p *ownedProcess) ownLifecycle(ctx context.Context, hooks processObservatio
 		exited, err := childExited(p.cmd.Process.Pid)
 		if err != nil {
 			// If identity cannot be proven, NEVER signal an integer PID/PGID.
+			// Surface this explicitly; do not turn uncertain cleanup into success.
+			p.identityErr = err
 			p.err = p.cmd.Wait()
 			return
 		}
