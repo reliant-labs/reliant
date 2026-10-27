@@ -78,6 +78,11 @@ func (a executionDescriptions) DescribeWorkflowExecution(ctx context.Context, id
 
 func registerRepairBoundary(t *testing.T, w worker.Worker, repo *db.Repo, f *resources, p *checkProvider, github prhandoffadapter.GitHub, handoff store.PRHandoffStore, root, runID, path string) {
 	t.Helper()
+	// External daemon availability is a declared fixture boundary: the Run
+	// replacement below executes no shell, but real runtime still preflights it.
+	w.RegisterActivityWithOptions(func(context.Context, map[string]any) (map[string]any, error) {
+		return map[string]any{"daemon_available": true, "daemon_id": "private-fixture"}, nil
+	}, activity.RegisterOptions{Name: "PreflightDaemonCheck"})
 	authors := prhandoffadapter.Authors{Store: repo, Temporal: executionDescriptions{f.Temporal}}
 	initial, err := prhandoff.New(prhandoff.Deps{Store: handoff, Authors: authors, GitHub: github})
 	if err != nil {
