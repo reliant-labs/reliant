@@ -37,7 +37,7 @@ func (r TemporalReader) Snapshot(ctx context.Context, e Execution) (Snapshot, er
 		return Snapshot{}, err
 	}
 	events := first.GetHistory().GetEvents()
-	if len(events) != 1 || events[0].GetEventId() != 1 || events[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+	if len(events) == 0 || events[0].GetEventId() != 1 || events[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 		return Snapshot{}, fmt.Errorf("%w: missing first event", ErrUnverified)
 	}
 	result := Snapshot{Start: events[0].GetWorkflowExecutionStartedEventAttributes()}
