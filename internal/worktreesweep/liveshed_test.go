@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // runningStore is a RunningChatStore answering from a fixed set.
@@ -103,6 +104,36 @@ func TestRecoverableIdleArchiveRequiresEnabledModeAndAtomicStoreAck(t *testing.T
 			} else {
 				require.Empty(t, rs.archiveAsked)
 			}
+		})
+	}
+}
+
+func TestWholeIdleExclusionsNeverFallBackToLegacyArchival(t *testing.T) {
+	for _, kind := range []string{"running-thread", "lookup-failure", "strong-refusal", "stale-idledone"} {
+		t.Run(kind, func(t *testing.T) {
+			store := newFakeStore("d")
+			store.add("child-b", false, nil)
+			rs := &runningStore{archiveOK: true}
+			if kind == "running-thread" {
+				rs.running = map[string]bool{"child-b": true}
+			}
+			if kind == "lookup-failure" {
+				rs.err = errors.New("activity unavailable")
+			}
+			sender := &scriptSender{answer: func(w worktreereclaim.Worktree) worktreereclaim.Result {
+				if w.ProbeIdle {
+					t.Error("excluded whole-idle row enabled weaker legacy probe")
+				}
+				outcome := worktreereclaim.OutcomeLocked
+				if kind == "stale-idledone" {
+					outcome = worktreereclaim.OutcomeIdleDone
+				}
+				return worktreereclaim.Result{ID: w.ID, Outcome: outcome}
+			}}
+			s := New(store, sender).WithIdleRetirement(time.Hour, rs).WithAutoArchive(AutoArchiveOn, store, nil)
+			require.NoError(t, s.Sweep(context.Background()))
+			require.Empty(t, store.archived, "whole-idle refusal cannot enter legacy chat-only archive")
+			require.Empty(t, rs.archiveAsked, "no strong positive proof authorizes row-locked archival")
 		})
 	}
 }

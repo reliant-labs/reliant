@@ -107,6 +107,13 @@ func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
 // The SQL trigger is a backstop for other writers, not a handler-only guard.
 func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID string, worktreeID *string, fn func(context.Context) error) error {
 	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		// Serialize the binding set before its workspace parents, matching
+		// workflow/thread admission triggers. Taking a workspace before this
+		// chat row would invert their order and deadlock a concurrent rebind.
+		var chatIDs []string
+		if err := db.Bun().NewRaw(`SELECT id FROM chats WHERE id=? FOR NO KEY UPDATE`, chatID).Scan(ctx, &chatIDs); err != nil {
+			return err
+		}
 		// A rebind locks old and new parents in the same stable order as the
 		// trigger. The trigger still protects against a concurrently moved row.
 		//

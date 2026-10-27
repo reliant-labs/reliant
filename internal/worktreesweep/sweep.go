@@ -767,7 +767,9 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 			w.Retire = wt.CleanupMetadata.RetireFence
 		}
 		// A user who chose "Keep everything" keeps their workspaces visible too.
-		w.ProbeIdle = state == worktreereclaim.StateActive && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
+		// When whole-idle retirement is configured, exclusions and failed
+		// lookups are terminal for this pass: never enable legacy probing.
+		w.ProbeIdle = state == worktreereclaim.StateActive && s.shed == nil && s.auto != nil && w.Retire == "" && !keep && wt.DeletedAt == nil
 		if state == worktreereclaim.StateActive && w.Retire == "" && shed[wt.ID] {
 			w.ProbeRecoverableAfterSeconds = int64(s.shed.after / time.Second)
 			// Do not fall back to the older directory-mtime-only idle predicate
@@ -928,7 +930,7 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		}
 		if r.RecoverableIdle {
 			s.archiveRecoverableIdle(ctx, userID, wt)
-		} else if r.Outcome == worktreereclaim.OutcomeIdleDone {
+		} else if r.Outcome == worktreereclaim.OutcomeIdleDone && s.shed == nil {
 			s.archiveFinished(ctx, userID, wt)
 		}
 		return // an unarchived row never records a removal
@@ -990,6 +992,9 @@ func (s *Sweeper) recordHold(ctx context.Context, wt *core.Worktree, reason work
 // it. The daemon has already checked the files; the server checks that no
 // chat still uses it. In dry-run mode it only counts and logs.
 func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.Worktree) {
+	if s.shed != nil {
+		return
+	} // whole-idle mode has only its row-locked provenance path
 	s.idleDone.Add(1)
 	a := s.auto
 	reason := ""
