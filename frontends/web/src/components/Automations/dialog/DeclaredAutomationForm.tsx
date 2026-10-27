@@ -1,30 +1,35 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Set up a workflow automation: one workflow turned on in one project
- * (research/autopilot/automation-ux-spec.md §3). The ONE dialog for it, in
- * three modes:
+ * An automation that turns on a workflow's DECLARED triggers in one project:
+ * the workflow says WHEN (its `triggers:`), and this asks for where the runs
+ * happen and as whom. Rendered by the automation dialog whenever it opens for
+ * a workflow that declares triggers, in three phases:
  *
- *   setup     "Set up PR review"            → Turn on
- *   finish    "Finish setting up PR review" → Save and turn on
+ *   setup     "Turn on PR review"                → Turn on
+ *   finish    "Finish setting up PR review"      → Save and turn on
  *             (NEEDS_SETUP: stored settings prefilled, the missing field
  *             focused, a banner saying what changed)
- *   settings  "PR review in reliant-labs"   → Save (Save and resume when paused)
+ *   settings  "PR review in reliant-labs"        → Save (Save and resume when paused)
  *
  * All three call EnableWorkflow, which creates the missing activations and
  * brings the existing ones to these settings (owner decision O2), so the
- * workflow's triggers are configured together and cannot drift apart.
+ * workflow's triggers are configured together and cannot drift apart — the
+ * builder's per-trigger "Turn on" comes here too, never to a single
+ * CreateTrigger. "Need a different trigger?" hands over to the inline form
+ * with the same workflow.
  *
- * Sections, in the order a person decides (typed-inputs-design.md §7):
+ * When first (report 03 §6.1), then in the order a person decides
+ * (typed-inputs-design.md §7):
+ *   When: set by the workflow, in words
  *   (1) each integration: its connection, then who writes
  *   (2) What it watches: the inputs a trigger is scoped by, then the typed
  *       inputs scoped by those
- *   (3) Where it runs: project, machine, workspace
- *   (4) Who can ask it to work: people pickers
- *   (5) Settings: other typed and required inputs
- *   then More settings (inputs with defaults), the prompt when some trigger
- *   has none, the success notification, and per-trigger exceptions.
- * Which input lands where is lib/setupInputs.ts, decided from data.
+ *   (3) Who can ask it to work: people pickers
+ *   (4) Settings: other typed and required inputs
+ *   then the prompt when some trigger has none, More settings (inputs with
+ *   defaults), where it runs as one inferred line, the success notification,
+ *   and per-trigger exceptions. Which input lands where is lib/setupInputs.ts.
  *
  * Validation is inline on blur and on submit; the primary button stays
  * enabled, and pressing it with gaps opens an error summary that takes focus
@@ -53,7 +58,7 @@ import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, isAlertingWebhook, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { useListRepos } from "@/hooks/repo-service-hooks_gen";
-import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "./oncallSetup";
+import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "../oncallSetup";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import { getInputDescription, getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
 import { classifyInputs, type SetupInput } from "@/lib/setupInputs";
@@ -64,19 +69,19 @@ import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import { useWorkflowPresets } from "@/hooks/preset-queries";
 import { cn } from "@/lib/utils";
-import { CardInset } from "../forge-ui/card";
+import { CardInset } from "../../forge-ui/card";
 import Button from "@/components/forge-ui/button";
-import { ErrorSummary, focusField, type ErrorSummaryItem } from "./ErrorSummary";
-import Modal from "../forge-ui/modal";
-import ToggleSwitch from "../forge-ui/toggle_switch";
-import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";
-import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
-import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
-import { TypedInputField, TypedInputsProvider } from "../workflow/inputs/TypedInputField";
-import { integrationDisplayName, inputTypeNouns } from "../workflow/inputs/inputTypeNouns";
-import { RunNowDialog } from "../workflow/run/RunNowDialog";
-import { RunWorkflowForm, WorktreeField } from "../workflow/run/RunWorkflowForm";
-import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
+import { ErrorSummary, focusField, type ErrorSummaryItem } from "../ErrorSummary";
+import Modal from "../../forge-ui/modal";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
+import { ProtoFieldRenderer } from "../../workflow/ProtoFieldRenderer";
+import { ConnectionPicker } from "../../workflow/connections/ConnectionPicker";
+import { ConnectIntegrationDialog } from "../../workflow/connections/ConnectIntegrationDialog";
+import { TypedInputField, TypedInputsProvider } from "../../workflow/inputs/TypedInputField";
+import { integrationDisplayName, inputTypeNouns } from "../../workflow/inputs/inputTypeNouns";
+import { RunNowDialog } from "../../workflow/run/RunNowDialog";
+import { RunWorkflowForm } from "../../workflow/run/RunWorkflowForm";
+import { errorTextClass, hintClass, labelClass, textareaClass } from "../../workflow/run/runFormStyles";
 import {
   coerceInputValue,
   flattenParams,
@@ -85,18 +90,22 @@ import {
   presetFlatValues,
   toDisplayValue,
   type RunWorkflowValue,
-} from "../workflow/run/runWorkflowValues";
-import { useWorkflowDefinition } from "../workflow/useWorkflowDefinition";
-import { ActingIdentityField } from "./ActingIdentityField";
-import { buildDaemonChoices, defaultDaemonId, NO_MACHINE } from "./daemonChoices";
-import { outcomeLabel, planEnable, refusalHeadline, summarizeEnable, triggersNeedingPrompt, type EnableVerdict } from "./enableWorkflow";
-import { SetupSection } from "./setup/SetupSection";
-import { joinOr, SetupSuccess } from "./setup/SetupSuccess";
+} from "../../workflow/run/runWorkflowValues";
+import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
+import { ActingIdentityField } from "../ActingIdentityField";
+import { buildDaemonChoices, NO_MACHINE } from "../daemonChoices";
+import { uniqueName } from "./autoName";
+import { Disclosure } from "./Disclosure";
+import { defaultMachine, lastUsedDaemon } from "./machineDefault";
+import type { AutomationDialogMode } from "./openAutomationDialog";
+import { MachineSelect, WhereSummary } from "./WhereSummary";
+import { outcomeLabel, planEnable, refusalHeadline, summarizeEnable, triggersNeedingPrompt, type EnableVerdict } from "../enableWorkflow";
+import { SetupSection } from "../setup/SetupSection";
+import { joinOr, SetupSuccess } from "../setup/SetupSuccess";
 
-export type SetupMode = "setup" | "finish" | "settings";
+export type SetupMode = AutomationDialogMode;
 
-export interface WorkflowSetupDialogProps {
-  open: boolean;
+export interface DeclaredAutomationFormProps {
   onClose: () => void;
   /** The stored workflow ref the triggers are declared in. */
   workflowRef: string;
@@ -111,13 +120,12 @@ export interface WorkflowSetupDialogProps {
   focus?: string;
   /** Offer "Open workflow" on success (the dialog was opened outside the workflow page). */
   showOpenWorkflow?: boolean;
+  /** The declared trigger the person came from (the builder's Turn on), named in the header. */
+  declaredTrigger?: string;
   /** Called once every trigger is running. */
   onEnabled?: (result: EnableWorkflowResult) => void;
-}
-
-export function WorkflowSetupDialog(props: WorkflowSetupDialogProps) {
-  if (!props.open) return null;
-  return <SetupBody {...props} />;
+  /** "Need a different trigger?": the same workflow, with a WHEN of its own. */
+  onUseCustom?: (projectId: string) => void;
 }
 
 interface Override {
@@ -196,7 +204,7 @@ function requiredMessage(input: SetupInput, label: string): string {
   return `Fill in ${label}.`;
 }
 
-function SetupBody({
+export function DeclaredAutomationForm({
   onClose,
   workflowRef,
   workflowTitle,
@@ -205,8 +213,10 @@ function SetupBody({
   mode: forcedMode,
   focus,
   showOpenWorkflow = false,
+  declaredTrigger,
   onEnabled,
-}: WorkflowSetupDialogProps) {
+  onUseCustom,
+}: DeclaredAutomationFormProps) {
   const ids = useId();
   const fid = (key: string) => `${ids}-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const navigate = useNavigate();
@@ -257,7 +267,6 @@ function SetupBody({
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
   const [moreOpen, setMoreOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(needPrompt.length > 0);
-  const [eventsOpen, setEventsOpen] = useState(false);
   const [connectTarget, setConnectTarget] = useState<string | null>(null);
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [attempts, setAttempts] = useState(0);
@@ -288,14 +297,21 @@ function SetupBody({
     if (p.message) setPromptOpen(true);
   }, [triggersQuery.isSuccess, existing, declared, projectId]);
 
-  const { daemons, loading: daemonsLoading } = useDaemonStatus();
+  const { daemons, loading: daemonsLoading, activeDaemon } = useDaemonStatus();
   const installs = useProjectDaemonInstalls();
   const choices = useMemo(() => buildDaemonChoices(daemons, installs.data ?? [], projectId), [daemons, installs.data, projectId]);
+  const lastUsed = useMemo(
+    () =>
+      activeDaemon?.daemonId ??
+      lastUsedDaemon((triggersQuery.data ?? []).filter((t) => t.projectId === projectId).map((t) => ({ daemonId: t.daemonId, at: t.updatedAt }))),
+    [activeDaemon, triggersQuery.data, projectId],
+  );
   useEffect(() => {
     if (machineChosen || daemonsLoading || installs.isLoading || !library.isSuccess) return;
-    // A workflow that needs no machine runs without one unless the user says otherwise.
-    setMachine(needsNoMachine ? NO_MACHINE : (defaultDaemonId(choices) ?? ""));
-  }, [choices, machineChosen, daemonsLoading, installs.isLoading, library.isSuccess, needsNoMachine]);
+    // A workflow that needs no machine runs without one unless the person
+    // says otherwise; else the machine they last used here.
+    setMachine(defaultMachine({ choices, needsNoMachine, lastUsed }));
+  }, [choices, machineChosen, daemonsLoading, installs.isLoading, library.isSuccess, needsNoMachine, lastUsed]);
 
   // What every input shows: presets first, explicit values over them.
   const flat = useMemo(
@@ -364,7 +380,7 @@ function SetupBody({
     fieldErrors.push({
       key: "machine",
       fieldId: fid("machine"),
-      message: daemons.length === 0 ? "Connect a machine first, or choose No machine." : "Choose where the runs execute.",
+      message: daemons.length === 0 ? "Connect a machine first, or choose No machine." : "Choose where it runs.",
     });
   }
   const unwritten = message.trim() ? [] : needPrompt.filter((name) => !overrides[name]?.message?.trim());
@@ -405,15 +421,30 @@ function SetupBody({
 
   const buildInput = (): EnableWorkflowInput => {
     const overrideInputs: WorkflowTriggerOverrideInput[] = [];
-    for (const [trigger, o] of Object.entries(overrides)) {
+    // A new activation is named "{workflow} · {event in words}" ("PR review ·
+    // Pull request opened"), not by the trigger's slug; an existing one keeps
+    // the name it has.
+    const taken = new Set((triggersQuery.data ?? []).filter((t) => t.projectId === projectId).map((t) => t.name));
+    const names: Record<string, string> = {};
+    for (const t of declared) {
+      const slug = t.name ?? "";
+      if (!slug || existing.some((a) => a.workflowTrigger === slug)) continue;
+      const name = uniqueName(`${title} · ${describeDeclaredSource(t, describeSchedule, naming)}`, taken);
+      taken.add(name);
+      names[slug] = name;
+    }
+    const withNames: Record<string, Override> = { ...overrides };
+    for (const slug of Object.keys(names)) withNames[slug] = withNames[slug] ?? {};
+    for (const [trigger, o] of Object.entries(withNames)) {
       const entry: WorkflowTriggerOverrideInput = { trigger };
+      if (names[trigger]) entry.name = names[trigger];
       if (o.machine) {
         entry.noMachine = o.machine === NO_MACHINE;
         entry.daemonId = o.machine === NO_MACHINE ? "" : o.machine;
       }
       if (o.connectionId) entry.connectionId = o.connectionId;
       if (o.message?.trim()) entry.message = o.message.trim();
-      if (entry.noMachine !== undefined || entry.connectionId || entry.message) overrideInputs.push(entry);
+      if (entry.name || entry.noMachine !== undefined || entry.connectionId || entry.message) overrideInputs.push(entry);
     }
     return {
       workflow: workflowRef,
@@ -502,7 +533,8 @@ function SetupBody({
       : `Runs in ${projectName} · ${machineLabel}`;
   const paused = mode === "settings" && !!prefill?.paused;
   const primaryLabel = mode === "setup" ? "Turn on" : mode === "finish" ? "Save and turn on" : paused ? "Save and resume" : "Save";
-  const dialogTitle = mode === "setup" ? `Set up ${title}` : mode === "finish" ? `Finish setting up ${title}` : `${title} in ${projectName}`;
+  const dialogTitle = mode === "setup" ? `Turn on ${title}` : mode === "finish" ? `Finish setting up ${title}` : `${title} in ${projectName}`;
+  const fromTrigger = declaredTrigger ? declared.find((t) => t.name === declaredTrigger) : undefined;
   const integrationEvents = declared.flatMap((t) => integrationOf(t)?.events ?? []);
   const integrationName = (id: string) => {
     const named = naming.integration(id);
@@ -567,29 +599,49 @@ function SetupBody({
         }}
       >
         <form id={fid("form")} onSubmit={onSubmit} noValidate className="space-y-6" aria-label={dialogTitle}>
-          <div className="space-y-1.5 text-sm">
-            {listing?.description && <p className="line-clamp-3 text-muted-foreground">{listing.description}</p>}
-            <button
-              type="button"
-              aria-expanded={eventsOpen}
-              onClick={() => setEventsOpen((o) => !o)}
-              className="inline-flex items-center gap-1 rounded-sm text-xs font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              {eventsOpen ? <ChevronDown className="h-3.5 w-3.5" aria-hidden /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
-              {plan.integrations.length > 0
-                ? `Listens for ${integrationEvents.length} ${integrationName(plan.integrations[0])} ${integrationEvents.length === 1 ? "event" : "events"}`
-                : `${declared.length} ${declared.length === 1 ? "trigger" : "triggers"}`}
-            </button>
-            {eventsOpen && (
-              <ul aria-label="What starts it" className="space-y-1 pl-5 text-xs text-muted-foreground">
+          <section className="space-y-2" aria-labelledby={fid("when-heading")} data-testid="declared-when">
+            <h3 id={fid("when-heading")} className="text-sm font-semibold text-foreground">
+              When
+            </h3>
+            {listing?.description && <p className="line-clamp-3 text-sm text-muted-foreground">{listing.description}</p>}
+            <p className="text-sm text-foreground">
+              {fromTrigger ? (
+                <>
+                  Set by the workflow: <span className="font-medium">{describeDeclaredSource(fromTrigger, describeSchedule, naming)}</span>
+                  {declared.length > 1 && <span className="text-muted-foreground"> — and its other {declared.length - 1 === 1 ? "trigger" : `${declared.length - 1} triggers`}, turned on together</span>}
+                </>
+              ) : declared.length === 1 ? (
+                <>
+                  Set by the workflow: <span className="font-medium">{describeDeclaredSource(declared[0]!, describeSchedule, naming)}</span>
+                </>
+              ) : (
+                <>
+                  Set by the workflow:{" "}
+                  {plan.integrations.length > 0
+                    ? `${integrationEvents.length} ${integrationName(plan.integrations[0])} ${integrationEvents.length === 1 ? "event" : "events"}`
+                    : `${declared.length} triggers`}
+                </>
+              )}
+            </p>
+            {(declared.length > 1 || !fromTrigger) && declared.length > 1 && (
+              <ul aria-label="What starts it" className="space-y-1 pl-4 text-xs text-muted-foreground">
                 {declared.map((t) => (
-                  <li key={t.name}>
-                    <span className="font-mono text-foreground">{t.name}</span> · {describeDeclaredSource(t, describeSchedule, naming)}
+                  <li key={t.name} className="list-disc">
+                    {describeDeclaredSource(t, describeSchedule, naming)}
                   </li>
                 ))}
               </ul>
             )}
-          </div>
+            {onUseCustom && mode === "setup" && (
+              <button
+                type="button"
+                onClick={() => onUseCustom(projectId)}
+                className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                Need a different trigger?
+              </button>
+            )}
+          </section>
 
           {alerting && (
             <div role="note" className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-testid="oncall-note">
@@ -660,75 +712,6 @@ function SetupBody({
             </SetupSection>
           )}
 
-          <SetupSection number={++section} title="Where it runs" testId="section-where">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div onBlur={blurOut("project")}>
-                <label htmlFor={fid("project")} className={labelClass}>
-                  Project
-                </label>
-                {mode === "setup" ? (
-                  <select
-                    id={fid("project")}
-                    className={fieldClass}
-                    value={projectId}
-                    aria-invalid={!!errorFor("project")}
-                    onChange={(e) => {
-                      setProjectId(e.target.value);
-                      setValue((prev) => ({ ...prev, worktreeId: undefined }));
-                    }}
-                  >
-                    {projects.length === 0 && <option value="">No projects</option>}
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p id={fid("project")} className="flex h-9 items-center text-sm text-foreground">
-                    {projectName}
-                  </p>
-                )}
-                {errorFor("project") && <p className={errorTextClass}>{errorFor("project")}</p>}
-              </div>
-              <div onBlur={blurOut("machine")}>
-                <label htmlFor={fid("machine")} className={labelClass}>
-                  Runs on
-                </label>
-                <MachineSelect
-                  id={fid("machine")}
-                  value={machine}
-                  loading={daemonsLoading}
-                  choices={choices}
-                  onChange={(v) => {
-                    setMachine(v);
-                    setMachineChosen(true);
-                  }}
-                  invalid={!!errorFor("machine")}
-                />
-                <p className={hintClass}>
-                  {needsNoMachine
-                    ? "This workflow needs none: it works through its integrations."
-                    : listing?.needsMachine?.length
-                      ? "It edits code, so it needs a machine with your checkout."
-                      : machine === NO_MACHINE
-                        ? "Runs use only web, integration and planning tools; nothing touches files."
-                        : "Every tool call in each run executes on this machine."}
-                </p>
-                {errorFor("machine") && <p className={errorTextClass}>{errorFor("machine")}</p>}
-              </div>
-            </div>
-            {machine && machine !== NO_MACHINE && projectId && (
-              <WorktreeField
-                id={fid("worktree")}
-                projectId={projectId}
-                worktreeId={value.worktreeId}
-                disabled={false}
-                onChange={(worktreeId) => setValue((prev) => ({ ...prev, worktreeId }))}
-              />
-            )}
-          </SetupSection>
-
           {inputs.people.length > 0 && (
             <SetupSection number={++section} title="Who can ask it to work" testId="section-people">
               {inputs.people.map((input) => renderInput(input))}
@@ -777,12 +760,12 @@ function SetupBody({
           <Disclosure
             open={promptOpen}
             onToggle={() => setPromptOpen((o) => !o)}
-            title={needPrompt.length > 0 ? "Prompt (required)" : "Prompt"}
-            summary={needPrompt.length === 0 ? "Every trigger brings its own" : message.trim() ? "Written" : "Not written yet"}
+            title={needPrompt.length > 0 ? "What should it do? (required)" : "What should it do?"}
+            summary={needPrompt.length === 0 ? "Uses the workflow's prompt" : message.trim() ? "Written" : "Not written yet"}
           >
             <div onBlur={blurOut("message")}>
               <label htmlFor={fid("message")} className="sr-only">
-                Prompt
+                What should it do?
               </label>
               <textarea
                 id={fid("message")}
@@ -807,15 +790,45 @@ function SetupBody({
             </div>
           </Disclosure>
 
+          <div onBlur={blurOut("machine")}>
+            <WhereSummary
+              idPrefix={ids}
+              projects={projects}
+              projectId={projectId}
+              onProjectChange={
+                mode === "setup"
+                  ? (next) => {
+                      setProjectId(next);
+                      setValue((prev) => ({ ...prev, worktreeId: undefined }));
+                    }
+                  : undefined
+              }
+              machine={machine}
+              onMachineChange={(v) => {
+                setMachine(v);
+                setMachineChosen(true);
+              }}
+              choices={choices}
+              daemonsLoading={daemonsLoading}
+              hasDaemons={daemons.length > 0}
+              needsNoMachine={needsNoMachine}
+              needsMachine={!!listing?.needsMachine?.length}
+              worktreeId={value.worktreeId}
+              onWorktreeChange={(worktreeId) => setValue((prev) => ({ ...prev, worktreeId }))}
+              projectError={errorFor("project")}
+              machineError={errorFor("machine")}
+            />
+          </div>
+
           <div>
             <ToggleSwitch
               checked={notify}
               onChange={setNotify}
-              label="Also notify me when a run succeeds"
+              label="Notify me when a run succeeds"
               size="lg"
               className="forge-ui"
             />
-            <p className={hintClass}>Failures always notify you.</p>
+            <p className={hintClass}>Failures always notify you, once per streak.</p>
           </div>
 
           {declared.length > 1 && (
@@ -892,73 +905,6 @@ function OutcomeIcon({ result }: { result: WorkflowTriggerResult }) {
   if (result.outcome === "leftEnabled") return <AlertTriangle className={cls} aria-hidden />;
   if (result.outcome === "notEnabled") return <MinusCircle className={cls} aria-hidden />;
   return <CircleCheck className={cls} aria-hidden />;
-}
-
-function Disclosure({
-  open,
-  onToggle,
-  title,
-  summary,
-  children,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  title: string;
-  summary?: string;
-  children: React.ReactNode;
-}) {
-  const panelId = useId();
-  return (
-    <div>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className="flex w-full items-baseline gap-2 rounded-sm text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-      >
-        {open ? <ChevronDown className="h-4 w-4 shrink-0 self-center" aria-hidden /> : <ChevronRight className="h-4 w-4 shrink-0 self-center" aria-hidden />}
-        <span className="font-semibold text-foreground">{title}</span>
-        {summary && <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>}
-      </button>
-      {/* Kept mounted while closed, so a field an error links to still exists. */}
-      <div id={panelId} hidden={!open} className="mt-3">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function MachineSelect({
-  id,
-  value,
-  loading,
-  choices,
-  onChange,
-  invalid,
-  inheritLabel,
-}: {
-  id: string;
-  value: string;
-  loading: boolean;
-  choices: ReturnType<typeof buildDaemonChoices>;
-  onChange: (value: string) => void;
-  invalid?: boolean;
-  /** Offered as the empty option (an override that follows the shared choice). */
-  inheritLabel?: string;
-}) {
-  return (
-    <select id={id} className={fieldClass} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={invalid}>
-      <option value="">{inheritLabel ?? (loading ? "Loading machines…" : "Choose a machine")}</option>
-      {choices.map((choice) => (
-        <option key={choice.daemonId} value={choice.daemonId} disabled={!choice.eligible}>
-          {choice.label} ({choice.statusLabel}
-          {choice.ineligibleReason ? `, ${choice.ineligibleReason}` : ""})
-        </option>
-      ))}
-      <option value={NO_MACHINE}>No machine (server tools only)</option>
-    </select>
-  );
 }
 
 /** The connected account an integration's triggers listen through. */

@@ -12,10 +12,16 @@
  * Building a workflow needs none — the workflow tools all run on the server —
  * but a machine that is only starting is waited for: no machine is a
  * permanent property of the chat, not a stand-in for "not up yet".
+ *
+ * When the workflow has gained `triggers:` (the agent declared them) and none
+ * is on yet, the panel offers "Turn on" right where the conversation is: the
+ * agent can declare a trigger but never turn one on, so this is the person's
+ * one-click next step (report 03, P11).
  */
 
 import { useEffect, useState } from "react";
-import { Maximize2, Plus, X } from "lucide-react";
+import { CalendarClock, Maximize2, Plus, X } from "lucide-react";
+import Button from "../forge-ui/button";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { cn } from "../../lib/utils";
 import { NewChatView } from "../Chat/NewChatView";
@@ -49,6 +55,8 @@ interface WorkflowEditorChatPanelProps {
   onPanelSizeChange: (size: PanelSize) => void;
   /** Whether a config panel is open (shifts the closed-state button left). */
   isConfigPanelOpen?: boolean;
+  /** The workflow declares triggers that are not on yet: offer to turn them on. */
+  turnOn?: { summary: string; onTurnOn: () => void };
 }
 
 export function WorkflowEditorChatPanel({
@@ -61,6 +69,7 @@ export function WorkflowEditorChatPanel({
   panelSize,
   onPanelSizeChange,
   isConfigPanelOpen = false,
+  turnOn,
 }: WorkflowEditorChatPanelProps) {
   if (!isOpen) {
     return (
@@ -125,6 +134,18 @@ export function WorkflowEditorChatPanel({
           </button>
         </div>
       </div>
+
+      {turnOn && (
+        <div className="flex items-center gap-2.5 border-b border-border bg-card px-3 py-2" data-testid="builder-turn-on-card">
+          <CalendarClock className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Not on yet.</span> {turnOn.summary}
+          </p>
+          <Button size="sm" onClick={turnOn.onTurnOn}>
+            Turn on
+          </Button>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0">
         {isStreamYielded ? (

@@ -520,6 +520,10 @@ func (f *ToolsFactory) ListTriggerEvents() Tool {
 	return NewListTriggerEventsTool(f.store(), f.opts.TriggerEventLister)
 }
 
+func (f *ToolsFactory) DraftAutomation() Tool {
+	return NewDraftAutomationTool()
+}
+
 // Analysis tools
 func (f *ToolsFactory) ProjectAnalyzer() Tool {
 	return NewProjectAnalyzerTool()

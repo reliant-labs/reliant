@@ -47,6 +47,8 @@ export interface RunHeaderActions {
   onRerun?: () => void;
   /** Fire this run's automation now; omitted unless it is a live automation's run. */
   onRunAutomationNow?: () => void;
+  /** Make an automation of this run (offered once it succeeded). */
+  onSchedule?: () => void;
 }
 
 interface RunHeaderProps {
@@ -138,6 +140,11 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
               disabled={busy}
             >
               Re-run (current definition)
+            </Button>
+          )}
+          {actions.onSchedule && (status.key === "succeeded" || status.key === "completed") && (
+            <Button size="sm" variant="ghost" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={actions.onSchedule} disabled={busy}>
+              Run this on a schedule
             </Button>
           )}
           {actions.onRunAutomationNow && (

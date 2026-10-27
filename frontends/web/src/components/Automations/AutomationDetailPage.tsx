@@ -47,7 +47,7 @@ import { useFireTrigger } from "@/hooks/trigger-service-hooks_gen";
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { AutomationFormDialog } from "./AutomationFormDialog";
+import { openAutomationDialog } from "./dialog/openAutomationDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../runs/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
@@ -92,7 +92,6 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   const setEnabled = useSetTriggerEnabled();
   const naming = useIntegrationEventNaming();
   const deleteTrigger = useDeleteTrigger();
-  const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const eventCountAtFire = useRef<number | null>(null);
 
@@ -228,7 +227,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
             Run now
           </Button>
           {!activation && (
-            <Button variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>
+            <Button variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => openAutomationDialog({ trigger })}>
               Edit
             </Button>
           )}
@@ -318,12 +317,6 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         </div>
       </Card>
 
-      <AutomationFormDialog
-        open={editing}
-        trigger={trigger}
-        onClose={() => setEditing(false)}
-        onSaved={() => toast.success("Automation saved")}
-      />
       <ConfirmationDialog
         open={confirmingDelete}
         title={`Delete ${trigger.name}?`}
@@ -360,7 +353,7 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
               ? "web & integrations only"
               : daemon
                 ? daemonStatusLabel(daemon.status)
-                : "not in your daemon list"}
+                : "not in your machine list"}
             )
           </span>
         </span>

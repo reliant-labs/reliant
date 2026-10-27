@@ -119,9 +119,11 @@ const (
 
 	// Activation mutations require an interactive owner approval. These
 	// constants are the read/manual-fire half; activation_tools.go owns writes.
+	// draft_automation only proposes a draft for review in the app.
 	ToolListTriggers      = "list_triggers"
 	ToolFireTrigger       = "fire_trigger"
 	ToolListTriggerEvents = "list_trigger_events"
+	ToolDraftAutomation   = "draft_automation"
 
 	// Scenario tools
 	ToolListScenarios  = "list_scenarios"
@@ -797,6 +799,9 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolEnableTrigger, (*ToolsFactory).EnableTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolPauseTrigger, (*ToolsFactory).PauseTrigger, []ToolTag{TagWorkflow}, PlacementServer, false},
 		{ToolListTriggerEvents, (*ToolsFactory).ListTriggerEvents, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer, false},
+		// Proposes an automation; the user reviews it in the app and presses
+		// Create. Pure validation, so it runs anywhere.
+		{ToolDraftAutomation, (*ToolsFactory).DraftAutomation, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},
 
 		// Workflow discovery tools
 		{ToolGetSchema, (*ToolsFactory).GetSchema, []ToolTag{TagWorkflow, TagReadOnly}, PlacementAny, false},

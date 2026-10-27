@@ -199,6 +199,15 @@ service TriggerService {
   rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // DraftAutomation turns a person's description ("every weekday at 9,
+  // summarise yesterday's failed CI runs") into a proposed automation for
+  // them to review in the automation dialog. It stores nothing and creates
+  // nothing: only the person's Create in the dialog makes a trigger. The
+  // draft is written by the caller's own fast model, with the draft_automation
+  // tool's schema as the structured output, and normalized by the same code
+  // that tool runs.
+  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {}
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -1286,4 +1295,46 @@ message PreviewReplayResponse {
   // Prompt is the trigger's prompt rendered against the event. Empty when the
   // declaration has none.
   string prompt = 2;
+}
+
+message DraftAutomationRequest {
+  // What the person wants, in their own words.
+  string description = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 4000
+  }];
+
+  // The project it will run in. The drafter sees this project's workflows.
+  string project_id = 2 [(buf.validate.field).string.min_len = 1];
+
+  // A workflow the automation must run (the dialog was opened for one).
+  // Empty lets the drafter choose; it proposes the person's default agent
+  // unless a workflow clearly fits.
+  string workflow = 3;
+
+  // The person's IANA time zone, for times like "at 9". Empty means UTC.
+  string timezone = 4;
+}
+
+message DraftAutomationResponse {
+  AutomationDraft draft = 1;
+}
+
+// AutomationDraft is a proposed automation, never stored. Only the person's
+// Create in the automation dialog makes a trigger from it.
+message AutomationDraft {
+  // The proposal. Only name, workflow, message, params, filter and the
+  // source (schedule, webhook, integration or workflow_event) are ever set.
+  // Never project_id, daemon_id, no_machine, connection_id, acting_identity,
+  // enabled, webhook_hmac_secret or workflow_trigger: where it runs and as
+  // whom are the person's choices, made in the dialog.
+  TriggerDefinition definition = 1;
+
+  // One line, in words: what it will do and when ("Every weekday at 9:00,
+  // summarise failed CI runs").
+  string summary = 2;
+
+  // What the drafter assumed that the description did not say, for the
+  // person to check ("Assumed 9:00 in your time zone").
+  repeated string assumptions = 3;
 }

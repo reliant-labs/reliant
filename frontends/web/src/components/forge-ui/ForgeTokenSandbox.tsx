@@ -401,7 +401,7 @@ function S1Sites() {
       </div>
 
       <div>
-        <SectionTitle>ErrorSummary (on alert_banner) — WorkflowSetupDialog</SectionTitle>
+        <SectionTitle>ErrorSummary (on alert_banner) — the automation dialog</SectionTitle>
         <div className="max-w-xl">
           <ErrorSummary
             title="Fix these to continue"

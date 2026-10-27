@@ -20,6 +20,7 @@ import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
+import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
@@ -583,7 +584,10 @@ function ChatMessageComponent({
   // whose cards render whatever the tool rows show.
   const hasUserCards = Boolean(
     enhancedToolExecutions?.some(
-      (exec) => exec.call.name === "ask_user" || isRequestMachineTool(exec.call.name),
+      (exec) =>
+        exec.call.name === "ask_user" ||
+        isRequestMachineTool(exec.call.name) ||
+        (isDraftAutomationTool(exec.call.name) && !!exec.result && !exec.result.is_error),
     ),
   );
   const hasVisibleContent =
@@ -1132,7 +1136,18 @@ function ChatMessageComponent({
                       finished={exec.result !== undefined}
                     />
                   ));
-                const userCards = [...machineRequestCards, ...askUserCards];
+                // A drafted automation is a decision for the user too: its card
+                // ("Review & create") shows once the draft is back and valid.
+                const draftCards = allRunExecutions
+                  .filter((exec) => isDraftAutomationTool(exec.call.name) && exec.result && !exec.result.is_error)
+                  .map((exec) => (
+                    <DraftAutomationCard
+                      key={`${message.id}-seg-${segIdx}-draft-automation-${exec.call.id}`}
+                      chatId={chatId || undefined}
+                      metadata={exec.result?.metadata}
+                    />
+                  ));
+                const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
                 if (hideToolExecutions) {
                   return userCards.length > 0 ? (
                     <Fragment key={`${message.id}-seg-${segIdx}`}>{userCards}</Fragment>

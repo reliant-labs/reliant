@@ -19,7 +19,7 @@ import { workflowEditHref } from "@/lib/workflowsArea";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
-import { SetupDialogFor } from "./SetupDialogFor";
+import { openAutomationDialog } from "./dialog/openAutomationDialog";
 
 export interface AutomationCtaProps {
   cta: AutomationCtaSpec;
@@ -55,16 +55,16 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
   const navigate = useNavigate();
   const setEnabled = useSetTriggerEnabled();
   const remove = useDeleteTrigger();
-  const [dialog, setDialog] = useState<"finish" | "settings" | "run" | "remove" | null>(null);
+  const [dialog, setDialog] = useState<"run" | "remove" | null>(null);
   const label = subject ? `${cta.label} for ${subject}` : undefined;
 
   const act = () => {
     switch (cta.kind) {
       case "finish_setup":
-        setDialog("finish");
+        openAutomationDialog({ workflowRef, projectId, mode: "finish", showOpenWorkflow: true });
         return;
       case "fix_settings":
-        setDialog("settings");
+        openAutomationDialog({ workflowRef, projectId, mode: "settings", showOpenWorkflow: true });
         return;
       case "try_now":
       case "run_now":
@@ -115,9 +115,6 @@ export function AutomationCta({ cta, triggers, workflowRef, projectId, size = "s
       >
         {cta.label}
       </Button>
-      {(dialog === "finish" || dialog === "settings") && (
-        <SetupDialogFor workflowRef={workflowRef} projectId={projectId} mode={dialog} onClose={() => setDialog(null)} />
-      )}
       {dialog === "run" && <RunNowDialog open projectId={projectId} workflowRef={workflowRef} onClose={() => setDialog(null)} />}
       {broken && (
         <ConfirmationDialog

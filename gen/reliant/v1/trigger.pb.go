@@ -4518,6 +4518,195 @@ func (x *PreviewReplayResponse) GetPrompt() string {
 	return ""
 }
 
+type DraftAutomationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the person wants, in their own words.
+	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
+	// The project it will run in. The drafter sees this project's workflows.
+	ProjectId string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// A workflow the automation must run (the dialog was opened for one).
+	// Empty lets the drafter choose; it proposes the person's default agent
+	// unless a workflow clearly fits.
+	Workflow string `protobuf:"bytes,3,opt,name=workflow,proto3" json:"workflow,omitempty"`
+	// The person's IANA time zone, for times like "at 9". Empty means UTC.
+	Timezone      string `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftAutomationRequest) Reset() {
+	*x = DraftAutomationRequest{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftAutomationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftAutomationRequest) ProtoMessage() {}
+
+func (x *DraftAutomationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftAutomationRequest.ProtoReflect.Descriptor instead.
+func (*DraftAutomationRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *DraftAutomationRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DraftAutomationRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *DraftAutomationRequest) GetWorkflow() string {
+	if x != nil {
+		return x.Workflow
+	}
+	return ""
+}
+
+func (x *DraftAutomationRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+type DraftAutomationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Draft         *AutomationDraft       `protobuf:"bytes,1,opt,name=draft,proto3" json:"draft,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DraftAutomationResponse) Reset() {
+	*x = DraftAutomationResponse{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DraftAutomationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DraftAutomationResponse) ProtoMessage() {}
+
+func (x *DraftAutomationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DraftAutomationResponse.ProtoReflect.Descriptor instead.
+func (*DraftAutomationResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *DraftAutomationResponse) GetDraft() *AutomationDraft {
+	if x != nil {
+		return x.Draft
+	}
+	return nil
+}
+
+// AutomationDraft is a proposed automation, never stored. Only the person's
+// Create in the automation dialog makes a trigger from it.
+type AutomationDraft struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The proposal. Only name, workflow, message, params, filter and the
+	// source (schedule, webhook, integration or workflow_event) are ever set.
+	// Never project_id, daemon_id, no_machine, connection_id, acting_identity,
+	// enabled, webhook_hmac_secret or workflow_trigger: where it runs and as
+	// whom are the person's choices, made in the dialog.
+	Definition *TriggerDefinition `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
+	// One line, in words: what it will do and when ("Every weekday at 9:00,
+	// summarise failed CI runs").
+	Summary string `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	// What the drafter assumed that the description did not say, for the
+	// person to check ("Assumed 9:00 in your time zone").
+	Assumptions   []string `protobuf:"bytes,3,rep,name=assumptions,proto3" json:"assumptions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AutomationDraft) Reset() {
+	*x = AutomationDraft{}
+	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AutomationDraft) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AutomationDraft) ProtoMessage() {}
+
+func (x *AutomationDraft) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_trigger_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AutomationDraft.ProtoReflect.Descriptor instead.
+func (*AutomationDraft) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_trigger_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *AutomationDraft) GetDefinition() *TriggerDefinition {
+	if x != nil {
+		return x.Definition
+	}
+	return nil
+}
+
+func (x *AutomationDraft) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *AutomationDraft) GetAssumptions() []string {
+	if x != nil {
+		return x.Assumptions
+	}
+	return nil
+}
+
 var File_reliant_v1_trigger_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_trigger_proto_rawDesc = "" +
@@ -4883,7 +5072,22 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x1aQ\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01*\x9f\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xa6\x01\n" +
+	"\x16DraftAutomationRequest\x12,\n" +
+	"\vdescription\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xa0\x1fR\vdescription\x12&\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tprojectId\x12\x1a\n" +
+	"\bworkflow\x18\x03 \x01(\tR\bworkflow\x12\x1a\n" +
+	"\btimezone\x18\x04 \x01(\tR\btimezone\"L\n" +
+	"\x17DraftAutomationResponse\x121\n" +
+	"\x05draft\x18\x01 \x01(\v2\x1b.reliant.v1.AutomationDraftR\x05draft\"\x8c\x01\n" +
+	"\x0fAutomationDraft\x12=\n" +
+	"\n" +
+	"definition\x18\x01 \x01(\v2\x1d.reliant.v1.TriggerDefinitionR\n" +
+	"definition\x12\x18\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\x12 \n" +
+	"\vassumptions\x18\x03 \x03(\tR\vassumptions*\x9f\x01\n" +
 	"\vTriggerKind\x12\x1c\n" +
 	"\x18TRIGGER_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15TRIGGER_KIND_SCHEDULE\x10\x01\x12\x18\n" +
@@ -4930,7 +5134,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
 	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
-	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xd5\r\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xb3\x0e\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +
@@ -4961,7 +5165,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"project_id\x12q\n" +
 	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12Y\n" +
-	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01\x12\\\n" +
+	"\x0fDraftAutomation\x12\".reliant.v1.DraftAutomationRequest\x1a#.reliant.v1.DraftAutomationResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_trigger_proto_rawDescOnce sync.Once
@@ -4976,7 +5181,7 @@ func file_reliant_v1_trigger_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_trigger_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
+var file_reliant_v1_trigger_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 var file_reliant_v1_trigger_proto_goTypes = []any{
 	(TriggerKind)(0),                      // 0: reliant.v1.TriggerKind
 	(TriggerEventKind)(0),                 // 1: reliant.v1.TriggerEventKind
@@ -5035,42 +5240,45 @@ var file_reliant_v1_trigger_proto_goTypes = []any{
 	(*ListReplayEventsResponse)(nil),      // 54: reliant.v1.ListReplayEventsResponse
 	(*PreviewReplayRequest)(nil),          // 55: reliant.v1.PreviewReplayRequest
 	(*PreviewReplayResponse)(nil),         // 56: reliant.v1.PreviewReplayResponse
-	nil,                                   // 57: reliant.v1.IntegrationSource.MatchEntry
-	nil,                                   // 58: reliant.v1.IntegrationSource.MatchInputEntry
-	nil,                                   // 59: reliant.v1.WorkflowTrigger.InputsEntry
-	nil,                                   // 60: reliant.v1.Trigger.PresetsEntry
-	nil,                                   // 61: reliant.v1.Trigger.ParamsEntry
-	nil,                                   // 62: reliant.v1.TriggerDefinition.PresetsEntry
-	nil,                                   // 63: reliant.v1.TriggerDefinition.ParamsEntry
-	nil,                                   // 64: reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
-	nil,                                   // 65: reliant.v1.EnableWorkflowRequest.ParamsEntry
-	nil,                                   // 66: reliant.v1.EnableWorkflowRequest.PresetsEntry
-	nil,                                   // 67: reliant.v1.WorkflowTriggerOverride.ParamsEntry
-	nil,                                   // 68: reliant.v1.PreviewReplayResponse.InputsEntry
-	(RunDisplayState)(0),                  // 69: reliant.v1.RunDisplayState
-	(WorkflowState)(0),                    // 70: reliant.v1.WorkflowState
-	(WorkflowStopReason)(0),               // 71: reliant.v1.WorkflowStopReason
-	(*structpb.Struct)(nil),               // 72: google.protobuf.Struct
-	(*ReplayEvent)(nil),                   // 73: reliant.v1.ReplayEvent
-	(*structpb.Value)(nil),                // 74: google.protobuf.Value
+	(*DraftAutomationRequest)(nil),        // 57: reliant.v1.DraftAutomationRequest
+	(*DraftAutomationResponse)(nil),       // 58: reliant.v1.DraftAutomationResponse
+	(*AutomationDraft)(nil),               // 59: reliant.v1.AutomationDraft
+	nil,                                   // 60: reliant.v1.IntegrationSource.MatchEntry
+	nil,                                   // 61: reliant.v1.IntegrationSource.MatchInputEntry
+	nil,                                   // 62: reliant.v1.WorkflowTrigger.InputsEntry
+	nil,                                   // 63: reliant.v1.Trigger.PresetsEntry
+	nil,                                   // 64: reliant.v1.Trigger.ParamsEntry
+	nil,                                   // 65: reliant.v1.TriggerDefinition.PresetsEntry
+	nil,                                   // 66: reliant.v1.TriggerDefinition.ParamsEntry
+	nil,                                   // 67: reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
+	nil,                                   // 68: reliant.v1.EnableWorkflowRequest.ParamsEntry
+	nil,                                   // 69: reliant.v1.EnableWorkflowRequest.PresetsEntry
+	nil,                                   // 70: reliant.v1.WorkflowTriggerOverride.ParamsEntry
+	nil,                                   // 71: reliant.v1.PreviewReplayResponse.InputsEntry
+	(RunDisplayState)(0),                  // 72: reliant.v1.RunDisplayState
+	(WorkflowState)(0),                    // 73: reliant.v1.WorkflowState
+	(WorkflowStopReason)(0),               // 74: reliant.v1.WorkflowStopReason
+	(*structpb.Struct)(nil),               // 75: google.protobuf.Struct
+	(*ReplayEvent)(nil),                   // 76: reliant.v1.ReplayEvent
+	(*structpb.Value)(nil),                // 77: google.protobuf.Value
 }
 var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	5,  // 0: reliant.v1.TriggerHealth.status:type_name -> reliant.v1.TriggerHealthStatus
 	8,  // 1: reliant.v1.TriggerHealth.setup_issues:type_name -> reliant.v1.TriggerSetupIssue
-	69, // 2: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
-	70, // 3: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
-	71, // 4: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
+	72, // 2: reliant.v1.TriggerEventRun.display_state:type_name -> reliant.v1.RunDisplayState
+	73, // 3: reliant.v1.TriggerEventRun.state:type_name -> reliant.v1.WorkflowState
+	74, // 4: reliant.v1.TriggerEventRun.stop_reason:type_name -> reliant.v1.WorkflowStopReason
 	4,  // 5: reliant.v1.ScheduleSource.overlap:type_name -> reliant.v1.TriggerOverlapPolicy
 	12, // 6: reliant.v1.WebhookSource.hmac:type_name -> reliant.v1.WebhookHmac
-	57, // 7: reliant.v1.IntegrationSource.match:type_name -> reliant.v1.IntegrationSource.MatchEntry
-	58, // 8: reliant.v1.IntegrationSource.match_input:type_name -> reliant.v1.IntegrationSource.MatchInputEntry
-	59, // 9: reliant.v1.WorkflowTrigger.inputs:type_name -> reliant.v1.WorkflowTrigger.InputsEntry
+	60, // 7: reliant.v1.IntegrationSource.match:type_name -> reliant.v1.IntegrationSource.MatchEntry
+	61, // 8: reliant.v1.IntegrationSource.match_input:type_name -> reliant.v1.IntegrationSource.MatchInputEntry
+	62, // 9: reliant.v1.WorkflowTrigger.inputs:type_name -> reliant.v1.WorkflowTrigger.InputsEntry
 	10, // 10: reliant.v1.WorkflowTrigger.schedule:type_name -> reliant.v1.ScheduleSource
 	11, // 11: reliant.v1.WorkflowTrigger.webhook:type_name -> reliant.v1.WebhookSource
 	13, // 12: reliant.v1.WorkflowTrigger.integration:type_name -> reliant.v1.IntegrationSource
 	14, // 13: reliant.v1.WorkflowTrigger.workflow_event:type_name -> reliant.v1.WorkflowEventSource
-	60, // 14: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
-	61, // 15: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
+	63, // 14: reliant.v1.Trigger.presets:type_name -> reliant.v1.Trigger.PresetsEntry
+	64, // 15: reliant.v1.Trigger.params:type_name -> reliant.v1.Trigger.ParamsEntry
 	18, // 16: reliant.v1.Trigger.last_event:type_name -> reliant.v1.TriggerEvent
 	17, // 17: reliant.v1.Trigger.changes:type_name -> reliant.v1.TriggerChange
 	7,  // 18: reliant.v1.Trigger.health:type_name -> reliant.v1.TriggerHealth
@@ -5081,11 +5289,11 @@ var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	3,  // 23: reliant.v1.Trigger.acting_identity:type_name -> reliant.v1.ActingIdentity
 	1,  // 24: reliant.v1.TriggerEvent.kind:type_name -> reliant.v1.TriggerEventKind
 	2,  // 25: reliant.v1.TriggerEvent.outcome:type_name -> reliant.v1.TriggerEventOutcome
-	72, // 26: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
+	75, // 26: reliant.v1.TriggerEvent.payload:type_name -> google.protobuf.Struct
 	9,  // 27: reliant.v1.TriggerEvent.run:type_name -> reliant.v1.TriggerEventRun
 	19, // 28: reliant.v1.TriggerEvent.sender:type_name -> reliant.v1.TriggerSender
-	62, // 29: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
-	63, // 30: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
+	65, // 29: reliant.v1.TriggerDefinition.presets:type_name -> reliant.v1.TriggerDefinition.PresetsEntry
+	66, // 30: reliant.v1.TriggerDefinition.params:type_name -> reliant.v1.TriggerDefinition.ParamsEntry
 	10, // 31: reliant.v1.TriggerDefinition.schedule:type_name -> reliant.v1.ScheduleSource
 	11, // 32: reliant.v1.TriggerDefinition.webhook:type_name -> reliant.v1.WebhookSource
 	13, // 33: reliant.v1.TriggerDefinition.integration:type_name -> reliant.v1.IntegrationSource
@@ -5101,12 +5309,12 @@ var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	20, // 43: reliant.v1.UpdateTriggerRequest.trigger:type_name -> reliant.v1.TriggerDefinition
 	16, // 44: reliant.v1.UpdateTriggerResponse.trigger:type_name -> reliant.v1.Trigger
 	16, // 45: reliant.v1.SetTriggerEnabledResponse.trigger:type_name -> reliant.v1.Trigger
-	64, // 46: reliant.v1.EnableWorkflowRequest.connection_ids:type_name -> reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
-	65, // 47: reliant.v1.EnableWorkflowRequest.params:type_name -> reliant.v1.EnableWorkflowRequest.ParamsEntry
-	66, // 48: reliant.v1.EnableWorkflowRequest.presets:type_name -> reliant.v1.EnableWorkflowRequest.PresetsEntry
+	67, // 46: reliant.v1.EnableWorkflowRequest.connection_ids:type_name -> reliant.v1.EnableWorkflowRequest.ConnectionIdsEntry
+	68, // 47: reliant.v1.EnableWorkflowRequest.params:type_name -> reliant.v1.EnableWorkflowRequest.ParamsEntry
+	69, // 48: reliant.v1.EnableWorkflowRequest.presets:type_name -> reliant.v1.EnableWorkflowRequest.PresetsEntry
 	37, // 49: reliant.v1.EnableWorkflowRequest.overrides:type_name -> reliant.v1.WorkflowTriggerOverride
 	3,  // 50: reliant.v1.EnableWorkflowRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
-	67, // 51: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
+	70, // 51: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
 	6,  // 52: reliant.v1.WorkflowTriggerResult.outcome:type_name -> reliant.v1.WorkflowTriggerOutcome
 	16, // 53: reliant.v1.WorkflowTriggerResult.activation:type_name -> reliant.v1.Trigger
 	21, // 54: reliant.v1.WorkflowTriggerResult.webhook:type_name -> reliant.v1.WebhookCredential
@@ -5119,49 +5327,53 @@ var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	50, // 61: reliant.v1.ResolveTriggerSendersResponse.senders:type_name -> reliant.v1.ResolvedTriggerSender
 	18, // 62: reliant.v1.ReplayCandidate.event:type_name -> reliant.v1.TriggerEvent
 	53, // 63: reliant.v1.ListReplayEventsResponse.events:type_name -> reliant.v1.ReplayCandidate
-	73, // 64: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
+	76, // 64: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
 	19, // 65: reliant.v1.PreviewReplayRequest.sender:type_name -> reliant.v1.TriggerSender
-	68, // 66: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
-	74, // 67: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
-	74, // 68: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
-	74, // 69: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	74, // 70: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
-	74, // 71: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	22, // 72: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
-	26, // 73: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
-	28, // 74: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
-	30, // 75: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
-	32, // 76: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
-	34, // 77: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
-	43, // 78: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
-	45, // 79: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
-	47, // 80: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
-	24, // 81: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
-	36, // 82: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
-	40, // 83: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
-	49, // 84: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
-	52, // 85: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
-	55, // 86: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
-	23, // 87: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
-	27, // 88: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
-	29, // 89: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
-	31, // 90: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
-	33, // 91: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
-	35, // 92: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
-	44, // 93: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
-	46, // 94: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
-	48, // 95: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
-	25, // 96: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
-	39, // 97: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
-	41, // 98: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
-	51, // 99: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
-	54, // 100: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
-	56, // 101: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
-	87, // [87:102] is the sub-list for method output_type
-	72, // [72:87] is the sub-list for method input_type
-	72, // [72:72] is the sub-list for extension type_name
-	72, // [72:72] is the sub-list for extension extendee
-	0,  // [0:72] is the sub-list for field type_name
+	71, // 66: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
+	59, // 67: reliant.v1.DraftAutomationResponse.draft:type_name -> reliant.v1.AutomationDraft
+	20, // 68: reliant.v1.AutomationDraft.definition:type_name -> reliant.v1.TriggerDefinition
+	77, // 69: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
+	77, // 70: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
+	77, // 71: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	77, // 72: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
+	77, // 73: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
+	22, // 74: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
+	26, // 75: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
+	28, // 76: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
+	30, // 77: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
+	32, // 78: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
+	34, // 79: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
+	43, // 80: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
+	45, // 81: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
+	47, // 82: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
+	24, // 83: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
+	36, // 84: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
+	40, // 85: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
+	49, // 86: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
+	52, // 87: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
+	55, // 88: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
+	57, // 89: reliant.v1.TriggerService.DraftAutomation:input_type -> reliant.v1.DraftAutomationRequest
+	23, // 90: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
+	27, // 91: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
+	29, // 92: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
+	31, // 93: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
+	33, // 94: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
+	35, // 95: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
+	44, // 96: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
+	46, // 97: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
+	48, // 98: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
+	25, // 99: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
+	39, // 100: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
+	41, // 101: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
+	51, // 102: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
+	54, // 103: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
+	56, // 104: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
+	58, // 105: reliant.v1.TriggerService.DraftAutomation:output_type -> reliant.v1.DraftAutomationResponse
+	90, // [90:106] is the sub-list for method output_type
+	74, // [74:90] is the sub-list for method input_type
+	74, // [74:74] is the sub-list for extension type_name
+	74, // [74:74] is the sub-list for extension extendee
+	0,  // [0:74] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_trigger_proto_init() }
@@ -5206,7 +5418,7 @@ func file_reliant_v1_trigger_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_trigger_proto_rawDesc), len(file_reliant_v1_trigger_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   62,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

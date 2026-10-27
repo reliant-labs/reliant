@@ -92,6 +92,12 @@ type Deps struct {
 	// whose token Enable shows once.
 	// forge:optional-dep
 	Alerting AlertingProvisioner
+
+	// Drafter writes an automation draft from a description
+	// (DraftAutomation) on the worker, where the model drivers are. Without
+	// it DraftAutomation answers Unavailable and the dialog is filled by hand.
+	// forge:optional-dep
+	Drafter AutomationDrafter
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

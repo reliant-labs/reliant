@@ -9,6 +9,7 @@
  * automation form prefilled with this workflow.
  */
 
+import { useAutomationDialogStore } from "../../Automations/dialog/openAutomationDialog";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
@@ -144,7 +145,7 @@ describe("WorkflowDetailPage", () => {
     expect(within(automations).queryByText("Other")).toBeNull();
   });
 
-  it("says a workflow that declares a schedule is not turned on, and offers Set up instead of 'Nothing runs this workflow'", async () => {
+  it("says a workflow that declares a schedule is not turned on, and offers Turn on instead of 'Nothing runs this workflow'", async () => {
     // ci-triage declares `triggers: - schedule: cron [0 6 * * 1-5]` and has
     // no activation, so nothing runs it YET.
     mocks.listTriggers.mockResolvedValue({ triggers: [], lastUserUpdateSequence: "0" });
@@ -168,9 +169,9 @@ describe("WorkflowDetailPage", () => {
     renderDetail();
 
     const empty = await screen.findByTestId("turned-on-empty");
-    expect(empty).toHaveTextContent("Not turned on. Set up Triage to run it by itself:");
-    await userEvent.click(within(empty).getByRole("button", { name: "Set up Triage" }));
-    expect(await screen.findByRole("form", { name: "Set up Triage" })).toBeInTheDocument();
+    expect(empty).toHaveTextContent("Not turned on. Turn on Triage to run it by itself:");
+    await userEvent.click(within(empty).getByRole("button", { name: "Turn on Triage" }));
+    expect(useAutomationDialogStore.getState().request).toMatchObject({ workflowRef: "triage", projectId: "proj-1", workflowTitle: "Triage" });
   });
 
   it("a workflow whose Chat trigger is off can still be run by hand: Run now is how it is run", async () => {
@@ -212,15 +213,13 @@ describe("WorkflowDetailPage", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/triage"));
   });
 
-  it("Add a custom automation opens the automation form with this workflow; the header has only Run now and Edit", async () => {
+  it("Add an automation opens the automation dialog with this workflow and its own WHEN; the header has only Run now and Edit", async () => {
     renderDetail();
     await screen.findByRole("heading", { level: 1, name: "Triage" });
     expect(screen.queryByRole("button", { name: "New automation" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
-    await userEvent.click(await screen.findByRole("button", { name: "Add a custom automation" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByLabelText("Name")).toHaveValue("Triage");
-    await waitFor(() => expect(within(dialog).getByLabelText("Workflow")).toHaveValue("triage"));
+    await userEvent.click(await screen.findByRole("button", { name: "Add an automation" }));
+    expect(useAutomationDialogStore.getState().request).toMatchObject({ workflowRef: "triage", projectId: "proj-1", custom: true });
   });
 
   it("a draft cannot run, and says why in text", async () => {
@@ -361,12 +360,12 @@ describe("WorkflowDetailPage", () => {
       window.location.hash = "";
     });
 
-    it("offers no Set up on a workflow that declares nothing", async () => {
+    it("offers no Turn on on a workflow that declares nothing", async () => {
       mocks.listTriggers.mockResolvedValue({ triggers: [] });
       renderDetail();
       await screen.findByRole("heading", { level: 1, name: "Triage" });
       expect(await screen.findByText("This workflow declares no triggers, so it runs only when someone starts it.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Turn on/ })).toBeNull();
     });
   });
 });

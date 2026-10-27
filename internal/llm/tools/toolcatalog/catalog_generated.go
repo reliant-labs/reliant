@@ -132,6 +132,18 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"draft_automation": {
+		Bindable: map[string]struct{}{
+			"assumptions": {},
+			"name":        {},
+			"params":      {},
+			"prompt":      {},
+			"summary":     {},
+			"when":        {},
+			"workflow":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"edit": {
 		Bindable: map[string]struct{}{
 			"new_string":  {},

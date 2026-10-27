@@ -231,6 +231,9 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(GenerateTitleWorkflow, workflow.RegisterOptions{
 		Name: "GenerateTitleWorkflow",
 	})
+	w.RegisterWorkflowWithOptions(DraftAutomationWorkflow, workflow.RegisterOptions{
+		Name: DraftAutomationWorkflowName,
+	})
 
 	// Schedule triggers. The workflow is always registered — it is pure
 	// orchestration — but the activity needs a launcher. Registering the

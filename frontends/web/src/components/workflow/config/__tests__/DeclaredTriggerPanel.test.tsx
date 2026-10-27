@@ -240,7 +240,9 @@ describe("DeclaredTriggerPanel", () => {
     renderPanel([scheduleTrigger]);
     expect(await screen.findByText('"0 25 * * *" is not a valid cron expression')).toBeInTheDocument();
     expect(screen.queryByText("Filter")).not.toBeInTheDocument();
-    expect(screen.getByText("Every weekday at 9:00 AM UTC")).toBeInTheDocument();
+    // The schedule reads as a sentence, with its concrete next runs in its zone.
+    expect(screen.getByLabelText("Repeat")).toHaveValue("weekdays");
+    expect(screen.getByTestId("schedule-preview")).toHaveTextContent(/^Next runs: \w{3} 9:00, \w{3} 9:00, \w{3} 9:00 \(UTC\)$/);
   });
 
   it("validates the name as the server does, and renames on blur", async () => {

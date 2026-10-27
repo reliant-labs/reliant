@@ -109,6 +109,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
             onOpenAsChat,
             onRerun: rerun.onRerun,
             onRunAutomationNow: rerun.onRunAutomationNow,
+            onSchedule: rerun.onSchedule,
           }}
         />
         <RunMachineBanner chat={chat} />

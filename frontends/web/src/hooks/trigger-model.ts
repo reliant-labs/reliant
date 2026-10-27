@@ -23,7 +23,7 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
+import { create, fromJson, type JsonObject, type JsonValue, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { jsToProtoValue, protoValueToJs } from "../api/proto-utils";
@@ -36,6 +36,7 @@ import {
   type PreviewReplayRequestSchema,
   type PreviewReplayResponse,
   type ResolveTriggerSendersResponse,
+  AutomationDraftSchema,
   ScheduleSourceSchema,
   TriggerDefinitionSchema,
   TriggerEventKind,
@@ -47,6 +48,7 @@ import {
   IntegrationSourceSchema,
   WebhookSourceSchema,
   WorkflowEventSourceSchema,
+  type AutomationDraft as ProtoAutomationDraft,
   type ScheduleSource as ProtoScheduleSource,
   type Trigger as ProtoTrigger,
   type TriggerDefinition as ProtoTriggerDefinition,
@@ -730,6 +732,64 @@ export function enableWorkflowRequest(input: EnableWorkflowInput): MessageInitSh
     })),
   };
 }
+
+// ============================================
+// Drafts ("Describe it", and the chat's draft_automation tool)
+// ============================================
+
+/**
+ * A proposed automation, never stored: only the person's Create in the
+ * automation dialog makes a trigger from it. The server sets only the WHEN
+ * and the WHAT — where it runs and as whom are the person's choices.
+ */
+export interface AutomationDraft {
+  summary: string;
+  assumptions: string[];
+  name: string;
+  workflow: string;
+  message: string;
+  params: Record<string, unknown>;
+  presets: Record<string, string>;
+  filter: string;
+  /** Unknown when the draft has no source this client can read. */
+  source: TriggerSource;
+}
+
+export function automationDraftFromProto(proto: ProtoAutomationDraft): AutomationDraft {
+  const def = proto.definition;
+  const params: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(def?.params ?? {})) params[key] = protoValueToJs(value);
+  // A draft never activates a declaration (workflow_trigger): that arm reads as unknown.
+  let source: TriggerSource = def && def.source.case !== "workflowTrigger" ? inlineSourceFromProto(def.source) : { kind: "unknown" };
+  // A draft with no zone means "the person's own": keep it empty for the
+  // dialog to fill with the browser's, rather than the stored default UTC.
+  if (source.kind === "schedule" && def?.source.case === "schedule" && !def.source.value.timezone) {
+    source = { kind: "schedule", schedule: { ...source.schedule, timezone: "" } };
+  }
+  return {
+    summary: proto.summary,
+    assumptions: [...proto.assumptions],
+    name: def?.name ?? "",
+    workflow: def?.workflow ?? "",
+    message: def?.message ?? "",
+    params,
+    presets: { ...(def?.presets ?? {}) },
+    filter: def?.filter ?? "",
+    source,
+  };
+}
+
+/** A draft from its protojson (the draft_automation tool's result metadata), or undefined. */
+export function automationDraftFromJson(json: unknown): AutomationDraft | undefined {
+  if (!json || typeof json !== "object") return undefined;
+  try {
+    return automationDraftFromProto(fromJson(AutomationDraftSchema, json as JsonValue, { ignoreUnknownFields: true }));
+  } catch {
+    return undefined;
+  }
+}
+
+
 
 /**
  * What EnableWorkflow did. A refusal is a normal response (`enabled: false`)
