@@ -105,8 +105,10 @@ type daemonClient struct {
 	// result finished while the daemon was between streams still arrives.
 	results resultOutbox
 
-	cancelMu    sync.Mutex
-	cancelByReq map[string]context.CancelFunc
+	cancelMu       sync.Mutex
+	cancelByReq    map[string]context.CancelFunc
+	runExecutions  map[string]*ownedRunExecution
+	cancelledChats map[string]int64
 	// backgroundByReq marks in-flight executions the user asked to detach into
 	// a background process. The executing command polls this by request id (see
 	// exec.Run) — the same correlation cancel uses, and the only handle the
@@ -1454,6 +1456,15 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 
 	// What became of a tool call is the daemon's own bookkeeping, not the
 	// disk's, so it is answered even while the guard below refuses work.
+	if req.CommandType == "run.cancel" {
+		payload, err := d.cancelOwnedRun(ctx, req.Payload)
+		if err != nil {
+			d.sendCommandFailure(s, req, err)
+			return
+		}
+		_ = d.reply(s, &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_DaemonCommandResponse{DaemonCommandResponse: &reliantv1.DaemonCommandResponse{RequestId: req.RequestId, CommandType: req.CommandType, Success: true, Payload: payload}}})
+		return
+	}
 	if req.CommandType == toolexec.ToolStatusCommand {
 		payload, err := d.handleToolStatus(req.Payload)
 		if err != nil {
@@ -1830,6 +1841,13 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	}
 	if contextMap["user_id"] == nil {
 		contextMap["user_id"] = d.currentUserID()
+	}
+	chatID, _ := contextMap["chat_id"].(string)
+	dispatchedAt, _ := contextMap["dispatched_at_ns"].(float64)
+	if finish, allowed := d.trackRunExecution(req.RequestId, chatID, int64(dispatchedAt), cancel); allowed {
+		defer finish()
+	} else {
+		cancel()
 	}
 
 	// The worktree or project this call works in: recorded the first time it

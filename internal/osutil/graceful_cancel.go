@@ -56,14 +56,12 @@ const DefaultGraceDelay = 3 * time.Second
 // callers must start the child with its own process group (Setpgid on Unix,
 // CREATE_NEW_PROCESS_GROUP on Windows) — both exec paths already do.
 //
-// # Two ordering hazards this handles
+// # Identity-safe escalation
 //
-// Cancel runs BEFORE Wait reaps the child, so the pid is still un-reaped and
-// group-signalling it cannot reach a recycled pid. The escalation timer has
-// no such guarantee: it can fire after Wait has reaped. It therefore uses
-// Process.Kill(), which os.Process tracks as done and turns into a harmless
-// ErrProcessDone, rather than a raw kill on a pid number that may by then
-// belong to someone else.
+// Cancel captures identity-bound process handles before sending TERM. On
+// Linux these are pidfds for the owned group members, so escalation still
+// reaches descendants after the leader exits without risking a recycled PID.
+// stop joins escalation after Wait: leader exit alone is not group completion.
 //
 // # Reporting
 //
@@ -91,6 +89,9 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 
 	done := make(chan struct{})
 	var stopOnce sync.Once
+	var cancelMu sync.Mutex
+	var cancelled bool
+	escalated := make(chan struct{})
 
 	cmd.Cancel = func() error {
 		proc := cmd.Process
@@ -100,17 +101,29 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 			return os.ErrProcessDone
 		}
 
+		cancelMu.Lock()
+		if cancelled {
+			cancelMu.Unlock()
+			return os.ErrProcessDone
+		}
+		cancelled = true
+		cancelMu.Unlock()
+		// Capture BEFORE TERM: descendants may reparent as soon as it lands.
+		killGroup := captureGroupKiller(proc)
 		err := terminateGracefully(proc)
 
-		// Escalate on our own clock so WaitDelay keeps meaning only the pipe
-		// drain. Kill() (not a raw group kill) because this fires
-		// asynchronously and may land after Wait has reaped the child.
-		timer := time.AfterFunc(grace, func() {
-			_ = proc.Kill()
-		})
+		// Capture identity-bound handles while the command is still ours.
+		// The leader can exit/reap before escalation; killing its numeric PID
+		// later is unsafe, and Process.Kill alone leaves grandchildren alive.
 		go func() {
-			<-done
-			timer.Stop()
+			timer := time.NewTimer(grace)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-done:
+			}
+			killGroup()
+			close(escalated)
 		}()
 
 		return err
@@ -120,5 +133,15 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 	// than once, and the exec paths call it from whichever goroutine finishes
 	// the command, so an unsynchronized flag would be a data race and a
 	// double close would panic.
-	return func() { stopOnce.Do(func() { close(done) }) }
+	return func() {
+		stopOnce.Do(func() { close(done) })
+		cancelMu.Lock()
+		wasCancelled := cancelled
+		cancelMu.Unlock()
+		// Wait has already joined os/exec's Cancel callback. Do not acknowledge
+		// completion until the captured descendants have received escalation.
+		if wasCancelled {
+			<-escalated
+		}
+	}
 }

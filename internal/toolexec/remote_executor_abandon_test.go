@@ -79,6 +79,16 @@ func TestExecuteOnDaemon_AbandonedCallCancelsOnDaemon(t *testing.T) {
 // The push is strictly for abandonment. A call that returned normally must not
 // send one -- the execution is already over, and a stray cancel racing the next
 // dispatch of the same tool call id would stop work nobody asked to stop.
+func TestExecuteOnDaemon_RunNodeWithoutToolCallIDStillCancels(t *testing.T) {
+	router := &cancelRecordingRouter{blockFor: time.Minute}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := (&RemoteExecutor{router: router}).executeOnDaemon(ctx, &ToolRequest{UserID: "user", ChatID: "run", ToolName: "shell"}, time.Now())
+	require.NoError(t, err)
+	require.Len(t, router.recorded(), 1)
+	require.NotEmpty(t, router.recorded()[0], "use transport correlation for run nodes")
+}
+
 func TestExecuteOnDaemon_CompletedCallDoesNotCancel(t *testing.T) {
 	router := &cancelRecordingRouter{blockFor: time.Millisecond}
 	executor := &RemoteExecutor{router: router}

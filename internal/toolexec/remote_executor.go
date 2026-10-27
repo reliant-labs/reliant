@@ -392,6 +392,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 	}
 
 	contextMap := req.toolContextMap()
+	contextMap["dispatched_at_ns"] = time.Now().UnixNano()
 
 	timeoutMs := 0
 	if req.Timeout > 0 {
@@ -436,12 +437,18 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 	// outlive the turn — it would kill the process group the user asked to keep.
 	abandoned := false
 	defer func() {
-		if !abandoned || req.ToolCallID == "" {
+		if !abandoned {
 			return
+		}
+		// Run nodes have no LLM tool-call row/id. The transport request id
+		// is always present and registered by the daemon for cancellation.
+		cancelID := req.ToolCallID
+		if cancelID == "" {
+			cancelID = execReq.RequestID
 		}
 		cancelCtx, cancel := context.WithTimeout(WithDaemonSelector(context.WithoutCancel(ctx), req.DaemonSelector), daemonCancelPushTimeout)
 		defer cancel()
-		if err := e.router.SendToolExecutionCancel(cancelCtx, req.UserID, req.ToolCallID, "tool execution abandoned"); err != nil {
+		if err := e.router.SendToolExecutionCancel(cancelCtx, req.UserID, cancelID, "tool execution abandoned"); err != nil {
 			logging.WarnContext(ctx, "Could not tell the daemon to stop an abandoned tool; it may run to completion",
 				"error", err, "toolCallID", req.ToolCallID, "toolName", req.ToolName)
 		}

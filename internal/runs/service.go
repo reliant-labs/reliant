@@ -91,6 +91,12 @@ func (s *Service) Pause(ctx context.Context, chatID string) error {
 // cleanup that handler would normally own: drop the checkpoint, move the root row
 // with a CAS, void an open question, and drain workflow/thread descendants.
 func (s *Service) Terminate(ctx context.Context, chatID string) error {
+	return s.TerminateWithDrain(ctx, chatID, nil)
+}
+
+// TerminateWithDrain stops scheduling work before draining owned daemon work.
+// CANCELLED is committed only after the daemon confirms completion.
+func (s *Service) TerminateWithDrain(ctx context.Context, chatID string, drain func() error) error {
 	_, workflowID, err := s.chatRun(ctx, chatID)
 	if err != nil {
 		return err
@@ -103,6 +109,11 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 
 	state, stateErr := s.State(ctx, workflowID)
 	if stateErr == nil && (!state.Exists || !state.IsRunning) {
+		if drain != nil {
+			if err := drain(); err != nil {
+				return err
+			}
+		}
 		s.reconcileStoppedRun(ctx, workflowID, db.Cancelled())
 		s.clearUsageLimitWait(ctx, chatID)
 		return nil
@@ -119,8 +130,12 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 		return fmt.Errorf("temporal client cannot terminate workflows")
 	}
 	if err := terminator.TerminateWorkflow(ctx, workflowID, "", "Workflow terminated by operator"); err != nil {
-		logging.WarnContext(ctx, "[runs] Failed to terminate workflow in Temporal; continuing to reconcile DB",
-			"workflowID", workflowID, "error", err)
+		return fmt.Errorf("terminate workflow before draining commands: %w", err)
+	}
+	if drain != nil {
+		if err := drain(); err != nil {
+			return err
+		}
 	}
 
 	if err := s.markTerminated(ctx, workflowID); err != nil {

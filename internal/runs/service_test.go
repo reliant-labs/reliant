@@ -241,6 +241,17 @@ func fixture(t *testing.T) (*fakeRepo, *fakeTemporal, *fakePause, *Service) {
 // Terminate — hard stop policy owned by runs
 // =========================================================================
 
+func TestTerminateDrainFailureDoesNotPublishCancelled(t *testing.T) {
+	repo, temporal, _, svc := fixture(t)
+	err := svc.TerminateWithDrain(context.Background(), "chat-1", func() error {
+		require.Len(t, temporal.terminated, 1, "stop scheduling before drain")
+		require.Empty(t, repo.casCalls, "terminal state must wait for acknowledgement")
+		return errors.New("daemon command still alive")
+	})
+	require.ErrorContains(t, err, "still alive")
+	require.Empty(t, repo.casCalls)
+}
+
 func TestTerminate_LiveRunHardTerminatesAndDrainsSubtree(t *testing.T) {
 	repo, temporal, _, svc := fixture(t)
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Active()}
