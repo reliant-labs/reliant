@@ -44,7 +44,7 @@ func (w WaitOutcome) Deliver(ctx context.Context, intentID string) error {
 	if p.State != "confirmed" || p.CheckID <= 0 {
 		return reviewpublisher.ErrUnauthorized
 	}
-	state := "incomplete"
+	state := "unavailable"
 	switch a.Completion.Verdict {
 	case reviewpublisher.Approve:
 		if p.Intent.Conclusion == "success" && a.Completion.GraphSucceeded {
