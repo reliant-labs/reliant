@@ -174,6 +174,23 @@ export function TraceDetail({
         </div>
       </div>
 
+      <section aria-label="Related traces" className="space-y-2 rounded-lg border border-border bg-background p-3 text-xs">
+        <h4 className="font-semibold text-foreground">Related traces</h4>
+        <p className="text-muted-foreground">Links preserve causality across trace boundaries; they are not parent/child spans. Results use the current environment and time range.</p>
+        {(trace.data?.relatedTraces?.length ?? 0) > 0 ? (
+          <ul className="space-y-1">
+            {trace.data?.relatedTraces?.map((ref) => (
+              <li key={`${ref.traceId}-${ref.spanId}-${ref.linkedSpanId}`}>
+                <Button variant="ghost" size="xs" onClick={() => navigate({ view: "traces", trace: ref.traceId, span: ref.spanId, service: undefined, q: undefined })}>
+                  Trace {shortId(ref.traceId)} · span {shortId(ref.spanId)} links to {shortId(ref.linkedSpanId)}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-muted-foreground">No incoming links found. Related spans may be outside this range, sampled out, or past retention.</p>}
+        {trace.data?.relatedTracesTruncated && <p role="status" className="text-muted-foreground">Showing the first 100 related spans. Narrow the time range to find more.</p>}
+      </section>
+
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">
           <TraceWaterfall
@@ -191,6 +208,7 @@ export function TraceDetail({
             profiles={profilesOf(selected.service)}
             onFlamegraph={() => navigate({ view: "profiles", trace: traceId, span: undefined, service: selected.service })}
             onClose={() => navigate({ span: undefined }, { replace: true })}
+            onLinkedSpan={(trace, span) => navigate({ view: "traces", trace, span, service: undefined, q: undefined })}
           />
         ) : (
           <p className="self-start rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-xs text-ink-muted">
@@ -212,6 +230,7 @@ function SpanDetails({
   profiles,
   onFlamegraph,
   onClose,
+  onLinkedSpan,
 }: {
   span: Span;
   originMs: number;
@@ -220,6 +239,7 @@ function SpanDetails({
   profiles: SignalState;
   onFlamegraph: () => void;
   onClose: () => void;
+  onLinkedSpan: (traceId: string, spanId: string) => void;
 }) {
   return (
     <Card padding="md" className="self-start" data-testid="span-details">
@@ -266,6 +286,22 @@ function SpanDetails({
         )}
       </div>
       <div className="space-y-3">
+        {(span.links?.length ?? 0) > 0 && (
+          <section aria-label="Span links">
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Span links</h4>
+            <p className="mb-1 text-xs text-muted-foreground">Causal references, not parent/child edges. Linked spans may be outside this range, sampled out, or past retention.</p>
+            <ul className="space-y-1">
+              {span.links?.map((link, index) => (
+                <li key={`${link.traceId}-${link.spanId}-${index}`}>
+                  <Button variant="ghost" size="xs" onClick={() => onLinkedSpan(link.traceId, link.spanId)}>
+                    Trace {shortId(link.traceId)} · span {shortId(link.spanId)}
+                  </Button>
+                  {Object.keys(link.attributes).length > 0 && <AttributeTable title="Link attributes" attributes={link.attributes} />}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <AttributeTable title="Attributes" attributes={span.attributes} />
         {span.events.length > 0 && (
           <section aria-label="Events">
