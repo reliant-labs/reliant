@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -47,7 +48,7 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if descriptions == nil {
 		return errors.New("workflow capacity Temporal descriptions are unavailable")
 	}
-	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: t.Workflow}
+	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: strings.TrimPrefix(t.Workflow, "project://")}
 	if event.Outcome == core.TriggerEventPending {
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
 			return errors.New("queued workflow capacity scope changed")
