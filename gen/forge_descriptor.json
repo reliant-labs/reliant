@@ -38881,6 +38881,20 @@
           ]
         },
         {
+          "Name": "worktree_live_shed_idle",
+          "GoName": "WorktreeLiveShedIdle",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_WORKTREE_LIVE_SHED_IDLE",
+          "Flag": "",
+          "DefaultValue": "24h",
+          "Required": false,
+          "Description": "Idle floor for whole recoverable-worktree retirement; auto-archive on required (0 = off)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
+        },
+        {
           "Name": "auth_provider_url",
           "GoName": "AuthProviderUrl",
           "GoType": "string",
@@ -41680,7 +41694,7 @@
   ],
   "sources": {
     "reliant/config/v1/analytics_config.proto": "aee736b02a56e865ba9da6e827efb0ce56267256b44e37f5fd3e703ea7e461b9",
-    "reliant/config/v1/api_server_config.proto": "db6320103f36deedcdac6129b5f050b26ee1891d2d8a22e392cfa6c4375889e1",
+    "reliant/config/v1/api_server_config.proto": "1da0ace7f3197f6068ac1a51a47d1fb1e2ba92eedbfeae6d82c9377bf14450fd",
     "reliant/config/v1/cli_config.proto": "8322a3c3d237061fd60e217ec3056224b68449c6b3104510dc00fec5d5bb0b8e",
     "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
     "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",

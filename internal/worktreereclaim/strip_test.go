@@ -4,7 +4,6 @@ package worktreereclaim
 import (
 	"context"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -32,9 +31,9 @@ func fill(t *testing.T, checkout string) []string {
 	return []string{"web/node_modules", "dist", ".tools", ".forge/tmp", "tmp"}
 }
 
-// An archived worktree kept for its work loses its regenerable bulk and keeps
-// every tracked, untracked and data file.
-func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
+// A held worktree retains its entire contents; automatic cleanup is whole
+// safe worktrees only, never deletion of subsets beside unique data.
+func TestReconcile_HeldWorktreePreservesRegenerableFiles(t *testing.T) {
 	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := stripFixture(t)
@@ -49,15 +48,12 @@ func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
 		t.Fatalf("got %+v, want held for its data or its work", got)
 	}
 	for _, p := range bulk {
-		if exists(filepath.Join(w.Path, filepath.FromSlash(p))) {
-			t.Errorf("%s survived; it is regenerable", p)
-		}
-		if !slices.Contains(got.Stripped, p) {
-			t.Errorf("%s is not in the recorded stripped paths %v", p, got.Stripped)
+		if !exists(filepath.Join(w.Path, filepath.FromSlash(p))) {
+			t.Errorf("%s was removed from held workspace", p)
 		}
 	}
-	if got.StrippedBytes <= 0 {
-		t.Errorf("stripped bytes = %d, want > 0", got.StrippedBytes)
+	if got.StrippedBytes != 0 || len(got.Stripped) != 0 {
+		t.Errorf("held tree reported deletion: %+v", got)
 	}
 	for _, p := range []string{"wip.txt", "a.txt", "data/rows.csv", ".forge/hostinfra/pg/PG_VERSION"} {
 		if !exists(filepath.Join(w.Path, filepath.FromSlash(p))) {
@@ -67,6 +63,7 @@ func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
 
 	// Unarchiving still works: the checkout is re-locked as live, files intact.
 	w.State = StateActive
+	w.Checkouts = []Checkout{{RepoPath: f.project}}
 	if res := f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]; res.Outcome != OutcomeLocked {
 		t.Fatalf("restore after shedding: got %+v, want locked", res)
 	}
@@ -96,8 +93,8 @@ func TestReconcile_ShedSkipsPathsHoldingARepository(t *testing.T) {
 	if !exists(nested) {
 		t.Fatal("a nested repository was deleted")
 	}
-	if exists(filepath.Join(w.Path, "dist")) {
-		t.Fatal("dist holds no repository and is regenerable; it should be shed")
+	if !exists(filepath.Join(w.Path, "dist", "app.js")) {
+		t.Fatal("held workspace's build output must remain intact")
 	}
 }
 

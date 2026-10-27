@@ -250,6 +250,7 @@ type ExecuteRunStepStore interface {
 // which wraps it) reads and writes. It forwards the store to the tool
 // bindings, the worktree resolution and the tool-call status writer.
 type ExecuteToolsStore interface {
+	ReviveArchivedWorktree(ctx context.Context, id string) (string, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)

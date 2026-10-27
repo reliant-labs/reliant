@@ -279,7 +279,17 @@ type Worktree struct {
 	KeepFiles bool `json:"keep_files,omitempty"`
 	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
 	// with, in addition to locking it; see OutcomeIdleDone.
-	ProbeIdle  bool       `json:"probe_idle,omitempty"`
+	ProbeIdle bool `json:"probe_idle,omitempty"`
+	// ProbeRecoverableAfterSeconds asks for read-only whole-worktree idle
+	// eligibility. It never authorizes deleting files from a live checkout.
+	ProbeRecoverableAfterSeconds int64 `json:"probe_recoverable_after_s,omitempty"`
+	// ProbeLanded (ACTIVE requests only) asks whether the worktree's work has
+	// landed: every checkout clean and its HEAD merged into its base branch
+	// on the remote (see Result.Landed). Always read-only.
+	ProbeLanded bool `json:"probe_landed,omitempty"`
+	// ShedLanded is ignored; complete worktree retirement requires archival.
+	// It cannot authorize deleting any file from a live checkout.
+	ShedLanded bool       `json:"shed_landed,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
 }
@@ -306,7 +316,19 @@ type Result struct {
 	// root (outside every checkout) were saved to before the workspace was
 	// removed; empty when there were none.
 	ReclaimedTo string `json:"reclaimed_to,omitempty"`
-	Error       string `json:"error,omitempty"`
+	// Landed (an ACTIVE worktree asked with ProbeLanded) says its work has
+	// landed and, once archived, the automatic removal would take it: every
+	// checkout is clean, holds nothing on no branch, and its HEAD is in its
+	// base branch on the remote (an ancestor, the same patches, one squash
+	// commit, or the head of a merged pull request), and the workspace holds
+	// no data, foreign checkout or other repository. A checkout with no
+	// commits beyond its base counts as landed. The daemon never removes an
+	// active worktree; whether to archive it is the server's call.
+	Landed bool `json:"landed,omitempty"`
+	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
+	// whose files (including caches) have all been quiet for the requested floor.
+	RecoverableIdle bool   `json:"recoverable_idle,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

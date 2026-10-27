@@ -90,6 +90,10 @@ type APISettings struct {
 	// WorktreeAutoArchive is what the worktree sweep does with finished
 	// worktrees (RELIANT_WORKTREE_AUTO_ARCHIVE); see worktreesweep.
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
+	// WorktreeLiveShedIdle is the whole recoverable-worktree idle floor
+	// (configuration name retained); no live-file shedding is performed.
+	// auto-archive on is required; 0 disables idle retirement.
+	WorktreeLiveShedIdle time.Duration
 	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
 	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 	PayloadGCHorizon time.Duration
@@ -124,10 +128,11 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
 		},
-		AuthorizationServer: strings.TrimSpace(api.GetAuthorizationServer()),
-		OAuthProvider:       auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
-		WorktreeAutoArchive: worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
-		PayloadGCHorizon:    api.GetPayloadBlobGcHorizon().AsDuration(),
+		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
+		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
+		WorktreeAutoArchive:  worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
+		WorktreeLiveShedIdle: api.GetWorktreeLiveShedIdle().AsDuration(),
+		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -909,6 +914,7 @@ func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 		// gate does not bypass any per-workspace or remote verification check.
 		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
+		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, database).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {

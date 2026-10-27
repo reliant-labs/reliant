@@ -29,7 +29,12 @@ func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 		w := f.worktree("copy-"+name, "feat/copy-"+name)
 		write(t, filepath.Join(w.Path, "secrets", "dev.yaml"), "token: abc\n")
 		write(t, filepath.Join(w.Path, ".env"), "KEY=1\n")
-		if got := play(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
+		got := play(w)
+		if name == "auto" {
+			if got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, ".env")) {
+				t.Fatalf("automatic cleanup must preserve protected paths even when copied: %+v", got)
+			}
+		} else if got.Outcome != OutcomeRemoved || exists(w.Path) {
 			t.Fatalf("%s: got %+v, want removed", name, got)
 		}
 	}
@@ -197,8 +202,8 @@ func TestReconcile_SymlinkOutOfCheckoutIsInsideIt(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.one(w); got.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v, want removed", got)
+	if got := f.one(w); got.Outcome != OutcomeHeld || !exists(link) {
+		t.Fatalf("uncertain symlink layout must remain intact: %+v", got)
 	}
 	if !exists(target) {
 		t.Fatal("the symlink's target was deleted")
