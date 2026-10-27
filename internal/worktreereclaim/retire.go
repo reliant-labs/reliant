@@ -1,9 +1,7 @@
 package worktreereclaim
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -74,10 +72,7 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 	type parkedTree struct {
 		original, path, common string
 		tree                   *retirementTree
-		indexPath              string
-		indexHash              [32]byte
-		headPath               string
-		head                   []byte
+		gitState               retirementGitState
 	}
 	parked := []parkedTree{}
 	defer func() {
@@ -184,16 +179,28 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 		parked[len(parked)-1].tree = tree
 		inspectionFiles = append(inspectionFiles, tree.inspectionFiles()...)
 	}
-	for _, p := range parked {
+	for i := range parked {
+		p := &parked[i]
 		if err := check(); err != nil {
 			return rollback(ReasonInUse, err.Error())
 		}
 		if h := r.inUse(ctx, Worktree{ID: w.ID, Path: p.path}, true); h != nil {
 			return rollback(h.Reason, h.Detail)
 		}
+		// Bind BEFORE the first clean/index/history predicate. Snapshotting
+		// after classification would legitimize mutations in its late seams.
+		before, err := inspectRetirementGitState(ctx, p.path)
+		if err != nil {
+			return rollback(ReasonUnverified, err.Error())
+		}
 		if v := classifyCheckout(ctx, p.path, baseFor(w, p.original), nil, w.ID, r.probe()); !v.safe() {
 			return rollback(v.Reason, v.Detail)
 		}
+		after, err := inspectRetirementGitState(ctx, p.path)
+		if err != nil || before != after {
+			return rollback(ReasonUnverified, "Git state changed during classification")
+		}
+		p.gitState = before
 		if r.IdleFloor > 0 && r.now().Sub(p.tree.newest) < r.IdleFloor {
 			return rollback(ReasonRecentlyActive, "parked checkout changed recently")
 		}
@@ -206,26 +213,6 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 	for _, p := range parked {
 		if _, err := os.Lstat(p.original); !os.IsNotExist(err) {
 			return rollback(ReasonInUse, "original checkout path became occupied")
-		}
-	}
-	// Snapshot index/HEAD only AFTER classification (Git may refresh index).
-	// A concurrent git-add/checkout invalidates disposal instead of silently
-	// deleting something that became tracked after eligibility.
-	for i := range parked {
-		p := &parked[i]
-		admin := adminDir(p.path)
-		if admin == "" {
-			return rollback(ReasonUnverified, "missing checkout administration")
-		}
-		p.indexPath, p.headPath = filepath.Join(admin, "index"), filepath.Join(admin, "HEAD")
-		index, err := os.ReadFile(p.indexPath)
-		if err != nil {
-			return rollback(ReasonUnverified, err.Error())
-		}
-		p.indexHash = sha256.Sum256(index)
-		p.head, err = os.ReadFile(p.headPath)
-		if err != nil {
-			return rollback(ReasonUnverified, err.Error())
 		}
 	}
 	// From the first unlink onward errors preserve journal+remaining bytes for
@@ -247,16 +234,12 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 			if err != nil || !info.Locked || info.Reason != ArchivedLockReason(w.ID, w.Fence) {
 				return errors.New("archive lock changed during retirement")
 			}
-			index, err := os.ReadFile(p.indexPath)
+			state, err := inspectRetirementGitState(ctx, p.path)
 			if err != nil {
 				return err
 			}
-			head, err := os.ReadFile(p.headPath)
-			if err != nil {
-				return err
-			}
-			if sha256.Sum256(index) != p.indexHash || !bytes.Equal(head, p.head) {
-				return errors.New("git index or HEAD changed during retirement")
+			if state != p.gitState {
+				return errors.New("authorized Git index/history/ref state changed during retirement")
 			}
 			return nil
 		}
