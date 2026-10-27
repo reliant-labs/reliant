@@ -99,7 +99,7 @@ export interface ElectronAPI {
   onTrayGoToWorkflowHub: (callback: () => void) => void;
   onTrayOpenWorkflow: (callback: (payload: { workflowName?: string }) => void) => void;
   onTrayGoToSettings: (callback: () => void) => void;
-  onTrayGoToProjectPicker: (callback: () => void) => void;
+  onTrayAddProject: (callback: () => void) => void;
   onTraySwitchWorkspace: (callback: (payload: { workspaceId?: string }) => void) => void;
   onCloseAllTabs: (callback: () => void) => void;
   onNavigateTab: (callback: (direction: 'next' | 'previous') => void) => void;

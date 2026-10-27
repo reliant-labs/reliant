@@ -46,8 +46,8 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
   },
   openProject: {
     id: 'openProject',
-    name: 'Open Project',
-    description: 'Open a new project directory',
+    name: 'Add Project',
+    description: 'Add a project by cloning a repository or opening a folder',
     category: 'File & Window Management',
     defaultBinding: 'Cmd+O',
     defaultWebBinding: 'Cmd+K O',
@@ -347,7 +347,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
   switchProject: {
     id: 'switchProject',
     name: 'Switch Project',
-    description: 'Open the project switcher to jump to any project',
+    description: 'Open the sidebar\'s project switcher to show one project or all of them',
     category: 'Project Navigation',
     defaultBinding: 'Cmd+Shift+E',
     defaultWebBinding: 'Cmd+Shift+E',

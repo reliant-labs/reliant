@@ -108,8 +108,8 @@ shortcuts:
     handler: onNewChat
 
   - id: openProject
-    name: Open Project
-    description: Open a new project directory
+    name: Add Project
+    description: Add a project by cloning a repository or opening a folder
     category: File & Window Management
     binding: Cmd+O
     web_binding: Cmd+K O
@@ -400,7 +400,7 @@ shortcuts:
   # ==================================
   - id: switchProject
     name: Switch Project
-    description: Open the project switcher to jump to any project
+    description: Open the sidebar's project switcher to show one project or all of them
     category: Project Navigation
     binding: Cmd+Shift+E
     handler: onSwitchProject

@@ -367,6 +367,9 @@ message WorktreeSummary {
   WorktreeStatus status = 6;
   // Archive timestamp; unset for a live workspace.
   optional string deleted_at = 7;
+  // The project the workspace belongs to, so a list spanning projects can
+  // group by it.
+  string project_id = 8;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive

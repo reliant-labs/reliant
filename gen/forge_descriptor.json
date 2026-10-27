@@ -6120,8 +6120,8 @@
             "IsOptional": false
           },
           {
-            "Name": "main_worktree",
-            "ProtoType": "message",
+            "Name": "main_worktrees",
+            "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.WorktreeSummary"
           }
@@ -7556,10 +7556,7 @@
         "reliant.v1.ListChatsRequest": [
           {
             "name": "project_id",
-            "kind": "string",
-            "validate": {
-              "required": true
-            }
+            "kind": "string"
           },
           {
             "name": "limit",
@@ -7588,9 +7585,10 @@
             "kind": "int64"
           },
           {
-            "name": "main_worktree",
+            "name": "main_worktrees",
             "kind": "message",
-            "type_name": "reliant.v1.WorktreeSummary"
+            "type_name": "reliant.v1.WorktreeSummary",
+            "repeated": true
           }
         ],
         "reliant.v1.ListMessagesRequest": [
@@ -8629,6 +8627,10 @@
             "name": "deleted_at",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
           }
         ]
       },
@@ -41744,7 +41746,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "9617ec3b58fa0244f55b43ef49ce5d940e451d4b9658d9d6c1baaa7abaff7b4e",
+    "reliant/v1/chat.proto": "e1bd53bbf69d1bd64ac6123a7f43464efb5e62541130baa6d66af3579b0c4c82",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
@@ -41777,6 +41779,6 @@
     "reliant/v1/trigger.proto": "fe695d7df2de13bbfda0806758bce8b42e0887eae2e209b6679f1131901e2344",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "78e9af602bfd7e5c833c19b9572b284a900893d086732512d7b4bf0b0b529dfd",
-    "reliant/v1/worktree.proto": "2d2670e4ca98a799c8f0f8a9397ef34cd4f69f715283627ffd290fbe8f80b5cd"
+    "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }

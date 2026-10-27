@@ -2416,11 +2416,14 @@ func (x *RunNowResponse) GetRunId() string {
 	return ""
 }
 
-// ListChatsRequest lists chats for a project
+// ListChatsRequest lists the caller's chats: in one project, or in all of them.
 type ListChatsRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
-	Limit     *int32                 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The project to list. Empty lists every project the caller owns: the
+	// sidebar's "All projects" view. Chats are scoped by the caller either way,
+	// so a project id that is not the caller's lists nothing.
+	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Limit     *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// When true, return only chats the sidebar lists (chats_with_activity.
 	// list_in_sidebar): interactive chats and adopted chats. An automation or
 	// agent-started run appears only once adopted; one awaiting input surfaces
@@ -2490,9 +2493,11 @@ type ListChatsResponse struct {
 	// The frontend uses this to connect the streaming RPC with sinceSeq = this value,
 	// avoiding redundant replay of events already reflected in the chat list.
 	LastUserUpdateSequence int64 `protobuf:"varint,3,opt,name=last_user_update_sequence,json=lastUserUpdateSequence,proto3" json:"last_user_update_sequence,omitempty"`
-	// The project's main workspace, so the sidebar can show it even when no chat
-	// runs there. Unset only for a project that has no main worktree row yet.
-	MainWorktree  *WorktreeSummary `protobuf:"bytes,4,opt,name=main_worktree,json=mainWorktree,proto3" json:"main_worktree,omitempty"`
+	// The main workspace of every project in scope (the one requested, or all of
+	// the caller's), so the sidebar can show a project's main workspace even when
+	// no chat runs there. A project with no main worktree row yet has no entry.
+	// Each carries its project_id.
+	MainWorktrees []*WorktreeSummary `protobuf:"bytes,5,rep,name=main_worktrees,json=mainWorktrees,proto3" json:"main_worktrees,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2548,9 +2553,9 @@ func (x *ListChatsResponse) GetLastUserUpdateSequence() int64 {
 	return 0
 }
 
-func (x *ListChatsResponse) GetMainWorktree() *WorktreeSummary {
+func (x *ListChatsResponse) GetMainWorktrees() []*WorktreeSummary {
 	if x != nil {
-		return x.MainWorktree
+		return x.MainWorktrees
 	}
 	return nil
 }
@@ -3044,10 +3049,12 @@ func (x *DeleteChatResponse) GetPermanentlyDeleted() bool {
 
 // SearchChatsRequest searches chats
 type SearchChatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
-	Query         string                 `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`                          // Search query
-	Limit         *int32                 `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The project to search. Empty searches every project the caller owns; each
+	// result carries its project_id.
+	ProjectId     string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Query         string `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"` // Search query
+	Limit         *int32 `protobuf:"varint,3,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7267,19 +7274,19 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x97\x01\n" +
-	"\x10ListChatsRequest\x12%\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x8f\x01\n" +
+	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x19\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
 	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12&\n" +
 	"\fsidebar_only\x18\x03 \x01(\bH\x01R\vsidebarOnly\x88\x01\x01B\b\n" +
 	"\x06_limitB\x0f\n" +
-	"\r_sidebar_only\"\xce\x01\n" +
+	"\r_sidebar_only\"\xe5\x01\n" +
 	"\x11ListChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x129\n" +
-	"\x19last_user_update_sequence\x18\x03 \x01(\x03R\x16lastUserUpdateSequence\x12@\n" +
-	"\rmain_worktree\x18\x04 \x01(\v2\x1b.reliant.v1.WorktreeSummaryR\fmainWorktree\")\n" +
+	"\x19last_user_update_sequence\x18\x03 \x01(\x03R\x16lastUserUpdateSequence\x12B\n" +
+	"\x0emain_worktrees\x18\x05 \x03(\v2\x1b.reliant.v1.WorktreeSummaryR\rmainWorktreesJ\x04\b\x04\x10\x05R\rmain_worktree\")\n" +
 	"\x0eGetChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"7\n" +
 	"\x0fGetChatResponse\x12$\n" +
@@ -7972,7 +7979,7 @@ var file_reliant_v1_chat_proto_depIdxs = []int32{
 	24,  // 29: reliant.v1.RunNowRequest.replay:type_name -> reliant.v1.ReplayEvent
 	13,  // 30: reliant.v1.RunNowResponse.chat:type_name -> reliant.v1.Chat
 	13,  // 31: reliant.v1.ListChatsResponse.chats:type_name -> reliant.v1.Chat
-	109, // 32: reliant.v1.ListChatsResponse.main_worktree:type_name -> reliant.v1.WorktreeSummary
+	109, // 32: reliant.v1.ListChatsResponse.main_worktrees:type_name -> reliant.v1.WorktreeSummary
 	13,  // 33: reliant.v1.GetChatResponse.chat:type_name -> reliant.v1.Chat
 	13,  // 34: reliant.v1.UpdateChatResponse.chat:type_name -> reliant.v1.Chat
 	13,  // 35: reliant.v1.AdoptChatResponse.chat:type_name -> reliant.v1.Chat

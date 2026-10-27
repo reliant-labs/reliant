@@ -20,8 +20,9 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
-import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
+import { openChat } from "./openChat";
+import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
@@ -47,7 +48,6 @@ import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/transport";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
-import { resolveWorktree } from "../hooks/worktree-queries";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -299,11 +299,10 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
 
     set({ wsService });
-    // Scope the stream (and its catch-up replay) to this project. The chat
-    // stream is told too: it carries the open chat's updates this scope drops.
-    const projectId = useProjectStore.getState().currentProject?.id;
-    wsService.start(state.lastSequence, projectId);
-    state.chatStream?.setProjectScope(projectId);
+    // The global window receives all projects without reconnecting on a
+    // context switch. Chat detail still streams independently, immediately.
+    wsService.start(state.lastSequence);
+    state.chatStream?.setProjectScope(undefined);
   },
 
   disconnect: () => {
@@ -581,8 +580,8 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
         if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
       },
     },
-    // The scope the user stream was (or will be) opened with.
-    useProjectStore.getState().currentProject?.id,
+    // The global user stream includes every project.
+    undefined,
   );
 }
 
@@ -892,6 +891,8 @@ function handleChatStateChange(update: UserUpdate) {
       // Show notification with sound
       const soundOptions = getNotificationSoundOptions();
       const navigateToChat = async (id: string) => {
+        // The click owns the intent, not the later completion of GetChat.
+        const isCurrent = beginWorkspaceOpen();
         try {
           const chatStore = useChatStore.getState();
           
@@ -913,60 +914,23 @@ function handleChatStateChange(update: UserUpdate) {
             timestamp: new Date().toISOString(),
           });
           
-          const projectStore = useProjectStore.getState();
-          const worktreeStore = useWorktreeStore.getState();
-          const chatNavigationStore = useChatNavigationStore.getState();
-          
-          logger.warn(`${LOG_PREFIX} Current state`, {
-            activeChatId: chatStore.activeChatId?.slice(0, 8),
-            currentProject: projectStore.currentProject?.id?.slice(0, 8),
-          });
-          
           // Find the chat object in the React Query cache
           let chat = getChatFromCache(id);
           if (!chat) {
-            // Try to reload chats in case it's not in the list yet
-            await useChatStore.getState().loadChats();
-            // An automation-launched chat is never in the project list, so
-            // fall back to fetching it by id.
+            // An automation-launched chat is never in the sidebar list, so
+            // fetch it by id.
             chat = await resolveChat(id);
+            if (!isCurrent()) return;
             if (!chat) {
-              logger.error(`${LOG_PREFIX} Chat not found after reload: ${id.slice(0, 8)}`);
+              logger.error(`${LOG_PREFIX} Chat not found: ${id.slice(0, 8)}`);
               return;
             }
           }
-          
-          // Switch worktree context if needed
-          const currentProject = projectStore.currentProject;
-          if (chat.worktreeId && currentProject?.id) {
-            const worktree = await resolveWorktree(chat.worktreeId);
-            if (worktree) {
-              logger.warn(`${LOG_PREFIX} 🔄 Switching worktree context: ${worktree.name}`);
-              await worktreeStore.switchWorktreeContext(currentProject.id, worktree);
-              logger.warn(`${LOG_PREFIX} ✅ Worktree context switched`);
-            }
-          } else if (currentProject?.id) {
-            logger.warn(`${LOG_PREFIX} 🔄 Switching to main worktree context`);
-            await worktreeStore.switchWorktreeContext(currentProject.id, null);
-            logger.warn(`${LOG_PREFIX} ✅ Switched to main worktree`);
-          }
-          
-          // Select the chat - ALWAYS force navigation, even if already selected
-          logger.warn(`${LOG_PREFIX} 🎯 SELECTING CHAT (FORCED): ${chat.id.slice(0, 8)}`);
-          
-          // Now select the chat - this triggers full navigation logic
-          logger.warn(`${LOG_PREFIX} Calling selectChat for: ${chat.id.slice(0, 8)}`);
-          useChatStore.getState().selectChat(chat);
-          
-          // Add to navigation queue
-          chatNavigationStore.navigateToChat(chat.id);
-          
-          // Force a state refresh by reading and setting again
-          const stateAfter = useChatStore.getState();
-          if (stateAfter.activeChatId !== chat.id) {
-            logger.error(`${LOG_PREFIX} ❌ Active chat not set correctly! Setting directly...`);
-            useChatStore.getState().setActiveChat(chat.id);
-          }
+
+          // Continue the click's intent through project/workspace resolution.
+          // A superseded open must never be forced back into selection.
+          await openChat(chat, isCurrent);
+          if (!isCurrent()) return;
           
           // Verify it worked
           const finalActiveChatId = useChatStore.getState().activeChatId;

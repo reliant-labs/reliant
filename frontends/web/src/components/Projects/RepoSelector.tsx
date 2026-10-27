@@ -6,7 +6,7 @@
  * "credential missing" reconnect UI. Calls `onSelect` with the chosen repo.
  *
  * Extracted from `OnboardingFlow/steps/GitHubConnectStep.tsx` so the
- * ProjectPicker's "Clone repo" affordance can render the same picker
+ * Add project dialog's "Clone a repository" step can render the same picker
  * inside a modal without duplicating the repo-list / search / reconnect
  * plumbing.
  */

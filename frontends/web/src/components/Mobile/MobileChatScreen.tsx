@@ -38,9 +38,9 @@ export function MobileChatScreen() {
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
-  // shell selected. Everything the chat screen reads — worktrees, the update
-  // stream's project scope, the chat list — follows the current project, so
-  // move it to the chat's own. Once per chat: a user who then picks another
+  // shell selected. What the chat screen reads — worktrees, files, the
+  // composer's presets — follows the current project, so move it to the
+  // chat's own. Once per chat: a user who then picks another
   // project on purpose is not pulled back.
   const alignedFor = useRef<string | null>(null);
   const chatProjectId = chat?.projectId;
@@ -54,10 +54,11 @@ export function MobileChatScreen() {
         project = (await fetchProjects()).find((p) => p.id === chatProjectId);
       }
       if (!project) return;
-      // Not the desktop workspace restore: it would select the project's
-      // remembered chat — not this one — mark it read and move the update
-      // stream's single chat subscription off the chat on screen.
-      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false });
+      // This screen's chat comes from the URL: neither the desktop workspace
+      // restore nor the project's last chat may run over it (the restore would
+      // select the project's remembered chat, mark it read and move the update
+      // stream's single chat subscription off the chat on screen).
+      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false, restoreChat: false });
     })();
   }, [chatId, chatProjectId]);
 

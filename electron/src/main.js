@@ -706,9 +706,9 @@ function refreshTrayMenu() {
           click: () => sendToSurfacedWindow("tray:go-to-settings"),
         },
         {
-          label: "Project Picker",
+          label: "Add Project…",
           enabled: true,
-          click: () => sendToSurfacedWindow("tray:go-to-project-picker"),
+          click: () => sendToSurfacedWindow("tray:add-project"),
         },
       ],
     },

@@ -116,7 +116,7 @@ describe("MobileChatScreen project alignment", () => {
   it("switches to the chat's own project when it differs from the current one", async () => {
     chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p2" };
     render(<MobileChatScreen />);
-    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false }));
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false, restoreChat: false }));
     expect(projectState.selectProject).toHaveBeenCalledTimes(1);
   });
 
@@ -125,7 +125,7 @@ describe("MobileChatScreen project alignment", () => {
     projectState.projects = [p1];
     projectState.fetchProjects.mockImplementationOnce(async () => [p1, p2]);
     render(<MobileChatScreen />);
-    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false }));
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false, restoreChat: false }));
     expect(projectState.fetchProjects).toHaveBeenCalledTimes(1);
   });
 

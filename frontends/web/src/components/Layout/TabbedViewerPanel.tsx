@@ -422,15 +422,7 @@ function ViewerContent({ viewer, isActive }: ViewerContentProps) {
   if (viewer.type === "projects") {
     return (
       <div className="h-full overflow-auto">
-        <ProjectPanel
-          onNavigateToProjectPicker={() => {
-            // Close the projects viewer when navigating to project picker
-            const { closeViewer } = useViewerStore.getState();
-            closeViewer(viewer.id);
-            // Navigate to project picker (clear current project)
-            useProjectStore.setState({ currentProject: null });
-          }}
-        />
+        <ProjectPanel />
       </div>
     );
   }

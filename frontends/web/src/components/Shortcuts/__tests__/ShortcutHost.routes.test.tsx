@@ -60,6 +60,7 @@ import {
 import { useShortcutsStore } from "../../../store/shortcutsStore";
 import { useAuthStore } from "../../../store/authStore";
 import { useProjectStore, type Project } from "../../../store/projectStore";
+import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { ShortcutRegistry } from "../../../lib/keyboard/registry";
 import { OFF_WORKSPACE } from "../../../lib/keyboard/scope";
 
@@ -254,6 +255,9 @@ beforeEach(() => {
   getShortcuts.mockImplementation(async () => ({ shortcuts: "{}" }));
   useAuthStore.setState({ user: { id: "u1" } as never });
   useProjectStore.setState({ currentProject: PROJECT });
+  // The chat workspace's URL carries the sidebar's project filter: filtered
+  // to p1, "the workspace" is /project/p1.
+  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
 
   captureListeners = 0;
   const add = document.addEventListener.bind(document);
@@ -280,6 +284,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   useAuthStore.setState({ user: null });
   useProjectStore.setState({ currentProject: null });
+  useWorkspaceStateStore.setState({ projectFilterId: null });
   document.body.innerHTML = "";
 });
 
@@ -782,5 +787,17 @@ describe("no shortcuts", () => {
     act(() => useAuthStore.setState({ user: null }));
 
     expect(captureListeners).toBe(0);
+  });
+});
+
+describe("the chat workspace's URL", () => {
+  it("is / while the sidebar shows all projects", async () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+    const router = await mountAt("/settings");
+
+    press(NEW_CHAT_WEB);
+
+    await waitFor(() => expect(pathOf(router)).toBe("/"));
+    await waitFor(() => expect(workspace.onNewChat).toHaveBeenCalledOnce());
   });
 });

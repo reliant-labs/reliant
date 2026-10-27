@@ -47,18 +47,19 @@ export function isUnadoptedAutomation(chat: SidebarPolicyChat): boolean {
  *
  * The open chat is appended rather than placed: the sidebar sorts the result,
  * so it lands in its natural position for the current sort order. It is only
- * pinned into the project it belongs to, never when archived (archived chats
- * have their own tab), and never when the user has just moved it out of the
- * list themselves (`releasedChatId`, see useSidebarPinStore).
+ * pinned into a list whose scope holds its project (`scope` null is every
+ * project), never when archived (archived chats have their own tab), and never
+ * when the user has just moved it out of the list themselves
+ * (`releasedChatId`, see useSidebarPinStore).
  */
 export function withOpenChatPinned<T extends SidebarPolicyChat>(
   listed: readonly T[],
   openChat: T | undefined,
-  options: { projectId: string | undefined; releasedChatId?: string | null },
+  options: { scope: string | null; releasedChatId?: string | null },
 ): T[] {
-  if (!openChat || !options.projectId) return [...listed];
+  if (!openChat) return [...listed];
   if (openChat.id === options.releasedChatId) return [...listed];
-  if (openChat.projectId !== options.projectId) return [...listed];
+  if (options.scope !== null && openChat.projectId !== options.scope) return [...listed];
   if (openChat.state === ChatState.ARCHIVED) return [...listed];
   if (listed.some((chat) => chat.id === openChat.id)) return [...listed];
   return [...listed, openChat];

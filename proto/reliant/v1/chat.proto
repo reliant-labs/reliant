@@ -858,9 +858,12 @@ message RunNowResponse {
   string run_id = 3;
 }
 
-// ListChatsRequest lists chats for a project
+// ListChatsRequest lists the caller's chats: in one project, or in all of them.
 message ListChatsRequest {
-  string project_id = 1 [(buf.validate.field).required = true]; // Required
+  // The project to list. Empty lists every project the caller owns: the
+  // sidebar's "All projects" view. Chats are scoped by the caller either way,
+  // so a project id that is not the caller's lists nothing.
+  string project_id = 1;
   optional int32 limit = 2;
   // When true, return only chats the sidebar lists (chats_with_activity.
   // list_in_sidebar): interactive chats and adopted chats. An automation or
@@ -877,9 +880,13 @@ message ListChatsResponse {
   // The frontend uses this to connect the streaming RPC with sinceSeq = this value,
   // avoiding redundant replay of events already reflected in the chat list.
   int64 last_user_update_sequence = 3;
-  // The project's main workspace, so the sidebar can show it even when no chat
-  // runs there. Unset only for a project that has no main worktree row yet.
-  WorktreeSummary main_worktree = 4;
+  reserved 4;
+  reserved "main_worktree";
+  // The main workspace of every project in scope (the one requested, or all of
+  // the caller's), so the sidebar can show a project's main workspace even when
+  // no chat runs there. A project with no main worktree row yet has no entry.
+  // Each carries its project_id.
+  repeated WorktreeSummary main_worktrees = 5;
 }
 
 // GetChatRequest retrieves a chat by ID
@@ -936,7 +943,9 @@ message DeleteChatResponse {
 
 // SearchChatsRequest searches chats
 message SearchChatsRequest {
-  string project_id = 1;               // Required
+  // The project to search. Empty searches every project the caller owns; each
+  // result carries its project_id.
+  string project_id = 1;
   string query = 2;                    // Search query
   optional int32 limit = 3;
 }

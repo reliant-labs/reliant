@@ -25,15 +25,36 @@ import { useChatStore } from "../store/chatStore";
 import { useProjectStore } from "../store/projectStore";
 import { resolveWorktree } from "../hooks/worktree-queries";
 import { useWorktreeStore } from "../store/worktreeStore";
+import { fetchProjects, getCachedProjects, type Project } from "../hooks/project-queries";
+
+export class ChatProjectUnavailableError extends Error {
+  constructor() {
+    super("That chat's project is no longer available.");
+    this.name = "ChatProjectUnavailableError";
+  }
+}
+
+export async function findProject(projectId: string): Promise<Project | undefined> {
+  return getCachedProjects().find((p) => p.id === projectId) ??
+    (await fetchProjects()).find((p) => p.id === projectId);
+}
 
 export interface OpenChatOptions {
   /** Also move the chat to the front of the navigation queue (a sidebar click). */
   navigate?: boolean;
+  /** Continue an intent that began before resolving the chat (notifications). */
+  isCurrent?: () => boolean;
 }
 
 // Identity alone is insufficient when A is opened again before an older A
 // finishes. Only the newest open may commit selection-dependent state.
 let openEpoch = 0;
+
+/** A new-chat intent supersedes pending chat opens too (including A → B → A). */
+export function beginWorkspaceOpen(): () => boolean {
+  const epoch = ++openEpoch;
+  return () => epoch === openEpoch;
+}
 
 /**
  * Resolves once the chat is selected AND its worktree context is current and
@@ -43,16 +64,35 @@ export async function openChatInWorkspace(
   chat: Chat,
   options: OpenChatOptions = {}
 ): Promise<void> {
-  const epoch = ++openEpoch;
-  const projectId = useProjectStore.getState().currentProject?.id;
+  const isLatest = options.isCurrent ?? beginWorkspaceOpen();
+  if (!isLatest()) return;
+  let projectId = useProjectStore.getState().currentProject?.id;
+  // Selection starts the chat stream immediately, even while its project row
+  // is loading. Persistence waits for the matching project/workspace below.
   useChatStore.getState().selectChat(chat, { deferPersist: true });
 
   // Pass the fence into the switch too: it must recheck after its own import,
   // BEFORE it writes viewer, navigation or workspace routing state.
   const isCurrent = () =>
-    epoch === openEpoch &&
+    isLatest() &&
     useChatStore.getState().activeChatId === chat.id &&
     useProjectStore.getState().currentProject?.id === projectId;
+
+  if (chat.projectId && chat.projectId !== projectId) {
+    const project = await findProject(chat.projectId);
+    if (!isCurrent()) return;
+    if (!project) throw new ChatProjectUnavailableError();
+    // selectProject commits synchronously in this mode, without restoring a
+    // remembered chat/worktree over this open or starting unfenced async work.
+    const selected = useProjectStore.getState().selectProject(project, {
+      restoreChat: false,
+      restoreWorkspace: false,
+      isCurrent: isLatest,
+    });
+    projectId = project.id;
+    await selected;
+    if (!isCurrent()) return;
+  }
 
   if (projectId) {
     const worktrees = useWorktreeStore.getState();

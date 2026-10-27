@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useProjectStore } from "../projectStore";
+import { useWorkspaceStateStore } from "../workspaceStateStore";
 import { useWorktreeStore } from "../worktreeStore";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
@@ -18,6 +19,8 @@ vi.mock("../chatStore", () => ({
 
 describe("chatNavigationStore worktree-aware navigation", () => {
   beforeEach(() => {
+    // Navigation walks the sidebar's scope; these seed one project's list.
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     queryClient.clear();
     selectChatMock.mockReset();
     persistActiveChatMock.mockReset();

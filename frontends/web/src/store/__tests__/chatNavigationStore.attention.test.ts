@@ -10,6 +10,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useProjectStore } from "../projectStore";
+import { useWorkspaceStateStore } from "../workspaceStateStore";
 import { useWorktreeStore } from "../worktreeStore";
 import { useActivityStore, ChatActivity } from "../activityStore";
 import { chatKeys } from "../../hooks/chat-queries";
@@ -59,6 +60,8 @@ function setActive(chatId: string | null) {
 
 describe("navigateToNextAttention", () => {
   beforeEach(() => {
+    // Navigation walks the sidebar's scope; these seed one project's list.
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     queryClient.clear();
     selectChatMock.mockReset();
     chatStoreGetStateMock.mockReset();

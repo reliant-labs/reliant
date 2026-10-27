@@ -3,7 +3,7 @@
  * whether the current project is a forge project.
  *
  * WHY IT IS NOT ALSO GATED ON THE PROJECT. Forge is a top-level feature, so
- * the entry sits beside New chat / Projects / Workflows and stays PUT. A nav
+ * the entry sits beside New chat / Workflows and stays PUT. A nav
  * item that appears and disappears as you switch projects is harder to learn
  * than one that is always there, and "is this a forge project?" is a question
  * the destination answers better than the nav can: clicking it in an ordinary
@@ -41,9 +41,13 @@ vi.mock("../forge-ui/tooltip", () => ({
 vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 vi.mock("../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: [], lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats: [], lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
@@ -258,18 +262,18 @@ describe("Sidebar forge nav entry", () => {
 
   // The whole nav, in order. Workflows is ONE entry for the area — Library,
   // Runs and Automations are its tabs (WORKFLOW_UI.md §1.2) — and still sits
-  // under the Inbox, above Projects.
-  it("orders the nav New chat, Apps, Inbox, Workflows, Projects, Search", () => {
+  // under the Inbox, above Search.
+  it("orders the nav New chat, Apps, Inbox, Workflows, Search", () => {
     setProject(true);
     renderSidebar();
     const labels = screen
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map(navLabel);
-    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Projects", "Search"]);
+    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Search"]);
   });
 
-  it("orders the nav New chat, Inbox, Workflows, Projects, Search with Apps gated off", () => {
+  it("orders the nav New chat, Inbox, Workflows, Search with Apps gated off", () => {
     experimentalGate.enabled = false;
     setProject(true);
     renderSidebar();
@@ -277,7 +281,7 @@ describe("Sidebar forge nav entry", () => {
       .getByRole("navigation", { name: /chat sidebar navigation/i })
       .querySelectorAll("button");
     const text = Array.from(labels).map(navLabel);
-    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Projects", "Search"]);
+    expect(text).toEqual(["New chat", "Inbox", "Workflows", "Search"]);
   });
 
   // The entry is LABELLED Apps but is still the forge entry underneath: the
@@ -288,15 +292,15 @@ describe("Sidebar forge nav entry", () => {
     expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Apps");
   });
 
-  // Apps is the ONE entry into the forge surface: its observability is a
-  // section of it, not a second sidebar row.
+  // Apps remains the ONE forge entry; the global-window project filter replaces
+  // the former Projects navigation row without restoring a second forge entry.
   it("has no separate Observability entry", () => {
     setProject(true);
     renderSidebar();
     const text = Array.from(
       screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
     ).map(navLabel);
-    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Projects", "Search"]);
+    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Search"]);
     expect(screen.queryByTestId("sidebar-observability-button")).not.toBeInTheDocument();
   });
 });

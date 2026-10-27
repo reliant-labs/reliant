@@ -1,7 +1,8 @@
 /**
- * `/m/projects` — the project switcher. Pins that selecting a project calls
- * `selectProject` (not some local re-implementation) and returns to the chat
- * list, and that the current project is marked without needing a round trip.
+ * `/m/projects` — the chat list's project filter. Pins that a row sets the
+ * filter through `setProjectFilter` (not a local re-implementation) and
+ * returns to the chat list, that "All projects" is a choice of its own, and
+ * that the active scope is marked without a round trip.
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -10,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { seedProjects, type ProjectFixture } from "@/test/projectList";
+import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 const navigate = vi.fn();
 
@@ -17,14 +19,12 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-const selectProject = vi.fn(() => Promise.resolve());
+const setProjectFilter = vi.fn((_scope: string | null, _options?: unknown) => Promise.resolve());
 
-interface StoreState {
-  currentProject: { id: string; name: string; path: string } | null;
-  selectProject: typeof selectProject;
-}
+vi.mock("../../../store/projectStore", () => ({
+  useProjectStore: (selector: (s: unknown) => unknown) => selector({ setProjectFilter }),
+}));
 
-let storeState: StoreState;
 // The project list (ListProjects, read through useProjects).
 let projects: ProjectFixture[];
 
@@ -38,15 +38,14 @@ function renderList() {
   );
 }
 
-vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) => selector(storeState),
-}));
-
 const { MobileProjectList } = await import("../MobileProjectList");
+
+const rowOf = (text: string) => screen.getByText(text).closest("button")!;
+const isChecked = (row: HTMLElement) => row.querySelector("svg.lucide-check") !== null;
 
 beforeEach(() => {
   navigate.mockReset();
-  selectProject.mockClear();
+  setProjectFilter.mockClear();
   projects = [
     {
       id: "p1",
@@ -54,39 +53,32 @@ beforeEach(() => {
       path: "/home/user/reliant",
       last_active: new Date(Date.now() - 3600_000).toISOString(),
     },
-    { id: "p2", name: "forge", path: "/home/user/forge" },
+    { id: "p2", name: "forge", path: "/home/workspace/projects/forge" },
   ];
-  storeState = {
-    currentProject: { id: "p1", name: "reliant", path: "/home/user/reliant" },
-    selectProject,
-  };
+  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
 });
 
 describe("MobileProjectList", () => {
-  it("marks the current project with a check mark, not the other one", () => {
+  it("marks the filtered project with a check mark, not the others", () => {
     renderList();
-    const reliantRow = screen.getByText("reliant").closest("button")!;
-    const forgeRow = screen.getByText("forge").closest("button")!;
-    expect(reliantRow.querySelector("svg.lucide-check")).not.toBeNull();
-    expect(forgeRow.querySelector("svg.lucide-check")).toBeNull();
+    expect(isChecked(rowOf("reliant"))).toBe(true);
+    expect(isChecked(rowOf("forge"))).toBe(false);
+    expect(isChecked(rowOf("All projects"))).toBe(false);
   });
 
-  it("lists every project", () => {
+  it("marks All projects when there is no filter", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
     renderList();
-    expect(screen.getByText("reliant")).toBeInTheDocument();
-    expect(screen.getByText("forge")).toBeInTheDocument();
+    expect(isChecked(rowOf("All projects"))).toBe(true);
   });
 
-  it("selects a different project and navigates back to the chat list", async () => {
+  it("filters to a different project and navigates back to the chat list", async () => {
     const user = userEvent.setup();
     renderList();
 
     await user.click(screen.getByText("forge"));
 
-    expect(selectProject).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "p2", name: "forge" }),
-      { restoreWorkspace: false },
-    );
+    expect(setProjectFilter).toHaveBeenCalledWith("p2", { restoreWorkspace: false });
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
@@ -95,46 +87,53 @@ describe("MobileProjectList", () => {
   // remembered chat) — none with a timeout — held the user on this screen. A
   // switch that never settles must still take the user to the chat list.
   it("navigates without waiting for the switch to finish", async () => {
-    selectProject.mockImplementationOnce(() => new Promise<void>(() => {}));
+    setProjectFilter.mockImplementationOnce(() => new Promise<void>(() => {}));
     const user = userEvent.setup();
     renderList();
 
     await user.click(screen.getByText("forge"));
 
-    expect(selectProject).toHaveBeenCalledTimes(1);
+    expect(setProjectFilter).toHaveBeenCalledTimes(1);
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
     // No row is left disabled behind a pending switch.
-    expect(screen.getByText("forge").closest("button")).not.toBeDisabled();
+    expect(rowOf("forge")).not.toBeDisabled();
   });
 
-  it("navigating back without selecting doesn't call selectProject", async () => {
+  it("shows every project with All projects", async () => {
     const user = userEvent.setup();
     renderList();
 
-    await user.click(screen.getByRole("button", { name: "Back to chats" }));
+    await user.click(screen.getByText("All projects"));
 
-    expect(selectProject).not.toHaveBeenCalled();
+    expect(setProjectFilter).toHaveBeenCalledWith(null, { restoreWorkspace: false });
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("tapping the already-current project just navigates back", async () => {
+  it("tapping the active scope just navigates back", async () => {
     const user = userEvent.setup();
     renderList();
 
     await user.click(screen.getByText("reliant"));
 
-    expect(selectProject).not.toHaveBeenCalled();
+    expect(setProjectFilter).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("shows last-active for a project that has it", () => {
+  it("navigating back without choosing changes nothing", async () => {
+    const user = userEvent.setup();
     renderList();
-    expect(screen.getByText(/active 1h ago/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to chats" }));
+
+    expect(setProjectFilter).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/chats" });
   });
 
-  it("omits the metadata line entirely for a project with none of it", () => {
+  it("hides a cloud machine's checkout path, and shows last-active when there is one", () => {
     renderList();
-    const forgeRow = screen.getByText("forge").closest("button")!;
-    expect(forgeRow.textContent).not.toMatch(/active/i);
+    expect(screen.getByText("/home/user/reliant")).toBeInTheDocument();
+    expect(rowOf("forge").textContent).not.toContain("/home/workspace");
+    expect(screen.getByText(/active 1h ago/i)).toBeInTheDocument();
+    expect(rowOf("forge").textContent).not.toMatch(/active/i);
   });
 });

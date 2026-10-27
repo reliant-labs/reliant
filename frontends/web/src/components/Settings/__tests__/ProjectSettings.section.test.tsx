@@ -34,7 +34,6 @@ function makeProject(overrides: Partial<Project> & Pick<Project, "id" | "name" |
 const state = vi.hoisted(() => ({
   store: {} as Record<string, unknown>,
   navigate: vi.fn(),
-  navigateToPicker: vi.fn(),
 }));
 
 vi.mock("@/store/projectStore", () => ({
@@ -43,10 +42,6 @@ vi.mock("@/store/projectStore", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => state.navigate,
-}));
-
-vi.mock("@/hooks/useNavigateToProjectPicker", () => ({
-  useNavigateToProjectPicker: () => state.navigateToPicker,
 }));
 
 vi.mock("@/hooks/chat-queries", () => ({
@@ -75,6 +70,7 @@ vi.mock("@/store/chatNavigationStore", () => ({
 vi.mock("@/lib/toast-manager", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { ProjectsSection } from "@/components/Settings/ProjectsSection";
+import { useAddProjectDialogStore } from "@/store/addProjectDialogStore";
 
 const alpha = makeProject({
   id: "p-alpha",
@@ -99,7 +95,8 @@ function setStore({ projects = [], ...overrides }: { projects?: Project[] } & Re
   listProjects = () => listProjectsResponse(projects);
   state.store = {
     currentProject: null,
-    selectProject: vi.fn(async () => {}),
+    setProjectFilter: vi.fn(async () => {}),
+    updateProject: vi.fn(async () => {}),
     deleteProject: vi.fn(async () => {}),
     refreshCurrentProject: vi.fn(async () => {}),
     ...overrides,
@@ -108,7 +105,7 @@ function setStore({ projects = [], ...overrides }: { projects?: Project[] } & Re
 
 beforeEach(() => {
   state.navigate.mockReset();
-  state.navigateToPicker.mockReset();
+  useAddProjectDialogStore.setState({ isOpen: false, method: null });
   useAuthStore.setState({ session: { access_token: "t" } as never });
   setTransport(
     mockTransport({
@@ -142,20 +139,20 @@ describe("Settings → Projects", () => {
     expect(within(rows[1]).getByText("Folder")).toBeInTheDocument();
   });
 
-  it("offers Add project in the header, which goes to the picker", async () => {
+  it("offers Add project in the header, which opens the Add project dialog", async () => {
     setStore({ projects: [alpha], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
     await userEvent.click(await screen.findByTestId("settings-projects-add"));
-    expect(state.navigateToPicker).toHaveBeenCalledTimes(1);
+    expect(useAddProjectDialogStore.getState().isOpen).toBe(true);
   });
 
-  it("switches to another project and leaves Settings for it", async () => {
+  it("opens another project — filtered to it — and leaves Settings for it", async () => {
     setStore({ projects: [alpha, beta], currentProject: alpha });
     renderWithQuery(<ProjectsSection />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Open beta" }));
-    await waitFor(() => expect(state.store.selectProject).toHaveBeenCalledWith(beta));
+    await waitFor(() => expect(state.store.setProjectFilter).toHaveBeenCalledWith("p-beta"));
     expect(state.navigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: "/project/$projectId", params: { projectId: "p-beta" } }),
     );
@@ -174,13 +171,34 @@ describe("Settings → Projects", () => {
     await waitFor(() => expect(state.store.deleteProject).toHaveBeenCalledWith("p-beta"));
   });
 
+  it("renames a project inline", async () => {
+    setStore({ projects: [alpha, beta], currentProject: alpha });
+    renderWithQuery(<ProjectsSection />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Rename beta" }));
+    const input = screen.getByTestId("settings-project-rename-input-p-beta");
+    await userEvent.clear(input);
+    await userEvent.type(input, "gamma{Enter}");
+    await waitFor(() => expect(state.store.updateProject).toHaveBeenCalledWith("p-beta", { name: "gamma" }));
+  });
+
+  it("does not show a cloud machine's checkout path", async () => {
+    const cloud = makeProject({ id: "p-cloud", name: "cloudy", path: "/home/workspace/projects/cloudy" });
+    setStore({ projects: [cloud] });
+    renderWithQuery(<ProjectsSection />);
+
+    const row = await screen.findByTestId("settings-project-row-p-cloud");
+    expect(row).toHaveTextContent("On a cloud machine");
+    expect(row).not.toHaveTextContent("/home/workspace");
+  });
+
   it("shows a designed empty state with Add project when there are no projects", async () => {
     setStore({ projects: [] });
     renderWithQuery(<ProjectsSection />);
 
     expect(await screen.findByText("No projects yet")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-projects-table")).toBeNull();
-    // Header action + empty-state action both lead to the picker.
+    // Header action + empty-state action both open the Add project dialog.
     expect(screen.getAllByRole("button", { name: /add project/i })).toHaveLength(2);
   });
 

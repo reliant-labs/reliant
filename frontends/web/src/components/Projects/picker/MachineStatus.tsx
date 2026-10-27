@@ -3,7 +3,6 @@ import { Loader2, Plus } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 
 import Status from "@/components/forge-ui/status";
-import Badge from "@/components/forge-ui/badge";
 import {
   DaemonStatus,
   type DaemonInfo as CloudDaemon,
@@ -14,27 +13,29 @@ import { deleteDaemon } from "@/services/controlPlane/daemon";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
-import { AddMachineSheet } from "../../Machines/AddMachineSheet";
+import { AddMachineSheet } from "../../Machines";
 import { failureReason, isFailedDaemon } from "../cloneTargets";
 import { cloudDaemonStatusLabel } from "../cloudDaemonStatusLabel";
-import { isLocalDaemonType } from "../addProjectActions";
 import { isCloudDaemon } from "./format";
 import { pickerButton } from "./buttonStyles";
 import { machineDisplayName } from "@/lib/machineName";
 
 /**
- * The picker's machine ("daemon" internally) status, in one of three shapes:
+ * Machine ("daemon" internally) status, shown only where having no active
+ * machine blocks adding a project (the first-run state):
  *
- *   - connected      a one-line strip: dot, machine name, kind, add-machine
- *   - checking       the same strip, pending, while the registry first loads
+ *   - checking       a pending strip while the registry first loads
  *   - none active    a bordered panel listing every cloud machine with the
  *                    action it actually supports (resume / delete-failed),
- *                    plus "connect a machine"
+ *                    plus a link to add a machine in Settings → Machines
  *
- * The no-active panel coexists with the add-project actions rather than
- * replacing them. They used to be mutually exclusive, so a web user whose
- * only machine had FAILED lost every add-project entry point — see
- * docs/findings/add-github-project-2026-09-30.md.
+ * There is deliberately no "connected" strip: a project is not tied to the
+ * machine that happens to be connected (it can be checked out on several,
+ * and each chat picks its own), so a strip saying so was false.
+ *
+ * The panel coexists with the add-project actions rather than replacing
+ * them, so a web user whose only machine FAILED still has a way to add a
+ * project — see docs/findings/add-github-project-2026-09-30.md.
  */
 
 type StatusTone = "success" | "warning" | "danger" | "neutral";
@@ -50,52 +51,7 @@ const STATUS_DOT_VARIANT: Record<string, StatusTone> = {
   failed: "danger",
 };
 
-function machineKindLabel(daemonType: string | undefined): string {
-  if (isCloudDaemon(daemonType)) return "Cloud";
-  if (isLocalDaemonType(daemonType)) return "Self-hosted";
-  return "Machine";
-}
-
-// The one Add machine sheet. Kept mounted so a machine still starting after
-// "Keep working" reports when it is ready.
-function ConnectMachineModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return <AddMachineSheet open={open} onClose={onClose} />;
-}
-
 const STRIP = "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-card px-3 py-2";
-
-/** The connected machine, in one line. */
-export function MachineStatusStrip({
-  name,
-  daemonType,
-}: {
-  /** The machine's display name — lib/machineName, never a raw hostname. */
-  name: string;
-  daemonType: string | undefined;
-}) {
-  const [connectOpen, setConnectOpen] = useState(false);
-  return (
-    <div className={STRIP} data-testid="machine-status-strip">
-      <Status tone="success" size="md" />
-      <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-        <span className="truncate font-medium text-ink">{name || "Machine"}</span>
-        <Badge label={machineKindLabel(daemonType)} variant="neutral" size="sm" />
-        <span className="hidden text-xs text-ink-muted sm:inline">
-          Connected. Projects open on this machine.
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={() => setConnectOpen(true)}
-        className={pickerButton("ghost", "sm")}
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        Add machine
-      </button>
-      <ConnectMachineModal open={connectOpen} onClose={() => setConnectOpen(false)} />
-    </div>
-  );
-}
 
 /** Shown while the machine list is loading, or the local machine is starting. */
 export function MachineStatusPending({ message }: { message: string }) {
@@ -114,7 +70,7 @@ export function MachineStatusPending({ message }: { message: string }) {
  */
 export function NoActiveMachinePanel() {
   const [error, setError] = useState<string | null>(null);
-  const [connectOpen, setConnectOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const hasCloud = capabilities.cloudDaemons;
 
   // One list, from the registry — the service that knows both whether a
@@ -203,12 +159,12 @@ export function NoActiveMachinePanel() {
         ? "Resume a machine"
         : "Start a machine";
   const description = !hasCloud
-    ? "Reliant runs tools on a machine that can see your files. Connect one to open and work on projects."
+    ? "Reliant runs tools on a machine that can see your files. Add one to open and work on projects."
     : allFailed
-      ? "Every machine on your account failed to start. Delete the failed one, then connect a new one."
+      ? "Every machine on your account failed to start. Delete the failed one, then add a new one."
       : hasAnyCloudDaemon
         ? "Your machines are asleep. Resume one to work on its projects; this page updates when it connects."
-        : "You don't have a machine yet. Start one in the cloud or connect your own computer.";
+        : "You don't have a machine yet. Start one in the cloud or add your own computer.";
 
   return (
     <section
@@ -232,12 +188,15 @@ export function NoActiveMachinePanel() {
         </div>
         <button
           type="button"
-          onClick={() => setConnectOpen(true)}
+          onClick={() => setAdding(true)}
           className={pickerButton(hasAnyCloudDaemon && !allFailed ? "secondary" : "primary", "sm")}
+          data-testid="no-active-machine-add"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          {hasAnyCloudDaemon ? "Connect a new machine" : "Connect a machine"}
+          Add a machine
         </button>
+        {/* Kept mounted, so a machine still starting after "Keep working" reports in. */}
+        <AddMachineSheet open={adding} onClose={() => setAdding(false)} onReady={() => void refetch()} />
       </div>
 
       {hasCloud && isLoading && (
@@ -327,7 +286,6 @@ export function NoActiveMachinePanel() {
         </p>
       )}
 
-      <ConnectMachineModal open={connectOpen} onClose={() => setConnectOpen(false)} />
     </section>
   );
 }

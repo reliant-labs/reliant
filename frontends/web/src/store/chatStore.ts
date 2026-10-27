@@ -895,7 +895,7 @@ interface ChatStoreState {
   pendingStatusFetches: Record<string, Promise<unknown>>;
 
   // Methods for chat management
-  loadChats: (projectId?: string) => Promise<void>;
+  loadChats: () => Promise<void>;
   startChat: (
     worktreeId?: string,
     firstMessage?: string,
@@ -1195,6 +1195,7 @@ function applyFirstSend(chat: Chat, projectId: string): void {
   seedChatDetail(chat);
   upsertChatInListCache(projectId, chat);
   void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null) });
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1222,19 +1223,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   error: null,
   pendingStatusFetches: {},
 
-  // Load all chats (with singleflight deduplication to prevent parallel API calls)
+  // Load the sidebar's chat list — the filter's project, or every project —
+  // with singleflight deduplication to prevent parallel API calls.
   loadChats: async () => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      return;
-    }
+    const scope = useWorkspaceStateStore.getState().projectFilterId;
 
-    // Use singleflight to ensure only one load per project runs at a time
-    // The key includes projectId to allow different projects to load simultaneously
-    return singleflight(`loadChats:${projectId}`, async () => {
+    // Use singleflight to ensure only one load per scope runs at a time
+    return singleflight(`loadChats:${scope ?? "*"}`, async () => {
       set({ error: null });
       try {
-        const response = await chatActions.listChats(projectId);
+        const response = await chatActions.listChats(scope ?? undefined);
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 

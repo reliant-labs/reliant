@@ -54,6 +54,8 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useProjects } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
 import { chatListIndicators, stillRunningPhrase } from "../../lib/runStatus";
@@ -99,6 +101,8 @@ import { archiveWorktree } from "../../hooks/worktree-actions";
 
 interface ChatGroup {
   worktreeId: string;
+  /** The project the workspace belongs to. */
+  projectId: string;
   worktreeName: string;
   worktreeBranch: string;
   isMain: boolean;
@@ -113,17 +117,26 @@ const chatNeedsAttention = (chat: Chat) =>
   needsUserAttention({ activity: chat.activity, needsRecovery: chat.needsRecovery });
 
 // Grouped from the chat list alone: each chat carries its workspace and the
-// list carries the project's main one, so no worktree list is involved.
+// list carries each project's main one, so no worktree list is involved.
+//
+// `scope` is the list's project filter (null: every project). Across projects
+// a group's name carries its project ("app · main"), and a project's empty
+// main workspace is not listed — that would be one empty group per project.
 export function buildGroups(
   chats: Chat[],
-  mainWorktree: WorktreeSummary | undefined,
+  mainWorktrees: readonly WorktreeSummary[] | undefined,
   sortOrder: ChatSortOption,
+  { scope, projectNames }: { scope: string | null; projectNames?: ReadonlyMap<string, string> } = { scope: null },
 ): ChatGroup[] {
   const groupsById = new Map<string, ChatGroup>();
+  const named = (projectId: string, name: string) => {
+    const projectName = scope === null ? projectNames?.get(projectId) : undefined;
+    return projectName ? `${projectName} · ${name}` : name;
+  };
 
   for (const chat of chats) {
     if (chat.state === ChatState.ARCHIVED) continue;
-    const worktree = workspaceOfChat(chat, mainWorktree);
+    const worktree = workspaceOfChat(chat, mainWorktrees);
     // A chat whose worktree was deleted out from under it (rather than
     // archived through the normal flow) still needs somewhere to render —
     // group it under its own id so it doesn't silently vanish from the list.
@@ -134,7 +147,8 @@ export function buildGroups(
     } else {
       groupsById.set(worktreeId, {
         worktreeId,
-        worktreeName: worktree?.name ?? "Unknown workspace",
+        projectId: chat.projectId,
+        worktreeName: named(chat.projectId, worktree?.name ?? "Unknown workspace"),
         worktreeBranch: worktree?.branch ?? "",
         isMain: worktree?.isMain ?? false,
         hasWorktree: !!worktree,
@@ -145,11 +159,13 @@ export function buildGroups(
     }
   }
 
-  // Main worktree is always shown, even with zero chats, so there's always a
-  // way to start a chat in the project's default workspace.
+  // In one project's list its main worktree is always shown, even with zero
+  // chats, so there's always a way to start a chat in its default workspace.
+  const mainWorktree = scope ? mainWorktrees?.find((w) => w.projectId === scope) : undefined;
   if (mainWorktree && !mainWorktree.deletedAt && !groupsById.has(mainWorktree.id)) {
     groupsById.set(mainWorktree.id, {
       worktreeId: mainWorktree.id,
+      projectId: mainWorktree.projectId,
       worktreeName: mainWorktree.name,
       worktreeBranch: mainWorktree.branch,
       isMain: true,
@@ -403,8 +419,12 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
 export function MobileChatList() {
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
-  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
-  const { data: chatList, isLoading } = useChatListWithWorkspaces(currentProjectId);
+  const currentProjectName = useProjectStore((s) => s.currentProject?.name);
+  // The list is the project filter's (/m/projects), every project by default.
+  const scope = useWorkspaceStateStore((s) => s.projectFilterId);
+  const { projects } = useProjects();
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const { data: chatList, isLoading } = useChatListWithWorkspaces(scope);
   const sortOrder = useSortOrder();
   const queryClient = useQueryClient();
 
@@ -417,8 +437,8 @@ export function MobileChatList() {
 
   const chats = chatList?.chats;
   const groups = useMemo(
-    () => buildGroups(chats ?? [], chatList?.mainWorktree, sortOrder),
-    [chats, chatList?.mainWorktree, sortOrder],
+    () => buildGroups(chats ?? [], chatList?.mainWorktrees, sortOrder, { scope, projectNames }),
+    [chats, chatList?.mainWorktrees, sortOrder, scope, projectNames],
   );
 
   const toggleGroup = useCallback((worktreeId: string) => {
@@ -483,14 +503,15 @@ export function MobileChatList() {
               className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary active:bg-primary/10"
             >
               <GitBranchPlus className="h-4 w-4" />
-              New workspace
+              {/* Across projects, say which one it is made in. */}
+              {scope === null && currentProjectName ? `New workspace in ${currentProjectName}` : "New workspace"}
             </button>
           </div>
         ) : (
           <div className="h-8" />
         ),
     }),
-    [canCreateWorkspace],
+    [canCreateWorkspace, scope, currentProjectName],
   );
 
   return (
@@ -519,7 +540,9 @@ export function MobileChatList() {
         <MobileEmptyState
           icon={MessageSquarePlus}
           title="No chats yet"
-          description="Start a chat to put an agent to work on this project."
+          description={
+            scope ? "Start a chat to put an agent to work on this project." : "Start a chat to put an agent to work."
+          }
           action={
             <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
               <MessageSquarePlus className="h-4 w-4" />
@@ -560,7 +583,7 @@ export function MobileChatList() {
             isOpen
             onClose={() => setBrowsing(null)}
             worktreeId={browsing.worktreeId}
-            projectPath={currentProjectPath}
+            projectPath={projects.find((p) => p.id === browsing.projectId)?.path}
             title={browsing.worktreeName}
           />
         </Suspense>

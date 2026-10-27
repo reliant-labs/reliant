@@ -819,7 +819,10 @@ type WorktreeSummary struct {
 	IsMain bool           `protobuf:"varint,5,opt,name=is_main,json=isMain,proto3" json:"is_main,omitempty"`
 	Status WorktreeStatus `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.WorktreeStatus" json:"status,omitempty"`
 	// Archive timestamp; unset for a live workspace.
-	DeletedAt     *string `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"`
+	DeletedAt *string `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"`
+	// The project the workspace belongs to, so a list spanning projects can
+	// group by it.
+	ProjectId     string `protobuf:"bytes,8,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -899,6 +902,13 @@ func (x *WorktreeSummary) GetStatus() WorktreeStatus {
 func (x *WorktreeSummary) GetDeletedAt() string {
 	if x != nil && x.DeletedAt != nil {
 		return *x.DeletedAt
+	}
+	return ""
+}
+
+func (x *WorktreeSummary) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
 	}
 	return ""
 }
@@ -4531,7 +4541,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
-	"\x11_cleanup_metadata\"\xe1\x01\n" +
+	"\x11_cleanup_metadata\"\x80\x02\n" +
 	"\x0fWorktreeSummary\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -4540,7 +4550,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\ais_main\x18\x05 \x01(\bR\x06isMain\x122\n" +
 	"\x06status\x18\x06 \x01(\x0e2\x1a.reliant.v1.WorktreeStatusR\x06status\x12\"\n" +
 	"\n" +
-	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01B\r\n" +
+	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\b \x01(\tR\tprojectIdB\r\n" +
 	"\v_deleted_at\"\xb9\x02\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +

@@ -89,6 +89,7 @@ type Repository interface {
 
 	// Worktrees a chat list resolves and a branch un-archives.
 	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*db.Worktree, error)
+	ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*db.Worktree, error)
 	UnarchiveWorktree(ctx context.Context, id string) error
 
 	// The durable state a resumed run is rebuilt from. The callees that

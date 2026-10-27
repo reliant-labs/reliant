@@ -12,12 +12,13 @@ import (
 // worktreeSummaryToProto is the part of a worktree a chat list renders.
 func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 	out := &reliantv1.WorktreeSummary{
-		Id:     w.ID,
-		Name:   w.Name,
-		Branch: w.Branch,
-		Path:   w.Path,
-		IsMain: w.IsMain,
-		Status: reliantv1.WorktreeStatus(w.Status),
+		Id:        w.ID,
+		Name:      w.Name,
+		Branch:    w.Branch,
+		Path:      w.Path,
+		IsMain:    w.IsMain,
+		Status:    reliantv1.WorktreeStatus(w.Status),
+		ProjectId: w.ProjectID,
 	}
 	if w.DeletedAt != nil {
 		deletedAt := w.DeletedAt.Format(time.RFC3339)
@@ -26,12 +27,14 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 	return out
 }
 
-// attachWorktrees fills each chat's worktree summary and returns the project's
-// main workspace, in two queries however many chats and workspaces there are.
+// attachWorktrees fills each chat's worktree summary and returns the main
+// workspace of every project in scope (projectID, or all of the user's when it
+// is empty), in two queries however many chats, projects and workspaces there
+// are.
 // The client groups the sidebar from this, so it never has to page the whole
 // worktree list just to name the groups. A failure leaves the summaries out
 // (the chats still list); the client then groups those chats under a fallback.
-func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, chats []*db.Chat, protoChats []*reliantv1.Chat) *reliantv1.WorktreeSummary {
+func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
 	seen := make(map[string]struct{}, len(chats))
 	ids := make([]string, 0, len(chats))
 	for _, c := range chats {
@@ -62,20 +65,22 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 		}
 	}
 
-	// ListChats scopes chats by user, not project, so the main workspace needs
-	// its own ownership check: a project id that is not the caller's gets none.
-	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
-		return nil
+	// The query checks ownership itself: a project id that is not the
+	// caller's gets no main workspace.
+	var scope *string
+	if projectID != "" {
+		scope = &projectID
 	}
-	mains, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, MainOnly: true, Limit: 1})
+	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, scope)
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to load the main workspace of a chat list", "error", err, "projectID", projectID)
+		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projectID", projectID)
 		return nil
 	}
-	if len(mains) == 0 {
-		return nil
+	out := make([]*reliantv1.WorktreeSummary, len(mains))
+	for i, w := range mains {
+		out[i] = worktreeSummaryToProto(w)
 	}
-	return worktreeSummaryToProto(mains[0])
+	return out
 }
 
 // attachWorktree fills the workspace summary of a single chat, so the chat a

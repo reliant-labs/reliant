@@ -226,25 +226,27 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	return nil
 }
 
-// ListChats lists all non-archived chats for a project
+// ListChats lists the caller's non-archived chats: in one project, or across
+// all of their projects when project_id is empty (the sidebar's "All
+// projects" view). Chats are filtered by owner in both cases.
 func (s *Service) ListChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListChatsRequest],
 ) (*connect.Response[reliantv1.ListChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
-		return nil, svcerr.InvalidArgument("project_id is required")
-	}
-
 	limit := int(100)
 	if req.Msg.Limit != nil && *req.Msg.Limit > 0 {
 		limit = int(*req.Msg.Limit)
 	}
 
+	var projectID *string
+	if req.Msg.ProjectId != "" {
+		projectID = &req.Msg.ProjectId
+	}
 	filters := db.ChatFilters{
 		UserID:          userID,
-		ProjectID:       &req.Msg.ProjectId,
+		ProjectID:       projectID,
 		Limit:           limit,
 		ExcludeArchived: true,
 		SidebarOnly:     req.Msg.GetSidebarOnly(),
@@ -260,7 +262,7 @@ func (s *Service) ListChats(
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktree := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -274,7 +276,7 @@ func (s *Service) ListChats(
 		Chats:                  protoChats,
 		Total:                  int32(len(protoChats)),
 		LastUserUpdateSequence: latestSeq,
-		MainWorktree:           mainWorktree,
+		MainWorktrees:          mainWorktrees,
 	}), nil
 }
 
@@ -574,16 +576,13 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 		"workflowID", workflowID)
 }
 
-// SearchChats searches chats by title and message content
+// SearchChats searches the caller's chats by title and message content: in
+// one project, or in all of their projects when project_id is empty.
 func (s *Service) SearchChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchChatsRequest],
 ) (*connect.Response[reliantv1.SearchChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-
-	if req.Msg.ProjectId == "" {
-		return nil, svcerr.InvalidArgument("project_id is required")
-	}
 
 	// Return empty results if no query
 	if req.Msg.Query == "" {

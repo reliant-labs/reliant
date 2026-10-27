@@ -279,10 +279,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray:go-to-settings', listener);
     return () => ipcRenderer.removeListener('tray:go-to-settings', listener);
   },
-  onTrayGoToProjectPicker: (callback) => {
+  onTrayAddProject: (callback) => {
     const listener = () => callback();
-    ipcRenderer.on('tray:go-to-project-picker', listener);
-    return () => ipcRenderer.removeListener('tray:go-to-project-picker', listener);
+    ipcRenderer.on('tray:add-project', listener);
+    return () => ipcRenderer.removeListener('tray:add-project', listener);
   },
   onTraySwitchWorkspace: (callback) => {
     const listener = (event, payload) => callback(payload || {});

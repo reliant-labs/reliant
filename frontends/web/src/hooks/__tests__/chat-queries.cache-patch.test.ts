@@ -4,6 +4,8 @@ import type { Chat } from "../../types/chat";
 import { queryClient } from "../../lib/query-client";
 import {
   chatKeys,
+  getCachedChatList,
+  getCachedMainWorktree,
   patchChatCaches,
   removeChatFromListCache,
   upsertChatInListCache,
@@ -153,16 +155,16 @@ describe("patchChatCaches", () => {
     expect(queryClient.getQueryData(chatKeys.list("p1"))).toBe(envelope);
   });
 
-  it("skips the list patch but still patches detail when projectId is undefined", () => {
-    const envelope = buildEnvelope([buildChat({ id: "c1" })]);
-    queryClient.setQueryData(chatKeys.list("p1"), envelope);
+  it("patches the list and the detail even when projectId is undefined", () => {
+    queryClient.setQueryData(chatKeys.list("p1"), buildEnvelope([buildChat({ id: "c1" })]));
     const detail = buildChat({ id: "c1" });
     queryClient.setQueryData(chatKeys.detail("c1"), detail);
 
     patchChatCaches(undefined, "c1", { title: "New" });
 
-    // List untouched (same reference), detail patched.
-    expect(queryClient.getQueryData(chatKeys.list("p1"))).toBe(envelope);
+    // A chat is patched wherever it is listed: the caller's project id is
+    // not needed to find it.
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list("p1"))!.chats[0]!.title).toBe("New");
     const nextDetail = queryClient.getQueryData<Chat>(chatKeys.detail("c1"))!;
     expect(nextDetail).not.toBe(detail);
     expect(nextDetail.title).toBe("New");
@@ -260,14 +262,59 @@ describe("removeChatFromListCache", () => {
     expect(queryClient.getQueryData(chatKeys.detail("c1"))).toBeUndefined();
   });
 
-  it("still removes detail when projectId is undefined", () => {
-    const envelope = buildEnvelope([buildChat({ id: "c1" })]);
-    queryClient.setQueryData(chatKeys.list("p1"), envelope);
+  it("removes the chat from every list even when projectId is undefined", () => {
+    queryClient.setQueryData(chatKeys.list("p1"), buildEnvelope([buildChat({ id: "c1" })]));
     queryClient.setQueryData(chatKeys.detail("c1"), buildChat({ id: "c1" }));
 
     removeChatFromListCache(undefined, "c1");
 
-    expect(queryClient.getQueryData(chatKeys.list("p1"))).toBe(envelope);
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list("p1"))!.chats).toEqual([]);
     expect(queryClient.getQueryData(chatKeys.detail("c1"))).toBeUndefined();
+  });
+});
+// The sidebar lists every project (chatKeys.list(null)) or one; both lists can
+// hold the same chat, and every write must reach both.
+describe("all-projects and project lists together", () => {
+  it("keys the all-projects list apart from every project's", () => {
+    expect(chatKeys.list(null)).toEqual(chatKeys.list(undefined));
+    expect(chatKeys.list(null)).not.toEqual(chatKeys.list("p1"));
+  });
+
+  it("patches and removes a chat in every list that holds it", () => {
+    const chat = buildChat({ id: "c1", projectId: "p1" });
+    queryClient.setQueryData(chatKeys.list(null), buildEnvelope([chat]));
+    queryClient.setQueryData(chatKeys.list("p1"), buildEnvelope([chat]));
+
+    patchChatCaches(undefined, "c1", { title: "New" });
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(null))!.chats[0]!.title).toBe("New");
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list("p1"))!.chats[0]!.title).toBe("New");
+
+    removeChatFromListCache(undefined, "c1");
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(null))!.chats).toEqual([]);
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list("p1"))!.chats).toEqual([]);
+  });
+
+  it("upserts into a loaded all-projects list but never invents one", () => {
+    const chat = buildChat({ id: "c2", projectId: "p2" });
+    upsertChatInListCache("p2", chat);
+    expect(queryClient.getQueryData(chatKeys.list(null))).toBeUndefined();
+
+    queryClient.setQueryData(chatKeys.list(null), buildEnvelope([buildChat({ id: "c1" })]));
+    upsertChatInListCache("p2", buildChat({ id: "c3", projectId: "p2" }));
+    expect(queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(null))!.chats.map((c) => c.id)).toEqual([
+      "c3",
+      "c1",
+    ]);
+  });
+
+  it("reads one project's chats and main workspace from the all-projects list when its own is not loaded", () => {
+    queryClient.setQueryData(chatKeys.list(null), {
+      ...buildEnvelope([buildChat({ id: "a", projectId: "p1" }), buildChat({ id: "b", projectId: "p2" })]),
+      mainWorktrees: [{ id: "main-p2", projectId: "p2", isMain: true }],
+    });
+    expect(getCachedChatList("p2").map((c) => c.id)).toEqual(["b"]);
+    expect(getCachedChatList(null).map((c) => c.id)).toEqual(["a", "b"]);
+    expect(getCachedMainWorktree("p2")?.id).toBe("main-p2");
+    expect(getCachedMainWorktree("p1")).toBeUndefined();
   });
 });

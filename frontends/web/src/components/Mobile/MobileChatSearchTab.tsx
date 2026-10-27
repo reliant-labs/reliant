@@ -14,7 +14,7 @@
 
 import { Link } from "@tanstack/react-router";
 import { Loader2, MessageSquare, SearchX } from "lucide-react";
-import { useProjectStore } from "../../store/projectStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useChatSearch } from "../../hooks/chat-pull-queries";
 import { relativeTime } from "./relativeTime";
 import {
@@ -27,8 +27,9 @@ import {
 } from "./MobileChrome";
 
 export function MobileChatSearchTab({ query }: { query: string }) {
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const { results, isLoading } = useChatSearch(currentProject?.id, query);
+  // The chat list's scope: the /m/projects filter, or every project.
+  const scope = useWorkspaceStateStore((s) => s.projectFilterId);
+  const { results, isLoading } = useChatSearch(scope, query);
 
   if (isLoading && results.length === 0) {
     return (

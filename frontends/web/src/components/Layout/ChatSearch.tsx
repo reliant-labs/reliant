@@ -5,16 +5,17 @@ import { createPortal } from "react-dom";
 import { Search, MessageSquare, Loader2, Clock, ArrowRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useChatStore } from "../../store/chatStore";
-import { useProjectStore } from "../../store/projectStore";
-import { useChat, useChatList } from "../../hooks/chat-queries";
+import { resolveChat, useChat, useChatListWithWorkspaces } from "../../hooks/chat-queries";
 import { useChatSearch } from "../../hooks/chat-pull-queries";
-import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import type { Message } from "../../api/client";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { openChat as openChatInContext } from "../../store/openChat";
+import { toast } from "../../lib/toast-manager";
+import type { Chat, Message } from "../../api/client";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import { requestScrollToMessage } from "../../lib/scrollToMessage";
-import { resolveWorktree } from "../../hooks/worktree-queries";
 import * as chatActions from "../../hooks/chat-actions";
+
+const NO_CHATS: Chat[] = [];
 
 type SearchMode = "history" | "current";
 
@@ -82,18 +83,17 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const { data: chats = [] } = useChatList(currentProject?.id);
+  // History searches the sidebar's scope: the project filter, or every project.
+  const scope = useWorkspaceStateStore((state) => state.projectFilterId);
+  const { data: scopeList } = useChatListWithWorkspaces(scope);
+  const chats = scopeList?.chats ?? NO_CHATS;
   // History mode: the most recent chats, or the matches for the query.
-  const chatSearch = useChatSearch(currentProject?.id, query, isOpen && mode === "history");
+  const chatSearch = useChatSearch(scope, query, isOpen && mode === "history");
   const chatResults = useMemo<ChatSearchResult[]>(
     () => (mode === "history" ? chatSearch.results.map((hit) => ({ ...hit, messageCount: 0 })) : []),
     [mode, chatSearch.results],
   );
   const activeChatId = useChatStore((state) => state.activeChatId);
-  const selectChat = useChatStore((state) => state.selectChat);
-  const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
-  const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
 
   // Get current chat messages
   // From the detail cache, not the project list: the list omits automation-
@@ -271,20 +271,19 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
 
   // Open a chat from history
   const openChat = async (result: ChatSearchResult) => {
-    const chat = chats.find((c) => c.id === result.chatId);
+    // A server hit may be a chat the list does not hold (another project's,
+    // an automation's): read it by id then.
+    const chat = chats.find((c) => c.id === result.chatId) ?? (await resolveChat(result.chatId));
     if (chat) {
-      if (currentProject?.id) {
-        if (chat.worktreeId) {
-          const targetWorktree = await resolveWorktree(chat.worktreeId);
-          if (targetWorktree) {
-            await switchWorktreeContext(currentProject.id, targetWorktree);
-          }
-        } else {
-          await switchWorktreeContext(currentProject.id, null);
-        }
+      // The chat may be in another project: openChatInContext moves the
+      // context (project, workspace) to it, then selects it.
+      try {
+        await openChatInContext(chat);
+      } catch (error) {
+        void toast.error(error);
+        closeAndFocus();
+        return;
       }
-      navigateToChat(chat.id);
-      selectChat(chat);
 
       // When the hit was a specific message, land on it rather than dumping the
       // user at the bottom of the conversation. The timeline for the new chat

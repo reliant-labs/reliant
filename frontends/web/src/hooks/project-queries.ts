@@ -380,7 +380,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
       is_git_repo: project.is_git_repo,
       has_remote: Boolean(project.remote_url),
     });
-    toast.success(`Project "${project.name}" created successfully`);
+    toast.success(`Added ${project.name}`);
     return project;
   } catch (error) {
     if (!(error instanceof ConnectError && error.code === Code.AlreadyExists)) {

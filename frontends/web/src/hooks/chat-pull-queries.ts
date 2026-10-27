@@ -20,7 +20,7 @@ import type { SearchChatsResponse } from "../gen/reliant/v1/chat_pb";
 import { protoValueToJs } from "../api/proto-utils";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { chatServiceQueries, useSearchChats } from "./chat-service-hooks_gen";
-import { useChatList } from "./chat-queries";
+import { useChatListWithWorkspaces } from "./chat-queries";
 import { useDebounce } from "./useDebounce";
 
 // ── Thread workflow inputs ──────────────────────────────────────────────────
@@ -104,18 +104,20 @@ export interface ChatSearch {
 }
 
 /**
- * Find a chat in a project by title: the server's full-text search
- * (SearchChats) on the debounced query, or — with no project, or when the
- * search fails — a title match over the project's chat list. An empty query
- * lists the most recent chats. While a new term is in flight the previous
- * term's matches stay on screen.
+ * Find a chat by title in a scope — one project, or every project when
+ * `scope` is null (the sidebar's filter): the server's full-text search
+ * (SearchChats) on the debounced query, or — when the search fails — a title
+ * match over the scope's chat list. An empty query lists the most recent
+ * chats. While a new term is in flight the previous term's matches stay on
+ * screen.
  */
-export function useChatSearch(projectId: string | undefined, query: string, enabled = true): ChatSearch {
-  const { data: chats = NO_CHATS } = useChatList(projectId);
+export function useChatSearch(scope: string | null, query: string, enabled = true): ChatSearch {
+  const { data: list } = useChatListWithWorkspaces(scope, { enabled });
+  const chats = list?.chats ?? NO_CHATS;
   const term = useDebounce(query.trim(), CHAT_SEARCH_DEBOUNCE_MS);
-  const searchesServer = enabled && !!projectId && term !== "";
+  const searchesServer = enabled && term !== "";
   const search = useSearchChats(
-    { projectId: projectId ?? "", query: term },
+    { projectId: scope ?? "", query: term },
     {
       enabled: searchesServer,
       select: hitsOf,

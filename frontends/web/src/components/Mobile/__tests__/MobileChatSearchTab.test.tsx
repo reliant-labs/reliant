@@ -14,9 +14,9 @@ import { mockTransport } from "@/lib/test-utils";
 /** The fake server: `search(projectId, query)` answers the matching chats. */
 const search = vi.fn();
 
-vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: "proj-1" } }),
+// The chat list's scope (the /m/projects filter): one project here.
+vi.mock("../../../store/workspaceStateStore", () => ({
+  useWorkspaceStateStore: (selector: (s: unknown) => unknown) => selector({ projectFilterId: "proj-1" }),
 }));
 
 // The real Link needs a mounted router; this test only cares about the
@@ -46,13 +46,15 @@ vi.mock("@tanstack/react-router", () => ({
   },
 }));
 
+const LISTED = {
+  chats: [
+    { id: "c1", title: "Fix login bug", updatedAt: "2024-01-01T00:00:00Z" },
+    { id: "c2", title: "Add search screen", updatedAt: "2024-01-02T00:00:00Z" },
+  ],
+  mainWorktrees: [],
+};
 vi.mock("../../../hooks/chat-queries", () => ({
-  useChatList: () => ({
-    data: [
-      { id: "c1", title: "Fix login bug", updatedAt: "2024-01-01T00:00:00Z" },
-      { id: "c2", title: "Add search screen", updatedAt: "2024-01-02T00:00:00Z" },
-    ],
-  }),
+  useChatListWithWorkspaces: () => ({ data: LISTED }),
 }));
 
 const { MobileChatSearchTab } = await import("../MobileChatSearchTab");

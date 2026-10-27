@@ -35,8 +35,9 @@ import {
 } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "../../store/authStore";
-import { useProjectStore } from "../../store/projectStore";
-import { useNavigateToProjectPicker } from "../../hooks/useNavigateToProjectPicker";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { openAddProject } from "../../store/addProjectDialogStore";
+import { openProjectSwitcher } from "../../lib/projectSwitcher";
 import {
   useAppKeyboardShortcuts,
   type ShortcutHandlerLookup,
@@ -134,7 +135,6 @@ interface LiveState {
   workspace: boolean;
   pathname: string;
   navigate: ReturnType<typeof useNavigate>;
-  navigateToProjectPicker: () => void;
 }
 
 interface HostCore {
@@ -205,12 +205,11 @@ function createHostCore(
 
   const navigateToWorkspace = () => {
     const { navigate } = live.current;
-    const projectId = useProjectStore.getState().currentProject?.id;
+    // The chat workspace's URL carries the sidebar's project filter.
+    const projectId = useWorkspaceStateStore.getState().projectFilterId;
     if (projectId) {
       void navigate({ to: "/project/$projectId", params: { projectId }, search: {} });
     } else {
-      // No project: the workspace is the picker, which is where the user has
-      // to go before any workspace action can mean anything.
       void navigate({ to: "/", search: {} });
     }
   };
@@ -243,9 +242,22 @@ function createHostCore(
     setOverlay(overlay);
   };
 
-  const openProjectPicker = () => {
+  // Adding a project is a dialog; switching is the sidebar's project menu.
+  // Both open over the chat workspace, which is where they act.
+  const addProject = () => {
     closeOverlays();
-    live.current.navigateToProjectPicker();
+    if (!live.current.workspace) navigateToWorkspace();
+    openAddProject();
+  };
+  const switchProject = () => {
+    closeOverlays();
+    if (live.current.workspace) {
+      openProjectSwitcher();
+    } else {
+      navigateToWorkspace();
+      // The workspace mounts its sidebar on the next frame.
+      requestAnimationFrame(() => openProjectSwitcher());
+    }
   };
 
   /**
@@ -295,8 +307,8 @@ function createHostCore(
       else void live.current.navigate({ to: "/settings" });
     },
     onOpenWorkflows: () => void live.current.navigate({ to: "/workflows" }),
-    onOpenProject: openProjectPicker,
-    onSwitchProject: openProjectPicker,
+    onOpenProject: addProject,
+    onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds
     // it to the chat; with no taker the chord means what it does everywhere
     // else, focus the chat.
@@ -422,7 +434,6 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   });
 
   const navigate = useNavigate();
-  const navigateToProjectPicker = useNavigateToProjectPicker();
   const [overlay, setOverlay] = useState<Overlay | null>(null);
 
   const live = useRef<LiveState>({
@@ -430,10 +441,9 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
     workspace,
     pathname,
     navigate,
-    navigateToProjectPicker,
   });
   useLayoutEffect(() => {
-    live.current = { enabled, workspace, pathname, navigate, navigateToProjectPicker };
+    live.current = { enabled, workspace, pathname, navigate };
   });
 
   const [core] = useState(() => createHostCore(live, setOverlay));

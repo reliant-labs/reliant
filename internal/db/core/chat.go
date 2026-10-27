@@ -270,7 +270,9 @@ type ChatFilters struct {
 
 // ChatSearchFilters contains options for searching chats.
 type ChatSearchFilters struct {
-	UserID      string
+	UserID string
+	// ProjectID narrows the search to one project; empty searches all of the
+	// user's projects.
 	ProjectID   string
 	SearchQuery string
 	State       *ChatState

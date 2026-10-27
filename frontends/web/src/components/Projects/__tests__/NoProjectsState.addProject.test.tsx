@@ -1,16 +1,16 @@
 /**
- * ProjectPicker's add-project affordances in WEB mode, per daemon set.
+ * The first-run state's add-project actions in WEB mode, per daemon set
+ * (they are the Add project dialog's too: both read useAddProject).
  *
- * The reported bug: in web mode with no ACTIVE daemon, the picker replaced
- * BOTH "Open Project" and "Clone repo" with a "Resume a daemon" screen that
- * only handled SUSPENDED daemons. A user whose only machine had FAILED
- * therefore saw no action at all, and no surface anywhere in the app offered
- * "add project". See docs/findings/add-github-project-2026-09-30.md.
+ * The reported bug this guards: in web mode with no ACTIVE daemon, the old
+ * project picker replaced BOTH add actions with a "Resume a daemon" screen
+ * that only handled SUSPENDED daemons. A user whose only machine had FAILED
+ * saw no action at all. See docs/findings/add-github-project-2026-09-30.md.
  *
  * These render the real component against a failed-only, suspended-only and
  * active daemon set, and assert the user always has a way forward.
  */
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -70,31 +70,20 @@ vi.mock("@/hooks/useOnboardingQueries", async (importOriginal) => ({
   useCreateDaemon: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/services/settingsSync", () => ({
-  settingsSync: { getSetting: () => "", setSetting: vi.fn() },
-  SETTINGS_KEYS: { THEME: "appearance.theme" },
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, to: _to, params: _params, ...props }: { children?: ReactNode; to?: string; params?: unknown }) => (
+    <a {...props}>{children}</a>
+  ),
 }));
 
-vi.mock("@/store/projectStore", () => {
-  const useProjectStore = (selector: (s: unknown) => unknown) =>
-    selector({
-      projects: [],
-      loadProjects: vi.fn(),
-      createProject: vi.fn(),
-      selectProject: vi.fn(),
-      updateProject: vi.fn(),
-      deleteProject: vi.fn(),
-    });
-  useProjectStore.getState = () => ({ projects: [] });
-  return { useProjectStore };
-});
-
-vi.mock("@/store/apiKeySetupStore", () => ({
-  useApiKeySetupStore: (selector: (s: unknown) => unknown) =>
-    selector({ ensureApiKeyOrShowModal: vi.fn() }),
+vi.mock("@/store/openChat", () => ({ openNewChat: vi.fn() }));
+// The Add machine sheet is WS6's (its own tests); here only whether it opens.
+vi.mock("@/components/Machines", () => ({
+  AddMachineSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-machine-sheet" /> : null),
 }));
 
-import { ProjectPicker } from "../ProjectPicker";
+import { NoProjectsState } from "../NoProjectsState";
+import { useAddProjectDialogStore } from "@/store/addProjectDialogStore";
 import { markMachineGone, resetGoneMachinesForTest } from "@/lib/goneMachines";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { setTransport } from "@/lib/connect";
@@ -128,127 +117,130 @@ function daemon(id: string, status: number, extra: Record<string, unknown> = {})
 // settles once the daemon list resolves. Asserting on the first match would
 // therefore test the loading state rather than the gating rule.
 async function findSettledCloneButton(): Promise<HTMLElement> {
-  const clone = await screen.findByTestId("project-picker-clone-repo");
+  const clone = await screen.findByTestId("add-project-clone");
   await waitFor(() => expect(clone.textContent ?? "").not.toBe(""));
   return clone;
 }
 
-function renderPicker() {
+function renderFirstRun() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  return render(<ProjectPicker onProjectSelected={vi.fn()} />, { wrapper: Wrapper });
+  return render(<NoProjectsState />, { wrapper: Wrapper });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   registryDaemons = [];
   resetGoneMachinesForTest();
+  useAddProjectDialogStore.setState({ isOpen: false, method: null });
 });
 
-describe("ProjectPicker clone gating — failed-only daemons", () => {
+describe("first run — copy", () => {
+  it("says what a project is, and offers exactly the two ways to add one", async () => {
+    registryDaemons = [daemon("machine-c", DAEMON_STATUS_ACTIVE)];
+    renderFirstRun();
+    expect(screen.getByText(/A project is a codebase Reliant works in/)).toBeInTheDocument();
+    expect(screen.getByText(/clone a repository or open a folder/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("add-project-clone")).toHaveTextContent("Clone a repository");
+    expect(screen.getByTestId("add-project-open-folder")).toHaveTextContent("Open a folder");
+    expect(screen.queryByText(/new project/i)).toBeNull();
+  });
+
+  it("opens the Add project dialog on its clone step", async () => {
+    registryDaemons = [daemon("machine-c", DAEMON_STATUS_ACTIVE)];
+    renderFirstRun();
+    (await findSettledCloneButton()).click();
+    expect(useAddProjectDialogStore.getState()).toMatchObject({ isOpen: true, method: "clone" });
+  });
+});
+
+describe("first run — failed-only daemons", () => {
   beforeEach(() => {
     registryDaemons = [
-        daemon("machine-a", DAEMON_STATUS_FAILED, {
-          lastStatusMessage: "exceeded storage quota",
-        }),
-      ];
+      daemon("machine-a", DAEMON_STATUS_FAILED, {
+        lastStatusMessage: "exceeded storage quota",
+      }),
+    ];
   });
 
-  it("still offers Clone repo rather than hiding every add-project entry point", async () => {
-    renderPicker();
-    // The regression was an ABSENT control, so presence is the assertion.
-    expect(await screen.findByTestId("project-picker-clone-repo")).toBeInTheDocument();
+  it("still offers Clone a repository rather than hiding every add-project entry point", async () => {
+    renderFirstRun();
+    expect(await screen.findByTestId("add-project-clone")).toBeInTheDocument();
   });
 
-  it("disables Clone repo and says why", async () => {
-    renderPicker();
+  it("disables Clone a repository and says why", async () => {
+    renderFirstRun();
     const clone = await findSettledCloneButton();
     expect(clone).toBeDisabled();
     expect(clone).toHaveTextContent(/failed to start/i);
   });
 
-  it("shows the failure reason and a delete action for the failed machine", async () => {
-    renderPicker();
+  it("shows the failure reason, a delete action, and where to add a machine", async () => {
+    renderFirstRun();
     const row = await screen.findByTestId("failed-daemon-machine-a");
-    // Without the reason the user cannot tell a quota problem from a crash.
     expect(row).toHaveTextContent("exceeded storage quota");
     expect(within(row).getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    // Adding a machine opens the one Add machine sheet in place.
+    const add = screen.getByTestId("no-active-machine-add");
+    expect(add).toHaveTextContent("Add a machine");
+    expect(screen.queryByTestId("add-machine-sheet")).not.toBeInTheDocument();
+    fireEvent.click(add);
+    expect(screen.getByTestId("add-machine-sheet")).toBeInTheDocument();
   });
 
-  it("does not offer a resume action for a machine that cannot be resumed", async () => {
-    renderPicker();
-    await screen.findByTestId("failed-daemon-machine-a");
-    expect(screen.queryByText(/^Resume machine-a$/)).not.toBeInTheDocument();
+  it("explains why Open a folder is unavailable instead of hiding it", async () => {
+    renderFirstRun();
+    const open = await screen.findByTestId("add-project-open-folder");
+    expect(open).toBeDisabled();
+    expect(open).toHaveTextContent(/connect a machine first/i);
   });
 });
 
-describe("ProjectPicker clone gating — suspended-only daemons", () => {
+describe("first run — suspended-only daemons", () => {
   beforeEach(() => {
     registryDaemons = [daemon("machine-b", DAEMON_STATUS_SUSPENDED)];
   });
 
-  it("enables Clone repo — the command queues until the machine wakes", async () => {
-    renderPicker();
+  it("enables Clone a repository — the command queues until the machine wakes", async () => {
+    renderFirstRun();
     const clone = await findSettledCloneButton();
     expect(clone).toBeEnabled();
-  });
-
-  it("tells the user the clone is queued, not done", async () => {
-    renderPicker();
-    const clone = await findSettledCloneButton();
     expect(clone).toHaveTextContent(/queue/i);
     expect(clone).toHaveTextContent(/machine-b/);
   });
 
   it("still offers Resume for the suspended machine", async () => {
-    renderPicker();
-    expect(
-      await screen.findByRole("button", { name: /Resume machine-b/ }),
-    ).toBeInTheDocument();
+    renderFirstRun();
+    expect(await screen.findByRole("button", { name: /Resume machine-b/ })).toBeInTheDocument();
   });
 });
 
-describe("ProjectPicker clone gating — an active daemon", () => {
+describe("first run — an active daemon", () => {
   beforeEach(() => {
     registryDaemons = [daemon("machine-c", DAEMON_STATUS_ACTIVE)];
   });
 
-  it("enables Clone repo and presents it as an immediate pull", async () => {
-    renderPicker();
-    const clone = await findSettledCloneButton();
-    expect(clone).toBeEnabled();
-    expect(clone).toHaveTextContent(/Pull a GitHub repo/i);
-    expect(clone).not.toHaveTextContent(/queue/i);
+  it("shows no machine panel: a project is not tied to the connected machine", async () => {
+    renderFirstRun();
+    await findSettledCloneButton();
+    expect(screen.queryByTestId("no-active-machine")).toBeNull();
+    expect(screen.queryByText(/Projects open on this machine/)).toBeNull();
   });
 
-  // For a cloud user the directory picker reads the BROWSER HOST's filesystem
-  // and cannot see the cloud machine's disk at all, so leading with "Open
-  // Project" pointed them at an action that could not work. Clone leads
-  // instead — and "Open folder" is demoted, never removed.
-  it("leads with Clone from GitHub, ahead of Open folder", async () => {
-    renderPicker();
+  it("leads with Clone a repository, ahead of Open a folder, for a cloud account", async () => {
+    renderFirstRun();
     const clone = await findSettledCloneButton();
-    expect(clone).toHaveTextContent(/Clone from GitHub/i);
-
-    const openFolder = screen.queryByTestId("project-picker-open-folder");
-    if (openFolder) {
-      // DOCUMENT_POSITION_FOLLOWING: clone comes first in the DOM.
-      expect(
-        clone.compareDocumentPosition(openFolder) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
+    expect(clone).toHaveAttribute("data-variant", "primary");
+    const openFolder = screen.getByTestId("add-project-open-folder");
+    expect(clone.compareDocumentPosition(openFolder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-// MACHINE_LIST_BUGS_2026-10-07: the registry still listed cda8a89b, deleted in
-// the control plane the day before; it was the most recently created machine,
-// so the clone went to it and came back not_found. Once the control plane has
-// said a machine is gone, it is never the default target again.
-describe("ProjectPicker clone target — a machine the control plane says is gone", () => {
+describe("first run — clone target", () => {
   beforeEach(() => {
     registryDaemons = [
       daemon("ghost", DaemonStatus.PENDING, { createdAt: { seconds: 2_000n, nanos: 0 } }),
@@ -256,23 +248,11 @@ describe("ProjectPicker clone target — a machine the control plane says is gon
     ];
   });
 
-  it("defaults to the most recent machine while nothing says it is gone", async () => {
-    renderPicker();
-    const clone = await findSettledCloneButton();
-    expect(clone).toHaveTextContent(/ghost/);
-  });
-
-  it("never defaults to a machine marked gone", async () => {
+  it("never defaults to a machine the control plane says is gone", async () => {
     markMachineGone("ghost");
-    renderPicker();
+    renderFirstRun();
     const clone = await findSettledCloneButton();
     expect(clone).toHaveTextContent(/live/);
     expect(clone).not.toHaveTextContent(/ghost/);
-  });
-
-  it("does not promise a clone in the button's description", async () => {
-    renderPicker();
-    const clone = await findSettledCloneButton();
-    expect(clone).not.toHaveTextContent(/will clone when|it'll clone when/i);
   });
 });

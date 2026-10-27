@@ -1,5 +1,5 @@
 // ModernApp - Main application component
-import { useSearch, useNavigate, useLocation, useParams } from '@tanstack/react-router';
+import { useSearch, useNavigate, useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
@@ -19,8 +19,9 @@ import { ChatInterface } from "./components/Chat/ChatInterface";
 import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
-import { useProjectStore } from "./store/projectStore";
-import { fetchProjects, getCachedProjects } from "./hooks/project-queries";
+import { mostRecentProject, useProjectStore } from "./store/projectStore";
+import { ProjectFilterRouteSync, useRouteProjectId } from "./components/Layout/ProjectFilterRouteSync";
+import { fetchProjects, getCachedProjects, useProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
@@ -31,11 +32,11 @@ import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
 import { HomeNewChat } from "./components/Apps/HomeNewChat";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { approveAllPendingApprovals } from "./hooks/approval-queries";
-import { useChatList, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
+import { useChatListWithWorkspaces, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
 
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
-import { ProjectPicker } from "./components/Projects/ProjectPicker";
+import { NoProjectsState } from "./components/Projects/NoProjectsState";
 import { InitializeGitModal } from "./components/Git/InitializeGitModal";
 import { RescanModal } from "./components/Projects/RescanModal";
 
@@ -47,7 +48,8 @@ import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activity
 import { useChatNavigationStore } from "./store/chatNavigationStore";
 import { useWindowContext } from "./hooks/useWindowContext";
 import { useOpenProjectListener } from "./hooks/useOpenProjectListener";
-import { useNavigateToProjectPicker } from "./hooks/useNavigateToProjectPicker";
+import { openChat, openNewChat } from "./store/openChat";
+import { openAddProject } from "./store/addProjectDialogStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useShortcutHost, useShortcutLayer } from "./hooks/useShortcutHost";
 import { useElectronIPC } from "./hooks/useElectronIPC";
@@ -88,9 +90,13 @@ function App() {
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
   // Chat list from the React Query cache (the single source of truth), used by
-  // the tray-status effect below.
-  const { data: chats = EMPTY_CHAT_LIST } = useChatList(currentProject?.id);
+  // the tray-status effect below: the sidebar's list, every project or the
+  // filter's one.
+  const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
+  const { data: sidebarList } = useChatListWithWorkspaces(projectFilterId);
+  const chats = sidebarList?.chats ?? EMPTY_CHAT_LIST;
   const selectProject = useProjectStore((state) => state.selectProject);
+  const { projects, isLoading: projectsLoading } = useProjects();
   // Onboarding state (`plan`, `reset-onboarding`) now lives on /onboarding —
   // see OnboardingRoute. We still read the github_* params here because non-
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
@@ -183,6 +189,8 @@ function App() {
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
   const location = useLocation();
+  // Startup restoration and the mounted filter bridge share route identity.
+  const routeProjectId = useRouteProjectId();
   const isSettingsMode = location.pathname.startsWith("/settings");
   const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
   // Calculate hasOpenViewers based on subscribed state
@@ -190,82 +198,9 @@ function App() {
     ? viewers.filter((v) => v.projectId === viewerProjectId).length > 0
     : viewers.length > 0;
 
-  // Read projectId from URL (/project/$projectId). useParams with strict:false
-  // returns undefined when the current route doesn't have $projectId.
-  const routeParams = useParams({ strict: false }) as { projectId?: string };
-  const routeProjectId = routeParams.projectId;
-
-  // Track the last URL projectId we acted on so the effect only fires on URL
-  // changes — not on store changes (selectProject would otherwise re-trigger).
-  const lastRouteProjectIdRef = useRef<string | undefined>(undefined);
-
-  // Deep-link the URL into a project. When /project/$projectId is mounted and
-  // its id differs from the currently selected project, look up the project
-  // and call selectProject. Loads projects first if not yet loaded.
-  useEffect(() => {
-    if (!routeProjectId) {
-      lastRouteProjectIdRef.current = undefined;
-      return;
-    }
-    if (lastRouteProjectIdRef.current === routeProjectId) {
-      return; // already handled this URL
-    }
-    lastRouteProjectIdRef.current = routeProjectId;
-
-    const projectStore = useProjectStore.getState();
-    if (projectStore.currentProject?.id === routeProjectId) {
-      return; // already selected, no work needed
-    }
-
-    (async () => {
-      let projects = getCachedProjects();
-      if (projects.length === 0) {
-        try {
-          projects = await fetchProjects();
-        } catch (err) {
-          logger.warn("[ModernApp] Failed to load projects for deep-link", err);
-          return;
-        }
-      }
-      const match = projects.find((p) => p.id === routeProjectId);
-      if (!match) {
-        logger.warn("[ModernApp] Deep-link project not found, leaving user in current state", { routeProjectId });
-        return;
-      }
-      const stillSelected = useProjectStore.getState().currentProject?.id;
-      if (stillSelected === match.id) {
-        return; // raced with another selectProject — no-op
-      }
-      await useProjectStore.getState().selectProject(match);
-    })();
-  }, [routeProjectId]);
-
   const headerRef = useRef<HeaderRef>(null);
 
   // Note: Removed file polling - now handled by viewer store and individual viewer components
-
-  // Track if this is the initial project load (vs manual project switch)
-  // Used to prevent clearing chat during workspace restoration
-  const hasInitialProjectLoadedRef = useRef(false);
-  
-  // Handle project switching: clear chat on manual switch (viewer clearing is
-  // now handled by projectStore.selectProject directly via
-  // clearViewersForProjectSwitch — no dual-write to viewerStore.currentProjectId).
-  useEffect(() => {
-    const chatStore = useChatStore.getState();
-
-    if (currentProject?.id) {
-      // Only clear current chat when switching projects manually (not during initial load)
-      // During initial load, the workspace restore hook will set the correct chat
-      if (hasInitialProjectLoadedRef.current) {
-        chatStore.clearCurrentChat();
-      } else {
-        // Mark that initial project has loaded - subsequent changes will clear chat
-        hasInitialProjectLoadedRef.current = true;
-      }
-    }
-  }, [currentProject?.id]);
-
 
   // Restore panel state when worktree changes (file browser is per-worktree, chat sidebar is global)
   useEffect(() => {
@@ -385,11 +320,6 @@ function App() {
     handleCloseGitInitModal();
   }, [handleCloseGitInitModal, queryClient]);
 
-  // Navigating to the project picker. Shared with Settings → Projects, which
-  // offers the same "Add project" entry point — the store-clearing order this
-  // depends on is easy to get subtly wrong in a second copy.
-  const handleNavigateToProjectPicker = useNavigateToProjectPicker();
-
   // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
     return useWorktreeStore.getState().currentWorktreeId || undefined;
@@ -451,23 +381,22 @@ function App() {
   );
 
   /**
-   * Move to the next/previous project in the sidebar's order.
-   *
-   * Wraps around, matching how chat cycling already behaves.
+   * Move the sidebar's project filter to the next/previous project (from All
+   * projects, to the first/last). Wraps around, matching chat cycling.
    */
   const cycleProject = useCallback(
     async (direction: 1 | -1) => {
       const projects = getCachedProjects();
-      const { currentProject: active, selectProject } = useProjectStore.getState();
-      if (projects.length < 2) return;
-
-      const index = projects.findIndex((p) => p.id === active?.id);
-      if (index === -1) return;
-
-      const next =
-        projects[(index + direction + projects.length) % projects.length];
-      if (next && next.id !== active?.id) {
-        await selectProject(next);
+      if (projects.length === 0) return;
+      const filter = useWorkspaceStateStore.getState().projectFilterId;
+      const index = projects.findIndex((p) => p.id === filter);
+      const nextIndex =
+        index === -1
+          ? direction === 1 ? 0 : projects.length - 1
+          : (index + direction + projects.length) % projects.length;
+      const next = projects[nextIndex];
+      if (next && next.id !== filter) {
+        await useProjectStore.getState().setProjectFilter(next.id);
       }
     },
     [],
@@ -477,14 +406,9 @@ function App() {
   const keyboardHandlers = useMemo(
     () => ({
       onNewChat: () => {
-        // Clear active chat to show new chat view
-        // Preserve current worktree context from active chat or current worktree store
-        const chatStore = useChatStore.getState();
-        const worktreeStore = useWorktreeStore.getState();
-        const activeChatId = chatStore.activeChatId;
-        const activeChat = activeChatId ? getChatFromCache(activeChatId) ?? null : null;
-        const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktreeId || null;
-        chatStore.clearCurrentChat(currentWorktreeId);
+        // The new-chat view, in the filter's project, else the open chat's,
+        // else the last one used (openNewChat).
+        void openNewChat();
       },
       onCloseTab: () => {
         try {
@@ -1076,11 +1000,28 @@ function App() {
     };
   }, []); // Run once on mount — workspace restore handles project selection
 
-  // Connect the live update stream once the backend is ready. Chats are
-  // already loaded by workspace restore / selectProject before isBackendReady
-  // is set, so the lastUserUpdateSequence is already stored.
+  // Load the sidebar's chat list (every project, or the filter's one) once
+  // the backend is ready: it seeds activity and the stream's resume point.
+  // The list follows the filter, never the context project.
+  const [chatsLoaded, setChatsLoaded] = useState(false);
+  useEffect(() => {
+    if (!isBackendReady) return;
+    let cancelled = false;
+    void useChatStore
+      .getState()
+      .loadChats()
+      .finally(() => {
+        if (!cancelled) setChatsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBackendReady]);
+
+  // Connect the live update stream once the chat list has loaded. It spans
+  // every project, so switching projects never reconnects it.
+  useUpdateStreamConnection(isBackendReady && chatsLoaded);
   const projectId = currentProject?.id;
-  useUpdateStreamConnection(projectId, isBackendReady);
 
   useEffect(() => {
     if (!isBackendReady || !projectId) return;
@@ -1316,10 +1257,20 @@ function App() {
     autoRestore: isBackendReady,
     // In Electron, skip project restoration - let useWindowContext handle it.
     // Also skip if the URL deep-links to a specific project (`/project/$projectId`) —
-    // the route-param effect above owns project selection in that case so we
+    // ProjectFilterRouteSync owns project selection in that case so we
     // don't race lastProjectId vs the URL.
     skipProjectRestore: isElectron || Boolean(routeProjectId),
   });
+
+  // With projects but none in context (the last one was removed in another
+  // window, a restore that found nothing), open the most recent one: the
+  // window never stops on a project picker. Electron windows resolve their
+  // own context (useWindowContext), which falls back the same way.
+  useEffect(() => {
+    if (isElectron || !isBackendReady || isWorkspaceRestoring || currentProject) return;
+    const next = mostRecentProject(projects);
+    if (next) void useProjectStore.getState().selectProject(next);
+  }, [isElectron, isBackendReady, isWorkspaceRestoring, currentProject, projects]);
 
   // Listen for Electron menu events from tray and app menus
   useEffect(() => {
@@ -1331,23 +1282,15 @@ function App() {
     // newChat shortcut, through the keyboard host's menu bridge.
 
     const goToRecentChat = async (chatId?: string) => {
-      const chatStore = useChatStore.getState();
-      const project = useProjectStore.getState().currentProject;
-      const worktreeStore = useWorktreeStore.getState();
-
+      // The tray lists chats of every project: openChat moves the context to
+      // the chat's project and workspace.
       const alignWorktreeAndSelect = async (chat: Chat | undefined) => {
         if (!chat) return;
-        if (project?.id) {
-          if (chat.worktreeId) {
-            const targetWorktree = await resolveWorktree(chat.worktreeId);
-            if (targetWorktree) {
-              await worktreeStore.switchWorktreeContext(project.id, targetWorktree);
-            }
-          } else {
-            await worktreeStore.switchWorktreeContext(project.id, null);
-          }
+        try {
+          await openChat(chat);
+        } catch (error) {
+          void toast.error(error);
         }
-        chatStore.selectChat(chat);
       };
 
       const target = chatId ? getChatFromCache(chatId) : undefined;
@@ -1356,7 +1299,7 @@ function App() {
         return;
       }
 
-      const sorted = getCachedChatList(project?.id)
+      const sorted = getCachedChatList(useWorkspaceStateStore.getState().projectFilterId)
         .filter((chat) => chat.state !== ChatState.ARCHIVED)
         .sort((a, b) => {
           const aTime = Date.parse(a.updatedAt || a.createdAt || "");
@@ -1414,9 +1357,9 @@ function App() {
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
 
-    if ("onTrayGoToProjectPicker" in window.electronAPI) {
-      const unsubscribe = window.electronAPI.onTrayGoToProjectPicker(() => {
-        handleNavigateToProjectPicker();
+    if ("onTrayAddProject" in window.electronAPI) {
+      const unsubscribe = window.electronAPI.onTrayAddProject(() => {
+        openAddProject();
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1444,7 +1387,7 @@ function App() {
     return () => {
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [handleNavigateToProjectPicker]);
+  }, [navigate]);
 
   // Get onboarding state - we defer git init check until onboarding tour is completed
   const hasCompletedOnboarding = useTourStore((state) => state.hasCompletedOnboarding);
@@ -1648,28 +1591,20 @@ function App() {
       return <LoadingSpinner />;
     }
 
-    // Show project picker only after the account has projects but none is selected.
-    // Header is hoisted to the App-level return — this branch returns only the
-    // content rendered below it.
+    // There is no project picker. With projects, the window always works in
+    // one (the effect above selects the most recent while none is); only an
+    // account with no projects yet sees the first-run state. Header is
+    // hoisted to the App-level return — this branch returns only the content
+    // rendered below it.
     if (!currentProject) {
-      return (
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ProjectPicker
-            onProjectSelected={(project) => {
-              // Always select the project - initialization check will happen after navigation
-              // Ensure all required properties are present for the store
-              const fullProject = {
-                ...project,
-                is_git_repo: project.is_git_repo ?? true,
-                last_active: new Date().toISOString(),
-                created_at: project.created_at ?? new Date().toISOString(),
-                updated_at: project.updated_at ?? new Date().toISOString(),
-              };
-              selectProject(fullProject);
-            }}
-          />
-        </div>
-      );
+      if (!projectsLoading && projects.length === 0) {
+        return (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <NoProjectsState />
+          </div>
+        );
+      }
+      return <LoadingSpinner />;
     }
 
     // Workflow routes are handled by /workflow/* in routes.tsx — they render
@@ -1699,7 +1634,6 @@ function App() {
             <div id="layout-left-sidebar" className="flex flex-col h-full">
               <Sidebar
                 paddingClass=""
-                onNavigateToProjectPicker={handleNavigateToProjectPicker}
                 onOpenWorkflows={() => {
                   navigate({ to: '/workflows' });
                 }}
@@ -1712,6 +1646,9 @@ function App() {
                 onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
+                }}
+                onManageProjects={() => {
+                  navigate({ to: '/settings/$section', params: { section: 'projects' } });
                 }}
                 onOpenForge={() => {
                   navigate({ to: '/apps' });
@@ -1735,7 +1672,6 @@ function App() {
               <div className="flex flex-col h-full">
                 <Sidebar
                   paddingClass=""
-                  onNavigateToProjectPicker={handleNavigateToProjectPicker}
                   onOpenWorkflows={() => {
                     navigate({ to: '/workflows' });
                   }}
@@ -1748,6 +1684,9 @@ function App() {
                   onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                   onNavigateToSettings={() => {
                     navigate({ to: '/settings' });
+                  }}
+                  onManageProjects={() => {
+                    navigate({ to: '/settings/$section', params: { section: 'projects' } });
                   }}
                   onOpenForge={() => {
                     navigate({ to: '/apps' });
@@ -1890,27 +1829,18 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen">
+      <ProjectFilterRouteSync />
       {showHeader && (
         <Header
           ref={headerRef}
           logoSize="xl"
           windowAligned={true}
-          projectPickerMode={!currentProject}
           onNavigateToSettings={() => {
             navigate({ to: '/settings' });
           }}
           onNavigateToSettingsSection={(section) => {
             navigate({ to: '/settings/$section', params: { section } });
           }}
-          // Picker mode only — no-op outside picker mode (Header gates the
-          // project-tile click on projectPickerMode, so this is dead unless
-          // !currentProject).
-          onProjectSelect={(project) => {
-            selectProject(project);
-          }}
-          // Header internally gates these on `!projectPickerMode`, so it's
-          // safe to pass them unconditionally — they're inert in picker mode.
-          onNavigateToProjectPicker={handleNavigateToProjectPicker}
           onToggleTerminal={toggleTerminal}
           onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
           onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}

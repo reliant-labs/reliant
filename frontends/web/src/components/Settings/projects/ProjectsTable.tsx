@@ -1,4 +1,5 @@
-import { ArrowUpRight, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Tooltip from "@/components/forge-ui/tooltip";
@@ -8,11 +9,18 @@ import { cn } from "@/lib/utils";
 import type { Project } from "@/store/projectStore";
 
 import { describeProjectSource } from "./projectSource";
+import { isCloudProjectPath } from "../../Projects/picker/format";
+import { REMOVE_PROJECT_HINT } from "../../Projects/projectCopy";
 
 /**
  * Every project the user has added, one row each: what it is called, where it
- * lives, where it came from, and when it was last used. PURE PROPS — rows and
- * callbacks in, no stores — so the tests hand it object literals.
+ * lives, where it came from, and when it was last used — with Open, Rename and
+ * Remove. PURE PROPS — rows and callbacks in, no stores — so the tests hand it
+ * object literals (the inline rename's draft is the only local state).
+ *
+ * A cloud machine's checkout path (/home/workspace/projects/…) is not shown:
+ * it is the same for every cloud project, and "workspace" in it names the
+ * machine, not a Reliant workspace.
  *
  * A real table (`<th scope>` per column, actions right-aligned), in the same
  * vocabulary as forge's EnvironmentTable, so a project list reads like every
@@ -23,6 +31,8 @@ export interface ProjectsTableProps {
   currentProjectId?: string;
   onOpen: (project: Project) => void;
   onRemove: (project: Project) => void;
+  /** Rename a project. Omit to hide Rename. */
+  onRename?: (project: Project, name: string) => void;
   /** Disables Open on every row while a switch is in flight. */
   openingProjectId?: string | null;
 }
@@ -38,8 +48,17 @@ export function ProjectsTable({
   currentProjectId,
   onOpen,
   onRemove,
+  onRename,
   openingProjectId,
 }: ProjectsTableProps) {
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const commitRename = (project: Project) => {
+    const name = draft.trim();
+    setRenamingId(null);
+    // An empty or unchanged name is a cancel.
+    if (name && name !== project.name) onRename?.(project, name);
+  };
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card" data-testid="settings-projects-table">
       <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
@@ -51,7 +70,7 @@ export function ProjectsTable({
           <col />
           <col className="w-[24%]" />
           <col className="w-28" />
-          <col className="w-24" />
+          <col className="w-28" />
         </colgroup>
         <thead>
           <tr className="border-b border-border">
@@ -89,22 +108,42 @@ export function ProjectsTable({
               >
                 <th scope="row" className={cn(CELL, "text-left font-normal")}>
                   <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate font-medium text-foreground" title={project.name}>
-                      {project.name}
-                    </span>
-                    {isCurrent && <Badge label="Current" variant="info" size="sm" />}
+                    {renamingId === project.id ? (
+                      <input
+                        autoFocus
+                        aria-label={`Rename ${project.name}`}
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        onBlur={() => commitRename(project)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") commitRename(project);
+                          if (event.key === "Escape") setRenamingId(null);
+                        }}
+                        data-testid={`settings-project-rename-input-${project.id}`}
+                        className="h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    ) : (
+                      <span className="truncate font-medium text-foreground" title={project.name}>
+                        {project.name}
+                      </span>
+                    )}
+                    {isCurrent && renamingId !== project.id && <Badge label="Current" variant="info" size="sm" />}
                   </div>
                 </th>
 
                 {/* Middle-truncated: the head gives way under pressure while the
                     leaf directory stays pinned, so two checkouts of the same
                     repo remain distinguishable. */}
-                <td className={CELL} title={displayPath}>
-                  <div className="flex min-w-0 items-baseline font-mono text-xs text-muted-foreground">
-                    <span className="truncate">{head}</span>
-                    <span className="shrink-0 text-foreground/80">{tail}</span>
-                  </div>
-                </td>
+                {isCloudProjectPath(project.path) ? (
+                  <td className={cn(CELL, "text-xs text-muted-foreground")}>On a cloud machine</td>
+                ) : (
+                  <td className={CELL} title={displayPath}>
+                    <div className="flex min-w-0 items-baseline font-mono text-xs text-muted-foreground">
+                      <span className="truncate">{head}</span>
+                      <span className="shrink-0 text-foreground/80">{tail}</span>
+                    </div>
+                  </td>
+                )}
 
                 <td className={CELL}>
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -132,7 +171,7 @@ export function ProjectsTable({
 
                 <td className={cn(CELL, "whitespace-nowrap")}>
                   <div className="flex items-center justify-end gap-0.5">
-                    <Tooltip content={isCurrent ? "Go to project" : "Switch to this project"} delay={300}>
+                    <Tooltip content="Open" delay={300}>
                       <button
                         type="button"
                         onClick={() => onOpen(project)}
@@ -144,7 +183,23 @@ export function ProjectsTable({
                         <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </Tooltip>
-                    <Tooltip content="Remove from Reliant (files stay on disk)" side="left" delay={300}>
+                    {onRename && (
+                      <Tooltip content="Rename" delay={300}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingId(project.id);
+                            setDraft(project.name);
+                          }}
+                          aria-label={`Rename ${project.name}`}
+                          data-testid={`settings-project-rename-${project.id}`}
+                          className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    )}
+                    <Tooltip content={REMOVE_PROJECT_HINT} side="left" delay={300}>
                       <button
                         type="button"
                         onClick={() => onRemove(project)}

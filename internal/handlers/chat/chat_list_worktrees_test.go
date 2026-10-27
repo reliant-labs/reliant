@@ -82,11 +82,13 @@ func TestListChats_CarriesEachChatsWorktreeSummary(t *testing.T) {
 	}
 
 	t.Run("main worktree is carried even for a chat with no worktree", func(t *testing.T) {
-		require.NotNil(t, resp.Msg.MainWorktree)
-		assert.Equal(t, mainID, resp.Msg.MainWorktree.Id)
-		assert.True(t, resp.Msg.MainWorktree.IsMain)
-		assert.Equal(t, "main", resp.Msg.MainWorktree.Name)
-		assert.Equal(t, "main", resp.Msg.MainWorktree.Branch)
+		require.Len(t, resp.Msg.MainWorktrees, 1, "a project-scoped list carries that project's main workspace only")
+		main := resp.Msg.MainWorktrees[0]
+		assert.Equal(t, mainID, main.Id)
+		assert.True(t, main.IsMain)
+		assert.Equal(t, "main", main.Name)
+		assert.Equal(t, "main", main.Branch)
+		assert.Equal(t, projectID, main.ProjectId)
 		assert.Nil(t, byID[noWorktree].Worktree, "a chat with no worktree_id has no worktree summary")
 	})
 
@@ -132,7 +134,7 @@ func TestListChats_NoWorktreesYieldsNoSummaries(t *testing.T) {
 	require.Len(t, resp.Msg.Chats, 1)
 	assert.Equal(t, id, resp.Msg.Chats[0].Id)
 	assert.Nil(t, resp.Msg.Chats[0].Worktree)
-	assert.Nil(t, resp.Msg.MainWorktree, "a project with no main worktree row reports none")
+	assert.Empty(t, resp.Msg.MainWorktrees, "a project with no main worktree row reports none")
 }
 
 func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
@@ -149,5 +151,54 @@ func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
 	resp, err := svc.ListChats(intruder, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)
-	assert.Nil(t, resp.Msg.MainWorktree, "another user's project must not disclose its main workspace")
+	assert.Empty(t, resp.Msg.MainWorktrees, "another user's project must not disclose its main workspace")
+}
+
+// An empty project_id is the sidebar's "All projects" view: every chat and
+// main workspace of the caller's projects, and nothing of anyone else's.
+func TestListChats_AllProjectsSpansTheCallersProjectsOnly(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	svc := &Service{deps: Deps{Repo: repo}}
+
+	projectA, mainA := newInvariantTestProject(t, ctx, repo, true)
+	projectB, mainB := newInvariantTestProject(t, ctx, repo, true)
+	inA := seedListChatsChat(t, ctx, repo, projectA, &mainA, "in A")
+	inB := seedListChatsChat(t, ctx, repo, projectB, &mainB, "in B")
+
+	// Someone else's project, chat and main workspace.
+	now := time.Now().UTC()
+	foreignProject := "foreign-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: foreignProject, UserID: "someone-else", Name: "Foreign", Path: t.TempDir(),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	foreignMain := seedListChatsWorktree(t, ctx, repo, foreignProject, "foreign-main", true)
+	foreignChat := uuid.NewString()
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: foreignChat, Title: "not yours", ProjectID: foreignProject, WorktreeID: &foreignMain.ID,
+		UserID: "someone-else", State: 2, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))
+	require.NoError(t, err)
+
+	chatIDs := map[string]string{}
+	for _, c := range resp.Msg.Chats {
+		chatIDs[c.Id] = c.ProjectId
+	}
+	assert.Equal(t, projectA, chatIDs[inA])
+	assert.Equal(t, projectB, chatIDs[inB])
+	assert.NotContains(t, chatIDs, foreignChat, "another user's chat must not be listed")
+
+	mains := map[string]string{}
+	for _, w := range resp.Msg.MainWorktrees {
+		mains[w.Id] = w.ProjectId
+	}
+	assert.Equal(t, projectA, mains[mainA])
+	assert.Equal(t, projectB, mains[mainB])
+	assert.NotContains(t, mains, foreignMain.ID, "another user's main workspace must not be disclosed")
 }

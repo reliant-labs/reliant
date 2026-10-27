@@ -17,7 +17,8 @@ import {
 } from "react";
 import Tooltip from "../forge-ui/tooltip";
 
-import { useProjectStore, type Project } from "../../store/projectStore";
+import { useProjectStore } from "../../store/projectStore";
+import { openProjectSwitcher } from "../../lib/projectSwitcher";
 import type { SettingsSection } from "../../routeSchemas";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
 import { parseBinding } from "../../lib/keyboard/chord";
@@ -42,9 +43,6 @@ interface HeaderProps {
   onNavigateToSettingsSection?: (section: SettingsSection) => void;
   onNavigateToChats?: () => void;
   onNavigateToProjects?: () => void;
-  projectPickerMode?: boolean;
-  onProjectSelect?: (project: Project) => void;
-  onNavigateToProjectPicker?: () => void;
   onToggleTerminal?: () => void;
   onToggleFileBrowser?: () => void;
   onToggleChatSidebar?: () => void;
@@ -66,9 +64,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       onNavigateToSettingsSection: _onNavigateToSettingsSection,
       onNavigateToChats: _onNavigateToChats,
       onNavigateToProjects: _onNavigateToProjects,
-      projectPickerMode = false,
-      onProjectSelect: _onProjectSelect,
-      onNavigateToProjectPicker,
       onToggleTerminal,
       onToggleFileBrowser,
       onToggleChatSidebar,
@@ -165,7 +160,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
         <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: trafficLightPadding }}>
 
           {/* Toggle Chat Sidebar button */}
-          {!projectPickerMode && onToggleChatSidebar && (
+          {onToggleChatSidebar && (
             <Tooltip
               content={`Toggle Chat Sidebar (${formatShortcut(
                 "onToggleSidebar"
@@ -186,23 +181,27 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
         </div>
 
-        {/* Center - Project name and workspace selector */}
+        {/* Center - the project and workspace the open chat works in (its
+            files, terminal and git). Clicking it opens the sidebar's project
+            switcher. */}
+        {currentProject && (
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
           <div
             className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
             style={noDragRegionStyle}
           >
-            <Tooltip content={`Switch project (${formatShortcut("onOpenProject")})`} side="bottom" delay={300}>
+            <Tooltip content={`Switch project (${formatShortcut("onSwitchProject")})`} side="bottom" delay={300}>
             <button
               type="button"
               className="rounded px-2 py-0.5 transition-colors hover:bg-accent/60"
-              onClick={() => onNavigateToProjectPicker?.()}
+              onClick={openProjectSwitcher}
+              data-testid="header-project-name"
             >
-              {currentProject?.name || (projectPickerMode ? "Select Project" : "")}
+              {currentProject.name}
             </button>
             </Tooltip>
 
-            {!projectPickerMode && currentProject && (
+            {currentProject && (
               <>
                 <span className="text-muted-foreground/50">/</span>
                 <span className="flex items-center gap-1.5 px-2 py-0.5 text-muted-foreground">
@@ -213,6 +212,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
           </div>
         </div>
+        )}
 
         {/* Right side - controls */}
         <div className="flex items-center flex-1 justify-end">
@@ -252,13 +252,13 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
 
             {/* Detected workspace ports (open preview) */}
-            {!projectPickerMode && <DetectedPortsChip />}
+            <DetectedPortsChip />
 
             {/* Daemon status */}
-            {!projectPickerMode && <DaemonStatusDot />}
+            <DaemonStatusDot />
 
             {/* Terminal button */}
-            {!projectPickerMode && onToggleTerminal && (
+            {onToggleTerminal && (
               <Tooltip
                 content={`Toggle Terminal (${formatShortcut(
                   "onToggleTerminal"
@@ -277,7 +277,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
 
             {/* Toggle File Browser button */}
-            {!projectPickerMode && onToggleFileBrowser && (
+            {onToggleFileBrowser && (
               <Tooltip
                 content={`Toggle File Browser (${formatShortcut(
                   "onToggleFileBrowser"
@@ -296,7 +296,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
 
             {/* Workspaces button */}
-            {!projectPickerMode && onNavigateToWorktrees && (
+            {onNavigateToWorktrees && (
               <Tooltip
                 content={`Workspaces (${formatShortcut("onOpenWorktrees")})`}
                 side="bottom"
@@ -321,19 +321,15 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 wallet to run out of. Sits beside ConfigHealthIndicator because
                 it is the same kind of thing: ambient status the user can act
                 on, in the place they already look for it. */}
-            {!projectPickerMode && <LowCreditSurface />}
+            <LowCreditSurface />
 
             {/* Config Health Indicator */}
-            {!projectPickerMode && <ConfigHealthIndicator />}
+            <ConfigHealthIndicator />
 
-            {/* Settings. Deliberately NOT gated on `projectPickerMode`, unlike
-                every other control on this row. The Sidebar — which holds the
-                app's only other Settings link — renders solely inside the main
-                app shell, and that shell requires a selected project. A user
-                whose daemon never provisions never gets a project, so without
-                this button they cannot reach /settings at all, and therefore
-                cannot sign out. /settings itself needs neither a daemon nor a
-                project; it is gated only on auth. */}
+            {/* Settings. Always here: the Sidebar — the app's only other
+                Settings link — renders solely inside the chat shell, which
+                needs a project. A user with no project yet (the first-run
+                state) reaches /settings, and signs out, through this. */}
             {onNavigateToSettings && (
               <Tooltip
                 content={`Settings (${formatShortcut("onToggleSettings")})`}

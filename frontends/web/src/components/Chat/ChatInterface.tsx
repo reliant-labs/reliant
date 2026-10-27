@@ -39,6 +39,7 @@ export function ChatInterface({
         tabId="single-chat"  // Dummy ID for compatibility
         onNavigateToWorktrees={onNavigateToWorktrees}
         isFocused={isFocused}
+        showProjectChip
       />
     );
   }

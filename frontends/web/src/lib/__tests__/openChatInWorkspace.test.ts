@@ -61,6 +61,11 @@ vi.mock("../../store/worktreeStore", () => ({
   },
 }));
 
+vi.mock("../../hooks/project-queries", () => ({
+  getCachedProjects: () => [],
+  fetchProjects: async () => [],
+}));
+
 import { openChatInWorkspace } from "../openChatInWorkspace";
 
 function chat(id: string, worktreeId?: string): Chat {

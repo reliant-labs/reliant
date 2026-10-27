@@ -221,7 +221,7 @@ export function useCreateDaemon(
  * TanStack-Query mutation for `controlplane.v1.DaemonService.ResumeDaemon`.
  *
  * Same error-routing contract as `useCreateDaemon` — see that hook's
- * docstring. ProjectPicker's "Resume a daemon" button used to hand-roll the
+ * docstring. The project picker's "Resume a daemon" button used to hand-roll the
  * reasoned-error check; the hook centralizes it so a future call site
  * can't forget.
  */

@@ -13,23 +13,30 @@ const run = { id: "run", projectId: "p1", state: ChatState.IDLE, launchKind: "sc
 
 describe("withOpenChatPinned", () => {
   it("appends the open chat when the server list omits it", () => {
-    expect(withOpenChatPinned([listed], run, { projectId: "p1" }).map((c) => c.id)).toEqual(["listed", "run"]);
+    expect(withOpenChatPinned([listed], run, { scope: "p1" }).map((c) => c.id)).toEqual(["listed", "run"]);
   });
 
   it("does not duplicate a chat the server already listed", () => {
-    expect(withOpenChatPinned([listed, run], run, { projectId: "p1" })).toHaveLength(2);
+    expect(withOpenChatPinned([listed, run], run, { scope: "p1" })).toHaveLength(2);
   });
 
   it("leaves the list alone with no open chat, another project's chat, or an archived one", () => {
-    expect(withOpenChatPinned([listed], undefined, { projectId: "p1" })).toEqual([listed]);
-    expect(withOpenChatPinned([listed], { ...run, projectId: "p2" }, { projectId: "p1" })).toEqual([listed]);
-    expect(withOpenChatPinned([listed], { ...run, state: ChatState.ARCHIVED }, { projectId: "p1" })).toEqual([
+    expect(withOpenChatPinned([listed], undefined, { scope: "p1" })).toEqual([listed]);
+    expect(withOpenChatPinned([listed], { ...run, projectId: "p2" }, { scope: "p1" })).toEqual([listed]);
+    expect(withOpenChatPinned([listed], { ...run, state: ChatState.ARCHIVED }, { scope: "p1" })).toEqual([
       listed,
     ]);
   });
 
+  it("pins a chat from any project into the all-projects list", () => {
+    expect(withOpenChatPinned([listed], { ...run, projectId: "p2" }, { scope: null }).map((c) => c.id)).toEqual([
+      "listed",
+      "run",
+    ]);
+  });
+
   it("does not pin a chat the user just moved out of the list", () => {
-    expect(withOpenChatPinned([listed], run, { projectId: "p1", releasedChatId: "run" })).toEqual([listed]);
+    expect(withOpenChatPinned([listed], run, { scope: "p1", releasedChatId: "run" })).toEqual([listed]);
   });
 });
 
