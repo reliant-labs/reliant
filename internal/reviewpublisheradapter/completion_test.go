@@ -55,7 +55,7 @@ func payload(t *testing.T, v any) *commonpb.Payloads {
 
 func evidenceFixture(t *testing.T) (TemporalEvidence, store.ReviewAuthority, *historyFixture) {
 	t.Helper()
-	graph := json.RawMessage(`{"name":"trusted","nodes":[{"id":"finish"}]}`)
+	graph := json.RawMessage(`{"name":"trusted"}`)
 	snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "DynamicWorkflow", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, YAML: map[string][]byte{"trusted": []byte("name: trusted\nnodes: []\n")}, CompletionNode: ReviewCompletionPath, CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
 	require.NoError(t, err)
 	digest, err := store.DigestReviewSnapshot(snapshot)
@@ -147,7 +147,7 @@ func TestHistoryRejectsTemplateAndYAMLSubstitution(t *testing.T) {
 	for _, kind := range []string{"template", "yaml", "dependency template"} {
 		t.Run(kind, func(t *testing.T) {
 			r, a, f := evidenceFixture(t)
-			output := map[string]any{"workflow_json": []byte(`{"name":"trusted","nodes":[{"id":"finish"}]}`), "yaml": []byte("name: trusted\nnodes: []\n"), "has_templates": false}
+			output := map[string]any{"workflow_json": []byte(`{"name":"trusted"}`), "yaml": []byte("name: trusted\nnodes: []\n"), "has_templates": false}
 			if kind == "yaml" {
 				output["yaml"] = []byte("name: replaced\n")
 			} else {

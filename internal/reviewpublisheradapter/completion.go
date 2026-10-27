@@ -179,7 +179,7 @@ func (r TemporalEvidence) Verify(ctx context.Context, a store.ReviewAuthority, a
 						return store.ReviewEvidence{}, denied
 					}
 					expected, ok := snapshot.Graphs[input.WorkflowName]
-					if !ok || output.HasTemplates || len(output.YAML) == 0 || !bytes.Equal(snapshot.YAML[input.WorkflowName], output.YAML) || bytes.Contains(output.YAML, []byte("{{")) || !sameJSON(expected, output.WorkflowJSON) {
+					if !ok || !bytes.Equal(snapshot.YAML[input.WorkflowName], output.YAML) || !sameJSON(expected, output.WorkflowJSON) || validateReviewOutputExpressions(output.YAML, expected, output.HasTemplates) != nil || validateReviewOutputExpressions(output.YAML, output.WorkflowJSON, output.HasTemplates) != nil {
 						return store.ReviewEvidence{}, denied
 					}
 					observed[input.WorkflowName] = true
