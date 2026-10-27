@@ -8,7 +8,6 @@ package privatepipelineharness
 import (
 	"context"
 	"database/sql"
-	"net/url"
 	"os"
 	"os/exec"
 	"testing"
@@ -37,12 +36,7 @@ func requirePrivatePipeline(t *testing.T) {
 	if os.Getenv("RUN_FUTURECHAT_B") != "1" {
 		t.Skip("private integration fixture requires RUN_FUTURECHAT_B=1")
 	}
-	if dsn := os.Getenv("FORGE_TEST_POSTGRES_URL"); dsn != "" {
-		u, err := url.Parse(dsn)
-		if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" || u.Port() == "5434" {
-			t.Fatal("private Postgres override must be a valid private DSN, never dev port 5434")
-		}
-	}
+	guardPrivatePostgres(t)
 }
 
 func newResources(t *testing.T) *resources {

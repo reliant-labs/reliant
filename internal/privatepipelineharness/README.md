@@ -56,7 +56,17 @@ The parent compiles the CP helper with its own module and GOWORK=off, runs that
 binary directly (not through a cached go-test runner), passes an ephemeral secret
 without stdout logging, and closes its owned stdin for cleanup. The helper's
 listener is loopback-only. `CP_TEST_POSTGRES_URL` selects CP's private test server;
-5434 is explicitly rejected. No Go workspace or production module pins are edited.
+5434 is explicitly rejected. Overrides deliberately support only maintenance URIs
+with a literal loopback IP, explicit safe port and user, path `/postgres`, and
+exactly one `sslmode=disable` parameter. Arbitrary PostgreSQL configuration is not
+supported: all other query parameters (including encoded `port`, `dbname`,
+`database`, `service`, `options`), multi-host/fallback targets and nonempty `PG*`
+environment variables are rejected BEFORE database allocation. Both override
+variables are checked in BOTH processes. Accepted URIs are rebuilt canonically and
+parsed by actual pgx; effective host/port/database/runtime parameters and every
+fallback are checked. The clone path therefore remains authoritative.
+Pure `TestPrivatePostgresGuard` cases never connect or migrate any supplied URI.
+No Go workspace or production module pins are edited.
 
 Remaining prerequisites are tracked in
 `docs/research/futurechat-b-integration-harness-plan.md`: reviewed REL487 publisher
