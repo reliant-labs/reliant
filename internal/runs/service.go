@@ -108,14 +108,15 @@ func (s *Service) TerminateObserved(ctx context.Context, chatID, expectedRunID s
 		return err
 	}
 
-	if err := s.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
-		logging.WarnContext(ctx, "[runs] Failed to clear workflow checkpoint while terminating",
-			"workflowID", workflowID, "error", err)
-	}
-
 	state, stateErr := s.State(ctx, workflowID)
 	if expectedRunID != "" && stateErr == nil && state.RunID != expectedRunID {
 		return fmt.Errorf("run changed while cancellation was requested; retry against the current run")
+	}
+	if expectedRunID != "" && stateErr != nil {
+		return fmt.Errorf("cannot verify observed run before cancellation: %w", stateErr)
+	}
+	if err := s.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
+		logging.WarnContext(ctx, "[runs] Failed to clear workflow checkpoint while terminating", "workflowID", workflowID, "error", err)
 	}
 	if stateErr == nil && (!state.Exists || !state.IsRunning) {
 		if drain != nil {

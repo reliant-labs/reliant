@@ -854,9 +854,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// below, outliving this function, and the timer must stay armed for as long
 	// as cancellation can still fire. Stopped on every path where this function
 	// owns the command through to completion.
-	if err := osutil.SuperviseCommand(cmd, ExecGraceDelay); err != nil {
-		return nil, err
+	supervision, prepareErr := osutil.PrepareCommandSupervision(cmd, ExecGraceDelay)
+	if prepareErr != nil {
+		return nil, prepareErr
 	}
+	defer supervision.Close()
 	stopGrace := func() {}
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
@@ -914,9 +916,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// was stopped, if it was.
 	deadline.Release()
 	stopGrace()
-	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 125 {
-		osutil.ReportCancellationUncertainty(ctx, fmt.Errorf("local command supervisor could not confirm descendant shutdown"))
-	}
+	outputIncomplete, supervisionErr := supervision.Finish()
+	osutil.ReportCancellationUncertainty(ctx, supervisionErr)
 	duration := time.Since(start)
 
 	// Shared with the daemon's exec.run handler so the two exec paths cannot
@@ -924,9 +925,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	stdout := stdoutBuf.String()
 	outcome := ClassifyExecOutcome(err, deadline.Err(), stdout, stderrBuf.String(), localMemReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
-	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 124 {
+	if outputIncomplete {
 		outcome.OutputIncomplete = true
-		outcome.ExitCode = 0
 	}
 
 	return &CommandResult{

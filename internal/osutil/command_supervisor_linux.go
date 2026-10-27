@@ -3,6 +3,7 @@
 package osutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,9 +34,30 @@ func init() {
 				drain = parsed
 			}
 		}
-		code, err := superviseCommand(os.Args[3:], grace, drain)
+		if len(parts) > 2 {
+			if fd, e := strconv.Atoi(parts[2]); e == nil {
+				unix.CloseOnExec(fd)
+			}
+		}
+		result := supervisorResult{}
+		code, err := superviseCommand(os.Args[3:], grace, drain, &result)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "command shutdown unconfirmed:", err)
+			result.Error = err.Error()
+		} else {
+			result.Complete = true
+		}
+		if len(parts) < 3 {
+			os.Exit(125)
+		}
+		fd, parseErr := strconv.Atoi(parts[2])
+		if parseErr != nil {
+			os.Exit(125)
+		}
+		control := os.NewFile(uintptr(fd), "supervisor-result")
+		encoded, _ := json.Marshal(result)
+		_, writeErr := control.WriteAt(encoded, 0)
+		_ = control.Close()
+		if writeErr != nil {
 			os.Exit(125)
 		}
 		os.Exit(code)
@@ -46,14 +68,35 @@ func init() {
 // private payload group leader is held unreaped until group shutdown, so its
 // pgid cannot be recycled while signals are sent. Only this isolated child
 // calls wait(-1); it cannot steal another daemon command's wait status.
-func SuperviseCommand(cmd *exec.Cmd, grace time.Duration) error {
+func PrepareCommandSupervision(cmd *exec.Cmd, grace time.Duration) (*CommandSupervision, error) {
 	path, err := os.Executable()
 	if err != nil {
-		return err
+		return nil, err
 	}
+	file, err := os.CreateTemp("", "reliant-supervisor-*")
+	if err != nil {
+		return nil, err
+	}
+	// Anonymous regular file: no pipe to fill/block, and no path the payload
+	// can replace. FD is CLOEXEC in the wrapper before spawning the payload.
+	if err = os.Remove(file.Name()); err != nil {
+		file.Close()
+		return nil, err
+	}
+	// Keep the inherited writer separate so the daemon closes its copy at
+	// Finish/Close; the read handle remains valid after child Wait.
+	writerFD, err := unix.Dup(int(file.Fd()))
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	unix.CloseOnExec(writerFD)
+	writer := os.NewFile(uintptr(writerFD), "supervisor-result-writer")
+	fd := 3 + len(cmd.ExtraFiles)
+	cmd.ExtraFiles = append(cmd.ExtraFiles, writer)
 	payload := append([]string(nil), cmd.Args...)
 	payload[0] = cmd.Path
-	args := append([]string{path, supervisorArg, grace.String() + "," + cmd.WaitDelay.String()}, payload...)
+	args := append([]string{path, supervisorArg, grace.String() + "," + cmd.WaitDelay.String() + "," + strconv.Itoa(fd)}, payload...)
 	cmd.Path = path
 	cmd.Args = args
 	cmd.WaitDelay = 0 // supervisor owns bounded drain; os/exec must not kill it before it reaps
@@ -63,7 +106,7 @@ func SuperviseCommand(cmd *exec.Cmd, grace time.Duration) error {
 		}
 		return cmd.Process.Signal(syscall.SIGTERM)
 	}
-	return nil
+	return &CommandSupervision{file: file, writer: writer}, nil
 }
 
 // supervisorChildren only observes direct children of this isolated process.
@@ -99,7 +142,7 @@ func supervisorChildren() ([]byte, error) {
 	return []byte(strings.Join(ids, " ")), nil
 }
 
-func superviseCommand(argv []string, grace, drain time.Duration) (int, error) {
+func superviseCommand(argv []string, grace, drain time.Duration, result *supervisorResult) (int, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if len(argv) == 0 {
@@ -208,9 +251,7 @@ func superviseCommand(argv []string, grace, drain time.Duration) (int, error) {
 		if err == syscall.ECHILD {
 			if implicitDrain {
 				fmt.Fprintln(os.Stderr, "command descendants were stopped after shell exit; output collection was cut off")
-				if rootCode == 0 {
-					return 124, nil
-				}
+				result.OutputIncomplete = true
 			}
 			return rootCode, nil
 		}

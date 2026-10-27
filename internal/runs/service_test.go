@@ -248,6 +248,7 @@ func TestTerminateObservedDoesNotCancelNewConversation(t *testing.T) {
 	require.ErrorContains(t, err, "run changed")
 	require.Empty(t, temporal.terminated)
 	require.Empty(t, repo.casCalls)
+	require.Empty(t, repo.deletedCheckpoints, "rejecting an observed-run mismatch must not delete the newer run checkpoint")
 }
 
 func TestTerminateDrainFailureDoesNotPublishCancelled(t *testing.T) {

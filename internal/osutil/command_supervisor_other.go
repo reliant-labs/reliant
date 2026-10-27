@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
-func SuperviseCommand(cmd *exec.Cmd, grace time.Duration) error {
-	return fmt.Errorf("run-owned command supervision unsupported on this platform; shutdown cannot be confirmed")
+// Preserve ordinary command execution. Only cancellation proof is unsupported;
+// it must not turn every macOS/Windows shell call into a launch failure.
+func PrepareCommandSupervision(cmd *exec.Cmd, grace time.Duration) (*CommandSupervision, error) {
+	finish := ApplyGracefulCancelChecked(cmd, grace)
+	return &CommandSupervision{fallback: func() error {
+		if err := finish(); err != nil {
+			return fmt.Errorf("cancellation unconfirmed on this platform: %w", err)
+		}
+		return nil
+	}}, nil
 }

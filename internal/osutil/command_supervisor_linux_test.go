@@ -25,7 +25,9 @@ func TestLocalSupervisorReapsForkDuringCancelAndProtectsSibling(t *testing.T) {
 	defer cancel()
 	script := fmt.Sprintf(`trap 'bash -c "trap \"\" TERM; echo \$\$ > %s; sleep 0.6; echo bad > %s; sleep 30" >/dev/null 2>&1 & exit 0' TERM; echo ready > %s; while :; do sleep 0.01; done`, late, effect, ready)
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
-	require.NoError(t, SuperviseCommand(cmd, 150*time.Millisecond))
+	supervision, prepareErr := PrepareCommandSupervision(cmd, 150*time.Millisecond)
+	require.NoError(t, prepareErr)
+	defer supervision.Close()
 	sibling := exec.Command("sleep", "30")
 	require.NoError(t, sibling.Start())
 	defer func() { _ = sibling.Process.Kill(); _ = sibling.Wait() }()
@@ -42,6 +44,8 @@ func TestLocalSupervisorReapsForkDuringCancelAndProtectsSibling(t *testing.T) {
 	}
 	cancel()
 	_ = cmd.Wait()
+	_, proofErr := supervision.Finish()
+	require.NoError(t, proofErr)
 	data, e := os.ReadFile(late)
 	require.NoError(t, e, "TERM handler must fork after cancellation")
 	pid, e := strconv.Atoi(strings.TrimSpace(string(data)))
@@ -61,7 +65,9 @@ func TestLocalSupervisorLeaderExitKeepsCleanupGrace(t *testing.T) {
 	defer cancel()
 	script := fmt.Sprintf(`bash -c 'trap "sleep 0.05; echo clean > %s; exit 0" TERM; echo ready > %s; while :; do sleep 0.01; done' >/dev/null 2>&1 & wait`, clean, ready)
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
-	require.NoError(t, SuperviseCommand(cmd, 150*time.Millisecond))
+	supervision, prepareErr := PrepareCommandSupervision(cmd, 150*time.Millisecond)
+	require.NoError(t, prepareErr)
+	defer supervision.Close()
 	require.NoError(t, cmd.Start())
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -75,6 +81,8 @@ func TestLocalSupervisorLeaderExitKeepsCleanupGrace(t *testing.T) {
 	}
 	cancel()
 	_ = cmd.Wait()
+	_, proofErr := supervision.Finish()
+	require.NoError(t, proofErr)
 	b, e := os.ReadFile(clean)
 	require.NoError(t, e)
 	require.Equal(t, "clean", strings.TrimSpace(string(b)))
@@ -82,7 +90,9 @@ func TestLocalSupervisorLeaderExitKeepsCleanupGrace(t *testing.T) {
 
 func TestLocalSupervisorPreservesExitCode(t *testing.T) {
 	cmd := exec.CommandContext(context.Background(), "bash", "-c", "exit 7")
-	require.NoError(t, SuperviseCommand(cmd, 10*time.Millisecond))
+	supervision, prepareErr := PrepareCommandSupervision(cmd, 10*time.Millisecond)
+	require.NoError(t, prepareErr)
+	defer supervision.Close()
 	err := cmd.Run()
 	var exit *exec.ExitError
 	require.ErrorAs(t, err, &exit)
