@@ -35,6 +35,12 @@ func (waitIdentity) GetChat(context.Context, string) (*core.Chat, error) {
 	return &core.Chat{ID: "chat", UserID: "owner"}, nil
 }
 
+type waitAuthorityPolicy struct{}
+
+func (waitAuthorityPolicy) Resolve(context.Context, prreviewwait.AuthoritySubject) (prreviewwait.Authority, error) {
+	return prreviewwait.Authority{ID: "server", PolicyRevision: 1}, nil
+}
+
 type waitRepo struct{}
 
 func (waitRepo) Repository(context.Context, string, string) (prhandoff.Repository, error) {
@@ -110,11 +116,11 @@ func TestPRReviewWaitParallelDedicatedChannels(t *testing.T) {
 	continuity := &waitContinuity{current: runcontinuity.Execution{WorkflowID: "default-test-workflow-id", RunID: "default-test-run-id"}}
 	signals := &waitSignals{env: env}
 	persistent := store.PRReviewWaitStore{DB: database.ORM}
-	svc, err := prreviewwait.New(prreviewwait.Deps{Store: persistent, Continuity: continuity, Signals: signals})
+	svc, err := prreviewwait.New(prreviewwait.Deps{Policy: waitAuthorityPolicy{}, Store: persistent, Continuity: continuity, Signals: signals})
 	require.NoError(t, err)
 	(prreviewwait.Activities{Service: svc, Identity: waitIdentity{}, GitHub: waitRepo{}}).Register(env)
 	publish := func(number int64) {
-		require.NoError(t, svc.Publish(ctx, prreviewwait.Outcome{BindingID: fmt.Sprintf("b-%d", number), HeadSHA: sha, ProviderRef: fmt.Sprintf("review:%d", number), Sequence: number, State: "changes"}))
+		require.NoError(t, svc.Publish(ctx, prreviewwait.Outcome{OwnerID: "owner", AuthorityID: "server", BindingID: fmt.Sprintf("b-%d", number), HeadSHA: sha, ProviderRef: fmt.Sprintf("review:%d", number), Sequence: number, State: "changes"}))
 	}
 	// Reverse completion order. Each independently parked goroutine must wake.
 	env.RegisterDelayedCallback(func() { publish(2) }, time.Second)
@@ -135,7 +141,7 @@ func TestPRReviewWaitCancelAfterArmCommitBeforeResult(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	persistent := store.PRReviewWaitStore{DB: database.ORM}
-	svc, err := prreviewwait.New(prreviewwait.Deps{Store: persistent, Continuity: &waitContinuity{current: runcontinuity.Execution{WorkflowID: "default-test-workflow-id", RunID: "default-test-run-id"}}, Signals: &waitSignals{env: env}})
+	svc, err := prreviewwait.New(prreviewwait.Deps{Policy: waitAuthorityPolicy{}, Store: persistent, Continuity: &waitContinuity{current: runcontinuity.Execution{WorkflowID: "default-test-workflow-id", RunID: "default-test-run-id"}}, Signals: &waitSignals{env: env}})
 	require.NoError(t, err)
 	activities := prreviewwait.Activities{Service: svc, Identity: waitIdentity{}, GitHub: waitRepo{}}
 	activities.Register(env)
@@ -167,7 +173,7 @@ func TestPRReviewWaitSignalBufferedBeforeArmResult(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	persistent := store.PRReviewWaitStore{DB: database.ORM}
-	svc, err := prreviewwait.New(prreviewwait.Deps{Store: persistent, Continuity: &waitContinuity{current: runcontinuity.Execution{WorkflowID: "default-test-workflow-id", RunID: "default-test-run-id"}}, Signals: &waitSignals{env: env}})
+	svc, err := prreviewwait.New(prreviewwait.Deps{Policy: waitAuthorityPolicy{}, Store: persistent, Continuity: &waitContinuity{current: runcontinuity.Execution{WorkflowID: "default-test-workflow-id", RunID: "default-test-run-id"}}, Signals: &waitSignals{env: env}})
 	require.NoError(t, err)
 	activities := prreviewwait.Activities{Service: svc, Identity: waitIdentity{}, GitHub: waitRepo{}}
 	activities.Register(env)
@@ -176,7 +182,7 @@ func TestPRReviewWaitSignalBufferedBeforeArmResult(t *testing.T) {
 		sub, err := activities.Arm(ctx, in)
 		if err == nil {
 			once.Do(func() {
-				require.NoError(t, svc.Publish(ctx, prreviewwait.Outcome{BindingID: "b-1", HeadSHA: sha, ProviderRef: "early", Sequence: 1, State: "approved"}))
+				require.NoError(t, svc.Publish(ctx, prreviewwait.Outcome{OwnerID: "owner", AuthorityID: "server", BindingID: "b-1", HeadSHA: sha, ProviderRef: "early", Sequence: 1, State: "approved"}))
 			})
 		}
 		return sub, err
@@ -208,12 +214,12 @@ func TestPRReviewWaitRealActivitiesAndInboxRaces(t *testing.T) {
 			continuity := &waitContinuity{current: original}
 			signals := &waitSignals{env: env}
 			persistent := store.PRReviewWaitStore{DB: database.ORM}
-			service, err := prreviewwait.New(prreviewwait.Deps{Store: persistent, Continuity: continuity, Signals: signals})
+			service, err := prreviewwait.New(prreviewwait.Deps{Policy: waitAuthorityPolicy{}, Store: persistent, Continuity: continuity, Signals: signals})
 			require.NoError(t, err)
 			activities := prreviewwait.Activities{Service: service, Identity: waitIdentity{}, GitHub: waitRepo{}}
 			activities.Register(env)
 			publish := func() {
-				require.NoError(t, service.Publish(ctx, prreviewwait.Outcome{BindingID: "binding", HeadSHA: sha, ProviderRef: "review:77", Sequence: 77, State: "changes"}))
+				require.NoError(t, service.Publish(ctx, prreviewwait.Outcome{OwnerID: "owner", AuthorityID: "server", BindingID: "binding", HeadSHA: sha, ProviderRef: "review:77", Sequence: 77, State: "changes"}))
 			}
 			if when == "before-arm" {
 				publish()

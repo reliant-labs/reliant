@@ -17,8 +17,11 @@ type ReviewReader interface {
 // Owner/repo/PR come from trusted event admission, never raw comment text.
 // It is deliberately not constructed by any app root in this stage.
 type TrustedReviewProducer struct {
-	Reader   ReviewReader
-	Bindings interface {
+	// AuthorityID must identify the separately configured GitHub-review policy,
+	// never the server-assignment namespace. Prefixes are not authorization.
+	AuthorityID string
+	Reader      ReviewReader
+	Bindings    interface {
 		Binding(context.Context, string, int64, int64) (prhandoff.Binding, error)
 	}
 	Wait Service
@@ -28,7 +31,7 @@ type TrustedReviewProducer struct {
 // GitHub review numeric IDs provide monotonic review creation ordering; later
 // dismissal/check/merge-queue adapters need their own authoritative revision.
 func (p TrustedReviewProducer) Deliver(ctx context.Context, owner string, repoID, number int64, reviewID string) error {
-	if p.Reader == nil || p.Bindings == nil || p.Wait == nil {
+	if p.AuthorityID == "" || p.Reader == nil || p.Bindings == nil || p.Wait == nil {
 		return prhandoff.ErrRefused
 	}
 	b, err := p.Bindings.Binding(ctx, owner, repoID, number)
@@ -56,5 +59,5 @@ func (p TrustedReviewProducer) Deliver(ctx context.Context, owner string, repoID
 	default:
 		return prhandoff.ErrRefused
 	}
-	return p.Wait.Publish(ctx, Outcome{BindingID: b.ID, HeadSHA: b.Pull.HeadSHA, ProviderRef: "github-review:" + reviewID, Sequence: sequence, State: state})
+	return p.Wait.Publish(ctx, Outcome{OwnerID: owner, AuthorityID: p.AuthorityID, BindingID: b.ID, HeadSHA: b.Pull.HeadSHA, ProviderRef: "github-review:" + reviewID, Sequence: sequence, State: state})
 }

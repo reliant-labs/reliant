@@ -58,7 +58,7 @@ func (s PRReviewWaitStore) Binding(ctx context.Context, o string, r, p int64) (p
 
 // Arm commits a subscription before readiness can be exposed. Pre-arm inbox
 // entries are intentionally retained and read by the first workflow Read.
-func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proof runcontinuity.Result) (prreviewwait.Subscription, error) {
+func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proof runcontinuity.Result, authority prreviewwait.Authority) (prreviewwait.Subscription, error) {
 	var result prreviewwait.Subscription
 	err := s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if len(r.RequestKey) != 64 || r.OwnerID == "" || r.ChatID == "" || r.Execution.WorkflowID == "" || r.Execution.RunID == "" {
@@ -82,6 +82,9 @@ func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proo
 		original := runcontinuity.Execution{WorkflowID: b.Author.RootID, RunID: b.Author.ExecutionID}
 		if b.Author.OwnerID != r.OwnerID || b.Author.ChatID != r.ChatID || b.Pull.HeadSHA != r.HeadSHA || proof.Original != original || proof.Current != r.Execution || !proof.Live {
 			return prhandoff.ErrRefused
+		}
+		if err := s.bindAuthority(ctx, b, authority); err != nil {
+			return err
 		}
 		hash := sha256.Sum256([]byte(b.ID + "\x00" + r.HeadSHA))
 		id := hex.EncodeToString(hash[:])
@@ -137,7 +140,7 @@ func waitSub(r *PrReviewWaitSubscription) prreviewwait.Subscription {
 	return prreviewwait.Subscription{RequestKey: r.RequestKey, ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, WorkflowID: r.WorkflowID, OriginalRunID: r.OriginalRunID, CurrentRunID: r.CurrentRunID, State: r.State, Ready: r.Ready, NotifiedSequence: r.NotifiedSequence, ConsumedSequence: r.ConsumedSequence}
 }
 func waitOutcome(r *PrReviewWaitOutcome) prreviewwait.Outcome {
-	return prreviewwait.Outcome{ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, ProviderRef: r.ProviderRef, Sequence: r.ProviderSequence, State: r.State}
+	return prreviewwait.Outcome{AuthorityID: r.AuthorityID, ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, ProviderRef: r.ProviderRef, Sequence: r.ProviderSequence, State: r.State}
 }
 
 // Ready exposes only an already durable subscription, never PR readiness first.
@@ -163,8 +166,12 @@ func (s PRReviewWaitStore) Read(ctx context.Context, sub prreviewwait.Subscripti
 	if b.HeadSha != current.HeadSha {
 		return prreviewwait.Outcome{State: "unavailable", HeadSHA: current.HeadSha}, nil
 	}
+	authority, err := s.authority(ctx, current.BindingID, current.HeadSha)
+	if err != nil {
+		return prreviewwait.Outcome{}, err
+	}
 	var row PrReviewWaitOutcome
-	err = s.DB.Bun().NewSelect().Model(&row).Where("binding_id = ? AND head_sha = ?", current.BindingID, current.HeadSha).OrderExpr("provider_sequence DESC").Limit(1).Scan(ctx)
+	err = s.DB.Bun().NewSelect().Model(&row).Where("binding_id = ? AND head_sha = ? AND authority_id = ?", current.BindingID, current.HeadSha, authority.AuthorityID).OrderExpr("provider_sequence DESC").Limit(1).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
 		return prreviewwait.Outcome{}, nil
 	}
@@ -192,7 +199,7 @@ func (s PRReviewWaitStore) Consume(ctx context.Context, sub prreviewwait.Subscri
 		if err != nil {
 			return err
 		}
-		if actual.BindingID != current.BindingID || actual.HeadSha != current.HeadSha || actual.ProviderSequence != o.Sequence || actual.State != o.State || actual.ProviderRef != o.ProviderRef {
+		if actual.BindingID != current.BindingID || actual.HeadSha != current.HeadSha || actual.ProviderSequence != o.Sequence || actual.State != o.State || actual.ProviderRef != o.ProviderRef || actual.AuthorityID != o.AuthorityID {
 			return prhandoff.ErrRefused
 		}
 		binding, err := GetPrHandoffBindingByID(ctx, s.DB, current.BindingID)
@@ -202,8 +209,15 @@ func (s PRReviewWaitStore) Consume(ctx context.Context, sub prreviewwait.Subscri
 		if binding.HeadSha != current.HeadSha {
 			return prhandoff.ErrRefused
 		}
+		authority, err := s.authority(ctx, current.BindingID, current.HeadSha)
+		if err != nil {
+			return err
+		}
+		if actual.AuthorityID != authority.AuthorityID {
+			return prhandoff.ErrRefused
+		}
 		var latest PrReviewWaitOutcome
-		if err := s.DB.Bun().NewSelect().Model(&latest).Where("binding_id = ? AND head_sha = ?", current.BindingID, current.HeadSha).OrderExpr("provider_sequence DESC").Limit(1).Scan(ctx); err != nil {
+		if err := s.DB.Bun().NewSelect().Model(&latest).Where("binding_id = ? AND head_sha = ? AND authority_id = ?", current.BindingID, current.HeadSha, authority.AuthorityID).OrderExpr("provider_sequence DESC").Limit(1).Scan(ctx); err != nil {
 			return err
 		}
 		if latest.ID != actual.ID {
@@ -251,17 +265,20 @@ func (s PRReviewWaitStore) Cancel(ctx context.Context, sub prreviewwait.Subscrip
 }
 
 // Put persists provider-authorized, head-bound outcomes even before Arm.
-func (s PRReviewWaitStore) Put(ctx context.Context, o prreviewwait.Outcome) (prreviewwait.Subscription, error) {
+func (s PRReviewWaitStore) Put(ctx context.Context, o prreviewwait.Outcome, authority prreviewwait.Authority) (prreviewwait.Subscription, error) {
 	var out prreviewwait.Subscription
 	err := s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
-		binding, err := GetPrHandoffBindingByID(ctx, s.DB, o.BindingID)
+		binding, err := s.BindingByID(ctx, o.OwnerID, o.BindingID)
 		if err != nil {
 			return err
 		}
-		if binding.HeadSha != o.HeadSHA {
+		if binding.Pull.HeadSHA != o.HeadSHA || o.AuthorityID != authority.ID {
 			return prhandoff.ErrRefused
 		}
-		row := &PrReviewWaitOutcome{ID: o.ID, BindingID: o.BindingID, HeadSha: o.HeadSHA, ProviderRef: o.ProviderRef, ProviderSequence: o.Sequence, State: o.State}
+		if err := s.bindAuthority(ctx, binding, authority); err != nil {
+			return err
+		}
+		row := &PrReviewWaitOutcome{AuthorityID: o.AuthorityID, ID: o.ID, BindingID: o.BindingID, HeadSha: o.HeadSHA, ProviderRef: o.ProviderRef, ProviderSequence: o.Sequence, State: o.State}
 		if _, err = s.DB.Bun().NewInsert().Model(row).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
 			return err
 		}
@@ -269,7 +286,7 @@ func (s PRReviewWaitStore) Put(ctx context.Context, o prreviewwait.Outcome) (prr
 		if err != nil {
 			return err
 		}
-		if persisted.ProviderSequence != o.Sequence || persisted.State != o.State {
+		if persisted.ProviderSequence != o.Sequence || persisted.State != o.State || persisted.AuthorityID != o.AuthorityID || persisted.BindingID != o.BindingID || persisted.HeadSha != o.HeadSHA || persisted.ProviderRef != o.ProviderRef {
 			return prhandoff.ErrRefused
 		}
 		var sub PrReviewWaitSubscription
