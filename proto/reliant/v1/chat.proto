@@ -85,6 +85,24 @@ enum DisplayStyle {
   DISPLAY_STYLE_HIDDEN = 4;
 }
 
+// AgentMessageKind identifies what a mailbox (agent_messages) row carries and,
+// on a saved message, how it reached the thread. Values are persisted in
+// agent_messages.kind and messages.sender_kind: never renumber one.
+enum AgentMessageKind {
+  AGENT_MESSAGE_KIND_UNSPECIFIED = 0;
+  // Free-form text between a parent and a running sub-agent (spawn_send).
+  AGENT_MESSAGE_KIND_MESSAGE = 1;
+  // A sub-agent finished successfully.
+  AGENT_MESSAGE_KIND_COMPLETION = 2;
+  // A sub-agent was cancelled.
+  AGENT_MESSAGE_KIND_CANCELLED = 3;
+  // A sub-agent failed.
+  AGENT_MESSAGE_KIND_FAILED = 4;
+  // Text the HUMAN user sent into a running thread (SendAgentMessage), as
+  // opposed to AGENT_MESSAGE_KIND_MESSAGE, which is agent-to-agent.
+  AGENT_MESSAGE_KIND_HUMAN_MESSAGE = 5;
+}
+
 // ContentBlockType identifies the kind of content in a message block
 enum ContentBlockType {
   CONTENT_BLOCK_TYPE_UNSPECIFIED = 0;
@@ -628,6 +646,19 @@ message Message {
   optional DisplayStyle display_style = 17;
   int64 sequence_number = 18;           // Streaming sync sequence number for tracking
   optional string node_id = 19;         // Workflow node/step that produced this message (for per-node supervision)
+  // sender is set when another agent, not the human, wrote this message. Such
+  // a message keeps role USER (every provider accepts it) but must not be
+  // presented as the user's own words. Unset means the human (or the model).
+  MessageSender sender = 20;
+}
+
+// MessageSender attributes a message to the agent thread that sent it.
+message MessageSender {
+  string thread_id = 1;
+  // title is the sender thread's title, resolved when the message is read; empty
+  // when the thread is untitled or no longer exists.
+  string title = 2;
+  AgentMessageKind kind = 3;
 }
 
 // ToolCallStatus is the durable lifecycle state of a tool call, mirroring
@@ -1011,10 +1042,9 @@ message QueuedAgentMessage {
   string id = 1;
   string body = 2;
   string created_at = 3;
-  // sender_kind mirrors AgentMessageKind (core.AgentMessageKind): 1 =
-  // agent-to-agent (spawn_send), 5 = human (SendAgentMessage). It lets the
-  // UI distinguish a message the user queued from one a peer agent sent.
-  int32 sender_kind = 4;
+  // sender_kind lets the UI distinguish a message the user queued
+  // (HUMAN_MESSAGE) from one a peer agent sent (MESSAGE).
+  AgentMessageKind sender_kind = 4;
   repeated string attachments = 5;  // Attachment IDs
 }
 

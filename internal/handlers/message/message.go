@@ -93,6 +93,7 @@ func (s *Service) GetMessage(
 	// to ListMessages, which knows the thread being displayed.
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
+		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
 	})
 
 	return connect.NewResponse(&reliantv1.GetMessageResponse{

@@ -62,7 +62,7 @@ func (s *Service) ListQueuedAgentMessages(
 			Id:          msg.ID,
 			Body:        msg.Body,
 			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
-			SenderKind:  int32(msg.Kind),
+			SenderKind:  msg.Kind,
 			Attachments: msg.Attachments,
 		}
 	}

@@ -46,6 +46,11 @@ type Options struct {
 	// in-flight work. Empty leaves every status as persisted.
 	ViewingThreadID string
 
+	// SenderTitlesByThreadID maps a sender thread id to its title, for
+	// Message.sender.title. A sender missing from the map is reported
+	// untitled.
+	SenderTitlesByThreadID map[string]string
+
 	// SequenceNumber, if non-zero, is set on the resulting proto message.
 	// Used by streaming snapshots to tag messages with the latest sequence.
 	SequenceNumber int64
@@ -56,6 +61,67 @@ type Options struct {
 type ToolCallReader interface {
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
+}
+
+// ThreadReader is what AssembleForDisplay reads the titles of message senders
+// through: one batched read per response, never one per message.
+type ThreadReader interface {
+	ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error)
+}
+
+// Reader is everything AssembleForDisplay reads.
+type Reader interface {
+	ToolCallReader
+	ThreadReader
+}
+
+// SenderTitles loads the titles of the threads that sent messages, in one
+// query. A failure is logged and yields an empty map: an unresolved title
+// degrades the card's heading, never the transcript.
+func SenderTitles(ctx context.Context, threads ThreadReader, messages []*db.Message) map[string]string {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for _, m := range messages {
+		if m.SenderThreadID == nil || *m.SenderThreadID == "" {
+			continue
+		}
+		if _, dup := seen[*m.SenderThreadID]; dup {
+			continue
+		}
+		seen[*m.SenderThreadID] = struct{}{}
+		ids = append(ids, *m.SenderThreadID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := threads.ListThreadsByIDs(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "Failed to list sender threads for messages", "error", err, "count", len(ids))
+		return nil
+	}
+	titles := make(map[string]string, len(rows))
+	for _, t := range rows {
+		if t.Title != nil {
+			titles[t.ID] = *t.Title
+		}
+	}
+	return titles
+}
+
+// senderToProto is the wire form of a message's sender, nil for a message
+// from the human or the model.
+func senderToProto(m *db.Message, titles map[string]string) *reliantv1.MessageSender {
+	if m.SenderThreadID == nil || *m.SenderThreadID == "" {
+		return nil
+	}
+	sender := &reliantv1.MessageSender{
+		ThreadId: *m.SenderThreadID,
+		Title:    titles[*m.SenderThreadID],
+	}
+	if m.SenderKind != nil {
+		sender.Kind = *m.SenderKind
+	}
+	return sender
 }
 
 // toolCallStatusToProto converts the durable core.ToolCallStatus to the
@@ -219,6 +285,7 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 	if opts.SequenceNumber != 0 {
 		proto.SequenceNumber = opts.SequenceNumber
 	}
+	proto.Sender = senderToProto(m, opts.SenderTitlesByThreadID)
 
 	// Convert content blocks
 	protoBlocks := make([]*reliantv1.ContentBlock, len(blocks))
@@ -264,7 +331,7 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 // per-message grouping and the tool-call lookups.
 func AssembleForDisplay(
 	ctx context.Context,
-	toolCalls ToolCallReader,
+	reader Reader,
 	messages []*db.Message,
 	messageIDs []string,
 	blocksByMessageID map[string][]*db.MessageContentBlock,
@@ -287,7 +354,7 @@ func AssembleForDisplay(
 	// regardless. The by-message read is kept because it also returns calls
 	// whose block is not in this page.
 	toolCallStatusByCallID := make(map[string]*db.ToolCall)
-	calls, err := toolCalls.ListToolCallsByMessageIDs(ctx, messageIDs)
+	calls, err := reader.ListToolCallsByMessageIDs(ctx, messageIDs)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to list tool calls for messages", "error", err, "messageCount", len(messageIDs))
 	} else {
@@ -314,7 +381,7 @@ func AssembleForDisplay(
 		}
 	}
 	if len(blockToolCallIDs) > 0 {
-		byID, err := toolCalls.ListToolCallsByIDs(ctx, blockToolCallIDs)
+		byID, err := reader.ListToolCallsByIDs(ctx, blockToolCallIDs)
 		if err != nil {
 			logging.WarnContext(ctx, "Failed to list tool calls by id", "error", err, "count", len(blockToolCallIDs))
 		} else {
@@ -323,6 +390,8 @@ func AssembleForDisplay(
 			}
 		}
 	}
+
+	senderTitles := SenderTitles(ctx, reader, messages)
 
 	protoMessages := make([]*reliantv1.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -347,6 +416,7 @@ func AssembleForDisplay(
 			ToolCallStatusByCallID: toolCallStatusByCallID,
 			ToolNameByCallID:       toolNameByCallID,
 			ViewingThreadID:        viewingThreadID,
+			SenderTitlesByThreadID: senderTitles,
 			SequenceNumber:         sequenceNumber,
 		}))
 	}

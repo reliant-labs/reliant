@@ -20,7 +20,8 @@ import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
 import Tooltip from "../forge-ui/tooltip";
 import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
-import { QUEUED_SENDER_KIND_HUMAN, type QueuedAgentMessageView } from "../../hooks/chat-model";
+import { type QueuedAgentMessageView } from "../../hooks/chat-model";
+import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
 import * as chatActions from "../../hooks/chat-actions";
 
 
@@ -95,7 +96,7 @@ export function QueuedMessages({
   // Only the user's own queued messages are actionable here. A peer agent's
   // spawn_send message is not the human's to revoke.
   const pending = messages.filter(
-    (m) => m.sender_kind === QUEUED_SENDER_KIND_HUMAN,
+    (m) => m.sender_kind === AgentMessageKind.HUMAN_MESSAGE,
   );
 
   // Which message ids have an RPC in flight, so their buttons can't be

@@ -383,6 +383,8 @@ func messageRow(msg *core.Message) *Message {
 		NodePath:          validUTF8Ptr(msg.NodePath),
 		ActivityID:        validUTF8Ptr(msg.ActivityID),
 		ProviderAccountID: msg.ProviderAccountID,
+		SenderThreadID:    msg.SenderThreadID,
+		SenderKind:        msg.SenderKind,
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -408,6 +410,8 @@ func messageFromRow(row *Message) *core.Message {
 		NodePath:          row.NodePath,
 		ActivityID:        row.ActivityID,
 		ProviderAccountID: row.ProviderAccountID,
+		SenderThreadID:    row.SenderThreadID,
+		SenderKind:        row.SenderKind,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}

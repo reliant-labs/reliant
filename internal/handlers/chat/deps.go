@@ -112,5 +112,5 @@ type Repository interface {
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore
-	messageproto.ToolCallReader
+	messageproto.Reader
 }

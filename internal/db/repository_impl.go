@@ -3174,6 +3174,10 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 	return store.GetThread(ctx, r.ORM(), id)
 }
 
+func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
+	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
+}
+
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")

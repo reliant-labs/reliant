@@ -18,6 +18,8 @@
  * other way, it is moved in one React commit (chatStore.sendMessage,
  * "agentMailbox:queued" / "agentMailbox:drained").
  */
+import type { AgentMessageKind } from "../gen/reliant/v1/chat_pb";
+
 const inFlight = new Set<string>();
 
 export function beginPendingSend(clientMessageId: string): void {
@@ -80,7 +82,7 @@ export interface QueuedRow {
   id: string;
   body: string;
   created_at: string;
-  sender_kind: number;
+  sender_kind: AgentMessageKind;
   attachments: string[];
 }
 

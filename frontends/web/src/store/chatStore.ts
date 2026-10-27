@@ -6,6 +6,7 @@ import {
   ContentBlockType,
   StreamingState,
   ChatState,
+  AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
 import { ApprovalStatus, ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
@@ -113,7 +114,6 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { QUEUED_SENDER_KIND_HUMAN } from "../hooks/chat-model";
 import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
@@ -1692,7 +1692,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       id: clientMessageId,
       body: content,
       created_at: sentAt,
-      sender_kind: QUEUED_SENDER_KIND_HUMAN,
+      sender_kind: AgentMessageKind.HUMAN_MESSAGE,
       attachments: attachmentIds ?? [],
     };
     sendPayloads.set(clientMessageId, { chatId, content, attachmentIds, options: sendOptions });

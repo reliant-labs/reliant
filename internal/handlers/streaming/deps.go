@@ -42,5 +42,5 @@ type Repository interface {
 	// GetAttachmentsByIDs, GetContextUsage and ListToolCallsByIDs are called
 	// directly too; the roles below already declare them.
 	threads.Repository
-	messageproto.ToolCallReader
+	messageproto.Reader
 }

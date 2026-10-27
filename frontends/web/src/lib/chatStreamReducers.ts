@@ -444,7 +444,8 @@ export function mergeMessages(
   let next = [...existing];
 
   const hasRealUserMessage = incoming.some(
-    (m) => m.role === MessageRole.USER && !m.id.startsWith(OPTIMISTIC_USER_PREFIX),
+    (m) =>
+      m.role === MessageRole.USER && !m.sender && !m.id.startsWith(OPTIMISTIC_USER_PREFIX),
   );
   if (hasRealUserMessage) {
     next = next.filter((m) => !m.id.startsWith(OPTIMISTIC_USER_PREFIX));

@@ -91,6 +91,13 @@ type SaveMessageOpts struct {
 	WorkflowID   *string
 	StepID       string
 
+	// SenderThreadID and SenderKind attribute a message another agent wrote
+	// (spawn_send and the other mailbox kinds) to its sender. Empty/zero
+	// means the human, or the model's own output. The role stays USER either
+	// way: the model must see it as a user turn on every provider.
+	SenderThreadID string
+	SenderKind     reliantv1.AgentMessageKind
+
 	// Context window control
 	// When true, creates a new context window with incremented sequence.
 	// Used for compaction - the summary message starts fresh context.
@@ -265,6 +272,8 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		Model:             ptr.StringIfNotEmpty(opts.Model),
 		Agent:             ptr.StringIfNotEmpty(opts.Agent),
 		ProviderAccountID: ptr.StringIfNotEmpty(opts.ProviderAccountID),
+		SenderThreadID:    ptr.StringIfNotEmpty(opts.SenderThreadID),
+		SenderKind:        senderKindPtrIfNonZero(opts.SenderKind),
 		TokenCount:        ptr.IntIfPositive(opts.TokenCount),
 		Cost:              ptr.Float64IfPositive(opts.Cost),
 		WorkflowID:        opts.WorkflowID,
@@ -901,6 +910,16 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	if opts.TokenCount > 0 {
 		updateData.TokenCount = &opts.TokenCount
 	}
+	if opts.SenderThreadID != "" {
+		var title *string
+		if t, err := s.repo.GetThread(ctx, opts.SenderThreadID); err != nil {
+			slog.WarnContext(ctx, "[SaveMessage] Failed to load sender thread for chat_update; sending it untitled",
+				"error", err, "sender_thread_id", opts.SenderThreadID, "message_id", messageID)
+		} else if t != nil {
+			title = t.Title
+		}
+		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind)
+	}
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
@@ -912,6 +931,13 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	}
 
 	return string(updateDataJSON), nil
+}
+
+func senderKindPtrIfNonZero(k reliantv1.AgentMessageKind) *reliantv1.AgentMessageKind {
+	if k == reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED {
+		return nil
+	}
+	return &k
 }
 
 func displayStylePtrIfNonZero(i int32) *reliantv1.DisplayStyle {

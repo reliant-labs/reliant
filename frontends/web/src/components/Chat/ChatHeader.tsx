@@ -260,7 +260,9 @@ export function ChatHeader({
 
       // Add messages
       messages.forEach((message) => {
-        const role = message.role === MessageRole.USER ? 'User' : 'Assistant';
+        const role = message.sender
+          ? `Message from ${message.sender.title || 'another agent'}`
+          : message.role === MessageRole.USER ? 'User' : 'Assistant';
         const timestamp = new Date(message.createdAt || '').toLocaleString();
         markdown += `## ${role} - ${timestamp}\n\n`;
         

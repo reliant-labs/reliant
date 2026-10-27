@@ -43,6 +43,12 @@ type AtomicMessageWrite struct {
 	// message (messages.provider_account_id); nil for every other message.
 	ProviderAccountID *string
 
+	// SenderThreadID and SenderKind (messages.sender_thread_id/sender_kind)
+	// attribute a message another agent wrote; nil for the human and for the
+	// model's own output.
+	SenderThreadID *string
+	SenderKind     *reliantv1.AgentMessageKind
+
 	Blocks []core.MessageContentBlock
 
 	// ChatUpdateData is the chat_update payload. It is built by the caller
@@ -126,13 +132,15 @@ msg AS (
         id, chat_id, ordinal, seq, thread_id, context_window_id,
         node_id, node_path, role, display_style, model, agent,
         token_count, cost, workflow_id, run_id, activity_id,
-        created_at, updated_at, provider_account_id
+        created_at, updated_at, provider_account_id,
+        sender_thread_id, sender_kind
     )
     SELECT
         $3, $2, ord.last_assigned, sq.last_assigned, $1, $4,
         $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15,
-        $16, $16, $31
+        $16, $16, $31,
+        $32, $33
     FROM ord, sq
 ),
 blocks AS (
@@ -220,6 +228,8 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 			cols.versions, cols.activityIDs, cols.workflowRunIDs,
 			cols.attemptNumbers, cols.phases,
 			emptyNilPtr(w.ProviderAccountID),
+			emptyNilPtr(w.SenderThreadID),
+			senderKindValue(w.SenderKind),
 		).Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq)
 		if err != nil {
 			return fmt.Errorf("failed to write message: %w", err)
@@ -298,6 +308,15 @@ func newBlockColumns(blocks []core.MessageContentBlock) blockColumns {
 		c.phases[i] = deref(b.Phase)
 	}
 	return c
+}
+
+// senderKindValue is the sender_kind column value: NULL, or the enum's number.
+func senderKindValue(k *reliantv1.AgentMessageKind) *int32 {
+	if k == nil {
+		return nil
+	}
+	v := int32(*k)
+	return &v
 }
 
 // displayStyleValue is the display_style column value: NULL, or the enum's

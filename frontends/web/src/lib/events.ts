@@ -11,6 +11,8 @@
  * ```
  */
 
+import type { AgentMessageKind } from "../gen/reliant/v1/chat_pb";
+
 export interface ToastEvent {
   message: string;
   variant?: "success" | "error" | "warning" | "info";
@@ -80,7 +82,7 @@ export interface EventMap {
       id: string;
       body: string;
       created_at: string;
-      sender_kind: number;
+      sender_kind: AgentMessageKind;
       attachments: string[];
     };
   };

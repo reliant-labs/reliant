@@ -146,6 +146,31 @@ type MessageUpdateData struct {
 	CompactionThreshold *int                      `json:"compaction_threshold,omitempty"`
 	DisplayStyle        *int32                    `json:"display_style,omitempty"`
 	TokenCount          *int                      `json:"token_count,omitempty"`
+	// Sender attributes a message another agent wrote. It is parsed straight
+	// into reliantv1.Message.sender on the client, hence the proto JSON names.
+	Sender *MessageSenderPayload `json:"sender,omitempty"`
+}
+
+// MessageSenderPayload is the JSON form of reliantv1.MessageSender.
+type MessageSenderPayload struct {
+	ThreadID string `json:"thread_id"`
+	Title    string `json:"title,omitempty"`
+	Kind     int32  `json:"kind"`
+}
+
+// NewMessageSenderPayload builds the sender of a live message update. title
+// is the sender thread's title, nil when it has none or the thread is gone:
+// the attribution is still worth showing without it. It returns nil for a
+// message with no sender.
+func NewMessageSenderPayload(senderThreadID string, title *string, kind reliantv1.AgentMessageKind) *MessageSenderPayload {
+	if senderThreadID == "" {
+		return nil
+	}
+	p := &MessageSenderPayload{ThreadID: senderThreadID, Kind: int32(kind)}
+	if title != nil {
+		p.Title = *title
+	}
+	return p
 }
 
 func (u MessageUpdateData) Type() UpdateType { return UpdateTypeMessage }

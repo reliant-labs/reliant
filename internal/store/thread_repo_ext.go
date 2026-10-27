@@ -138,6 +138,19 @@ func ListThreadsByConversation(ctx context.Context, db orm.Context, chatID strin
 	return threadsFromRows(rows), nil
 }
 
+// ListThreadsByIDs returns the threads with the given ids, in no particular
+// order; an id that names no thread is simply absent.
+func ListThreadsByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Thread, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := ListThread(ctx, db, orm.WhereIn(ThreadFieldID, ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list threads by id: %w", err)
+	}
+	return threadsFromRows(rows), nil
+}
+
 // ListChildThreads returns the threads forked directly from parentThreadID,
 // oldest first.
 func ListChildThreads(ctx context.Context, db orm.Context, parentThreadID string) ([]*core.Thread, error) {
