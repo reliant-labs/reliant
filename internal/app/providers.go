@@ -423,13 +423,20 @@ type TemporalClientDeps struct {
 // not a crash: the first dial retries with backoff (serverkit.RetryConnect),
 // and /readyz names "temporal" as pending meanwhile.
 func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
+	return newTemporalClient(d, temporal.NewExternalClient)
+}
+
+// Explicit dial seam keeps namespace/metadata consistency testable without a
+// network connection or exposing SDK client options to the composition root.
+func newTemporalClient(d TemporalClientDeps, dial func(context.Context, temporal.ExternalClientConfig) (client.Client, error)) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
+	namespace = temporal.EffectiveNamespace(namespace)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
-		dialed, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
+		dialed, err := dial(ctx, temporal.ExternalClientConfig{
 			Host:         host,
 			Port:         port,
 			Namespace:    namespace,

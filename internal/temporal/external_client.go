@@ -33,6 +33,15 @@ type ExternalClientConfig struct {
 	PayloadStore claimcheck.Store
 }
 
+// EffectiveNamespace is the namespace used for both dialing and exact-history
+// readers. An omitted/empty namespace preserves the established reliant default.
+func EffectiveNamespace(namespace string) string {
+	if namespace == "" {
+		return "reliant"
+	}
+	return namespace
+}
+
 // NewExternalClient creates a Temporal SDK client connected to an external Temporal server.
 // This is used by the standalone api-server and temporal-worker services.
 // It uses the same FlexibleDataConverter and keepalive settings as the embedded client.
@@ -53,9 +62,7 @@ func externalClientOptions(cfg ExternalClientConfig) (client.Options, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 7233
 	}
-	if cfg.Namespace == "" {
-		cfg.Namespace = "reliant"
-	}
+	cfg.Namespace = EffectiveNamespace(cfg.Namespace)
 
 	hostPort := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 

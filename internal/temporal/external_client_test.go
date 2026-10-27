@@ -7,6 +7,28 @@ import (
 	"go.temporal.io/sdk/interceptor"
 )
 
+func TestExternalClientEffectiveNamespace(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cfg  ExternalClientConfig
+		want string
+	}{
+		{"omitted", ExternalClientConfig{Host: "temporal.invalid"}, "reliant"},
+		{"empty", ExternalClientConfig{Host: "temporal.invalid", Namespace: ""}, "reliant"},
+		{"custom", ExternalClientConfig{Host: "temporal.invalid", Namespace: "private-reviews"}, "private-reviews"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := externalClientOptions(tt.cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if opts.Namespace != tt.want || EffectiveNamespace(tt.cfg.Namespace) != tt.want {
+				t.Fatalf("effective dial namespace %q want %q", opts.Namespace, tt.want)
+			}
+		})
+	}
+}
+
 // The tracing interceptor goes on the CLIENT, once: there it injects the
 // caller's span into each workflow it starts, and — because it is also a
 // worker interceptor — every worker built from the client continues that
