@@ -17,7 +17,7 @@ func LockTriggerAdmission(ctx context.Context, db orm.Context, scope string) err
 
 const admissionSelect = `SELECT id AS event_id, admission_scope, admission_key,
  COALESCE(admission_head,'') AS admission_head, admission_order, admission_state,
- COALESCE(admission_run_id,'') AS admission_run_id, COALESCE(chat_id,'') AS chat_id,
+ COALESCE(admission_run_id,'') AS admission_run_id, COALESCE(admission_workflow_id,'') AS chat_id,
  COALESCE(superseded_by,'') AS superseded_by FROM trigger_events `
 
 func GetAdmissionEvent(ctx context.Context, db orm.Context, id string) (*core.TriggerEvent, error) {
@@ -167,7 +167,7 @@ func ReleaseTriggerAdmission(ctx context.Context, db orm.Context, id, chatID, ru
 	if runID == "" || chatID == "" {
 		return false, nil
 	}
-	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET admission_state='released' WHERE id=?0 AND chat_id=?1 AND admission_run_id=?2 AND admission_state='reserved'`, id, chatID, runID).Exec(ctx)
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET admission_state='released' WHERE id=?0 AND admission_workflow_id=?1 AND admission_run_id=?2 AND admission_state='reserved'`, id, chatID, runID).Exec(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -175,8 +175,20 @@ func ReleaseTriggerAdmission(ctx context.Context, db orm.Context, id, chatID, ru
 	return n == 1, err
 }
 
-func ListTriggerAdmissions(ctx context.Context, db orm.Context, after int64, limit int) ([]core.TriggerAdmission, error) {
+// SettleOrphanQueuedAdmission never alters a reservation that won the race.
+func SettleOrphanQueuedAdmission(ctx context.Context, db orm.Context, id string) error {
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events SET admission_state='superseded',outcome='failed',outcome_detail='activation deleted before admission' WHERE id=?0 AND trigger_id IS NULL AND admission_state='queued' AND outcome='pending'`, id).Exec(ctx)
+	return err
+}
+
+func TriggerAdmissionHighWater(ctx context.Context, db orm.Context) (int64, error) {
+	var high int64
+	err := db.Bun().NewRaw(`SELECT COALESCE(max(admission_order),0) FROM trigger_events WHERE admission_state IN ('queued','reserved')`).Scan(ctx, &high)
+	return high, err
+}
+
+func ListTriggerAdmissions(ctx context.Context, db orm.Context, after, through int64, limit int) ([]core.TriggerAdmission, error) {
 	var rows []core.TriggerAdmission
-	err := db.Bun().NewRaw(admissionSelect+`WHERE admission_state IN ('queued','reserved') AND admission_order > ?0 ORDER BY admission_order,id LIMIT ?1`, after, limit).Scan(ctx, &rows)
+	err := db.Bun().NewRaw(admissionSelect+`WHERE admission_state IN ('queued','reserved') AND admission_order > ?0 AND admission_order <= ?1 ORDER BY admission_order,id LIMIT ?2`, after, through, limit).Scan(ctx, &rows)
 	return rows, err
 }

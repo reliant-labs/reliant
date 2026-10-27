@@ -33,11 +33,13 @@ const (
 // redelivers it on its own, so the receiver acks as soon as the row is
 // written and this closes the gap between the row and the run.
 type Redriver struct {
-	repo           EventRepo
-	starter        WorkflowStarter
-	taskQueue      string
-	now            func() time.Time
-	admissionAfter int64 // bounded keyset scan; wraps, never queue ownership
+	repo             EventRepo
+	starter          WorkflowStarter
+	taskQueue        string
+	now              func() time.Time
+	admissionAfter   int64 // bounded keyset scan; wraps, never queue ownership
+	admissionThrough int64 // fixed high-water mark for this sweep, not moving intake
+	admissionBatch   int   // zero uses the production batch size
 }
 
 // NewRedriver builds a Redriver. taskQueue empty means the shared queue.

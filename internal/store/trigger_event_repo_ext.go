@@ -174,9 +174,20 @@ func CountLiveLaunchedRuns(ctx context.Context, db orm.Context, userID string, k
 // UpdateTriggerEventOutcome records a firing's outcome and the chat it
 // launched (nil for none), or returns core.ErrTriggerEventNotFound.
 func UpdateTriggerEventOutcome(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
-	row := &TriggerEvent{ID: id, Outcome: outcome, OutcomeDetail: detail, ChatID: chatID}
-	return writeTriggerEvent(ctx, db, row, "outcome",
-		TriggerEventFieldOutcome, TriggerEventFieldOutcomeDetail, TriggerEventFieldChatID)
+	// Attach the immutable execution identity in the SAME launch transaction
+	// and statement as the deletable chat FK. Later chat deletion clears only
+	// chat_id; retries cannot replace the original Temporal root.
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome=?1, outcome_detail=?2, chat_id=?3,
+	 admission_workflow_id=CASE WHEN admission_state='reserved' THEN COALESCE(admission_workflow_id, ?3::text) ELSE admission_workflow_id END
+	 WHERE id=?0`, id, outcome, detail, chatID).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return core.ErrTriggerEventNotFound
+	}
+	return err
 }
 
 // UpdateTriggerEventPayload replaces a firing's payload, or returns

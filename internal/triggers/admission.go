@@ -24,7 +24,9 @@ type AdmissionStore interface {
 	GetTriggerAdmission(context.Context, string) (*core.TriggerAdmission, error)
 	ReserveTriggerAdmission(context.Context, string, int) error
 	BindTriggerAdmissionRun(context.Context, string, string) error
-	ListTriggerAdmissions(context.Context, int64, int) ([]core.TriggerAdmission, error)
+	SettleOrphanQueuedAdmission(context.Context, string) error
+	TriggerAdmissionHighWater(context.Context) (int64, error)
+	ListTriggerAdmissions(context.Context, int64, int64, int) ([]core.TriggerAdmission, error)
 	ReleaseTriggerAdmission(context.Context, string, string, string) (bool, error)
 }
 
