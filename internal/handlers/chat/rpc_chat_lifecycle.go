@@ -98,7 +98,32 @@ func (s *Service) TerminateChat(
 		return nil, svcerr.NotFound("chat")
 	}
 
-	if err := s.runs.Terminate(ctx, req.Msg.ChatId); err != nil {
+	releaseRun := s.runs.LockRunControl(ctx, chat.ID)
+	defer releaseRun()
+	observed, inspectErr := s.runs.State(ctx, chat.MainThreadID())
+	if inspectErr != nil {
+		return nil, svcerr.Wrap(inspectErr)
+	}
+	rootFirstRunID := observed.FirstRunID
+	if rootFirstRunID == "" {
+		rootFirstRunID = observed.RunID
+	}
+	drain := func() error {
+		if chat.NoMachine {
+			return nil
+		}
+		canceler, ok := s.deps.Router.(interface {
+			CancelRunCommands(context.Context, string, string, string) error
+		})
+		if !ok {
+			if s.deps.Router == nil && chat.ActiveDaemonID == nil {
+				return nil
+			}
+			return svcerr.Unavailable("command cancellation cannot be confirmed by this runtime")
+		}
+		return canceler.CancelRunCommands(ctx, userID, chat.ID, rootFirstRunID)
+	}
+	if err := s.runs.TerminateObserved(ctx, req.Msg.ChatId, observed.RunID, drain); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to terminate workflow"))
 	}
 

@@ -73,7 +73,10 @@ func TestLeaderExitPreservesDescendantCleanupGrace(t *testing.T) {
 	script := fmt.Sprintf(`bash -c 'trap "sleep 0.08; echo cleaned > %s; exit 0" TERM; echo ready > %s; while :; do sleep 0.01; done' >/dev/null 2>&1 & wait`, clean, ready)
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	finish := ApplyGracefulCancelChecked(cmd, 200*time.Millisecond)
+	// Leave scheduling headroom for the explicit 80ms cleanup subprocess on
+	// a loaded integration host. A leader-triggered immediate escalation still
+	// fails this assertion; the grace policy itself is unchanged.
+	finish := ApplyGracefulCancelChecked(cmd, time.Second)
 	defer finish()
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

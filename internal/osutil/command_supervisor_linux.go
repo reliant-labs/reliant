@@ -3,6 +3,7 @@
 package osutil
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,9 +20,35 @@ import (
 
 const supervisorArg = "__reliant-command-supervisor"
 
+// Existing launch wrappers (notably credsandbox) own the payload namespace
+// attributes and inherited descriptors. The supervisor must stay OUTSIDE that
+// namespace, while forwarding its original launch contract unchanged.
+// No credential data is encoded here: only syscall attributes and FD count.
+type supervisorPayloadConfig struct {
+	Sys        *syscall.SysProcAttr
+	ExtraFiles int
+}
+
 // Only the re-exec child takes this path. No service/container is created.
 // Keeping the dispatch here also lets the real supervisor run in test binaries.
 func init() {
+	if len(os.Args) > 3 && os.Args[1] == "__reliant-supervisor-payload-gate" {
+		fd, e := strconv.Atoi(os.Args[2])
+		if e != nil {
+			os.Exit(125)
+		}
+		f := os.NewFile(uintptr(fd), "payload-start-gate")
+		var b [1]byte
+		_, e = f.Read(b[:])
+		_ = f.Close()
+		if e != nil || b[0] != 1 {
+			os.Exit(125)
+		}
+		if e = syscall.Exec(os.Args[3], os.Args[3:], os.Environ()); e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			os.Exit(125)
+		}
+	}
 	if len(os.Args) > 3 && os.Args[1] == supervisorArg {
 		parts := strings.Split(os.Args[2], ",")
 		grace, err := time.ParseDuration(parts[0])
@@ -39,9 +66,21 @@ func init() {
 				unix.CloseOnExec(fd)
 			}
 		}
+		payloadSys := &syscall.SysProcAttr{Setpgid: true}
+		payloadFDs := 0
+		if len(parts) > 3 {
+			var config supervisorPayloadConfig
+			raw, e := base64.RawURLEncoding.DecodeString(parts[3])
+			if e != nil || json.Unmarshal(raw, &config) != nil {
+				os.Exit(125)
+			}
+			payloadSys = config.Sys
+			payloadFDs = config.ExtraFiles
+		}
 		result := supervisorResult{}
-		code, err := superviseCommand(os.Args[3:], grace, drain, &result)
+		code, err := superviseCommand(os.Args[3:], grace, drain, &result, payloadSys, payloadFDs)
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "supervisor launch/drain failed:", err)
 			result.Error = err.Error()
 		} else {
 			result.Complete = true
@@ -88,11 +127,22 @@ func PrepareCommandSupervision(cmd *exec.Cmd, grace time.Duration) (*CommandSupe
 	}
 	file := os.NewFile(uintptr(sockets[0]), "supervisor-result-reader")
 	writer := os.NewFile(uintptr(sockets[1]), "supervisor-result-writer")
+	payloadSys := cmd.SysProcAttr
+	if payloadSys == nil {
+		payloadSys = &syscall.SysProcAttr{Setpgid: true}
+	}
+	config, err := json.Marshal(supervisorPayloadConfig{Sys: payloadSys, ExtraFiles: len(cmd.ExtraFiles)})
+	if err != nil {
+		file.Close()
+		writer.Close()
+		return nil, err
+	}
 	fd := 3 + len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, writer)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	payload := append([]string(nil), cmd.Args...)
 	payload[0] = cmd.Path
-	args := append([]string{path, supervisorArg, grace.String() + "," + cmd.WaitDelay.String() + "," + strconv.Itoa(fd)}, payload...)
+	args := append([]string{path, supervisorArg, grace.String() + "," + cmd.WaitDelay.String() + "," + strconv.Itoa(fd) + "," + base64.RawURLEncoding.EncodeToString(config)}, payload...)
 	cmd.Path = path
 	cmd.Args = args
 	cmd.WaitDelay = 0 // supervisor owns bounded drain; os/exec must not kill it before it reaps
@@ -185,14 +235,11 @@ func supervisorChildren() ([]byte, error) {
 	return []byte(strings.Join(ids, " ")), nil
 }
 
-func superviseCommand(argv []string, grace, drain time.Duration, result *supervisorResult) (int, error) {
+func superviseCommand(argv []string, grace, drain time.Duration, result *supervisorResult, payloadSys *syscall.SysProcAttr, extraFiles int) (int, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	// Deny same-UID ptrace/proc-fd access to the wrapper before the payload
 	// exists. Capable debuggers/root are not an isolation boundary we claim.
-	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
-		return 125, err
-	}
 	if len(argv) == 0 {
 		return 125, fmt.Errorf("missing command")
 	}
@@ -208,8 +255,47 @@ func superviseCommand(argv []string, grace, drain time.Duration, result *supervi
 	sigs := make(chan os.Signal, 8)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(sigs)
-	pid, err := syscall.ForkExec(argv[0], argv, &syscall.ProcAttr{Env: os.Environ(), Files: []uintptr{0, 1, 2}, Sys: &syscall.SysProcAttr{Setpgid: true}})
+	files := []uintptr{0, 1, 2}
+	for i := 0; i < extraFiles; i++ {
+		files = append(files, uintptr(3+i))
+	}
+	// User namespace uid_map setup requires a dumpable parent. Spawn only a
+	// trusted gate first, lock down the wrapper, then release the original
+	// payload. This keeps the reviewed same-UID ptrace boundary intact.
+	gateR, gateW, err := os.Pipe()
 	if err != nil {
+		return 125, err
+	}
+	gateFD := len(files)
+	files = append(files, gateR.Fd())
+	self, err := os.Executable()
+	if err != nil {
+		gateR.Close()
+		gateW.Close()
+		return 125, err
+	}
+	gateArgs := append([]string{self, "__reliant-supervisor-payload-gate", strconv.Itoa(gateFD)}, argv...)
+	pid, err := syscall.ForkExec(self, gateArgs, &syscall.ProcAttr{Env: os.Environ(), Files: files, Sys: payloadSys})
+	gateR.Close()
+	if err != nil {
+		gateW.Close()
+		return 125, err
+	}
+	if err = unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		gateW.Close()
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		var ws syscall.WaitStatus
+		_, _ = syscall.Wait4(pid, &ws, 0, nil)
+		return 125, err
+	}
+	_, err = gateW.Write([]byte{1})
+	gateW.Close()
+	if err != nil {
+		// The gate never received permission to exec user code. Reap our
+		// exact child before returning uncertainty; do not leave a blocked gate.
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		var ws syscall.WaitStatus
+		_, _ = syscall.Wait4(pid, &ws, 0, nil)
 		return 125, err
 	}
 	tick := time.NewTicker(5 * time.Millisecond)
