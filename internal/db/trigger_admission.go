@@ -30,6 +30,12 @@ func (r *Repo) BindTriggerAdmissionRun(ctx context.Context, id, runID string) er
 func (r *Repo) ReleaseTriggerAdmission(ctx context.Context, id, chatID, runID string) (bool, error) {
 	return store.ReleaseTriggerAdmission(ctx, r.ORM(), id, chatID, runID)
 }
-func (r *Repo) ListTriggerAdmissions(ctx context.Context, after int64, limit int) ([]core.TriggerAdmission, error) {
-	return store.ListTriggerAdmissions(ctx, r.ORM(), after, limit)
+func (r *Repo) SettleOrphanQueuedAdmission(ctx context.Context, id string) error {
+	return store.SettleOrphanQueuedAdmission(ctx, r.ORM(), id)
+}
+func (r *Repo) TriggerAdmissionHighWater(ctx context.Context) (int64, error) {
+	return store.TriggerAdmissionHighWater(ctx, r.ORM())
+}
+func (r *Repo) ListTriggerAdmissions(ctx context.Context, after, through int64, limit int) ([]core.TriggerAdmission, error) {
+	return store.ListTriggerAdmissions(ctx, r.ORM(), after, through, limit)
 }

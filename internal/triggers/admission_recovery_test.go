@@ -49,7 +49,10 @@ func TestAdmissionRecoveryUsesTemporalNotCompletionCache(t *testing.T) {
 	if err := env.Repo.CreateWorkflow(ctx, &db.Workflow{ID: root, ChatID: root, WorkflowName: "wf", Thread: root, Status: core.Completed()}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET chat_id=$2,outcome='launched',run_status='completed' WHERE id=$1`, event.ID, root); err != nil {
+	if err := env.Repo.UpdateTriggerEventOutcome(ctx, event.ID, core.TriggerEventLaunched, "", &root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET run_status='completed' WHERE id=$1`, event.ID); err != nil {
 		t.Fatal(err)
 	}
 	memo, err := converter.GetDefaultDataConverter().ToPayload(event.ID)

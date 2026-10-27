@@ -25,12 +25,30 @@ func (r *Redriver) redriveAdmissions(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("admission Temporal describer is not wired")
 	}
-	rows, err := repo.ListTriggerAdmissions(ctx, r.admissionAfter, 2000)
+	if r.admissionThrough == 0 {
+		high, err := repo.TriggerAdmissionHighWater(ctx)
+		if err != nil {
+			return err
+		}
+		r.admissionThrough = high
+	}
+	batch := r.admissionBatch
+	if batch <= 0 {
+		batch = 2000
+	}
+	rows, err := repo.ListTriggerAdmissions(ctx, r.admissionAfter, r.admissionThrough, batch)
 	if err != nil {
 		return err
 	}
+	// Freeze each sweep's upper bound. Continuous intake cannot postpone
+	// revisiting old reservations forever. Replacements with older ordinals
+	// are revisited on the next sweep too.
+	defer func() {
+		if len(rows) < batch || r.admissionAfter >= r.admissionThrough {
+			r.admissionAfter, r.admissionThrough = 0, 0
+		}
+	}()
 	if len(rows) == 0 {
-		r.admissionAfter = 0
 		return nil
 	}
 	for _, a := range rows {
@@ -87,7 +105,13 @@ func (r *Redriver) startAdmissionFire(ctx context.Context, repo AdmissionStore, 
 		return err
 	}
 	if event.TriggerID == nil {
-		return nil
+		// Trigger deletion uses ON DELETE SET NULL. A never-admitted orphan
+		// must leave FIFO eligibility; a reservation still belongs to its
+		// exact Temporal execution and is never released here.
+		if a.State == "queued" {
+			err = repo.SettleOrphanQueuedAdmission(ctx, event.ID)
+		}
+		return err
 	}
 	return StartEventFire(ctx, r.starter, event.ID, EventFireInput{TriggerID: *event.TriggerID, Kind: event.Kind, DedupeKey: event.DedupeKey}, r.taskQueue)
 }

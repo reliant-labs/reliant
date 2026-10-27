@@ -51,7 +51,7 @@ func TestTriggerAdmissionConcurrentBoundAndCapacityLowering(t *testing.T) {
 		}
 		wg.Wait()
 	}
-	rows, err := env.Repo.ListTriggerAdmissions(ctx, 0, 100)
+	rows, err := env.Repo.ListTriggerAdmissions(ctx, 0, 1<<62, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestTriggerAdmissionKeySupersessionDedupeOverloadAndGeneration(t *testing.T
 	}
 	// Use an actual launch chat to satisfy the FK and release exact generation.
 	seedRun(t, env, "admission-root", core.Active())
-	if _, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET chat_id=$2 WHERE id=$1`, first.ID, "admission-root"); err != nil {
+	if _, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET chat_id=$2,admission_workflow_id=$2 WHERE id=$1`, first.ID, "admission-root"); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := env.Repo.ReleaseTriggerAdmission(ctx, first.ID, "admission-root", "run1"); err != nil || !ok {
