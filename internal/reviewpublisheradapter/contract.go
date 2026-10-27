@@ -29,6 +29,7 @@ type GraphSnapshot struct {
 	RootRef            string                     `json:"root_ref"`
 	WorkflowType       string                     `json:"workflow_type"`
 	Graphs             map[string]json.RawMessage `json:"graphs"`
+	YAML               map[string][]byte          `json:"yaml"`
 	CompletionNode     string                     `json:"completion_node"`
 	CompletionActivity string                     `json:"completion_activity"`
 	OutputSchema       string                     `json:"output_schema"`

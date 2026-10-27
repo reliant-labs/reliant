@@ -129,6 +129,17 @@ func (s ReviewAuthorityStore) ResolveReviewWaitPolicy(ctx context.Context, owner
 	return row.ID, row.Revision, err
 }
 
+// AssignmentForExecution resolves only an enrolled original reviewer execution.
+// CAN successors need explicit verified continuity; never use latest-run fallback.
+func (s ReviewAuthorityStore) AssignmentForExecution(ctx context.Context, root, run string) (string, error) {
+	var id string
+	err := s.DB.Bun().NewRaw(`SELECT id FROM review_assignments WHERE reviewer_root_id=? AND reviewer_run_id=? AND NOT cancelled AND NOT superseded`, root, run).Scan(ctx, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", reviewpublisher.ErrUnauthorized
+	}
+	return id, err
+}
+
 // AssignmentSubject resolves the enabled policy-bound handoff subject for a fresh
 // server provider read. AssignReview repeats all SQL checks after that read.
 func (s ReviewAuthorityStore) AssignmentSubject(ctx context.Context, policyID, bindingID string) (reviewpublisher.Head, error) {
