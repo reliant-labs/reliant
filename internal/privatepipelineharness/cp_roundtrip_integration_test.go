@@ -47,18 +47,22 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(400)
 			return
 		}
-		if err := validateQueueOperation(r.Header.Get("Authorization"), request.Query, request.Variables); err != nil {
+		currentHead := f.head
+		if currentHead == "" {
+			currentHead = strings.Repeat("a", 40)
+		}
+		if err := validateQueueOperation(r.Header.Get("Authorization"), request.Query, request.Variables, currentHead); err != nil {
 			w.WriteHeader(400)
 			return
 		}
-		entry := map[string]any{"id": "queue-1", "position": 1, "pullRequest": map[string]any{"id": "pr-7", "headRefOid": strings.Repeat("a", 40), "repository": map[string]any{"id": "repo-42"}}}
+		entry := map[string]any{"id": "queue-1", "position": 1, "pullRequest": map[string]any{"id": "pr-7", "headRefOid": currentHead, "repository": map[string]any{"id": "repo-42"}}}
 		if request.Query == allowedEnqueueMutation {
 			var input struct {
 				PullRequestID string `json:"pullRequestId"`
 				ExpectedHead  string `json:"expectedHeadOid"`
 			}
 			_ = json.Unmarshal(request.Variables["input"], &input)
-			if input.PullRequestID != "pr-7" || input.ExpectedHead != strings.Repeat("a", 40) || f.check == nil || f.check["conclusion"] != "success" {
+			if input.PullRequestID != "pr-7" || input.ExpectedHead != currentHead || f.check == nil || f.check["conclusion"] != "success" {
 				f.t.Error("enqueue attempted without exact confirmed successful check")
 				w.WriteHeader(409)
 				return
@@ -71,7 +75,7 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if f.queued {
 				membership = entry
 			}
-			out = map[string]any{"data": map[string]any{"repository": map[string]any{"id": "repo-42", "databaseId": 42, "nameWithOwner": "acme/example", "defaultBranchRef": map[string]any{"name": "main"}, "pullRequest": map[string]any{"id": "pr-7", "databaseId": 700, "url": "https://github.com/acme/example/pull/7", "number": 7, "state": "OPEN", "isDraft": false, "headRefOid": strings.Repeat("a", 40), "baseRefName": "main", "isMergeQueueEnabled": true, "repository": map[string]any{"id": "repo-42", "databaseId": 42}, "headRepository": map[string]any{"id": "repo-42", "databaseId": 42}, "mergeQueueEntry": membership}}}}
+			out = map[string]any{"data": map[string]any{"repository": map[string]any{"id": "repo-42", "databaseId": 42, "nameWithOwner": "acme/example", "defaultBranchRef": map[string]any{"name": "main"}, "pullRequest": map[string]any{"id": "pr-7", "databaseId": 700, "url": "https://github.com/acme/example/pull/7", "number": 7, "state": "OPEN", "isDraft": false, "headRefOid": currentHead, "baseRefName": "main", "isMergeQueueEnabled": true, "repository": map[string]any{"id": "repo-42", "databaseId": 42}, "headRepository": map[string]any{"id": "repo-42", "databaseId": 42}, "mergeQueueEntry": membership}}}}
 		}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example":
 		if r.Header.Get("Authorization") != "Bearer ghp_futurechat_b_fixture_owner" {
@@ -86,6 +90,12 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		out = map[string]any{"id": 700, "number": 7, "title": "private", "body": "", "state": "open", "draft": false, "merged": false, "html_url": "https://github.com/acme/example/pull/7",
 			"head": map[string]any{"ref": "fix", "sha": headSHA, "repo": map[string]any{"id": 42, "full_name": "acme/example"}},
 			"base": map[string]any{"ref": "main", "sha": strings.Repeat("b", 40), "repo": map[string]any{"id": 42, "full_name": "acme/example"}}}
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/branches/fix":
+		head := f.head
+		if head == "" {
+			head = strings.Repeat("a", 40)
+		}
+		out = map[string]any{"name": "fix", "protected": false, "commit": map[string]any{"sha": head}}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/installation":
 		out = map[string]any{"id": 8, "app_id": 7}
 	case r.Method == http.MethodPost && r.URL.Path == "/app/installations/8/access_tokens":
@@ -115,12 +125,17 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if conclusion == "" {
 			conclusion = "success"
 		}
-		if check["head_sha"] != strings.Repeat("a", 40) || check["name"] != "ReliantReview" || check["external_id"] != externalID || check["conclusion"] != conclusion {
+		expectedHead := f.head
+		if expectedHead == "" {
+			expectedHead = strings.Repeat("a", 40)
+		}
+		if check["head_sha"] != expectedHead || check["name"] != "ReliantReview" || check["external_id"] != externalID || check["conclusion"] != conclusion {
 			f.t.Error("check mutation was not exact-head, exact-intent review")
 		}
 		f.writes++
-		check["id"] = int64(99)
-		check["url"] = "https://api.github.com/repos/acme/example/check-runs/99"
+		checkID := int64(98 + f.writes)
+		check["id"] = checkID
+		check["url"] = fmt.Sprintf("https://api.github.com/repos/acme/example/check-runs/%d", checkID)
 		check["app"] = map[string]any{"id": 7}
 		f.check = check
 		status, out = http.StatusCreated, check

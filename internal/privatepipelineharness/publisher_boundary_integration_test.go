@@ -85,12 +85,13 @@ func TestFutureChatBStaleHeadCannotPublish(t *testing.T) {
 
 func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome string, stale bool) {
 	f := newResources(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 	defer cancel()
 	repo, err := db.NewRepoWithDriver(f.SQL, db.DriverPostgres)
 	if err != nil {
 		t.Fatal(err)
 	}
+	repairLoop := verdict == "changes" && actualGraph
 	provider := &checkProvider{t: t}
 	github := newGitHubBoundary(t, provider)
 	endpoint := startCP(t, github)
@@ -108,8 +109,24 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	var authorRun client.WorkflowRun
 	var authorWorker worker.Worker
 	authorDefinition := "name: private-author\nentry: [wait]\nnodes:\n  - id: wait\n    type: await_pr_review\n    repo: acme/example\n    pr: 7\n    expected_head: " + strings.Repeat("a", 40) + "\noutputs:\n  review_state: \"{{ nodes.wait.state }}\"\n"
+	worktreePath := t.TempDir()
+	if repairLoop {
+		authorDefinition = "name: private-author\nentry: [wait]\nnodes:\n  - id: wait\n    type: await_pr_review\n    repo: acme/example\n    pr: 7\n    expected_head: " + strings.Repeat("a", 40) + "\n  - id: repair\n    type: run\n    command: private-fixture-repair\n  - id: wait_repaired\n    type: await_pr_review\n    repo: acme/example\n    pr: 7\n    expected_head: \"{{ nodes.repair.head_sha }}\"\nedges:\n  - from: wait\n    default: repair\n  - from: repair\n    default: wait_repaired\noutputs:\n  review_state: \"{{ nodes.wait_repaired.state }}\"\n"
+		if err := store.InsertWorktree(ctx, repo.ORM(), &core.Worktree{ID: "private-wt", Name: "private", Path: worktreePath, Branch: "fix", BaseBranch: "main", ProjectID: "test-project", CreatedAt: time.Now(), UpdatedAt: time.Now(), LastActive: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		remote := "https://github.com/acme/example.git"
+		if err := store.InsertRepo(ctx, repo.ORM(), &core.Repo{ID: "private-repo", ProjectID: "test-project", Name: "example", RelativePath: "", RemoteURL: &remote, CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if actualGraph {
-		if err := repo.CreateChat(ctx, &db.Chat{ID: root, Title: "original author", UserID: endpoint.OwnerID, ProjectID: "test-project", WorkflowID: &root}); err != nil {
+		var wt *string
+		if repairLoop {
+			id := "private-wt"
+			wt = &id
+		}
+		if err := repo.CreateChat(ctx, &db.Chat{ID: root, Title: "original author", UserID: endpoint.OwnerID, ProjectID: "test-project", WorkflowID: &root, WorktreeID: wt}); err != nil {
 			t.Fatal(err)
 		}
 		authorQueue := f.Queue + "-author"
@@ -168,6 +185,9 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	snapshot, _ := json.Marshal(map[string]any{"root_ref": "trusted", "admission_key": store.ReviewAdmissionKeyExpression, "graphs": map[string]any{"trusted": map[string]any{"concurrency": map[string]any{"key": store.ReviewAdmissionKeyExpression}}}})
 	if actualGraph {
 		definition := "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [finish]\nnodes:\n  - id: finish\n    type: compute\n    outcome: " + graphOutcome + "\noutputs:\n  review_verdict: " + verdict + "\n"
+		if repairLoop {
+			definition = repairReviewerDefinition()
+		}
 		wf, err := wfyaml.ParseWorkflow([]byte(definition))
 		if err != nil {
 			t.Fatal(err)
@@ -190,11 +210,14 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 		reviewerWorker = worker.New(f.Temporal, reviewQueue, worker.Options{})
 		reviewerWorker.RegisterWorkflowWithOptions(adapter.PrivateReviewWorkflow, workflow.RegisterOptions{Name: "PrivateTrustedReviewer"})
 		reviewerWorker.RegisterActivityWithOptions(func(context.Context, handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
-			return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: graph}, nil
+			return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: graph, HasTemplates: strings.Contains(definition, "{{")}, nil
 		}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowStatusActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowStatus"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowCheckpointActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewCleanupActivity(repo).Execute, activity.RegisterOptions{Name: "Cleanup"})
+		if repairLoop {
+			registerReviewModelBoundary(reviewerWorker, provider)
+		}
 		completion = adapter.CompletionActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}
 		reviewerWorker.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: adapter.CompletionActivityName})
 		reviewerWorker.RegisterActivityWithOptions((adapter.ResolveAssignmentActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}).Execute, activity.RegisterOptions{Name: adapter.ResolveAssignmentActivityName})
@@ -281,6 +304,9 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	if actualGraph {
 		providerReader := prhandoffadapter.GitHub{OwnerID: endpoint.OwnerID, Site: httpaction.CallSite{RunID: root}, Catalog: cat, Runner: runner, Credentials: providerCredentials{}}
 		(prreviewwait.Activities{Service: wait, Identity: repo, GitHub: providerReader}).Register(authorWorker)
+		if repairLoop {
+			registerRepairBoundary(t, authorWorker, repo, f, provider, providerReader, handoff, root, authorRun.GetRunID(), worktreePath)
+		}
 		if err := authorWorker.Start(); err != nil {
 			t.Fatal(err)
 		}
@@ -311,8 +337,19 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	if publishErr != nil {
 		t.Fatal(publishErr)
 	}
+	if actualGraph {
+		awaitArmedHead(t, ctx, f.SQL, sha)
+	}
 	if err := (adapter.WaitOutcome{Store: state, Wait: wait}).Deliver(ctx, intent.IntentID); err != nil {
 		t.Fatal(err)
+	}
+	if repairLoop {
+		awaitArmedHead(t, ctx, f.SQL, strings.Repeat("b", 40))
+		if _, err := (adapter.Publisher{Store: state, Heads: heads, Bridge: bridge}).Publish(ctx, intent.IntentID); err == nil {
+			t.Fatal("old-head intent survived repaired publication")
+		}
+		a = runRepairedReview(t, ctx, f, repo, state, provider, heads, bridge, wait, endpoint.OwnerID, trigger, reviewer, reviewRunID)
+		sha = strings.Repeat("b", 40)
 	}
 	if actualGraph {
 		var authorResult runtime.WorkflowResult
@@ -320,7 +357,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 			t.Fatal(err)
 		}
 		expectedState := "approved"
-		if verdict == "changes" {
+		if verdict == "changes" && !repairLoop {
 			expectedState = "changes"
 		} else if graphOutcome != "success" {
 			expectedState = "unavailable"
@@ -336,7 +373,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 			t.Fatal("original author was replaced")
 		}
 		var consumed int64
-		if err := f.SQL.QueryRowContext(ctx, "SELECT consumed_sequence FROM pr_review_wait_subscriptions WHERE binding_id='binding'").Scan(&consumed); err != nil {
+		if err := f.SQL.QueryRowContext(ctx, "SELECT consumed_sequence FROM pr_review_wait_subscriptions WHERE binding_id='binding' AND head_sha=$1", sha).Scan(&consumed); err != nil {
 			t.Fatal(err)
 		}
 		if consumed != a.Binding.Generation {
@@ -385,7 +422,11 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	provider.mu.Lock()
 	writes := provider.writes
 	provider.mu.Unlock()
-	if writes != 1 {
+	wantWrites := 1
+	if repairLoop {
+		wantWrites = 2
+	}
+	if writes != wantWrites {
 		t.Fatalf("check POST count %d", writes)
 	}
 }

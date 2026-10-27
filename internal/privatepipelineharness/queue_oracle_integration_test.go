@@ -29,7 +29,7 @@ const allowedEnqueueMutation = `mutation ReliantEnqueue($input: EnqueuePullReque
   }
 }`
 
-func validateQueueOperation(auth, query string, variables map[string]json.RawMessage) error {
+func validateQueueOperation(auth, query string, variables map[string]json.RawMessage, expectedHead string) error {
 	denied := fmt.Errorf("provider fixture refused unapproved GraphQL operation")
 	if auth != "Bearer ghp_futurechat_b_fixture_owner" {
 		return denied
@@ -54,7 +54,7 @@ func validateQueueOperation(auth, query string, variables map[string]json.RawMes
 		}
 		decoder := json.NewDecoder(bytes.NewReader(variables["input"]))
 		decoder.DisallowUnknownFields()
-		if decoder.Decode(&input) != nil || input.PullRequestID != "pr-7" || input.ExpectedHead != strings.Repeat("a", 40) {
+		if decoder.Decode(&input) != nil || input.PullRequestID != "pr-7" || input.ExpectedHead != expectedHead {
 			return denied
 		}
 	default:
@@ -77,13 +77,13 @@ func TestQueueOracleRejectsForbiddenOperations(t *testing.T) {
 		{"unknown query", "query { viewer { login } }", "Bearer ghp_futurechat_b_fixture_owner", map[string]any{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider := &checkProvider{t: t}
+			provider := &checkProvider{t: t, check: map[string]any{"conclusion": "success"}}
 			body, _ := json.Marshal(map[string]any{"query": tc.query, "variables": tc.variables})
 			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1/graphql", bytes.NewReader(body))
 			req.Header.Set("Authorization", tc.auth)
 			response := httptest.NewRecorder()
 			provider.ServeHTTP(response, req)
-			if response.Code < 400 || provider.queueWrites != 0 || provider.queued {
+			if response.Code != http.StatusBadRequest || provider.queueWrites != 0 || provider.queued {
 				t.Fatal("forbidden GraphQL reached successful queue oracle")
 			}
 		})

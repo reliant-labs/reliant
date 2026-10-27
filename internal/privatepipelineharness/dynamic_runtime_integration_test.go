@@ -5,6 +5,7 @@ package privatepipelineharness
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +35,7 @@ func registerSQLRuntime(t *testing.T, w worker.Worker, repo *db.Repo, definition
 	}
 	w.RegisterWorkflow(runtime.DynamicWorkflow)
 	w.RegisterActivityWithOptions(func(context.Context, handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
-		return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: raw}, nil
+		return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: raw, HasTemplates: strings.Contains(definition, "{{")}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	w.RegisterActivityWithOptions(handlers.NewWorkflowStatusActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowStatus"})
 	w.RegisterActivityWithOptions(handlers.NewWorkflowCheckpointActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
