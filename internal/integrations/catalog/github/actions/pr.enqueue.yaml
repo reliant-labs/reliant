@@ -57,3 +57,7 @@ output:
       queue_entry_id: { type: string }
       position: { type: integer }
       already_queued: { type: boolean }
+      retry_after_seconds:
+        type: integer
+        minimum: 1
+        maximum: 3600
