@@ -22,7 +22,7 @@ import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
-import { resolveWorktree } from "../hooks/worktree-queries";
+import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
@@ -161,6 +161,8 @@ export interface SelectProjectOptions {
    * view (the new-chat project chip).
    */
   restoreChat?: boolean;
+  /** Continue the caller's logical navigation rather than starting a new one. */
+  isCurrent?: () => boolean;
 }
 
 interface ProjectStore {
@@ -201,6 +203,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   currentProject: null,
 
   selectProject: async (project: Project, options?: SelectProjectOptions) => {
+    const isLatest = options?.isCurrent ?? beginWorkspaceOpen();
+    if (!isLatest()) return;
+    const isCurrent = () => isLatest() && get().currentProject?.id === project.id;
     const prevProjectId = get().currentProject?.id ?? null;
     const isProjectSwitch = prevProjectId !== null && prevProjectId !== project.id;
     const restoreChat = options?.restoreChat ?? true;
@@ -269,7 +274,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       // Restore last worktree for this project. Fetches only that workspace
       // (or main) — the sidebar groups from the chat list, so the project's
       // full worktree list is not loaded here.
-      await restoreLastWorktree(project.id);
+      await restoreLastWorktree(project.id, undefined, { isCurrent });
+      if (!isCurrent()) return;
       const currentWorktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
       
       // Restore viewer state (project context is now read from projectStore.currentProject)
@@ -284,20 +290,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         const chat = worktreeState.activeChatId
           ? await resolveChat(worktreeState.activeChatId)
           : undefined;
+        if (!isCurrent()) return;
         if (chat) {
-          logger.info("[ProjectStore] Restoring active chat on project switch", {
-            chatId: chat.id,
-            title: chat.title,
-          });
-          if (chat.worktreeId) {
-            const targetWorktree = await resolveWorktree(chat.worktreeId);
-            if (targetWorktree) {
-              await useWorktreeStore.getState().switchWorktreeContext(project.id, targetWorktree);
-            }
-          } else {
-            await useWorktreeStore.getState().switchWorktreeContext(project.id, null);
-          }
-          useChatStore.getState().selectChat(chat);
+          await openChatInWorkspace(chat, { isCurrent });
+          if (!isCurrent()) return;
         }
       }
       
@@ -310,6 +306,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   setProjectFilter: async (projectId: string | null, options) => {
+    // Even All projects supersedes a pending project/workspace restoration.
+    const isCurrent = beginWorkspaceOpen();
     const workspaceState = useWorkspaceStateStore.getState();
     const changed = workspaceState.projectFilterId !== projectId;
     workspaceState.setProjectFilterId(projectId);
@@ -328,6 +326,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           return;
         }
       }
+      if (!isCurrent()) return;
       const project = projects.find((p) => p.id === projectId);
       if (!project) {
         // The filter names a project that is gone: show them all.
@@ -335,14 +334,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         syncProjectFilterUrl(null);
         return;
       }
-      await get().selectProject(project, options);
+      await get().selectProject(project, { ...options, isCurrent });
     }
+    if (!isCurrent()) return;
 
     // The list of the new scope seeds activity and the stream's resume point.
     await useChatStore.getState().loadChats();
   },
 
   restoreLastProject: async (options) => {
+    const isCurrent = beginWorkspaceOpen();
     const { lastProjectId } = useWorkspaceStateStore.getState();
 
     let projects: Project[];
@@ -354,6 +355,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logger.warn("[ProjectStore] Could not load projects to restore the last one", { lastProjectId, error });
       return false;
     }
+    if (!isCurrent()) return false;
     let project = lastProjectId ? projects.find((p) => p.id === lastProjectId) : undefined;
 
     if (lastProjectId && !project) {
@@ -372,9 +374,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     logger.info("[ProjectStore] Restoring last project", { projectId: project.id, name: project.name });
 
     // Select project with skipWorkspaceStateSave since we're restoring
-    await get().selectProject(project, { ...options, skipWorkspaceStateSave: true });
+    await get().selectProject(project, { ...options, skipWorkspaceStateSave: true, isCurrent });
 
-    return true;
+    return isCurrent();
   },
 
   refreshCurrentProject: async () => {
@@ -390,13 +392,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   createProject: async (data: Partial<Project>) => {
+    const isCurrent = beginWorkspaceOpen();
     const project = await createProjectRpc({
       name: data.name || "",
       path: data.path || "",
       description: data.description,
       default_branch: data.default_branch,
     });
-    set({ currentProject: project });
+    if (isCurrent()) await get().selectProject(project, { isCurrent });
     return project;
   },
 
@@ -410,6 +413,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   deleteProject: async (id: string) => {
+    const wasCurrent = get().currentProject?.id === id;
+    const isCurrent = wasCurrent ? beginWorkspaceOpen() : () => false;
     await deleteProjectRpc(id);
 
     const wasFiltered = useWorkspaceStateStore.getState().projectFilterId === id;
@@ -420,6 +425,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (get().currentProject?.id === id) {
       // The context moves to the most recently used project left; with none,
       // the shell shows its first-run state.
+      // Clean departure explicitly before nulling identity. No replacement
+      // (or a replacement with no saved chat) must retain the deleted pane.
+      useChatStore.getState().clearCurrentChat(null);
+      useViewerStore.getState().clearViewersForProjectSwitch();
+      useWorktreeStore.getState().reset();
       set({ currentProject: null });
       let remaining: Project[] = [];
       try {
@@ -428,7 +438,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         logger.warn("[ProjectStore] Could not load projects after a delete", { error });
       }
       const next = mostRecentProject(remaining);
-      if (next) await get().selectProject(next);
+      if (next && isCurrent()) await get().selectProject(next, { isCurrent });
     }
   },
 

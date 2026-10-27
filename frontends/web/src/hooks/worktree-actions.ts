@@ -22,6 +22,7 @@ import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
 import { connectClient } from "../lib/connect";
 import { retryAcrossWake } from "../lib/daemon-retry";
 import { logger } from "../lib/logger";
+import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
 import { useBrowserStore } from "../store/browserStore";
@@ -460,8 +461,9 @@ export async function updateWorktreeStatus(
  */
 export async function loadMainWorktree(projectId: string | undefined, qc: QueryClient = appQueryClient): Promise<void> {
   if (!projectId) return;
+  const isCurrent = beginWorkspaceOpen();
   const main = await resolveMainWorktree(projectId, qc);
-  if (!main || useWorktreeStore.getState().currentWorktreeId) return;
+  if (!isCurrent() || !main || useWorktreeStore.getState().currentWorktreeId) return;
   logger.info("[Worktrees] Auto-selecting main worktree after load", { worktreeId: main.id, name: main.name });
   useWorktreeStore.getState().selectWorktree(main, { skipWorkspaceStateSave: true });
 }
@@ -471,12 +473,19 @@ export async function loadMainWorktree(projectId: string | undefined, qc: QueryC
  * the saved one is gone, archived, or another project's). Fetches a workspace
  * the cache does not hold by id; resolves false when nothing could be selected.
  */
-export async function restoreLastWorktree(projectId: string, qc: QueryClient = appQueryClient): Promise<boolean> {
+export async function restoreLastWorktree(
+  projectId: string,
+  qc: QueryClient = appQueryClient,
+  options?: { isCurrent?: () => boolean },
+): Promise<boolean> {
+  const isCurrent = options?.isCurrent ?? beginWorkspaceOpen();
+  if (!isCurrent()) return false;
   const workspaceState = useWorkspaceStateStore.getState();
   const lastWorktreeId = workspaceState.getProjectState(projectId).lastWorktreeId;
 
   const selectMainWorktree = async () => {
     const mainWorktree = await resolveMainWorktree(projectId, qc);
+    if (!isCurrent()) return false;
     if (mainWorktree) {
       logger.info("[Worktrees] Selecting main worktree as default", {
         worktreeId: mainWorktree.id,
@@ -498,6 +507,7 @@ export async function restoreLastWorktree(projectId: string, qc: QueryClient = a
 
   // By id: the saved workspace need not be in any loaded page.
   const worktree = await resolveWorktree(lastWorktreeId, qc);
+  if (!isCurrent()) return false;
   if (!worktree || worktree.deleted_at || (worktree.project_id && worktree.project_id !== projectId)) {
     logger.warn("[Worktrees] Last worktree is not restorable, selecting main worktree", { lastWorktreeId });
     // Forget the saved workspace only when it is definitely unusable. A failed

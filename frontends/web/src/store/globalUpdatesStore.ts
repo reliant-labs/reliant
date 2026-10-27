@@ -22,6 +22,7 @@ import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
 import { useProjectStore } from "./projectStore";
 import { openChat } from "./openChat";
+import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
@@ -890,6 +891,8 @@ function handleChatStateChange(update: UserUpdate) {
       // Show notification with sound
       const soundOptions = getNotificationSoundOptions();
       const navigateToChat = async (id: string) => {
+        // The click owns the intent, not the later completion of GetChat.
+        const isCurrent = beginWorkspaceOpen();
         try {
           const chatStore = useChatStore.getState();
           
@@ -917,22 +920,17 @@ function handleChatStateChange(update: UserUpdate) {
             // An automation-launched chat is never in the sidebar list, so
             // fetch it by id.
             chat = await resolveChat(id);
+            if (!isCurrent()) return;
             if (!chat) {
               logger.error(`${LOG_PREFIX} Chat not found: ${id.slice(0, 8)}`);
               return;
             }
           }
 
-          // The chat may be in any project: openChat moves the context to its
-          // project and workspace, then selects it.
-          await openChat(chat);
-
-          // Force a state refresh by reading and setting again
-          const stateAfter = useChatStore.getState();
-          if (stateAfter.activeChatId !== chat.id) {
-            logger.error(`${LOG_PREFIX} ❌ Active chat not set correctly! Setting directly...`);
-            useChatStore.getState().setActiveChat(chat.id);
-          }
+          // Continue the click's intent through project/workspace resolution.
+          // A superseded open must never be forced back into selection.
+          await openChat(chat, isCurrent);
+          if (!isCurrent()) return;
           
           // Verify it worked
           const finalActiveChatId = useChatStore.getState().activeChatId;

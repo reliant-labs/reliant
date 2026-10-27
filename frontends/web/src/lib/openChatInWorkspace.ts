@@ -42,6 +42,8 @@ export async function findProject(projectId: string): Promise<Project | undefine
 export interface OpenChatOptions {
   /** Also move the chat to the front of the navigation queue (a sidebar click). */
   navigate?: boolean;
+  /** Continue an intent that began before resolving the chat (notifications). */
+  isCurrent?: () => boolean;
 }
 
 // Identity alone is insufficient when A is opened again before an older A
@@ -62,7 +64,8 @@ export async function openChatInWorkspace(
   chat: Chat,
   options: OpenChatOptions = {}
 ): Promise<void> {
-  const isLatest = beginWorkspaceOpen();
+  const isLatest = options.isCurrent ?? beginWorkspaceOpen();
+  if (!isLatest()) return;
   let projectId = useProjectStore.getState().currentProject?.id;
   // Selection starts the chat stream immediately, even while its project row
   // is loading. Persistence waits for the matching project/workspace below.
@@ -84,6 +87,7 @@ export async function openChatInWorkspace(
     const selected = useProjectStore.getState().selectProject(project, {
       restoreChat: false,
       restoreWorkspace: false,
+      isCurrent: isLatest,
     });
     projectId = project.id;
     await selected;

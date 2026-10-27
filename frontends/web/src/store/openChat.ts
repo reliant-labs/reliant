@@ -25,8 +25,8 @@ import { useWorktreeStore } from "./worktreeStore";
  * Select immediately, then follow its project/workspace with main's identity
  * fence. All source entry points share the same epoch as the main helper.
  */
-export function openChat(chat: Chat): Promise<void> {
-  return openChatInWorkspace(chat, { navigate: true });
+export function openChat(chat: Chat, isCurrent?: () => boolean): Promise<void> {
+  return openChatInWorkspace(chat, { navigate: true, isCurrent });
 }
 
 /**
@@ -64,6 +64,7 @@ export async function openNewChat(target: { projectId?: string | null; worktreeI
     const selected = useProjectStore.getState().selectProject(project, {
       restoreChat: false,
       restoreWorkspace: false,
+      isCurrent: isLatest,
     });
     contextProjectId = project.id;
     await selected;

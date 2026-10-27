@@ -1,5 +1,5 @@
 // ModernApp - Main application component
-import { useSearch, useNavigate, useLocation, useParams } from '@tanstack/react-router';
+import { useSearch, useNavigate, useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
@@ -19,7 +19,8 @@ import { ChatInterface } from "./components/Chat/ChatInterface";
 import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
-import { mostRecentProject, syncProjectFilterUrl, useProjectStore } from "./store/projectStore";
+import { mostRecentProject, useProjectStore } from "./store/projectStore";
+import { ProjectFilterRouteSync } from "./components/Layout/ProjectFilterRouteSync";
 import { fetchProjects, getCachedProjects, useProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
@@ -194,33 +195,6 @@ function App() {
   const hasOpenViewers = viewerProjectId
     ? viewers.filter((v) => v.projectId === viewerProjectId).length > 0
     : viewers.length > 0;
-
-  // Read the project filter from the URL (/project/$projectId). useParams
-  // with strict:false returns undefined when the route has no $projectId.
-  const routeParams = useParams({ strict: false }) as { projectId?: string };
-  const routeProjectId = routeParams.projectId;
-
-  // Track the last URL projectId we acted on so the effect only fires on URL
-  // changes — not on store changes (setProjectFilter navigates itself).
-  const lastRouteProjectIdRef = useRef<string | undefined>(undefined);
-
-  // The URL is the project filter: `/project/$projectId` shows that project,
-  // `/` every project. A deep link (or Back) to `/project/$projectId` sets the
-  // filter, which also moves the main pane into that project.
-  useEffect(() => {
-    if (lastRouteProjectIdRef.current === routeProjectId) return;
-    lastRouteProjectIdRef.current = routeProjectId;
-    if (!routeProjectId) return;
-    if (useWorkspaceStateStore.getState().projectFilterId === routeProjectId) return;
-    void useProjectStore.getState().setProjectFilter(routeProjectId);
-  }, [routeProjectId]);
-
-  // `/` with a filter set (a cold load, a return from Settings) shows the
-  // filter in the URL, so a refresh and a shared link mean the same view.
-  const isChatRoot = location.pathname === "/";
-  useEffect(() => {
-    if (isChatRoot && projectFilterId) syncProjectFilterUrl(projectFilterId);
-  }, [isChatRoot, projectFilterId]);
 
   const headerRef = useRef<HeaderRef>(null);
 
@@ -1859,6 +1833,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen">
+      <ProjectFilterRouteSync />
       {showHeader && (
         <Header
           ref={headerRef}

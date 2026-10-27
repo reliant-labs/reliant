@@ -185,7 +185,7 @@ describe("openChat", () => {
     const chat = { id: "c9", projectId: "p2", worktreeId: "wt-9" } as never;
     await openChat(chat);
 
-    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false });
+    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false, isCurrent: expect.any(Function) });
     expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("p2", { id: "wt-9", project_id: "p2" }, { isCurrent: expect.any(Function) });
     expect(mocks.selectChat).toHaveBeenCalledWith(chat, { deferPersist: true });
     expect(mocks.persistActiveChat).toHaveBeenCalledWith("c9");
@@ -223,7 +223,7 @@ describe("newChatTargetProjectId", () => {
 describe("openNewChat", () => {
   it("starts in another project on its main workspace", async () => {
     await openNewChat({ projectId: "p2" });
-    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false });
+    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false, isCurrent: expect.any(Function) });
     expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("p2", { id: "main-p2" }, { isCurrent: expect.any(Function) });
     expect(mocks.clearCurrentChat).toHaveBeenCalledWith("main-p2");
   });
