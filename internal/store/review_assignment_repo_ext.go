@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -22,7 +23,20 @@ type ReviewAssignmentExtra struct{}
 type ReviewAuthorityStore struct{ DB orm.Context }
 
 // ReviewPolicyConfig is provisioned only by a trusted owner/admin fixture.
+// ReviewAdmissionKeyExpression is the fixed private graph admission key. Its
+// repository ID comes from the verified normalized GitHub event projection.
+const ReviewAdmissionKeyExpression = `"github:" + trigger.payload.resource + ":pr:" + string(trigger.payload.data.pull_request.number)`
+
+// ReviewAdmissionScope matches the existing admission owner/project/workflow hash.
+// WorkflowRef must already be canonical (no aliases or mutable display name).
+func ReviewAdmissionScope(owner, project, workflowRef string) string {
+	raw, _ := json.Marshal([]string{owner, project, workflowRef})
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
 type ReviewPolicyConfig struct {
+	ProjectID, WorkflowRef                                  string
 	ID, OwnerID                                             string
 	RepositoryID, Revision                                  int64
 	Enabled                                                 bool
@@ -34,6 +48,9 @@ type ReviewPolicyConfig struct {
 // The head/author/run identity is loaded from canonical SQL, not accepted here.
 type ReviewAssignmentRequest struct {
 	ID, PolicyID, BindingID, AdmissionEventID string
+	// ProviderHead is obtained by the private server assignment adapter via a
+	// fresh authenticated read. It is never a model/CLI-supplied authorization.
+	ProviderHead reviewpublisher.Head
 }
 
 // ReviewAuthority is the immutable assignment with current authority projection.
@@ -75,7 +92,7 @@ func DigestReviewSnapshot(raw []byte) (string, error) {
 // Callers MUST establish owner/admin authority before using this fixture seam.
 func (s ReviewAuthorityStore) ProvisionReviewPolicy(ctx context.Context, p ReviewPolicyConfig) error {
 	digest, err := DigestReviewSnapshot(p.GraphSnapshot)
-	if err != nil || digest != p.WorkflowDigest || p.ID == "" || p.OwnerID == "" || p.AuthorizedBy == "" || p.RepositoryID <= 0 || p.Revision <= 0 || p.CheckName != "ReliantReview" || p.CompletionNode == "" {
+	if err != nil || digest != p.WorkflowDigest || p.ID == "" || p.OwnerID == "" || p.ProjectID == "" || p.WorkflowRef == "" || p.AuthorizedBy == "" || p.RepositoryID <= 0 || p.Revision <= 0 || p.CheckName != "ReliantReview" || p.CompletionNode == "" || !validReviewAdmissionSnapshot(p.GraphSnapshot, p.WorkflowRef) {
 		return reviewpublisher.ErrUnauthorized
 	}
 	return s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
@@ -87,10 +104,10 @@ func (s ReviewAuthorityStore) ProvisionReviewPolicy(ctx context.Context, p Revie
 		if err == nil && p.Revision <= old.Revision {
 			return reviewpublisher.ErrUnauthorized
 		}
-		_, err = s.DB.Bun().NewRaw(`INSERT INTO review_policies (id,owner_id,repository_id,revision,enabled,workflow_digest,graph_snapshot,completion_node,check_name,authorized_by)
-   VALUES (?,?,?,?,?,?,?::jsonb,?,?,?) ON CONFLICT (id) DO UPDATE SET revision=EXCLUDED.revision,enabled=EXCLUDED.enabled,
+		_, err = s.DB.Bun().NewRaw(`INSERT INTO review_policies (id,owner_id,repository_id,revision,enabled,workflow_digest,graph_snapshot,completion_node,check_name,authorized_by,project_id,workflow_ref,admission_scope)
+   VALUES (?,?,?,?,?,?,?::jsonb,?,?,?,?,?,?) ON CONFLICT (id) DO UPDATE SET revision=EXCLUDED.revision,enabled=EXCLUDED.enabled,
    workflow_digest=EXCLUDED.workflow_digest,graph_snapshot=EXCLUDED.graph_snapshot,completion_node=EXCLUDED.completion_node,check_name=EXCLUDED.check_name,authorized_by=EXCLUDED.authorized_by,updated_at=now()
-   WHERE review_policies.owner_id=EXCLUDED.owner_id AND review_policies.repository_id=EXCLUDED.repository_id`, p.ID, p.OwnerID, p.RepositoryID, p.Revision, p.Enabled, p.WorkflowDigest, string(p.GraphSnapshot), p.CompletionNode, p.CheckName, p.AuthorizedBy).Exec(ctx)
+   WHERE review_policies.owner_id=EXCLUDED.owner_id AND review_policies.repository_id=EXCLUDED.repository_id AND review_policies.project_id=EXCLUDED.project_id AND review_policies.workflow_ref=EXCLUDED.workflow_ref`, p.ID, p.OwnerID, p.RepositoryID, p.Revision, p.Enabled, p.WorkflowDigest, string(p.GraphSnapshot), p.CompletionNode, p.CheckName, p.AuthorizedBy, p.ProjectID, p.WorkflowRef, ReviewAdmissionScope(p.OwnerID, p.ProjectID, p.WorkflowRef)).Exec(ctx)
 		return err
 	})
 }
@@ -111,15 +128,24 @@ func (s ReviewAuthorityStore) AssignReview(ctx context.Context, in ReviewAssignm
    e.admission_workflow_id AS reviewer_root_id,e.admission_run_id AS reviewer_run_id
    FROM pr_handoff_bindings b JOIN review_policies p ON p.id=? AND p.owner_id=b.owner_id AND p.repository_id=b.repo_id
    JOIN trigger_events e ON e.id=? AND e.user_id=b.owner_id
+   JOIN triggers t ON t.id=e.trigger_id AND t.user_id=b.owner_id AND t.project_id=p.project_id
+    AND t.kind='integration' AND t.workflow=p.workflow_ref AND t.config->>'integration'='github'
+   JOIN workflows w ON w.id=e.admission_workflow_id AND w.parent_id IS NULL AND w.owner_user_id=b.owner_id
+   JOIN chats c ON c.id=w.chat_id AND c.user_id=b.owner_id AND c.project_id=p.project_id
    WHERE b.id=? AND p.enabled AND e.admission_state='reserved' AND e.superseded_by IS NULL
-   AND e.admission_head=b.head_sha AND e.admission_workflow_id<>b.root_id AND length(e.admission_run_id)>0`, in.PolicyID, in.AdmissionEventID, in.BindingID).Scan(ctx, &row)
+   AND e.kind='integration' AND e.admission_scope=p.admission_scope
+   AND e.admission_key=('github:'||b.repo_id::text||':pr:'||b.pr_number::text)
+   AND w.workflow_name=p.workflow_ref AND e.admission_head=b.head_sha
+   AND e.payload->>'integration'='github' AND e.payload->>'event' LIKE 'pull_request.%'
+   AND e.payload->>'resource'=b.repo_id::text AND e.payload->'data'->'pull_request'->>'number'=b.pr_number::text
+   AND e.admission_workflow_id<>b.root_id AND length(e.admission_run_id)>0`, in.PolicyID, in.AdmissionEventID, in.BindingID).Scan(ctx, &row)
 		if errors.Is(err, sql.ErrNoRows) {
 			return reviewpublisher.ErrUnauthorized
 		}
 		if err != nil {
 			return err
 		}
-		if in.ID == "" || row.ReviewerRootID == "" {
+		if in.ID == "" || row.ReviewerRootID == "" || in.ProviderHead.RepositoryID != row.RepositoryID || in.ProviderHead.PullNumber != row.PRNumber || in.ProviderHead.SHA != row.HeadSHA {
 			return reviewpublisher.ErrUnauthorized
 		}
 		var existing string
@@ -166,9 +192,14 @@ func (s ReviewAuthorityStore) LoadReviewAuthority(ctx context.Context, id string
   (SELECT MAX(generation) FROM review_assignments WHERE binding_id=a.binding_id) AS current_generation,
   (a.superseded OR b.head_sha<>a.head_sha OR b.root_id<>a.author_root_id OR b.execution_id<>a.author_run_id OR
    e.admission_head IS DISTINCT FROM a.head_sha OR e.admission_workflow_id IS DISTINCT FROM a.reviewer_root_id OR
-   e.admission_run_id IS DISTINCT FROM a.reviewer_run_id OR e.admission_state NOT IN ('reserved','released') OR e.superseded_by IS NOT NULL) AS superseded
+   e.admission_run_id IS DISTINCT FROM a.reviewer_run_id OR e.admission_state NOT IN ('reserved','released') OR e.superseded_by IS NOT NULL OR
+   e.kind<>'integration' OR e.admission_scope IS DISTINCT FROM p.admission_scope OR e.admission_key IS DISTINCT FROM ('github:'||a.repository_id::text||':pr:'||a.pr_number::text) OR
+   e.payload->>'resource' IS DISTINCT FROM a.repository_id::text OR e.payload->'data'->'pull_request'->>'number' IS DISTINCT FROM a.pr_number::text OR
+   w.workflow_name IS DISTINCT FROM p.workflow_ref OR w.owner_user_id IS DISTINCT FROM a.owner_id OR c.project_id IS DISTINCT FROM p.project_id OR
+   t.kind IS DISTINCT FROM 'integration' OR t.config->>'integration' IS DISTINCT FROM 'github' OR t.workflow IS DISTINCT FROM p.workflow_ref) AS superseded
   FROM review_assignments a JOIN review_policies p ON p.id=a.policy_id
-  JOIN pr_handoff_bindings b ON b.id=a.binding_id JOIN trigger_events e ON e.id=a.admission_event_id WHERE a.id=?`, id).Scan(ctx, &r)
+  JOIN pr_handoff_bindings b ON b.id=a.binding_id JOIN trigger_events e ON e.id=a.admission_event_id
+  LEFT JOIN workflows w ON w.id=e.admission_workflow_id LEFT JOIN chats c ON c.id=w.chat_id LEFT JOIN triggers t ON t.id=e.trigger_id WHERE a.id=?`, id).Scan(ctx, &r)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReviewAuthority{}, reviewpublisher.ErrUnauthorized
 	}
@@ -218,6 +249,28 @@ func (s ReviewAuthorityStore) RecordReviewEvidence(ctx context.Context, e Review
 func authorityCurrent(a ReviewAuthority) bool {
 	return a.Policy.Enabled && !a.Cancelled && !a.Superseded && a.CurrentGeneration == a.Binding.Generation && a.Policy.Revision == a.Binding.PolicyRevision && a.Policy.WorkflowDigest == a.Binding.WorkflowDigest && a.Author.RootID != a.Binding.Reviewer.RootID
 }
+func validReviewAdmissionSnapshot(raw []byte, workflowRef string) bool {
+	var snapshot struct {
+		RootRef      string                     `json:"root_ref"`
+		AdmissionKey string                     `json:"admission_key"`
+		Graphs       map[string]json.RawMessage `json:"graphs"`
+	}
+	if json.Unmarshal(raw, &snapshot) != nil || snapshot.RootRef != workflowRef || snapshot.AdmissionKey != ReviewAdmissionKeyExpression {
+		return false
+	}
+	var root struct {
+		Concurrency struct {
+			Key string `json:"key"`
+		} `json:"concurrency"`
+	}
+	return json.Unmarshal(snapshot.Graphs[workflowRef], &root) == nil && root.Concurrency.Key == ReviewAdmissionKeyExpression
+}
+
+// ReviewExternalID is fixed from immutable assignment, generation and intent.
+func ReviewExternalID(a ReviewAuthority, intentID string) string {
+	return "review:" + a.ID + ":" + strconv.FormatInt(a.Binding.Generation, 10) + ":" + intentID
+}
+
 func validReviewVerdict(v reviewpublisher.Verdict) bool {
 	return v == reviewpublisher.Approve || v == reviewpublisher.Changes || v == reviewpublisher.Incomplete
 }
@@ -265,7 +318,7 @@ func (s ReviewAuthorityStore) PrepareIntent(ctx context.Context, in reviewpublis
 			return err
 		}
 		id := uuid.NewString()
-		_, err = s.DB.Bun().NewRaw(`INSERT INTO review_publication_intents(id,assignment_id,payload,payload_digest) VALUES(?,?,?::jsonb,?)`, id, in.AssignmentID, string(raw), digest).Exec(ctx)
+		_, err = s.DB.Bun().NewRaw(`INSERT INTO review_publication_intents(id,assignment_id,repository_id,payload,payload_digest) VALUES(?,?,?,?::jsonb,?)`, id, in.AssignmentID, in.Binding.RepositoryID, string(raw), digest).Exec(ctx)
 		if err == nil {
 			receipt = reviewpublisher.Receipt{IntentID: id}
 		}

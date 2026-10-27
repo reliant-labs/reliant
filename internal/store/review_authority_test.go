@@ -7,7 +7,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/prhandoff"
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -30,17 +32,48 @@ func reviewFixture(t *testing.T) (*storetest.Env, store.ReviewAuthorityStore, st
 	p := prhandoff.Publication{ID: "publication", Author: a, Repo: repo, Branch: "fix", HeadSHA: sha}
 	require.NoError(t, handoff.RecordPublication(ctx, p))
 	require.NoError(t, handoff.Enroll(ctx, prhandoff.Binding{ID: "binding", Author: a, PublicationID: p.ID, Pull: prhandoff.Pull{Repo: repo, Number: 7, ObjectID: 700, HeadRepoID: 42, Branch: "fix", HeadSHA: sha, Open: true}}))
-	enqueueAdmission(t, env, "review-event", "private-review", "repo42/pr7", sha, 10)
+	enqueueAdmission(t, env, "review-event", store.ReviewAdmissionScope(storetest.SeedUserID, storetest.SeedProjectID, "trusted"), "github:42:pr:7", sha, 10)
 	require.NoError(t, reserveAdmission(env, "review-event", 1))
-	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET admission_workflow_id='review-root',admission_run_id='review-run' WHERE id='review-event'`)
+	root := "review-root"
+	require.NoError(t, env.Repo.CreateChat(ctx, &db.Chat{ID: root, Title: "private review", ProjectID: storetest.SeedProjectID, UserID: storetest.SeedUserID, WorkflowID: &root}))
+	require.NoError(t, env.Repo.CreateWorkflow(ctx, &db.Workflow{ID: root, ChatID: root, WorkflowName: "trusted", Thread: root, Status: db.Active(), OwnerUserID: &a.OwnerID}))
+	trigger := newStoreTrigger("review-trigger", "review", time.Now())
+	trigger.Workflow = "trusted"
+	trigger.Kind = "integration"
+	trigger.Config = json.RawMessage(`{"integration":"github","event":"pull_request.opened"}`)
+	require.NoError(t, store.InsertTrigger(ctx, env.ORM, trigger))
+	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET trigger_id='review-trigger',admission_workflow_id='review-root',admission_run_id='review-run',payload='{"integration":"github","event":"pull_request.opened","resource":"42","data":{"pull_request":{"number":7}}}'::jsonb WHERE id='review-event'`)
 	require.NoError(t, err)
-	raw := json.RawMessage(`{"root_ref":"trusted","graphs":{"trusted":{"nodes":[]}},"completion_node":"finish","completion_activity":"ActivityPrivateReviewCompletion","output_schema":"review-verdict-v1"}`)
+	raw, _ := json.Marshal(map[string]any{"root_ref": "trusted", "admission_key": store.ReviewAdmissionKeyExpression, "graphs": map[string]any{"trusted": map[string]any{"nodes": []any{}, "concurrency": map[string]any{"key": store.ReviewAdmissionKeyExpression}}}, "completion_node": "finish", "completion_activity": "ActivityPrivateReviewCompletion", "output_schema": "review-verdict-v1"})
 	digest, err := store.DigestReviewSnapshot(raw)
 	require.NoError(t, err)
-	require.NoError(t, s.ProvisionReviewPolicy(ctx, store.ReviewPolicyConfig{ID: "policy", OwnerID: storetest.SeedUserID, RepositoryID: 42, Revision: 1, Enabled: true, WorkflowDigest: digest, CompletionNode: "finish", CheckName: "ReliantReview", AuthorizedBy: "fixture-admin", GraphSnapshot: raw}))
-	assigned, err := s.AssignReview(ctx, store.ReviewAssignmentRequest{ID: "assignment", PolicyID: "policy", BindingID: "binding", AdmissionEventID: "review-event"})
+	require.NoError(t, s.ProvisionReviewPolicy(ctx, store.ReviewPolicyConfig{ProjectID: storetest.SeedProjectID, WorkflowRef: "trusted", ID: "policy", OwnerID: storetest.SeedUserID, RepositoryID: 42, Revision: 1, Enabled: true, WorkflowDigest: digest, CompletionNode: "finish", CheckName: "ReliantReview", AuthorizedBy: "fixture-admin", GraphSnapshot: raw}))
+	assigned, err := s.AssignReview(ctx, store.ReviewAssignmentRequest{ID: "assignment", PolicyID: "policy", BindingID: "binding", AdmissionEventID: "review-event", ProviderHead: reviewpublisher.Head{RepositoryID: 42, PullNumber: 7, SHA: strings.Repeat("a", 40)}})
 	require.NoError(t, err)
 	return env, s, assigned
+}
+
+func TestReviewAuthoritySQLWrongAdmissionSubjectAndWorkflow(t *testing.T) {
+	for _, tc := range []struct{ name, statement string }{
+		{"wrong PR", `UPDATE trigger_events SET payload=jsonb_set(payload,'{data,pull_request,number}','8') WHERE id='review-event'`},
+		{"wrong repository", `UPDATE trigger_events SET payload=jsonb_set(payload,'{resource}','"43"') WHERE id='review-event'`},
+		{"wrong key", `UPDATE trigger_events SET admission_key='github:42:pr:8' WHERE id='review-event'`},
+		{"wrong scope", `UPDATE trigger_events SET admission_scope='unrelated' WHERE id='review-event'`},
+		{"wrong workflow", `UPDATE workflows SET workflow_name='author-controlled' WHERE id='review-root'`},
+		{"wrong trigger source", `UPDATE triggers SET config='{"integration":"http"}'::jsonb WHERE id='review-trigger'`},
+		{"generic webhook", `UPDATE trigger_events SET kind='webhook' WHERE id='review-event'`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env, s, _ := reviewFixture(t)
+			ctx := context.Background()
+			_, err := env.SQL.ExecContext(ctx, `DELETE FROM review_assignments`)
+			require.NoError(t, err)
+			_, err = env.SQL.ExecContext(ctx, tc.statement)
+			require.NoError(t, err)
+			_, err = s.AssignReview(ctx, store.ReviewAssignmentRequest{ID: "new", PolicyID: "policy", BindingID: "binding", AdmissionEventID: "review-event", ProviderHead: reviewpublisher.Head{RepositoryID: 42, PullNumber: 7, SHA: strings.Repeat("a", 40)}})
+			require.ErrorIs(t, err, reviewpublisher.ErrUnauthorized)
+		})
+	}
 }
 
 func TestReviewAuthoritySQLIntentAndAtomicDenials(t *testing.T) {
@@ -86,13 +119,42 @@ func TestReviewAuthoritySQLIntentAndAtomicDenials(t *testing.T) {
 	claimed, err = s.ClaimPublication(ctx, first.IntentID)
 	require.NoError(t, err)
 	require.False(t, claimed, "uncertain must never reset create")
-	require.NoError(t, s.ConfirmPublication(ctx, first.IntentID, 901, "https://github.com/acme/repo/runs/901"))
-	require.NoError(t, s.ConfirmPublication(ctx, first.IntentID, 901, "https://github.com/acme/repo/runs/901"))
-	require.ErrorIs(t, s.ConfirmPublication(ctx, first.IntentID, 902, "https://github.com/acme/repo/runs/902"), reviewpublisher.ErrUnauthorized)
+	for _, bad := range []store.ReviewCheckReceipt{
+		{RepositoryID: 43, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"},
+		{RepositoryID: 42, HeadSHA: strings.Repeat("c", 40), Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"},
+		{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "Other", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"},
+		{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: "another-intent", CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"},
+		{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://evil.test/runs/901"},
+	} {
+		require.ErrorIs(t, s.ConfirmPublication(ctx, first.IntentID, bad), reviewpublisher.ErrUnauthorized)
+	}
+	require.NoError(t, s.ConfirmPublication(ctx, first.IntentID, store.ReviewCheckReceipt{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"}))
+	require.NoError(t, s.ConfirmPublication(ctx, first.IntentID, store.ReviewCheckReceipt{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"}))
+	require.ErrorIs(t, s.ConfirmPublication(ctx, first.IntentID, store.ReviewCheckReceipt{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 902, CheckURL: "https://github.com/acme/repo/runs/902"}), reviewpublisher.ErrUnauthorized)
 	_, err = env.SQL.ExecContext(ctx, `UPDATE review_policies SET revision=2 WHERE id='policy'`)
 	require.NoError(t, err)
 	_, err = s.PrepareIntent(ctx, intent)
 	require.ErrorIs(t, err, reviewpublisher.ErrUnauthorized)
+}
+
+func TestReviewAuthoritySQLCheckReceiptCannotBeReusedAcrossIntents(t *testing.T) {
+	env, s, a := reviewFixture(t)
+	ctx := context.Background()
+	require.NoError(t, s.RecordReviewEvidence(ctx, store.ReviewEvidence{AssignmentID: a.ID, Digest: "sha256:" + strings.Repeat("b", 64), ActivityID: "finish", RunID: "review-run", Verdict: reviewpublisher.Approve, Terminal: true, GraphSucceeded: true}))
+	first, err := s.PrepareIntent(ctx, reviewpublisher.Intent{AssignmentID: a.ID, Binding: a.Binding, CheckName: "ReliantReview", Conclusion: "success"})
+	require.NoError(t, err)
+	_, err = s.ClaimPublication(ctx, first.IntentID)
+	require.NoError(t, err)
+	receipt := store.ReviewCheckReceipt{RepositoryID: 42, HeadSHA: a.Binding.HeadSHA, Name: "ReliantReview", ExternalID: store.ReviewExternalID(a, first.IntentID), CheckID: 901, CheckURL: "https://github.com/acme/repo/runs/901"}
+	require.NoError(t, s.ConfirmPublication(ctx, first.IntentID, receipt))
+	// Copy fixture state into another assignment/intent to exercise the storage
+	// uniqueness invariant; this is an adversarial DB fixture, not trusted flow.
+	_, err = env.SQL.ExecContext(ctx, `INSERT INTO trigger_events (id,user_id,kind,dedupe_key,occurred_at,payload,outcome,outcome_detail) SELECT 'other-event',user_id,kind,'other',occurred_at,payload,outcome,outcome_detail FROM trigger_events WHERE id='review-event'`)
+	require.NoError(t, err)
+	_, err = env.SQL.ExecContext(ctx, `INSERT INTO review_assignments SELECT 'other-assignment',policy_id,binding_id,'other-event',owner_id,repository_id,pr_number,repeat('c',40),author_root_id,author_run_id,'other-reviewer','other-run',policy_revision,workflow_digest,graph_snapshot,completion_node,2,cancelled,superseded,completion_state,verdict,evidence_digest,completion_activity_id,completion_run_id,graph_succeeded,created_at,updated_at FROM review_assignments WHERE id='assignment'`)
+	require.NoError(t, err)
+	_, err = env.SQL.ExecContext(ctx, `INSERT INTO review_publication_intents(id,assignment_id,repository_id,payload,payload_digest,state,check_id,check_url) SELECT 'other-intent','other-assignment',repository_id,payload,payload_digest,'publishing',901,NULL FROM review_publication_intents WHERE id=$1`, first.IntentID)
+	require.Error(t, err, "database must reject the same provider check identity for another intent")
 }
 
 func TestReviewAuthoritySQLDriftAndSpoofing(t *testing.T) {
@@ -117,7 +179,7 @@ func TestReviewAuthoritySQLDriftAndSpoofing(t *testing.T) {
 func TestReviewAuthoritySQLConflictAndSameHeadCoalesces(t *testing.T) {
 	_, s, a := reviewFixture(t)
 	ctx := context.Background()
-	same, err := s.AssignReview(ctx, store.ReviewAssignmentRequest{ID: "duplicate", PolicyID: "policy", BindingID: "binding", AdmissionEventID: "review-event"})
+	same, err := s.AssignReview(ctx, store.ReviewAssignmentRequest{ID: "duplicate", PolicyID: "policy", BindingID: "binding", AdmissionEventID: "review-event", ProviderHead: reviewpublisher.Head{RepositoryID: 42, PullNumber: 7, SHA: strings.Repeat("a", 40)}})
 	require.NoError(t, err)
 	require.Equal(t, a.ID, same.ID)
 	e := store.ReviewEvidence{AssignmentID: a.ID, Digest: "sha256:" + strings.Repeat("b", 64), ActivityID: "finish", RunID: "review-run", Verdict: reviewpublisher.Changes, Terminal: true}

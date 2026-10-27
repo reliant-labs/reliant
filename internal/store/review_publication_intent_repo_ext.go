@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
@@ -88,14 +89,33 @@ func (s ReviewAuthorityStore) UncertainPublication(ctx context.Context, id strin
 // ConfirmPublication requires still-current authority and a nonzero CP receipt.
 // Exact remote binding is verified by the CP fixed-operation bridge, not claimed
 // from a model or a generic GitHub webhook.
-func (s ReviewAuthorityStore) ConfirmPublication(ctx context.Context, id string, checkID int64, checkURL string) error {
+// ReviewCheckReceipt is returned only by the dedicated CP bridge after exact
+// issuer/remote-binding verification. These fields are compared to the immutable
+// local intent; arbitrary positive check IDs or URLs are not sufficient.
+type ReviewCheckReceipt struct {
+	RepositoryID, CheckID               int64
+	HeadSHA, Name, ExternalID, CheckURL string
+}
+
+func (s ReviewAuthorityStore) ConfirmPublication(ctx context.Context, id string, receipt ReviewCheckReceipt) error {
+	checkID, checkURL := receipt.CheckID, receipt.CheckURL
 	if checkID <= 0 || checkURL == "" {
 		return reviewpublisher.ErrUnauthorized
 	}
 	return s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
-		p, _, err := s.Publication(ctx, id)
+		p, a, err := s.Publication(ctx, id)
 		if err != nil {
 			return err
+		}
+		if receipt.RepositoryID != a.Binding.RepositoryID || receipt.HeadSHA != a.Binding.HeadSHA || receipt.Name != p.Intent.CheckName || receipt.ExternalID != ReviewExternalID(a, p.ID) || checkURL != fmt.Sprintf("https://github.com/%s/runs/%d", a.RepoName, checkID) {
+			return reviewpublisher.ErrUnauthorized
+		}
+		var reused int
+		if err = s.DB.Bun().NewRaw(`SELECT count(*) FROM review_publication_intents WHERE repository_id=? AND check_id=? AND id<>?`, receipt.RepositoryID, checkID, id).Scan(ctx, &reused); err != nil {
+			return err
+		}
+		if reused != 0 {
+			return reviewpublisher.ErrUnauthorized
 		}
 		if p.State == "confirmed" {
 			if p.CheckID != checkID || p.CheckURL != checkURL {
