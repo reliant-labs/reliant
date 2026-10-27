@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -1141,6 +1142,11 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
+	if p.spec.RecordExecution != nil {
+		// An acknowledged or completed admitted start must never create a
+		// second chain when a post-accept database write is retried.
+		workflowOptions.WorkflowIDReusePolicy = enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+	}
 
 	// Inject session daemon if set on chat. A chat that reaches here still
 	// unpinned (a branch's first send, a trigger-recorded chat) is pinned
@@ -1202,6 +1208,14 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// The root start stays synchronous. Returning before Temporal accepted
 	// it would hand the caller a committed chat that may never run.
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
+	if err != nil && p.spec.RecordExecution != nil {
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &already) {
+			if recoverErr := l.recoverAdmission(ctx, p.eventID, workflowID, p.spec); recoverErr == nil {
+				return nil, &AlreadyLaunchedError{ChatID: chatID, EventID: p.eventID}
+			}
+		}
+	}
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", chatID)
 		l.recordFailedStart(ctx, workflowID)
