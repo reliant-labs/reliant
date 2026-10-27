@@ -198,6 +198,8 @@ type Event struct {
 	// this is only evidence for attributing the event to a write Reliant made
 	// (see triggers.InboundEvent.Echo). Optional.
 	Echo *provenance.Echo
+	// ObservedHead is normalized provider identity, not a freshness assertion.
+	ObservedHead string
 }
 
 // ErrUnauthorized marks a request that failed verification.

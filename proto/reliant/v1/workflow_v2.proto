@@ -2145,4 +2145,15 @@ message Workflow {
   // had produced. The run still ends FAILED: the handler cannot mask the
   // failure, and an error in it is logged, never recursive.
   Workflow on_failure = 19;
+  // Concurrency bounds automation root runs across this owner's project activations.
+  WorkflowConcurrency concurrency = 20;
+}
+
+// WorkflowConcurrency is private automation admission, not intra-run fanout.
+message WorkflowConcurrency {
+  uint32 max_running = 1;
+  // Key is a CEL string expression over the authenticated trigger envelope.
+  string key = 2;
+  // Supersede currently accepts only "latest" (intake order, not provider freshness).
+  string supersede = 3;
 }

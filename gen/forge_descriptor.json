@@ -37885,6 +37885,25 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "concurrency",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowConcurrency"
+          }
+        ],
+        "reliant.v1.WorkflowConcurrency": [
+          {
+            "name": "max_running",
+            "kind": "uint32"
+          },
+          {
+            "name": "key",
+            "kind": "string"
+          },
+          {
+            "name": "supersede",
+            "kind": "string"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -38175,6 +38194,7 @@
         "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
         "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+        "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
@@ -41360,7 +41380,7 @@
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
     "reliant/v1/trigger.proto": "154c1e6cac514f479c24a2b742a4a52d4f3d3e314ffb2b9f254da7a416058aad",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
+    "reliant/v1/workflow_v2.proto": "cba9c4fa13764af2331f1a5f80eee2a105861f43d63642153902ae9996a195ef",
     "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
   }
 }
