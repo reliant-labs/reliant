@@ -1199,6 +1199,9 @@
     "internal/store/pr_review_wait_outcome_repo_ext.go": {
       "scaffolded_at": "2026-10-27T07:34:35Z"
     },
+    "internal/store/pr_review_wait_request_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:40:32Z"
+    },
     "internal/store/pr_review_wait_subscription_repo_ext.go": {
       "scaffolded_at": "2026-10-27T07:34:35Z"
     },
