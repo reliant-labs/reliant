@@ -11,14 +11,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
 	"github.com/reliant-labs/reliant/internal/runcontinuity"
 	"github.com/reliant-labs/reliant/internal/store"
-	relianttemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	servicepb "go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -31,14 +29,14 @@ type CompletionInput struct {
 	Result       GraphResult          `json:"result"`
 }
 
+// ReviewCompletionPath is a private lifecycle hook identity, never a YAML node.
+const ReviewCompletionPath = "hooks.review_completion"
+
 // TemporalEvidence reads exact histories with bounded pages, events, payloads and
 // continuation chains. Service and namespace are trusted server configuration.
 type TemporalEvidence struct {
 	Service   runcontinuity.HistoryService
 	Namespace string
-	// Converter must share the server claim-check payload store. Nil uses the
-	// standard flexible converter, which fails closed on offloaded references.
-	Converter converter.DataConverter
 }
 
 // CompletionActivity records pending evidence, never whole-graph success from
@@ -109,7 +107,7 @@ func (r TemporalEvidence) Verify(ctx context.Context, a store.ReviewAuthority, a
 		return store.ReviewEvidence{}, denied
 	}
 	var snapshot GraphSnapshot
-	if json.Unmarshal(a.GraphSnapshot, &snapshot) != nil || snapshot.RootRef == "" || snapshot.WorkflowType == "" || len(snapshot.Graphs) == 0 || len(snapshot.Graphs) > 64 || snapshot.CompletionNode != a.CompletionNode || snapshot.CompletionActivity != CompletionActivityName || snapshot.OutputSchema != CompletionSchema {
+	if json.Unmarshal(a.GraphSnapshot, &snapshot) != nil || snapshot.RootRef == "" || snapshot.WorkflowType == "" || len(snapshot.Graphs) == 0 || len(snapshot.Graphs) > 64 || snapshot.CompletionNode != a.CompletionNode || snapshot.CompletionNode != ReviewCompletionPath || snapshot.CompletionActivity != CompletionActivityName || snapshot.OutputSchema != CompletionSchema {
 		return store.ReviewEvidence{}, denied
 	}
 	if _, ok := snapshot.Graphs[snapshot.RootRef]; !ok {
@@ -154,6 +152,11 @@ func (r TemporalEvidence) Verify(ctx context.Context, a store.ReviewAuthority, a
 						return store.ReviewEvidence{}, denied
 					}
 					result = input.Result
+					// Registered private hook schedules this fixed identity only
+					// after graph settling; arbitrary serialized paths are not enough.
+					if attr.GetActivityId() != "private-review-completion" {
+						return store.ReviewEvidence{}, denied
+					}
 					scheduled = event
 					found = true
 				}
@@ -169,12 +172,14 @@ func (r TemporalEvidence) Verify(ctx context.Context, a store.ReviewAuthority, a
 					}
 					var output struct {
 						WorkflowJSON []byte `json:"workflow_json"`
+						YAML         []byte `json:"yaml"`
+						HasTemplates bool   `json:"has_templates"`
 					}
 					if r.decodeOne(schedule.GetInput(), &input) != nil || r.decodeOne(attr.GetResult(), &output) != nil {
 						return store.ReviewEvidence{}, denied
 					}
 					expected, ok := snapshot.Graphs[input.WorkflowName]
-					if !ok || !sameJSON(expected, output.WorkflowJSON) {
+					if !ok || output.HasTemplates || len(output.YAML) == 0 || !bytes.Equal(snapshot.YAML[input.WorkflowName], output.YAML) || bytes.Contains(output.YAML, []byte("{{")) || !sameJSON(expected, output.WorkflowJSON) {
 						return store.ReviewEvidence{}, denied
 					}
 					observed[input.WorkflowName] = true
@@ -271,18 +276,15 @@ func (r TemporalEvidence) decodeOne(p *commonpb.Payloads, out any) error {
 	if len(p.GetPayloads()) != 1 || len(p.GetPayloads()[0].GetData()) > 1<<20 {
 		return reviewpublisher.ErrUnauthorized
 	}
-	dc := r.Converter
-	if dc == nil {
-		dc = relianttemporal.NewFlexibleDataConverter()
-	}
-	if err := dc.FromPayloads(p, out); err != nil {
-		return err
-	}
-	decoded, err := json.Marshal(out)
-	if err != nil || len(decoded) > 2<<20 {
+	// Review metadata is deliberately inline-only initially. Never invoke an
+	// offload codec/fetch/decompress before enforcing bounds, and inspect the
+	// entire raw JSON (including unknown fields) rather than re-marshaling a
+	// typed projection that could discard an oversized ignored field.
+	payload := p.GetPayloads()[0]
+	if string(payload.GetMetadata()["encoding"]) != "json/plain" || !json.Valid(payload.GetData()) {
 		return reviewpublisher.ErrUnauthorized
 	}
-	return nil
+	return json.Unmarshal(payload.GetData(), out)
 }
 func sameJSON(a, b []byte) bool {
 	var x, y any

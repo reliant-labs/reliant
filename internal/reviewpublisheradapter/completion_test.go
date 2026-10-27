@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
@@ -55,11 +56,11 @@ func payload(t *testing.T, v any) *commonpb.Payloads {
 func evidenceFixture(t *testing.T) (TemporalEvidence, store.ReviewAuthority, *historyFixture) {
 	t.Helper()
 	graph := json.RawMessage(`{"name":"trusted","nodes":[{"id":"finish"}]}`)
-	snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "DynamicWorkflow", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, CompletionNode: "finish", CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
+	snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "DynamicWorkflow", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, YAML: map[string][]byte{"trusted": []byte("name: trusted\nnodes: []\n")}, CompletionNode: ReviewCompletionPath, CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
 	require.NoError(t, err)
 	digest, err := store.DigestReviewSnapshot(snapshot)
 	require.NoError(t, err)
-	a := store.ReviewAuthority{ID: "assignment", Binding: reviewpublisher.Binding{Reviewer: reviewpublisher.Execution{RootID: "review-root", RunID: "review-run"}, WorkflowDigest: digest}, GraphSnapshot: snapshot, CompletionNode: "finish"}
+	a := store.ReviewAuthority{ID: "assignment", Binding: reviewpublisher.Binding{Reviewer: reviewpublisher.Execution{RootID: "review-root", RunID: "review-run"}, WorkflowDigest: digest}, GraphSnapshot: snapshot, CompletionNode: ReviewCompletionPath}
 	scheduled := func(id int64, name, activityID string, input any) *historypb.HistoryEvent {
 		return &historypb.HistoryEvent{EventId: id, EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED, Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{ActivityId: activityID, ActivityType: &commonpb.ActivityType{Name: name}, Input: payload(t, input)}}}
 	}
@@ -70,8 +71,9 @@ func evidenceFixture(t *testing.T) (TemporalEvidence, store.ReviewAuthority, *hi
 		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{WorkflowId: "review-root", OriginalExecutionRunId: "review-run", FirstExecutionRunId: "review-run", WorkflowType: &commonpb.WorkflowType{Name: "DynamicWorkflow"}, TaskQueue: &taskqueuepb.TaskQueue{Name: "private-review"}}}},
 		scheduled(2, "ActivityLoadWorkflow", "load", map[string]string{"workflow_name": "trusted"}), completed(3, 2, struct {
 			WorkflowJSON []byte `json:"workflow_json"`
-		}{graph}),
-		scheduled(4, CompletionActivityName, "complete", CompletionInput{AssignmentID: "assignment", Runtime: types.RuntimeContext{WorkflowID: "review-root", StepID: "finish", NodePath: "finish"}, Result: GraphResult{Verdict: reviewpublisher.Approve}}), completed(5, 4, map[string]bool{"recorded": true}),
+			YAML         []byte `json:"yaml"`
+		}{graph, []byte("name: trusted\nnodes: []\n")}),
+		scheduled(4, CompletionActivityName, "private-review-completion", CompletionInput{AssignmentID: "assignment", Runtime: types.RuntimeContext{WorkflowID: "review-root", StepID: ReviewCompletionPath, NodePath: ReviewCompletionPath}, Result: GraphResult{Verdict: reviewpublisher.Approve}}), completed(5, 4, map[string]bool{"recorded": true}),
 		scheduled(6, "WorkflowStatus", "status", map[string]string{"workflow_id": "review-root", "status": "completed", "outcome": "success"}), completed(7, 6, nil),
 		{EventId: 8, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{Result: payload(t, map[string]any{"outputs": map[string]any{"review_verdict": "approve"}})}}},
 	}}
@@ -80,11 +82,11 @@ func evidenceFixture(t *testing.T) (TemporalEvidence, store.ReviewAuthority, *hi
 
 func TestHistoryCompletionRequiresTerminalGraphEvidence(t *testing.T) {
 	r, a, _ := evidenceFixture(t)
-	pending, err := r.Verify(context.Background(), a, "review-run", "complete", 4, false)
+	pending, err := r.Verify(context.Background(), a, "review-run", "private-review-completion", 4, false)
 	require.NoError(t, err)
 	require.False(t, pending.Terminal)
 	require.False(t, pending.GraphSucceeded)
-	final, err := r.Verify(context.Background(), a, "review-run", "complete", 4, true)
+	final, err := r.Verify(context.Background(), a, "review-run", "private-review-completion", 4, true)
 	require.NoError(t, err)
 	require.True(t, final.Terminal)
 	require.True(t, final.GraphSucceeded)
@@ -130,7 +132,7 @@ func TestHistorySpoofingAndFailure(t *testing.T) {
 				denied = false
 				f.events[7].GetWorkflowExecutionCompletedEventAttributes().Result = payload(t, map[string]any{"outputs": map[string]any{"review_verdict": "changes"}})
 			}
-			got, err := r.Verify(context.Background(), a, "review-run", "complete", 4, true)
+			got, err := r.Verify(context.Background(), a, "review-run", "private-review-completion", 4, true)
 			if denied {
 				require.Error(t, err)
 			} else {
@@ -141,10 +143,51 @@ func TestHistorySpoofingAndFailure(t *testing.T) {
 	}
 }
 
+func TestHistoryRejectsTemplateAndYAMLSubstitution(t *testing.T) {
+	for _, kind := range []string{"template", "yaml", "dependency template"} {
+		t.Run(kind, func(t *testing.T) {
+			r, a, f := evidenceFixture(t)
+			output := map[string]any{"workflow_json": []byte(`{"name":"trusted","nodes":[{"id":"finish"}]}`), "yaml": []byte("name: trusted\nnodes: []\n"), "has_templates": false}
+			if kind == "yaml" {
+				output["yaml"] = []byte("name: replaced\n")
+			} else {
+				output["has_templates"] = true
+				output["yaml"] = []byte("name: '{{ inputs.untrusted }}'\n")
+			}
+			if kind == "dependency template" {
+				var s GraphSnapshot
+				require.NoError(t, json.Unmarshal(a.GraphSnapshot, &s))
+				s.Graphs["dependency"] = s.Graphs["trusted"]
+				s.YAML["dependency"] = s.YAML["trusted"]
+				a.GraphSnapshot, _ = json.Marshal(s)
+				a.Binding.WorkflowDigest, _ = store.DigestReviewSnapshot(a.GraphSnapshot)
+				f.events[1].GetActivityTaskScheduledEventAttributes().Input = payload(t, map[string]string{"workflow_name": "dependency"})
+			}
+			f.events[2].GetActivityTaskCompletedEventAttributes().Result = payload(t, output)
+			_, err := r.Verify(context.Background(), a, "review-run", "private-review-completion", 4, true)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestReviewMetadataRejectsOffloadAndOversizeBeforeDecode(t *testing.T) {
+	r := TemporalEvidence{}
+	for _, data := range []string{`{"key":"sha256:missing","size":999999999999,"zsize":1}`, `{"key":"sha256:bomb","size":1073741824,"zsize":10}`} {
+		var out any
+		err := r.decodeOne(&commonpb.Payloads{Payloads: []*commonpb.Payload{{Metadata: map[string][]byte{"encoding": []byte("claim-check/v1")}, Data: []byte(data)}}}, &out)
+		require.ErrorIs(t, err, reviewpublisher.ErrUnauthorized)
+	}
+	var ignored struct {
+		Verdict string `json:"verdict"`
+	}
+	raw := []byte(`{"verdict":"approve","ignored":"` + strings.Repeat("x", 1<<20) + `"}`)
+	require.ErrorIs(t, r.decodeOne(&commonpb.Payloads{Payloads: []*commonpb.Payload{{Metadata: map[string][]byte{"encoding": []byte("json/plain")}, Data: raw}}}, &ignored), reviewpublisher.ErrUnauthorized)
+}
+
 func TestHistoryBounds(t *testing.T) {
 	r, a, f := evidenceFixture(t)
 	f.cycle = true
-	_, err := r.Verify(context.Background(), a, "review-run", "complete", 4, true)
+	_, err := r.Verify(context.Background(), a, "review-run", "private-review-completion", 4, true)
 	require.Error(t, err)
 	require.Less(t, f.calls, 8)
 }

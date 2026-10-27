@@ -51,8 +51,9 @@ func deterministicReviewGraph(ctx workflow.Context, otherBranchFails bool) (map[
 	if err := workflow.ExecuteActivity(ctx, "ActivityLoadWorkflow", map[string]string{"workflow_name": "trusted"}).Get(ctx, &loaded); err != nil {
 		return nil, err
 	}
-	in := CompletionInput{AssignmentID: "assignment", Runtime: types.RuntimeContext{WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID, StepID: "finish", NodePath: "finish"}, Result: GraphResult{Verdict: reviewpublisher.Approve}}
-	if err := workflow.ExecuteActivity(ctx, CompletionActivityName, in).Get(ctx, nil); err != nil {
+	in := CompletionInput{AssignmentID: "assignment", Runtime: types.RuntimeContext{WorkflowID: workflow.GetInfo(ctx).WorkflowExecution.ID, StepID: ReviewCompletionPath, NodePath: ReviewCompletionPath}, Result: GraphResult{Verdict: reviewpublisher.Approve}}
+	completionCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{ActivityID: "private-review-completion", StartToCloseTimeout: 20 * time.Second})
+	if err := workflow.ExecuteActivity(completionCtx, CompletionActivityName, in).Get(ctx, nil); err != nil {
 		return nil, err
 	}
 	outcome := "success"
@@ -87,7 +88,7 @@ func TestActualTemporalCompletionActivityAndFailedBranch(t *testing.T) {
 			taskQueue := "review-proof-" + uuid.NewString()
 			workflowID := "review-root-" + uuid.NewString()
 			graph := json.RawMessage(`{"name":"trusted","nodes":[{"id":"finish"}]}`)
-			snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "PrivateReviewProof", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, CompletionNode: "finish", CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
+			snapshot, err := json.Marshal(GraphSnapshot{WorkflowType: "PrivateReviewProof", RootRef: "trusted", Graphs: map[string]json.RawMessage{"trusted": graph}, YAML: map[string][]byte{"trusted": []byte("name: trusted\nnodes: []\n")}, CompletionNode: ReviewCompletionPath, CompletionActivity: CompletionActivityName, OutputSchema: CompletionSchema})
 			require.NoError(t, err)
 			digest, err := store.DigestReviewSnapshot(snapshot)
 			require.NoError(t, err)
@@ -95,13 +96,13 @@ func TestActualTemporalCompletionActivityAndFailedBranch(t *testing.T) {
 			// not inferred from a current chat pointer or activity supplied args.
 			execution, err := srv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: workflowID, TaskQueue: taskQueue}, "PrivateReviewProof", failed)
 			require.NoError(t, err)
-			fixture := &proofStore{assignment: store.ReviewAuthority{ID: "assignment", Binding: reviewpublisher.Binding{Reviewer: reviewpublisher.Execution{RootID: workflowID, RunID: execution.GetRunID()}, WorkflowDigest: digest}, GraphSnapshot: snapshot, CompletionNode: "finish"}, pending: make(chan store.ReviewEvidence, 4)}
+			fixture := &proofStore{assignment: store.ReviewAuthority{ID: "assignment", Binding: reviewpublisher.Binding{Reviewer: reviewpublisher.Execution{RootID: workflowID, RunID: execution.GetRunID()}, WorkflowDigest: digest}, GraphSnapshot: snapshot, CompletionNode: ReviewCompletionPath}, pending: make(chan store.ReviewEvidence, 4)}
 			reader := TemporalEvidence{Service: srv.Client().WorkflowService(), Namespace: "default"}
 			completion := CompletionActivity{Store: fixture, History: reader}
 			w := worker.New(srv.Client(), taskQueue, worker.Options{})
 			w.RegisterWorkflowWithOptions(deterministicReviewGraph, workflow.RegisterOptions{Name: "PrivateReviewProof"})
 			w.RegisterActivityWithOptions(func(context.Context, map[string]string) (map[string]any, error) {
-				return map[string]any{"workflow_json": []byte(graph)}, nil
+				return map[string]any{"workflow_json": []byte(graph), "yaml": []byte("name: trusted\nnodes: []\n"), "has_templates": false}, nil
 			}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 			w.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: CompletionActivityName})
 			w.RegisterActivityWithOptions(func(context.Context, map[string]string) error { return nil }, activity.RegisterOptions{Name: "WorkflowStatus"})

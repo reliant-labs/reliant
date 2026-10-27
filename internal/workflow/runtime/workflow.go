@@ -792,6 +792,10 @@ type WorkflowResult struct {
 }
 
 func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *WorkflowResult, retErr error) {
+	return dynamicWorkflowWithHooks(ctx, input, WorkflowHooks{})
+}
+
+func dynamicWorkflowWithHooks(ctx workflow.Context, input WorkflowInput, hooks WorkflowHooks) (result *WorkflowResult, retErr error) {
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
@@ -2443,6 +2447,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				return nil, fmt.Errorf("failed to evaluate workflow outputs: %w", err)
 			}
 
+			if hooks.AfterGraph != nil {
+				if err := hooks.AfterGraph(ctx, GraphCompletion{WorkflowName: input.WorkflowName, Loaded: *loadedWf, Outputs: outputs, Outcome: runOutcome}); err != nil {
+					return nil, fmt.Errorf("private graph completion hook: %w", err)
+				}
+			}
 			return &WorkflowResult{Outputs: outputs}, nil
 		}
 
