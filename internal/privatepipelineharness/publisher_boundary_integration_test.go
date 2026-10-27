@@ -197,7 +197,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewCleanupActivity(repo).Execute, activity.RegisterOptions{Name: "Cleanup"})
 		completion = adapter.CompletionActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}
 		reviewerWorker.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: adapter.CompletionActivityName})
-		reviewerWorker.RegisterActivityWithOptions((adapter.ResolveAssignmentActivity{Store: state}).Execute, activity.RegisterOptions{Name: adapter.ResolveAssignmentActivityName})
+		reviewerWorker.RegisterActivityWithOptions((adapter.ResolveAssignmentActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}).Execute, activity.RegisterOptions{Name: adapter.ResolveAssignmentActivityName})
 	}
 	if err := repo.BindTriggerAdmissionRun(ctx, event.ID, reviewRunID); err != nil {
 		t.Fatal(err)

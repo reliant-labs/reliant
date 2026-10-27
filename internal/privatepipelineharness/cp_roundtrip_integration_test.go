@@ -41,13 +41,18 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Query     string                     `json:"query"`
 			Variables map[string]json.RawMessage `json:"variables"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			f.t.Error("invalid GraphQL fixture input")
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&request); err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		if err := validateQueueOperation(r.Header.Get("Authorization"), request.Query, request.Variables); err != nil {
 			w.WriteHeader(400)
 			return
 		}
 		entry := map[string]any{"id": "queue-1", "position": 1, "pullRequest": map[string]any{"id": "pr-7", "headRefOid": strings.Repeat("a", 40), "repository": map[string]any{"id": "repo-42"}}}
-		if strings.Contains(request.Query, "mutation ReliantEnqueue") {
+		if request.Query == allowedEnqueueMutation {
 			var input struct {
 				PullRequestID string `json:"pullRequestId"`
 				ExpectedHead  string `json:"expectedHeadOid"`
@@ -66,7 +71,7 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if f.queued {
 				membership = entry
 			}
-			out = map[string]any{"data": map[string]any{"repository": map[string]any{"id": "repo-42", "databaseId": 42, "nameWithOwner": "acme/example", "defaultBranchRef": map[string]any{"name": "main"}, "pullRequest": map[string]any{"id": "pr-7", "number": 7, "state": "OPEN", "isDraft": false, "headRefOid": strings.Repeat("a", 40), "baseRefName": "main", "isMergeQueueEnabled": true, "repository": map[string]any{"id": "repo-42", "databaseId": 42}, "headRepository": map[string]any{"id": "repo-42", "databaseId": 42}, "mergeQueueEntry": membership}}}}
+			out = map[string]any{"data": map[string]any{"repository": map[string]any{"id": "repo-42", "databaseId": 42, "nameWithOwner": "acme/example", "defaultBranchRef": map[string]any{"name": "main"}, "pullRequest": map[string]any{"id": "pr-7", "databaseId": 700, "url": "https://github.com/acme/example/pull/7", "number": 7, "state": "OPEN", "isDraft": false, "headRefOid": strings.Repeat("a", 40), "baseRefName": "main", "isMergeQueueEnabled": true, "repository": map[string]any{"id": "repo-42", "databaseId": 42}, "headRepository": map[string]any{"id": "repo-42", "databaseId": 42}, "mergeQueueEntry": membership}}}}
 		}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example":
 		if r.Header.Get("Authorization") != "Bearer ghp_futurechat_b_fixture_owner" {
