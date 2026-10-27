@@ -15,10 +15,14 @@ import { getActiveOrgId } from "@/store/activeOrgStore";
  * active org (still loading, a machine credential, a signup mid-provisioning)
  * names none, so the server resolves the person's default.
  *
+ * Runs synchronously before authentication can await a token, outside all
+ * retry stages. The stamped message (including an absent org at inception)
+ * belongs to this operation; retries must never consult the selection again.
+ *
  * Streaming requests are left alone: their request is an async iterable, and
  * no org-scoped control-plane rpc the web calls streams.
  */
-export const orgInterceptor: Interceptor = (next) => async (req) => {
+export const orgInterceptor: Interceptor = (next) => (req) => {
   if (!req.stream) {
     const field = req.method.input.fields.find((f) => f.name === "org_id");
     if (field) {
@@ -28,5 +32,5 @@ export const orgInterceptor: Interceptor = (next) => async (req) => {
       if (orgId && !message[key]) message[key] = orgId;
     }
   }
-  return await next(req);
+  return next(req);
 };

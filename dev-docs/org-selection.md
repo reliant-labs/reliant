@@ -34,6 +34,41 @@ The helper passes it in `TokenService.ExchangeToken.org_id`, then `AccessTokenIn
 
 Plain HTTP approval call sites also send `org_id`: `Auth/CliLogin.tsx` → `/oauth/approve`; `Auth/DevicePairing.tsx` and `Machines/PairMachinePanel.tsx` → `services/controlPlane/pairing.ts` → `/oauth/device/approve`.
 
+## Request-inception identity and mutation audit
+
+Live routing does not yield before entering the shared interceptor chain.
+`orgInterceptor` captures the selected org synchronously, before authentication's
+`getToken()` and outside deadline replacement and 401 recovery. Explicit caller
+orgs win. An absent selection stays absent for that request, including retries;
+selecting B while auth is pending cannot turn A's request into B's request.
+This changes no server authority checks or resource-bound identity.
+
+Audited implicit-org mutation constructors:
+
+- `hooks/useCloudBillingQueries.ts`: checkout, wallet top-up session and intent,
+  compute subscription intent, auto-recharge, payment-method setup, billing
+  portal. Each constructs its canonical RPC immediately (purchase identity
+  checks are synchronous); all are covered by shared capture. Compute overage
+  and billing-email update are user-keyed and carry no org field.
+- `services/controlPlane/reliantAI.ts` / `hooks/useReliantAIQueries.ts`: coupon
+  redemption immediately invokes BillingService. Managed key creation keeps
+  its required explicit org; rotation/revocation keep their canonical key ID.
+  `services/controlPlane/llm.ts`'s optional-org key constructor is also covered.
+- `components/Settings/cloud/usage/useDeployUsage.ts`: infra-overage remains
+  user-keyed. `services/forge/{cloudEnvs,register,domains}.ts` immediately invoke
+  the canonical deploy/domain mutation RPCs, covered by shared capture.
+- Member grants retain their explicit component org and empty-org rejection.
+  Identity, observability (including dashboards/alerts/RUM) and activity wrappers
+  continue to pass explicit org/scope. Environment-bound secret and git credential
+  mutations keep their resource identity. CLI/device HTTP approval keeps its
+  separately confirmed org; it is not a Connect request.
+
+The canonical transport tests defer both initial token acquisition and 401 token
+refresh for all eight implicit-org billing mutations, model independent A/B/C
+writes, and assert both wire attempts remain A. They also exercise the real
+billing/coupon hooks, immediate same-stack switching, explicit/absent org retry
+identity, and the prior member-grant/key isolation regressions.
+
 ## Validation
 
 - `task test:affected LANES=web` and `LANES=go` (this checkout has a Taskfile, not a Makefile).

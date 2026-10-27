@@ -261,11 +261,15 @@ export function transportFor(route: TransportRoute): Transport {
 function routed(pick: (method: DescMethod) => Transport | Promise<Transport>): Transport {
   return {
     async unary(method, signal, timeoutMs, header, input, contextValues) {
-      const target = await pick(method);
+      const picked = pick(method);
+      // Live routing is synchronous: do not yield before the org interceptor
+      // captures this call's identity. Only lazy mock loading needs an await.
+      const target = "unary" in picked ? picked : await picked;
       return target.unary(method, signal, timeoutMs, header, input, contextValues);
     },
     async stream(method, signal, timeoutMs, header, input, contextValues) {
-      const target = await pick(method);
+      const picked = pick(method);
+      const target = "stream" in picked ? picked : await picked;
       return target.stream(method, signal, timeoutMs, header, input, contextValues);
     },
   };
