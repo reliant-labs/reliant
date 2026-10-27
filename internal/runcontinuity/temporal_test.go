@@ -14,9 +14,10 @@ import (
 )
 
 type rpcFake struct {
-	calls    int
-	cyclic   bool
-	wrongRun bool
+	calls        int
+	cyclic       bool
+	wrongRun     bool
+	invalidFirst bool
 }
 
 func (f *rpcFake) GetWorkflowExecutionHistory(_ context.Context, in *servicepb.GetWorkflowExecutionHistoryRequest, _ ...grpc.CallOption) (*servicepb.GetWorkflowExecutionHistoryResponse, error) {
@@ -25,7 +26,14 @@ func (f *rpcFake) GetWorkflowExecutionHistory(_ context.Context, in *servicepb.G
 		return nil, ErrUnverified
 	}
 	if in.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT {
-		return &servicepb.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: start("a", "")}}}}}, nil
+		first := &historypb.HistoryEvent{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: start("a", "")}}
+		if f.invalidFirst {
+			first.EventId = 2
+			first.EventType = enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED
+		}
+		// Temporal returns complete persistence batches: max page size 1 may
+		// contain STARTED followed by WORKFLOW_TASK_SCHEDULED.
+		return &servicepb.GetWorkflowExecutionHistoryResponse{History: &historypb.History{Events: []*historypb.HistoryEvent{first, {EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED}}}}, nil
 	}
 	if f.cyclic {
 		return &servicepb.GetWorkflowExecutionHistoryResponse{NextPageToken: []byte("cycle")}, nil
@@ -42,6 +50,14 @@ func (f *rpcFake) DescribeWorkflowExecution(_ context.Context, in *servicepb.Des
 	}
 	return &servicepb.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: run}, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}}, nil
 }
+func TestTemporalReaderRejectsInvalidFirstInPersistenceBatch(t *testing.T) {
+	fake := &rpcFake{invalidFirst: true}
+	_, err := (TemporalReader{Service: fake, Namespace: "trusted"}).Snapshot(context.Background(), Execution{"wf", "a"})
+	if err == nil {
+		t.Fatal("accepted non-start first event")
+	}
+}
+
 func TestTemporalReaderExactRunAndBoundedPagination(t *testing.T) {
 	for _, tt := range []struct {
 		name                      string
