@@ -22,7 +22,7 @@ type service struct{ deps Deps }
 
 // New constructs the disabled wait service, requiring every dependency.
 func New(d Deps) (Service, error) {
-	if d.Store == nil || d.Continuity == nil || d.Signals == nil {
+	if d.Store == nil || d.Continuity == nil || d.Signals == nil || d.Policy == nil {
 		return nil, errors.New("review wait dependencies missing")
 	}
 	return &service{d}, nil
@@ -46,7 +46,11 @@ func (s *service) Arm(ctx context.Context, r Request) (Subscription, error) {
 	if !proof.Live || proof.Current != r.Execution {
 		return Subscription{}, ErrUnavailable
 	}
-	return s.deps.Store.Arm(ctx, r, proof)
+	authority, err := s.resolveAuthority(ctx, b)
+	if err != nil {
+		return Subscription{}, err
+	}
+	return s.deps.Store.Arm(ctx, r, proof, authority)
 }
 func (s *service) Ready(ctx context.Context, sub Subscription) error {
 	return s.deps.Store.Ready(ctx, sub)
@@ -57,18 +61,36 @@ func (s *service) Read(ctx context.Context, sub Subscription) (Outcome, error) {
 func (s *service) Consume(ctx context.Context, sub Subscription, outcome Outcome) error {
 	return s.deps.Store.Consume(ctx, sub, outcome)
 }
+func (s *service) CancelRequest(ctx context.Context, r Request) error {
+	return s.deps.Store.CancelRequest(ctx, r)
+}
+
 func (s *service) Cancel(ctx context.Context, sub Subscription) error {
 	return s.deps.Store.Cancel(ctx, sub)
 }
 
 func (s *service) Publish(ctx context.Context, o Outcome) error {
-	if o.BindingID == "" || len(o.BindingID) > 255 || o.ProviderRef == "" || len(o.ProviderRef) > 255 || o.Sequence <= 0 || !shaPattern.MatchString(o.HeadSHA) || !validState(o.State) {
+	if o.OwnerID == "" || len(o.OwnerID) > 255 || o.AuthorityID == "" || len(o.AuthorityID) > 255 || o.BindingID == "" || len(o.BindingID) > 255 || o.ProviderRef == "" || len(o.ProviderRef) > 255 || o.Sequence <= 0 || !shaPattern.MatchString(o.HeadSHA) || !validState(o.State) {
+		return prhandoff.ErrRefused
+	}
+	binding, err := s.deps.Store.BindingByID(ctx, o.OwnerID, o.BindingID)
+	if err != nil {
+		return err
+	}
+	if binding.Author.OwnerID != o.OwnerID || binding.Pull.HeadSHA != o.HeadSHA {
+		return prhandoff.ErrRefused
+	}
+	authority, err := s.resolveAuthority(ctx, binding)
+	if err != nil {
+		return err
+	}
+	if o.AuthorityID != authority.ID {
 		return prhandoff.ErrRefused
 	}
 	// Deterministic reference identity; raw findings and caller run IDs do not exist.
 	digest := sha256.Sum256([]byte(o.BindingID + "\x00" + o.HeadSHA + "\x00" + o.ProviderRef))
 	o.ID = hex.EncodeToString(digest[:])
-	sub, err := s.deps.Store.Put(ctx, o)
+	sub, err := s.deps.Store.Put(ctx, o, authority)
 	if err != nil {
 		return err
 	}
@@ -101,6 +123,17 @@ func (s *service) Publish(ctx context.Context, o Outcome) error {
 	}
 	return fmt.Errorf("exact author review doorbell: %w", err)
 }
+func (s *service) resolveAuthority(ctx context.Context, b prhandoff.Binding) (Authority, error) {
+	authority, err := s.deps.Policy.Resolve(ctx, AuthoritySubject{OwnerID: b.Author.OwnerID, RepositoryID: b.Pull.Repo.ID, PR: b.Pull.Number, HeadSHA: b.Pull.HeadSHA})
+	if err != nil {
+		return Authority{}, err
+	}
+	if authority.ID == "" || len(authority.ID) > 255 || authority.PolicyRevision <= 0 {
+		return Authority{}, prhandoff.ErrRefused
+	}
+	return authority, nil
+}
+
 func validState(s string) bool {
 	return s == "approved" || s == "changes" || s == "closed" || s == "unavailable"
 }

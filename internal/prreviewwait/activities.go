@@ -61,7 +61,8 @@ func (a Activities) request(ctx context.Context, in NodeInput) (Request, error) 
 	if err != nil {
 		return Request{}, err
 	}
-	return Request{OwnerID: chat.UserID, ChatID: chat.ID, Execution: runcontinuity.Execution{WorkflowID: execution.ID, RunID: execution.RunID}, RepoID: repo.ID, PR: in.PR, HeadSHA: in.HeadSHA}, nil
+	exact := runcontinuity.Execution{WorkflowID: execution.ID, RunID: execution.RunID}
+	return Request{RequestKey: RequestKey(exact, in), OwnerID: chat.UserID, ChatID: chat.ID, Execution: exact, RepoID: repo.ID, PR: in.PR, HeadSHA: in.HeadSHA}, nil
 }
 
 // Arm authenticates the real activity context, then atomically subscribes.
@@ -131,6 +132,32 @@ func (a Activities) Cancel(ctx context.Context, s Subscription) error {
 	return a.Service.Cancel(ctx, s)
 }
 
+// CancelRequest reconciles unknown Arm results using exact authenticated
+// execution + node occurrence. It deliberately does not require a live root or
+// a GitHub read: terminal author cancellation must still tombstone late Arm.
+func (a Activities) CancelRequest(ctx context.Context, in NodeInput) error {
+	if a.Service == nil || a.Identity == nil || !activity.IsActivity(ctx) {
+		return prhandoff.ErrRefused
+	}
+	e := activity.GetInfo(ctx).WorkflowExecution
+	root, err := a.Identity.GetWorkflow(ctx, e.ID)
+	if err != nil {
+		return err
+	}
+	if root == nil || root.ParentID != nil {
+		return prhandoff.ErrRefused
+	}
+	chat, err := a.Identity.GetChat(ctx, root.ChatID)
+	if err != nil {
+		return err
+	}
+	if chat == nil || chat.UserID == "" || (root.OwnerUserID != nil && *root.OwnerUserID != chat.UserID) {
+		return prhandoff.ErrRefused
+	}
+	exact := runcontinuity.Execution{WorkflowID: e.ID, RunID: e.RunID}
+	return a.Service.CancelRequest(ctx, Request{RequestKey: RequestKey(exact, in), OwnerID: chat.UserID, ChatID: chat.ID, Execution: exact})
+}
+
 // Register installs only the narrow activities on an explicitly supplied worker.
 // Production does not call it until trusted event admission/retention are ready.
 func (a Activities) Register(registry worker.ActivityRegistry) {
@@ -139,4 +166,5 @@ func (a Activities) Register(registry worker.ActivityRegistry) {
 	registry.RegisterActivityWithOptions(a.Read, activity.RegisterOptions{Name: "PRReviewWaitRead"})
 	registry.RegisterActivityWithOptions(a.Consume, activity.RegisterOptions{Name: "PRReviewWaitConsume"})
 	registry.RegisterActivityWithOptions(a.Cancel, activity.RegisterOptions{Name: "PRReviewWaitCancel"})
+	registry.RegisterActivityWithOptions(a.CancelRequest, activity.RegisterOptions{Name: "PRReviewWaitCancelRequest"})
 }
