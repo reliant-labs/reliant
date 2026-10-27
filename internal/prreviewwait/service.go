@@ -57,6 +57,10 @@ func (s *service) Read(ctx context.Context, sub Subscription) (Outcome, error) {
 func (s *service) Consume(ctx context.Context, sub Subscription, outcome Outcome) error {
 	return s.deps.Store.Consume(ctx, sub, outcome)
 }
+func (s *service) CancelRequest(ctx context.Context, r Request) error {
+	return s.deps.Store.CancelRequest(ctx, r)
+}
+
 func (s *service) Cancel(ctx context.Context, sub Subscription) error {
 	return s.deps.Store.Cancel(ctx, sub)
 }

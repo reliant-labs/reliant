@@ -20,6 +20,7 @@ var ErrStaleRead = errors.New("review wait read superseded")
 
 // Subscription pins immutable original ownership plus a proven current cursor.
 type Subscription struct {
+	RequestKey string
 	// RepoID/PR are server-resolved output metadata, not subscription authority.
 	RepoID           int64
 	PR               int64
@@ -48,19 +49,22 @@ type Outcome struct {
 
 // NodeInput is the typed workflow node's subject, never its destination.
 type NodeInput struct {
-	Repo    string
-	PR      int64
-	HeadSHA string
+	// Occurrence is internal workflow node-path/iteration identity, not YAML args.
+	Occurrence string
+	Repo       string
+	PR         int64
+	HeadSHA    string
 }
 
 // Request comes from the executing activity's server context, never node args.
 type Request struct {
-	OwnerID   string
-	ChatID    string
-	Execution runcontinuity.Execution
-	RepoID    int64
-	PR        int64
-	HeadSHA   string
+	RequestKey string
+	OwnerID    string
+	ChatID     string
+	Execution  runcontinuity.Execution
+	RepoID     int64
+	PR         int64
+	HeadSHA    string
 }
 
 // Store persists atomic arm, cursor, inbox and consumption transitions.
@@ -72,6 +76,7 @@ type Store interface {
 	Read(context.Context, Subscription) (Outcome, error)
 	Consume(context.Context, Subscription, Outcome) error
 	Cancel(context.Context, Subscription) error
+	CancelRequest(context.Context, Request) error
 	Put(context.Context, Outcome) (Subscription, error)
 	Advance(context.Context, Subscription, runcontinuity.Result) (Subscription, error)
 	Notified(context.Context, Subscription, int64) error
@@ -96,6 +101,7 @@ type Service interface {
 	Read(context.Context, Subscription) (Outcome, error)
 	Consume(context.Context, Subscription, Outcome) error
 	Cancel(context.Context, Subscription) error
+	CancelRequest(context.Context, Request) error
 	Publish(context.Context, Outcome) error
 }
 

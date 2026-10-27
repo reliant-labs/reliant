@@ -61,6 +61,20 @@ func (s PRReviewWaitStore) Binding(ctx context.Context, o string, r, p int64) (p
 func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proof runcontinuity.Result) (prreviewwait.Subscription, error) {
 	var result prreviewwait.Subscription
 	err := s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+		if len(r.RequestKey) != 64 || r.OwnerID == "" || r.ChatID == "" || r.Execution.WorkflowID == "" || r.Execution.RunID == "" {
+			return prhandoff.ErrRefused
+		}
+		request := &PrReviewWaitRequest{ID: r.RequestKey, OwnerID: r.OwnerID, ChatID: r.ChatID, WorkflowID: r.Execution.WorkflowID, RunID: r.Execution.RunID, State: "arming"}
+		if _, err := s.DB.Bun().NewInsert().Model(request).On("CONFLICT (id) DO NOTHING").Exec(ctx); err != nil {
+			return err
+		}
+		persisted, err := GetPrReviewWaitRequestByID(ctx, s.DB, r.RequestKey)
+		if err != nil {
+			return err
+		}
+		if persisted.OwnerID != r.OwnerID || persisted.ChatID != r.ChatID || persisted.WorkflowID != r.Execution.WorkflowID || persisted.RunID != r.Execution.RunID || persisted.State == "cancelled" {
+			return prhandoff.ErrRefused
+		}
 		b, err := s.Binding(ctx, r.OwnerID, r.RepoID, r.PR)
 		if err != nil {
 			return err
@@ -71,7 +85,7 @@ func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proo
 		}
 		hash := sha256.Sum256([]byte(b.ID + "\x00" + r.HeadSHA))
 		id := hex.EncodeToString(hash[:])
-		row := &PrReviewWaitSubscription{ID: id, BindingID: b.ID, HeadSha: r.HeadSHA, WorkflowID: original.WorkflowID, OriginalRunID: original.RunID, CurrentRunID: proof.Current.RunID, State: "armed"}
+		row := &PrReviewWaitSubscription{RequestKey: r.RequestKey, ID: id, BindingID: b.ID, HeadSha: r.HeadSHA, WorkflowID: original.WorkflowID, OriginalRunID: original.RunID, CurrentRunID: proof.Current.RunID, State: "armed"}
 		if _, err := s.DB.Bun().NewInsert().Model(row).On("CONFLICT (binding_id,head_sha) DO NOTHING").Exec(ctx); err != nil {
 			return err
 		}
@@ -82,18 +96,45 @@ func (s PRReviewWaitStore) Arm(ctx context.Context, r prreviewwait.Request, proo
 		if existing.WorkflowID != original.WorkflowID || existing.OriginalRunID != original.RunID || existing.State == "cancelled" || existing.State == "needs_human" {
 			return prhandoff.ErrRefused
 		}
+		if existing.CurrentRunID == proof.Current.RunID && existing.RequestKey != r.RequestKey {
+			previousRequest, err := GetPrReviewWaitRequestByID(ctx, s.DB, existing.RequestKey)
+			if err != nil {
+				return err
+			}
+			// Cursor delivery may already have advanced; only a genuinely proven
+			// successor execution may replace request ownership, never another wait
+			// occurrence inside the same exact execution.
+			predecessor := false
+			for _, edge := range proof.Edges {
+				if edge.From.WorkflowID == r.Execution.WorkflowID && edge.From.RunID == previousRequest.RunID {
+					predecessor = true
+				}
+			}
+			if previousRequest.RunID == r.Execution.RunID || previousRequest.WorkflowID != r.Execution.WorkflowID || previousRequest.OwnerID != r.OwnerID || previousRequest.ChatID != r.ChatID || !predecessor {
+				return prhandoff.ErrRefused
+			}
+		}
 		result = waitSub(existing)
 		if result.CurrentRunID != proof.Current.RunID {
 			result, err = s.advance(ctx, result, proof)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := s.DB.Bun().NewUpdate().Model((*PrReviewWaitSubscription)(nil)).Set("request_key = ?", r.RequestKey).Where("id = ? AND current_run_id = ?", id, r.Execution.RunID).Exec(ctx); err != nil {
 			return err
 		}
+		if _, err := s.DB.Bun().NewUpdate().Model((*PrReviewWaitRequest)(nil)).Set("state = 'armed'").Set("subscription_id = ?", id).Where("id = ? AND state != 'cancelled'", r.RequestKey).Exec(ctx); err != nil {
+			return err
+		}
+		result.RequestKey = r.RequestKey
 		return nil
 	})
 	return result, err
 }
 
 func waitSub(r *PrReviewWaitSubscription) prreviewwait.Subscription {
-	return prreviewwait.Subscription{ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, WorkflowID: r.WorkflowID, OriginalRunID: r.OriginalRunID, CurrentRunID: r.CurrentRunID, State: r.State, Ready: r.Ready, NotifiedSequence: r.NotifiedSequence, ConsumedSequence: r.ConsumedSequence}
+	return prreviewwait.Subscription{RequestKey: r.RequestKey, ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, WorkflowID: r.WorkflowID, OriginalRunID: r.OriginalRunID, CurrentRunID: r.CurrentRunID, State: r.State, Ready: r.Ready, NotifiedSequence: r.NotifiedSequence, ConsumedSequence: r.ConsumedSequence}
 }
 func waitOutcome(r *PrReviewWaitOutcome) prreviewwait.Outcome {
 	return prreviewwait.Outcome{ID: r.ID, BindingID: r.BindingID, HeadSHA: r.HeadSha, ProviderRef: r.ProviderRef, Sequence: r.ProviderSequence, State: r.State}
@@ -169,6 +210,36 @@ func (s PRReviewWaitStore) Consume(ctx context.Context, sub prreviewwait.Subscri
 			return prreviewwait.ErrStaleRead
 		}
 		_, err = s.DB.Bun().NewUpdate().Model((*PrReviewWaitSubscription)(nil)).Set("consumed_sequence = GREATEST(consumed_sequence, ?)", o.Sequence).Set("state = 'resolved'").Where("id = ?", sub.ID).Exec(ctx)
+		return err
+	})
+}
+
+// CancelRequest inserts an exact-author tombstone even when Arm's result is
+// unknown. Serializable ordering ensures either Arm is cancelled after commit,
+// or a late Arm sees cancellation and cannot recreate an orphan subscription.
+func (s PRReviewWaitStore) CancelRequest(ctx context.Context, r prreviewwait.Request) error {
+	if len(r.RequestKey) != 64 || r.OwnerID == "" || r.ChatID == "" || r.Execution.WorkflowID == "" || r.Execution.RunID == "" {
+		return prhandoff.ErrRefused
+	}
+	return s.DB.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+		row := &PrReviewWaitRequest{ID: r.RequestKey, OwnerID: r.OwnerID, ChatID: r.ChatID, WorkflowID: r.Execution.WorkflowID, RunID: r.Execution.RunID, State: "cancelled"}
+		if _, err := s.DB.Bun().NewInsert().Model(row).On("CONFLICT (id) DO NOTHING").Exec(ctx); err != nil {
+			return err
+		}
+		existing, err := GetPrReviewWaitRequestByID(ctx, s.DB, r.RequestKey)
+		if err != nil {
+			return err
+		}
+		if existing.OwnerID != r.OwnerID || existing.ChatID != r.ChatID || existing.WorkflowID != r.Execution.WorkflowID || existing.RunID != r.Execution.RunID {
+			return prhandoff.ErrRefused
+		}
+		if _, err := s.DB.Bun().NewUpdate().Model((*PrReviewWaitRequest)(nil)).Set("state = 'cancelled'").Where("id = ?", r.RequestKey).Exec(ctx); err != nil {
+			return err
+		}
+		if existing.SubscriptionID == nil {
+			return nil
+		}
+		_, err = s.DB.Bun().NewUpdate().Model((*PrReviewWaitSubscription)(nil)).Set("state = 'cancelled'").Where("id = ? AND request_key = ? AND workflow_id = ? AND current_run_id = ? AND state = 'armed'", *existing.SubscriptionID, r.RequestKey, r.Execution.WorkflowID, r.Execution.RunID).Exec(ctx)
 		return err
 	})
 }
