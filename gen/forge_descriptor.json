@@ -781,7 +781,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stages an image for the composer: the message that sends it is the record"
           }
         },
         {
@@ -797,7 +799,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stages a file's content for the composer: the message that sends it is the record"
           }
         },
         {
@@ -831,7 +835,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "removes an attachment staged for the composer: draft state of a message not yet sent"
           }
         }
       ],
@@ -2460,7 +2466,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "restore",
+            "TargetKind": "worktree_recovery",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2477,7 +2487,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "worktree_recovery",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2498,7 +2512,6 @@
             "Declared": true,
             "Verb": "create",
             "TargetKind": "worktree",
-            "Implied": true,
             "Writer": "INTERCEPTOR"
           }
         },
@@ -2567,7 +2580,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2584,7 +2601,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2600,7 +2621,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "archive",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2616,7 +2641,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "unarchive",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2632,7 +2661,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "import",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2665,7 +2698,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "prune_worktrees",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2681,7 +2718,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "recreate",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2761,7 +2802,9 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "git index edit through the daemon: the commit that follows is the event, and git records it"
           }
         },
         {
@@ -2777,7 +2820,9 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "git index edit through the daemon: undoes a stage, and the repository's history never sees it"
           }
         },
         {
@@ -2793,7 +2838,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "revert_files",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2809,7 +2858,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "commit",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2825,7 +2878,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "push",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2841,7 +2898,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pull",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2873,7 +2934,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create_pr",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -5290,6 +5355,22 @@
           }
         },
         {
+          "Name": "GetToolResult",
+          "InputType": "GetToolResultRequest",
+          "OutputType": "GetToolResultResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetToolResultRequest",
+          "OutputTypeFQ": "reliant.v1.GetToolResultResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
           "Name": "UpdateChatState",
           "InputType": "UpdateChatStateRequest",
           "OutputType": "UpdateChatStateResponse",
@@ -5863,6 +5944,40 @@
           {
             "Name": "resumable",
             "ProtoType": "bool",
+            "IsOptional": false
+          }
+        ],
+        "GetToolResultRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "tool_call_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetToolResultResponse": [
+          {
+            "Name": "tool_call_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "content",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "is_error",
+            "ProtoType": "bool",
+            "IsOptional": false
+          },
+          {
+            "Name": "size",
+            "ProtoType": "int64",
             "IsOptional": false
           }
         ],
@@ -7144,12 +7259,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -7168,6 +7277,16 @@
           {
             "name": "child_workflow_id",
             "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "truncated",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "original_size",
+            "kind": "int64",
             "optional": true
           }
         ],
@@ -7280,6 +7399,40 @@
           {
             "name": "resumable",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.GetToolResultRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "tool_call_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          }
+        ],
+        "reliant.v1.GetToolResultResponse": [
+          {
+            "name": "tool_call_id",
+            "kind": "string"
+          },
+          {
+            "name": "content",
+            "kind": "string"
+          },
+          {
+            "name": "is_error",
+            "kind": "bool"
+          },
+          {
+            "name": "size",
+            "kind": "int64"
           }
         ],
         "reliant.v1.GetWorkflowExecutionsRequest": [
@@ -7559,26 +7712,6 @@
             "kind": "string"
           }
         ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
-          }
-        ],
         "reliant.v1.Message": [
           {
             "name": "id",
@@ -7665,6 +7798,26 @@
             "name": "node_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "sender",
+            "kind": "message",
+            "type_name": "reliant.v1.MessageSender"
+          }
+        ],
+        "reliant.v1.MessageSender": [
+          {
+            "name": "thread_id",
+            "kind": "string"
+          },
+          {
+            "name": "title",
+            "kind": "string"
+          },
+          {
+            "name": "kind",
+            "kind": "enum",
+            "type_name": "reliant.v1.AgentMessageKind"
           }
         ],
         "reliant.v1.PauseChatRequest": [
@@ -7710,7 +7863,8 @@
           },
           {
             "name": "sender_kind",
-            "kind": "int32"
+            "kind": "enum",
+            "type_name": "reliant.v1.AgentMessageKind"
           },
           {
             "name": "attachments",
@@ -8505,6 +8659,8 @@
         "reliant.v1.GetChatUpdatesResponse": "reliant/v1/chat.proto",
         "reliant.v1.GetThreadWorkflowInputsRequest": "reliant/v1/chat.proto",
         "reliant.v1.GetThreadWorkflowInputsResponse": "reliant/v1/chat.proto",
+        "reliant.v1.GetToolResultRequest": "reliant/v1/chat.proto",
+        "reliant.v1.GetToolResultResponse": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsRequest": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsResponse": "reliant/v1/chat.proto",
         "reliant.v1.InputMessage": "reliant/v1/chat.proto",
@@ -8526,8 +8682,8 @@
         "reliant.v1.ListStepExecutionsResponse": "reliant/v1/chat.proto",
         "reliant.v1.MarkUnreadChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.MarkUnreadChatResponse": "reliant/v1/chat.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto",
+        "reliant.v1.MessageSender": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatRequest": "reliant/v1/chat.proto",
         "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
         "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
@@ -8567,6 +8723,14 @@
         "reliant.v1.WorktreeSummary": "reliant/v1/worktree.proto"
       },
       "Enums": {
+        "reliant.v1.AgentMessageKind": [
+          "AGENT_MESSAGE_KIND_UNSPECIFIED",
+          "AGENT_MESSAGE_KIND_MESSAGE",
+          "AGENT_MESSAGE_KIND_COMPLETION",
+          "AGENT_MESSAGE_KIND_CANCELLED",
+          "AGENT_MESSAGE_KIND_FAILED",
+          "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+        ],
         "reliant.v1.ChatActivity": [
           "CHAT_ACTIVITY_IDLE",
           "CHAT_ACTIVITY_RUNNING",
@@ -8667,6 +8831,14 @@
         ]
       },
       "EnumNumbers": {
+        "reliant.v1.AgentMessageKind": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "reliant.v1.ChatActivity": [
           0,
           1,
@@ -8767,6 +8939,10 @@
         ]
       },
       "EnumGoRefs": {
+        "reliant.v1.AgentMessageKind": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "AgentMessageKind"
+        },
         "reliant.v1.ChatActivity": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ChatActivity"
@@ -9032,6 +9208,17 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.Run"
+          },
+          {
+            "Name": "nodes",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.RunNodeExecution"
+          },
+          {
+            "Name": "nodes_truncated",
+            "ProtoType": "bool",
+            "IsOptional": false
           }
         ],
         "InterruptRunRequest": [
@@ -9320,6 +9507,16 @@
             "name": "run",
             "kind": "message",
             "type_name": "reliant.v1.Run"
+          },
+          {
+            "name": "nodes",
+            "kind": "message",
+            "type_name": "reliant.v1.RunNodeExecution",
+            "repeated": true
+          },
+          {
+            "name": "nodes_truncated",
+            "kind": "bool"
           }
         ],
         "reliant.v1.InputMessage": [
@@ -9611,6 +9808,75 @@
             "kind": "bool"
           }
         ],
+        "reliant.v1.RunNodeExecution": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_id",
+            "kind": "string"
+          },
+          {
+            "name": "node_id",
+            "kind": "string"
+          },
+          {
+            "name": "node_path",
+            "kind": "string"
+          },
+          {
+            "name": "activity",
+            "kind": "string"
+          },
+          {
+            "name": "status",
+            "kind": "string"
+          },
+          {
+            "name": "duration_ms",
+            "kind": "int64",
+            "optional": true
+          },
+          {
+            "name": "error",
+            "kind": "string"
+          },
+          {
+            "name": "exit_code",
+            "kind": "int32",
+            "optional": true
+          },
+          {
+            "name": "stdout_tail",
+            "kind": "string"
+          },
+          {
+            "name": "stderr_tail",
+            "kind": "string"
+          },
+          {
+            "name": "started_at",
+            "kind": "string"
+          },
+          {
+            "name": "completed_at",
+            "kind": "string"
+          },
+          {
+            "name": "attempt",
+            "kind": "int32"
+          },
+          {
+            "name": "loop_node_id",
+            "kind": "string"
+          },
+          {
+            "name": "loop_iteration",
+            "kind": "int32",
+            "optional": true
+          }
+        ],
         "reliant.v1.SignalRunRequest": [
           {
             "name": "run_id",
@@ -9696,6 +9962,7 @@
         "reliant.v1.ResumeRunRequest": "reliant/v1/run.proto",
         "reliant.v1.ResumeRunResponse": "reliant/v1/run.proto",
         "reliant.v1.Run": "reliant/v1/run.proto",
+        "reliant.v1.RunNodeExecution": "reliant/v1/run.proto",
         "reliant.v1.SignalRunRequest": "reliant/v1/run.proto",
         "reliant.v1.SignalRunResponse": "reliant/v1/run.proto",
         "reliant.v1.StartRunRequest": "reliant/v1/run.proto",
@@ -11003,6 +11270,12 @@
             "optional": true
           },
           {
+            "name": "changes",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerChange",
+            "repeated": true
+          },
+          {
             "name": "daemon_id",
             "kind": "string"
           },
@@ -11021,6 +11294,10 @@
           },
           {
             "name": "daemon_name",
+            "kind": "string"
+          },
+          {
+            "name": "machine_state",
             "kind": "string"
           },
           {
@@ -11078,6 +11355,44 @@
           {
             "name": "webhook_managed",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.TriggerChange": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "user_id",
+            "kind": "string"
+          },
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
+          {
+            "name": "run_id",
+            "kind": "string"
+          },
+          {
+            "name": "tool_call_id",
+            "kind": "string"
+          },
+          {
+            "name": "operation",
+            "kind": "string"
+          },
+          {
+            "name": "before_state",
+            "kind": "string"
+          },
+          {
+            "name": "after_state",
+            "kind": "string"
+          },
+          {
+            "name": "created_at",
+            "kind": "string"
           }
         ],
         "reliant.v1.TriggerDefinition": [
@@ -11497,6 +11812,7 @@
         "reliant.v1.SetTriggerEnabledRequest": "reliant/v1/trigger.proto",
         "reliant.v1.SetTriggerEnabledResponse": "reliant/v1/trigger.proto",
         "reliant.v1.Trigger": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
@@ -13899,7 +14215,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "an OAuth handshake still in flight on the daemon: the provider connection it completes is what records the change"
           }
         },
         {
@@ -13915,7 +14233,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "opens the daemon's loopback OAuth helper for one linking session: handshake transport, not a change"
           }
         },
         {
@@ -13931,7 +14251,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "closes the loopback OAuth helper when its linking session ends: handshake transport, not a change"
           }
         }
       ],
@@ -14073,7 +14395,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "the daemon's tool-execution transport stream: each tool call records its own outcome"
           }
         },
         {
@@ -14089,7 +14413,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "the gateway-dialed twin of ConnectDaemon: daemon transport, each tool call records its own outcome"
           }
         },
         {
@@ -14105,7 +14431,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "unary fallback delivery of one tool result: daemon transport, the tool call records its own outcome"
           }
         },
         {
@@ -14116,12 +14444,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.WhoAmIRequest",
           "OutputTypeFQ": "reliant.v1.WhoAmIResponse",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         }
       ],
@@ -15888,12 +16217,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ResolveDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ResolveDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -15909,7 +16239,9 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"
           }
         },
         {
@@ -15925,7 +16257,9 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"
           }
         },
         {
@@ -15941,7 +16275,11 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_local_model_endpoints",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -15957,7 +16295,11 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "clear_caches",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -16716,7 +17058,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "file edit through the daemon: git records file changes, and editor saves are high-volume"
           }
         },
         {
@@ -16780,7 +17124,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the file once it is committed"
           }
         },
         {
@@ -16796,7 +17142,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the removal once it is committed"
           }
         },
         {
@@ -16812,7 +17160,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the copy once it is committed"
           }
         },
         {
@@ -16844,7 +17194,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "bulk file edit through the daemon: git records each changed file once it is committed"
           }
         },
         {
@@ -16876,7 +17228,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: an empty directory is not even something git records"
           }
         }
       ],
@@ -18113,7 +18467,9 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS"
           }
         },
         {
@@ -18194,7 +18550,11 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "promote",
+            "TargetKind": "release",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -18227,7 +18587,9 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "builds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event"
           }
         },
         {
@@ -18243,7 +18605,11 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "deploy",
+            "TargetKind": "release",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -19210,7 +19576,11 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "cleanup_storage",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -19226,7 +19596,9 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user inbox read state: hides items without resolving them"
           }
         },
         {
@@ -19242,7 +19614,9 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user inbox read state: undoes a dismiss"
           }
         }
       ],
@@ -20049,7 +20423,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "install",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20065,7 +20443,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "uninstall",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20081,7 +20463,9 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "restarts a server process from its unchanged config: runtime recovery, not a configuration change"
           }
         },
         {
@@ -20113,7 +20497,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update_config",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20129,7 +20517,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_enabled",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20145,7 +20537,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "move_scope",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -21075,12 +21471,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -21100,6 +21490,16 @@
             "name": "child_workflow_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "truncated",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "original_size",
+            "kind": "int64",
+            "optional": true
           }
         ],
         "reliant.v1.GetMessageRequest": [
@@ -21113,26 +21513,6 @@
             "name": "message",
             "kind": "message",
             "type_name": "reliant.v1.Message"
-          }
-        ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
           }
         ],
         "reliant.v1.Message": [
@@ -21221,6 +21601,26 @@
             "name": "node_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "sender",
+            "kind": "message",
+            "type_name": "reliant.v1.MessageSender"
+          }
+        ],
+        "reliant.v1.MessageSender": [
+          {
+            "name": "thread_id",
+            "kind": "string"
+          },
+          {
+            "name": "title",
+            "kind": "string"
+          },
+          {
+            "name": "kind",
+            "kind": "enum",
+            "type_name": "reliant.v1.AgentMessageKind"
           }
         ]
       },
@@ -21229,10 +21629,18 @@
         "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
         "reliant.v1.GetMessageRequest": "reliant/v1/message.proto",
         "reliant.v1.GetMessageResponse": "reliant/v1/message.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
-        "reliant.v1.Message": "reliant/v1/chat.proto"
+        "reliant.v1.Message": "reliant/v1/chat.proto",
+        "reliant.v1.MessageSender": "reliant/v1/chat.proto"
       },
       "Enums": {
+        "reliant.v1.AgentMessageKind": [
+          "AGENT_MESSAGE_KIND_UNSPECIFIED",
+          "AGENT_MESSAGE_KIND_MESSAGE",
+          "AGENT_MESSAGE_KIND_COMPLETION",
+          "AGENT_MESSAGE_KIND_CANCELLED",
+          "AGENT_MESSAGE_KIND_FAILED",
+          "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+        ],
         "reliant.v1.ContentBlockType": [
           "CONTENT_BLOCK_TYPE_UNSPECIFIED",
           "CONTENT_BLOCK_TYPE_TEXT",
@@ -21275,6 +21683,14 @@
         ]
       },
       "EnumNumbers": {
+        "reliant.v1.AgentMessageKind": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "reliant.v1.ContentBlockType": [
           0,
           1,
@@ -21317,6 +21733,10 @@
         ]
       },
       "EnumGoRefs": {
+        "reliant.v1.AgentMessageKind": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "AgentMessageKind"
+        },
         "reliant.v1.ContentBlockType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ContentBlockType"
@@ -21480,6 +21900,11 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.ModelEndpoint"
+          },
+          {
+            "Name": "credentials_available",
+            "ProtoType": "bool",
+            "IsOptional": false
           }
         ],
         "TestModelEndpointRequest": [
@@ -21560,6 +21985,10 @@
             "kind": "message",
             "type_name": "reliant.v1.ModelEndpoint",
             "repeated": true
+          },
+          {
+            "name": "credentials_available",
+            "kind": "bool"
           }
         ],
         "reliant.v1.LocalModelEndpoint": [
@@ -24723,7 +25152,6 @@
             "Declared": true,
             "Verb": "create",
             "TargetKind": "project",
-            "Implied": true,
             "Writer": "INTERCEPTOR"
           }
         },
@@ -24775,7 +25203,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -24792,7 +25224,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -24808,7 +25244,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "bumps last_active when the project is opened: recency for sorting, not a change to the project"
           }
         },
         {
@@ -24840,7 +25278,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update_metadata",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -24904,7 +25346,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"
           }
         },
         {
@@ -24952,7 +25396,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "save_prompts",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -24968,7 +25416,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "init_git",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25017,7 +25469,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs"
           }
         },
         {
@@ -25033,7 +25487,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25065,7 +25523,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pull",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25081,7 +25543,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "remove_from_daemon",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25097,7 +25563,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "reclone",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -27453,12 +27923,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.DiscoverReposRequest",
           "OutputTypeFQ": "reliant.v1.DiscoverReposResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -27491,7 +27962,11 @@
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "add",
+            "TargetKind": "repo",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -27507,7 +27982,11 @@
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "remove",
+            "TargetKind": "repo",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -31828,24 +32307,80 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "StreamChatUpdates",
+          "InputType": "StreamChatUpdatesRequest",
+          "OutputType": "ChatStreamEvent",
+          "ClientStreaming": false,
+          "ServerStreaming": true,
+          "AuthRequired": true,
+          "Errors": null,
+          "NoSideEffects": true,
+          "InputTypeFQ": "reliant.v1.StreamChatUpdatesRequest",
+          "OutputTypeFQ": "reliant.v1.ChatStreamEvent",
+          "InputProtoFile": "reliant/v1/streaming.proto",
+          "OutputProtoFile": "reliant/v1/streaming.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/streaming.proto",
       "ModulePath": "",
       "Messages": {
-        "StreamUserUpdatesRequest": [
+        "ChatStreamEvent": [
+          {
+            "Name": "snapshot",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatSyncSnapshot"
+          },
+          {
+            "Name": "updates",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatUpdateBatch"
+          },
+          {
+            "Name": "caught_up",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatCaughtUp"
+          },
+          {
+            "Name": "heartbeat",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.Heartbeat"
+          },
+          {
+            "Name": "user_updates",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatUserUpdates"
+          }
+        ],
+        "StreamChatUpdatesRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
           {
             "Name": "since_seq",
             "ProtoType": "int64",
             "IsOptional": false
           },
           {
-            "Name": "subscribe_chat_id",
+            "Name": "project_id",
             "ProtoType": "string",
             "IsOptional": true
-          },
+          }
+        ],
+        "StreamUserUpdatesRequest": [
           {
-            "Name": "chat_since_seq",
+            "Name": "since_seq",
             "ProtoType": "int64",
             "IsOptional": false
           },
@@ -31873,42 +32408,6 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.Heartbeat"
-          },
-          {
-            "Name": "chat_sync_snapshot",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatSyncSnapshot"
-          },
-          {
-            "Name": "chat_updates",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatUpdateBatch"
-          },
-          {
-            "Name": "workflow_event",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.WorkflowExecutionEvent"
-          },
-          {
-            "Name": "node_event",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.NodeExecutionEvent"
-          },
-          {
-            "Name": "execution_log",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ExecutionLog"
-          },
-          {
-            "Name": "chat_caught_up",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.ChatCaughtUp"
           }
         ]
       },
@@ -31940,6 +32439,38 @@
           {
             "name": "latest_sequence",
             "kind": "int64"
+          }
+        ],
+        "reliant.v1.ChatStreamEvent": [
+          {
+            "name": "snapshot",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatSyncSnapshot",
+            "oneof": "event"
+          },
+          {
+            "name": "updates",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatUpdateBatch",
+            "oneof": "event"
+          },
+          {
+            "name": "caught_up",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatCaughtUp",
+            "oneof": "event"
+          },
+          {
+            "name": "heartbeat",
+            "kind": "message",
+            "type_name": "reliant.v1.Heartbeat",
+            "oneof": "event"
+          },
+          {
+            "name": "user_updates",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatUserUpdates",
+            "oneof": "event"
           }
         ],
         "reliant.v1.ChatSyncSnapshot": [
@@ -32025,6 +32556,14 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.ChatUserUpdates": [
+          {
+            "name": "updates",
+            "kind": "message",
+            "type_name": "reliant.v1.UserUpdateData",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ContentBlock": [
           {
             "name": "id",
@@ -32065,12 +32604,6 @@
             "optional": true
           },
           {
-            "name": "matched_result",
-            "kind": "message",
-            "type_name": "reliant.v1.MatchedToolResult",
-            "optional": true
-          },
-          {
             "name": "tool_call_status",
             "kind": "enum",
             "type_name": "reliant.v1.ToolCallStatus",
@@ -32090,71 +32623,22 @@
             "name": "child_workflow_id",
             "kind": "string",
             "optional": true
-          }
-        ],
-        "reliant.v1.ExecutionLog": [
-          {
-            "name": "id",
-            "kind": "string"
           },
           {
-            "name": "workflow_id",
-            "kind": "string"
-          },
-          {
-            "name": "node_id",
-            "kind": "string",
+            "name": "truncated",
+            "kind": "bool",
             "optional": true
           },
           {
-            "name": "level",
-            "kind": "enum",
-            "type_name": "reliant.v1.ExecutionLogLevel"
-          },
-          {
-            "name": "message",
-            "kind": "string"
-          },
-          {
-            "name": "timestamp",
-            "kind": "int64"
-          },
-          {
-            "name": "source",
-            "kind": "string",
+            "name": "original_size",
+            "kind": "int64",
             "optional": true
-          },
-          {
-            "name": "fields",
-            "kind": "map",
-            "map_key_kind": "string",
-            "map_value_kind": "string"
           }
         ],
         "reliant.v1.Heartbeat": [
           {
             "name": "timestamp",
             "kind": "int64"
-          }
-        ],
-        "reliant.v1.MatchedToolResult": [
-          {
-            "name": "tool_call_id",
-            "kind": "string"
-          },
-          {
-            "name": "type",
-            "kind": "string"
-          },
-          {
-            "name": "content",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "is_error",
-            "kind": "bool",
-            "optional": true
           }
         ],
         "reliant.v1.Message": [
@@ -32243,28 +32727,26 @@
             "name": "node_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "sender",
+            "kind": "message",
+            "type_name": "reliant.v1.MessageSender"
           }
         ],
-        "reliant.v1.NodeExecutionEvent": [
+        "reliant.v1.MessageSender": [
           {
-            "name": "event_type",
+            "name": "thread_id",
+            "kind": "string"
+          },
+          {
+            "name": "title",
+            "kind": "string"
+          },
+          {
+            "name": "kind",
             "kind": "enum",
-            "type_name": "reliant.v1.NodeExecutionEventType"
-          },
-          {
-            "name": "node",
-            "kind": "message",
-            "type_name": "reliant.v1.NodeExecutionState"
-          },
-          {
-            "name": "progress_message",
-            "kind": "string",
-            "optional": true
-          },
-          {
-            "name": "progress_percent",
-            "kind": "double",
-            "optional": true
+            "type_name": "reliant.v1.AgentMessageKind"
           }
         ],
         "reliant.v1.NodeExecutionState": [
@@ -32337,18 +32819,24 @@
             "map_value_kind": "string"
           }
         ],
-        "reliant.v1.StreamUserUpdatesRequest": [
+        "reliant.v1.StreamChatUpdatesRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          },
           {
             "name": "since_seq",
             "kind": "int64"
           },
           {
-            "name": "subscribe_chat_id",
+            "name": "project_id",
             "kind": "string",
             "optional": true
-          },
+          }
+        ],
+        "reliant.v1.StreamUserUpdatesRequest": [
           {
-            "name": "chat_since_seq",
+            "name": "since_seq",
             "kind": "int64"
           },
           {
@@ -32374,42 +32862,6 @@
             "name": "heartbeat",
             "kind": "message",
             "type_name": "reliant.v1.Heartbeat",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_sync_snapshot",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatSyncSnapshot",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_updates",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatUpdateBatch",
-            "oneof": "event"
-          },
-          {
-            "name": "workflow_event",
-            "kind": "message",
-            "type_name": "reliant.v1.WorkflowExecutionEvent",
-            "oneof": "event"
-          },
-          {
-            "name": "node_event",
-            "kind": "message",
-            "type_name": "reliant.v1.NodeExecutionEvent",
-            "oneof": "event"
-          },
-          {
-            "name": "execution_log",
-            "kind": "message",
-            "type_name": "reliant.v1.ExecutionLog",
-            "oneof": "event"
-          },
-          {
-            "name": "chat_caught_up",
-            "kind": "message",
-            "type_name": "reliant.v1.ChatCaughtUp",
             "oneof": "event"
           }
         ],
@@ -32480,18 +32932,6 @@
           {
             "name": "created_at",
             "kind": "string"
-          }
-        ],
-        "reliant.v1.WorkflowExecutionEvent": [
-          {
-            "name": "event_type",
-            "kind": "enum",
-            "type_name": "reliant.v1.WorkflowExecutionEventType"
-          },
-          {
-            "name": "workflow",
-            "kind": "message",
-            "type_name": "reliant.v1.WorkflowExecutionState"
           }
         ],
         "reliant.v1.WorkflowExecutionState": [
@@ -32565,25 +33005,33 @@
       "SchemaFiles": {
         "reliant.v1.Attachment": "reliant/v1/chat.proto",
         "reliant.v1.ChatCaughtUp": "reliant/v1/streaming.proto",
+        "reliant.v1.ChatStreamEvent": "reliant/v1/streaming.proto",
         "reliant.v1.ChatSyncSnapshot": "reliant/v1/streaming.proto",
         "reliant.v1.ChatUpdateBatch": "reliant/v1/streaming.proto",
         "reliant.v1.ChatUpdateData": "reliant/v1/streaming.proto",
+        "reliant.v1.ChatUserUpdates": "reliant/v1/streaming.proto",
         "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
-        "reliant.v1.ExecutionLog": "reliant/v1/streaming.proto",
         "reliant.v1.Heartbeat": "reliant/v1/streaming.proto",
-        "reliant.v1.MatchedToolResult": "reliant/v1/chat.proto",
         "reliant.v1.Message": "reliant/v1/chat.proto",
-        "reliant.v1.NodeExecutionEvent": "reliant/v1/streaming.proto",
+        "reliant.v1.MessageSender": "reliant/v1/chat.proto",
         "reliant.v1.NodeExecutionState": "reliant/v1/streaming.proto",
+        "reliant.v1.StreamChatUpdatesRequest": "reliant/v1/streaming.proto",
         "reliant.v1.StreamUserUpdatesRequest": "reliant/v1/streaming.proto",
         "reliant.v1.UserStreamEvent": "reliant/v1/streaming.proto",
         "reliant.v1.UserSyncInfo": "reliant/v1/streaming.proto",
         "reliant.v1.UserUpdateBatch": "reliant/v1/streaming.proto",
         "reliant.v1.UserUpdateData": "reliant/v1/streaming.proto",
-        "reliant.v1.WorkflowExecutionEvent": "reliant/v1/streaming.proto",
         "reliant.v1.WorkflowExecutionState": "reliant/v1/streaming.proto"
       },
       "Enums": {
+        "reliant.v1.AgentMessageKind": [
+          "AGENT_MESSAGE_KIND_UNSPECIFIED",
+          "AGENT_MESSAGE_KIND_MESSAGE",
+          "AGENT_MESSAGE_KIND_COMPLETION",
+          "AGENT_MESSAGE_KIND_CANCELLED",
+          "AGENT_MESSAGE_KIND_FAILED",
+          "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+        ],
         "reliant.v1.ChatUpdateType": [
           "CHAT_UPDATE_TYPE_UNSPECIFIED",
           "CHAT_UPDATE_TYPE_MESSAGE",
@@ -32633,26 +33081,12 @@
           "ENTITY_TYPE_SYSTEM",
           "ENTITY_TYPE_WORKFLOW_DRAFT"
         ],
-        "reliant.v1.ExecutionLogLevel": [
-          "EXECUTION_LOG_LEVEL_UNSPECIFIED",
-          "EXECUTION_LOG_LEVEL_DEBUG",
-          "EXECUTION_LOG_LEVEL_INFO",
-          "EXECUTION_LOG_LEVEL_WARN",
-          "EXECUTION_LOG_LEVEL_ERROR"
-        ],
         "reliant.v1.MessageRole": [
           "MESSAGE_ROLE_UNSPECIFIED",
           "MESSAGE_ROLE_USER",
           "MESSAGE_ROLE_ASSISTANT",
           "MESSAGE_ROLE_SYSTEM",
           "MESSAGE_ROLE_TOOL"
-        ],
-        "reliant.v1.NodeExecutionEventType": [
-          "NODE_EXECUTION_EVENT_TYPE_UNSPECIFIED",
-          "NODE_EXECUTION_EVENT_TYPE_STARTED",
-          "NODE_EXECUTION_EVENT_TYPE_PROGRESS",
-          "NODE_EXECUTION_EVENT_TYPE_COMPLETED",
-          "NODE_EXECUTION_EVENT_TYPE_FAILED"
         ],
         "reliant.v1.NodeExecutionStatus": [
           "NODE_EXECUTION_STATUS_UNSPECIFIED",
@@ -32702,13 +33136,6 @@
           "USER_UPDATE_TYPE_DAEMON_HEARTBEAT",
           "USER_UPDATE_TYPE_WORKFLOW_DRAFT_UPDATED"
         ],
-        "reliant.v1.WorkflowExecutionEventType": [
-          "WORKFLOW_EXECUTION_EVENT_TYPE_UNSPECIFIED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_STARTED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_COMPLETED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_FAILED",
-          "WORKFLOW_EXECUTION_EVENT_TYPE_CANCELLED"
-        ],
         "reliant.v1.WorkflowExecutionStatus": [
           "WORKFLOW_EXECUTION_STATUS_UNSPECIFIED",
           "WORKFLOW_EXECUTION_STATUS_RUNNING",
@@ -32718,6 +33145,14 @@
         ]
       },
       "EnumNumbers": {
+        "reliant.v1.AgentMessageKind": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "reliant.v1.ChatUpdateType": [
           0,
           1,
@@ -32767,21 +33202,7 @@
           5,
           6
         ],
-        "reliant.v1.ExecutionLogLevel": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
         "reliant.v1.MessageRole": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
-        "reliant.v1.NodeExecutionEventType": [
           0,
           1,
           2,
@@ -32836,13 +33257,6 @@
           20,
           21
         ],
-        "reliant.v1.WorkflowExecutionEventType": [
-          0,
-          1,
-          2,
-          3,
-          4
-        ],
         "reliant.v1.WorkflowExecutionStatus": [
           0,
           1,
@@ -32852,6 +33266,10 @@
         ]
       },
       "EnumGoRefs": {
+        "reliant.v1.AgentMessageKind": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "AgentMessageKind"
+        },
         "reliant.v1.ChatUpdateType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ChatUpdateType"
@@ -32868,17 +33286,9 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "EntityType"
         },
-        "reliant.v1.ExecutionLogLevel": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "ExecutionLogLevel"
-        },
         "reliant.v1.MessageRole": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "MessageRole"
-        },
-        "reliant.v1.NodeExecutionEventType": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "NodeExecutionEventType"
         },
         "reliant.v1.NodeExecutionStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -32895,10 +33305,6 @@
         "reliant.v1.UserUpdateType": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "UserUpdateType"
-        },
-        "reliant.v1.WorkflowExecutionEventType": {
-          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
-          "GoName": "WorkflowExecutionEventType"
         },
         "reliant.v1.WorkflowExecutionStatus": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -35600,6 +36006,27 @@
             "name": "force",
             "kind": "message",
             "type_name": "reliant.v1.CelBool"
+          },
+          {
+            "name": "target_repo",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "base_branches",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "fetch_branch",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "expected_head",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
           }
         ],
         "reliant.v1.DaemonSelectorProto": [
@@ -41107,42 +41534,42 @@
     "reliant/v1/account.proto": "9a2ee53fe8cd0e6ad7e2bc371885bb267664232a3782761076b843a0f7ca102d",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4d455295dc786a51bb13f302b34a6b60ac70d131b5b6c1bd91967f17f37c7d72",
-    "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
+    "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "4b78eab5552a9d6007156033f9971c309f48ee0203e95c0b2c383c89e494920b",
+    "reliant/v1/chat.proto": "9617ec3b58fa0244f55b43ef49ce5d940e451d4b9658d9d6c1baaa7abaff7b4e",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
-    "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
-    "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
-    "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
-    "reliant/v1/forge.proto": "d975074ed16882b06823391fa8e1ab82c54e7b8624a1465cb45d11e3eb0c0138",
-    "reliant/v1/inbox.proto": "94d7bdbff7dc2d3cc85ed9ac7e47140ad217af70dff62ec3b7bd88d78bd3f732",
+    "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
+    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
+    "reliant/v1/forge.proto": "f680b960736a0cf2e1653dccfbbdde85e65bc9dd6c5328fc934a26bd1436b3f1",
+    "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
-    "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
+    "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
-    "reliant/v1/model_endpoint.proto": "e0cc2fe196e9924630a5fed14a68e89e4e51192d98b763201af3f7f84210caf3",
+    "reliant/v1/model_endpoint.proto": "78c975ea77eacab893b2389073746b4cc29f298c44a9b80543a74b13d1c649cc",
     "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
     "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
     "reliant/v1/preset.proto": "4a4d7a48d45412e11b50bac80bbdc2d2e5c9a86596f680598efa312cb9f300c5",
-    "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
+    "reliant/v1/project.proto": "f45510467e94c4ac68f0e393635699c4a44482058007647617096ec86c117dc9",
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
-    "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
-    "reliant/v1/run.proto": "40df7416b308111e1627565d8498943ad1ceeaefb0adf22c3e2c212f518762a7",
+    "reliant/v1/repo.proto": "41361c4d530daffc74850527b0953baab9a7681b7f659e580c96d1de6d01498a",
+    "reliant/v1/run.proto": "e4f1d7b5b9d6594c86efc20e1c7a49bf71663418ff7994b580b3b0dc69edcc29",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
-    "reliant/v1/streaming.proto": "e75666fc99eae37e14188b9a98efdf06699d92ad922db89abf5dc9190ae8d2bc",
+    "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "280e0dcd903d116bb7805890cace95e2440c24d33047fcac2e2cba1b5a986bd2",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
-    "reliant/v1/trigger.proto": "865ce2ff003ba8acd15c4f2e664e149a00e7e6c840e4fcae5a5503b93f4a411a",
+    "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
+    "reliant/v1/trigger.proto": "1e4c6c51ccfb548c1249aeb15d1ee161013b60d29b20041eb9bb8d4ec67ae64a",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
-    "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
+    "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
+    "reliant/v1/worktree.proto": "2d2670e4ca98a799c8f0f8a9397ef34cd4f69f715283627ffd290fbe8f80b5cd"
   }
 }
