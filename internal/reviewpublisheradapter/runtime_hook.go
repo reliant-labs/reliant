@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
+	"github.com/reliant-labs/reliant/internal/runcontinuity"
 	"github.com/reliant-labs/reliant/internal/store"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -17,7 +18,10 @@ const ResolveAssignmentActivityName = "ActivityPrivateReviewAssignment"
 
 // ResolveAssignmentActivity loads an assignment only by authenticated runtime
 // execution, never a YAML/model-provided assignment or current chat pointer.
-type ResolveAssignmentActivity struct{ Store store.ReviewAuthorityStore }
+type ResolveAssignmentActivity struct {
+	Store   store.ReviewAuthorityStore
+	History TemporalEvidence
+}
 
 // Execute uses actual activity context and returns only assignment identity.
 func (a ResolveAssignmentActivity) Execute(ctx context.Context) (string, error) {
@@ -25,7 +29,31 @@ func (a ResolveAssignmentActivity) Execute(ctx context.Context) (string, error) 
 		return "", reviewpublisher.ErrUnauthorized
 	}
 	info := activity.GetInfo(ctx)
-	return a.Store.AssignmentForExecution(ctx, info.WorkflowExecution.ID, info.WorkflowExecution.RunID)
+	assignment, err := a.Store.AssignmentForRoot(ctx, info.WorkflowExecution.ID)
+	if err != nil {
+		return "", err
+	}
+	if err = a.History.VerifyRecipient(ctx, assignment, info.WorkflowExecution.RunID); err != nil {
+		return "", err
+	}
+	return assignment.ID, nil
+}
+
+// VerifyRecipient accepts only the shared proof's exact current execution from
+// the immutable assignment original. Reset/retry/follow-up/latest fallbacks are
+// never accepted; full graph/digest evidence is still checked by completion.
+func (h TemporalEvidence) VerifyRecipient(ctx context.Context, a store.ReviewAuthority, actualRun string) error {
+	if h.Service == nil || h.Namespace == "" || actualRun == "" {
+		return reviewpublisher.ErrUnauthorized
+	}
+	proof, err := runcontinuity.Resolve(ctx, runcontinuity.TemporalReader{Service: h.Service, Namespace: h.Namespace}, runcontinuity.Execution{WorkflowID: a.Binding.Reviewer.RootID, RunID: a.Binding.Reviewer.RunID})
+	if err != nil {
+		return err
+	}
+	if !proof.Live || proof.Current.RunID != actualRun || proof.Current.WorkflowID != a.Binding.Reviewer.RootID {
+		return reviewpublisher.ErrUnauthorized
+	}
+	return nil
 }
 
 // PrivateReviewWorkflow is registered explicitly under the policy-pinned private
