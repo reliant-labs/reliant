@@ -2,6 +2,7 @@ package triggers
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -27,8 +28,9 @@ func (r capacityResolver) ResolveRunWorkflow(context.Context, string, string, st
 
 type describedStarter struct {
 	*flakyStarter
-	mu           sync.Mutex
-	descriptions map[string]*workflowservice.DescribeWorkflowExecutionResponse
+	mu               sync.Mutex
+	descriptions     map[string]*workflowservice.DescribeWorkflowExecutionResponse
+	failDescriptions bool
 }
 
 func (s *describedStarter) ExecuteWorkflow(ctx context.Context, o client.StartWorkflowOptions, w interface{}, args ...interface{}) (client.WorkflowRun, error) {
@@ -50,6 +52,9 @@ func (s *describedStarter) ExecuteWorkflow(ctx context.Context, o client.StartWo
 func (s *describedStarter) DescribeWorkflowExecution(_ context.Context, id, _ string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.failDescriptions {
+		return nil, errors.New("description reply lost")
+	}
 	return s.descriptions[id], nil
 }
 
@@ -62,6 +67,10 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), starter, noopRunRecorder{}, "test-queue")
 	resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 1}}}
 	f.firer = NewFirer(f.repo, launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
+	starter.failDescriptions = true
+	_, err := f.firer.Fire(ctx, f.fireAt(2))
+	require.Error(t, err, "accepted Temporal start with lost description/binding must not release capacity")
+	starter.failDescriptions = false
 	first, err := f.firer.Fire(ctx, f.fireAt(2))
 	require.NoError(t, err)
 	require.Equal(t, string(core.TriggerEventLaunched), first.Outcome)
