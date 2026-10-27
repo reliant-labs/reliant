@@ -41,7 +41,7 @@ The runtime seam starts with `//go:build integration`; it exposes only the exist
 
 `GOWORK=off go test -short -tags integration ./internal/privatepipelineharness` **PASS** (0.094s). This compiles the complete integration harness and runs only its short/pure boundary checks. No real SQL/Temporal/CP proof was run. No output-only verifier fix is included yet. This is readiness, not a passing same-author two-round or combined-CAN proof.
 
-## Minimal CP helper integration plan — not applied
+## Minimal CP helper integration — applied on isolated landed checkout
 
 On a separate isolated checkout of the independently reviewed CP1420/1421 plus SQL-claim production stack, import only these two final files from CP `5901d327cd87b2658c5e90a9fde542d21b99073f`:
 
@@ -56,4 +56,39 @@ Required CP production APIs are the reviewed inactive operation-specific bridge,
 
 First validation after that test-only import: `GOWORK=off go test -short -tags integration ./internal/privatepipelineharness`. Later, only after the reviewed verifier fix is supplied and proof is authorized, set `CP_CHECKOUT` to that prepared CP checkout. The Reliant harness builds/starts the explicit `TestFutureChatBCPServer` helper itself. Keep external PostgreSQL overrides and PG* variables removed as specified by the source handoff. No production configuration, migration, or API change is needed for the helper port.
 
-No push, queue, gate, merge, activation, or release occurred during this preparation.
+## Follow-up prepared identities and verification
+
+B now owns this prepared checkout, not its historical source production copies.
+The supplied output-only fix `a8078ed4b8d4def1f06d27a8aa828bef97498174`
+was cherry-picked as `82cdf10b6215424104af35a46f3e73f877566047`, resulting tree
+`dc85ef76a233964982de0d2dd265116fab9e61fe`. No verifier/hook code was authored
+by the harness owner. Independent security review is pending; heavy proof is held
+until explicit parent PASS.
+
+Minimal CP checkout:
+`/home/workspace/.reliant/worktrees/reliant-labs/rel1715-cp-harness-2700af5b/control-plane`,
+branch `test/rel1715-cp-harness`. Exact landed production parent:
+`5b65f0607fb87a8ecf4a8bcf8fb169308b8b2b3a`, tree
+`e33c663e884eec56717ee7ae8756354aca1e6b8d`, identical to reviewed `da715fb9`.
+Only the two helper files above were imported with exact listed blob IDs.
+Test-only helper commit `58c378ba39c11e72cca0d64f6a8a7ad27f75c8e1`, tree
+`9497183115cac43d6d25edf6f89fcada99013e45`. No prior CP component history copied.
+
+Commands actually run on these prepared checkouts:
+
+```sh
+GOWORK=off go test -short -tags integration ./internal/privatepipelineharness
+```
+
+PASS CP 0.050s; PASS Reliant 0.128s. These compile and run pure safeguards only;
+SQL/Temporal/CP integration proofs skipped under `-short`. No two-round or combined
+CAN success is claimed. After machine reconnect the previously verified `/tmp`
+CLI is absent; restore only the same approved official v1.5.1 artifact with both
+fixed release hashes and the runtime executable hash before actual proof.
+
+Future CP_CHECKOUT must name the new landed-capability checkout above, not the
+historical FutureChat B checkout. Actual two-round command remains gated on the
+reviewed output-only fix's explicit security PASS. All PG* and both external
+Postgres overrides must be removed before that invocation.
+
+No push, queue, gate, merge, activation, or release occurred during preparation.
