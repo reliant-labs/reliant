@@ -18,7 +18,11 @@ func TestPrivateReviewHookOutputExpressionBoundary(t *testing.T) {
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
 			loaded := runtime.LoadedWorkflow{YAML: []byte(reviewOutputYAML), WorkflowJSON: reviewGraphJSON(t, reviewOutputYAML), HasTemplates: true}
-			verdict := kind
+			// Structural refusals must not also fail the independent verdict gate.
+			verdict := "approve"
+			if kind == "changes" || kind == "invalid verdict" {
+				verdict = kind
+			}
 			switch kind {
 			case "false metadata":
 				loaded.HasTemplates = false
