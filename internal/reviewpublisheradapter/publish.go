@@ -63,6 +63,22 @@ func (p Publisher) Publish(ctx context.Context, id string) (CheckReceipt, error)
 		receipt, err = p.Bridge.Publish(ctx, request)
 	} else {
 		receipt, err = p.Bridge.Reconcile(ctx, request)
+		if err == nil && receipt.ID > 0 {
+			head, headErr := p.Heads.CurrentHead(ctx, a.Binding.RepositoryID, a.Binding.PullNumber)
+			if headErr != nil {
+				return CheckReceipt{}, reviewpublisher.ErrUnavailable
+			}
+			if head.RepositoryID != a.Binding.RepositoryID || head.PullNumber != a.Binding.PullNumber || head.SHA != a.Binding.HeadSHA {
+				return CheckReceipt{}, reviewpublisher.ErrUnauthorized
+			}
+			if _, _, authErr := p.Store.Publication(ctx, id); authErr != nil {
+				return CheckReceipt{}, authErr
+			}
+			// FOUND proves binding, not terminal conclusion. Identity-verified
+			// update writes this immutable intent before confirming locally.
+			request.CheckID = receipt.ID
+			receipt, err = p.Bridge.Publish(ctx, request)
+		}
 	}
 	if err != nil || receipt.ID <= 0 || receipt.URL == "" {
 		_ = p.Store.UncertainPublication(ctx, id)
