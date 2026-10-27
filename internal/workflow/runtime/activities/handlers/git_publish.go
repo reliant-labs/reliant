@@ -46,6 +46,8 @@ type GitPublishActivity struct {
 	runner       writeledger.Runner
 	credentials  httpaction.CredentialSource
 	ledger       writeledger.Service
+	// handoff is deliberately nil in app wiring until durable author wait exists.
+	handoff publishHandoff
 	// token returns the credential for one push. It is a field so tests can
 	// stand in for control-plane.
 	token pushTokenSource
@@ -167,8 +169,17 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		FilesChanged: int32(prep.FilesChanged), Insertions: int32(prep.Insertions), Deletions: int32(prep.Deletions),
 	}
 	if prep.Commits == 0 {
-		// Nothing to publish: no push, no ledger row, no credential, no error.
+		// No successful push receipt: never claim an existing remote branch.
+		// Ambiguous previous pushes need explicit receipt reconciliation.
 		return out, nil
+	}
+
+	previousHead := ""
+	if a.handoff != nil {
+		previousHead, err = a.handoffPreviousHead(ctx, site, owner, name, decision.Branch)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// 3. Record the intent BEFORE pushing, with the sha the push will end on.
@@ -206,6 +217,11 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		return out, nil
 	}
 	out.Pushed = push.Pushed
+	if push.Pushed && a.handoff != nil {
+		if err := a.recordHandoff(ctx, rtx, repo.String(), worktree, decision.Branch, prep.HeadSHA, previousHead); err != nil {
+			return nil, temporal.NewNonRetryableApplicationError(err.Error(), "PRHandoffNeedsHuman", err)
+		}
+	}
 	logging.InfoContext(ctx, "[GitPublish] Completed", "stepID", rtx.StepID, "repo", repo.String(),
 		"branch", decision.Branch, "sha", prep.HeadSHA, "pushed", push.Pushed, "ledger", intent.IDs())
 	return out, nil
