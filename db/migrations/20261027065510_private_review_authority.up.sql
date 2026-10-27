@@ -2,6 +2,9 @@
 CREATE TABLE review_policies (
  id text PRIMARY KEY,
  owner_id text NOT NULL,
+ project_id text NOT NULL,
+ workflow_ref text NOT NULL CHECK (length(workflow_ref)>0),
+ admission_scope text NOT NULL CHECK (admission_scope ~ '^[0-9a-f]{64}$'),
  repository_id bigint NOT NULL CHECK (repository_id > 0),
  revision bigint NOT NULL CHECK (revision > 0),
  enabled boolean NOT NULL DEFAULT false,
@@ -55,6 +58,7 @@ CREATE UNIQUE INDEX review_assignments_source_once ON review_assignments (bindin
 CREATE TABLE review_publication_intents (
  id text PRIMARY KEY,
  assignment_id text NOT NULL UNIQUE REFERENCES review_assignments(id),
+ repository_id bigint NOT NULL CHECK (repository_id > 0),
  payload jsonb NOT NULL,
  payload_digest text NOT NULL CHECK (payload_digest ~ '^sha256:[0-9a-f]{64}$'),
  state text NOT NULL DEFAULT 'prepared' CHECK (state IN ('prepared','publishing','uncertain','confirmed','blocked')),
@@ -64,6 +68,7 @@ CREATE TABLE review_publication_intents (
  updated_at timestamptz NOT NULL DEFAULT now(),
  CHECK ((state = 'confirmed' AND check_id IS NOT NULL AND check_url IS NOT NULL) OR state <> 'confirmed')
 );
+CREATE UNIQUE INDEX review_publication_check_identity ON review_publication_intents(repository_id,check_id) WHERE check_id IS NOT NULL;
 COMMENT ON TABLE review_policies IS 'Private owner/admin-provisioned policy; no agent or public write surface';
 COMMENT ON TABLE review_assignments IS 'Private policy-bound reviewer assignments referencing existing admission and original-author binding';
 COMMENT ON TABLE review_publication_intents IS 'Immutable per-assignment check intent and nonsecret reconciliation receipt, not a generic event queue';
