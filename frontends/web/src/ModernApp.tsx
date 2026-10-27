@@ -20,7 +20,7 @@ import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
 import { mostRecentProject, useProjectStore } from "./store/projectStore";
-import { ProjectFilterRouteSync } from "./components/Layout/ProjectFilterRouteSync";
+import { ProjectFilterRouteSync, useRouteProjectId } from "./components/Layout/ProjectFilterRouteSync";
 import { fetchProjects, getCachedProjects, useProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
@@ -189,6 +189,8 @@ function App() {
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
   const location = useLocation();
+  // Startup restoration and the mounted filter bridge share route identity.
+  const routeProjectId = useRouteProjectId();
   const isSettingsMode = location.pathname.startsWith("/settings");
   const isWorkflowMode = isWorkflowSurfacePath(location.pathname);
   // Calculate hasOpenViewers based on subscribed state
@@ -1255,7 +1257,7 @@ function App() {
     autoRestore: isBackendReady,
     // In Electron, skip project restoration - let useWindowContext handle it.
     // Also skip if the URL deep-links to a specific project (`/project/$projectId`) —
-    // the route-param effect above owns project selection in that case so we
+    // ProjectFilterRouteSync owns project selection in that case so we
     // don't race lastProjectId vs the URL.
     skipProjectRestore: isElectron || Boolean(routeProjectId),
   });

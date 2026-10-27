@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
-import { ProjectFilterRouteSync } from "./ProjectFilterRouteSync";
+import { ProjectFilterRouteSync, useRouteProjectId } from "./ProjectFilterRouteSync";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useChatStore } from "../../store/chatStore";
@@ -23,7 +23,11 @@ afterEach(() => {
 });
 
 async function mountShell() {
-  const root = createRootRoute({ component: () => <><ProjectFilterRouteSync /><Outlet /></> });
+  function StartupProbe() {
+    const routeProjectId = useRouteProjectId();
+    return <output data-testid="startup-skip">{String(Boolean(routeProjectId))}</output>;
+  }
+  const root = createRootRoute({ component: () => <><StartupProbe /><ProjectFilterRouteSync /><Outlet /></> });
   const all = createRoute({ getParentRoute: () => root, path: "/", component: () => <div>All</div> });
   const filtered = createRoute({ getParentRoute: () => root, path: "/project/$projectId", component: () => <div>Project</div> });
   const history = createMemoryHistory({ initialEntries: ["/"] });
@@ -37,12 +41,14 @@ async function mountShell() {
 
 it("mounted shell honors Back to All without pushing the filtered URL again", async () => {
   const { router, history } = await mountShell();
+  expect(screen.getByTestId("startup-skip").textContent).toBe("false");
   await act(async () => { await useProjectStore.getState().setProjectFilter("a", { restoreWorkspace: false }); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/a"));
   const pushes = vi.spyOn(history, "push");
   await act(async () => { history.back(); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   await waitFor(() => expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull());
+  expect(screen.getByTestId("startup-skip").textContent).toBe("false");
   expect(pushes).not.toHaveBeenCalled();
   await act(async () => { history.forward(); });
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/a"));
@@ -55,4 +61,5 @@ it("restores a persisted filter only on the initial root", async () => {
   useWorkspaceStateStore.setState({ projectFilterId: "a" });
   const { router } = await mountShell();
   await waitFor(() => expect(router.state.location.pathname).toBe("/project/a"));
+  expect(screen.getByTestId("startup-skip").textContent).toBe("true");
 });

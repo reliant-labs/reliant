@@ -3,6 +3,13 @@ import { useLocation, useParams } from "@tanstack/react-router";
 import { syncProjectFilterUrl, useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
+/** Startup restoration and the filter bridge read the same route identity. */
+export function useRouteProjectId(): string | undefined {
+  const { pathname } = useLocation();
+  const { projectId } = useParams({ strict: false }) as { projectId?: string };
+  return pathname === "/" ? undefined : projectId;
+}
+
 /** The chat shell's URL/filter bridge, mounted once by ModernApp. */
 export function ProjectFilterRouteSync() {
   const { pathname } = useLocation();
