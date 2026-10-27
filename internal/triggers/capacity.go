@@ -52,10 +52,7 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if err != nil {
 		return err
 	}
-	poolRef := ref.Name
-	if ref.Kind == workflowref.Builtin {
-		poolRef = workflowref.BuiltinScheme + ref.Name
-	}
+	poolRef := ref.Key()
 	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: poolRef}
 	if event.Outcome == core.TriggerEventPending {
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
