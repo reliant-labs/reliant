@@ -27,6 +27,7 @@ func (m *memory) Arm(context.Context, Request, runcontinuity.Result) (Subscripti
 func (m *memory) Ready(context.Context, Subscription) error            { return nil }
 func (m *memory) Read(context.Context, Subscription) (Outcome, error)  { return m.outcome, nil }
 func (m *memory) Consume(context.Context, Subscription, Outcome) error { m.consumed++; return nil }
+func (m *memory) CancelRequest(context.Context, Request) error         { m.sub.State = "cancelled"; return nil }
 func (m *memory) Cancel(context.Context, Subscription) error           { m.sub.State = "cancelled"; return nil }
 func (m *memory) Put(_ context.Context, o Outcome) (Subscription, error) {
 	m.outcome = o

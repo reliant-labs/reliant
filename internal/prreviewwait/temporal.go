@@ -9,6 +9,10 @@ import (
 // SignalName is a metadata-only doorbell. Database inbox remains authoritative.
 const SignalName = "pr_review_wait"
 
+// SubscriptionSignal isolates concurrent waits; Temporal buffers early signals
+// until the owning workflow goroutine opens this exact channel.
+func SubscriptionSignal(id string) string { return SignalName + "." + id }
+
 // ContinuityReader adapts the single shared proof implementation.
 type ContinuityReader struct{ Reader runcontinuity.Reader }
 
@@ -29,5 +33,5 @@ func (s TemporalSignaler) SignalReview(ctx context.Context, e runcontinuity.Exec
 	if s.Client == nil || e.WorkflowID == "" || e.RunID == "" || subscriptionID == "" {
 		return ErrUnavailable
 	}
-	return s.Client.SignalWorkflow(ctx, e.WorkflowID, e.RunID, SignalName, subscriptionID)
+	return s.Client.SignalWorkflow(ctx, e.WorkflowID, e.RunID, SubscriptionSignal(subscriptionID), subscriptionID)
 }

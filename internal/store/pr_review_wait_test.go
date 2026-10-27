@@ -14,6 +14,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPRReviewWaitRequestTombstoneIsolation(t *testing.T) {
+	database := storetest.New(t)
+	ctx := context.Background()
+	s := store.PRReviewWaitStore{DB: database.ORM}
+	sha := strings.Repeat("a", 40)
+	original := runcontinuity.Execution{WorkflowID: "wf", RunID: "run"}
+	author := prhandoff.Author{OwnerID: "owner", RootID: "wf", ExecutionID: "run", ChatID: "chat", WorktreeID: "wt"}
+	repo := prhandoff.Repository{ID: 42, Name: "org/repo"}
+	handoff := store.PRHandoffStore{DB: database.ORM}
+	require.NoError(t, handoff.RecordPublication(ctx, prhandoff.Publication{ID: "pub", Author: author, Repo: repo, Branch: "fix", HeadSHA: sha}))
+	require.NoError(t, handoff.Enroll(ctx, prhandoff.Binding{ID: "b", Author: author, PublicationID: "pub", Pull: prhandoff.Pull{Repo: repo, Number: 1, ObjectID: 11, HeadRepoID: 42, Branch: "fix", HeadSHA: sha, Open: true}}))
+	request := prreviewwait.Request{RequestKey: strings.Repeat("a", 64), OwnerID: "owner", ChatID: "chat", Execution: original, RepoID: 42, PR: 1, HeadSHA: sha}
+	proof := runcontinuity.Result{Original: original, Current: original, Live: true}
+	require.NoError(t, s.CancelRequest(ctx, request))
+	_, err := s.Arm(ctx, request, proof)
+	require.Error(t, err) // cancellation wins before late Arm
+	request.RequestKey = strings.Repeat("b", 64)
+	sub, err := s.Arm(ctx, request, proof)
+	require.NoError(t, err)
+	again, err := s.Arm(ctx, request, proof)
+	require.NoError(t, err)
+	require.Equal(t, sub.ID, again.ID)
+	foreign := request
+	foreign.OwnerID = "other"
+	require.Error(t, s.CancelRequest(ctx, foreign))
+	otherRequest := request
+	otherRequest.RequestKey = strings.Repeat("c", 64)
+	require.NoError(t, s.CancelRequest(ctx, otherRequest))
+	var state string
+	require.NoError(t, database.SQL.QueryRowContext(ctx, "SELECT state FROM pr_review_wait_subscriptions WHERE id = $1", sub.ID).Scan(&state))
+	require.Equal(t, "armed", state)
+	require.NoError(t, s.CancelRequest(ctx, request))
+	_, err = s.Arm(ctx, request, proof)
+	require.Error(t, err)
+	stale := request
+	stale.RequestKey = strings.Repeat("d", 64)
+	stale.HeadSHA = strings.Repeat("b", 40)
+	_, err = s.Arm(ctx, stale, proof)
+	require.Error(t, err)
+}
+
 func TestPRReviewWaitAtomicIsolationAndCursor(t *testing.T) {
 	db := storetest.New(t)
 	ctx := context.Background()
@@ -25,7 +66,7 @@ func TestPRReviewWaitAtomicIsolationAndCursor(t *testing.T) {
 	require.NoError(t, handoff.RecordPublication(ctx, prhandoff.Publication{ID: "pub", Author: author, Repo: repo, Branch: "fix", HeadSHA: sha}))
 	require.NoError(t, handoff.Enroll(ctx, prhandoff.Binding{ID: "b", Author: author, PublicationID: "pub", Pull: prhandoff.Pull{Repo: repo, Number: 1, ObjectID: 11, HeadRepoID: 42, Branch: "fix", HeadSHA: sha, Open: true}}))
 	s := store.PRReviewWaitStore{DB: db.ORM}
-	request := prreviewwait.Request{OwnerID: "owner", ChatID: "chat", Execution: original, RepoID: 42, PR: 1, HeadSHA: sha}
+	request := prreviewwait.Request{RequestKey: strings.Repeat("a", 64), OwnerID: "owner", ChatID: "chat", Execution: original, RepoID: 42, PR: 1, HeadSHA: sha}
 	proof := runcontinuity.Result{Original: original, Current: original, Live: true}
 	for _, change := range []func(*prreviewwait.Request){func(r *prreviewwait.Request) { r.OwnerID = "other" }, func(r *prreviewwait.Request) { r.PR = 2 }, func(r *prreviewwait.Request) { r.HeadSHA = strings.Repeat("b", 40) }, func(r *prreviewwait.Request) { r.Execution.RunID = "unverified" }} {
 		bad := request
@@ -57,6 +98,7 @@ func TestPRReviewWaitAtomicIsolationAndCursor(t *testing.T) {
 	_, err = s.Read(ctx, sub)
 	require.Error(t, err)
 	request.Execution = successor
+	request.RequestKey = strings.Repeat("b", 64)
 	rearmed, err := s.Arm(ctx, request, proof)
 	require.NoError(t, err)
 	require.Equal(t, "next", rearmed.CurrentRunID)

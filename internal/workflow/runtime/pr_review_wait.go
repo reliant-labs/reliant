@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"errors"
+	"fmt"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"time"
@@ -16,14 +17,33 @@ import (
 // by activities from their actual Temporal context and persisted enrollment.
 type PRReviewWaitInput = prreviewwait.NodeInput
 
-// executePRReviewWait executes the durable node. Channel collection starts
-// BEFORE Arm, and a generation counter prevents read→Await lost wakes. Signals
-// carry no verdict; every transition is read/consumed through the durable inbox.
+// executePRReviewWait executes the durable node. Each subscription owns its
+// signal channel; Temporal buffers doorbells before Arm returns. A generation
+// counter prevents read→Await lost wakes. Cancellation reconciliation is armed
+// BEFORE the Arm activity so an unknown activity result cannot orphan a wait.
+// Signals carry no verdict; every transition reads/consumes the durable inbox.
 func executePRReviewWait(ctx workflow.Context, input PRReviewWaitInput) (map[string]interface{}, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 5}})
 	var subscription prreviewwait.Subscription
 	generation := uint64(0)
-	channel := workflow.GetSignalChannel(ctx, prreviewwait.SignalName)
+	// Cleanup is installed BEFORE Arm: its SQL commit may succeed even when
+	// cancellation prevents the activity result from reaching this goroutine.
+	defer func() {
+		if ctx.Err() != nil {
+			cleanup, _ := workflow.NewDisconnectedContext(ctx)
+			cleanup = workflow.WithActivityOptions(cleanup, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 3}})
+			_ = workflow.ExecuteActivity(cleanup, "PRReviewWaitCancelRequest", input).Get(cleanup, nil)
+		}
+	}()
+	if err := workflow.ExecuteActivity(activityCtx, "PRReviewWaitArm", input).Get(ctx, &subscription); err != nil {
+		return nil, err
+	}
+	if subscription.State == "needs_human" {
+		return waitOutput(subscription, prreviewwait.Outcome{State: "unavailable"}), nil
+	}
+	// Dedicated channel: another parallel wait cannot consume this doorbell.
+	// Temporal retains signals sent before the Arm result/channel acquisition.
+	channel := workflow.GetSignalChannel(ctx, prreviewwait.SubscriptionSignal(subscription.ID))
 	listenerCtx, cancelListener := workflow.WithCancel(ctx)
 	defer cancelListener()
 	workflow.Go(listenerCtx, func(gctx workflow.Context) {
@@ -33,24 +53,11 @@ func executePRReviewWait(ctx workflow.Context, input PRReviewWaitInput) (map[str
 			if gctx.Err() != nil {
 				return
 			}
-			if subscription.ID == "" || id == subscription.ID {
+			if id == subscription.ID {
 				generation++
 			}
 		}
 	})
-	if err := workflow.ExecuteActivity(activityCtx, "PRReviewWaitArm", input).Get(ctx, &subscription); err != nil {
-		return nil, err
-	}
-	if subscription.State == "needs_human" {
-		return waitOutput(subscription, prreviewwait.Outcome{State: "unavailable"}), nil
-	}
-	defer func() {
-		if ctx.Err() != nil {
-			cleanup, _ := workflow.NewDisconnectedContext(ctx)
-			cleanup = workflow.WithActivityOptions(cleanup, workflow.ActivityOptions{StartToCloseTimeout: 30 * time.Second, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 3}})
-			_ = workflow.ExecuteActivity(cleanup, "PRReviewWaitCancel", subscription).Get(cleanup, nil)
-		}
-	}()
 	// Register cleanup before the first post-arm activity so cancellation while
 	// readiness is being exposed cannot strand an armed subscription.
 	if err := workflow.ExecuteActivity(activityCtx, "PRReviewWaitReady", subscription).Get(ctx, nil); err != nil {
@@ -85,7 +92,7 @@ func waitOutput(s prreviewwait.Subscription, o prreviewwait.Outcome) map[string]
 	return map[string]interface{}{"state": o.State, "subscription_id": s.ID, "provider_ref": o.ProviderRef, "head_sha": s.HeadSHA, "repo_id": s.RepoID, "pr": s.PR}
 }
 
-func (e *StepExecutor) startPRReviewWait(_ *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
+func (e *StepExecutor) startPRReviewWait(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
 	future, settable := workflow.NewFuture(e.ctx)
 	args := evalResult.GetAwaitPrReview()
 	workflow.Go(e.ctx, func(ctx workflow.Context) {
@@ -93,7 +100,7 @@ func (e *StepExecutor) startPRReviewWait(_ *reliantv1.Node, evalResult *reliantv
 			settable.SetError(temporal.NewNonRetryableApplicationError("await_pr_review arguments missing", "PRReviewWaitInvalid", nil))
 			return
 		}
-		output, err := executePRReviewWait(ctx, PRReviewWaitInput{Repo: model.CelStringValue(args.GetRepo()), PR: model.CelIntValue(args.GetPr()), HeadSHA: model.CelStringValue(args.GetExpectedHead())})
+		output, err := executePRReviewWait(ctx, PRReviewWaitInput{Occurrence: fmt.Sprintf("%s/%s/%d", joinNodePath(e.nodePathPrefix, node.GetId()), e.loopNodeID, e.loopIteration), Repo: model.CelStringValue(args.GetRepo()), PR: model.CelIntValue(args.GetPr()), HeadSHA: model.CelStringValue(args.GetExpectedHead())})
 		if err != nil {
 			settable.SetError(err)
 			return
