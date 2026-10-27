@@ -18,10 +18,20 @@ type memory struct {
 	failAck            bool
 }
 
+type fixedPolicy struct{}
+
+func (fixedPolicy) Resolve(context.Context, AuthoritySubject) (Authority, error) {
+	return Authority{ID: "server", PolicyRevision: 1}, nil
+}
+func (m *memory) BindingByID(_ context.Context, owner, id string) (prhandoff.Binding, error) {
+	return prhandoff.Binding{ID: id, Author: prhandoff.Author{OwnerID: owner}, Pull: prhandoff.Pull{Repo: prhandoff.Repository{ID: 42}, Number: 1, HeadSHA: m.sub.HeadSHA}}, nil
+}
+func (m *memory) BindAuthority(context.Context, prhandoff.Binding, Authority) error { return nil }
+
 func (m *memory) Binding(context.Context, string, int64, int64) (prhandoff.Binding, error) {
 	return prhandoff.Binding{}, nil
 }
-func (m *memory) Arm(context.Context, Request, runcontinuity.Result) (Subscription, error) {
+func (m *memory) Arm(context.Context, Request, runcontinuity.Result, Authority) (Subscription, error) {
 	return m.sub, nil
 }
 func (m *memory) Ready(context.Context, Subscription) error            { return nil }
@@ -29,7 +39,7 @@ func (m *memory) Read(context.Context, Subscription) (Outcome, error)  { return 
 func (m *memory) Consume(context.Context, Subscription, Outcome) error { m.consumed++; return nil }
 func (m *memory) CancelRequest(context.Context, Request) error         { m.sub.State = "cancelled"; return nil }
 func (m *memory) Cancel(context.Context, Subscription) error           { m.sub.State = "cancelled"; return nil }
-func (m *memory) Put(_ context.Context, o Outcome) (Subscription, error) {
+func (m *memory) Put(_ context.Context, o Outcome, _ Authority) (Subscription, error) {
 	m.outcome = o
 	return m.sub, nil
 }
@@ -79,17 +89,24 @@ func (s *signal) SignalReview(_ context.Context, e runcontinuity.Execution, _ st
 	return nil
 }
 
+func TestNewRefusesMissingAuthorityPolicy(t *testing.T) {
+	_, err := New(Deps{Store: &memory{}, Continuity: &continuity{}, Signals: &signal{}})
+	if err == nil {
+		t.Fatal("nil policy must fail closed")
+	}
+}
+
 func TestPublishRolloverCrashAndAckNeverConsumes(t *testing.T) {
 	ctx := context.Background()
 	original := runcontinuity.Execution{WorkflowID: "wf", RunID: "original"}
 	m := &memory{sub: Subscription{ID: "s", BindingID: "b", HeadSHA: strings.Repeat("a", 40), WorkflowID: "wf", OriginalRunID: "original", CurrentRunID: "original", State: "armed"}, failAck: true}
 	c := &continuity{current: original, live: true}
 	signals := &signal{c: c, race: true}
-	svc, err := New(Deps{Store: m, Continuity: c, Signals: signals})
+	svc, err := New(Deps{Policy: fixedPolicy{}, Store: m, Continuity: c, Signals: signals})
 	if err != nil {
 		t.Fatal(err)
 	}
-	outcome := Outcome{BindingID: "b", HeadSHA: m.sub.HeadSHA, ProviderRef: "review:1", Sequence: 1, State: "changes"}
+	outcome := Outcome{OwnerID: "owner", AuthorityID: "server", BindingID: "b", HeadSHA: m.sub.HeadSHA, ProviderRef: "review:1", Sequence: 1, State: "changes"}
 	if err := svc.Publish(ctx, outcome); err == nil {
 		t.Fatal("crash must return retryable error")
 	}

@@ -1193,6 +1193,9 @@
     "internal/store/pr_handoff_review_repo_ext.go": {
       "scaffolded_at": "2026-10-27T05:17:18Z"
     },
+    "internal/store/pr_review_wait_authority_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:06:07Z"
+    },
     "internal/store/pr_review_wait_outcome_repo_ext.go": {
       "scaffolded_at": "2026-10-27T06:12:42Z"
     },
