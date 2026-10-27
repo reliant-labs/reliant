@@ -66,14 +66,24 @@ func (a cpAuthentication) Apply(r *http.Request) error {
 // input. It is NOT a graph-completion/whole-pipeline proof. All source/intent/
 // publication/wait-policy adapters, SQL stores, provider reads and CP HTTP are real.
 func TestFutureChatBPublisherConfirmedInboxBoundary(t *testing.T) {
-	runPublisherInbox(t, false)
+	runPublisherInbox(t, false, "approve", "success", false)
 }
 
 func TestFutureChatBActualReviewGraphToAuthorWait(t *testing.T) {
-	runPublisherInbox(t, true)
+	runPublisherInbox(t, true, "approve", "success", false)
 }
 
-func runPublisherInbox(t *testing.T, actualGraph bool) {
+func TestFutureChatBChangesWakeSameAuthor(t *testing.T) {
+	runPublisherInbox(t, true, "changes", "success", false)
+}
+func TestFutureChatBFailedGraphNeverApproves(t *testing.T) {
+	runPublisherInbox(t, true, "approve", "failure", false)
+}
+func TestFutureChatBStaleHeadCannotPublish(t *testing.T) {
+	runPublisherInbox(t, true, "approve", "success", true)
+}
+
+func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome string, stale bool) {
 	f := newResources(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
@@ -157,7 +167,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 	var completion adapter.CompletionActivity
 	snapshot, _ := json.Marshal(map[string]any{"root_ref": "trusted", "admission_key": store.ReviewAdmissionKeyExpression, "graphs": map[string]any{"trusted": map[string]any{"concurrency": map[string]any{"key": store.ReviewAdmissionKeyExpression}}}})
 	if actualGraph {
-		definition := "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [finish]\nnodes:\n  - id: finish\n    type: compute\n    outcome: success\noutputs:\n  review_verdict: approve\n"
+		definition := "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [finish]\nnodes:\n  - id: finish\n    type: compute\n    outcome: " + graphOutcome + "\noutputs:\n  review_verdict: " + verdict + "\n"
 		wf, err := wfyaml.ParseWorkflow([]byte(definition))
 		if err != nil {
 			t.Fatal(err)
@@ -237,7 +247,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !a.Completion.Final || !a.Completion.GraphSucceeded || a.Completion.Verdict != reviewpublisher.Approve {
+		if !a.Completion.Final || a.Completion.GraphSucceeded != (graphOutcome == "success") || a.Completion.Verdict != reviewpublisher.Verdict(verdict) {
 			t.Fatalf("actual graph history did not attest completion: %+v", a.Completion)
 		}
 	} else {
@@ -256,6 +266,12 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 	}
 	provider.mu.Lock()
 	provider.externalID = store.ReviewExternalID(a, intent.IntentID)
+	if verdict != "approve" || graphOutcome != "success" {
+		provider.conclusion = "failure"
+	}
+	if stale {
+		provider.head = strings.Repeat("b", 40)
+	}
 	provider.mu.Unlock()
 	wait, err := prreviewwait.New(prreviewwait.Deps{Policy: adapter.WaitPolicy{Store: state}, Store: adapter.GuardedWaitStore{PRReviewWaitStore: store.PRReviewWaitStore{DB: repo.ORM()}}, Continuity: prreviewwait.ContinuityReader{Reader: runcontinuity.TemporalReader{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}, Signals: prreviewwait.TemporalSignaler{Client: f.Temporal}})
 	if err != nil {
@@ -279,8 +295,21 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 		}
 	}
 	bridge := adapter.BridgeHTTP{Origin: endpoint.URL, Client: &http.Client{Timeout: 10 * time.Second}, Auth: cpAuthentication{endpoint}}
-	if _, err := (adapter.Publisher{Store: state, Heads: heads, Bridge: bridge}).Publish(ctx, intent.IntentID); err != nil {
-		t.Fatal(err)
+	_, publishErr := (adapter.Publisher{Store: state, Heads: heads, Bridge: bridge}).Publish(ctx, intent.IntentID)
+	if stale {
+		if publishErr == nil {
+			t.Fatal("stale head authorized check publication")
+		}
+		provider.mu.Lock()
+		writes, queueWrites := provider.writes, provider.queueWrites
+		provider.mu.Unlock()
+		if writes != 0 || queueWrites != 0 {
+			t.Fatal("stale head mutated provider")
+		}
+		return
+	}
+	if publishErr != nil {
+		t.Fatal(publishErr)
 	}
 	if err := (adapter.WaitOutcome{Store: state, Wait: wait}).Deliver(ctx, intent.IntentID); err != nil {
 		t.Fatal(err)
@@ -290,7 +319,13 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 		if err := authorRun.Get(ctx, &authorResult); err != nil {
 			t.Fatal(err)
 		}
-		if authorResult.Outputs["review_state"] != "approved" {
+		expectedState := "approved"
+		if verdict == "changes" {
+			expectedState = "changes"
+		} else if graphOutcome != "success" {
+			expectedState = "unavailable"
+		}
+		if authorResult.Outputs["review_state"] != expectedState {
 			t.Fatalf("real author wait did not consume approved result: %#v", authorResult.Outputs)
 		}
 		binding, err := handoff.Binding(ctx, endpoint.OwnerID, 42, 7)
@@ -306,6 +341,15 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 		}
 		if consumed != a.Binding.Generation {
 			t.Fatalf("actual node consumed generation %d expected%d", consumed, a.Binding.Generation)
+		}
+		if expectedState != "approved" {
+			provider.mu.Lock()
+			queueWrites := provider.queueWrites
+			provider.mu.Unlock()
+			if queueWrites != 0 {
+				t.Fatal("nonapproval enqueued")
+			}
+			return
 		}
 		queueAction, err := cat.Resolve("github/pr.enqueue@1")
 		if err != nil {

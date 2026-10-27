@@ -22,6 +22,8 @@ type checkProvider struct {
 	writes      int
 	check       map[string]any
 	externalID  string
+	conclusion  string
+	head        string
 	queueWrites int
 	queued      bool
 	t           *testing.T
@@ -72,8 +74,12 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		out = map[string]any{"id": 42, "full_name": "acme/example", "name": "example", "owner": map[string]any{"login": "acme"}, "private": true, "default_branch": "main", "html_url": "https://github.com/acme/example", "permissions": map[string]bool{"push": true}}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/pulls/7":
+		headSHA := f.head
+		if headSHA == "" {
+			headSHA = strings.Repeat("a", 40)
+		}
 		out = map[string]any{"id": 700, "number": 7, "title": "private", "body": "", "state": "open", "draft": false, "merged": false, "html_url": "https://github.com/acme/example/pull/7",
-			"head": map[string]any{"ref": "fix", "sha": strings.Repeat("a", 40), "repo": map[string]any{"id": 42, "full_name": "acme/example"}},
+			"head": map[string]any{"ref": "fix", "sha": headSHA, "repo": map[string]any{"id": 42, "full_name": "acme/example"}},
 			"base": map[string]any{"ref": "main", "sha": strings.Repeat("b", 40), "repo": map[string]any{"id": 42, "full_name": "acme/example"}}}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example/installation":
 		out = map[string]any{"id": 8, "app_id": 7}
@@ -100,7 +106,11 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if externalID == "" {
 			externalID = "fixture/assignment/1"
 		}
-		if check["head_sha"] != strings.Repeat("a", 40) || check["name"] != "ReliantReview" || check["external_id"] != externalID || check["conclusion"] != "success" {
+		conclusion := f.conclusion
+		if conclusion == "" {
+			conclusion = "success"
+		}
+		if check["head_sha"] != strings.Repeat("a", 40) || check["name"] != "ReliantReview" || check["external_id"] != externalID || check["conclusion"] != conclusion {
 			f.t.Error("check mutation was not exact-head, exact-intent review")
 		}
 		f.writes++
