@@ -400,12 +400,13 @@ func toInbound(providerID string, trigger *core.Trigger, ev Event) triggers.Inbo
 		attrs[k] = v
 	}
 	return triggers.InboundEvent{
-		Kind:       core.TriggerEventKindIntegration,
-		DedupeKey:  trigger.ID + ":" + ev.DeliveryID,
-		OccurredAt: ev.OccurredAt,
-		Payload:    inboundPayload(providerID, ev, attrs),
-		Sender:     ev.Sender,
-		Echo:       ev.Echo,
+		Kind:             core.TriggerEventKindIntegration,
+		DedupeKey:        trigger.ID + ":" + ev.DeliveryID,
+		OccurredAt:       ev.OccurredAt,
+		Payload:          inboundPayload(providerID, ev, attrs),
+		Sender:           ev.Sender,
+		Echo:             ev.Echo,
+		AdmissionSubject: &triggers.AdmissionSubject{Head: ev.ObservedHead},
 	}
 }
 

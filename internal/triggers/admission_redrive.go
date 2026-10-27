@@ -1,0 +1,118 @@
+package triggers
+
+import (
+	"context"
+	"fmt"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// AdmissionDescriber is execution truth, not the DB's terminal-status cache.
+type AdmissionDescriber interface {
+	DescribeWorkflowExecution(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
+}
+
+func (r *Redriver) redriveAdmissions(ctx context.Context) error {
+	repo, ok := r.repo.(AdmissionStore)
+	if !ok {
+		return nil
+	}
+	temporal, ok := r.starter.(AdmissionDescriber)
+	if !ok {
+		return fmt.Errorf("admission Temporal describer is not wired")
+	}
+	rows, err := repo.ListTriggerAdmissions(ctx, r.admissionAfter, 2000)
+	if err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		r.admissionAfter = 0
+		return nil
+	}
+	for _, a := range rows {
+		r.admissionAfter = a.Order
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if a.State == "reserved" && a.ChatID != "" {
+			// Unknown run ID is recoverable ONLY with the immutable event memo.
+			// NotFound is ambiguous and never frees a permit.
+			desc, e := temporal.DescribeWorkflowExecution(ctx, a.ChatID, a.RunID)
+			if e != nil {
+				if a.RunID == "" {
+					// Retry the recorded launch. Launcher only resumes its PENDING
+					// root; an ACTIVE/reused root is never blindly restarted.
+					if err := r.startAdmissionFire(ctx, repo, a); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if a.RunID == "" {
+				runID, matched := admissionMemoRun(desc, a)
+				if !matched {
+					continue
+				}
+				if err = repo.BindTriggerAdmissionRun(ctx, a.EventID, runID); err != nil {
+					return err
+				}
+				a.RunID = runID
+			}
+			info := desc.GetWorkflowExecutionInfo()
+			if info.GetExecution().GetWorkflowId() != a.ChatID || info.GetExecution().GetRunId() != a.RunID {
+				continue
+			}
+			if admissionTerminal(info.GetStatus()) {
+				if _, err = repo.ReleaseTriggerAdmission(ctx, a.EventID, a.ChatID, a.RunID); err != nil {
+					return err
+				}
+			}
+			// A known running/closed execution is never started again.
+			continue
+		}
+		if err := r.startAdmissionFire(ctx, repo, a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Redriver) startAdmissionFire(ctx context.Context, repo AdmissionStore, a core.TriggerAdmission) error {
+	event, err := repo.GetAdmissionEvent(ctx, a.EventID)
+	if err != nil {
+		return err
+	}
+	if event.TriggerID == nil {
+		return nil
+	}
+	return StartEventFire(ctx, r.starter, event.ID, EventFireInput{TriggerID: *event.TriggerID, Kind: event.Kind, DedupeKey: event.DedupeKey}, r.taskQueue)
+}
+
+func admissionMemoRun(desc *workflowservice.DescribeWorkflowExecutionResponse, a core.TriggerAdmission) (string, bool) {
+	info := desc.GetWorkflowExecutionInfo()
+	if info.GetExecution().GetWorkflowId() != a.ChatID {
+		return "", false
+	}
+	var eventID string
+	p := info.GetMemo().GetFields()["reliant_admission_event_id"]
+	if p == nil || converter.GetDefaultDataConverter().FromPayload(p, &eventID) != nil || eventID != a.EventID {
+		return "", false
+	}
+	runID := info.GetExecution().GetRunId()
+	return runID, runID != ""
+}
+
+func admissionTerminal(status enumspb.WorkflowExecutionStatus) bool {
+	switch status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false // RUNNING, unknown, and continue-as-new chains retain capacity.
+	}
+}

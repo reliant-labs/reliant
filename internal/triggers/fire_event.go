@@ -146,6 +146,27 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
 	}
+	admission, err := readAdmission(ctx, f.repo, ev.ID)
+	if err != nil {
+		return nil, err
+	}
+	if decl != nil && decl.Concurrency != nil && admission == nil {
+		return f.settle(ctx, ev, core.TriggerEventFailed, "concurrency event has no admission metadata", nil)
+	}
+	if admission != nil {
+		if admission.State != "queued" && admission.State != "reserved" {
+			return outputFromEvent(ev), nil
+		}
+		if decl == nil || decl.Concurrency == nil {
+			return nil, fmt.Errorf("admission declaration removed while event pending")
+		}
+		spec.OnStarted = func(ctx context.Context, eventID, runID string) error {
+			return f.repo.(AdmissionStore).BindTriggerAdmissionRun(ctx, eventID, runID)
+		}
+		spec.Guard = func(ctx context.Context) (string, error) {
+			return "", f.repo.(AdmissionStore).ReserveTriggerAdmission(ctx, ev.ID, int(decl.Concurrency.MaxRunning))
+		}
+	}
 	res, launchErr := f.launcher.Launch(ctx, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,
@@ -157,7 +178,14 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}, spec)
 
 	switch {
+	case errors.Is(launchErr, core.ErrAdmissionDeferred):
+		return &FireOutput{Outcome: string(core.TriggerEventPending), EventID: ev.ID, Reason: "waiting for admission capacity"}, nil
 	case launchErr == nil:
+		if admission != nil {
+			if err := f.repo.(AdmissionStore).BindTriggerAdmissionRun(ctx, ev.ID, res.RunID); err != nil {
+				return nil, err
+			}
+		}
 		return &FireOutput{Outcome: string(core.TriggerEventLaunched), ChatID: res.Chat.ID, EventID: res.EventID}, nil
 	case errors.Is(launchErr, launch.ErrAlreadyLaunched):
 		out := &FireOutput{Outcome: string(core.TriggerEventLaunched), Reason: "already launched", EventID: ev.ID}

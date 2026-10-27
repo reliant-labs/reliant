@@ -146,6 +146,9 @@ type Spec struct {
 	// transaction retries on a serialization conflict. Applies to new chats
 	// only; resuming an already-recorded launch never consults it.
 	Guard func(ctx context.Context) (declineReason string, err error)
+	// OnStarted durably binds the exact execution after Temporal accepts it.
+	// Errors retain the already-running execution and its reservation.
+	OnStarted func(ctx context.Context, eventID, runID string) error
 }
 
 // Result is what Launch produced.
