@@ -6,6 +6,7 @@ package privatepipelineharness
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -356,8 +357,16 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	if actualGraph {
 		awaitArmedHead(t, ctx, f.SQL, sha)
 	}
-	if err := (adapter.WaitOutcome{Store: state, Wait: wait}).Deliver(ctx, intent.IntentID); err != nil {
-		t.Fatal(err)
+	deliveryErr := (adapter.WaitOutcome{Store: state, Wait: wait}).Deliver(ctx, intent.IntentID)
+	if deliveryErr != nil {
+		if graphOutcome == "success" || !errors.Is(deliveryErr, prreviewwait.ErrUnavailable) {
+			t.Fatal(deliveryErr)
+		}
+		// Negative-only post-commit doorbell race: Publish.Put has already
+		// committed. An author can consume the durable unavailable result and
+		// finish before the subsequent exact-recipient history read. This is
+		// NOT permission to ignore pre-publication or positive-path errors.
+		assertConsumedFailureBeforeDoorbell(t, ctx, f, state, intent.IntentID, root, authorRun.GetRunID(), a.Binding.Generation)
 	}
 	if repairLoop {
 		awaitArmedHead(t, ctx, f.SQL, strings.Repeat("b", 40))
