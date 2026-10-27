@@ -166,7 +166,6 @@ export default function ReleasesPreview() {
                 search={{ q: search.q, author: search.author, status: search.status, every: search.every }}
                 onSearch={(next) => go(next)}
                 releaseHref={releaseHref}
-                onSelectEnv={(next) => go({ env: next })}
                 promote={promote}
                 scopeIsLocal={caseId === "local-env" && env === "laptop"}
               />

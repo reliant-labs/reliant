@@ -23,6 +23,7 @@ import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues"
 import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
 import type {
   AttributeValueCount,
   Dashboard,
@@ -833,6 +834,9 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   failError?: unknown;
   /** An environment that has sent nothing. */
   empty?: boolean;
+  graphUnknown?: boolean;
+  /** DEV-only negative cases for catalog review regressions. */
+  graphReview?: "retained-denied" | "retained-unavailable" | "rpc-201" | "artifacts-21" | "unsupported";
   /** Called for each RPC, with its request — tests assert on what was asked. */
   onCall?: (rpc: string, request: unknown) => void;
   /**
@@ -854,9 +858,28 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     }
     return answer();
   };
+  let catalogCalls = 0;
   const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
+    getServiceGraph: (req) => call("GetServiceGraph", req, () => fixtureGraph(options.empty, options.graphUnknown)),
+    getServiceGraphCatalog: (req) => call("GetServiceGraphCatalog", req, () => {
+      catalogCalls++;
+      if (options.graphReview === "unsupported") throw new ConnectError("unknown procedure", Code.Unimplemented);
+      if (catalogCalls > 1 && options.graphReview?.startsWith("retained-")) throw new ConnectError("catalog no longer readable", options.graphReview === "retained-denied" ? Code.PermissionDenied : Code.Unavailable);
+      const result = fixtureCatalog(options.empty, options.graphUnknown);
+      if (options.graphReview === "rpc-201") {
+        const selectedId = "shop.v1.OrdersService/ZZMethod201";
+        result.methods = req.rpcIds?.includes(selectedId) ? [{ ...result.methods[0], id: selectedId, method: "ZZMethod201" }] : [];
+      }
+      if (options.graphReview === "artifacts-21") {
+        result.declaredCatalogs = Array.from({ length: 21 }, (_, i) => ({ ...result.declaredCatalogs[0], envId: `env-${i}`, bundleDigest: `bundle-${i}` }));
+        const last = JSON.parse(result.declaredCatalogs[20].json);
+        last.services[0].descriptor.Schemas["shop.v1.GetOrderRequest"] = [{ name: "different_schema_in_21st", kind: "int64" }];
+        result.declaredCatalogs[20].json = JSON.stringify(last);
+      }
+      return result;
+    }),
     getServiceOverview: (req) =>
       call("GetServiceOverview", req, () => {
         if (options.empty) return { services: [], trendStepSeconds: 60 };

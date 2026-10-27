@@ -54,6 +54,12 @@ const (
 	// ObservabilityServiceListMetricExemplarsProcedure is the fully-qualified name of the
 	// ObservabilityService's ListMetricExemplars RPC.
 	ObservabilityServiceListMetricExemplarsProcedure = "/controlplane.v1.ObservabilityService/ListMetricExemplars"
+	// ObservabilityServiceGetServiceGraphProcedure is the fully-qualified name of the
+	// ObservabilityService's GetServiceGraph RPC.
+	ObservabilityServiceGetServiceGraphProcedure = "/controlplane.v1.ObservabilityService/GetServiceGraph"
+	// ObservabilityServiceGetServiceGraphCatalogProcedure is the fully-qualified name of the
+	// ObservabilityService's GetServiceGraphCatalog RPC.
+	ObservabilityServiceGetServiceGraphCatalogProcedure = "/controlplane.v1.ObservabilityService/GetServiceGraphCatalog"
 	// ObservabilityServiceGetServiceOverviewProcedure is the fully-qualified name of the
 	// ObservabilityService's GetServiceOverview RPC.
 	ObservabilityServiceGetServiceOverviewProcedure = "/controlplane.v1.ObservabilityService/GetServiceOverview"
@@ -123,6 +129,12 @@ type ObservabilityServiceClient interface {
 	// group and a minimum value. Exemplars whose trace is stored sort first.
 	// Max range 7 days.
 	ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error)
+	// GetServiceGraph aggregates received pre-tail evidence, never estimated total traffic.
+	// Maximum window 1 hour; arbitrary QueryScope attribute filters are rejected.
+	GetServiceGraph(context.Context, *connect.Request[v1.GetServiceGraphRequest]) (*connect.Response[v1.GetServiceGraphResponse], error)
+	// GetServiceGraphCatalog lists observed fully qualified RPC methods and available
+	// declared metadata. Missing hosted code inventory is explicitly unavailable.
+	GetServiceGraphCatalog(context.Context, *connect.Request[v1.GetServiceGraphCatalogRequest]) (*connect.Response[v1.GetServiceGraphCatalogResponse], error)
 	// GetServiceOverview returns per-service request rate, errors and
 	// p50/p95/p99 latency over server spans: the default landing view. Max range
 	// 7 days.
@@ -262,6 +274,18 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
 			connect.WithClientOptions(opts...),
 		),
+		getServiceGraph: connect.NewClient[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetServiceGraphProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		getServiceGraphCatalog: connect.NewClient[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetServiceGraphCatalogProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+			connect.WithClientOptions(opts...),
+		),
 		getServiceOverview: connect.NewClient[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceOverviewProcedure,
@@ -327,23 +351,25 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // observabilityServiceClient implements ObservabilityServiceClient.
 type observabilityServiceClient struct {
-	searchLogs            *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
-	listTraces            *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
-	getTrace              *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
-	listMetrics           *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
-	queryMetric           *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
-	getMetric             *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
-	listMetricExemplars   *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
-	getServiceOverview    *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
-	getFlamegraph         *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
-	queryPanel            *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
-	listAttributeValues   *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
-	getServiceSignals     *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
-	listWorkloads         *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
-	getWorkload           *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
-	getDashboards         *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
-	getObservabilityUsage *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
-	getReleaseHealth      *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
+	searchLogs             *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	listTraces             *connect.Client[v1.ListTracesRequest, v1.ListTracesResponse]
+	getTrace               *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
+	listMetrics            *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
+	queryMetric            *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
+	getMetric              *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
+	listMetricExemplars    *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
+	getServiceGraph        *connect.Client[v1.GetServiceGraphRequest, v1.GetServiceGraphResponse]
+	getServiceGraphCatalog *connect.Client[v1.GetServiceGraphCatalogRequest, v1.GetServiceGraphCatalogResponse]
+	getServiceOverview     *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
+	getFlamegraph          *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	queryPanel             *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
+	listAttributeValues    *connect.Client[v1.ListAttributeValuesRequest, v1.ListAttributeValuesResponse]
+	getServiceSignals      *connect.Client[v1.GetServiceSignalsRequest, v1.GetServiceSignalsResponse]
+	listWorkloads          *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
+	getWorkload            *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
+	getDashboards          *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
+	getObservabilityUsage  *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
+	getReleaseHealth       *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -381,6 +407,16 @@ func (c *observabilityServiceClient) GetMetric(ctx context.Context, req *connect
 // ListMetricExemplars calls controlplane.v1.ObservabilityService.ListMetricExemplars.
 func (c *observabilityServiceClient) ListMetricExemplars(ctx context.Context, req *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error) {
 	return c.listMetricExemplars.CallUnary(ctx, req)
+}
+
+// GetServiceGraph calls controlplane.v1.ObservabilityService.GetServiceGraph.
+func (c *observabilityServiceClient) GetServiceGraph(ctx context.Context, req *connect.Request[v1.GetServiceGraphRequest]) (*connect.Response[v1.GetServiceGraphResponse], error) {
+	return c.getServiceGraph.CallUnary(ctx, req)
+}
+
+// GetServiceGraphCatalog calls controlplane.v1.ObservabilityService.GetServiceGraphCatalog.
+func (c *observabilityServiceClient) GetServiceGraphCatalog(ctx context.Context, req *connect.Request[v1.GetServiceGraphCatalogRequest]) (*connect.Response[v1.GetServiceGraphCatalogResponse], error) {
+	return c.getServiceGraphCatalog.CallUnary(ctx, req)
 }
 
 // GetServiceOverview calls controlplane.v1.ObservabilityService.GetServiceOverview.
@@ -473,6 +509,12 @@ type ObservabilityServiceHandler interface {
 	// group and a minimum value. Exemplars whose trace is stored sort first.
 	// Max range 7 days.
 	ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error)
+	// GetServiceGraph aggregates received pre-tail evidence, never estimated total traffic.
+	// Maximum window 1 hour; arbitrary QueryScope attribute filters are rejected.
+	GetServiceGraph(context.Context, *connect.Request[v1.GetServiceGraphRequest]) (*connect.Response[v1.GetServiceGraphResponse], error)
+	// GetServiceGraphCatalog lists observed fully qualified RPC methods and available
+	// declared metadata. Missing hosted code inventory is explicitly unavailable.
+	GetServiceGraphCatalog(context.Context, *connect.Request[v1.GetServiceGraphCatalogRequest]) (*connect.Response[v1.GetServiceGraphCatalogResponse], error)
 	// GetServiceOverview returns per-service request rate, errors and
 	// p50/p95/p99 latency over server spans: the default landing view. Max range
 	// 7 days.
@@ -608,6 +650,18 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetServiceGraphHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetServiceGraphProcedure,
+		svc.GetServiceGraph,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceGetServiceGraphCatalogHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetServiceGraphCatalogProcedure,
+		svc.GetServiceGraphCatalog,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetServiceGraphCatalog")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceGetServiceOverviewHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceOverviewProcedure,
 		svc.GetServiceOverview,
@@ -684,6 +738,10 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetMetricHandler.ServeHTTP(w, r)
 		case ObservabilityServiceListMetricExemplarsProcedure:
 			observabilityServiceListMetricExemplarsHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetServiceGraphProcedure:
+			observabilityServiceGetServiceGraphHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetServiceGraphCatalogProcedure:
+			observabilityServiceGetServiceGraphCatalogHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetServiceOverviewProcedure:
 			observabilityServiceGetServiceOverviewHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetFlamegraphProcedure:
@@ -739,6 +797,14 @@ func (UnimplementedObservabilityServiceHandler) GetMetric(context.Context, *conn
 
 func (UnimplementedObservabilityServiceHandler) ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListMetricExemplars is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetServiceGraph(context.Context, *connect.Request[v1.GetServiceGraphRequest]) (*connect.Response[v1.GetServiceGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetServiceGraph is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetServiceGraphCatalog(context.Context, *connect.Request[v1.GetServiceGraphCatalogRequest]) (*connect.Response[v1.GetServiceGraphCatalogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetServiceGraphCatalog is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetServiceOverview(context.Context, *connect.Request[v1.GetServiceOverviewRequest]) (*connect.Response[v1.GetServiceOverviewResponse], error) {

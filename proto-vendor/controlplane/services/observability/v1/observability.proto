@@ -119,6 +119,24 @@ service ObservabilityService {
     };
   }
 
+  // GetServiceGraph aggregates received pre-tail evidence, never estimated total traffic.
+  // Maximum window 1 hour; arbitrary QueryScope attribute filters are rejected.
+  rpc GetServiceGraph(GetServiceGraphRequest) returns (GetServiceGraphResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetServiceGraphCatalog lists observed fully qualified RPC methods and available
+  // declared metadata. Missing hosted code inventory is explicitly unavailable.
+  rpc GetServiceGraphCatalog(GetServiceGraphCatalogRequest) returns (GetServiceGraphCatalogResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetServiceOverview returns per-service request rate, errors and
   // p50/p95/p99 latency over server spans: the default landing view. Max range
   // 7 days.
@@ -329,6 +347,171 @@ message QueryScope {
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
   // Generic attribute predicates, ANDed with each other and with everything else.
   repeated AttributeFilter filters = 7 [(buf.validate.field).repeated.max_items = 20];
+}
+
+// === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
+message GetServiceGraphRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Full case-sensitive proto service/method, e.g. acme.v1.OrdersService/GetOrder.
+  repeated string rpc_ids = 2 [(buf.validate.field).repeated.max_items = 50];
+  repeated GraphEdgeKind edge_kinds = 3;
+  // Optional process node identity; narrows to incident edges.
+  string focus_node_id = 4;
+  // 0 defaults to 200, maximum 500.
+  uint32 max_edges = 5;
+  // Method expansion is separate from process traffic; never adds to request counts.
+  bool include_internal = 6;
+  // Exact fully qualified proto service; ANDed with rpc_ids, never expanded from a capped catalog.
+  string rpc_service = 7 [(buf.validate.field).string.max_len = 128];
+}
+message GetServiceGraphResponse {
+  repeated GraphNode nodes = 1;
+  repeated GraphEdge edges = 2;
+  GraphCompleteness completeness = 3;
+  TimeRange effective_time_range = 4;
+}
+enum GraphNodeKind {
+  GRAPH_NODE_KIND_UNSPECIFIED = 0;
+  GRAPH_NODE_KIND_PROCESS = 1;
+  GRAPH_NODE_KIND_RPC = 2;
+  GRAPH_NODE_KIND_INTERNAL_METHOD = 3;
+  GRAPH_NODE_KIND_DATABASE = 4;
+  GRAPH_NODE_KIND_EXTERNAL = 5;
+  GRAPH_NODE_KIND_BROKER = 6;
+  GRAPH_NODE_KIND_WORKFLOW = 7;
+  GRAPH_NODE_KIND_UNKNOWN = 8;
+  GRAPH_NODE_KIND_FRONTEND = 9;
+}
+enum GraphEdgeKind {
+  GRAPH_EDGE_KIND_UNSPECIFIED = 0;
+  GRAPH_EDGE_KIND_SYNC = 1;
+  GRAPH_EDGE_KIND_DATABASE = 2;
+  GRAPH_EDGE_KIND_EXTERNAL = 3;
+  GRAPH_EDGE_KIND_ASYNC_SEND = 4;
+  GRAPH_EDGE_KIND_ASYNC_CONSUME = 5;
+  GRAPH_EDGE_KIND_INTERNAL = 6;
+  GRAPH_EDGE_KIND_DECLARED = 7;
+}
+enum GraphEvidenceKind {
+  GRAPH_EVIDENCE_KIND_UNSPECIFIED = 0;
+  GRAPH_EVIDENCE_KIND_OBSERVED = 1;
+  GRAPH_EVIDENCE_KIND_DECLARED = 2;
+}
+message GraphNode {
+  string id = 1;
+  string env_id = 2;
+  GraphNodeKind kind = 3;
+  string label = 4;
+  string parent_node_id = 5;
+  string rpc_id = 6;
+  string instrumentation_scope = 7;
+  // Empty unless a verified hosted artifact supplies exact source mapping.
+  string source_unavailable_reason = 8;
+}
+message GraphHistogram {
+  // Noncumulative counts: one per bound plus a final +Inf bucket. Version 1.
+  uint32 version = 1;
+  repeated double upper_bounds_seconds = 2;
+  repeated uint64 bucket_counts = 3;
+  uint64 count = 4;
+  double sum_seconds = 5;
+}
+message GraphTraceExemplar {
+  string trace_id = 1;
+  string span_id = 2;
+  // Pre-tail evidence does not guarantee the trace survived tail sampling.
+  bool trace_availability_unknown = 3;
+}
+message GraphEdge {
+  string id = 1;
+  string source_node_id = 2;
+  string destination_node_id = 3;
+  string env_id = 4;
+  GraphEdgeKind kind = 5;
+  GraphEvidenceKind evidence = 6;
+  string rpc_id = 7;
+  // server_request, client_attempt, database_operation, delivery, publish, method_invocation.
+  string unit = 8;
+  // server, client, consumer, producer or internal; never sum viewpoints.
+  string viewpoint = 9;
+  string cohort = 10;
+  uint64 count = 11;
+  uint64 server_fault_count = 12;
+  uint64 user_outcome_count = 13;
+  uint64 cancelled_count = 14;
+  uint64 unknown_status_count = 15;
+  uint64 matched_count = 16;
+  uint64 unmatched_count = 17;
+  GraphHistogram duration = 18;
+  repeated GraphTraceExemplar exemplars = 19;
+  google.protobuf.Timestamp first_seen = 20;
+  google.protobuf.Timestamp last_seen = 21;
+}
+message GraphCompleteness {
+  // PRE_TAIL_RECEIVED: weight=1 after dedup, not all real traffic.
+  string metrics_origin = 1;
+  bool upstream_loss_unknown = 2;
+  bool upstream_sampling_unknown = 3;
+  bool truncated = 4;
+  bool provisional = 5;
+  uint64 duplicate_count = 6;
+  uint64 conflicting_count = 7;
+  uint64 unmatched_count = 8;
+  uint64 rejected_count = 9;
+  uint64 overflow_count = 10;
+  google.protobuf.Timestamp aggregated_through = 11;
+  repeated string warnings = 12;
+  uint32 available_minutes = 13;
+  uint32 requested_minutes = 14;
+}
+message GetServiceGraphCatalogRequest {
+  // scope.services is rejected: telemetry service.name has no verified mapping
+  // to declared process IDs. Use an environment scope; never guess by name.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Optional exact full proto service name.
+  string rpc_service = 2;
+  // Enumeration only: 0 defaults to 200, maximum 500.
+  uint32 max_methods = 3;
+  // Exact lookup, ANDed with rpc_service, applied before enumeration caps.
+  // Full case-sensitive proto service/method. Empty selects enumeration mode.
+  repeated string rpc_ids = 4 [(buf.validate.field).repeated.max_items = 50];
+}
+message GraphRPCMethod {
+  string rpc_id = 1;
+  string rpc_service = 2;
+  string method = 3;
+  repeated string process_node_ids = 4;
+  GraphEvidenceKind evidence = 5;
+  uint64 observed_count = 6;
+  string input_type = 7;
+  string output_type = 8;
+  string stream_mode = 9;
+  string source_unavailable_reason = 10;
+  // Declared only when supplied by a verified hosted catalog.
+  string idempotency = 11;
+  optional bool auth_required = 12;
+  repeated string serves_process_ids = 13;
+  repeated string can_call_process_ids = 14;
+}
+// Exact frozen release-bundle artifact; no current-runtime/version assignment implied.
+// Catalog JSON has schema forge.dev/service-catalog/v1, preserving the existing
+// forge_descriptor schema graph and validation dialect without a second schema.
+message GraphDeclaredCatalog {
+  string env_id = 1;
+  string release_id = 2;
+  string bundle_digest = 3;
+  string catalog_json = 4;
+  // Repository/commit are absent unless existing bundle provenance verifies them.
+  string repository = 5;
+  string commit = 6;
+}
+message GetServiceGraphCatalogResponse {
+  repeated GraphRPCMethod methods = 1;
+  GraphCompleteness completeness = 2;
+  // unavailable until a verified hosted metadata artifact is present; not daemon filesystem.
+  string declared_catalog_status = 3;
+  string declared_catalog_unavailable_reason = 4;
+  repeated GraphDeclaredCatalog declared_catalogs = 5;
 }
 
 enum SortOrder {

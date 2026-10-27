@@ -21,7 +21,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 const legacyOnly = async () => { throw new ConnectError("Legacy usage fixture", Code.Unimplemented); };
 const legacyBillingApi = { getObservabilityUsage: legacyOnly, listObservabilityUsage: legacyOnly, getObservabilityStorage: legacyOnly, getObservabilityLimits: legacyOnly, updateObservabilityLimits: legacyOnly };
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -51,6 +51,12 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "not-set-up", label: "org not set up (FailedPrecondition)", options: { failWith: Code.FailedPrecondition } },
   { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
   { id: "empty", label: "no data in range", options: { empty: true } },
+  { id: "graph-unknown", label: "graph: coverage/catalog unavailable", options: { graphUnknown: true } },
+  { id: "graph-retained-denied", label: "graph: catalog revoked on refetch", options: { graphReview: "retained-denied" } },
+  { id: "graph-retained-unavailable", label: "graph: catalog unavailable on refetch", options: { graphReview: "retained-unavailable" } },
+  { id: "graph-rpc-201", label: "graph: exact method beyond enumeration", options: { graphReview: "rpc-201" } },
+  { id: "graph-artifacts-21", label: "graph: 21st artifact disagrees", options: { graphReview: "artifacts-21" } },
+  { id: "graph-unsupported", label: "graph: older unsupported server", options: { graphReview: "unsupported" } },
   { id: "window-empty", label: "no data in range, data this week", options: { empty: true, signals: FIXTURE_SIGNALS } },
   { id: "denied", label: "no permission", options: { failWith: Code.PermissionDenied } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
@@ -90,7 +96,7 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
 ];
 
 /** The views the panel hosts (Metrics and Dashboards are console pages of their own). */
-const PANEL_VIEWS: ObsNavView[] = ["errors", "sessions", "logs", "traces", "profiles", "alerts"];
+const PANEL_VIEWS: ObsNavView[] = ["graph", "rpc", "errors", "sessions", "logs", "traces", "profiles", "alerts"];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy", "cursor"]);
 
@@ -106,11 +112,16 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
       } catch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
-    } else if (key === "live" || key === "errors" || key === "replay") out[key] = params.get(key) === "true";
+    } else if (key === "live" || key === "errors" || key === "replay" || key === "declared" || key === "internal") out[key] = params.get(key) === "true";
     else if (key === "t") out[key] = Number(params.get(key)) || undefined;
     else out[key] = params.get(key);
   }
   return out as ObsSearch;
+}
+
+function CatalogRefetchProbe() {
+  const client = useQueryClient();
+  return <button className="text-sm text-primary underline" onClick={() => void client.invalidateQueries({ predicate: (q) => q.queryKey.includes("graph-catalog") || q.queryKey.includes("graph-catalog-exact") })}>Preview: refetch retained catalog</button>;
 }
 
 export default function ObservabilityPreview() {
@@ -207,6 +218,7 @@ export default function ObservabilityPreview() {
         <QueryClientProvider client={queryClient}>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+              {active.options.graphReview?.startsWith("retained-") && <CatalogRefetchProbe />}
               <ObservabilityPanel key={caseId} place={place} search={search} navigate={navigate} />
             </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>

@@ -2,7 +2,9 @@
 
 # Phase 2 of a release: tag the commit that ACTUALLY LANDED ON MAIN.
 #
-# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--dry-run]
+# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--commit <sha>] [--dry-run]
+# --commit selects a reviewed main ancestor explicitly and requires its EXACT
+# complete green record; no metadata carry or gate waiver is allowed in this mode.
 #
 # Run this AFTER the release PR opened by ./scripts/release.sh has merged.
 # With no version argument it reads the version from origin/main itself, so
@@ -50,9 +52,20 @@ NC='\033[0m'
 DRY_RUN=false
 REQUESTED_TAG=""
 SKIP_RELEASE_GATE=false
+REQUESTED_COMMIT=""
 
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
     case "$arg" in
+        --commit)
+            if [[ -n "$REQUESTED_COMMIT" || $# -eq 0 || ! "$1" =~ ^[0-9a-fA-F]{4,40}$ ]]; then
+                echo "Error: --commit requires one unambiguous commit SHA (4-40 hex digits), specified once" >&2
+                exit 1
+            fi
+            REQUESTED_COMMIT=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+            shift
+            ;;
         --dry-run)
             DRY_RUN=true
             ;;
@@ -63,20 +76,26 @@ for arg in "$@"; do
             REQUESTED_TAG="$arg"
             ;;
         -h|--help)
-            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]"
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]"
             echo ""
             echo "  vX.Y.Z               Tag this specific version (default: read from origin/main)"
+            echo "  --commit <sha>       Select this main ancestor; requires its exact full green record"
             echo "  --dry-run            Print exactly what would happen, create and push nothing"
             echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
             exit 0
             ;;
         *)
             echo -e "${RED}Error: unrecognized argument '$arg'${NC}" >&2
-            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]" >&2
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]" >&2
             exit 1
             ;;
     esac
 done
+
+if [[ -n "$REQUESTED_COMMIT" && "$SKIP_RELEASE_GATE" == "true" ]]; then
+    echo "Error: --commit cannot be combined with --skip-release-gate" >&2
+    exit 1
+fi
 
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo -e "${RED}Error: Not in a git repository${NC}" >&2
@@ -99,7 +118,11 @@ fi
 # local `main` can be stale, ahead, or someone else's in-flight work; the tag
 # has to describe what is actually published.
 echo -e "${YELLOW}📡 Fetching origin...${NC}"
-git fetch origin main --tags --quiet
+if [[ -n "$REQUESTED_COMMIT" ]]; then
+    git fetch origin '+refs/heads/main:refs/remotes/origin/main' --tags --quiet
+else
+    git fetch origin main --tags --quiet
+fi
 
 if ! git rev-parse --verify --quiet origin/main >/dev/null; then
     echo -e "${RED}Error: origin/main does not exist${NC}" >&2
@@ -111,7 +134,11 @@ fi
 # Read from origin/main's electron/package.json, NOT from the working tree.
 # The working tree can hold an unmerged bump, and tagging a version that main
 # does not carry is precisely the failure this script exists to prevent.
-VERSION_ON_MAIN=$(git show origin/main:electron/package.json | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+MAIN_REF=origin/main
+if [[ -n "$REQUESTED_COMMIT" ]]; then
+    MAIN_REF=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
+fi
+VERSION_ON_MAIN=$(git show "$MAIN_REF:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
 
 if [[ -z "$VERSION_ON_MAIN" ]]; then
     echo -e "${RED}Error: could not read a version from origin/main:electron/package.json${NC}" >&2
@@ -151,6 +178,12 @@ if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2
     echo -e "${RED}Error: tag $RELEASE_TAG already exists on origin${NC}" >&2
     echo -e "${YELLOW}  Published tags are never moved. If this release needs another build, cut a new version.${NC}" >&2
     exit 1
+else
+    TAG_QUERY_RC=$?
+    if [[ -n "$REQUESTED_COMMIT" && "$TAG_QUERY_RC" != 2 ]]; then
+        echo "Error: could not establish that $RELEASE_TAG is absent on origin" >&2
+        exit 1
+    fi
 fi
 
 # ── Which commit gets the tag? ──────────────────────────────────────────────
@@ -172,7 +205,7 @@ while read -r candidate; do
         RELEASE_COMMIT="$candidate"
         break
     fi
-done < <(git rev-list --reverse origin/main -- electron/package.json)
+done < <(git rev-list --reverse "$MAIN_REF" -- electron/package.json)
 
 if [[ -z "$RELEASE_COMMIT" ]]; then
     echo -e "${RED}Error: no commit on origin/main sets electron/package.json to ${NEW_VERSION}${NC}" >&2
@@ -180,12 +213,47 @@ if [[ -z "$RELEASE_COMMIT" ]]; then
     exit 1
 fi
 
+if [[ -n "$REQUESTED_COMMIT" ]]; then
+    VERSION_COMMIT="$RELEASE_COMMIT"
+    # Resolve object IDs, not revision expressions or a hex-looking ref name.
+    # More than one matching object is ambiguous, even if one is not a commit.
+    RELEASE_COMMIT=$(git rev-parse --disambiguate="$REQUESTED_COMMIT")
+    if [[ ! "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] ||
+        [[ "$(git cat-file -t "$RELEASE_COMMIT")" != commit ]]; then
+        echo "Error: cannot resolve --commit '$REQUESTED_COMMIT' to an unambiguous commit" >&2
+        exit 1
+    fi
+    if ! git merge-base --is-ancestor "$VERSION_COMMIT" "$RELEASE_COMMIT"; then
+        echo "Error: explicit commit must include the version-introducing commit $VERSION_COMMIT" >&2
+        exit 1
+    fi
+    if ! git show "$RELEASE_COMMIT:electron/package.json" | node -e '
+        const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        process.exit(j.version === process.argv[1] ? 0 : 1);
+    ' "$NEW_VERSION" || ! git show "$RELEASE_COMMIT:electron/package-lock.json" | node -e '
+        const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
+        process.exit(j.version === process.argv[1] && j.packages?.[""]?.version === process.argv[1] ? 0 : 1);
+    ' "$NEW_VERSION"; then
+        echo "Error: explicit commit package and lock versions must all equal $NEW_VERSION" >&2
+        exit 1
+    fi
+    # Explicit candidates always need canonical notes, including prereleases.
+    if ! git show "$RELEASE_COMMIT:docs/data/releases/${RELEASE_TAG}.yaml" | node -e '
+        const lines = require("fs").readFileSync(0, "utf8").split(/\r?\n/).filter(l => /^version:/.test(l));
+        const v = lines.length === 1 && lines[0].slice(8).trim();
+        process.exit([process.argv[1], `"${process.argv[1]}"`, `\x27${process.argv[1]}\x27`].includes(v) ? 0 : 1);
+    ' "$RELEASE_TAG"; then
+        echo "Error: canonical release notes at explicit commit must declare version $RELEASE_TAG" >&2
+        exit 1
+    fi
+fi
+
 # ── THE GUARD ───────────────────────────────────────────────────────────────
 #
 # The one check that would have caught this five releases ago. It is cheap,
 # and it is the difference between a release that can be described by
 # `git describe` and one that cannot.
-if ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
+if ! git merge-base --is-ancestor "$RELEASE_COMMIT" "$MAIN_REF"; then
     echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} is not an ancestor of origin/main${NC}" >&2
     echo -e "${YELLOW}  A tag off the trunk breaks git describe, changelog-from-tags, and Go pseudo-versions.${NC}" >&2
     exit 1
@@ -219,16 +287,50 @@ else
     "$(dirname "$0")/release-gate.sh" check "$RELEASE_COMMIT"
     GATE_RC=$?
     set -e
+    if [[ "$GATE_RC" == 0 && -n "$REQUESTED_COMMIT" ]]; then
+        # check fetches the existing evidence, but may allow metadata carry.
+        # show reads ONLY this commit. Require one complete record naming this
+        # exact SHA, not even an identical tree or a green ancestor.
+        if ! "$(dirname "$0")/release-gate.sh" show "$RELEASE_COMMIT" | jq -es --arg sha "$RELEASE_COMMIT" '
+            ["npm","generate","docs","lint","build","webbuild","typecheck","vet","test","integration","e2e"] as $required |
+            length == 1 and (.[0] |
+                .sha == $sha and .result == "PASS" and
+                (.steps | type == "array" and length == ($required | length)) and
+                ([.steps[].name] | sort) == ($required | sort) and
+                all(.steps[]; .result == "PASS"))
+        ' >/dev/null; then
+            echo "Error: --commit requires an exact eleven-step PASS record for $RELEASE_COMMIT; ancestor carry is not accepted" >&2
+            GATE_RC=1
+        fi
+    fi
     if [[ "$GATE_RC" != 0 ]]; then
         echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} has no green release-gate record${NC}" >&2
         echo -e "${YELLOW}  Run the slow tier on it (40-70 min; it holds one heavy slot):${NC}" >&2
         echo -e "${BLUE}    ./scripts/release-gate.sh run ${RELEASE_COMMIT}${NC}" >&2
-        echo -e "${YELLOW}  then run this again. A hotfix that cannot wait: --skip-release-gate.${NC}" >&2
+        if [[ -n "$REQUESTED_COMMIT" ]]; then
+            echo "  then run this again. Explicit candidates cannot waive the release gate." >&2
+        else
+            echo -e "${YELLOW}  then run this again. A hotfix that cannot wait: --skip-release-gate.${NC}" >&2
+        fi
         exit 1
     fi
 fi
 
 SUBJECT=$(git log -1 --format=%s "$RELEASE_COMMIT")
+if [[ -n "$REQUESTED_COMMIT" ]]; then
+    RELEASE_TREE=$(git rev-parse "$RELEASE_COMMIT^{tree}")
+    # Refuse any observed main movement, even if its version is unchanged.
+    # Never reselect the candidate to follow it. This runs in dry-run too.
+    REMOTE_MAIN=$(git ls-remote --exit-code origin refs/heads/main)
+    if [[ "$REMOTE_MAIN" != "$MAIN_REF"$'\trefs/heads/main' ]]; then
+        echo "Error: origin/main moved during preflight; retry against the new trusted main" >&2
+        exit 1
+    fi
+    echo "  Explicit candidate: $RELEASE_COMMIT"
+    echo "  Tree: $RELEASE_TREE"
+    echo "  Version source: $VERSION_COMMIT"
+    echo "  Trusted main: $MAIN_REF"
+fi
 
 echo ""
 echo -e "${GREEN}✅ Verified — this tag will land on main${NC}"

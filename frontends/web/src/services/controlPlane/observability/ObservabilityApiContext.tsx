@@ -17,6 +17,7 @@ import { currentOrgId } from "../orgs";
 import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
+import * as graph from "./graphApi";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
@@ -32,6 +33,8 @@ export interface ObservabilityApi {
   getTrace: typeof rpc.getTrace;
   queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
+  getServiceGraph: typeof graph.getServiceGraph;
+  getServiceGraphCatalog: typeof graph.getServiceGraphCatalog;
   getFlamegraph: typeof rpc.getFlamegraph;
   getServiceSignals: typeof rpc.getServiceSignals;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
@@ -105,6 +108,8 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getTrace: rpc.getTrace,
   queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
+  getServiceGraph: graph.getServiceGraph,
+  getServiceGraphCatalog: graph.getServiceGraphCatalog,
   getFlamegraph: rpc.getFlamegraph,
   getServiceSignals: rpc.getServiceSignals,
   getObservabilityUsage: rpc.getObservabilityUsage,
