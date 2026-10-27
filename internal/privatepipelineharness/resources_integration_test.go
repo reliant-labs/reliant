@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,9 +24,10 @@ import (
 )
 
 type resources struct {
-	SQL      *sql.DB
-	Temporal client.Client
-	Queue    string
+	SQL       *sql.DB
+	Temporal  client.Client
+	Queue     string
+	Namespace string
 }
 
 func requirePrivatePipeline(t *testing.T) {
@@ -61,6 +63,7 @@ func newResources(t *testing.T) *resources {
 	srv, err := testsuite.StartDevServer(ctx, testsuite.DevServerOptions{
 		ExistingPath: path,
 		LogLevel:     "never",
+		DBFilename:   filepath.Join(t.TempDir(), "temporal.sqlite"),
 		ClientOptions: &client.Options{
 			Namespace: "futurechat-b-" + id,
 		},
@@ -73,7 +76,7 @@ func newResources(t *testing.T) *resources {
 			t.Errorf("stop owned Temporal server: %v", err)
 		}
 	})
-	return &resources{SQL: raw, Temporal: srv.Client(), Queue: "futurechat-b-" + id}
+	return &resources{SQL: raw, Temporal: srv.Client(), Queue: "futurechat-b-" + id, Namespace: "futurechat-b-" + id}
 }
 
 type observedExecution struct {

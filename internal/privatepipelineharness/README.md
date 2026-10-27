@@ -18,14 +18,30 @@ RUN_FUTURECHAT_B=1 GOWORK=off go test -tags integration \
   -run '^TestFutureChatBInProcessSQL$' -timeout 2m ./internal/privatepipelineharness
 ```
 
-Run actual SQL/Temporal server infrastructure only (local Temporal CLI required,
-no SDK download fallback):
+Run actual SQL/Temporal server infrastructure and real CAN-history verification
+(local pinned Temporal CLI required; no SDK download fallback):
 
 ```sh
 RUN_FUTURECHAT_B=1 TEMPORAL_CLI_PATH=/absolute/path/to/temporal \
-  GOWORK=off go test -tags integration -run '^TestFutureChatBInfrastructure$' \
+  GOWORK=off go test -tags integration \
+  -run '^TestFutureChatB(Infrastructure|RealHistoryContinuity)$' \
   -timeout 3m ./internal/privatepipelineharness
 ```
+
+Verified local binary used for the recorded proofs:
+`/tmp/futurechat-b-tools/temporal-1.5.1/temporal`, official temporalio/cli v1.5.1,
+asset `temporal_cli_1.5.1_linux_amd64.tar.gz`, SHA256
+`ddc95e08b0b076efd4ea9733a3f488eb7d2be875f8834e616cd2a37358b4852d`.
+Official same-release `checksums.txt` SHA256
+`1b674a6e62e2e582cfd5cd84fa09f58844a2507d4621e0f4278a587ef9095a90`.
+Both were verified before extracting only `temporal`, after rejecting unsafe tar
+paths/symlinks. This is a temporary dev dependency, not a system installation.
+
+Real server infrastructure passed 3.247s; actual CAN history/namespace fencing/
+exact-run successor and terminal proof passed 17.621s. These still are NOT an
+end-to-end reviewer-author pipeline. Server state lives in a unique temporary
+SQLite file; SDK binds loopback on an allocated port. Only owned worker/server
+handles are stopped. No pre-existing stack is reused.
 
 The database uses `db.NewTestDatabase`: isolated migrated pgtest clone, dropped at
 cleanup. It ignores `DATABASE_URL`. Optional `FORGE_TEST_POSTGRES_URL` selects a
