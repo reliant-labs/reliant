@@ -43,9 +43,14 @@ This is a temporary dev dependency, not a system installation.
 
 The fixture does not use SDK StartDevServer: it starts its owned CLI directly in
 a fresh process group, registers cleanup before starting, bounds startup readiness,
-and terminates/waits its own group on startup failure or teardown. A never-ready
-owned subprocess regression and binary-mismatch regression passed 0.224s. Repaired
-lifecycle actual server+CAN+DynamicWorkflow SQL tests passed together in 20.819s.
+and terminates/waits its own group on startup failure or teardown. A single
+lifecycle owner uses Linux Waitid(WNOWAIT) to retain the direct child's PID/PGID
+identity, including as a zombie, until ALL group signals finish; only then does
+it call cmd.Wait once. Stop/context only request shutdown and await that owner.
+A deterministic concurrent-stop regression pauses before/after group signaling,
+proves the leader remains unreaped through both phases and is finally reaped once.
+Together with never-ready and binary-mismatch tests it passed 0.493s. Repaired
+lifecycle actual server+CAN+DynamicWorkflow SQL tests passed together in 19.685s.
 DynamicWorkflow uses concrete SQL status/checkpoint/cleanup activities; its
 immutable definition loader is an explicit trusted-fixture boundary, not a mock
 review-completion result. Full reviewer/author pipeline is still unproven.

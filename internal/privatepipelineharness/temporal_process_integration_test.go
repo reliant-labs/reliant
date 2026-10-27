@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/client"
+	"golang.org/x/sys/unix"
 )
 
 const pinnedTemporalExecutableSHA = "eb4f6ddaa41cadf58c7a77aa50c4bd932d6739fcef04ac76c7a679eaff2f5e6a"
@@ -53,18 +54,29 @@ func validateTemporalExecutable(path string) error {
 // ownedProcess is test infrastructure, not an authorization adapter. The
 // command is always started in a fresh group; signals target only that group.
 type ownedProcess struct {
-	cmd  *exec.Cmd
-	done chan struct{}
-	err  error
-	once sync.Once
+	cmd     *exec.Cmd
+	done    chan struct{}
+	request chan struct{}
+	err     error
+	once    sync.Once
+}
+
+type processObservationHooks struct {
+	beforeSignals func()
+	afterSignals  func()
 }
 
 func startOwnedProcess(t *testing.T, ctx context.Context, command string, args ...string) (*ownedProcess, error) {
 	t.Helper()
+	return startOwnedProcessObserved(t, ctx, processObservationHooks{}, command, args...)
+}
+
+func startOwnedProcessObserved(t *testing.T, ctx context.Context, hooks processObservationHooks, command string, args ...string) (*ownedProcess, error) {
+	t.Helper()
 	cmd := exec.Command(command, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-	p := &ownedProcess{cmd: cmd, done: make(chan struct{})}
+	p := &ownedProcess{cmd: cmd, done: make(chan struct{}), request: make(chan struct{})}
 	// Register before Start: readiness failure cannot strand the child.
 	t.Cleanup(p.stop)
 	if err := cmd.Start(); err != nil {
@@ -72,36 +84,68 @@ func startOwnedProcess(t *testing.T, ctx context.Context, command string, args .
 		close(p.done)
 		return p, err
 	}
-	go func() { p.err = cmd.Wait(); close(p.done) }()
-	go func() {
-		select {
-		case <-ctx.Done():
-			p.stop()
-		case <-p.done:
+	go p.ownLifecycle(ctx, hooks)
+	t.Cleanup(func() {
+		p.stop()
+		if p.identityErr != nil {
+			t.Errorf("owned child identity observation failed; group was NOT signaled: %v", p.identityErr)
 		}
-	}()
+	})
 	return p, nil
 }
 
+// childExited observes without reaping. The direct child reserves its PID and
+// process-group identity (including as a zombie) until the SINGLE owner Waits.
+func childExited(pid int) (bool, error) {
+	var info unix.Siginfo
+	err := unix.Waitid(unix.P_PID, pid, &info, unix.WEXITED|unix.WNOHANG|unix.WNOWAIT, nil)
+	return info.Signo != 0, err
+}
+
+func (p *ownedProcess) ownLifecycle(ctx context.Context, hooks processObservationHooks) {
+	defer close(p.done)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		exited, err := childExited(p.cmd.Process.Pid)
+		if err != nil {
+			// If identity cannot be proven, NEVER signal an integer PID/PGID.
+			p.err = p.cmd.Wait()
+			return
+		}
+		if exited {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			goto stopping
+		case <-p.request:
+			goto stopping
+		case <-ticker.C:
+		}
+	}
+stopping:
+	if hooks.beforeSignals != nil {
+		hooks.beforeSignals()
+	}
+	// No Wait has occurred, so PID/PGID cannot have been recycled. Retain
+	// that identity through BOTH signals; even a simultaneous leader exit is
+	// only a zombie until the final Wait below. KILL also closes surviving
+	// descendants before the leader can be reaped.
+	_ = unix.Kill(-p.cmd.Process.Pid, unix.SIGTERM)
+	grace := time.NewTimer(100 * time.Millisecond)
+	<-grace.C
+	_ = unix.Kill(-p.cmd.Process.Pid, unix.SIGKILL)
+	if hooks.afterSignals != nil {
+		hooks.afterSignals()
+	}
+	// This is the ONLY reap and occurs after the last possible group signal.
+	p.err = p.cmd.Wait()
+}
+
 func (p *ownedProcess) stop() {
-	p.once.Do(func() {
-		if p.cmd.Process == nil {
-			return
-		}
-		select {
-		case <-p.done:
-			return
-		default:
-		}
-		// A still-live direct child owns this process group; never name-match.
-		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGTERM)
-		select {
-		case <-p.done:
-		case <-time.After(3 * time.Second):
-			_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
-			<-p.done
-		}
-	})
+	p.once.Do(func() { close(p.request) })
+	<-p.done
 }
 
 func startTemporalProcess(t *testing.T, binary, namespace, database string) (client.Client, error) {
@@ -152,6 +196,19 @@ func TestTemporalExecutableMismatchRejected(t *testing.T) {
 	}
 }
 
+func TestOwnedProcessStartFailureHasNoSignalTarget(t *testing.T) {
+	p, err := startOwnedProcess(t, context.Background(), t.TempDir()+"/missing-executable")
+	if err == nil || p.cmd.Process != nil {
+		t.Fatal("failed start unexpectedly acquired a signal target")
+	}
+	p.stop()
+	select {
+	case <-p.done:
+	default:
+		t.Fatal("failed start cleanup did not finish")
+	}
+}
+
 func TestOwnedProcessStopsWhenReadinessNeverArrives(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts an owned test subprocess; run scoped without -short")
@@ -171,6 +228,68 @@ func TestOwnedProcessStopsWhenReadinessNeverArrives(t *testing.T) {
 	}
 	if p.err == nil {
 		t.Fatal("never-ready child exited successfully instead of being terminated")
+	}
+}
+
+func TestOwnedProcessRetainsZombieUntilSignalsFinish(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts an owned test subprocess; run scoped without -short")
+	}
+	beforeSignals := make(chan struct{})
+	allowSignals := make(chan struct{})
+	afterSignals := make(chan struct{})
+	allowReap := make(chan struct{})
+	// Always release barriers before cleanup waits for the lifecycle owner.
+	var releaseSignals, releaseReap sync.Once
+	defer releaseSignals.Do(func() { close(allowSignals) })
+	defer releaseReap.Do(func() { close(allowReap) })
+	p, err := startOwnedProcessObserved(t, context.Background(), processObservationHooks{
+		beforeSignals: func() { close(beforeSignals); <-allowSignals },
+		afterSignals:  func() { close(afterSignals); <-allowReap },
+	}, os.Args[0], "-test.run=^TestOwnedImmediateExitChild$")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-beforeSignals:
+	case <-time.After(5 * time.Second):
+		t.Fatal("owned immediate-exit child did not reach signal barrier")
+	}
+	exited, err := childExited(p.cmd.Process.Pid)
+	if err != nil || !exited {
+		t.Fatal("leader was reaped before first group signal; identity not reserved")
+	}
+	stopped := make(chan struct{})
+	go func() { p.stop(); close(stopped) }()
+	releaseSignals.Do(func() { close(allowSignals) })
+	select {
+	case <-afterSignals:
+	case <-time.After(5 * time.Second):
+		t.Fatal("owned process did not finish signal phase")
+	}
+	exited, err = childExited(p.cmd.Process.Pid)
+	if err != nil || !exited {
+		t.Fatal("leader identity was reaped during concurrent stop/signal phase")
+	}
+	select {
+	case <-stopped:
+		t.Fatal("stop returned before final reap")
+	default:
+	}
+	releaseReap.Do(func() { close(allowReap) })
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("owned process did not reap after all signals")
+	}
+	if _, err := childExited(p.cmd.Process.Pid); err != unix.ECHILD {
+		t.Fatalf("expected exactly one final reap, got %v", err)
+	}
+}
+
+func TestOwnedImmediateExitChild(t *testing.T) {
+	if len(os.Args) < 2 || !bytes.Contains([]byte(strings.Join(os.Args, " ")), []byte("-test.run=^TestOwnedImmediateExitChild$")) {
+		t.Skip("owned subprocess fixture only")
 	}
 }
 
