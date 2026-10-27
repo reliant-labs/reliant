@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 )
 
 // CommandSupervision is a private supervisor result channel, never payload
@@ -12,6 +13,8 @@ type CommandSupervision struct {
 	file     *os.File
 	writer   *os.File
 	fallback func() error
+	cmd      *exec.Cmd
+	receive  func() ([]byte, error)
 }
 type supervisorResult struct {
 	Complete         bool   `json:"complete"`
@@ -34,13 +37,12 @@ func (s *CommandSupervision) Finish() (bool, error) {
 	if s.fallback != nil {
 		return false, s.fallback()
 	}
-	var b [4096]byte
-	n, err := s.file.ReadAt(b[:], 0)
-	if n == 0 {
-		return false, fmt.Errorf("command supervisor result unavailable: %v", err)
+	b, err := s.receive()
+	if err != nil {
+		return false, err
 	}
 	var result supervisorResult
-	if json.Unmarshal(b[:n], &result) != nil {
+	if json.Unmarshal(b, &result) != nil {
 		return false, fmt.Errorf("invalid command supervisor result")
 	}
 	if result.Error != "" {

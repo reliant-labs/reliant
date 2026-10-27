@@ -55,16 +55,20 @@ func init() {
 		}
 		control := os.NewFile(uintptr(fd), "supervisor-result")
 		encoded, _ := json.Marshal(result)
-		_, writeErr := control.WriteAt(encoded, 0)
+		// SO_PASSCRED on the receiver supplies credentials from the kernel for
+		// this send. A payload that obtains/duplicates the endpoint still sends
+		// with its own PID, not the supervisor's.
+		writeErr := unix.Sendmsg(int(control.Fd()), encoded, nil, nil, unix.MSG_NOSIGNAL)
 		_ = control.Close()
-		if writeErr != nil {
-			os.Exit(125)
-		}
+		// The foreground caller may explicitly detach and close its receiver.
+		// Missing proof then remains uncertain to that caller, but must not
+		// rewrite a completed payload's actual status in the background manager.
+		_ = writeErr
 		os.Exit(code)
 	}
 }
 
-// SuperviseCommand wraps a not-yet-started Cmd in a local subreaper. Its
+// PrepareCommandSupervision wraps a not-yet-started Cmd in a local subreaper. Its
 // private payload group leader is held unreaped until group shutdown, so its
 // pgid cannot be recycled while signals are sent. Only this isolated child
 // calls wait(-1); it cannot steal another daemon command's wait status.
@@ -73,25 +77,17 @@ func PrepareCommandSupervision(cmd *exec.Cmd, grace time.Duration) (*CommandSupe
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.CreateTemp("", "reliant-supervisor-*")
+	sockets, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
-	// Anonymous regular file: no pipe to fill/block, and no path the payload
-	// can replace. FD is CLOEXEC in the wrapper before spawning the payload.
-	if err = os.Remove(file.Name()); err != nil {
-		file.Close()
+	if err = unix.SetsockoptInt(sockets[0], unix.SOL_SOCKET, unix.SO_PASSCRED, 1); err != nil {
+		unix.Close(sockets[0])
+		unix.Close(sockets[1])
 		return nil, err
 	}
-	// Keep the inherited writer separate so the daemon closes its copy at
-	// Finish/Close; the read handle remains valid after child Wait.
-	writerFD, err := unix.Dup(int(file.Fd()))
-	if err != nil {
-		file.Close()
-		return nil, err
-	}
-	unix.CloseOnExec(writerFD)
-	writer := os.NewFile(uintptr(writerFD), "supervisor-result-writer")
+	file := os.NewFile(uintptr(sockets[0]), "supervisor-result-reader")
+	writer := os.NewFile(uintptr(sockets[1]), "supervisor-result-writer")
 	fd := 3 + len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, writer)
 	payload := append([]string(nil), cmd.Args...)
@@ -106,7 +102,54 @@ func PrepareCommandSupervision(cmd *exec.Cmd, grace time.Duration) (*CommandSupe
 		}
 		return cmd.Process.Signal(syscall.SIGTERM)
 	}
-	return &CommandSupervision{file: file, writer: writer}, nil
+	supervision := &CommandSupervision{file: file, writer: writer, cmd: cmd}
+	supervision.receive = func() ([]byte, error) { return receiveSupervisorResult(file, cmd) }
+	return supervision, nil
+}
+
+// receiveSupervisorResult rejects every sender except the exact wrapper. It
+// runs after Wait, so only already queued packets are read, nonblocking and
+// bounded. Credential spoofing requires CAP_SYS_ADMIN/CAP_SYS_PTRACE; such
+// privileged payloads are outside a same-UID process isolation guarantee.
+func receiveSupervisorResult(file *os.File, cmd *exec.Cmd) ([]byte, error) {
+	var hdr unix.CapUserHeader
+	hdr.Version = unix.LINUX_CAPABILITY_VERSION_3
+	var caps [2]unix.CapUserData
+	if err := unix.Capget(&hdr, &caps[0]); err != nil {
+		return nil, fmt.Errorf("cannot establish supervisor proof capability boundary: %w", err)
+	}
+	// Same-UID payloads inherit the daemon's capability set. With ptrace or
+	// credential-spoofing capabilities they can impersonate/control the peer;
+	// ordinary execution remains allowed but completion proof fails closed.
+	unsafe := uint32(1<<unix.CAP_SYS_ADMIN | 1<<unix.CAP_SYS_PTRACE)
+	if (caps[0].Effective|caps[0].Permitted)&unsafe != 0 {
+		return nil, fmt.Errorf("supervisor completion unconfirmed: privileged same-UID payload can impersonate peer")
+	}
+	if cmd.Process == nil || cmd.ProcessState == nil || cmd.ProcessState.ExitCode() < 0 {
+		return nil, fmt.Errorf("supervisor did not exit normally; tree shutdown unconfirmed")
+	}
+	var data [4096]byte
+	var oob [256]byte
+	for i := 0; i < 16; i++ {
+		n, on, flags, _, err := unix.Recvmsg(int(file.Fd()), data[:], oob[:], unix.MSG_DONTWAIT)
+		if err != nil || n == 0 {
+			return nil, fmt.Errorf("authenticated supervisor result unavailable: %v", err)
+		}
+		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 {
+			return nil, fmt.Errorf("truncated supervisor result")
+		}
+		messages, err := unix.ParseSocketControlMessage(oob[:on])
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range messages {
+			cred, e := unix.ParseUnixCredentials(&m)
+			if e == nil && int(cred.Pid) == cmd.Process.Pid && int(cred.Uid) == os.Getuid() {
+				return append([]byte(nil), data[:n]...), nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("supervisor result exceeded unauthenticated packet budget")
 }
 
 // supervisorChildren only observes direct children of this isolated process.
@@ -145,6 +188,11 @@ func supervisorChildren() ([]byte, error) {
 func superviseCommand(argv []string, grace, drain time.Duration, result *supervisorResult) (int, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	// Deny same-UID ptrace/proc-fd access to the wrapper before the payload
+	// exists. Capable debuggers/root are not an isolation boundary we claim.
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return 125, err
+	}
 	if len(argv) == 0 {
 		return 125, fmt.Errorf("missing command")
 	}
