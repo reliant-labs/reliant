@@ -63,8 +63,10 @@ type ownedProcess struct {
 }
 
 type processObservationHooks struct {
-	beforeSignals func()
-	afterSignals  func()
+	beforeSignals       func()
+	afterSignals        func()
+	observeExit         func(int) (bool, error)
+	reportIdentityError func(error)
 }
 
 func startOwnedProcess(t *testing.T, ctx context.Context, command string, args ...string) (*ownedProcess, error) {
@@ -89,7 +91,11 @@ func startOwnedProcessObserved(t *testing.T, ctx context.Context, hooks processO
 	t.Cleanup(func() {
 		p.stop()
 		if p.identityErr != nil {
-			t.Errorf("owned child identity observation failed; group was NOT signaled: %v", p.identityErr)
+			if hooks.reportIdentityError != nil {
+				hooks.reportIdentityError(p.identityErr)
+			} else {
+				t.Errorf("owned child identity observation failed; group was NOT signaled and descendant cleanup is unverified: %v", p.identityErr)
+			}
 		}
 	})
 	return p, nil
@@ -107,13 +113,27 @@ func (p *ownedProcess) ownLifecycle(ctx context.Context, hooks processObservatio
 	defer close(p.done)
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
+	observe := childExited
+	if hooks.observeExit != nil {
+		observe = hooks.observeExit
+	}
 	for {
-		exited, err := childExited(p.cmd.Process.Pid)
+		exited, err := observe(p.cmd.Process.Pid)
 		if err != nil {
-			// If identity cannot be proven, NEVER signal an integer PID/PGID.
-			// Surface this explicitly; do not turn uncertain cleanup into success.
+			// No owner Wait has happened, so this direct child cannot have had
+			// its identity recycled. Kill ONLY the retained os.Process handle
+			// (pidfd on supported Go/Linux), never an unverified integer PGID.
 			p.identityErr = err
-			p.err = p.cmd.Wait()
+			if killErr := p.cmd.Process.Kill(); killErr != nil && killErr != os.ErrProcessDone {
+				p.identityErr = fmt.Errorf("observation failed and owned leader kill failed: %w", killErr)
+			}
+			reaped := make(chan error, 1)
+			go func() { reaped <- p.cmd.Wait() }()
+			select {
+			case p.err = <-reaped:
+			case <-time.After(3 * time.Second):
+				p.identityErr = fmt.Errorf("observation failed; owned leader reap deadline exceeded; descendants unverified")
+			}
 			return
 		}
 		if exited {
@@ -196,6 +216,48 @@ func TestTemporalExecutableMismatchRejected(t *testing.T) {
 	}
 	if err := validateTemporalExecutable(path); err == nil {
 		t.Fatal("unverified executable accepted before SQL allocation")
+	}
+}
+
+func TestOwnedProcessObservationDeniedReapsLeaderWithoutGroupSignal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts an owned test subprocess; run scoped without -short")
+	}
+	groupSignaled := false
+	reported := false
+	t.Cleanup(func() {
+		if !reported {
+			t.Error("identity observation error was silently suppressed during cleanup")
+		}
+	})
+	p, err := startOwnedProcessObserved(t, context.Background(), processObservationHooks{
+		observeExit:   func(int) (bool, error) { return false, unix.EACCES },
+		beforeSignals: func() { groupSignaled = true },
+		reportIdentityError: func(err error) {
+			reported = true
+			if err != unix.EACCES {
+				t.Errorf("unexpected observation error: %v", err)
+			}
+		},
+	}, os.Args[0], "-test.run=^TestNeverReadyOwnedChild$")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-p.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Waitid EACCES left live child cleanup blocked")
+	}
+	if groupSignaled || p.identityErr != unix.EACCES || p.err == nil {
+		t.Fatal("observation failure was not safely surfaced without group signals")
+	}
+	if _, err := childExited(p.cmd.Process.Pid); err != unix.ECHILD {
+		t.Fatalf("owned leader was not reaped after observation failure: %v", err)
+	}
+	// Explicitly verify the error-report callback; normal cleanup repeats it
+	// rather than suppressing an observation failure as a successful teardown.
+	if reported {
+		t.Fatal("identity reporting unexpectedly ran before cleanup")
 	}
 }
 
