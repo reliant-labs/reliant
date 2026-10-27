@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 type realCapacityRepository struct {
@@ -41,7 +42,7 @@ func TestCapacityRealTemporalContinuedChainRetainsSlot(t *testing.T) {
 	defer cancel()
 	queue := "capacity-" + uuid.NewString()
 	id := "capacity-chain-" + uuid.NewString()
-	w := worker.New(c, queue, worker.Options{})
+	w := worker.New(c, queue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflow(capacityChainWorkflow)
 	require.NoError(t, w.Start())
 	defer w.Stop()

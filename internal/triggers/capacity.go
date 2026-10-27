@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 )
@@ -48,7 +48,15 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if descriptions == nil {
 		return errors.New("workflow capacity Temporal descriptions are unavailable")
 	}
-	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: strings.TrimPrefix(t.Workflow, "project://")}
+	ref, err := workflowref.Parse(t.Workflow)
+	if err != nil {
+		return err
+	}
+	poolRef := ref.Name
+	if ref.Kind == workflowref.Builtin {
+		poolRef = workflowref.BuiltinScheme + ref.Name
+	}
+	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: poolRef}
 	if event.Outcome == core.TriggerEventPending {
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
 			return errors.New("queued workflow capacity scope changed")
