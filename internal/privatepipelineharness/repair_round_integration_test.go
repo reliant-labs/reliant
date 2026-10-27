@@ -50,7 +50,11 @@ func awaitArmedHead(t *testing.T, ctx context.Context, raw *sql.DB, sha string) 
 	}
 }
 
-func repairReviewerDefinition() string {
+func repairReviewerDefinition(canVariant ...bool) string {
+	if len(canVariant) > 0 && canVariant[0] {
+		return "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [agent_loop]\nnodes:\n  - id: agent_loop\n    type: loop\n    outcome: success\n    while: iter.iteration < 2\n    inline:\n      entry: [review]\n      nodes:\n        - id: review\n          type: call_llm\noutputs:\n  review_verdict: \"{{ nodes.agent_loop.review.response_text }}\"\n"
+	}
+
 	return "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [review]\nnodes:\n  - id: review\n    type: call_llm\n    outcome: success\noutputs:\n  review_verdict: \"{{ nodes.review.response_text }}\"\n"
 }
 func registerReviewModelBoundary(w worker.Worker, p *checkProvider) {
@@ -121,7 +125,7 @@ func registerRepairBoundary(t *testing.T, w worker.Worker, repo *db.Repo, f *res
 	}, activity.RegisterOptions{Name: "ExecuteRunStep"})
 }
 
-func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db.Repo, state store.ReviewAuthorityStore, p *checkProvider, heads adapter.GitHub, bridge adapter.BridgeHTTP, wait prreviewwait.Service, owner string, trigger *core.Trigger, oldReviewer, oldRun string) store.ReviewAuthority {
+func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db.Repo, state store.ReviewAuthorityStore, p *checkProvider, heads adapter.GitHub, bridge adapter.BridgeHTTP, wait prreviewwait.Service, owner string, trigger *core.Trigger, oldReviewer, oldRun string, forceCAN bool) store.ReviewAuthority {
 	t.Helper()
 	if _, err := repo.ReleaseTriggerAdmission(ctx, "private-event", oldReviewer, oldRun); err != nil {
 		t.Fatal(err)
@@ -150,7 +154,8 @@ func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.BindTriggerAdmissionRun(ctx, ev.ID, run.GetRunID()); err != nil {
+	initialRunID := run.GetRunID()
+	if err := repo.BindTriggerAdmissionRun(ctx, ev.ID, initialRunID); err != nil {
 		t.Fatal(err)
 	}
 	heads.Site.RunID = root
@@ -158,7 +163,7 @@ func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := repairReviewerDefinition()
+	definition := repairReviewerDefinition(forceCAN)
 	wf, err := wfyaml.ParseWorkflow([]byte(definition))
 	if err != nil {
 		t.Fatal(err)
@@ -169,13 +174,21 @@ func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db
 	}
 	w := worker.New(f.Temporal, queue, worker.Options{})
 	w.RegisterWorkflowWithOptions(adapter.PrivateReviewWorkflow, workflow.RegisterOptions{Name: "PrivateTrustedReviewer"})
-	w.RegisterActivityWithOptions(func(context.Context, handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
+	var canControl *reviewerCANControl
+	w.RegisterActivityWithOptions(func(loadCtx context.Context, _ handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
+		if canControl != nil {
+			canControl.loaded(activity.GetInfo(loadCtx).WorkflowExecution.RunID)
+		}
 		return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: graph, HasTemplates: strings.Contains(definition, "{{")}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 	w.RegisterActivityWithOptions(handlers.NewWorkflowStatusActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowStatus"})
 	w.RegisterActivityWithOptions(handlers.NewWorkflowCheckpointActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 	w.RegisterActivityWithOptions(handlers.NewCleanupActivity(repo).Execute, activity.RegisterOptions{Name: "Cleanup"})
-	registerReviewModelBoundary(w, p)
+	if forceCAN {
+		canControl = registerCANReviewModelBoundary(t, w, p, root, initialRunID)
+	} else {
+		registerReviewModelBoundary(w, p)
+	}
 	history := adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}
 	completion := adapter.CompletionActivity{Store: state, History: history}
 	w.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: adapter.CompletionActivityName})
@@ -187,6 +200,9 @@ func runRepairedReview(t *testing.T, ctx context.Context, f *resources, repo *db
 	var result runtime.WorkflowResult
 	if err := run.Get(ctx, &result); err != nil {
 		t.Fatal(err)
+	}
+	if forceCAN {
+		assertActualReviewCAN(t, ctx, f, root, initialRunID)
 	}
 	if err := completion.Reconcile(ctx, a.ID); err != nil {
 		t.Fatal(err)

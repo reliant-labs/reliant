@@ -83,7 +83,12 @@ func TestFutureChatBStaleHeadCannotPublish(t *testing.T) {
 	runPublisherInbox(t, true, "approve", "success", true)
 }
 
-func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome string, stale bool) {
+func TestFutureChatBRepairWithReviewerCAN(t *testing.T) {
+	runPublisherInbox(t, true, "changes", "success", false, true)
+}
+
+func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome string, stale bool, canVariant ...bool) {
+	forceCAN := len(canVariant) > 0 && canVariant[0]
 	f := newResources(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 	defer cancel()
@@ -186,7 +191,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 	if actualGraph {
 		definition := "name: trusted\nconcurrency:\n  key: '" + store.ReviewAdmissionKeyExpression + "'\n  max_running: 1\nentry: [finish]\nnodes:\n  - id: finish\n    type: compute\n    outcome: " + graphOutcome + "\noutputs:\n  review_verdict: " + verdict + "\n"
 		if repairLoop {
-			definition = repairReviewerDefinition()
+			definition = repairReviewerDefinition(forceCAN)
 		}
 		wf, err := wfyaml.ParseWorkflow([]byte(definition))
 		if err != nil {
@@ -209,14 +214,22 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 		reviewRunID = reviewerRun.GetRunID()
 		reviewerWorker = worker.New(f.Temporal, reviewQueue, worker.Options{})
 		reviewerWorker.RegisterWorkflowWithOptions(adapter.PrivateReviewWorkflow, workflow.RegisterOptions{Name: "PrivateTrustedReviewer"})
-		reviewerWorker.RegisterActivityWithOptions(func(context.Context, handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
+		var canControl *reviewerCANControl
+		reviewerWorker.RegisterActivityWithOptions(func(loadCtx context.Context, _ handlers.LoadWorkflowInput) (*handlers.LoadWorkflowOutput, error) {
+			if canControl != nil {
+				canControl.loaded(activity.GetInfo(loadCtx).WorkflowExecution.RunID)
+			}
 			return &handlers.LoadWorkflowOutput{YAML: []byte(definition), WorkflowJSON: graph, HasTemplates: strings.Contains(definition, "{{")}, nil
 		}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowStatusActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowStatus"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewWorkflowCheckpointActivity(repo).Execute, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 		reviewerWorker.RegisterActivityWithOptions(handlers.NewCleanupActivity(repo).Execute, activity.RegisterOptions{Name: "Cleanup"})
 		if repairLoop {
-			registerReviewModelBoundary(reviewerWorker, provider)
+			if forceCAN {
+				canControl = registerCANReviewModelBoundary(t, reviewerWorker, provider, reviewer, reviewRunID)
+			} else {
+				registerReviewModelBoundary(reviewerWorker, provider)
+			}
 		}
 		completion = adapter.CompletionActivity{Store: state, History: adapter.TemporalEvidence{Service: f.Temporal.WorkflowService(), Namespace: f.Namespace}}
 		reviewerWorker.RegisterActivityWithOptions(completion.Execute, activity.RegisterOptions{Name: adapter.CompletionActivityName})
@@ -262,6 +275,9 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 		var result runtime.WorkflowResult
 		if err := reviewerRun.Get(ctx, &result); err != nil {
 			t.Fatal(err)
+		}
+		if forceCAN {
+			assertActualReviewCAN(t, ctx, f, reviewer, reviewRunID)
 		}
 		if err := completion.Reconcile(ctx, a.ID); err != nil {
 			t.Fatal(err)
@@ -348,7 +364,7 @@ func runPublisherInbox(t *testing.T, actualGraph bool, verdict, graphOutcome str
 		if _, err := (adapter.Publisher{Store: state, Heads: heads, Bridge: bridge}).Publish(ctx, intent.IntentID); err == nil {
 			t.Fatal("old-head intent survived repaired publication")
 		}
-		a = runRepairedReview(t, ctx, f, repo, state, provider, heads, bridge, wait, endpoint.OwnerID, trigger, reviewer, reviewRunID)
+		a = runRepairedReview(t, ctx, f, repo, state, provider, heads, bridge, wait, endpoint.OwnerID, trigger, reviewer, reviewRunID, forceCAN)
 		sha = strings.Repeat("b", 40)
 	}
 	if actualGraph {
