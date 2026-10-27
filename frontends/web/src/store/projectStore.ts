@@ -430,6 +430,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       useChatStore.getState().clearCurrentChat(null);
       useViewerStore.getState().clearViewersForProjectSwitch();
       useWorktreeStore.getState().reset();
+      // Departure hooks save their pane state; discard that final snapshot of
+      // the deleted project too, rather than recreating its persisted entry.
+      useWorkspaceStateStore.getState().removeProjectState(id);
       set({ currentProject: null });
       let remaining: Project[] = [];
       try {

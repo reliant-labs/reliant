@@ -20,7 +20,7 @@ export function ProjectFilterRouteSync() {
       syncProjectFilterUrl(filter);
       return;
     }
-    const target = projectId ?? null;
+    const target = pathname === "/" ? null : projectId ?? null;
     if (filter !== target) void useProjectStore.getState().setProjectFilter(target);
   }, [pathname, projectId]);
   return null;
