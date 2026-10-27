@@ -60,7 +60,7 @@ func TestAdmissionRecoveryUsesTemporalNotCompletionCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	probe := &admissionTemporalProbe{desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: root, RunId: "original-run"}, Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{"reliant_admission_event_id": memo}}}}}
-	redriver := NewRedriver(env.Repo, probe, "")
+	redriver := NewRedriver(env.Repo, probe, "").WithContinuity(singleAdmissionHistory{probe})
 	if err = redriver.redriveAdmissions(ctx); err != nil {
 		t.Fatal(err)
 	}

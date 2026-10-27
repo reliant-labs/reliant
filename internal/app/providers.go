@@ -406,7 +406,10 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 }
 
 // TemporalClient is the process's client of the external Temporal server.
-type TemporalClient struct{ Client client.Client }
+type TemporalClient struct {
+	Client    client.Client
+	Namespace string // trusted dial namespace, never inferred from an event
+}
 
 // TemporalClientDeps is the server, and the boot context the first dial
 // waits under.
@@ -442,7 +445,7 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c}, nil
+	return &TemporalClient{Client: c, Namespace: namespace}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.

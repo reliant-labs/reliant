@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runcontinuity"
 )
 
 const (
@@ -40,6 +41,14 @@ type Redriver struct {
 	admissionAfter   int64 // bounded keyset scan; wraps, never queue ownership
 	admissionThrough int64 // fixed high-water mark for this sweep, not moving intake
 	admissionBatch   int   // zero uses the production batch size
+	continuity       runcontinuity.Reader
+}
+
+// WithContinuity supplies authenticated exact-run history; absent proof never
+// releases a reservation, including a legacy terminal Describe projection.
+func (r *Redriver) WithContinuity(reader runcontinuity.Reader) *Redriver {
+	r.continuity = reader
+	return r
 }
 
 // NewRedriver builds a Redriver. taskQueue empty means the shared queue.
