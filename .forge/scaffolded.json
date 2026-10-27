@@ -1220,6 +1220,15 @@
     "internal/store/repo_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/review_assignment_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
+    },
+    "internal/store/review_policy_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
+    },
+    "internal/store/review_publication_intent_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
+    },
     "internal/store/run_event_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
