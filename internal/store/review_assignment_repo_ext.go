@@ -129,6 +129,27 @@ func (s ReviewAuthorityStore) ResolveReviewWaitPolicy(ctx context.Context, owner
 	return row.ID, row.Revision, err
 }
 
+// AssignmentForRoot returns one immutable current assignment candidate. The
+// caller MUST prove its exact current Temporal execution before using authority.
+// More than one active candidate is ambiguous and fails closed.
+func (s ReviewAuthorityStore) AssignmentForRoot(ctx context.Context, root string) (ReviewAuthority, error) {
+	var ids []string
+	if err := s.DB.Bun().NewRaw(`SELECT id FROM review_assignments WHERE reviewer_root_id=? AND NOT cancelled AND NOT superseded LIMIT 2`, root).Scan(ctx, &ids); err != nil {
+		return ReviewAuthority{}, err
+	}
+	if len(ids) != 1 {
+		return ReviewAuthority{}, reviewpublisher.ErrUnauthorized
+	}
+	a, err := s.LoadReviewAuthority(ctx, ids[0])
+	if err != nil {
+		return a, err
+	}
+	if !authorityCurrent(a) {
+		return ReviewAuthority{}, reviewpublisher.ErrUnauthorized
+	}
+	return a, nil
+}
+
 // AssignmentForExecution resolves only an enrolled original reviewer execution.
 // CAN successors need explicit verified continuity; never use latest-run fallback.
 func (s ReviewAuthorityStore) AssignmentForExecution(ctx context.Context, root, run string) (string, error) {
