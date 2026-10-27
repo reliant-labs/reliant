@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	_ "github.com/reliant-labs/reliant/internal/integrations/githubqueue"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/prhandoff"
 	"github.com/reliant-labs/reliant/internal/prhandoffadapter"
@@ -305,6 +306,25 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 		}
 		if consumed != a.Binding.Generation {
 			t.Fatalf("actual node consumed generation %d expected%d", consumed, a.Binding.Generation)
+		}
+		queueAction, err := cat.Resolve("github/pr.enqueue@1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for attempt := 0; attempt < 2; attempt++ {
+			queued, err := runner.RunAuthenticated(ctx, queueAction.Manifest, queueAction.Spec, map[string]any{"owner": "acme", "repo": "example", "repository_id": int64(42), "pull_number": int64(7), "expectedHeadOid": sha}, providerCredentials{}, httpaction.CallSite{RunID: root, NodeID: "native-enqueue"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if queued == nil || queued.IsError {
+				t.Fatalf("actual native enqueue failed: %#v", queued)
+			}
+		}
+		provider.mu.Lock()
+		queueWrites := provider.queueWrites
+		provider.mu.Unlock()
+		if queueWrites != 1 {
+			t.Fatalf("native enqueue mutation count%d", queueWrites)
 		}
 	} else {
 		outcome, err := wait.Read(ctx, sub)

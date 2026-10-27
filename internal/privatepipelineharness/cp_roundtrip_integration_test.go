@@ -18,11 +18,13 @@ import (
 // checkProvider implements the external provider boundary only. The actual
 // CP journal, credential store/service, internal handler and bridge run unchanged.
 type checkProvider struct {
-	mu         sync.Mutex
-	writes     int
-	check      map[string]any
-	externalID string
-	t          *testing.T
+	mu          sync.Mutex
+	writes      int
+	check       map[string]any
+	externalID  string
+	queueWrites int
+	queued      bool
+	t           *testing.T
 }
 
 func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +34,38 @@ func (f *checkProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	var out any
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/graphql":
+		var request struct {
+			Query     string                     `json:"query"`
+			Variables map[string]json.RawMessage `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			f.t.Error("invalid GraphQL fixture input")
+			w.WriteHeader(400)
+			return
+		}
+		entry := map[string]any{"id": "queue-1", "position": 1, "pullRequest": map[string]any{"id": "pr-7", "headRefOid": strings.Repeat("a", 40), "repository": map[string]any{"id": "repo-42"}}}
+		if strings.Contains(request.Query, "mutation ReliantEnqueue") {
+			var input struct {
+				PullRequestID string `json:"pullRequestId"`
+				ExpectedHead  string `json:"expectedHeadOid"`
+			}
+			_ = json.Unmarshal(request.Variables["input"], &input)
+			if input.PullRequestID != "pr-7" || input.ExpectedHead != strings.Repeat("a", 40) || f.check == nil || f.check["conclusion"] != "success" {
+				f.t.Error("enqueue attempted without exact confirmed successful check")
+				w.WriteHeader(409)
+				return
+			}
+			f.queueWrites++
+			f.queued = true
+			out = map[string]any{"data": map[string]any{"enqueuePullRequest": map[string]any{"mergeQueueEntry": entry}}}
+		} else {
+			var membership any
+			if f.queued {
+				membership = entry
+			}
+			out = map[string]any{"data": map[string]any{"repository": map[string]any{"id": "repo-42", "databaseId": 42, "nameWithOwner": "acme/example", "defaultBranchRef": map[string]any{"name": "main"}, "pullRequest": map[string]any{"id": "pr-7", "number": 7, "state": "OPEN", "isDraft": false, "headRefOid": strings.Repeat("a", 40), "baseRefName": "main", "isMergeQueueEnabled": true, "repository": map[string]any{"id": "repo-42", "databaseId": 42}, "headRepository": map[string]any{"id": "repo-42", "databaseId": 42}, "mergeQueueEntry": membership}}}}
+		}
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/example":
 		if r.Header.Get("Authorization") != "Bearer ghp_futurechat_b_fixture_owner" {
 			f.t.Error("CP did not use its actual persisted owner credential")
