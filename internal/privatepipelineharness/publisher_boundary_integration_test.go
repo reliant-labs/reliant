@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/prhandoff"
+	"github.com/reliant-labs/reliant/internal/prhandoffadapter"
 	"github.com/reliant-labs/reliant/internal/prreviewwait"
 	"github.com/reliant-labs/reliant/internal/reviewpublisher"
 	adapter "github.com/reliant-labs/reliant/internal/reviewpublisheradapter"
@@ -93,7 +94,20 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 	}
 	t.Cleanup(w.Stop)
 	root := uuid.NewString()
-	authorRun, err := f.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: root, TaskQueue: f.Queue}, continuationInfrastructure, true)
+	var authorRun client.WorkflowRun
+	var authorWorker worker.Worker
+	authorDefinition := "name: private-author\nentry: [wait]\nnodes:\n  - id: wait\n    type: await_pr_review\n    repo: acme/example\n    pr: 7\n    expected_head: " + strings.Repeat("a", 40) + "\noutputs:\n  review_state: \"{{ nodes.wait.state }}\"\n"
+	if actualGraph {
+		if err := repo.CreateChat(ctx, &db.Chat{ID: root, Title: "original author", UserID: endpoint.OwnerID, ProjectID: "test-project", WorkflowID: &root}); err != nil {
+			t.Fatal(err)
+		}
+		authorQueue := f.Queue + "-author"
+		authorRun, err = f.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: root, TaskQueue: authorQueue}, runtime.DynamicWorkflow, runtime.WorkflowInput{ChatID: root, WorkflowName: "private-author", Inputs: map[string]any{}, ExecContext: &runtime.ExecutionContext{ChatID: root, Thread: root, ThreadMode: "new", WorkflowName: "private-author"}})
+		authorWorker = worker.New(f.Temporal, authorQueue, worker.Options{})
+		registerSQLRuntime(t, authorWorker, repo, authorDefinition)
+	} else {
+		authorRun, err = f.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: root, TaskQueue: f.Queue}, continuationInfrastructure, true)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,12 +260,22 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub, err := wait.Arm(ctx, prreviewwait.Request{RequestKey: strings.Repeat("c", 64), OwnerID: endpoint.OwnerID, ChatID: root, Execution: runcontinuity.Execution{WorkflowID: root, RunID: authorRun.GetRunID()}, RepoID: 42, PR: 7, HeadSHA: sha})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := wait.Ready(ctx, sub); err != nil {
-		t.Fatal(err)
+	var sub prreviewwait.Subscription
+	if actualGraph {
+		providerReader := prhandoffadapter.GitHub{OwnerID: endpoint.OwnerID, Site: httpaction.CallSite{RunID: root}, Catalog: cat, Runner: runner, Credentials: providerCredentials{}}
+		(prreviewwait.Activities{Service: wait, Identity: repo, GitHub: providerReader}).Register(authorWorker)
+		if err := authorWorker.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(authorWorker.Stop)
+	} else {
+		sub, err = wait.Arm(ctx, prreviewwait.Request{RequestKey: strings.Repeat("c", 64), OwnerID: endpoint.OwnerID, ChatID: root, Execution: runcontinuity.Execution{WorkflowID: root, RunID: authorRun.GetRunID()}, RepoID: 42, PR: 7, HeadSHA: sha})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := wait.Ready(ctx, sub); err != nil {
+			t.Fatal(err)
+		}
 	}
 	bridge := adapter.BridgeHTTP{Origin: endpoint.URL, Client: &http.Client{Timeout: 10 * time.Second}, Auth: cpAuthentication{endpoint}}
 	if _, err := (adapter.Publisher{Store: state, Heads: heads, Bridge: bridge}).Publish(ctx, intent.IntentID); err != nil {
@@ -260,15 +284,39 @@ func runPublisherInbox(t *testing.T, actualGraph bool) {
 	if err := (adapter.WaitOutcome{Store: state, Wait: wait}).Deliver(ctx, intent.IntentID); err != nil {
 		t.Fatal(err)
 	}
-	outcome, err := wait.Read(ctx, sub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome.State != "approved" || outcome.AuthorityID != "policy" || outcome.HeadSHA != sha {
-		t.Fatalf("wrong SQL-backed confirmed outcome: %+v", outcome)
-	}
-	if err := wait.Consume(ctx, sub, outcome); err != nil {
-		t.Fatal(err)
+	if actualGraph {
+		var authorResult runtime.WorkflowResult
+		if err := authorRun.Get(ctx, &authorResult); err != nil {
+			t.Fatal(err)
+		}
+		if authorResult.Outputs["review_state"] != "approved" {
+			t.Fatalf("real author wait did not consume approved result: %#v", authorResult.Outputs)
+		}
+		binding, err := handoff.Binding(ctx, endpoint.OwnerID, 42, 7)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if binding.Author.RootID != root || binding.Author.ExecutionID != authorRun.GetRunID() {
+			t.Fatal("original author was replaced")
+		}
+		var consumed int64
+		if err := f.SQL.QueryRowContext(ctx, "SELECT consumed_sequence FROM pr_review_wait_subscriptions WHERE binding_id='binding'").Scan(&consumed); err != nil {
+			t.Fatal(err)
+		}
+		if consumed != a.Binding.Generation {
+			t.Fatalf("actual node consumed generation %d expected%d", consumed, a.Binding.Generation)
+		}
+	} else {
+		outcome, err := wait.Read(ctx, sub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if outcome.State != "approved" || outcome.AuthorityID != "policy" || outcome.HeadSHA != sha {
+			t.Fatalf("wrong SQL-backed confirmed outcome: %+v", outcome)
+		}
+		if err := wait.Consume(ctx, sub, outcome); err != nil {
+			t.Fatal(err)
+		}
 	}
 	provider.mu.Lock()
 	writes := provider.writes
