@@ -37,8 +37,13 @@ func TestRootFiles_SmallScratchIsSavedThenTheWorkspaceIsRemoved(t *testing.T) {
 	}
 
 	got := f.one(w)
-	if got.Outcome != OutcomeRemoved || exists(w.Path) {
-		t.Fatalf("got %+v exists=%v, want removed", got, exists(w.Path))
+	if got.Outcome != OutcomeHeld || got.Reason != ReasonOutsideFiles || !exists(filepath.Join(w.Path, "NOTES.md")) {
+		t.Fatalf("automatic cleanup must preserve loose root files in place: %+v", got)
+	}
+	// Explicit user-confirmed recovery retains the established save/verify path.
+	got = f.confirmed(w)
+	if got.Outcome != OutcomeRemoved {
+		t.Fatalf("confirmed cleanup: %+v", got)
 	}
 	want := filepath.Join(filepath.Dir(f.root), "reclaimed", "scratchy")
 	if got.ReclaimedTo != want {
@@ -206,12 +211,8 @@ func TestDevSecrets_ProtectedOnlyForValuesTheSourceLacks(t *testing.T) {
 			w := f.worktree("dev", "feat/dev")
 			write(t, filepath.Join(w.Path, "secrets", "dev.yaml"), tc.worktree)
 			got := f.one(w)
-			held := got.Outcome == OutcomeHeld && got.Reason == ReasonData
-			if held != tc.wantHeld {
-				t.Fatalf("got %+v, wantHeld=%v", got, tc.wantHeld)
-			}
-			if !tc.wantHeld && got.Outcome != OutcomeRemoved {
-				t.Fatalf("got %+v, want removed", got)
+			if got.Outcome != OutcomeHeld || !exists(filepath.Join(w.Path, "secrets", "dev.yaml")) {
+				t.Fatalf("automatic whole-worktree cleanup retains protected secrets regardless of copy equivalence: %+v", got)
 			}
 		})
 	}

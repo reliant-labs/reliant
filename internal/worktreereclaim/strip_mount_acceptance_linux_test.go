@@ -39,9 +39,39 @@ func TestStripSafetyBindMountChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer syscall.Unmount(target, syscall.MNT_DETACH)
-	result := Result{}
-	f.r.strip(context.Background(), w, nil, []string{w.Path}, &result, func() error { return nil })
+	tree, err := inspectRetirementTree(context.Background(), w.Path)
+	if tree != nil {
+		tree.close()
+	}
+	if err == nil {
+		t.Fatal("bind mount must fail closed during retirement inventory")
+	}
 	if !exists(protected) {
-		t.Fatalf("recursive removal traversed bind mount and deleted external data: %+v", result)
+		t.Fatal("retirement traversed bind mount and deleted external data")
+	}
+	if err := syscall.Unmount(target, 0); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(target, "generated"), "old data")
+	tree, err = inspectRetirementTree(context.Background(), w.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	mounted := false
+	err = tree.remove(context.Background(), func() error {
+		if !mounted {
+			mounted = true
+			if err := syscall.Mount(external, target, "", syscall.MS_BIND, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	})
+	if err == nil || !mounted {
+		t.Fatal("mount replacement at destructive boundary must hold")
+	}
+	if !exists(protected) || !exists(filepath.Join(w.Path, ".git")) {
+		t.Fatal("mount race lost external data or recovery pointer")
 	}
 }

@@ -15,7 +15,7 @@ type stripTestLease struct {
 func (l stripTestLease) Check(context.Context) error { return l.check() }
 func (l stripTestLease) Release()                    { l.release() }
 
-func TestStripRequiresAdmissionAndCompleteInspection(t *testing.T) {
+func TestRetirementRequiresAdmissionAndCompleteInspection(t *testing.T) {
 	for _, fail := range []string{"missing-admission", "busy-admission", "missing-inspection", "unsupported", "open-file", "expired"} {
 		t.Run(fail, func(t *testing.T) {
 			root := t.TempDir()
@@ -36,20 +36,19 @@ func TestStripRequiresAdmissionAndCompleteInspection(t *testing.T) {
 			case "unsupported":
 				r.ProcessUse = func(context.Context, []string) error { return ErrProcessUseUnsupported }
 			case "open-file":
-				r.ProcessUse = func(context.Context, []string) error { return errors.New("open fd or executable mapping") }
+				r.ProcessUse = func(context.Context, []string) error { return errors.New("open fd/executable mapping") }
 			case "expired":
 				r.Acquire = func(context.Context, []string) (RecoveryLease, error) {
 					return stripTestLease{check: func() error { return errors.New("expired") }, release: func() { released = true }}, nil
 				}
 			}
-			got := Result{}
-			r.stripUnused(context.Background(), Worktree{Path: root}, nil, []string{root}, &got)
-			if !exists(target) || len(got.Stripped) != 0 {
-				t.Fatalf("unsafe strip on %s: %+v", fail, got)
+			got := r.retireWorkspace(context.Background(), Worktree{Path: root}, []string{root}, nil)
+			if !exists(target) || got.Outcome != OutcomeHeld {
+				t.Fatalf("unsafe retirement on %s: %+v", fail, got)
 			}
 			if fail == "unsupported" || fail == "open-file" || fail == "expired" {
 				if !released {
-					t.Fatal("admission leaked on refusal")
+					t.Fatal("admission leaked")
 				}
 			}
 		})

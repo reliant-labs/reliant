@@ -762,7 +762,9 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		// Only a row whose chat runs were read (and found idle) is asked.
 		_, read := running[wt.ID]
 		w.ProbeLanded = w.ProbeIdle && s.reclaimsLanded() && !wt.IsMain && read && !running[wt.ID]
-		w.ShedLanded = w.ProbeLanded && s.auto.mode == AutoArchiveOn
+		// Whole-worktree retirement follows row-locked archival. Never permit
+		// the landed probe to delete subsets from a still-live workspace.
+		w.ShedLanded = false
 		repos, _ := reposOf(wt.ProjectID)
 		for _, repo := range repos {
 			w.Checkouts = append(w.Checkouts, worktreereclaim.Checkout{

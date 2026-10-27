@@ -56,11 +56,9 @@ func TestLandedStripExcludesNewCommandThroughDeletion(t *testing.T) {
 	checks := 0
 	r.ProcessUse = func(context.Context, []string) error {
 		checks++
-		// Deterministically attempt new command admission after initial eligibility,
-		// again immediately before RemoveAll, while the target still exists.
-		if _, err := os.Stat(target); err != nil {
-			t.Fatal("inspection must precede deletion", err)
-		}
+		// Attempt new command admission after eligibility, after parking and
+		// immediately before every descriptor-relative unlink.
+
 		if done, err := g.begin(nil); err == nil {
 			done()
 			t.Fatal("new command admitted during stripping")
@@ -73,8 +71,18 @@ func TestLandedStripExcludesNewCommandThroughDeletion(t *testing.T) {
 		t.Fatal("reconcile would veto its own lease")
 	}
 	result := r.Reconcile(context.Background(), worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
-	if checks < 2 || len(result.Stripped) != 1 {
-		t.Fatalf("strip was not fenced through deletion: checks=%d result=%+v", checks, result)
+	if !result.Landed {
+		t.Fatalf("landed proof: %+v", result)
+	}
+	w.State, w.Fence, w.ProbeLanded, w.ShedLanded = worktreereclaim.StateArchived, "123", false, false
+	result = r.Reconcile(context.Background(), worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
+	if result.Outcome != worktreereclaim.OutcomeClaimed {
+		t.Fatalf("archive claim: %+v", result)
+	}
+	w.Remove = true
+	result = r.Reconcile(context.Background(), worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
+	if checks < 2 || result.Outcome != worktreereclaim.OutcomeRemoved {
+		t.Fatalf("whole retirement was not fenced through deletion: checks=%d result=%+v", checks, result)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatal("temporary rebuildable fixture should be removed", err)

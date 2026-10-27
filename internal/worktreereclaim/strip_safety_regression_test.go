@@ -1,4 +1,4 @@
-//go:build cleanup_acceptance
+//go:build linux && cleanup_acceptance
 
 package worktreereclaim
 
@@ -9,42 +9,41 @@ import (
 	"testing"
 )
 
-// These are desired safety invariants, intentionally red on the held cleanup
-// candidates. All mutations and attempted deletion are within t.TempDir().
+// Original red proofs are retained at b6767a9a. The approved whole-worktree
+// primitive must preserve the same protected/redirected data, not just stop
+// calling the old function. Every path below is temporary fixture data.
 func TestStripSafetyProtectedDescendants(t *testing.T) {
-	heavyUnderShort(t, "creates temporary git worktree for deletion safety regression")
 	for _, rel := range []string{"tmp/local.sqlite", "tmp/.env", "tmp/data/only-copy.csv", "tmp/secrets/key"} {
 		t.Run(rel, func(t *testing.T) {
-			f := newFixture(t)
-			ignore(t, f, "/tmp/\n")
-			w := f.worktree("protected", "feat/protected")
-			protected := filepath.Join(w.Path, filepath.FromSlash(rel))
-			write(t, protected, "irreplaceable fixture data")
-			res := Result{}
-			f.r.strip(context.Background(), w, nil, []string{w.Path}, &res, func() error { return nil })
-			if !exists(protected) {
-				t.Fatalf("protected descendant %s was deleted through allowed ancestor: %+v", rel, res)
+			root := retirementFixture(t)
+			p := filepath.Join(root, rel)
+			write(t, p, "unique")
+			tree, err := inspectRetirementTree(context.Background(), root)
+			if tree != nil {
+				tree.close()
+			}
+			if err == nil {
+				t.Fatal("protected descendant authorized")
+			}
+			if !exists(p) {
+				t.Fatal("protected data lost")
 			}
 		})
 	}
 }
-
 func TestStripSafetyAncestorReplacement(t *testing.T) {
-	heavyUnderShort(t, "creates temporary git worktree and deterministically swaps ancestor")
-	if os.PathSeparator == '\\' {
-		t.Skip("requires symlinks")
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
 	}
-	f := newFixture(t)
-	ignore(t, f, "node_modules/\n")
-	w := f.worktree("ancestor", "feat/ancestor")
-	parent := filepath.Join(w.Path, "web")
-	write(t, filepath.Join(parent, "node_modules", "generated"), "rebuildable")
+	defer tree.close()
+	parent := filepath.Join(root, "node_modules")
 	external := t.TempDir()
-	protected := filepath.Join(external, "node_modules", "only-copy")
-	write(t, protected, "not part of the inspected tree")
+	protected := filepath.Join(external, "pkg", "index.js")
+	write(t, protected, "external data")
 	swapped := false
-	res := Result{}
-	f.r.strip(context.Background(), w, nil, []string{w.Path}, &res, func() error {
+	err = tree.remove(context.Background(), func() error {
 		if !swapped {
 			swapped = true
 			if err := os.Rename(parent, parent+"-inspected"); err != nil {
@@ -56,27 +55,33 @@ func TestStripSafetyAncestorReplacement(t *testing.T) {
 		}
 		return nil
 	})
-	if !swapped {
-		t.Fatal("test did not reach destructive boundary")
+	if !swapped || err == nil {
+		t.Fatal("replacement was not held")
 	}
 	if !exists(protected) {
-		t.Fatalf("ancestor replacement deleted an uninspected external tree: %+v", res)
+		t.Fatal("external tree deleted")
 	}
 }
-
 func TestStripSafetyNewProtectedFileAtDeletionBoundary(t *testing.T) {
-	heavyUnderShort(t, "creates temporary git worktree and writes protected data at deletion boundary")
-	f := newFixture(t)
-	ignore(t, f, "/tmp/\n")
-	w := f.worktree("new-data", "feat/new-data")
-	write(t, filepath.Join(w.Path, "tmp", "generated"), "rebuildable")
-	protected := filepath.Join(w.Path, "tmp", ".env")
-	res := Result{}
-	f.r.strip(context.Background(), w, nil, []string{w.Path}, &res, func() error {
-		write(t, protected, "new external writer's data")
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	p := filepath.Join(root, "node_modules", "pkg", ".env")
+	written := false
+	err = tree.remove(context.Background(), func() error {
+		if !written {
+			written = true
+			write(t, p, "new protected data")
+		}
 		return nil
 	})
-	if !exists(protected) {
-		t.Fatalf("new protected data deleted after last inspection: %+v", res)
+	if err == nil {
+		t.Fatal("unexpected new contents must hold partial retirement")
+	}
+	if !exists(p) || !exists(filepath.Join(root, ".git")) {
+		t.Fatal("protected data or recovery pointer lost")
 	}
 }

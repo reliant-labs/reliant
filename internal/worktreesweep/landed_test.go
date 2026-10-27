@@ -48,7 +48,7 @@ func TestLanded_AQuietLandedWorktreeIsArchivedAndItsChatStaysLive(t *testing.T) 
 	require.NoError(t, s.Sweep(context.Background()))
 	w := sender.seen["wt"]
 	assert.True(t, w.ProbeLanded, "a live row with no chat run is asked whether it landed")
-	assert.True(t, w.ShedLanded, "and, with auto-archive on, may be shed")
+	assert.False(t, w.ShedLanded, "live probes never delete; whole retirement follows archival")
 	assert.Equal(t, []string{"wt"}, store.archived, "a live chat does not keep a landed worktree: it gets it back when it runs")
 	assert.EqualValues(t, 1, s.landedArchived.Load())
 	meta := store.rows["wt"].Worktree.CleanupMetadata

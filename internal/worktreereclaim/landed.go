@@ -8,20 +8,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 )
 
 // Reclaim on merge. Most worktrees are made for one pull request; once it
 // lands, the checkout is a copy of the base branch plus a node_modules, a
 // tool install and caches nobody will use again, held for as long as its chat
-// is not archived, which for an agent's chat is forever. ProbeLanded asks the
-// daemon whether that has happened, and ShedLanded lets it delete the
-// regenerable bulk while the worktree is still live. Archiving and removing
-// the checkout stay the server's call and the existing fenced path's job.
-
-// DefaultLandedShedFloor is how long a landed active worktree must have been
-// quiet (idleSince) before its regenerable output is shed.
-const DefaultLandedShedFloor = 30 * time.Minute
+// is not archived. ProbeLanded reports whether the complete checkout can be
+// retired after row-locked archival. Live probing never deletes files; whole
+// retirement is the server's existing fenced removal path.
 
 // ErrProcessUseUnsupported is CheckProcessUse on a platform it cannot inspect
 // completely. It is uncertainty, never proof that destructive cleanup is safe.
@@ -39,13 +33,8 @@ const (
 	landedInconclusive
 )
 
-// probeLanded answers ProbeLanded for an active worktree that was just
-// locked, setting res.Landed, and sheds its regenerable output when allowed
-// (ShedLanded). A landed worktree whose structure keeps it on disk anyway
-// (ignored data, files outside its checkouts, another repository inside it)
-// is not reported landed, so the server leaves it live, but it is still shed:
-// those holds are about files shedding never touches. Anything the probe
-// could not settle makes the outcome OutcomeProbeInconclusive.
+// probeLanded reports complete safe retirement eligibility without deleting
+// anything. Protected, mounted, changed or uncertain layouts remain live.
 func (r *Reclaimer) probeLanded(ctx context.Context, w Worktree, res *Result) {
 	budget := r.ProbeBudget
 	if budget <= 0 {
@@ -63,9 +52,20 @@ func (r *Reclaimer) probeLanded(ctx context.Context, w Worktree, res *Result) {
 		res.Outcome = OutcomeProbeInconclusive
 		return
 	}
-	_, sc, hold := r.structure(pctx, w, false)
+	_, _, hold := r.structure(pctx, w, false)
 	switch {
 	case hold == nil:
+		// The old data classifier may accept an ignored ancestor wholesale.
+		// Whole retirement requires complete mount-safe descendant inspection
+		// before even offering the row for automatic archival.
+		for _, checkout := range shallowCheckouts(w.Path, w.Checkouts) {
+			tree, err := inspectRetirementTree(pctx, checkout)
+			if err != nil {
+				res.Detail = "worktree retained: " + err.Error()
+				return
+			}
+			tree.close()
+		}
 		res.Landed = true
 	case hold.Reason == ReasonUnverified:
 		res.Outcome = OutcomeProbeInconclusive
@@ -75,9 +75,8 @@ func (r *Reclaimer) probeLanded(ctx context.Context, w Worktree, res *Result) {
 	default:
 		res.Detail = "landed, but kept on disk: " + hold.Detail
 	}
-	if w.ShedLanded {
-		r.shedLanded(ctx, w, sc, res)
-	}
+	// Landed cleanup retires the whole checkout after the server archives it.
+	// Never recursively shed a subset out of a still-live worktree.
 }
 
 // allLanded reports whether every checkout's work has landed. There must be
@@ -192,35 +191,6 @@ func remoteBaseCommits(ctx context.Context, checkout string, names []string) []s
 		}
 	}
 	return shas
-}
-
-// shedLanded deletes the regenerable output of a landed ACTIVE worktree. It
-// is shed's live counterpart and stricter than it: the server has seen no
-// chat run in the worktree, the worktree has been quiet for the shed floor,
-// exclusive runtime admission excludes new tools, and a complete fresh
-// process inspection proves no cwd, executable, open file or mapped file
-// uses it. Unsupported inspection holds it. Only paths in checkouts this row's
-// lock proves are its own are touched (strip).
-func (r *Reclaimer) shedLanded(ctx context.Context, w Worktree, sc scan, res *Result) {
-	if w.KeepFiles || sc.Truncated {
-		return
-	}
-	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < shedMinBudget {
-		return // the next pass sheds it
-	}
-	checkouts := ownCheckouts(ctx, w, sc)
-	if len(checkouts) == 0 {
-		return
-	}
-	floor := r.LandedShedFloor
-	if floor <= 0 {
-		floor = DefaultLandedShedFloor
-	}
-	last, err := idleSince(ctx, w.Path, checkouts)
-	if err != nil || r.now().Sub(last) < floor {
-		return
-	}
-	r.stripUnused(ctx, w, sc.Repos, checkouts, res)
 }
 
 // selfWithin reports whether this process runs from inside path: its

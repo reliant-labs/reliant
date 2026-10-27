@@ -101,6 +101,13 @@ func checkProcessUseAt(ctx context.Context, proc string, uid int, paths []string
 			return errors.New("process fd budget exceeded")
 		}
 		for _, fd := range fds {
+			// Only private trusted retirement code may pass its exact pinned
+			// inspection descriptors. Never exempt a process or caller payload.
+			if entry.Name() == strconv.Itoa(os.Getpid()) {
+				if n, err := strconv.ParseUint(fd.Name(), 10, 64); err == nil && inspectionFile(ctx, uintptr(n)) {
+					continue
+				}
+			}
 			target, err := os.Readlink(filepath.Join(base, "fd", fd.Name()))
 			// FDs legitimately close between enumeration and readlink. ENOENT is
 			// safe for that one fd; permission/other failures are uncertainty.

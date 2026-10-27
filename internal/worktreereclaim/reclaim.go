@@ -67,10 +67,6 @@ type Reclaimer struct {
 	// the locking that precedes it; zero means DefaultProbeBudget. A probe that
 	// runs out of it is OutcomeProbeInconclusive, not a "no".
 	ProbeBudget time.Duration
-	// LandedShedFloor is the quiet time before a landed active worktree's
-	// regenerable output is shed (ShedLanded); zero means
-	// DefaultLandedShedFloor.
-	LandedShedFloor time.Duration
 	// Acquire excludes new runtime work through the final checks and shedding.
 	// Missing admission or process inspection fails closed: nothing is shed.
 	Acquire func(context.Context, []string) (RecoveryLease, error)
@@ -627,9 +623,8 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if w.Remove {
 		return r.autoRemove(ctx, w)
 	}
-	checkouts, sc, hold := r.structure(ctx, w, false)
+	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil {
-		r.shed(ctx, w, sc, hold)
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
@@ -660,9 +655,6 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		res.SnapshotRefs = saved
-		if v.Reason != ReasonDirty && v.Reason != ReasonUnpushed && v.Reason != ReasonUnreachable {
-			r.shed(ctx, w, sc, &res)
-		}
 		r.measure(ctx, &res, w.Path)
 		return res
 	}
@@ -706,7 +698,7 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
-	return r.removeWorkspace(ctx, w, checkouts, sc.Outside, false)
+	return r.retireWorkspace(ctx, w, checkouts, sc.Outside)
 }
 
 // classifyAll classifies every checkout of a workspace, concurrently: each is
@@ -927,9 +919,18 @@ func (r *Reclaimer) quarantined(id string) []string {
 		return nil
 	}
 	var out []string
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, filepath.Join(r.quarantineRoot(id), e.Name()))
+		name := e.Name()
+		if strings.HasSuffix(name, ".disposing") {
+			name = strings.TrimSuffix(name, ".disposing")
+		} else if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(r.quarantineRoot(id), name)
+		if !seen[path] {
+			out = append(out, path)
+			seen[path] = true
 		}
 	}
 	return out
@@ -1260,6 +1261,12 @@ func (r *Reclaimer) rowLock(ctx context.Context, id string) (func(), error) {
 func (r *Reclaimer) recoverLocked(ctx context.Context, rowID string) (restored, parked []string) {
 	r.dropStrayMarkers(rowID)
 	for _, q := range r.quarantined(rowID) {
+		// A partially disposed checkout is evidence/recovery state, never a
+		// complete workspace that automatic revival may silently move home.
+		if _, err := os.Lstat(q + ".disposing"); err == nil || !os.IsNotExist(err) {
+			parked = append(parked, q)
+			continue
+		}
 		orig, err := os.ReadFile(originMarker(q))
 		if err != nil || len(orig) == 0 {
 			parked = append(parked, q)

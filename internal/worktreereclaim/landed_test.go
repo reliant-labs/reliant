@@ -213,7 +213,7 @@ func TestLanded_MultiRepoNeedsEveryCheckoutLanded(t *testing.T) {
 	requireStillActive(t, f, Worktree{ID: w.ID, Path: api.Path})
 }
 
-func TestLanded_ShedsRegenerableOutputOnlyWhenQuietAndUnused(t *testing.T) {
+func TestLanded_ProbeNeverDeletesFromLiveWorktree(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "a landed worktree probed for shedding five ways (~70 git processes)")
 	f := newFixture(t)
@@ -256,11 +256,8 @@ func TestLanded_ShedsRegenerableOutputOnlyWhenQuietAndUnused(t *testing.T) {
 
 	got = f.landed(w, true)
 	requireLanded(t, got, true, "quiet, unused, landed")
-	if exists(filepath.Join(w.Path, "node_modules")) {
-		t.Fatalf("node_modules was not shed: %+v", got)
-	}
-	if len(got.Stripped) != 1 || got.Stripped[0] != "node_modules" || got.StrippedBytes == 0 {
-		t.Fatalf("stripped = %v (%d bytes), want node_modules", got.Stripped, got.StrippedBytes)
+	if !exists(filepath.Join(w.Path, "node_modules")) || len(got.Stripped) != 0 || got.StrippedBytes != 0 {
+		t.Fatalf("live landed probing must preserve all files until whole archival: %+v", got)
 	}
 	if !exists(tracked) {
 		t.Fatal("a tracked file was removed")
@@ -268,7 +265,7 @@ func TestLanded_ShedsRegenerableOutputOnlyWhenQuietAndUnused(t *testing.T) {
 	requireStillActive(t, f, w)
 }
 
-func TestLanded_DataKeepsItLiveButIsStillShed(t *testing.T) {
+func TestLanded_DataKeepsEntireWorktreeLive(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "a landed worktree with ignored data (~35 git processes)")
 	f := newFixture(t)
@@ -285,8 +282,8 @@ func TestLanded_DataKeepsItLiveButIsStillShed(t *testing.T) {
 	if !strings.Contains(got.Detail, "landed, but kept") {
 		t.Fatalf("detail %q should say why it stays", got.Detail)
 	}
-	if exists(filepath.Join(w.Path, "node_modules")) || !exists(filepath.Join(w.Path, ".env")) {
-		t.Fatal("the rebuildable output must be shed and the data kept")
+	if !exists(filepath.Join(w.Path, "node_modules")) || !exists(filepath.Join(w.Path, ".env")) {
+		t.Fatal("held live worktree must retain both output and protected data")
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 // cleanliness, NOT the preservation policy for ignored files or live users.
 func TestGitWorktreeRemoveContract(t *testing.T) {
 	heavyUnderShort(t, "creates temporary git worktrees to verify non-force removal behavior")
-	for _, kind := range []string{"clean", "tracked-edit", "untracked", "ignored-data", "symlink"} {
+	for _, kind := range []string{"clean", "tracked-edit", "untracked", "ignored-data", "symlink", "missing"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newFixture(t)
 			ignore(t, f, "/tmp/\n")
@@ -31,6 +31,11 @@ func TestGitWorktreeRemoveContract(t *testing.T) {
 					t.Fatal(err)
 				}
 				if err := os.Symlink(filepath.Dir(external), filepath.Join(w.Path, "tmp", "linked")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if kind == "missing" {
+				if err := os.RemoveAll(w.Path); err != nil {
 					t.Fatal(err)
 				}
 			}
