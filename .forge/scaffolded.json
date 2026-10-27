@@ -1184,6 +1184,15 @@
     "internal/store/plan_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/pr_handoff_binding_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
+    "internal/store/pr_handoff_publication_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
+    "internal/store/pr_handoff_review_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
     "internal/store/preset_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
