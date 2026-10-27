@@ -170,6 +170,29 @@ func (s PRHandoffStore) RecordReview(ctx context.Context, r prhandoff.Review) (p
 	return out, err
 }
 
+// PRHandoffBranchBinding resolves an existing enrolled branch within the
+// authenticated owner's provider repository identity. Multiple PR targets are
+// permitted only when they agree on immutable original ownership.
+func (s PRHandoffStore) PRHandoffBranchBinding(ctx context.Context, owner string, repoID int64, branch string) (prhandoff.Binding, error) {
+	var rows []PrHandoffBinding
+	if err := s.DB.Bun().NewSelect().Model(&rows).Where("owner_id = ? AND repo_id = ? AND branch = ?", owner, repoID, branch).Scan(ctx); err != nil {
+		return prhandoff.Binding{}, err
+	}
+	if len(rows) == 0 {
+		return prhandoff.Binding{}, prhandoff.ErrNotFound
+	}
+	first, err := s.Binding(ctx, owner, repoID, rows[0].PrNumber)
+	if err != nil {
+		return prhandoff.Binding{}, err
+	}
+	for _, r := range rows {
+		if r.RootID != first.Author.RootID || r.ExecutionID != first.Author.ExecutionID || r.ChatID != first.Author.ChatID || r.WorktreeID != first.Author.WorktreeID {
+			return prhandoff.Binding{}, prhandoff.ErrRefused
+		}
+	}
+	return first, nil
+}
+
 // PrHandoffBindingExtra carries fields on PrHandoffBinding that are NOT columns — computed
 // values, transient state, anything derived rather than stored. PrHandoffBinding is
 // embedded on PrHandoffBindingExtra (see pr_handoff_binding_orm.go), so a field added here is a field on
