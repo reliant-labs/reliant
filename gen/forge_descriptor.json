@@ -35856,6 +35856,23 @@
             "optional": true
           }
         ],
+        "reliant.v1.AwaitPRReviewArgs": [
+          {
+            "name": "repo",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "pr",
+            "kind": "message",
+            "type_name": "reliant.v1.CelInt"
+          },
+          {
+            "name": "expected_head",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          }
+        ],
         "reliant.v1.BooleanInputConfig": [
           {
             "name": "base",
@@ -37187,6 +37204,12 @@
             "kind": "message",
             "type_name": "reliant.v1.GitPublishArgs",
             "oneof": "args"
+          },
+          {
+            "name": "await_pr_review",
+            "kind": "message",
+            "type_name": "reliant.v1.AwaitPRReviewArgs",
+            "oneof": "args"
           }
         ],
         "reliant.v1.NodeRouterCandidate": [
@@ -38257,6 +38280,25 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "concurrency",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowConcurrency"
+          }
+        ],
+        "reliant.v1.WorkflowConcurrency": [
+          {
+            "name": "max_running",
+            "kind": "uint32"
+          },
+          {
+            "name": "key",
+            "kind": "string"
+          },
+          {
+            "name": "supersede",
+            "kind": "string"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -38454,6 +38496,7 @@
         "reliant.v1.ArrayInputConfig": "reliant/v1/workflow_v2.proto",
         "reliant.v1.AskQuestionArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.AttachmentsInputConfig": "reliant/v1/workflow_v2.proto",
+        "reliant.v1.AwaitPRReviewArgs": "reliant/v1/workflow_v2.proto",
         "reliant.v1.BooleanInputConfig": "reliant/v1/workflow_v2.proto",
         "reliant.v1.BoundParam": "reliant/v1/workflow_v2.proto",
         "reliant.v1.CallLLMArgs": "reliant/v1/workflow_v2.proto",
@@ -38547,6 +38590,7 @@
         "reliant.v1.WebhookHmac": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookSource": "reliant/v1/trigger.proto",
         "reliant.v1.Workflow": "reliant/v1/workflow_v2.proto",
+        "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
@@ -41732,7 +41776,7 @@
     "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
     "reliant/v1/trigger.proto": "fe695d7df2de13bbfda0806758bce8b42e0887eae2e209b6679f1131901e2344",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
+    "reliant/v1/workflow_v2.proto": "78e9af602bfd7e5c833c19b9572b284a900893d086732512d7b4bf0b0b529dfd",
     "reliant/v1/worktree.proto": "2d2670e4ca98a799c8f0f8a9397ef34cd4f69f715283627ffd290fbe8f80b5cd"
   }
 }

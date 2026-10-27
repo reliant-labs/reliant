@@ -348,7 +348,18 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 		resume.StoppedSpawns = childTracker.stoppedSpawnHandoffs()
 		resume.ThreadInputs = childTracker.threadInputOverridesHandoff()
 	}
-	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{
+	// Preserve a server-registered private wrapper (and its lifecycle hooks).
+	// Existing histories retain the original command through the version gate;
+	// target comes only from Temporal registration identity, never YAML/inputs.
+	var target interface{} = DynamicWorkflow
+	if workflow.GetVersion(ctx, "continue-as-new-preserve-registered-type", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		name := workflow.GetInfo(ctx).WorkflowType.Name
+		if name == "" {
+			return fmt.Errorf("continue as new: missing registered workflow type")
+		}
+		target = name
+	}
+	return workflow.NewContinueAsNewError(ctx, target, WorkflowInput{
 		ChatID:       input.ChatID,
 		WorkflowName: input.WorkflowName,
 		Inputs:       input.Inputs,

@@ -72,6 +72,8 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			err = val.Decode(&wf.Hidden)
 		case "automation_only", "automationOnly":
 			err = val.Decode(&wf.AutomationOnly)
+		case "concurrency":
+			wf.Concurrency, err = unmarshalConcurrency(val)
 		case "description":
 			var desc string
 			if err := val.Decode(&desc); err == nil {
@@ -396,6 +398,15 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// a chat starting the workflow is the default.
 	if wf.AutomationOnly {
 		m.Content = append(m.Content, scalarNode("automation_only", ""), scalarNode("true", "!!bool"))
+	}
+	if c := wf.GetConcurrency(); c != nil {
+		m.Content = append(m.Content, scalarNode("concurrency", ""), &yaml.Node{
+			Kind: yaml.MappingNode, Content: []*yaml.Node{
+				scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(c.MaxRunning), 10), "!!int"),
+				scalarNode("key", ""), scalarNode(c.Key, "!!str"),
+				scalarNode("supersede", ""), scalarNode(c.Supersede, "!!str"),
+			},
+		})
 	}
 
 	// apiVersion

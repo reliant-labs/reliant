@@ -72,7 +72,9 @@ type Declaration struct {
 	OriginFilter string
 	// WorkflowInputs are the inputs the workflow declares: the types and
 	// defaults activation.params is read through (see ActivationScope).
-	WorkflowInputs map[string]*reliantv1.Input
+	WorkflowInputs    map[string]*reliantv1.Input
+	Concurrency       *reliantv1.WorkflowConcurrency
+	CanonicalWorkflow string
 }
 
 // WorkflowResolver loads the workflow a run of a ref executes, as run start
@@ -184,8 +186,18 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 			return nil, broken(fmt.Sprintf("it now listens to %s, and this activation's connection is for %s; activate it again", src.Integration, prev.Integration))
 		}
 	}
+	if wf.GetConcurrency() != nil && src.Kind == core.TriggerKindSchedule {
+		return nil, broken("scheduled concurrency is not supported in stage 1; enqueue through an inbound activation instead")
+	}
+	if err := triggerspec.CompileConcurrency(wf.GetConcurrency()); err != nil {
+		return nil, broken(err.Error())
+	}
+	if wf.GetConcurrency() != nil && !wf.GetAutomationOnly() {
+		return nil, broken("concurrency requires automation_only")
+	}
 	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt,
-		DedupeKey: dedupeKey, DedupeWindow: dedupeWindow, OriginFilter: originFilter, WorkflowInputs: wf.GetInputs()}, nil
+		DedupeKey: dedupeKey, DedupeWindow: dedupeWindow, OriginFilter: originFilter, WorkflowInputs: wf.GetInputs(),
+		Concurrency: wf.GetConcurrency(), CanonicalWorkflow: t.Workflow}, nil
 }
 
 // ActivationScope is everything a trigger expression of t reads: the event's

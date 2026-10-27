@@ -406,7 +406,10 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 }
 
 // TemporalClient is the process's client of the external Temporal server.
-type TemporalClient struct{ Client client.Client }
+type TemporalClient struct {
+	Client    client.Client
+	Namespace string // trusted dial namespace, never inferred from an event
+}
 
 // TemporalClientDeps is the server, and the boot context the first dial
 // waits under.
@@ -420,13 +423,20 @@ type TemporalClientDeps struct {
 // not a crash: the first dial retries with backoff (serverkit.RetryConnect),
 // and /readyz names "temporal" as pending meanwhile.
 func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
+	return newTemporalClient(d, temporal.NewExternalClient)
+}
+
+// Explicit dial seam keeps namespace/metadata consistency testable without a
+// network connection or exposing SDK client options to the composition root.
+func newTemporalClient(d TemporalClientDeps, dial func(context.Context, temporal.ExternalClientConfig) (client.Client, error)) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
+	namespace = temporal.EffectiveNamespace(namespace)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
-		dialed, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
+		dialed, err := dial(ctx, temporal.ExternalClientConfig{
 			Host:         host,
 			Port:         port,
 			Namespace:    namespace,
@@ -442,7 +452,7 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c}, nil
+	return &TemporalClient{Client: c, Namespace: namespace}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.

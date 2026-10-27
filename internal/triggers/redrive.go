@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runcontinuity"
 )
 
 const (
@@ -33,10 +34,21 @@ const (
 // redelivers it on its own, so the receiver acks as soon as the row is
 // written and this closes the gap between the row and the run.
 type Redriver struct {
-	repo      EventRepo
-	starter   WorkflowStarter
-	taskQueue string
-	now       func() time.Time
+	repo             EventRepo
+	starter          WorkflowStarter
+	taskQueue        string
+	now              func() time.Time
+	admissionAfter   int64 // bounded keyset scan; wraps, never queue ownership
+	admissionThrough int64 // fixed high-water mark for this sweep, not moving intake
+	admissionBatch   int   // zero uses the production batch size
+	continuity       runcontinuity.Reader
+}
+
+// WithContinuity supplies authenticated exact-run history; absent proof never
+// releases a reservation, including a legacy terminal Describe projection.
+func (r *Redriver) WithContinuity(reader runcontinuity.Reader) *Redriver {
+	r.continuity = reader
+	return r
 }
 
 // NewRedriver builds a Redriver. taskQueue empty means the shared queue.
@@ -50,6 +62,9 @@ func NewRedriver(repo EventRepo, starter WorkflowStarter, taskQueue string) *Red
 // RedriveOnce runs one pass. Every replica may run it concurrently: a start
 // names the event's fire id, so racing starts collapse into one execution.
 func (r *Redriver) RedriveOnce(ctx context.Context) error {
+	if err := r.redriveAdmissions(ctx); err != nil {
+		return err
+	}
 	now := r.now()
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {

@@ -1184,6 +1184,27 @@
     "internal/store/plan_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/pr_handoff_binding_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
+    "internal/store/pr_handoff_publication_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
+    "internal/store/pr_handoff_review_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T05:17:18Z"
+    },
+    "internal/store/pr_review_wait_authority_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:06:07Z"
+    },
+    "internal/store/pr_review_wait_outcome_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:34:35Z"
+    },
+    "internal/store/pr_review_wait_request_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:40:32Z"
+    },
+    "internal/store/pr_review_wait_subscription_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T07:34:35Z"
+    },
     "internal/store/preset_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
@@ -1210,6 +1231,15 @@
     },
     "internal/store/repo_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/review_assignment_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
+    },
+    "internal/store/review_policy_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
+    },
+    "internal/store/review_publication_intent_repo_ext.go": {
+      "scaffolded_at": "2026-10-27T06:59:26Z"
     },
     "internal/store/run_event_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"

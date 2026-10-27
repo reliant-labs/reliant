@@ -1135,6 +1135,18 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
+	if p.spec.OnStarted != nil {
+		// A retry after an accepted-but-unbound execution CLOSED must not
+		// create another run under the same root ID.
+		workflowOptions.WorkflowIDReusePolicy = enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
+		// The immutable event identity fences recovery if Temporal accepted a
+		// start but the worker died before OnStarted could bind its run ID.
+		if workflowOptions.Memo == nil {
+			workflowOptions.Memo = map[string]interface{}{}
+		}
+		workflowOptions.Memo["reliant_admission_event_id"] = p.eventID
+	}
+
 	// Inject session daemon if set on chat. A chat that reaches here still
 	// unpinned (a branch's first send, a trigger-recorded chat) is pinned
 	// first; an existing pin is never overwritten.
@@ -1202,6 +1214,13 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	}
 
 	runID := workflowRun.GetRunID()
+	if p.spec.OnStarted != nil {
+		if err := p.spec.OnStarted(ctx, p.eventID, runID); err != nil {
+			// Temporal accepted the execution. Do not mark its start failed:
+			// recovery must attach to this execution, never free its permit.
+			return nil, &InternalError{Reason: "failed to record accepted execution", Err: err}
+		}
+	}
 	l.runs.RecordRun(ctx, chatID, workflowID, runID)
 
 	// Close the pending window now rather than waiting for the run's own

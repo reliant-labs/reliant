@@ -71,6 +71,7 @@ func InsertTriggerEventIfAbsent(ctx context.Context, db orm.Context, ev *core.Tr
 		return false, err
 	}
 	res, err := db.Bun().NewInsert().Model(row).
+		ExcludeColumn("admission_order").
 		On("CONFLICT (kind, dedupe_key) DO NOTHING").
 		Exec(ctx)
 	if err != nil {
@@ -173,9 +174,20 @@ func CountLiveLaunchedRuns(ctx context.Context, db orm.Context, userID string, k
 // UpdateTriggerEventOutcome records a firing's outcome and the chat it
 // launched (nil for none), or returns core.ErrTriggerEventNotFound.
 func UpdateTriggerEventOutcome(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
-	row := &TriggerEvent{ID: id, Outcome: outcome, OutcomeDetail: detail, ChatID: chatID}
-	return writeTriggerEvent(ctx, db, row, "outcome",
-		TriggerEventFieldOutcome, TriggerEventFieldOutcomeDetail, TriggerEventFieldChatID)
+	// Attach the immutable execution identity in the SAME launch transaction
+	// and statement as the deletable chat FK. Later chat deletion clears only
+	// chat_id; retries cannot replace the original Temporal root.
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome=?1, outcome_detail=?2, chat_id=?3,
+	 admission_workflow_id=CASE WHEN admission_state='reserved' THEN COALESCE(admission_workflow_id, ?3::text) ELSE admission_workflow_id END
+	 WHERE id=?0`, id, outcome, detail, chatID).Exec(ctx)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return core.ErrTriggerEventNotFound
+	}
+	return err
 }
 
 // UpdateTriggerEventPayload replaces a firing's payload, or returns
@@ -243,7 +255,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 		limit = defaultTriggerEventLimit
 	}
 	rows, err := ListTriggerEvent(ctx, db,
-		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
+		func(q *bun.SelectQuery) { q.Where("outcome = 'pending' AND admission_state IS NULL") },
 		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
 		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
 		orm.WithLimit(limit))
@@ -291,6 +303,7 @@ func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, o
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = ?", outcome).
 		Set("outcome_detail = ?", detail).
+		Set("admission_state = CASE WHEN admission_state = 'queued' THEN 'superseded' ELSE admission_state END").
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
