@@ -46,6 +46,9 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		skipStreak  = true
 		lastFailure string
 		haveFailure bool
+		failedAt    time.Time
+		// recovered counts the successes newer than the newest failure.
+		recovered int
 	)
 	for _, f := range firings {
 		result, detail := resolveFiring(f)
@@ -53,11 +56,14 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		case resultFailure:
 			anyFailure = true
 			if !haveFailure {
-				lastFailure, haveFailure = detail, true
+				lastFailure, haveFailure, failedAt = detail, true, f.Event.OccurredAt
 			}
 			skipStreak = false
 		case resultSuccess:
 			anySuccess = true
+			if !haveFailure {
+				recovered++
+			}
 			skipStreak = false
 		case resultSkipped:
 			if skipStreak {
@@ -68,6 +74,16 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		}
 	}
 	health.LastFailureDetail = rundiagnostics.ErrorText(lastFailure)
+	if haveFailure && recovered > 0 {
+		// A trigger that has since recovered stays DEGRADED while the failure
+		// is in the window, but its detail must not read as a current fault:
+		// "trader-bot.yaml does not parse" read as broken after eight good runs.
+		when := ""
+		if !failedAt.IsZero() {
+			when = " on " + failedAt.UTC().Format("2006-01-02 15:04 MST") + ";"
+		}
+		health.LastFailureDetail = fmt.Sprintf("%s (failed%s %d later run(s) succeeded)", health.LastFailureDetail, when, recovered)
+	}
 	health.ConsecutiveFailures = FailureStreak(firings).Count
 
 	switch {

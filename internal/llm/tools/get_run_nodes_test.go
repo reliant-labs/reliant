@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -63,6 +64,32 @@ func TestGetRunExecuteIncludesNodeMetadata(t *testing.T) {
 	require.Equal(t, "failed", detail.Nodes[0].Status)
 	require.NotContains(t, resp.Metadata, "hidden")
 	require.Contains(t, resp.Content, "Nodes (newest attempts first)")
+}
+
+// A run parked on a usage limit has an ACTIVE root, so its state alone reads
+// "running"; get_run must say what it is waiting for and that it can be
+// cancelled (prod chat 10c43cfa sat in that wait for 2.5h).
+func TestGetRunReportsAUsageLimitWait(t *testing.T) {
+	root := "root"
+	activity := int(pb.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT)
+	resumes := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	repo := &MockgetRunStore{}
+	repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+		return &db.Chat{ID: id, UserID: "owner", WorkflowID: &root, Activity: &activity,
+			UsageLimitProvider: "Claude subscription", UsageLimitResumesAt: &resumes,
+			RootStatus: db.WorkflowStatus{State: db.WorkflowStateActive}}, nil
+	}
+	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) { return nil, sql.ErrNoRows }
+	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
+	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "State: running\n")
+	require.Contains(t, resp.Content, "Waiting: waiting for usage limit (Claude subscription), retries by itself at 2026-10-28T09:00:00Z. It is live: control_run cancel stops it")
+	var detail RunDetail
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &detail))
+	require.Equal(t, "waiting for usage limit", detail.Waiting)
+	require.Equal(t, "2026-10-28T09:00:00Z", detail.UsageLimitRetriesAt)
 }
 
 func TestRunNodesEmptyIsExplicit(t *testing.T) {

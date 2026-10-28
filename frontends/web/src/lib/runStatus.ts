@@ -290,14 +290,20 @@ export function runStatusFromDisplayState(
   }
 }
 
-/** Whether a status still has work ahead of it, so a view of it goes stale. */
+/**
+ * Whether a status still has work ahead of it, so a view of it goes stale and
+ * the run can still be paused or stopped. A run held for a usage-limit reset
+ * is live: it retries by itself, so leaving it out hid the only Stop button on
+ * the run page while it waited.
+ */
 export function isLiveRunStatus(status: RunStatusDisplay): boolean {
   return (
     status.key === "queued" ||
     status.key === "running" ||
     status.key === "needs_you" ||
     status.key === "paused" ||
-    status.key === "waiting_for_machine"
+    status.key === "waiting_for_machine" ||
+    status.key === "waiting_for_usage_limit"
   );
 }
 

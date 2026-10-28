@@ -242,6 +242,8 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
     });
     expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "neutral", badgeVariant: "warning", pulse: false });
+    // Live: it retries by itself, so it can still be paused or stopped.
+    expect(isLiveRunStatus(status)).toBe(true);
   });
 
   it("the sidebar's activity view says the same", () => {

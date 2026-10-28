@@ -191,6 +191,25 @@ describe("RunHeader", () => {
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
   });
 
+  it("a run held for a usage-limit reset still offers Stop", async () => {
+    const user = userEvent.setup();
+    renderRunsAt(
+      <RunHeader
+        chat={chat({
+          workflowState: WorkflowState.ACTIVE,
+          workflowStopReason: WorkflowStopReason.UNSPECIFIED,
+          activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
+        })}
+        actions={handlers}
+      />,
+      "/workflows/runs/chat-1",
+    );
+    expect(await screen.findByText("Waiting for usage limit")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(handlers.onStop).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Re-run" })).not.toBeInTheDocument();
+  });
+
   it("a paused run offers Resume", async () => {
     const user = userEvent.setup();
     renderRunsAt(
