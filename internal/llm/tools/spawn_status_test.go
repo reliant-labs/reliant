@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -335,35 +336,163 @@ func TestSpawnStatus_Wait_CutShortSaysItStoppedEarly(t *testing.T) {
 // was about to succeed. The wait must report the finish, not "still running".
 func TestSpawnStatus_Wait_CutShortReportsTheAgentFinishing(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	chatID := uuid.New().String()
-	createTestChat(t, repo, chatID)
+	for _, cutAt := range []string{"initial read", "waiting", "terminal snapshot", "activity snapshot"} {
+		t.Run(cutAt, func(t *testing.T) {
+			t.Parallel()
+			callCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			childID := "child"
+			reads := 0
+			// The repository callback is the barrier: completion and delivery
+			// of its report happen at a specific read, never on a wall clock.
+			// Like the real store, reads on a cancelled context fail, NOT vanish.
+			repo := &MockspawnStatusStore{
+				ListSpawnChildrenFunc: func(ctx context.Context, parentID string) ([]*db.SpawnChild, error) {
+					require.NoError(t, ctx.Err())
+					require.Equal(t, "parent", parentID)
+					return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
+				},
+				GetThreadFunc: func(ctx context.Context, id string) (*db.Thread, error) {
+					require.Equal(t, childID, id)
+					reads++
+					if reads == 1 {
+						switch cutAt {
+						case "initial read":
+							cancel()
+						case "waiting":
+							cancel()
+							return &db.Thread{ID: childID, Status: db.ThreadStatusRunning}, nil
+						case "terminal snapshot":
+							cancel()
+							return &db.Thread{ID: childID, Status: db.ThreadStatusCompleted}, nil
+						}
+					}
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					return &db.Thread{ID: childID, Status: db.ThreadStatusCompleted}, nil
+				},
+				GetLatestContextWindowFunc: func(ctx context.Context, id string) (*db.ContextWindow, error) {
+					if cutAt == "activity snapshot" {
+						cancel()
+					}
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					// Final status AND answer must use a live, bounded context.
+					deadline, ok := ctx.Deadline()
+					require.True(t, ok)
+					require.LessOrEqual(t, time.Until(deadline), stoppedEarlyCheckTimeout)
+					return &db.ContextWindow{ID: "window", ThreadID: id}, nil
+				},
+				GetMessagesByContextWindowFunc: func(ctx context.Context, _ string, _ *int64) ([]*db.Message, error) {
+					return []*db.Message{{ID: "answer", Role: reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT}}, ctx.Err()
+				},
+				ListContentBlocksFunc: func(ctx context.Context, _ string) ([]*db.MessageContentBlock, error) {
+					answer := "the answer is 42"
+					return []*db.MessageContentBlock{{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &answer}}, ctx.Err()
+				},
+			}
+			rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
+			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 
-	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "the answer is 42")
+			require.False(t, resp.IsError, "response: %+v", resp)
+			require.True(t, meta.HasExited, "the agent finished; metadata: %+v", meta)
+			require.Equal(t, "completed", meta.Status)
+			require.Equal(t, childID, meta.AgentID)
+			require.False(t, meta.StoppedEarly)
+			require.False(t, meta.TimedOut)
+			require.Contains(t, resp.Content, "the answer is 42")
+			require.ErrorIs(t, callCtx.Err(), context.Canceled)
+		})
+	}
+}
 
-	callCtx, cancel := context.WithCancel(ctx)
+// A failed initial read is retried only when cancellation cut it short.
+// A still-running child stays untouched; a genuinely missing child remains
+// an error even after the detached last look.
+func TestSpawnStatus_Wait_InitialReadCancellationPreservesStatus(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		cancelRead bool
+		missing    bool
+	}{
+		{name: "cancelled read of running child", cancelRead: true},
+		{name: "cancelled read of missing child", cancelRead: true, missing: true},
+		{name: "missing child", missing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			callCtx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			childID := "child"
+			reads := 0
+			repo := &MockspawnStatusStore{
+				ListSpawnChildrenFunc: func(context.Context, string) ([]*db.SpawnChild, error) {
+					return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
+				},
+				GetThreadFunc: func(ctx context.Context, _ string) (*db.Thread, error) {
+					reads++
+					if reads == 1 && tc.cancelRead {
+						cancel()
+						return nil, ctx.Err()
+					}
+					require.NoError(t, ctx.Err())
+					if tc.missing {
+						return nil, nil
+					}
+					return &db.Thread{ID: childID, Status: db.ThreadStatusRunning}, nil
+				},
+			}
+			rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
+			resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+			require.Equal(t, tc.missing, resp.IsError, "response: %+v", resp)
+			if tc.missing {
+				require.Contains(t, resp.Content, "could not be found")
+			} else {
+				require.True(t, meta.StoppedEarly)
+				require.False(t, meta.TimedOut)
+				require.False(t, meta.HasExited)
+				require.Equal(t, "running", meta.Status)
+				require.Contains(t, resp.Content, "has not been stopped")
+			}
+			if tc.cancelRead {
+				require.Equal(t, 2, reads, "one bounded last look, not a new wait")
+			} else {
+				require.Equal(t, 1, reads, "a genuine miss must fail fast")
+			}
+		})
+	}
+}
+
+// Cancellation coinciding with a genuine store failure does not make that
+// failure recoverable. A retry could otherwise hide a database/auth error.
+func TestSpawnStatus_Wait_CancellationDoesNotMaskStoreFailure(t *testing.T) {
+	t.Parallel()
+	callCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// The agent finishes, and its report preempts the wait, both well inside
-	// the 500ms poll — so only the last look can see the finish.
-	time.AfterFunc(100*time.Millisecond, func() {
-		now := time.Now()
-		_, err := repo.UpdateThreadStatus(context.Background(), childID, db.ThreadStatusCompleted, &now)
-		if err != nil {
-			t.Errorf("complete the agent: %v", err)
-		}
-		cancel()
-	})
-	rc := rctx.NewToolContext(callCtx, chatID, callerID, nil, nil)
-
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
-
-	require.False(t, resp.IsError, "response: %+v", resp)
-	require.True(t, meta.HasExited, "the agent finished; metadata: %+v", meta)
-	require.False(t, meta.StoppedEarly)
-	require.Contains(t, resp.Content, "the answer is 42")
+	childID := "child"
+	storeErr := errors.New("permission denied by store")
+	reads := 0
+	repo := &MockspawnStatusStore{
+		ListSpawnChildrenFunc: func(context.Context, string) ([]*db.SpawnChild, error) {
+			return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
+		},
+		GetThreadFunc: func(context.Context, string) (*db.Thread, error) {
+			reads++
+			if reads == 1 {
+				cancel()
+				return nil, storeErr
+			}
+			return &db.Thread{ID: childID, Status: db.ThreadStatusCompleted}, nil
+		},
+	}
+	rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
+	resp, _ := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+	require.True(t, resp.IsError, "a coincident cancellation must not recover an unrelated store error")
+	require.Equal(t, 1, reads, "non-cancellation errors must not trigger a detached retry")
+	require.Equal(t, "Agent \"child\" could not be found.", resp.Content, "preserve the existing store-error response")
 }
 
 // timeout_seconds above the 240s ceiling must be clamped, not rejected — an
