@@ -39,6 +39,47 @@ func claimCapacity(ctx context.Context, env *storetest.Env, id string, scope sto
 	return claimed, err
 }
 
+func TestTriggerCapacityRedriveFairnessPreservesOrdinaryDeliveryBudget(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	for i := 0; i < 205; i++ {
+		ev := capacityEvent(fmt.Sprintf("blocked-%03d", i))
+		ev.CreatedAt = time.Now().Add(-48 * time.Hour)
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
+	}
+	ordinary := capacityEvent("ordinary-expiring")
+	ordinary.CreatedAt = time.Now().Add(-48 * time.Hour)
+	_, err := store.InsertTriggerEventIfAbsent(ctx, env.ORM, ordinary)
+	require.NoError(t, err)
+	for i := 0; i < 3; i++ {
+		other := scope
+		other.WorkflowRef = fmt.Sprintf("other-%d", i)
+		ev := capacityEvent(fmt.Sprintf("other-%d", i))
+		ev.CreatedAt = time.Now().Add(-time.Hour)
+		require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, other))
+	}
+	seen := map[string]bool{}
+	for pass := 0; pass < 4; pass++ {
+		rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, time.Now(), 1)
+		require.NoError(t, err)
+		require.LessOrEqual(t, len(rows), 2)
+		ordinarySeen := false
+		for _, ev := range rows {
+			seen[ev.ID] = true
+			if ev.ID == ordinary.ID {
+				ordinarySeen = true
+			}
+		}
+		require.True(t, ordinarySeen, "ordinary deliveries retain their own recovery/expiry budget")
+	}
+	require.True(t, seen["blocked-000"])
+	for i := 0; i < 3; i++ {
+		require.True(t, seen[fmt.Sprintf("other-%d", i)], "capacity scopes rotate fairly")
+	}
+	require.False(t, seen["blocked-001"], "only the oldest pending head of a blocked scope is redriven")
+}
+
 func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()

@@ -8,6 +8,7 @@ ALTER TABLE trigger_events
     ADD COLUMN capacity_workflow_id text,
     ADD COLUMN capacity_first_run_id text,
     ADD COLUMN capacity_released boolean NOT NULL DEFAULT false,
+    ADD COLUMN capacity_redriven_at timestamptz,
     ADD CONSTRAINT trigger_events_capacity_scope CHECK (
         (capacity_project_id IS NULL AND capacity_workflow_ref IS NULL AND capacity_order IS NULL)
         OR (capacity_project_id IS NOT NULL AND capacity_project_id <> ''
