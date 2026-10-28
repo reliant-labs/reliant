@@ -195,7 +195,7 @@ func TestMergeTierCoverageAndWiring(t *testing.T) {
 			t.Errorf("merge missing %s", s)
 		}
 	}
-	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test ;", "task test:integration", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "INCOMPLETE", `($required - [.steps[]`} {
+	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test ;", "task test:integration", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "missing_steps"} {
 		if !strings.Contains(release, s) {
 			t.Errorf("release missing %s", s)
 		}
