@@ -71,13 +71,61 @@ describe("trace list", () => {
 });
 
 describe("trace waterfall", () => {
+  it("sends the selected range to GetTrace and refetches when the range changes", async () => {
+    const now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      const getTrace = vi.spyOn(api, "getTrace");
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      await screen.findByTestId("trace-detail");
+      expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        envIds: ["env-prod"],
+        window: { startMs: now - 60 * 60_000, endMs: now },
+      }));
+      await user.selectOptions(screen.getByTestId("obs-range"), "15m");
+      await waitFor(() => expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        window: { startMs: now - 15 * 60_000, endMs: now },
+      })));
+      expect(getTrace).toHaveBeenCalledTimes(2);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("finds late incoming links on stale revisit and on explicit Refresh without polling", async () => {
+    let now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      let arrived = false;
+      const getTrace = vi.spyOn(api, "getTrace").mockImplementation(async (req) => ({
+        ...fixtureTrace(req.traceId, now),
+        relatedTraces: arrived ? [{ traceId: "c".repeat(32), spanId: "d".repeat(16), linkedSpanId: "b0" }] : [],
+      }));
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      expect(await screen.findByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found");
+      await user.click(screen.getByTestId("trace-back"));
+      await screen.findAllByTestId("obs-trace-row");
+      arrived = true;
+      now += 16_000;
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
+      expect(getTrace).toHaveBeenCalledTimes(2);
+      arrived = false;
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(screen.getByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found"));
+      expect(getTrace).toHaveBeenCalledTimes(3);
+    } finally { clock.mockRestore(); }
+  });
+
   it("navigates outgoing span links without inventing a parent or losing scope/time", async () => {
     const user = userEvent.setup();
     const api = createFixtureApi();
     const linkedTrace = "a".repeat(32);
     api.getTrace = vi.fn(async (req) => {
       const result = fixtureTrace(req.traceId, Date.now());
-      result.spans[0].links = [{ traceId: linkedTrace, spanId: "b".repeat(16), attributes: { reason: "remote parent" } }];
+      result.spans[0].links = [{ traceId: linkedTrace, spanId: "b".repeat(16) }];
       return result;
     });
     const harness = renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, envs: ["prod"], apps: ["control-plane"], range: "1h" });

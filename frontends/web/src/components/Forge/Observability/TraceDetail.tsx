@@ -21,6 +21,7 @@ import Button from "@/components/forge-ui/button";
 import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
+import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { AskReliantButton } from "./AskReliant/AskReliant";
 import { useObsAskContext } from "./AskReliant/askReliantContext";
@@ -43,15 +44,17 @@ export function TraceDetail({
   subject,
   traceId,
   spanId,
+  range,
   navigate,
 }: {
   scope: ObsScope;
   subject: string;
   traceId: string;
   spanId: string | undefined;
+  range: RangePreset;
   navigate: ObsNavigate;
 }) {
-  const trace = useTrace(scope, traceId);
+  const trace = useTrace(scope, traceId, range);
   const { environments } = useObsAskContext();
   const spans = trace.data?.spans ?? [];
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
@@ -106,8 +109,8 @@ export function TraceDetail({
           data-testid="trace-empty"
           className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted"
         >
-          No spans were found for trace <span className="font-mono text-ink">{traceId}</span>. It may be older than
-          this environment keeps traces (7 days), or it was dropped by sampling.
+          No spans were found for trace <span className="font-mono text-ink">{traceId}</span> in the selected time range.
+          It may be outside this range, past retention, or dropped by sampling.
         </p>
       </div>
     );
@@ -296,7 +299,6 @@ function SpanDetails({
                   <Button variant="ghost" size="xs" onClick={() => onLinkedSpan(link.traceId, link.spanId)}>
                     Trace {shortId(link.traceId)} · span {shortId(link.spanId)}
                   </Button>
-                  {Object.keys(link.attributes).length > 0 && <AttributeTable title="Link attributes" attributes={link.attributes} />}
                 </li>
               ))}
             </ul>

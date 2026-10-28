@@ -139,7 +139,7 @@ describe("response mapping", () => {
           attributes: {},
           resourceAttributes: {},
           events: [],
-          links: [{ traceId: "outgoing", spanId: "browser", attributes: { reason: "untrusted remote" } }],
+          links: [{ traceId: "outgoing", spanId: "browser" }],
           source: "",
           operatorData: false,
         },
@@ -149,7 +149,7 @@ describe("response mapping", () => {
     expect(trace.spans[0]).toMatchObject({ kind: "server", status: "error", durationMs: 0.042 });
     expect(trace.spans[0].startMs - window.startMs).toBeCloseTo(0.25, 6);
     expect(trace.spans[0].parentSpanId).toBe("");
-    expect(trace.spans[0].links).toEqual([{ traceId: "outgoing", spanId: "browser", attributes: { reason: "untrusted remote" } }]);
+    expect(trace.spans[0].links).toEqual([{ traceId: "outgoing", spanId: "browser" }]);
     expect(trace.relatedTraces).toEqual([{ traceId: "incoming", spanId: "server", linkedSpanId: "s" }]);
     expect(trace.relatedTracesTruncated).toBe(true);
     expect(statusOf("Ok")).toBe("ok");

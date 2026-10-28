@@ -300,7 +300,7 @@ function mapSpan(s: WireSpan): Span {
     attributes: { ...s.attributes },
     resource: { ...s.resourceAttributes },
     events: s.events.map((e) => ({ timeMs: msOf(e.time), name: e.name, attributes: { ...e.attributes } })),
-    links: s.links.map((link) => ({ traceId: link.traceId, spanId: link.spanId, attributes: { ...link.attributes } })),
+    links: s.links.map((link) => ({ traceId: link.traceId, spanId: link.spanId })),
     source: s.source,
     operatorData: s.operatorData,
   };

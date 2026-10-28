@@ -89,6 +89,7 @@ export function TracesView(props: {
         subject={props.subject}
         traceId={props.traceId}
         spanId={props.spanId}
+        range={props.range}
         navigate={props.navigate}
       />
     );

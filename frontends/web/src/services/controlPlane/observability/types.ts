@@ -189,7 +189,7 @@ export interface Span extends Provenance {
   resource: Record<string, string>;
   events: SpanEvent[];
   /** OTel links are causal references, not parent/child edges. */
-  links?: { traceId: string; spanId: string; attributes: Record<string, string> }[];
+  links?: { traceId: string; spanId: string }[];
 }
 
 export interface Trace {

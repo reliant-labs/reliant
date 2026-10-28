@@ -73,7 +73,7 @@ export const obsKeys = {
     [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
+  trace: (scope: ObsScope | null, traceId: string, range: RangePreset = "7d") => [...obsKeys.all(scope), "trace", traceId, range] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
     [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
@@ -264,17 +264,18 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
 }
 
 /**
- * One trace. Spans are immutable once written, so it never goes stale. The
- * lookup searches the whole 7 days traces are kept, not the list's window: a
- * trace linked from a log may be older than the window the reader is in.
+ * One trace and its incoming causal references. Trace detail uses the selected
+ * range for related-evidence admission; callers without a selected range keep
+ * the historical seven-day lookup. Late spans/links can arrive after the first
+ * fetch, so revisit/focus/Refresh must be able to fetch again. No polling.
  */
-export function useTrace(scope: ObsScope | null, traceId: string | null) {
+export function useTrace(scope: ObsScope | null, traceId: string | null, range: RangePreset = "7d") {
   const api = useObsReadApi();
   return useQuery({
-    queryKey: obsKeys.trace(scope, traceId ?? ""),
-    queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow("7d") }),
+    queryKey: obsKeys.trace(scope, traceId ?? "", range),
+    queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(range) }),
     enabled: !!scope && !!traceId,
-    staleTime: Infinity,
+    staleTime: 15_000,
     retry: obsRetry,
   });
 }
