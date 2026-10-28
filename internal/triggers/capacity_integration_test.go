@@ -99,4 +99,10 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	third, err = f.firer.Fire(ctx, f.fireAt(4))
 	require.NoError(t, err)
 	require.Equal(t, string(core.TriggerEventPending), third.Outcome)
+	// Removing the declaration's cap definitively settles a queued intent,
+	// rather than leaving a poisoned FIFO head retrying forever.
+	resolver.wf.Concurrency = nil
+	third, err = f.firer.Fire(ctx, f.fireAt(4))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventSkipped), third.Outcome)
 }

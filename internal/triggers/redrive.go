@@ -77,7 +77,7 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		}
 		if ev.Kind == core.TriggerEventKindSchedule {
 			request := FireRequest{TriggerID: *ev.TriggerID, FireWorkflowID: ev.DedupeKey, ScheduledAt: ev.OccurredAt, Manual: ev.Payload[payloadManual] == true}
-			_, startErr := r.starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: r.taskQueue}, TriggerFireWorkflow, request)
+			_, startErr := r.starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: r.taskQueue}, TriggerCapacityRedriveWorkflow, request)
 			if startErr != nil {
 				errs = append(errs, startErr)
 			}

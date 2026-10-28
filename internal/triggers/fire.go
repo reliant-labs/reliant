@@ -162,7 +162,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, err
 	}
 	if existing != nil && existing.CapacityOrder != nil && maxRunning == 0 {
-		return nil, errors.New("queued workflow capacity policy was removed; refusing to bypass admission")
+		return f.recordSkip(ctx, trigger, req, "queued workflow capacity policy was removed")
 	}
 	if maxRunning == 0 && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
@@ -177,6 +177,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 			row = existing
 		}
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
+			if errors.Is(err, errCapacityScopeChanged) {
+				return f.recordSkip(ctx, trigger, req, err.Error())
+			}
 			return nil, err
 		}
 	}
@@ -471,6 +474,21 @@ func (f *Firer) recordOutcome(
 		stored, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
 		if err != nil {
 			return nil, fmt.Errorf("load existing event for fire %s: %w", req.FireWorkflowID, err)
+		}
+		if stored.Outcome == core.TriggerEventPending && stored.CapacityOrder != nil {
+			settler, ok := f.repo.(interface {
+				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string) (bool, error)
+			})
+			if !ok {
+				return nil, errors.New("capacity queue settlement unavailable")
+			}
+			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail); err != nil {
+				return nil, err
+			}
+			stored, err = f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return outputFromEvent(stored), nil
 	}

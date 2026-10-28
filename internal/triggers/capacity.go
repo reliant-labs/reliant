@@ -15,6 +15,8 @@ import (
 
 const capacityWaiting = "waiting for workflow capacity"
 
+var errCapacityScopeChanged = errors.New("queued workflow capacity scope changed")
+
 type capacityRepository interface {
 	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
 	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, uint32) (bool, error)
@@ -56,7 +58,7 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	scope := store.TriggerCapacityScope{UserID: t.UserID, ProjectID: t.ProjectID, WorkflowRef: poolRef}
 	if event.Outcome == core.TriggerEventPending {
 		if event.CapacityOrder != nil && (event.CapacityProjectID == nil || event.CapacityWorkflowRef == nil || *event.CapacityProjectID != scope.ProjectID || *event.CapacityWorkflowRef != scope.WorkflowRef) {
-			return errors.New("queued workflow capacity scope changed")
+			return errCapacityScopeChanged
 		}
 		if err := repo.EnqueueTriggerCapacity(ctx, event, scope); err != nil {
 			return err
