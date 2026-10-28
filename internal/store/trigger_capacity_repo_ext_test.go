@@ -102,6 +102,37 @@ func TestTriggerCapacityUnboundStartDoesNotHidePendingScopeHead(t *testing.T) {
 	require.True(t, ids[second.ID], "pending scope head must not disappear behind an unbound launch")
 }
 
+// A released unbound launch has nothing left to recover. Redriving it every
+// rotation would share the batch with the real scope heads and starve them.
+func TestTriggerCapacityReleasedUnboundLaunchIsNotRedriven(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	released, head := capacityEvent("released-unbound"), capacityEvent("pending-head")
+	released.CreatedAt = time.Now().Add(-time.Hour)
+	head.CreatedAt = released.CreatedAt
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, released, scope))
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, head, scope))
+	claimed, err := claimCapacity(ctx, env, released.ID, scope, 2)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, released.ID, "released-root")
+	}))
+	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=now(),capacity_release_reason='start_fenced_and_absent' WHERE id=$1`, released.ID)
+	require.NoError(t, err)
+	for pass := 0; pass < 3; pass++ {
+		rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, time.Now(), 1)
+		require.NoError(t, err)
+		ids := map[string]bool{}
+		for _, row := range rows {
+			ids[row.ID] = true
+		}
+		require.False(t, ids[released.ID], "a released unbound launch is not a redrive candidate")
+		require.True(t, ids[head.ID], "the pending head is redriven every pass, not starved by released rows")
+	}
+}
+
 func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()

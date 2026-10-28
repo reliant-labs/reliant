@@ -243,7 +243,9 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	}
 	// Ordinary delivery recovery has its own budget. Capacity recovery rotates
 	// one head per scope by last-attempt time, so a large blocked pool cannot
-	// monopolize every tenant's redrive or expiry sweep.
+	// monopolize every tenant's redrive or expiry sweep. An unbound launch is a
+	// candidate only while it still holds its slot: a released one has nothing
+	// left to recover, and redriving it forever would starve the heads.
 	var rows []*TriggerEvent
 	err := db.Bun().NewRaw(`WITH ordinary AS (
  SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
@@ -257,7 +259,8 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
  SELECT id,capacity_redriven_at,created_at FROM heads
  UNION ALL
  SELECT id,capacity_redriven_at,created_at FROM trigger_events
- WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND created_at < ?0
+ WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND NOT capacity_released
+ AND created_at < ?0
 ), selected AS (
  SELECT id FROM candidates ORDER BY capacity_redriven_at NULLS FIRST,created_at,id LIMIT ?1
 ), touched AS (
