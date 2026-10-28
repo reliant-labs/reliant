@@ -76,13 +76,9 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# One release of reliant at a time on this machine: a second release.sh or
-# release-tag.sh fails here, naming who holds the lock, instead of racing the
-# first. Releases are the release train's job (control-plane's
-# scripts/release-train.sh); a chat labels its PR release:asap instead.
-# shellcheck source=scripts/lib/release-lock.sh
-. "$(dirname "$0")/lib/release-lock.sh"
-release_lock reliant "release.sh $RELEASE_TYPE" || exit $?
+# Releases are the release train's job (control-plane's scripts/release-train.sh);
+# a chat labels its PR release:asap instead. There is no release lock: the tag
+# push decides a race between two releases.
 
 # Check if there are uncommitted changes
 if ! git diff-index --quiet HEAD --; then

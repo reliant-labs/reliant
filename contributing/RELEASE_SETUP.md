@@ -28,10 +28,9 @@ both steps below:
    run` on the bump commit (or main's tip) every few hours, so no chat runs the
    40-70-minute gate itself.
 
-**To get a change released sooner, label its PR `release:asap`.** Both scripts take
-the machine-wide release lock (`scripts/lib/release-lock.sh`, in
-`~/fm-logs/release-locks/reliant.lock`): a second release fails at once, naming who
-holds the lock. The commands below are what the train runs, documented for whoever
+**To get a change released sooner, label its PR `release:asap`.** There is no release
+lock: the tag push decides a race (the remote refuses a second push of the same tag).
+The commands below are what the train runs, documented for whoever
 fixes it or cuts by hand in a prod incident (and says so to the owner).
 
 ## Quick Release Commands

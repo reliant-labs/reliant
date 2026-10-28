@@ -91,17 +91,10 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# One release of reliant at a time on this machine (release.sh takes the same
-# lock): a second tagger fails here, naming who holds it. A dry run only
-# reports a release in progress. Tagging is the release train's job
-# (control-plane's scripts/release-train.sh); a chat labels its PR release:asap.
-# shellcheck source=scripts/lib/release-lock.sh
-. "$(dirname "$0")/lib/release-lock.sh"
-if [[ "$DRY_RUN" == "true" ]]; then
-    release_lock_status reliant || echo -e "${YELLOW}  A real run would refuse now (above); the dry run continues.${NC}" >&2
-else
-    release_lock reliant "release-tag.sh ${REQUESTED_TAG:-<version on main>}" || exit $?
-fi
+# Tagging is the release train's job (control-plane's scripts/release-train.sh);
+# a chat labels its PR release:asap. There is no release lock: the tag push
+# decides a race between two taggers (the remote refuses a second push of the
+# same tag).
 
 # Everything below reasons about origin/main, never the local checkout. A
 # local `main` can be stale, ahead, or someone else's in-flight work; the tag
