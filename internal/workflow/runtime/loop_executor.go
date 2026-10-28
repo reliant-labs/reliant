@@ -45,6 +45,11 @@ type InlineLoopExecutor struct {
 	subWorkflowSemantics *RuntimeSemantics         // Core semantics for nested nodes in subWorkflow
 	invocationContract   *core.SubWorkflowContract // Core contract for this loop invocation
 
+	// pendingToolBatch is the execute_tools batch a relaunched spawn parked
+	// inside (a blocking ask_user wait); its first iteration re-enters it
+	// rather than calling the LLM (ask_user_handoff.go).
+	pendingToolBatch *PendingToolBatch
+
 	// prevIterOutputs holds the outputs from the previous loop iteration,
 	// made available as outputs.* in CEL expressions for inner nodes.
 	prevIterOutputs map[string]interface{}
@@ -882,6 +887,10 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		spawnRec.resumeArmed = false
 		e.startIteration = spawnRec.handoff.LoopIteration
 		e.awaitSpawnsFirst = spawnRec.handoff.AwaitSpawnsFirst
+		// Parked inside a blocking ask_user: the first iteration re-enters
+		// its execute_tools batch instead of calling the LLM again
+		// (ask_user_handoff.go).
+		e.pendingToolBatch = spawnRec.handoff.PendingToolBatch
 	}
 
 	// Resume-at-position: begin at the checkpointed iteration instead of 0.
@@ -998,6 +1007,9 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		if spawnRec != nil {
 			spawnRec.handoff.LoopIteration = e.iteration
 			spawnRec.handoff.AwaitSpawnsFirst = false
+			// A pending batch not yet re-entered stays with the spawn if it
+			// parks again here; any other is stale.
+			spawnRec.handoff.PendingToolBatch = e.pendingToolBatch
 			e.childTracker.refreshHandoffRequest(e.ctx)
 			if e.childTracker.handoffRequested {
 				return nil, e.parkSpawn(spawnRec, e.iteration, false)
@@ -1019,8 +1031,17 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		}
 		reenteredOnHint = false
 
-		// Execute this iteration
-		iterOutputs, err := e.executeIteration()
+		// Execute this iteration, re-entering a pending tool batch once.
+		var askUserHandoff *toolBatchHandoff
+		if spawnRec != nil {
+			askUserHandoff = &toolBatchHandoff{tracker: e.childTracker, rec: spawnRec, iteration: e.iteration}
+		}
+		pending := e.pendingToolBatch
+		e.pendingToolBatch = nil
+		if spawnRec != nil {
+			spawnRec.handoff.PendingToolBatch = nil
+		}
+		iterOutputs, err := e.executeIteration(askUserHandoff, pending)
 		if err != nil {
 			logFailure(e.logger, err, "[InlineLoop] Iteration failed, exiting loop",
 				"loopID", e.loopID,
@@ -1349,10 +1370,24 @@ func (e *InlineLoopExecutor) syncIterationInputs(iterInputs map[string]interface
 
 // executeIteration runs all nodes in the sub-workflow for a single iteration.
 // Returns the evaluated workflow outputs when complete.
-func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) {
+//
+// askUserHandoff is set on a background spawn's own agent loop; pending is the
+// tool batch a relaunched spawn parked inside, which this iteration re-enters
+// at its execute_tools: seeded with the node outputs that batch started from,
+// and triggered by the node that triggered it, so no call_llm runs.
+func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, pending *PendingToolBatch) (map[string]interface{}, error) {
 	// Create a fresh step outputs map for this iteration
 	// This is scoped to the sub-workflow execution
 	iterNodeOutputs := make(map[string]interface{})
+	if pending != nil {
+		for k, v := range pending.NodeOutputs {
+			iterNodeOutputs[k] = v
+		}
+		if askUserHandoff != nil {
+			progress := pending.Progress
+			askUserHandoff.resume = &progress
+		}
+	}
 
 	// Build iteration inputs from core semantic contract.
 	iterInputs, err := e.buildIterationInputs()
@@ -1398,7 +1433,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		WithPauseController(e.pauseCtrl).
 		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
 		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, e.GetThread())).
-		WithMakeThreadInterrupt(e.makeThreadInterrupt)
+		WithMakeThreadInterrupt(e.makeThreadInterrupt).
+		WithAskUserHandoff(askUserHandoff)
 
 	// Initialize with start event
 	events := []*core.WorkflowEvent{{
@@ -1409,6 +1445,19 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		StepID:       "", // Empty = workflow started
 		Data:         iterInputs,
 	}}
+	if pending != nil {
+		// Re-enter the parked batch: replay only the completion that
+		// triggered its execute_tools.
+		triggerData, _ := pending.NodeOutputs[pending.TriggerStepID].(map[string]interface{})
+		events = []*core.WorkflowEvent{{
+			ID:           fmt.Sprintf("loop-%s-iter%d-resume-%s", e.loopID, e.iteration, pending.TriggerStepID),
+			WorkflowID:   e.workflowID,
+			ChatID:       e.chatID,
+			WorkflowName: e.workflowIdentity(),
+			StepID:       pending.TriggerStepID,
+			Data:         triggerData,
+		}}
+	}
 	// Track running steps for this iteration
 	var runningSteps []*RunningStep
 

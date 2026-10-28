@@ -185,6 +185,11 @@ type SpawnHandoff struct {
 	// deterministic failure would otherwise give the parent the same report,
 	// and a turn to read it, on every one.
 	LastFailure string `json:"last_failure,omitempty"`
+	// PendingToolBatch is set when the spawn parked inside a blocking
+	// ask_user wait: the successor re-enters iteration LoopIteration at its
+	// execute_tools batch, with what already settled, instead of calling the
+	// LLM again (ask_user_handoff.go).
+	PendingToolBatch *PendingToolBatch `json:"pending_tool_batch,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -4503,8 +4508,14 @@ func executeToolsWithSpawnSupport(
 
 	var regularToolsFuture workflow.Future
 
+	// A batch a successor re-enters after its spawn parked in an ask_user
+	// wait resumes from what had settled: its regular tools, spawns and
+	// earlier answers are not run again (ask_user_handoff.go).
+	batchPark := toolBatchHandoffFrom(ctx)
+	resume := batchPark.takeResume()
+
 	// Execute regular tools via ExecuteTools activity
-	if len(split.regularToolCalls) > 0 {
+	if len(split.regularToolCalls) > 0 && resume == nil {
 		runRegular := func(refused map[string]string) workflow.Future {
 			regularNode := &reliantv1.Node{
 				Id:   evalNode.GetId(),
@@ -4548,7 +4559,11 @@ func executeToolsWithSpawnSupport(
 	// Execute spawn tool calls inline and combine with regular tool results
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
-	for _, spawnToolCall := range split.spawnToolCalls {
+	spawnToolCalls := split.spawnToolCalls
+	if resume != nil {
+		spawnToolCalls = nil
+	}
+	for _, spawnToolCall := range spawnToolCalls {
 		config, err := parseSpawnToolCall(ctx, spawnToolCall, rtx.WorkflowID)
 		if err != nil {
 			// Return error as a tool result so the LLM can learn and retry
@@ -4566,12 +4581,13 @@ func executeToolsWithSpawnSupport(
 	resultFuture, resultSettable := workflow.NewFuture(ctx)
 
 	workflow.Go(ctx, func(gCtx workflow.Context) {
-		var combinedResults []interface{}
-		var messageOutput map[string]interface{}
-		var grantedTools []interface{}
+		var progress toolBatchProgress
+		if resume != nil {
+			progress = *resume
+		}
 
 		// Include any spawn parse errors as tool results
-		combinedResults = append(combinedResults, spawnParseErrors...)
+		progress.Results = append(progress.Results, spawnParseErrors...)
 
 		// Wait for regular tools first (if any)
 		if regularToolsFuture != nil {
@@ -4581,10 +4597,10 @@ func executeToolsWithSpawnSupport(
 				return
 			}
 			if result.messageOutput != nil {
-				messageOutput = result.messageOutput
+				progress.MessageOutput = result.messageOutput
 			}
-			combinedResults = append(combinedResults, result.toolResults...)
-			grantedTools = result.grantedTools
+			progress.Results = append(progress.Results, result.toolResults...)
+			progress.GrantedTools = result.grantedTools
 		}
 
 		// Every spawn dispatches detached. Each call to dispatchSpawnBackground
@@ -4594,7 +4610,7 @@ func executeToolsWithSpawnSupport(
 		// multiple spawns so prep for one does not gate prep for another.
 		if len(spawnConfigs) == 1 {
 			result := dispatchSpawnBackground(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl, threadInterruptFactory)
-			combinedResults = append(combinedResults, result.toToolResult())
+			progress.Results = append(progress.Results, result.toToolResult())
 		} else if len(spawnConfigs) > 1 {
 			resultCh := workflow.NewChannel(gCtx)
 			for _, cfg := range spawnConfigs {
@@ -4607,7 +4623,7 @@ func executeToolsWithSpawnSupport(
 			for range spawnConfigs {
 				var result *spawnInlineResult
 				resultCh.Receive(gCtx, &result)
-				combinedResults = append(combinedResults, result.toToolResult())
+				progress.Results = append(progress.Results, result.toToolResult())
 			}
 		}
 
@@ -4619,24 +4635,33 @@ func executeToolsWithSpawnSupport(
 			tracker:   childTracker,
 			interrupt: resolveThreadInterrupt(threadInterruptFactory, nil, rtx.Thread),
 		}
-		for _, askTC := range split.askUserToolCalls {
+		// A background spawn's blocking wait can park the spawn for a
+		// continue-as-new handoff, carrying what this batch has settled
+		// (ask_user_handoff.go); a resumed batch starts at its first
+		// unsettled ask_user.
+		for i := progress.NextAsk; i < len(split.askUserToolCalls); i++ {
+			progress.NextAsk = i
+			if batchPark != nil {
+				askThreadInput.park = &askUserPark{batch: batchPark, progress: progress}
+			}
+			askThreadInput.resumeBlocking = resume != nil && i == resume.NextAsk
 			result := executeAskUserInline(
-				gCtx, askTC,
+				gCtx, split.askUserToolCalls[i],
 				rtx.ChatID, rtx.WorkflowID, rtx.Thread,
 				rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration,
 				IsUnattended(workflowInputs),
 				askThreadInput,
 				logger,
 			)
-			combinedResults = append(combinedResults, result)
+			progress.Results = append(progress.Results, result)
 		}
 
 		// Return in ExecuteToolsOutput format. The regular batch's load_tool
 		// grants ride along: the step completion records them for the thread
 		// whichever way the batch was assembled.
-		finalResult := buildFinalToolResult(combinedResults, messageOutput)
-		if len(grantedTools) > 0 {
-			finalResult["granted_tools"] = grantedTools
+		finalResult := buildFinalToolResult(progress.Results, progress.MessageOutput)
+		if len(progress.GrantedTools) > 0 {
+			finalResult["granted_tools"] = progress.GrantedTools
 		}
 		resultSettable.SetValue(finalResult)
 	})
@@ -4754,7 +4779,7 @@ func executeAskUserInline(
 	// Async — the default: post the question and return at once
 	// (askUserAsync). The rule is versioned per call (askUserIsAsync), so a
 	// history recorded when a call without a flag blocked replays that wait.
-	if askUserIsAsync(ctx, toolCallID, toolInput) {
+	if !thread.resumeBlocking && askUserIsAsync(ctx, toolCallID, toolInput) {
 		metaObj["async"] = true
 		asyncMeta, _ := json.Marshal(metaObj)
 		return askUserAsync(ctx, toolCallID, askUserQuestionInput{
@@ -4841,8 +4866,18 @@ func executeAskUserInline(
 		cancelTimer()
 	})
 
+	// A handoff requested while this waits parks the spawn here, with the
+	// question still pending; the successor reattaches to it. The wait goes
+	// on meanwhile, and a wait that ends before the handoff unparks it.
+	parkCtx, stopParkWatch := workflow.WithCancel(ctx)
+	parked := awaitAskUserPark(parkCtx, createOutput.QuestionID, thread.park)
+
 	selector.Select(ctx)
 	stopYieldWatch()
+	stopParkWatch()
+	if *parked {
+		thread.park.batch.unpark()
+	}
 
 	// An answer that landed in the same moment as the yield wins: the user
 	// did answer, and the answer is what the model asked for.
