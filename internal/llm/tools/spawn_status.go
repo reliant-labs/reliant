@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -454,12 +455,22 @@ func (s *spawnStatusTool) waitForTerminal(rctx *rctx.ToolContext, params SpawnSt
 
 	thread, err := s.repo.GetThread(rctx.Context, params.AgentID)
 	if err != nil || thread == nil {
+		// Completion can preempt the call during its very first read, not
+		// just inside the polling loop. Retry only a cancelled read, never
+		// an unrelated store failure that happens to coincide with it.
+		if rctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			return s.stoppedEarly(rctx, nil, params, time.Since(start))
+		}
 		return NewTextErrorResponse(fmt.Sprintf("Agent %q could not be found.", params.AgentID)), nil
 	}
 
 	for {
 		if core.ThreadStatusIsTerminal(thread.Status) {
-			return s.terminalResponse(rctx, thread, params, time.Since(start))
+			// The completion report itself can cancel the wait while reading
+			// its answer, even if the status read beat it by a moment.
+			checkCtx, cancel := context.WithTimeout(context.WithoutCancel(rctx.Context), stoppedEarlyCheckTimeout)
+			defer cancel()
+			return s.terminalResponse(rctx.WithContext(checkCtx), thread, params, time.Since(start))
 		}
 
 		if time.Now().After(deadline) {
@@ -533,6 +544,11 @@ func (s *spawnStatusTool) stoppedEarly(rctx *rctx.ToolContext, thread *db.Thread
 		if core.ThreadStatusIsTerminal(thread.Status) {
 			return s.terminalResponse(settle, thread, params, waited)
 		}
+	}
+	if thread == nil {
+		// The initial read was cancelled and the bounded last look could not
+		// establish that the agent exists. Do not invent a running state.
+		return NewTextErrorResponse(fmt.Sprintf("Agent %q could not be found.", params.AgentID)), nil
 	}
 
 	output := fmt.Sprintf(
