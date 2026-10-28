@@ -140,6 +140,7 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 	}
 	for file, want := range map[string]string{
 		"scripts/release-gate.sh": "task generate:docs:check",
+		"scripts/merge-gate.sh":   "task generate:docs",
 	} {
 		if !strings.Contains(string(read(file)), want) {
 			t.Errorf("%s must run `%s` (the docs-generate check)", file, want)

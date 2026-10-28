@@ -11,20 +11,22 @@
 #   --amend       a regenerate that changes only generated paths is amended
 #                 into HEAD instead of failing (the merge queue's mode: the
 #                 merge with main can leave generated files a step behind)
-#   --regen       repair generation after conflict resolution, but only when
-#                 generator inputs changed (full validation is release-only)
+#   --regen       run forge generate even if no forge input changed (the
+#                 merge queue resolved a generated-file conflict)
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
 #   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
-#   docs/Electron/production renderer/full fallbacks: RELEASE ONLY
+#   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      compile (go list -export: no link) every package whose build
 #              contains a change (the plan's go.build), or ./... on a full Go lane
 #   test       tools/test-affected run -plan <the plan> (-short, cached, no
-#              -race): the changed packages and their DIRECT importers, and the
-#              vitest files within two imports of a changed module; deeper
-#              dependents run in the release gate (MG_REACH=all for all). A Go
+#              -race): the changed packages and their DIRECT importers, the
+#              vitest files within two imports of a changed module, and the
+#              electron tests when electron/ changed; deeper dependents run in
+#              the release gate (MG_REACH=all for all). A change the rules cannot
+#              scope (go.mod, package.json, config) runs its whole lane. A Go
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
@@ -37,7 +39,7 @@
 #              like build and test it starts after the generators in --amend
 #              mode, so it reads the amended tree (lint reads generated files
 #              such as gen/forge_descriptor.json)
-#   migsafety  forge lint --migration-safety, only when a migration changed
+#   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
@@ -205,11 +207,17 @@ gen_forge() {
   judge generate "$b" "$wt" || return 1
   (cd "$wt" && GOMAXPROCS=$gen_procs "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
 }
+gen_docs() {
+  local wt=$1 b
+  b=$(cd "$wt" && snapshot)
+  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:docs) || return 1
+  judge docs "$b" "$wt"
+}
 
 # ── plan ──────────────────────────────────────────────────────────────────
 # The merge tier's Go fan-out: direct importers only (owner, 2026-10-24).
 reach=${MG_REACH:-direct}
-phase plan go run ./tools/test-affected plan -merge -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
+phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 # Fail closed: without jq, or with a plan it cannot parse, every lane would read
 # as "not selected" and be silently skipped.
@@ -222,12 +230,11 @@ load_selection() {
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
   elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
-  # --regen repairs a conflict only when actual generator inputs changed.
-  [ "$regen" = 1 ] && [ "$fgen" = true ] && hooks_only=false
+  [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
   # vitest strips types: every changed web source needs tsc, tested or not.
   typecheck=false
-  if echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
@@ -262,6 +269,7 @@ prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
+  if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' "${need[@]}" | sort -u); do
     npm_install "$d" & npm_pids+=($!)
@@ -290,6 +298,7 @@ gen_procs=$quarter; [ "$inplace" = 1 ] && gen_procs=$gate_cpus
 # Every consumer, including gate-verify, uses the regenerated-tree plan.
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
+  [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
   # --amend: fold what the generators rewrote (judge allowed generated paths
   # only) into HEAD before anything builds or tests it.
   if [ "$amend" = 1 ] && [ "$fail" = 0 ] && [ -n "$(git status --porcelain)" ]; then
@@ -298,7 +307,7 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
   # Dirty-tree generation can expand reach too, even without --amend.
   if [ "$fail" = 0 ]; then
-    phase plan-2 go run ./tools/test-affected plan -merge -json -reach "$reach" -base "$base" || fail=1
+    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
     if [ "$fail" = 0 ]; then
       sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"
       run_plan=$L/plan-2.json
@@ -318,6 +327,9 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
 elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
     if scratch gen; then phase generate gen_forge "$SCRATCH" & pids+=($!); else fail=1; fi
+  fi
+  if [ "$dgen" = true ]; then
+    if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
 # build_check: compile, without linking, every package whose build contains a
@@ -349,7 +361,7 @@ lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-mark
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes go,web -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
@@ -365,11 +377,13 @@ if [ "$fail" = 0 ]; then
   phase proto task proto:lint & pids+=($!)
   # Build reach includes ordinary production packages with no test binary.
   # Keep test-only changes too: vet checks their tests even when Build is empty.
-  mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
+  if [ "$gofull" = true ]; then vet_pkgs=(./...); else
+    mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
+  fi
   if [ ${#vet_pkgs[@]} -gt 0 ]; then
     phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
   fi
-  if echo "$files" | grep -qE '^db/migrations/'; then
+  if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator
@@ -406,7 +420,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-tools-protoc-gen-es generate plan-2 build test typecheck lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
@@ -414,7 +428,6 @@ end=$(date +%s)
   echo
   echo "wall: $((end - t0))s in the slot, after ${slot_wait}s queued for it; diff base $(git rev-parse --short "$base")"
   for n in "${notes[@]}"; do echo "- $n"; done
-  jq -r '.release_deferred[]? | "- release-deferred: " + .' "$run_plan"
   echo "head: $(git rev-parse --short HEAD)  logs: $L"
 } >"$L/summary.md"
 cat "$L/summary.md"

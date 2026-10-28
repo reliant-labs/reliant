@@ -111,19 +111,17 @@ type MigOrderPlan struct {
 
 // Plan is the whole decision.
 type Plan struct {
-	Schema          int          `json:"schema"`
-	InputDigest     string       `json:"input_digest"`
-	Merge           bool         `json:"merge,omitempty"`
-	ReleaseDeferred []string     `json:"release_deferred,omitempty"`
-	Base            string       `json:"base"`
-	Head            string       `json:"head"`
-	Files           []FileReport `json:"files"`
-	Go              GoPlan       `json:"go"`
-	Web             WebPlan      `json:"web"`
-	Electron        ElectronPlan `json:"electron"`
-	ForgeGen        ForgeGenPlan `json:"forge_generate"`
-	DocGen          DocGenPlan   `json:"docs_generate"`
-	MigOrder        MigOrderPlan `json:"migration_order"`
+	Schema      int          `json:"schema"`
+	InputDigest string       `json:"input_digest"`
+	Base        string       `json:"base"`
+	Head        string       `json:"head"`
+	Files       []FileReport `json:"files"`
+	Go          GoPlan       `json:"go"`
+	Web         WebPlan      `json:"web"`
+	Electron    ElectronPlan `json:"electron"`
+	ForgeGen    ForgeGenPlan `json:"forge_generate"`
+	DocGen      DocGenPlan   `json:"docs_generate"`
+	MigOrder    MigOrderPlan `json:"migration_order"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs from its lockfile (`npm ci`, or pnpm's
 	// --frozen-lockfile) before any test runs.
@@ -219,6 +217,8 @@ type classifier struct {
 	pl        *Plan
 
 	full map[lane][]string
+	// buildAll is set by a deleted Go package (buildsModule).
+	buildAll bool
 
 	code     *reasons // package whose built code changed: fans out to importers' tests
 	embed    *reasons // package whose embedded file changed: fans out like code
@@ -331,6 +331,15 @@ func (c *classifier) attribute(ch Change) {
 	if !ch.Deleted && isMigrationPath(ch.Path) {
 		rep.Rules = append(rep.Rules, "migration-order")
 		c.full[laneMigOrder] = append(c.full[laneMigOrder], ch.Path+": a migration must be versioned above origin/main's newest")
+	}
+	if len(matched) == 0 && !owned && c.deletedPackage(ch) {
+		// A whole Go package is gone. Each importer had to change with it, and
+		// those changes select their own tests; one that still imports it no
+		// longer compiles, so the module is compiled rather than every lane
+		// run.
+		c.buildAll = true
+		owned = true
+		rep.Note = "deleted Go package: its importers changed with it; the whole module is compiled"
 	}
 	if len(matched) == 0 && !owned {
 		why := fmt.Sprintf("%s: claimed by no rule and no Go package (fail-safe)", ch.Path)
@@ -684,7 +693,20 @@ func (c *classifier) selectGo() {
 				gp.Build = append(gp.Build, dot(p))
 			}
 		}
+		if c.buildAll {
+			gp.Build = []string{"./..."}
+		}
 	}
+}
+
+// deletedPackage reports whether ch deletes a Go file whose directory no
+// longer holds a package at all.
+func (c *classifier) deletedPackage(ch Change) bool {
+	if !ch.Deleted || !strings.HasSuffix(ch.Path, ".go") {
+		return false
+	}
+	_, ok := c.g.DirPkg[path.Dir(ch.Path)]
+	return !ok
 }
 
 func (c *classifier) selectWeb() {

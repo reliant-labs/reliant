@@ -69,7 +69,6 @@ func main() {
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
 	full := fs.Bool("full", false, "run everything (also TEST_FULL=1)")
-	merge := fs.Bool("merge", false, "merge policy: no release-only lanes or full test fallbacks")
 	lanes := fs.String("lanes", defaultLanes, "comma-separated lanes to consider")
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
@@ -115,15 +114,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
 		os.Exit(1)
 	}
-	if *merge {
-		for _, reason := range pl.Go.Reasons {
-			if strings.HasPrefix(reason, "cannot ") {
-				fmt.Fprintln(os.Stderr, "merge plan unavailable:", reason)
-				os.Exit(1)
-			}
-		}
-		mergeTier(pl)
-	}
 	enabled := laneSet(*lanes)
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -139,10 +129,6 @@ func main() {
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
 			os.Exit(2)
-		}
-		// Merge timing is gate health, never attribution to the batched PRs.
-		if pl.Merge {
-			r.owned = nil
 		}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
@@ -714,7 +700,7 @@ func (r *runner) goSteps(pl *Plan) []step {
 		return nil
 	}
 	s := step{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}
-	if r.budget > 0 || pl.Merge {
+	if r.budget > 0 {
 		// -json right after "test": the filter turns it back into plain
 		// go test output and times each test.
 		s.argv = append([]string{"go", "test", "-json"}, s.argv[2:]...)
