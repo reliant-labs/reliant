@@ -67,9 +67,12 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 			}
 			continue
 		}
-		// A delivery that failed to launch can expire. A durable intent waiting
-		// for workflow capacity must never be discarded merely for waiting.
-		if ev.CapacityOrder == nil && ev.CreatedAt.Before(now.Add(-redriveGiveUp)) {
+		// An event that has not launched within redriveGiveUp expires, a delivery
+		// that failed to launch and an intent queued for workflow capacity alike:
+		// a queue that never drains must surface as failed events, not grow forever.
+		// A launched capacity start still awaiting its binding is not waiting: it
+		// keeps being redriven so its slot is bound or recovered.
+		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
 				"the event was never launched; it is too old to start now"); err != nil {
 				errs = append(errs, err)
@@ -103,8 +106,8 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
 				if err != nil {
 					errs = append(errs, err)
-				} else if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
-					errs = append(errs, err)
+				} else {
+					reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
 				}
 			}
 		}

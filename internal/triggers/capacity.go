@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -77,9 +78,7 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if err != nil {
 		return err
 	}
-	if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
-		return err
-	}
+	reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
 	previous := spec.Guard
 	spec.Guard = func(ctx context.Context) (string, error) {
 		allowed, err := repo.CanLaunchTriggerCapacity(ctx, enrolled.ID, scope, n)
@@ -99,14 +98,16 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	return nil
 }
 
-func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) error {
-	var errs []error
+// reconcileCapacityExecutions frees the slots whose runs have finished. A row
+// that cannot be reconciled is logged and keeps its slot; it never fails the
+// fire, or one bad row would stop every launch in its scope.
+func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) {
 	for _, execution := range occupied {
 		if err := reconcileCapacityExecution(ctx, repo, descriptions, execution); err != nil {
-			errs = append(errs, err)
+			slog.WarnContext(ctx, "workflow capacity: cannot reconcile an occupied slot; it stays held",
+				"event_id", execution.EventID, "workflow_id", execution.WorkflowID, "error", err)
 		}
 	}
-	return errors.Join(errs...)
 }
 
 func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
@@ -117,14 +118,22 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")
 		if err != nil {
 			var missing *serviceerror.NotFound
-			if execution.FirstRunID == "" && errors.As(err, &missing) {
+			if !errors.As(err, &missing) {
+				// An outage is uncertainty: hold the slot and look again on the next fire.
+				continue
+			}
+			if execution.FirstRunID == "" {
 				if err := recoverMissingCapacityStart(ctx, repo, descriptions, execution); err != nil {
 					return err
 				}
+				continue
 			}
-			// Unknown state cannot release capacity. A namespace outage or
-			// expired history requires explicit fenced operator resolution,
-			// never an elapsed-time guess that might over-admit live work.
+			// A bound chain Temporal no longer knows has closed and aged past
+			// namespace retention: Temporal deletes only closed histories. Holding
+			// it would wedge the scope forever, so release it.
+			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
+				return fmt.Errorf("release workflow capacity: %w", err)
+			}
 			continue
 		}
 		info := desc.GetWorkflowExecutionInfo()

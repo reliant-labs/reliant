@@ -1,4 +1,4 @@
-# Generic trigger capacity — draft, not released
+# Generic trigger capacity
 
 Opt-in YAML:
 
@@ -16,12 +16,17 @@ parallel loop iterations.
 A paused or uncertain execution retains its slot. Only a matching immutable
 Temporal workflow ID / FirstRunId chain with an observed terminal status frees
 capacity. The chain includes Continue-As-New, retries, resets and cron. UI/chat
-status is not release evidence. An outage or missing chain holds capacity.
+status is not release evidence. An outage holds capacity; a bound chain Temporal
+reports NotFound has closed and aged past retention (Temporal deletes only closed
+histories), so it is released. A row that cannot be reconciled is logged and keeps
+its slot; it never fails the fire, so one bad row cannot stop a scope.
 
 The launch transaction atomically claims capacity and creates the chat. A
 Temporal memo carries the event ID to recover an accepted start whose binding
 reply was lost; admitted launches reject duplicate workflow-ID reuse. Queued
-intents do not expire under the inbound delivery age limit. Existing redrive
+intents expire after the same 24h give-up as any undelivered event (a queue that
+never drains surfaces as failed events); a launched start awaiting its binding is
+still redriven. Existing redrive
 retries pending work, including scheduled intents and missing launch bindings.
 
 No PR-specific subjects, verdicts, author registries or review tables are used.
@@ -48,7 +53,7 @@ No PR-specific subjects, verdicts, author registries or review tables are used.
 
 ## Fenced operator recovery (not an automatic expiry)
 
-If Temporal history expired or a start is permanently unverifiable, capacity
+If a start is permanently unverifiable (unbound, with an uncertain root), capacity
 stays occupied. Never release merely because time elapsed or the UI says done.
 An authorized operator must first fence launch retries (the root must no longer
 be PENDING), terminate/verify absence of the external execution, and record
@@ -86,7 +91,5 @@ execution retains its slot and is memo-bound on a later pass. A pending retry
 that wins the failed-start CAS prevents release. Namespace/transport errors
 never count as absence.
 
-Draft PR #1734 is not activated, merged or released. Independent review,
-current-main integration, actual Temporal restart/retention tests, complete manual
-start/alias semantics and retention/deletion audit remain acceptance work. Do
-not call this finished or enable the workflow cap before those checks.
+Shipped in #1734; the expiry, NotFound and per-row fixes followed the 2026-10-28
+audit (research/2026-10-28-audit-reliant.md B1/B2).

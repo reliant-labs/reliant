@@ -23,18 +23,23 @@ func (r *capacityRedriveRepo) SettlePendingTriggerEvent(_ context.Context, id st
 	return true, nil
 }
 
-func TestCapacityQueueNeverExpiresAsDelivery(t *testing.T) {
+// A queued capacity intent expires after redriveGiveUp like any undelivered
+// event, so a queue that never drains surfaces instead of growing forever. A
+// launched start awaiting its binding is not waiting and keeps being redriven.
+func TestCapacityQueueExpiresButLaunchedStartIsRedriven(t *testing.T) {
 	now := time.Now().UTC()
 	triggerID := "activation"
 	order := int64(1)
 	repo := &capacityRedriveRepo{events: []*core.TriggerEvent{
-		{ID: "capacity", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "capacity", CreatedAt: now.Add(-48 * time.Hour), CapacityOrder: &order},
-		{ID: "ordinary-delivery", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "ordinary", CreatedAt: now.Add(-48 * time.Hour)},
+		{ID: "queued-old", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "queued-old", Outcome: core.TriggerEventPending, CreatedAt: now.Add(-48 * time.Hour), CapacityOrder: &order},
+		{ID: "queued-fresh", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "queued-fresh", Outcome: core.TriggerEventPending, CreatedAt: now.Add(-time.Hour), CapacityOrder: &order},
+		{ID: "launched-unbound", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "launched", Outcome: core.TriggerEventLaunched, CreatedAt: now.Add(-48 * time.Hour), CapacityOrder: &order},
+		{ID: "ordinary-delivery", TriggerID: &triggerID, Kind: core.TriggerEventKindIntegration, DedupeKey: "ordinary", Outcome: core.TriggerEventPending, CreatedAt: now.Add(-48 * time.Hour)},
 	}}
 	starter := &recordingStarter{}
 	redriver := NewRedriver(repo, starter, "")
 	redriver.now = func() time.Time { return now }
 	require.NoError(t, redriver.RedriveOnce(context.Background()))
-	require.Equal(t, []string{"ordinary-delivery"}, repo.settled)
-	require.Len(t, starter.snapshot(), 1, "intentional capacity wait must be retried, not expired")
+	require.Equal(t, []string{"queued-old", "ordinary-delivery"}, repo.settled)
+	require.Len(t, starter.snapshot(), 2, "the fresh queued intent and the launched start are redriven")
 }
