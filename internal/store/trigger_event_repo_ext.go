@@ -251,10 +251,15 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 ), heads AS (
  SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
  FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
- AND (outcome = 'pending' OR (outcome = 'launched' AND capacity_first_run_id IS NULL))
+ AND outcome = 'pending'
  ORDER BY user_id,capacity_project_id,capacity_workflow_ref,capacity_order
+), candidates AS (
+ SELECT id,capacity_redriven_at,created_at FROM heads
+ UNION ALL
+ SELECT id,capacity_redriven_at,created_at FROM trigger_events
+ WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND created_at < ?0
 ), selected AS (
- SELECT id FROM heads ORDER BY capacity_redriven_at NULLS FIRST,created_at,id LIMIT ?1
+ SELECT id FROM candidates ORDER BY capacity_redriven_at NULLS FIRST,created_at,id LIMIT ?1
 ), touched AS (
  UPDATE trigger_events SET capacity_redriven_at = now() WHERE id IN (SELECT id FROM selected) RETURNING id
 )

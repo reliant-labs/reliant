@@ -80,6 +80,28 @@ func TestTriggerCapacityRedriveFairnessPreservesOrdinaryDeliveryBudget(t *testin
 	require.False(t, seen["blocked-001"], "only the oldest pending head of a blocked scope is redriven")
 }
 
+func TestTriggerCapacityUnboundStartDoesNotHidePendingScopeHead(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	first, second := capacityEvent("unbound-first"), capacityEvent("pending-second")
+	first.CreatedAt = time.Now().Add(-time.Hour)
+	second.CreatedAt = first.CreatedAt
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, first, scope))
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, second, scope))
+	claimed, err := claimCapacity(ctx, env, first.ID, scope, 2)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	rows, err := store.ListStalePendingTriggerEvents(ctx, env.ORM, time.Now(), 10)
+	require.NoError(t, err)
+	ids := map[string]bool{}
+	for _, row := range rows {
+		ids[row.ID] = true
+	}
+	require.True(t, ids[first.ID], "unbound launch recovery remains reachable")
+	require.True(t, ids[second.ID], "pending scope head must not disappear behind an unbound launch")
+}
+
 func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()

@@ -161,7 +161,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil && existing.CapacityOrder != nil && maxRunning == 0 {
+	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && maxRunning == 0 {
 		return f.recordSkip(ctx, trigger, req, "queued workflow capacity policy was removed")
 	}
 	if maxRunning == 0 && enforcePolicy && sched.SkipOnOverlap() {

@@ -55,23 +55,6 @@ func NewRedriver(repo EventRepo, starter WorkflowStarter, taskQueue string) *Red
 // names the event's fire id, so racing starts collapse into one execution.
 func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	now := r.now()
-	// Reconcile occupied permits even when nobody is queued, before the
-	// server's finite execution retention can erase terminal evidence.
-	if repo, ok := r.repo.(capacityRepository); ok {
-		if batch, ok := r.repo.(interface {
-			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
-		}); ok {
-			if descriptions, ok := r.starter.(capacityDescriptions); ok {
-				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
-				if err != nil {
-					return err
-				}
-				if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
-					return err
-				}
-			}
-		}
-	}
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {
 		return err
@@ -109,6 +92,21 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		}
 		if err := StartEventFire(ctx, r.starter, ev.ID, input, r.taskQueue); err != nil {
 			errs = append(errs, err)
+		}
+	}
+	// Capacity reconciliation cannot prevent unrelated delivery recovery.
+	if repo, ok := r.repo.(capacityRepository); ok {
+		if batch, ok := r.repo.(interface {
+			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
+		}); ok {
+			if descriptions, ok := r.starter.(capacityDescriptions); ok {
+				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
+				if err != nil {
+					errs = append(errs, err)
+				} else if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
+					errs = append(errs, err)
+				}
+			}
 		}
 	}
 	return errors.Join(errs...)

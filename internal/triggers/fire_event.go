@@ -157,7 +157,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return nil, err
 	}
-	if ev.CapacityOrder != nil && maxRunning == 0 {
+	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && maxRunning == 0 {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
 	if maxRunning > 0 {

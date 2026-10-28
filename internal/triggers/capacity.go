@@ -99,7 +99,17 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 }
 
 func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) error {
+	var errs []error
 	for _, execution := range occupied {
+		if err := reconcileCapacityExecution(ctx, repo, descriptions, execution); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
+	for _, execution := range []store.TriggerCapacityExecution{execution} {
 		if execution.WorkflowID == "" {
 			continue
 		}
