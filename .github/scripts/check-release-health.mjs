@@ -114,9 +114,9 @@ export function releaseChannel(tag) {
   return PRERELEASE_TAG.test(tag) ? "alpha" : "latest";
 }
 
-/** The manifests Finalize purges: macOS, Windows (named after the channel alone), Linux. */
+/** The manifests Finalize purges: macOS, Windows (named after the channel alone), Linux x64, Linux arm64. */
 export function feedFiles(channel) {
-  return [`${channel}-mac.yml`, `${channel}.yml`, `${channel}-linux.yml`];
+  return [`${channel}-mac.yml`, `${channel}.yml`, `${channel}-linux.yml`, `${channel}-linux-arm64.yml`];
 }
 
 export function parseFeedVersion(text) {

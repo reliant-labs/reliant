@@ -13,6 +13,16 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.7" description="October 28, 2026">
+### Stop runs waiting on usage limits, and dependable workflow capacity
+
+- **Stop a run that is waiting on a usage limit** The run page now offers Stop while a run waits for a provider usage limit to reset, as the chat view already did. get_run and list_runs report the wait, and recovered trigger failures show when they happened.
+- **Workflow capacity limits keep draining** A workflow using concurrency.max_running no longer holds a slot forever for a run whose history has expired. One record that cannot be reconciled no longer blocks the rest of the queue, and queued trigger events expire after 24 hours like any other undelivered event.
+- **Redact more secrets from telemetry** Error reports and traces now redact environment-style secret names such as DATABASE_PASSWORD= and STRIPE_SECRET_KEY=, values passed to flags such as --password and --api-key, AWS secret keys, and whole PEM private-key blocks.
+- **Follow traces between the browser and the backend** Trace views show links between a browser trace and the backend traces it caused, in both directions. When related evidence is missing, the view says whether the time range, sampling or retention is the reason.
+- **Verify every release artifact after publishing** The release pipeline now checks that every desktop installer and archive is downloadable and that every update feed reads the new version before it reports success.
+</Update>
+
 <Update label="v1.8.6" description="October 28, 2026">
 ### Reliable question handoffs and queued workflow capacity
 
