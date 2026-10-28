@@ -76,7 +76,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	existing, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
 	switch {
 	case err == nil:
-		if existing.Outcome != core.TriggerEventLaunched && !(existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil) {
+		if existing.Outcome != core.TriggerEventLaunched && (existing.Outcome != core.TriggerEventPending || existing.CapacityOrder == nil) {
 			return outputFromEvent(existing), nil
 		}
 	case errors.Is(err, core.ErrTriggerEventNotFound):
