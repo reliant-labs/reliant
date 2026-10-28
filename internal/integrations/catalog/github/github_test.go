@@ -30,7 +30,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
-	_ "github.com/reliant-labs/reliant/internal/integrations/githubqueue" // Exercise the shipped native executor alongside REST actions.
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
@@ -954,7 +953,6 @@ var minimal = map[string]map[string]any{
 	"labels.create":           {"owner": "acme", "repo": "app", "name": "bug"},
 	"labels.list":             {"owner": "acme", "repo": "app"},
 	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
-	"pr.enqueue":              {"owner": "acme", "repo": "app", "repository_id": 101, "pull_number": 1, "expectedHeadOid": strings.Repeat("a", 40)},
 	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
 	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comments.list": {"owner": "acme", "repo": "app", "pull_number": 1},
@@ -1041,7 +1039,7 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 		for _, tc := range errorCases {
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				f := newFake(t)
-				h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					for k, v := range tc.headers {
 						w.Header().Set(k, v)
 					}
@@ -1049,42 +1047,12 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 					w.WriteHeader(tc.status)
 					_, _ = w.Write([]byte(tc.body))
 				})
-				if id == "pr.enqueue" {
-					f.on("POST", "/graphql", h)
-				} else {
-					f.srv.Config.Handler = h
-				}
 				res := f.run(id, params)
 				assert.True(t, res.IsError, "a %d is an error result", tc.status)
 				assert.Equal(t, tc.status, res.StatusCode)
 				assert.Equal(t, tc.retryable, res.Retryable, "retryable for %s: %s", tc.name, res.Content)
-				if id == "pr.enqueue" {
-					// The native executor deliberately returns fixed safe prose,
-					// not the REST runner's provider-detail mapping. Still drive
-					// every status through it and assert its complete contract.
-					outcome := "failed"
-					content := "GitHub could not enqueue this open, non-draft pull request on its default branch. Check repository access, native queue availability and required rules."
-					if tc.retryable {
-						outcome = "unavailable"
-						content = "Queue outcome is unavailable. Retry to read current queue membership before another enqueue attempt."
-					}
-					assert.Equal(t, outcome, res.Data["outcome"])
-					assert.Equal(t, false, res.Data["accepted"])
-					assert.Equal(t, content, res.Content)
-					if tc.status == 403 && tc.retryable || tc.status == 429 {
-						assert.GreaterOrEqual(t, res.Data["retry_after_seconds"].(float64), float64(1))
-						assert.LessOrEqual(t, res.Data["retry_after_seconds"].(float64), float64(3600))
-					} else {
-						assert.NotContains(t, res.Data, "retry_after_seconds")
-					}
-					req := f.only()
-					assert.Equal(t, "POST", req.Method)
-					assert.Equal(t, "/graphql", req.Path)
-					assert.Contains(t, req.Body["query"], "query ReliantQueueSubject")
-				} else {
-					for _, want := range tc.contains {
-						assert.Contains(t, res.Content, want)
-					}
+				for _, want := range tc.contains {
+					assert.Contains(t, res.Content, want)
 				}
 				assert.NotContains(t, res.Content, token)
 			})

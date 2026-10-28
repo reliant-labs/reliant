@@ -9,17 +9,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 )
 
-func TestEnqueuePlanRecordsReceiptWithoutReviewAuthority(t *testing.T) {
-	p := planFor("github", "pr.enqueue", map[string]any{"owner": "Acme", "repo": "App", "pull_number": float64(42)})
-	assert.Equal(t, "github:acme/app#42", p.target)
-	assert.Empty(t, p.correlation.ObjectKind)
-	assert.Empty(t, p.correlation.Events)
-	target, objectID, url := p.completion(map[string]any{"queue_entry_id": "MQE_1"})
-	assert.Empty(t, target)
-	assert.Equal(t, "MQE_1", objectID)
-	assert.Empty(t, url)
-}
-
 func TestPlanForEveryMutatingGitHubAction(t *testing.T) {
 	base := map[string]any{"owner": "Acme", "repo": "App"}
 	with := func(extra map[string]any) map[string]any {

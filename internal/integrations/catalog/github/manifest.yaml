@@ -109,7 +109,6 @@ actions:
   - $ref: actions/pr.list_files.yaml
   - $ref: actions/pr.review.create.yaml
   - $ref: actions/pr.create.yaml
-  - $ref: actions/pr.enqueue.yaml
   - $ref: actions/pr.update.yaml
   - $ref: actions/pr.reviews.list.yaml
   - $ref: actions/pr.review_comments.list.yaml

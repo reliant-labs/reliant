@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (27 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (70 tools)
+- [Other Tools](#other-tools) (69 tools)
 
 ---
 
@@ -2169,7 +2169,6 @@ _Miscellaneous tools and utilities._
 | [`github__labels_create`](#github__labels_create) | integration | Create a label in a repository with a name, a six-digit hex color and an optional description. It... |
 | [`github__labels_list`](#github__labels_list) | integration | List the labels defined in a repository (not the labels on one issue), following GitHub's paginat... |
 | [`github__pr_create`](#github__pr_create) | integration | Open a pull request merging head into base. The head branch must already be pushed (from a worksp... |
-| [`github__pr_enqueue`](#github__pr_enqueue) | integration | Enqueue an open, non-draft, same-repository pull request targeting the default branch with its na... |
 | [`github__pr_get`](#github__pr_get) | integration | Return one pull request: title, body, state, draft and merged flags, the head and base refs (bran... |
 | [`github__pr_list_files`](#github__pr_list_files) | integration | List the files a pull request changes: filename, status (added, modified, removed, renamed, ...),... |
 | [`github__pr_review_comment_reply`](#github__pr_review_comment_reply) | integration | Post a reply to an inline review comment, in the same thread. comment_id is the id of a comment i... |
@@ -2507,15 +2506,7 @@ List the labels defined in a repository (not the labels on one issue), following
 
 **Tags:** `integration`
 
-Open a pull request merging head into base. The head branch must already be pushed (from a workspace, or created through GitHub). head is a branch name, or owner:branch for a branch in a fork. A pull request cannot be created with labels in the same request; add them afterwards with issue.labels.add using the returned number. GitHub answers 422 when the branches are identical, have no commits between them, or a pull request for them is already open; the message says which. Merging is not a direct action here; pr.enqueue can request GitHub's native queue without bypassing rules. Returns the pull request's number, id, node id and URL.
-
----
-
-### github__pr_enqueue
-
-**Tags:** `integration`
-
-Enqueue an open, non-draft, same-repository pull request targeting the default branch with its native merge queue enabled. repository_id and expectedHeadOid must match authenticated current GitHub facts. Forks are deliberately refused initially. Returns accepted queue entry identity and position, not a merge or auto-merge flag. GitHub permissions and required checks remain authoritative; this action does not verify reviewer App identity or attest a trusted review. A private coordinator must validate its server-owned review before calling. Private organization repositories require GitHub Enterprise Cloud for native queue availability. No direct merge, queue jumping or protection bypass. Unknown mutation outcomes are reconciled by reading membership, not replayed blindly. Retrying starts with another authenticated membership/head read.
+Open a pull request merging head into base. The head branch must already be pushed (from a workspace, or created through GitHub). head is a branch name, or owner:branch for a branch in a fork. A pull request cannot be created with labels in the same request; add them afterwards with issue.labels.add using the returned number. GitHub answers 422 when the branches are identical, have no commits between them, or a pull request for them is already open; the message says which. Merging is not an action here: a person merges. Returns the pull request's number, id, node id and URL.
 
 ---
 
