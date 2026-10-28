@@ -587,9 +587,10 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 
 // ListTranscriptSiblingMessagesInRange returns, ascending, every message of
 // the chat on a thread other than mainThreadID that is not a spawn thread,
-// with seq >= fromSeq and, when toSeq is set, seq < toSeq. It is the sibling
-// half of a ListMessages page, from the same filter the chat snapshot uses.
-func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
+// with seq >= fromSeq and, when toSeq is set, seq < toSeq; with limit > 0, the
+// newest limit of them. It is the sibling half of a ListMessages page, from the
+// same filter the chat snapshot uses.
+func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
@@ -597,7 +598,7 @@ func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID,
 		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq)
+	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq, limit)
 }
 
 // CountMessagesInChatOutsideThread counts the chat's messages that sit on

@@ -191,17 +191,26 @@ func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, ch
 // ListTranscriptSiblingMessagesInRange is the same sibling set as
 // ListRecentTranscriptSiblingMessages, for a ListMessages page: every such
 // message with seq >= fromSeq and, when toSeq is set, seq < toSeq, ascending.
-// It is not capped, because a page's seq range is already bounded by the
-// main-thread window it accompanies, and capping inside that range would lose
-// siblings no later page returns (the next cursor is the page's oldest seq).
-func ListTranscriptSiblingMessagesInRange(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
+// A page whose main-thread window bounds the range passes limit 0: capping
+// inside that range would lose siblings no later page returns (the next cursor
+// is the page's oldest seq). A page with no main-thread window passes a limit,
+// and gets the newest limit rows of the range.
+func ListTranscriptSiblingMessagesInRange(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*core.Message, error) {
 	var rows []*Message
 	q := transcriptSiblingMessages(db, chatID, mainThreadID, fromSeq, &rows)
 	if toSeq != nil {
 		q = q.Where("seq < ?", *toSeq)
 	}
-	if err := q.OrderExpr("seq ASC").Scan(ctx); err != nil {
+	if limit > 0 {
+		q = q.OrderExpr("seq DESC").Limit(int64(limit))
+	} else {
+		q = q.OrderExpr("seq ASC")
+	}
+	if err := q.Scan(ctx); err != nil {
 		return nil, fmt.Errorf("failed to list transcript sibling messages in range: %w", err)
+	}
+	if limit > 0 {
+		slices.Reverse(rows)
 	}
 	return messagesFromRows(rows), nil
 }

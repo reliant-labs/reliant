@@ -322,16 +322,19 @@ func TestMessageReads_AgreeWithRepository(t *testing.T) {
 	// Sibling ranges: the snapshot's filter (not main, never spawn), bounded
 	// on both sides, ascending, uncapped.
 	to := int64(5)
-	if r, err := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil); err != nil || ids(r) != "[n2 n5]" {
+	if r, err := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil, 0); err != nil || ids(r) != "[n2 n5]" {
 		t.Fatalf("sibling range [0,∞) = %s, %v; want [n2 n5]", ids(r), err)
 	}
-	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 3, nil); ids(r) != "[n5]" {
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 3, nil, 0); ids(r) != "[n5]" {
 		t.Fatalf("sibling range [3,∞) = %s; want [n5]", ids(r))
 	}
-	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, &to); ids(r) != "[n2]" {
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, &to, 0); ids(r) != "[n2]" {
 		t.Fatalf("sibling range [0,5) = %s; want [n2]", ids(r))
 	}
-	if twin, _ := f.env.Repo.ListTranscriptSiblingMessagesInRange(ctx, f.chat, f.main, 0, nil); ids(twin) != "[n2 n5]" {
+	if r, _ := store.ListTranscriptSiblingMessagesInRange(ctx, o, f.chat, f.main, 0, nil, 1); ids(r) != "[n5]" {
+		t.Fatalf("sibling range [0,∞) limit 1 = %s; want the newest, [n5]", ids(r))
+	}
+	if twin, _ := f.env.Repo.ListTranscriptSiblingMessagesInRange(ctx, f.chat, f.main, 0, nil, 0); ids(twin) != "[n2 n5]" {
 		t.Fatalf("Repo sibling range = %s; want [n2 n5]", ids(twin))
 	}
 	if n, err := store.CountMessagesInChatOutsideThread(ctx, o, f.chat, f.main); err != nil || n != 4 {
