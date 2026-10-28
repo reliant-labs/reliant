@@ -187,59 +187,58 @@ jobs:
       # nonprod GAR straight into prod GAR — a registry-to-registry manifest
       # copy, no rebuild.
       #
-      # NON-BLOCKING (continue-on-error) — and, right now, EXPECTED TO FAIL.
-      # This needs TWO things this repo does not currently have:
-      #   1. `secrets.WIF_PROVIDER_PROD` / `secrets.WIF_SA_PROD` in THIS repo
-      #      (`gh secret list --repo reliant-labs/reliant` has no PROD WIF
-      #      secrets — only WIF_PROVIDER_NONPROD/WIF_SA_NONPROD).
-      #   2. An IAM binding on `github-actions@reliant-labs-475814...` that
-      #      accepts assertions from `reliant-labs/reliant` (verified via
-      #      `gcloud iam service-accounts get-iam-policy`: today it only
-      #      accepts `reliant-labs/control-plane`).
-      # Provisioning both is an infra/IAM change with real blast radius, so
-      # it is not done here — this step degrades to a loud log message
-      # instead of inventing credentials. Once both exist, drop
-      # continue-on-error so a real mirror failure is caught.
+      # REQUIRED: a successful release build must publish the same multi-arch
+      # index to prod, not silently leave it only in nonprod. Missing prod WIF
+      # secrets or IAM permissions are release failures, not optional mirrors.
+      # This does not provision credentials or change IAM.
       - name: Check prod WIF credentials are configured
         id: prod_wif
         env:
           WIF_PROVIDER_PROD: ${{ secrets.WIF_PROVIDER_PROD }}
           WIF_SA_PROD: ${{ secrets.WIF_SA_PROD }}
         run: |
-          if [ -n "$WIF_PROVIDER_PROD" ] && [ -n "$WIF_SA_PROD" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::WIF_PROVIDER_PROD/WIF_SA_PROD are not set on this repo (or the prod GCP project has no IAM binding for reliant-labs/reliant yet) — skipping the prod GAR mirror. The image is pushed to nonprod GAR only. See the workflow comment for exactly what is missing."
+          set -euo pipefail
+          if [ -z "$WIF_PROVIDER_PROD" ] || [ -z "$WIF_SA_PROD" ]; then
+            echo "::error::Required prod GAR mirror needs WIF_PROVIDER_PROD and WIF_SA_PROD; no release mirror was published."
+            exit 1
           fi
+          echo "present=true" >> "$GITHUB_OUTPUT"
 
-      - name: Pull image for the prod mirror
-        if: steps.prod_wif.outputs.present == 'true'
-        continue-on-error: true
-        run: docker pull "${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}"
+      - name: Stage full OCI index for the prod mirror
+        env:
+          SOURCE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          SRC="${{ env.GAR_NONPROD }}/reliant@$SOURCE_DIGEST"
+          # crane is already installed at v0.20.2 by Verify image interpreters.
+          # No --platform: OCI format recursively stages ALL platform and
+          # attestation manifests/blobs, unlike docker pull's host selection.
+          crane pull --format=oci "$SRC" "$RUNNER_TEMP/prod-mirror-oci"
+          INDEX="$RUNNER_TEMP/prod-mirror-oci/blobs/sha256/${SOURCE_DIGEST#sha256:}"
+          echo "${SOURCE_DIGEST#sha256:}  $INDEX" | sha256sum --check
+          jq -e '
+            (.mediaType == "application/vnd.oci.image.index.v1+json" or
+             .mediaType == "application/vnd.docker.distribution.manifest.list.v2+json") and
+            ([.manifests[].platform | select(.os == "linux") | .architecture] |
+             index("amd64") != null and index("arm64") != null)
+          ' "$INDEX" > /dev/null
 
       - name: Authenticate to GCP (prod)
-        if: steps.prod_wif.outputs.present == 'true'
-        continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER_PROD }}
           service_account: ${{ secrets.WIF_SA_PROD }}
 
       - name: Configure Docker for Artifact Registry (prod)
-        if: steps.prod_wif.outputs.present == 'true'
-        continue-on-error: true
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       - name: Mirror digest to prod GAR
-        if: steps.prod_wif.outputs.present == 'true'
-        # Same cross-project constraint as control-plane's mirror: nonprod
-        # and prod GAR share the host us-central1-docker.pkg.dev and docker
-        # keeps one credential per host, so the prod identity active here
-        # cannot READ the nonprod source. Pull it while the nonprod
-        # credential was still live (previous step), then tag and push
-        # locally — `imagetools create` would re-read from the remote and
-        # hit 403.
+        # Both GAR projects share one credential host. Stage while nonprod
+        # auth is active, then push the local OCI layout under prod auth.
+        # Direct imagetools create SOURCE@digest would re-read nonprod with
+        # prod-only credentials. Never docker pull/tag/push: that loses the
+        # index, the other architecture and BuildKit's attestation children.
         #
         # ONE TAG, NEVER `latest`. Prod GAR (reliant-prod) is tag-immutable
         # (control-plane deploy/gcp/provision.sh): a tag cannot be moved to
@@ -250,13 +249,36 @@ jobs:
         # `reliant:latest`: every prod workload is pinned by the release
         # ledger's digest. The per-commit `sha-<short>` (or a dispatch's
         # image_tag) is written once; pushing an existing one is refused.
-        continue-on-error: true
+        env:
+          SOURCE_DIGEST: ${{ steps.build.outputs.digest }}
+          MIRROR_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          SRC="${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}"
-          TAG="${{ steps.tag.outputs.tag }}"
-          docker tag "$SRC" "${{ env.GAR_PROD }}/reliant:$TAG"
-          docker push "${{ env.GAR_PROD }}/reliant:$TAG"
+          [[ "$SOURCE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$MIRROR_TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ && "$MIRROR_TAG" != latest ]]
+          TARGET="${{ env.GAR_PROD }}/reliant:$MIRROR_TAG"
+          DEST="${{ env.GAR_PROD }}/reliant@$SOURCE_DIGEST"
+          # Do NOT use --index: the layout has one entry, the original index.
+          # --index would publish the extra layout wrapper with a NEW digest.
+          crane push "$RUNNER_TEMP/prod-mirror-oci" "$TARGET"
+          test "$(crane digest "$TARGET")" = "$SOURCE_DIGEST"
+          crane manifest "$DEST" > "$RUNNER_TEMP/prod-mirror-index.json"
+          echo "${SOURCE_DIGEST#sha256:}  $RUNNER_TEMP/prod-mirror-index.json" | sha256sum --check
+          # Compare the complete index, not just a tag's platform listing:
+          # every platform/attestation descriptor and annotation must survive.
+          cmp "$RUNNER_TEMP/prod-mirror-oci/blobs/sha256/${SOURCE_DIGEST#sha256:}" "$RUNNER_TEMP/prod-mirror-index.json"
+          # Read back the whole graph from PROD: every platform manifest,
+          # config, layer and unknown/unknown attestation must be available.
+          # crane validate treats layers as filesystem tars, which is wrong
+          # for in-toto JSON attestations. Compare/hash the opaque blobs instead.
+          crane pull --format=oci "$DEST" "$RUNNER_TEMP/prod-mirror-readback"
+          for BLOB in "$RUNNER_TEMP/prod-mirror-oci/blobs/sha256/"*; do
+            HASH="${BLOB##*/}"
+            READBACK="$RUNNER_TEMP/prod-mirror-readback/blobs/sha256/$HASH"
+            echo "$HASH  $BLOB" | sha256sum --check
+            echo "$HASH  $READBACK" | sha256sum --check
+            cmp "$BLOB" "$READBACK"
+          done
 
   summary:
     name: Build Summary
