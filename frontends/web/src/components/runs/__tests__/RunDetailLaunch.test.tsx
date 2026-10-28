@@ -104,6 +104,7 @@ afterEach(() => {
   // window (late under load) went to the real network and failed the test
   // ("This test made a real network request … ChatService/GetChat").
   cleanup();
+  closeAutomationDialog();
   setTransport(null);
   // The preset reads are cached in the app's query client; no test may see
   // another's answers.
@@ -126,6 +127,8 @@ vi.mock("@/store/globalUpdatesStore", () => ({
 }));
 
 import { RunDetail } from "../RunDetailPage";
+import { AutomationDialogHost } from "../../Automations/dialog/AutomationDialogHost";
+import { closeAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 
 function protoChat(overrides: Partial<Omit<ProtoChat, "$typeName">> = {}) {
   return create(ChatSchema, {
@@ -341,6 +344,25 @@ describe("run detail: launch event", () => {
     // Attended: the new chat opens as a chat in its project, not in Runs.
     await waitFor(() => expect(loadRunContext).toHaveBeenCalledWith("chat-new"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/project/proj-1"));
+  });
+
+  it("Run this on a schedule opens the real unified form with the run's prompt, inputs and machine", async () => {
+    useChat(protoChat({ launchKind: "chat.start", triggerId: undefined, workflowStopReason: WorkflowStopReason.COMPLETED }));
+    rpc.getLaunchEvent.mockResolvedValue(scheduleLaunch("The successful prompt"));
+    renderRunsAt(<><RunDetail chatId="chat-1" /><AutomationDialogHost /></>, "/workflows/runs/chat-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Run this on a schedule" }));
+    expect(await screen.findByRole("form", { name: "New automation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "When" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Do" })).toBeInTheDocument();
+    expect(screen.getByLabelText("What should it do?")).toHaveValue("The successful prompt");
+    expect(screen.queryByLabelText("Workflow")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Workflow settings/ }));
+    await waitFor(() => expect(screen.getByLabelText("Depth")).toHaveValue(4));
+    expect(screen.getByLabelText("Label")).toHaveValue("bug");
+    expect(screen.getByLabelText("Strictness")).toHaveValue("high");
+    expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1");
+    expect(rpc.startChat).not.toHaveBeenCalled();
+    expect(rpc.fireTrigger).not.toHaveBeenCalled();
   });
 
   it("Fire trigger now fires the run's automation", async () => {

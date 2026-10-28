@@ -96,7 +96,8 @@ import { ActingIdentityField } from "../ActingIdentityField";
 import { buildDaemonChoices, NO_MACHINE } from "../daemonChoices";
 import { uniqueName } from "./autoName";
 import { Disclosure } from "./Disclosure";
-import { defaultMachine, lastUsedDaemon } from "./machineDefault";
+import { defaultMachine } from "./machineDefault";
+import { useRecentMachine } from "./useRecentMachine";
 import type { AutomationDialogMode } from "./openAutomationDialog";
 import { MachineSelect, WhereSummary } from "./WhereSummary";
 import { outcomeLabel, planEnable, refusalHeadline, summarizeEnable, triggersNeedingPrompt, type EnableVerdict } from "../enableWorkflow";
@@ -297,21 +298,16 @@ export function DeclaredAutomationForm({
     if (p.message) setPromptOpen(true);
   }, [triggersQuery.isSuccess, existing, declared, projectId]);
 
-  const { daemons, loading: daemonsLoading, activeDaemon } = useDaemonStatus();
+  const { daemons, loading: daemonsLoading } = useDaemonStatus();
   const installs = useProjectDaemonInstalls();
   const choices = useMemo(() => buildDaemonChoices(daemons, installs.data ?? [], projectId), [daemons, installs.data, projectId]);
-  const lastUsed = useMemo(
-    () =>
-      activeDaemon?.daemonId ??
-      lastUsedDaemon((triggersQuery.data ?? []).filter((t) => t.projectId === projectId).map((t) => ({ daemonId: t.daemonId, at: t.updatedAt }))),
-    [activeDaemon, triggersQuery.data, projectId],
-  );
+  const { lastUsed, loading: historyLoading } = useRecentMachine(projectId, triggersQuery.data ?? [], choices);
   useEffect(() => {
-    if (machineChosen || daemonsLoading || installs.isLoading || !library.isSuccess) return;
+    if (machineChosen || daemonsLoading || installs.isLoading || historyLoading || !library.isSuccess) return;
     // A workflow that needs no machine runs without one unless the person
     // says otherwise; else the machine they last used here.
     setMachine(defaultMachine({ choices, needsNoMachine, lastUsed }));
-  }, [choices, machineChosen, daemonsLoading, installs.isLoading, library.isSuccess, needsNoMachine, lastUsed]);
+  }, [choices, machineChosen, daemonsLoading, installs.isLoading, historyLoading, library.isSuccess, needsNoMachine, lastUsed]);
 
   // What every input shows: presets first, explicit values over them.
   const flat = useMemo(

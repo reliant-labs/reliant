@@ -14,6 +14,7 @@ import Button from "@/components/forge-ui/button";
 import { triggerErrorMessage, webhookUrlForDisplay, type Trigger, type WebhookCredential } from "@/hooks/trigger-model";
 import { useRotateWebhookToken } from "@/hooks/trigger-queries";
 import { reliantApiBaseUrl } from "@/lib/connect";
+import { TestEventPreview } from "./TestEventPreview";
 import { cn } from "@/lib/utils";
 import { fieldClass, hintClass, labelClass } from "../../workflow/run/runFormStyles";
 
@@ -101,6 +102,7 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
           Rotate token
         </Button>
       )}
+      <TestEventPreview trigger={trigger} />
       {error && <p role="alert" className="text-sm text-destructive-ink">{error}</p>}
     </div>
   );

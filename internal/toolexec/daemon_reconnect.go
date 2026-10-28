@@ -281,12 +281,7 @@ func (r *NATSDaemonRouter) awaitDaemonSubject(ctx context.Context, userID, daemo
 	}
 }
 
-// daemonAnswers reports whether a gateway holds daemonID's stream again: its
-// bridge answers the daemon's tools.online subject (NATSToolBridge).
-func (r *NATSDaemonRouter) daemonAnswers(ctx context.Context, userID, daemonID string, deadline time.Time) bool {
-	return r.daemonAnswersSubject(ctx, userID, daemonID, deadline, toolOnlineSubject)
-}
-
+// daemonAnswersSubject probes new-work or recovery reachability separately.
 func (r *NATSDaemonRouter) daemonAnswersSubject(ctx context.Context, userID, daemonID string, deadline time.Time, subject string) bool {
 	timeout := min(reconnectProbeTimeout, time.Until(deadline))
 	if timeout <= 0 {
