@@ -132,12 +132,18 @@ describe("a workload", () => {
     await waitFor(() => expect(screen.getByTestId("workload-updated")).toHaveTextContent(/updated .* by /));
   });
 
-  it("marks a rollback in the deploy history", async () => {
+  it("links to canonical promotion histories without duplicating their event feed", async () => {
     renderWorkload("admin-server", { env: "e2e" });
     await ready();
-    const history = await screen.findByTestId("workload-deploy-history");
-    await waitFor(() => expect(within(history).getAllByRole("listitem").length).toBeGreaterThan(1));
-    expect(history.querySelector("[data-rollback=true]")).not.toBeNull();
+    expect(screen.queryByTestId("workload-deploy-history")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "History" }));
+    const history = await screen.findByTestId("workload-history-deploys");
+    const links = await within(history).findAllByRole("link", { name: /Promotion history for/ });
+    expect(links.length).toBeGreaterThan(1);
+    expect(new Set(links.map((link) => link.getAttribute("href"))).size).toBe(links.length);
+    expect(history.querySelector("[data-rollback]")).toBeNull();
+    expect(screen.getByTestId("workload-history-versions")).toBeInTheDocument();
+    expect(screen.getByTestId("workload-history-images")).toBeInTheDocument();
   });
 
   it("never scales from the console: it opens a pull request against the repository's default branch", async () => {

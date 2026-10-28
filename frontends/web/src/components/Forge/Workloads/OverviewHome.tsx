@@ -743,7 +743,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
   const releases = useProjectReleases(project);
   const recent = (releases.data ?? []).slice(0, 3);
   return (
-    <Panel title="Recent releases" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
+    <Panel title="Recent releases" meta="Latest builds and where they run now" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
       {releases.isLoading ? (
         <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
       ) : releases.error ? (
@@ -770,7 +770,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
                   </span>
                 )}
                 <span className="block text-ink-muted">
-                  {live.length ? `live in ${live.join(", ")}` : "not live anywhere"}
+                  {live.length ? `live in ${live.join(", ")}` : "not live in these environments"}
                   {release.author ? ` · ${release.author}` : ""}
                   {release.createdAt ? " · " : ""}
                   <Ago at={release.createdAt} />

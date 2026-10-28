@@ -39,7 +39,7 @@ describe("the list", () => {
 
     const table = screen.getByTestId("releases-table");
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
-      "Version",
+      "Release",
       "Commit",
       "Checks",
       "prod",
@@ -60,9 +60,12 @@ describe("the list", () => {
     expect(row(V[0]!)).toHaveTextContent(RELEASES[0]!.subject);
     expect(row(V[0]!)).toHaveTextContent("sean");
     expect(row(V[0]!)).toHaveTextContent("scoped: admin-web +1");
-    await waitFor(() =>
-      expect(screen.getByTestId(`release-followup-${V[0]}`)).toHaveTextContent("Scoped deploy: admin-web, internal-console shipped to prod by G3")
-    );
+    // Current-state scope remains visible, but promotion events live on the release.
+    expect(screen.queryByTestId(`release-followup-${V[0]}`)).not.toBeInTheDocument();
+    const identity = within(row(V[0]!)).getAllByRole("cell")[0];
+    expect(identity.querySelector("a")).toHaveTextContent(RELEASES[0]!.subject);
+    expect(identity.querySelector("a")).toHaveAttribute("aria-label", `${RELEASES[0]!.subject} · ${V[0]}`);
+    expect(identity).toHaveTextContent(V[0]!.split("-")[0]);
     expect(row(V[2]!)).toHaveTextContent("rolled back · prod");
     expect(row(V[2]!)).toHaveTextContent("1/2");
     // A release cut before subjects were recorded says so instead of inventing one.
@@ -117,12 +120,14 @@ describe("the list", () => {
     expect(await screen.findByTestId("releases-empty-filtered")).toHaveTextContent("No release matches these filters");
   });
 
-  it("selects an environment from the pipeline", async () => {
-    const user = userEvent.setup();
-    const harness = renderList(createReleasesFixtureApi());
+  it("uses the pipeline only for current state, leaving scope selection to the top bar", async () => {
+    renderList(createReleasesFixtureApi());
     await ready();
-    await user.click(within(screen.getByTestId("pipeline-e2e")).getByRole("button", { name: "e2e" }));
-    expect(harness.selectEnv).toHaveBeenCalledWith("e2e");
+    const pipeline = screen.getByTestId("releases-pipeline");
+    expect(within(pipeline).queryAllByRole("button")).toHaveLength(0);
+    expect(pipeline.querySelector("[aria-pressed]")).toBeNull();
+    expect(within(pipeline).getByTestId("pipeline-e2e")).toHaveTextContent("e2e");
+    expect(within(pipeline).getAllByRole("link").length).toBeGreaterThan(0);
   });
 });
 

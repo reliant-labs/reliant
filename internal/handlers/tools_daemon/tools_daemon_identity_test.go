@@ -120,7 +120,7 @@ func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	stream.RequestHeader().Set("X-Test-User", userID)
 	defer func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() }()
 	_ = stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h", Platform: "linux", DaemonType: "local"},
+		Register: &reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h", Platform: "linux", DaemonType: "local", IncarnationId: uuid.NewString()},
 	}})
 	_, err := stream.Receive()
 	return err

@@ -74,6 +74,17 @@ func (s *Service) sendToDaemon(userID, daemonID string, msg *reliantv1.ServerMes
 // when the caller already holds the exact connection (e.g. reconcile) rather
 // than resolving the user's default daemon.
 func (s *Service) sendToConn(conn *daemonConnection, msg *reliantv1.ServerMessage) error {
+	if conn != nil && requestNeedsAdmission(msg) {
+		conn.admissionMu.Lock()
+		defer conn.admissionMu.Unlock()
+		if conn.restart.Load() != nil {
+			return toolexec.ErrDaemonUpdating
+		}
+	}
+	return s.sendControlToConn(conn, msg)
+}
+
+func (s *Service) sendControlToConn(conn *daemonConnection, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil
 	}

@@ -141,6 +141,9 @@ describe("one release", () => {
     const titles = releaseTimeline(RELEASES[2]!, RELEASE_ENVS, ledger, RELEASES, FIXTURE_NAMES).map((entry) => `${entry.title}|${entry.tone}`);
     // Prod's promotion is "bad": its smoke check failed. Then an older release replaced it there.
     expect(titles).toEqual(["Cut|ok", "Promoted to dev|ok", "Promoted to prod|bad", "Rolled back in prod|bad", "Superseded in dev|neutral"]);
+    const rollback = releaseTimeline(RELEASES[2]!, RELEASE_ENVS, ledger, RELEASES, FIXTURE_NAMES).find((entry) => entry.title === "Rolled back in prod")!;
+    expect(rollback.detail).toMatch(/^to \S+ by \S+/);
+    expect(rollback.detail).not.toMatch(/^by \d/);
   });
 
   it("measures lead time from the commit to the first promotion, and says nothing when the commit time is unknown", () => {

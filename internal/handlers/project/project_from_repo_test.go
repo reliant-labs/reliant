@@ -327,6 +327,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // what a daemon sends.
 func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
+	incarnationID := uuid.NewString() // one simulated daemon process for this fixture
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger: slog.New(slog.DiscardHandler),
 		Config: &typedconfig.Config{},
@@ -358,7 +359,7 @@ func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonI
 	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
 	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID, Platform: "linux", DaemonType: "local"},
+		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID, Platform: "linux", DaemonType: "local", IncarnationId: incarnationID},
 	}}))
 	msg, err := stream.Receive()
 	require.NoError(t, err)

@@ -10,8 +10,8 @@
  *   pipeline    one cell per long-lived environment: the release live there,
  *               how far it is from prod, who put it there and when, and any
  *               scoped deploy on top; the previews share one cell.
- *   table       one row per release: version (with scoped / rolled-back tags),
- *               sha + commit subject, checks, ONE COLUMN PER LONG-LIVED
+ *   table       one row per release: commit subject, short version and tags,
+ *               sha, checks, ONE COLUMN PER LONG-LIVED
  *               ENVIRONMENT (● live · ◐ partly live · ○ ran before · · never),
  *               previews, author, and a row menu whose actions name their
  *               environment.
@@ -95,7 +95,6 @@ export interface ReleasesListProps {
   search: ReleasesSearch;
   onSearch: (next: Partial<ReleasesSearch>) => void;
   releaseHref: (version: string, search?: Record<string, unknown>) => string;
-  onSelectEnv: (env: string) => void;
   promote: PromoteControl;
   /** The scope names a local environment, which runs the working tree and has no releases by design. */
   scopeIsLocal?: boolean;
@@ -107,7 +106,7 @@ function actionEnvOf(env: string, model: ReleaseModel): string | null {
   return referenceEnv(model.longEnvs)?.name ?? null;
 }
 
-export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, onSelectEnv, promote, scopeIsLocal = false }: ReleasesListProps) {
+export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, promote, scopeIsLocal = false }: ReleasesListProps) {
   const data = useReleaseData(project, envs);
   const [promoting, setPromoting] = useState<string | null>(null);
   const model = data.model;
@@ -193,7 +192,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
     <div className="space-y-6" data-testid="releases" data-state={loading ? "loading" : "ready"}>
       {header}
 
-      {loading || !model ? <PipelineSkeleton /> : <Pipeline model={model} env={env} releaseHref={releaseHref} onSelectEnv={onSelectEnv} />}
+      {loading || !model ? <PipelineSkeleton /> : <Pipeline model={model} env={env} releaseHref={releaseHref} />}
 
       {data.ledgerFailed.length > 0 && (
         <Note tone="warning" testId="releases-ledger-failed">
@@ -433,12 +432,10 @@ function Pipeline({
   model,
   env,
   releaseHref,
-  onSelectEnv,
 }: {
   model: ReleaseModel;
   env: string;
   releaseHref: ReleasesListProps["releaseHref"];
-  onSelectEnv: (env: string) => void;
 }) {
   if (model.pipeline.length === 0 && model.previews.length === 0) return null;
   const previewSelected = model.previews.some((candidate) => candidate.name === env);
@@ -453,7 +450,7 @@ function Pipeline({
         const selected = cell.env.name === env;
         return (
           <PipelineCellFrame key={cell.env.name} first={index === 0} selected={selected} testId={`pipeline-${cell.env.name}`}>
-            <EnvButton name={cell.env.name} selected={selected} onSelect={onSelectEnv} />
+            <div className={cn("text-xs", selected ? "font-medium text-ink" : "text-ink-muted")}>{cell.env.name}</div>
             <div className="mt-1 truncate text-sm font-medium text-ink">
               {cell.base ? (
                 <Link href={releaseHref(cell.base)} className={INK_LINK} title={cell.base}>
@@ -475,7 +472,7 @@ function Pipeline({
               {cell.followUps[0] && (
                 <span title={cell.followUps.map((f) => `${shortVersion(f.version)}: ${f.targets.join(", ")}`).join("\n")}>
                   {" "}
-                  · {scopedLabel(cell.followUps[0].targets)} rescoped <Ago at={cell.followUps[0].at} />
+                  · {scopedLabel(cell.followUps[0].targets)} on a scoped release
                 </span>
               )}
             </div>
@@ -492,14 +489,7 @@ function Pipeline({
             {model.previews.map((preview, index) => (
               <span key={preview.name}>
                 {index > 0 && <span aria-hidden="true">· </span>}
-                <button
-                  type="button"
-                  onClick={() => onSelectEnv(preview.name)}
-                  aria-pressed={preview.name === env}
-                  className={cn("hover:text-ink hover:underline", preview.name === env && "font-medium text-ink")}
-                >
-                  {preview.name}
-                </button>
+                <span className={cn(preview.name === env && "font-medium text-ink")}>{preview.name}</span>
               </span>
             ))}
           </div>
@@ -517,20 +507,6 @@ function PipelineCellFrame({ first, selected, testId, children }: { first: boole
       {/* The scoped environment: an ink rule along the cell's foot, as the table highlights its column. */}
       {selected && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-ink" />}
     </div>
-  );
-}
-
-function EnvButton({ name, selected, onSelect }: { name: string; selected: boolean; onSelect: (env: string) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(name)}
-      aria-pressed={selected}
-      title={selected ? `The page is scoped to ${name}` : `Show ${name}`}
-      className={cn("rounded text-xs hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", selected ? "font-medium text-ink" : "text-ink-muted")}
-    >
-      {name}
-    </button>
   );
 }
 
@@ -675,14 +651,6 @@ function ReleaseTable({
   // the column in dark and tints it in light, as the mockup's muted-55% does.
   // `bg-surface-muted` (= --background) would recess it into a black stripe.
   const sel = (on: boolean) => (on ? "bg-surface-sunken" : "");
-  // Scoped deploys that sit on top of a release, by version, for the follow-up line under its row.
-  const followUps = new Map<string, { env: string; targets: string[]; by: string; at?: string }[]>();
-  for (const cell of model?.pipeline ?? []) {
-    for (const followUp of cell.followUps) {
-      followUps.set(followUp.version, [...(followUps.get(followUp.version) ?? []), { env: cell.env.name, ...followUp }]);
-    }
-  }
-
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -690,7 +658,7 @@ function ReleaseTable({
           <thead>
             <tr className="border-b border-border">
               <th scope="col" className={TH}>
-                Version
+                Release
               </th>
               <th scope="col" className={TH}>
                 Commit
@@ -739,28 +707,24 @@ function ReleaseTable({
             ) : (
               rows.flatMap((row) => {
                 const version = row.release.version;
-                const extra = followUps.get(version) ?? [];
                 return [
                   <tr key={version} className="relative border-t border-border/70 first:border-t-0 hover:bg-ink/5" data-testid={`release-row-${version}`}>
-                    <td className={TD}>
-                      <span className="flex items-center gap-2">
-                        <Link
-                          href={releaseHref(version)}
-                          title={version}
-                          className="no-color shrink-0 font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
-                        >
-                          {shortVersion(version)}
-                        </Link>
+                    <td className={cn(TD, "w-full max-w-0")}>
+                      <Link
+                        href={releaseHref(version)}
+                        title={version}
+                        aria-label={`${row.release.subject || "No commit subject recorded"} · ${version}`}
+                        className="no-color block truncate font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
+                      >
+                        {row.release.subject || "No commit subject recorded"}
+                      </Link>
+                      <span className="mt-1 flex items-center gap-2 text-xs text-ink-muted">
+                        <span title={version}>{shortVersion(version)}</span>
                         <ReleaseTags row={row} />
                       </span>
                     </td>
-                    <td className={cn(TD, "w-full max-w-0")}>
-                      <span className="flex min-w-0 items-center gap-2">
-                        {row.release.gitCommit ? <span className="relative z-10 shrink-0"><Mono value={row.release.gitCommit} /></span> : null}
-                        <span className={cn("truncate", !row.release.subject && "text-ink-muted")} title={row.release.subject || undefined}>
-                          {row.release.subject || (row.release.gitCommit ? "No commit subject recorded" : "No commit recorded")}
-                        </span>
-                      </span>
+                    <td className={TD}>
+                      {row.release.gitCommit ? <span className="relative z-10"><Mono value={row.release.gitCommit} /></span> : <span className="text-ink-muted">No commit recorded</span>}
                     </td>
                     <td className={TD}>
                       <ChecksMark checks={row.checks} />
@@ -786,14 +750,6 @@ function ReleaseTable({
                       <RowMenu label={`Actions for ${version}`} items={menuFor(row)} testId={`release-menu-${version}`} />
                     </td>
                   </tr>,
-                  ...extra.map((followUp) => (
-                    <tr key={`${version}-follow-${followUp.env}`} data-testid={`release-followup-${version}`}>
-                      <td colSpan={columns} className="h-8 whitespace-nowrap px-4 pl-8 text-xs text-ink-muted">
-                        ↳ Scoped deploy: {followUp.targets.join(", ")} shipped to {followUp.env}
-                        {followUp.by && ` by ${followUp.by}`} · <Ago at={followUp.at} />
-                      </td>
-                    </tr>
-                  )),
                 ];
               })
             )}

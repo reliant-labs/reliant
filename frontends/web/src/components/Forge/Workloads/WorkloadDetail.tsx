@@ -1140,8 +1140,8 @@ function HistoryTab({
   const images = [...(detail?.imageChanges ?? [])].filter((c) => c.envId === envId).reverse();
   return (
     <>
-      <Panel title="Deploy history" meta="Every promotion that moved it, newest first" testId="workload-history-deploys">
-        <DeployHistoryList history={history} env="" hrefs={hrefs} />
+      <Panel title="Release history" meta="Promotion history lives with each release" testId="workload-history-deploys">
+        <ReleaseHistoryLinks history={history} hrefs={hrefs} />
       </Panel>
       <Panel title="Versions" meta="The service.version it reported, newest first" testId="workload-history-versions">
         {versions.length === 0 ? (
@@ -1397,20 +1397,6 @@ function Rail({
           ]}
         />
       </Panel>
-      {!latestRun && (
-        <Panel
-          title="Deploy history"
-          actions={
-            <button type="button" onClick={() => onTab("history")} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink">
-              History
-              <ArrowRight className="h-3 w-3" aria-hidden="true" />
-            </button>
-          }
-          testId="workload-deploy-history"
-        >
-          <DeployHistoryList history={history} env={env.name} hrefs={hrefs} limit={5} />
-        </Panel>
-      )}
       <Panel
         title="Recent events"
         actions={
@@ -1462,43 +1448,20 @@ function Rail({
   );
 }
 
-/**
- * Promotions that moved the workload, newest first: the release, who, and
- * when; a rollback in red, a scoped deploy said so. The ledger records no
- * "via" (CLI, console or CI), so none is shown.
- */
-function DeployHistoryList({ history, env, hrefs, limit }: { history: DeployHistory; env: string; hrefs: WorkloadDetailHrefs; limit?: number }) {
-  if (history.loading) return <div className="h-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading deploy history" />;
-  if (history.failed) return <p className="text-xs text-ink-muted">The deploy history could not be read right now.</p>;
-  if (history.entries.length === 0) return <p className="text-xs text-ink-muted">No promotion{env ? ` to ${env}` : ""} has moved it yet.</p>;
-  const entries = limit ? history.entries.slice(0, limit) : history.entries;
+/** Contextual, de-duplicated release links — not another promotion event feed. */
+function ReleaseHistoryLinks({ history, hrefs }: { history: DeployHistory; hrefs: WorkloadDetailHrefs }) {
+  if (history.loading) return <p className="text-xs text-ink-muted" aria-busy="true">Loading release links…</p>;
+  if (history.failed) return <p className="text-xs text-ink-muted">Release links could not be read right now.</p>;
+  const versions = [...new Set(history.entries.map((entry) => entry.version))];
+  if (!versions.length) return <p className="text-xs text-ink-muted">No recorded release has moved this workload yet.</p>;
   return (
-    <ol className="space-y-3.5" data-testid="deploy-history">
-      {entries.map((entry, index) => (
-        <li key={entry.id} className="relative pl-6 text-xs" data-rollback={entry.rollback ? "true" : undefined}>
-          <span
-            aria-hidden="true"
-            className={cn(
-              "absolute left-1 top-1.5 h-2 w-2 rounded-full border",
-              entry.rollback ? "border-danger bg-danger" : index === 0 ? "border-success bg-success" : "border-ink-muted bg-surface"
-            )}
-          />
-          {index < entries.length - 1 && <span aria-hidden="true" className="absolute -bottom-3.5 left-2 top-4 w-px bg-border" />}
-          <span className={cn("block", entry.rollback ? "text-danger-ink" : "text-ink")}>
-            {entry.rollback ? "Rolled back to " : ""}
-            <Link href={hrefs.release(entry.version)} className={INK_LINK} title={entry.version}>
-              {shortVersion(entry.version)}
-            </Link>
-            {entry.scoped && <span className="text-ink-muted"> · scoped</span>}
-          </span>
-          <span className="block text-ink-muted">
-            {entry.by || "unknown"}
-            {entry.at ? " · " : ""}
-            <Ago at={entry.at} />
-          </span>
-        </li>
-      ))}
-    </ol>
+    <ul className="flex flex-wrap gap-3" aria-label="Releases that moved this workload">
+      {versions.map((version) => <li key={version}>
+        <Link href={hrefs.release(version)} className={`${INK_LINK} text-xs`} title={version} aria-label={`Promotion history for ${version}`}>
+          {shortVersion(version)}
+        </Link>
+      </li>)}
+    </ul>
   );
 }
 

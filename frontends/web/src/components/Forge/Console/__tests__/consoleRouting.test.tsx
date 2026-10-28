@@ -133,7 +133,9 @@ vi.mock("@/hooks/apps-queries", () => ({
   useApps: () => ({ apps: [], loading: false, availability: "available", detail: "" }),
 }));
 
+vi.mock("@/hooks/observability-session-queries", () => ({ useSessions: () => ({ isSuccess: false }) }));
 vi.mock("@/hooks/observability-queries", () => ({
+  useServiceSignals: () => ({ isSuccess: false }),
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
     data: [
@@ -369,7 +371,7 @@ describe("redirects from the retired URLs", () => {
 
   it("lands a view that is not a nav entry on the first view", async () => {
     const router = renderAt("/forge/p/alpha/observability/heatmaps?env=e2e");
-    await landsOn(router, "/forge/p/alpha/observability/errors", { env: "e2e" });
+    await landsOn(router, "/forge/p/alpha/observability/graph", { env: "e2e" });
   });
 
   it("lands the retired Observability home on the Overview, which carries its strip", async () => {

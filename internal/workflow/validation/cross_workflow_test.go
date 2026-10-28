@@ -196,6 +196,21 @@ func TestValidateInputsAgainstSchema_PresetAware(t *testing.T) {
 			wantErrors:   false,
 		},
 		{
+			// The name is a static fact; only the VALUE is untypeable until
+			// run time. A renamed arg written as a template (yield, now ask)
+			// used to pass here and get dropped at run time, silently
+			// disarming whatever it configured.
+			name:     "unknown arg written as a template is still flagged",
+			provided: map[string]interface{}{"yield": "{{inputs.yield}}"},
+			presets:  nil,
+			schema: makeSchema(map[string]*reliantv1.Input{
+				"ask": {Type: "boolean"},
+			}),
+			presetLoader:  nil,
+			wantErrors:    true,
+			errorContains: "unknown input(s): yield",
+		},
+		{
 			name:     "CEL template preset name is skipped",
 			provided: map[string]interface{}{},
 			presets:  map[string]string{"default": "{{inputs.preset}}"},
