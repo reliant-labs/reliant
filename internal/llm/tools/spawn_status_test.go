@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -463,6 +464,35 @@ func TestSpawnStatus_Wait_InitialReadCancellationPreservesStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Cancellation coinciding with a genuine store failure does not make that
+// failure recoverable. A retry could otherwise hide a database/auth error.
+func TestSpawnStatus_Wait_CancellationDoesNotMaskStoreFailure(t *testing.T) {
+	t.Parallel()
+	callCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	childID := "child"
+	storeErr := errors.New("permission denied by store")
+	reads := 0
+	repo := &MockspawnStatusStore{
+		ListSpawnChildrenFunc: func(context.Context, string) ([]*db.SpawnChild, error) {
+			return []*db.SpawnChild{{ChildThreadID: &childID}}, nil
+		},
+		GetThreadFunc: func(context.Context, string) (*db.Thread, error) {
+			reads++
+			if reads == 1 {
+				cancel()
+				return nil, storeErr
+			}
+			return &db.Thread{ID: childID, Status: db.ThreadStatusCompleted}, nil
+		},
+	}
+	rc := rctx.NewToolContext(callCtx, "chat", "parent", nil, nil)
+	resp, _ := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+	require.True(t, resp.IsError, "a coincident cancellation must not recover an unrelated store error")
+	require.Equal(t, 1, reads, "non-cancellation errors must not trigger a detached retry")
+	require.Equal(t, "Agent \"child\" could not be found.", resp.Content, "preserve the existing store-error response")
 }
 
 // timeout_seconds above the 240s ceiling must be clamped, not rejected — an
