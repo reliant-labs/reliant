@@ -223,10 +223,10 @@ describe("automationHealth: setup and launch states", () => {
     expect(event.cta).toEqual({ kind: "try_now", label: "Try it now" });
   });
 
-  it("gives every state at most one call to action, and a broken built-in's is Remove trigger", () => {
-    const broken = (workflow: string) => automationHealth({ enabled: true, health: health("broken"), workflow }).cta;
-    expect(broken("builtin://autopilot-pr-review")).toEqual({ kind: "remove_trigger", label: "Remove trigger" });
-    expect(broken("my-flow")).toEqual({ kind: "open_workflow", label: "Open workflow" });
+  it("gives every state at most one call to action, and a broken one's is Remove trigger", () => {
+    const broken = automationHealth({ enabled: true, health: health("broken", { lastFailureDetail: "its workflow does not resolve" }) });
+    expect(broken.cta).toEqual({ kind: "remove_trigger", label: "Remove trigger" });
+    expect(broken.detail).toBe("its workflow does not resolve");
     expect(automationHealth({ enabled: false, health: health("healthy") }).cta).toEqual({ kind: "resume", label: "Resume" });
     expect(automationHealth({ enabled: true, health: health("failing", { consecutiveFailures: 2 }), lastEvent: EVENT }).cta?.label).toBe("Open last run");
     expect(automationHealth({ enabled: true, health: health("healthy"), lastEvent: EVENT }).cta).toBeUndefined();

@@ -475,11 +475,18 @@ describe("WorkflowDetailPage", () => {
 
       const notice = await screen.findByTestId("automation-state-notice");
       expect(notice).toHaveAttribute("data-state", "broken");
-      expect(notice).toHaveTextContent("Triage in Reliant can't run: its workflow no longer declares this trigger.");
-      expect(within(notice).getByRole("button", { name: "Open workflow" })).toBeInTheDocument();
+      expect(notice).toHaveTextContent("Triage in Reliant is broken: nothing it receives can start a run.");
+      expect(notice).toHaveTextContent("the workflow no longer declares a trigger named morning");
+      expect(within(notice).getByRole("button", { name: "Remove trigger" })).toBeInTheDocument();
       // The project's group carries the same action instead of Settings.
       const group = screen.getByTestId("triggers-project-proj-1");
-      expect(within(group).getByRole("button", { name: "Open workflow for Reliant" })).toBeInTheDocument();
+      expect(within(group).getByRole("button", { name: "Remove trigger for Reliant" })).toBeInTheDocument();
+      // The row itself says why and offers Remove without expanding; its
+      // switch pauses it.
+      const row = within(group).getByTestId("trigger-row-a1");
+      expect(within(row).getByTestId("trigger-broken-reason")).toHaveTextContent("the workflow no longer declares a trigger named morning");
+      expect(within(row).getByRole("button", { name: /Remove trigger/ })).toBeInTheDocument();
+      expect(within(row).getByRole("switch", { name: /on$/ })).toBeInTheDocument();
     });
 
     it("opens and scrolls to the trigger the address names", async () => {

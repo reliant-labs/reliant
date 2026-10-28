@@ -24,6 +24,7 @@ import {
   ListInboxResponseSchema,
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
+import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
 import {
@@ -49,6 +50,7 @@ const mocks = vi.hoisted(() => ({
   resolveQuestion: vi.fn(),
   resumeDaemon: vi.fn(),
   setEnabled: vi.fn(),
+  deleteTrigger: vi.fn(),
   notify: vi.fn(),
 }));
 
@@ -64,6 +66,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 vi.mock("@/hooks/trigger-queries", () => ({
   useSetTriggerEnabled: () => ({ mutate: mocks.setEnabled, isPending: false }),
+  useDeleteTrigger: () => ({ mutate: mocks.deleteTrigger, isPending: false }),
   // A custom automation: its items link to its own page.
   useTriggerById: () => undefined,
 }));
@@ -211,6 +214,35 @@ describe("InboxPage item kinds", () => {
 
     await userEvent.click(within(row).getByRole("link", { name: "Open last run" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
+  });
+
+  it("a broken automation shows why and offers Remove and Pause, not a run to open", async () => {
+    respond([
+      failingItem({
+        itemId: "automation_failing:broken:trg-1:abc",
+        payload: {
+          case: "automationFailing",
+          value: {
+            health: create(TriggerHealthSchema, {
+              status: TriggerHealthStatus.BROKEN,
+              lastFailureDetail: 'declared trigger "tick" of workflow "merge-steward": its workflow does not resolve',
+            }),
+            lastRunChatId: "chat-last",
+          },
+        },
+      }),
+    ]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_failing:broken:trg-1:abc");
+    expect(within(row).getByText(/its workflow does not resolve/)).toBeInTheDocument();
+    expect(within(row).queryByRole("link", { name: "Open last run" })).toBeNull();
+
+    await userEvent.click(within(row).getByRole("button", { name: "Pause" }));
+    expect(mocks.setEnabled).toHaveBeenCalledWith({ id: "trg-1", enabled: false }, expect.anything());
+
+    await userEvent.click(within(row).getByRole("button", { name: "Remove" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove trigger" }));
+    expect(mocks.deleteTrigger).toHaveBeenCalledWith({ id: "trg-1" }, expect.anything());
   });
 
   it("a failed launch shows the reason, a single failure no count, and opens the trigger", async () => {

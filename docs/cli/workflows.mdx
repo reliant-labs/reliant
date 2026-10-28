@@ -89,6 +89,24 @@ Validating 1 workflow(s)
 
 `validate` exits `1` when any workflow has an error, so it works as a pre-commit hook or a CI step. Add `--json` for output a program can read.
 
+A field the workflow format does not define is an error, and the message names the field and the version of Reliant that rejected it. The server parses the same files with its own version, so a file written for a newer CLI than the server fails there with that message: upgrade the server, or remove the field.
+
+### Changes that break activations
+
+Each person who turns on a declared trigger creates an activation of it on the server, bound to the trigger's name and kind. Deleting the workflow, renaming or removing the trigger, or turning it into another kind leaves every activation of it **broken**: each firing is refused and nothing runs. Every file can still validate, so give `validate` the revision you are changing from and it compares the declarations:
+
+```text
+$ reliant workflow validate --base origin/main
+Validating 2 workflow(s)
+
+  ✓ review.yaml (review)
+      Breaks activations: trigger "pr" is gone (it now declares trigger "pull-request"): every activation of it turns BROKEN. Keep the name, or remove its activations (reliant trigger list)
+  ✓ steward.yaml (steward)
+      Breaks activations: deleted: at origin/main this workflow declared trigger "tick"; every activation of it turns BROKEN and fires nothing. Turn those activations off or remove them (reliant trigger list) as part of this change
+```
+
+These are warnings: the CLI cannot see the activations, and removing a trigger nobody turned on is an ordinary edit. The server can, and lists an enabled activation that a synced change broke in its owner's Inbox, with **Pause** and **Remove**.
+
 `reliant workflow validate-tree <ref>` goes further for one workflow. It follows every workflow the target calls, through `project://` and `builtin://` references, and checks [presets](/workflows/presets) against the inputs they set. This is the check the server runs when a chat starts. Pass the workflow as a file path, `project://<name>` or `builtin://<name>`:
 
 ```text

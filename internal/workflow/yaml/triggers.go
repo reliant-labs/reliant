@@ -320,7 +320,7 @@ func unknownFieldError(key string, md protoreflect.MessageDescriptor) error {
 	for i := 0; i < md.Fields().Len(); i++ {
 		known = append(known, string(md.Fields().Get(i).Name()))
 	}
-	return fmt.Errorf("unknown field %q (known: %s)", key, strings.Join(known, ", "))
+	return unknownField(key, "unknown field %q (known: %s)", key, strings.Join(known, ", "))
 }
 
 func yamlKindName(k yaml.Kind) string {

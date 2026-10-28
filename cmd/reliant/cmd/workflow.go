@@ -77,6 +77,7 @@ func newWorkflowValidateCmd() *cobra.Command {
 		triggerSender   string
 		activationParam string
 		ownerGitHubID   string
+		base            string
 	)
 
 	cmd := &cobra.Command{
@@ -99,6 +100,15 @@ give only the fields your expressions read. The JSON may be a file: @event.json.
 would set them (params it leaves out read as the workflow's input defaults), and
 --owner-github-id trigger.activation.owner.github_id.
 
+With --base <git revision> (in CI, the branch the change merges into), the
+declared triggers are also compared with the ones at that revision. An edit that
+existing activations cannot follow — a workflow with triggers deleted, a trigger
+renamed or removed, a trigger changed to another kind or integration — is
+reported under "Breaks activations": each activation of it would turn BROKEN
+and fire nothing. These are warnings, since the CLI cannot see whether anyone
+activated the trigger; the server lists any enabled activation a synced change
+broke in its owner's Inbox.
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -106,13 +116,14 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 			if err != nil {
 				return err
 			}
-			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins, sample)
+			return runWorkflowValidate(cmd, args, workflowDir, verboseValidate, failFast, jsonOutput, includeBuiltins, sample, base)
 		},
 	}
 	cmd.Flags().StringVar(&triggerPayload, "trigger-payload", "", "Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it")
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
 	cmd.Flags().StringVar(&activationParam, "activation-params", "", "Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload")
 	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "Sample trigger.activation.owner.github_id (a string), used with --trigger-payload")
+	cmd.Flags().StringVar(&base, "base", "", "Git revision the workflows are changing from: also report trigger changes that would break existing activations")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
 	cmd.Flags().BoolVarP(&verboseValidate, "verbose", "V", false, "Show detailed output for each workflow")
@@ -486,14 +497,19 @@ type validateResult struct {
 	Valid    bool     `json:"valid"`
 	Errors   []string `json:"errors,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
-	Nodes    int      `json:"nodes,omitempty"`
-	Edges    int      `json:"edges,omitempty"`
+	// ActivationBreaks are the declared-trigger changes since --base that
+	// existing activations cannot follow (activationBreaks). Warnings, kept
+	// apart so they are always printed.
+	ActivationBreaks []string `json:"activation_breaks,omitempty"`
+	Nodes            int      `json:"nodes,omitempty"`
+	Edges            int      `json:"edges,omitempty"`
 }
 
-func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample) error {
+func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, failFast, jsonOut, includeBuiltins bool, sample *triggerSample, base string) error {
 	var files []string
 
 	// Single file or directory from positional arg
+	singleFile := false
 	if len(args) == 1 {
 		path := args[0]
 		info, err := os.Stat(path)
@@ -510,6 +526,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		} else {
 			dir = filepath.Dir(path)
 			files = append(files, path)
+			singleFile = true
 		}
 	} else {
 		// Default directory mode
@@ -542,7 +559,20 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		return err
 	}
 
-	total := len(files) + len(builtins)
+	// What the edit since --base breaks, by workflow name; a deleted workflow
+	// is its own result (a single-file run is not about the others).
+	var breaks map[string][]string
+	var deleted []validateResult
+	if base != "" {
+		if breaks, deleted, err = activationBreaks(dir, base, layout); err != nil {
+			return err
+		}
+		if singleFile {
+			deleted = nil
+		}
+	}
+
+	total := len(files) + len(builtins) + len(deleted)
 	if total == 0 {
 		if jsonOut {
 			fmt.Println("[]")
@@ -580,9 +610,18 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	for _, file := range files {
 		result := validateWorkflowFileIn(file, dir, layout)
 		dryRunTriggers(&result, file, sample)
+		if result.Name != "" {
+			result.ActivationBreaks = breaks[result.Name]
+		}
 		if stopped = record(result); stopped {
 			break
 		}
+	}
+	for _, d := range deleted {
+		if stopped {
+			break
+		}
+		stopped = record(d)
 	}
 	for _, b := range builtins {
 		if stopped {
@@ -841,6 +880,9 @@ func printCompactValidateResult(r validateResult) {
 			fmt.Printf("      Error: %s\n", e)
 		}
 	}
+	for _, b := range r.ActivationBreaks {
+		fmt.Printf("      Breaks activations: %s\n", b)
+	}
 }
 
 func printVerboseValidateResult(r validateResult) {
@@ -865,6 +907,12 @@ func printVerboseValidateResult(r validateResult) {
 		fmt.Println("Warnings:")
 		for _, w := range r.Warnings {
 			fmt.Printf("  - %s\n", w)
+		}
+	}
+	if len(r.ActivationBreaks) > 0 {
+		fmt.Println("Breaks activations:")
+		for _, b := range r.ActivationBreaks {
+			fmt.Printf("  - %s\n", b)
 		}
 	}
 
@@ -1065,6 +1113,7 @@ func printValidateSummary(results []validateResult) {
 	valid := 0
 	invalid := 0
 	totalWarnings := 0
+	breaks := 0
 
 	for _, r := range results {
 		if r.Valid {
@@ -1072,7 +1121,8 @@ func printValidateSummary(results []validateResult) {
 		} else {
 			invalid++
 		}
-		totalWarnings += len(r.Warnings)
+		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks)
+		breaks += len(r.ActivationBreaks)
 	}
 
 	fmt.Println()
@@ -1083,6 +1133,9 @@ func printValidateSummary(results []validateResult) {
 	fmt.Printf("  Valid:    %d\n", valid)
 	fmt.Printf("  Invalid:  %d\n", invalid)
 	fmt.Printf("  Warnings: %d\n", totalWarnings)
+	if breaks > 0 {
+		fmt.Printf("  Breaks activations: %d (each activation of these triggers would turn BROKEN)\n", breaks)
+	}
 	fmt.Println("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550")
 
 	if invalid > 0 {

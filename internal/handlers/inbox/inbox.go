@@ -3,6 +3,8 @@ package inbox
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,17 +89,18 @@ func (s *Service) ListInbox(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
-	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.needsSetup))
+	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.declarations))
 	for _, p := range read.pending {
 		items = append(items, inboxItemFromPending(p))
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.needsSetup, read.recovery} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.declarations, read.recovery} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
 	}
+	items = dropSupersededByBroken(items)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
@@ -155,11 +158,13 @@ const inboxReadConcurrency = 3
 // inboxReads is what readInbox gathers: everything ListInbox lists, before
 // dismissals and scoping.
 type inboxReads struct {
-	pending    []*core.InboxPending
-	failing    []*reliantv1.InboxItem
-	storage    []*reliantv1.InboxItem
-	needsSetup []*reliantv1.InboxItem
-	recovery   []*reliantv1.InboxItem
+	pending []*core.InboxPending
+	failing []*reliantv1.InboxItem
+	storage []*reliantv1.InboxItem
+	// declarations are the items read from each enabled activation's
+	// declaration: needs-setup and broken (declarationItems).
+	declarations []*reliantv1.InboxItem
+	recovery     []*reliantv1.InboxItem
 }
 
 // inboxReadTimeout bounds a shared read (sharedRead), which runs detached
@@ -237,10 +242,10 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 			return err
 		})
 		tg.Go(func() error {
-			needsSetup, err := s.needsSetupAutomations(tctx, lim, stored)
+			declarations, err := s.declarationAutomations(tctx, lim, stored)
 			// Advisory like storage: the badge and the other sections still work.
-			advisory("Failed to compute needs-setup automations for inbox", err)
-			out.needsSetup = needsSetup
+			advisory("Failed to compute needs-setup and broken automations for inbox", err)
+			out.declarations = declarations
 			return nil
 		})
 		return tg.Wait()
@@ -470,26 +475,36 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userI
 	return out, nil
 }
 
-// needsSetupAutomations returns one item per enabled workflow automation whose
-// params leave a required input unset (triggers.NeedsSetupHealth, the same rule
-// Trigger.health reads), so a workflow update or a legacy `{}` activation that
-// the person did not just touch still reaches them. The item leaves the list
-// the moment setup is finished, because it is recomputed on every read. A
-// paused automation is the person's choice and not nagged about; an automation
-// whose declaration is broken is BROKEN, not a setup matter.
+// declarationAutomations returns the items read from each enabled workflow
+// automation's declaration, as it resolves NOW (the same rules Trigger.health
+// reads):
+//
+//   - NEEDS_SETUP (triggers.NeedsSetupHealth): its params leave a required
+//     input unset, so a workflow update or a legacy `{}` activation that the
+//     person did not just touch still reaches them;
+//   - BROKEN (a *triggers.DeclarationError): its workflow is gone or does not
+//     parse, or no longer declares the trigger, or changed in a way it cannot
+//     follow. Listed as AUTOMATION_FAILING with BROKEN health.
+//
+// Both are recomputed on every read from the stored workflows, so a synced
+// .reliant/workflows change (a deleted file, a renamed trigger, a field this
+// server does not know) reaches the owner on their next look, not on the
+// activation's next fire, which for a weekly schedule or a rare webhook may
+// be days away or never. Either item leaves the list the moment its cause is
+// gone. A paused automation is the person's choice and not nagged about.
 //
 // Resolving a declaration may read the workflow store, one workflow after
 // another, so the whole loop holds one of lim's tokens.
-func (s *Service) needsSetupAutomations(ctx context.Context, lim readLimiter, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
+func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	var out []*reliantv1.InboxItem
 	err := lim.do(ctx, func() error {
-		out = s.needsSetupItems(ctx, stored)
+		out = s.declarationItems(ctx, stored)
 		return nil
 	})
 	return out, err
 }
 
-func (s *Service) needsSetupItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
+func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	var out []*reliantv1.InboxItem
 	for _, t := range stored {
@@ -497,8 +512,13 @@ func (s *Service) needsSetupItems(ctx context.Context, stored []*core.Trigger) [
 			continue
 		}
 		decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
-		if err != nil {
+		var declErr *triggers.DeclarationError
+		if errors.As(err, &declErr) {
+			out = append(out, brokenAutomationItem(t, declErr))
 			continue
+		}
+		if err != nil {
+			continue // a store failure, not a verdict: the next read retries
 		}
 		issues := triggers.SetupIssues(decl, t)
 		if len(issues) == 0 {
@@ -525,6 +545,52 @@ func (s *Service) needsSetupItems(ctx context.Context, stored []*core.Trigger) [
 		})
 	}
 	return out
+}
+
+// brokenAutomationItem is the item for an enabled activation whose
+// declaration cannot be used. The reason is part of its identity, so
+// dismissing "the workflow no longer declares nightly" does not hide a later
+// "its workflow does not resolve".
+func brokenAutomationItem(t *core.Trigger, declErr *triggers.DeclarationError) *reliantv1.InboxItem {
+	health := triggers.BrokenHealth(declErr)
+	reason := sha256.Sum256([]byte(health.LastFailureDetail))
+	return &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
+		ItemId:       inboxFailingPrefix + brokenItemInfix + t.ID + ":" + hex.EncodeToString(reason[:6]),
+		TriggerId:    t.ID,
+		TriggerName:  t.Name,
+		ProjectId:    t.ProjectID,
+		ProjectName:  t.ProjectName,
+		WorkflowName: t.Workflow,
+		WaitingSince: t.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: &reliantv1.InboxAutomationFailing{Health: health}},
+	}
+}
+
+// brokenItemInfix follows inboxFailingPrefix on a broken automation's id.
+const brokenItemInfix = "broken:"
+
+// dropSupersededByBroken removes an automation's failing and could-not-start
+// items when the same automation is listed as broken: every firing of a broken
+// activation fails to launch, so those items restate the one cause the broken
+// item names, with a less useful reason.
+func dropSupersededByBroken(items []*reliantv1.InboxItem) []*reliantv1.InboxItem {
+	broken := map[string]bool{}
+	for _, it := range items {
+		if strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
+			broken[it.TriggerId] = true
+		}
+	}
+	if len(broken) == 0 {
+		return items
+	}
+	return slices.DeleteFunc(items, func(it *reliantv1.InboxItem) bool {
+		if !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
+			return false
+		}
+		return it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING ||
+			it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED
+	})
 }
 
 func (s *Service) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
