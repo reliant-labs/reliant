@@ -572,12 +572,36 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to read agent activity: %v", err)), nil
 	}
-	if !result.Found {
-		return WithResponseMetadata(NewTextResponse(fmt.Sprintf("Agent %s has no activity yet.", params.AgentID)), metadata), nil
+	// A missing assistant message does not mean execution never started. Surface
+	// the same persisted wait/activity signals as listing mode, including a
+	// provider wait before the first model response.
+	signals := s.loadSignals(rctx, thread.ChatID)
+	var wait db.ProviderBackoff
+	waiting := false
+	if !metadata.HasExited {
+		wait, waiting = signals.usageWaits[params.AgentID]
+		if waiting {
+			metadata.Status = "waiting for usage limit"
+		}
 	}
-
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "=== %s: %s ===\n\n", params.AgentID, metadata.Status)
+	if waiting {
+		fmt.Fprintf(&sb, "Waiting: %s\n", usageWaitSentence(wait.Provider, wait.ResumeAt.UTC().Format(time.RFC3339), wait.Reason == db.ReasonUsageLimitProbe))
+	}
+	if last := signals.lastActivity[params.AgentID]; !last.IsZero() {
+		fmt.Fprintf(&sb, "Last activity: %s\n", last.UTC().Format(time.RFC3339))
+	}
+	if q := signals.pendingQuestions[params.AgentID]; q != nil {
+		sb.WriteString("Gated: pending question\n")
+	} else if signals.pendingApprovalThreads[params.AgentID] {
+		sb.WriteString("Gated: pending approval\n")
+	}
+	if !result.Found {
+		sb.WriteString("No assistant message yet. This alone does not establish whether execution has started or is blocked.\n")
+		return WithResponseMetadata(NewTextResponse(sb.String()), metadata), nil
+	}
+	sb.WriteString("\n")
 	if result.Warning != "" {
 		fmt.Fprintf(&sb, "[WORKFLOW_WARNING] %s\n\nLast response before warning:\n", result.Warning)
 	}
