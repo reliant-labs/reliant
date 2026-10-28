@@ -185,6 +185,11 @@ type SpawnHandoff struct {
 	// deterministic failure would otherwise give the parent the same report,
 	// and a turn to read it, on every one.
 	LastFailure string `json:"last_failure,omitempty"`
+	// PendingToolBatch is set when the spawn parked inside a blocking
+	// ask_user wait: the successor re-enters iteration LoopIteration at its
+	// execute_tools batch, with what already settled, instead of calling the
+	// LLM again (ask_user_handoff.go).
+	PendingToolBatch *PendingToolBatch `json:"pending_tool_batch,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
