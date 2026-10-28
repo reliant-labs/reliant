@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enums "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 )
@@ -48,6 +49,36 @@ func (b *capacityBoundary) DescribeWorkflowExecution(context.Context, string, st
 	return b.desc, b.err
 }
 
+// failingReleaseBoundary fails to release one occupied row; the others must
+// still be reconciled and the fire must not fail.
+type failingReleaseBoundary struct {
+	capacityBoundary
+	releasedRows []string
+}
+
+func (b *failingReleaseBoundary) ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error) {
+	return []store.TriggerCapacityExecution{
+		{EventID: "bad", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: true},
+		{EventID: "good", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: true},
+	}, nil
+}
+func (b *failingReleaseBoundary) ReleaseTriggerCapacityExecution(_ context.Context, e store.TriggerCapacityExecution) error {
+	if e.EventID == "bad" {
+		return errors.New("bind conflict")
+	}
+	b.releasedRows = append(b.releasedRows, e.EventID)
+	b.released = true
+	return nil
+}
+
+func TestCapacityOneBadRowDoesNotBlockTheScope(t *testing.T) {
+	b := &failingReleaseBoundary{capacityBoundary: capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending},
+		desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow"}, FirstRunId: "first", Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}}}}
+	spec := launch.Spec{}
+	require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, 1, &spec))
+	require.Equal(t, []string{"good"}, b.releasedRows)
+}
+
 func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -62,6 +93,7 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 		{"different-chain", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "other", false, true},
 		{"different-running-chain", enums.WORKFLOW_EXECUTION_STATUS_RUNNING, "other", false, true},
 		{"outage", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "first", true, false},
+		{"history-expired", enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, "first", true, true},
 		{"completed", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "first", false, true},
 		{"failed", enums.WORKFLOW_EXECUTION_STATUS_FAILED, "first", false, true},
 		{"cancelled", enums.WORKFLOW_EXECUTION_STATUS_CANCELED, "first", false, true},
@@ -72,6 +104,10 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 			b := &capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending}, desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow", RunId: "successor"}, FirstRunId: tc.first, Status: tc.status}}}
 			if tc.apiErr {
 				b.err = errors.New("unavailable")
+				if tc.name == "history-expired" {
+					// Temporal deletes only closed histories, past retention.
+					b.err = serviceerror.NewNotFound("workflow execution not found")
+				}
 			}
 			spec := launch.Spec{}
 			require.NoError(t, prepareCapacity(context.Background(), b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, 1, &spec))

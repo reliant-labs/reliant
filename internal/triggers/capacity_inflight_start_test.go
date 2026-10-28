@@ -66,7 +66,7 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 			}
 
 			// The fresh database attempt must hold before any external Describe can authorize release.
-			require.NoError(t, reconcileCapacityExecutions(ctx, f.repo, starter, occupied))
+			require.NoError(t, reconcileCapacityExecution(ctx, f.repo, starter, held))
 			after, err := f.repo.ListTriggerCapacityExecutions(ctx, scope)
 			require.NoError(t, err)
 			require.Len(t, after, 1, "an in-flight start holds its slot however its root left PENDING")
