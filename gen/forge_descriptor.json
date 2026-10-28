@@ -14738,12 +14738,6 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelInventory"
-          },
-          {
-            "Name": "restart_status",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.DaemonRestartStatus"
           }
         ],
         "ReportToolResultRequest": [
@@ -14931,12 +14925,6 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.ToolResultAck"
-          },
-          {
-            "Name": "restart_requested",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.RestartRequested"
           }
         ],
         "WhoAmIRequest": null,
@@ -15054,10 +15042,6 @@
           },
           {
             "name": "error_message",
-            "kind": "string"
-          },
-          {
-            "name": "error_code",
             "kind": "string"
           }
         ],
@@ -15211,12 +15195,6 @@
             "kind": "message",
             "type_name": "reliant.v1.LocalModelInventory",
             "oneof": "message"
-          },
-          {
-            "name": "restart_status",
-            "kind": "message",
-            "type_name": "reliant.v1.DaemonRestartStatus",
-            "oneof": "message"
           }
         ],
         "reliant.v1.DaemonRegister": [
@@ -15273,37 +15251,6 @@
           },
           {
             "name": "forge_version",
-            "kind": "string"
-          },
-          {
-            "name": "restart_status",
-            "kind": "message",
-            "type_name": "reliant.v1.DaemonRestartStatus"
-          },
-          {
-            "name": "incarnation_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.DaemonRestartStatus": [
-          {
-            "name": "deadline_unix_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "reason",
-            "kind": "string"
-          },
-          {
-            "name": "drained",
-            "kind": "bool"
-          },
-          {
-            "name": "timed_out",
-            "kind": "bool"
-          },
-          {
-            "name": "incarnation_id",
             "kind": "string"
           }
         ],
@@ -15988,16 +15935,6 @@
             "kind": "bool"
           }
         ],
-        "reliant.v1.RestartRequested": [
-          {
-            "name": "deadline_unix_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "reason",
-            "kind": "string"
-          }
-        ],
         "reliant.v1.ServerHeartbeat": [
           {
             "name": "timestamp",
@@ -16133,12 +16070,6 @@
             "name": "tool_result_ack",
             "kind": "message",
             "type_name": "reliant.v1.ToolResultAck",
-            "oneof": "message"
-          },
-          {
-            "name": "restart_requested",
-            "kind": "message",
-            "type_name": "reliant.v1.RestartRequested",
             "oneof": "message"
           }
         ],
@@ -16332,7 +16263,6 @@
         "reliant.v1.DaemonKillProcessResponse": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DaemonMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DaemonRegister": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.DaemonRestartStatus": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -16362,7 +16292,6 @@
         "reliant.v1.RegistrationAck": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ReportToolResultRequest": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ReportToolResultResponse": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.RestartRequested": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ServerHeartbeat": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ServerMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.TerminalInputMessage": "reliant/v1/tools_daemon.proto",
@@ -16439,26 +16368,6 @@
       "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
       "PkgName": "reliantv1",
       "Methods": [
-        {
-          "Name": "RequestDaemonRestart",
-          "InputType": "RequestDaemonRestartRequest",
-          "OutputType": "RequestDaemonRestartResponse",
-          "ClientStreaming": false,
-          "ServerStreaming": false,
-          "AuthRequired": true,
-          "Errors": null,
-          "InputTypeFQ": "reliant.v1.RequestDaemonRestartRequest",
-          "OutputTypeFQ": "reliant.v1.RequestDaemonRestartResponse",
-          "InputProtoFile": "reliant/v1/daemon_registry.proto",
-          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
-          "Activity": {
-            "Mutating": true,
-            "Declared": true,
-            "Verb": "request_restart",
-            "TargetKind": "daemon",
-            "Writer": "INTERCEPTOR"
-          }
-        },
         {
           "Name": "ListDaemons",
           "InputType": "ListDaemonsRequest",
@@ -16650,31 +16559,6 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelInventory"
-          }
-        ],
-        "RequestDaemonRestartRequest": [
-          {
-            "Name": "daemon_id",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "reason",
-            "ProtoType": "string",
-            "IsOptional": false
-          },
-          {
-            "Name": "deadline_unix_ms",
-            "ProtoType": "int64",
-            "IsOptional": false
-          }
-        ],
-        "RequestDaemonRestartResponse": [
-          {
-            "Name": "restart_status",
-            "ProtoType": "message",
-            "IsOptional": false,
-            "MessageType": "reliant.v1.DaemonRestartStatus"
           }
         ],
         "ResolveDaemonRequest": [
@@ -16907,33 +16791,6 @@
           },
           {
             "name": "forge_version",
-            "kind": "string"
-          },
-          {
-            "name": "restart_status",
-            "kind": "message",
-            "type_name": "reliant.v1.DaemonRestartStatus"
-          }
-        ],
-        "reliant.v1.DaemonRestartStatus": [
-          {
-            "name": "deadline_unix_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "reason",
-            "kind": "string"
-          },
-          {
-            "name": "drained",
-            "kind": "bool"
-          },
-          {
-            "name": "timed_out",
-            "kind": "bool"
-          },
-          {
-            "name": "incarnation_id",
             "kind": "string"
           }
         ],
@@ -17185,27 +17042,6 @@
             "type_name": "reliant.v1.LocalModelInventory"
           }
         ],
-        "reliant.v1.RequestDaemonRestartRequest": [
-          {
-            "name": "daemon_id",
-            "kind": "string"
-          },
-          {
-            "name": "reason",
-            "kind": "string"
-          },
-          {
-            "name": "deadline_unix_ms",
-            "kind": "int64"
-          }
-        ],
-        "reliant.v1.RequestDaemonRestartResponse": [
-          {
-            "name": "restart_status",
-            "kind": "message",
-            "type_name": "reliant.v1.DaemonRestartStatus"
-          }
-        ],
         "reliant.v1.ResolveDaemonRequest": [
           {
             "name": "daemon_id",
@@ -17277,7 +17113,6 @@
         "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
         "reliant.v1.DaemonInfo": "reliant/v1/daemon_registry.proto",
-        "reliant.v1.DaemonRestartStatus": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -17291,8 +17126,6 @@
         "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
-        "reliant.v1.RequestDaemonRestartRequest": "reliant/v1/daemon_registry.proto",
-        "reliant.v1.RequestDaemonRestartResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -17317,8 +17150,7 @@
           "DAEMON_STATUS_DISCONNECTED",
           "DAEMON_STATUS_PENDING",
           "DAEMON_STATUS_SUSPENDED",
-          "DAEMON_STATUS_FAILED",
-          "DAEMON_STATUS_UPDATING"
+          "DAEMON_STATUS_FAILED"
         ],
         "reliant.v1.DiskGuardState": [
           "DISK_GUARD_STATE_UNSPECIFIED",
@@ -17343,8 +17175,7 @@
           3,
           4,
           5,
-          6,
-          7
+          6
         ],
         "reliant.v1.DiskGuardState": [
           0,
@@ -42022,7 +41853,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "1434425d14eaf704bd1bf77841615391a4007fda2907764ea2bc07f2044957e1",
+    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
@@ -42046,7 +41877,7 @@
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "dd6dad7dac70569a324f30b80e6397a201aa91cb62095e78b9cec8c0d4637b38",
+    "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
     "reliant/v1/trigger.proto": "70a0e0d2c0dd52a775ab4e2007b58a099bbea6c22a7cecebb2e1a61940ea4ffa",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",

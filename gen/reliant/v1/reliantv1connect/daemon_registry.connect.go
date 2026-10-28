@@ -35,9 +35,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DaemonRegistryServiceRequestDaemonRestartProcedure is the fully-qualified name of the
-	// DaemonRegistryService's RequestDaemonRestart RPC.
-	DaemonRegistryServiceRequestDaemonRestartProcedure = "/reliant.v1.DaemonRegistryService/RequestDaemonRestart"
 	// DaemonRegistryServiceListDaemonsProcedure is the fully-qualified name of the
 	// DaemonRegistryService's ListDaemons RPC.
 	DaemonRegistryServiceListDaemonsProcedure = "/reliant.v1.DaemonRegistryService/ListDaemons"
@@ -63,8 +60,6 @@ const (
 
 // DaemonRegistryServiceClient is a client for the reliant.v1.DaemonRegistryService service.
 type DaemonRegistryServiceClient interface {
-	// Admin-only manual drain hook. No floor, quiet-point or rollout policy.
-	RequestDaemonRestart(context.Context, *connect.Request[v1.RequestDaemonRestartRequest]) (*connect.Response[v1.RequestDaemonRestartResponse], error)
 	// ListDaemons returns the authenticated user's registered daemons.
 	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
 	// GetDaemon fetches a specific daemon by ID.
@@ -108,12 +103,6 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 	baseURL = strings.TrimRight(baseURL, "/")
 	daemonRegistryServiceMethods := v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods()
 	return &daemonRegistryServiceClient{
-		requestDaemonRestart: connect.NewClient[v1.RequestDaemonRestartRequest, v1.RequestDaemonRestartResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceRequestDaemonRestartProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("RequestDaemonRestart")),
-			connect.WithClientOptions(opts...),
-		),
 		listDaemons: connect.NewClient[v1.ListDaemonsRequest, v1.ListDaemonsResponse](
 			httpClient,
 			baseURL+DaemonRegistryServiceListDaemonsProcedure,
@@ -162,7 +151,6 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 
 // daemonRegistryServiceClient implements DaemonRegistryServiceClient.
 type daemonRegistryServiceClient struct {
-	requestDaemonRestart   *connect.Client[v1.RequestDaemonRestartRequest, v1.RequestDaemonRestartResponse]
 	listDaemons            *connect.Client[v1.ListDaemonsRequest, v1.ListDaemonsResponse]
 	getDaemon              *connect.Client[v1.GetDaemonRequest, v1.GetDaemonResponse]
 	resolveDaemon          *connect.Client[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse]
@@ -170,11 +158,6 @@ type daemonRegistryServiceClient struct {
 	refreshLocalModels     *connect.Client[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse]
 	setLocalModelEndpoints *connect.Client[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse]
 	clearMachineCaches     *connect.Client[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse]
-}
-
-// RequestDaemonRestart calls reliant.v1.DaemonRegistryService.RequestDaemonRestart.
-func (c *daemonRegistryServiceClient) RequestDaemonRestart(ctx context.Context, req *connect.Request[v1.RequestDaemonRestartRequest]) (*connect.Response[v1.RequestDaemonRestartResponse], error) {
-	return c.requestDaemonRestart.CallUnary(ctx, req)
 }
 
 // ListDaemons calls reliant.v1.DaemonRegistryService.ListDaemons.
@@ -215,8 +198,6 @@ func (c *daemonRegistryServiceClient) ClearMachineCaches(ctx context.Context, re
 // DaemonRegistryServiceHandler is an implementation of the reliant.v1.DaemonRegistryService
 // service.
 type DaemonRegistryServiceHandler interface {
-	// Admin-only manual drain hook. No floor, quiet-point or rollout policy.
-	RequestDaemonRestart(context.Context, *connect.Request[v1.RequestDaemonRestartRequest]) (*connect.Response[v1.RequestDaemonRestartResponse], error)
 	// ListDaemons returns the authenticated user's registered daemons.
 	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
 	// GetDaemon fetches a specific daemon by ID.
@@ -256,12 +237,6 @@ type DaemonRegistryServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	daemonRegistryServiceMethods := v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods()
-	daemonRegistryServiceRequestDaemonRestartHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceRequestDaemonRestartProcedure,
-		svc.RequestDaemonRestart,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("RequestDaemonRestart")),
-		connect.WithHandlerOptions(opts...),
-	)
 	daemonRegistryServiceListDaemonsHandler := connect.NewUnaryHandler(
 		DaemonRegistryServiceListDaemonsProcedure,
 		svc.ListDaemons,
@@ -307,8 +282,6 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 	)
 	return "/reliant.v1.DaemonRegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case DaemonRegistryServiceRequestDaemonRestartProcedure:
-			daemonRegistryServiceRequestDaemonRestartHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceListDaemonsProcedure:
 			daemonRegistryServiceListDaemonsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceGetDaemonProcedure:
@@ -331,10 +304,6 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 
 // UnimplementedDaemonRegistryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDaemonRegistryServiceHandler struct{}
-
-func (UnimplementedDaemonRegistryServiceHandler) RequestDaemonRestart(context.Context, *connect.Request[v1.RequestDaemonRestartRequest]) (*connect.Response[v1.RequestDaemonRestartResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.RequestDaemonRestart is not implemented"))
-}
 
 func (UnimplementedDaemonRegistryServiceHandler) ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ListDaemons is not implemented"))

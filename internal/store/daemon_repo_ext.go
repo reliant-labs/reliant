@@ -331,7 +331,6 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		LastStatusChangedAt: row.LastStatusChangedAt,
 		LastOOMKilledAt:     row.LastOomKilledAt,
 		OOMKillCount:        row.OomKillCount,
-		RestartStatus:       string(row.RestartStatus),
 	}
 }
 

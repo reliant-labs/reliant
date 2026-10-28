@@ -208,7 +208,7 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 		// Nothing can be asked of the daemon, and nothing delivered by it,
 		// until a gateway holds its stream again. A result that lands first
 		// is taken: the daemon sends held results as soon as it registers.
-		msg, reachable, err := r.awaitDaemonOrReply(ctx, inbox, userID, daemonID, earliest(deadline, r.reconnectDeadline(ctx, userID, daemonID, time.Now().Add(DaemonReconnectGrace))))
+		msg, reachable, err := r.awaitDaemonOrReply(ctx, inbox, userID, daemonID, earliest(deadline, time.Now().Add(DaemonReconnectGrace)))
 		switch {
 		case err != nil:
 			return nil, dispatchFinal, redeliveryWaitError(ctx, err)
@@ -309,7 +309,7 @@ func (r *NATSDaemonRouter) awaitDaemonOrReply(ctx context.Context, inbox *replyI
 	defer stop()
 	probe := make(chan error, 1)
 	go func() {
-		err := r.awaitDaemonSubject(waitCtx, userID, daemonID, by, false, toolRecoverySubject)
+		err := r.awaitDaemon(waitCtx, userID, daemonID, by, false)
 		probe <- err
 		stop() // ends the inbox wait below
 	}()

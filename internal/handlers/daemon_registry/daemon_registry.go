@@ -504,13 +504,6 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		OomKillCount:      d.OOMKillCount,
 		CreatedAt:         timestamppb.New(d.CreatedAt),
 	}
-	var restart reliantv1.DaemonRestartStatus
-	if json.Unmarshal([]byte(d.RestartStatus), &restart) == nil && restart.DeadlineUnixMs > 0 {
-		info.RestartStatus = &restart
-		if att != nil || time.Now().Before(time.UnixMilli(restart.DeadlineUnixMs).Add(toolexec.DaemonRestartBudget)) {
-			info.Status = reliantv1.DaemonStatus_DAEMON_STATUS_UPDATING
-		}
-	}
 	// Sourced from the attachment lease, so both are absent while nothing is
 	// attached. That is deliberate: the lease row is deleted on disconnect and
 	// this service keeps no history, so there is no honest "last connected" to
