@@ -14142,6 +14142,15 @@ give only the fields your expressions read. The JSON may be a file: @event.json.
 would set them (params it leaves out read as the workflow's input defaults), and
 --owner-github-id trigger.activation.owner.github_id.
 
+With --base <git revision> (in CI, the branch the change merges into), the
+declared triggers are also compared with the ones at that revision. An edit that
+existing activations cannot follow — a workflow with triggers deleted, a trigger
+renamed or removed, a trigger changed to another kind or integration — is
+reported under "Breaks activations": each activation of it would turn BROKEN
+and fire nothing. These are warnings, since the CLI cannot see whether anyone
+activated the trigger; the server lists any enabled activation a synced change
+broke in its owner's Inbox.
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
 ```
@@ -14153,6 +14162,7 @@ reliant workflow validate [path] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--activation-params` | `string` | - | Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload |
+| `--base` | `string` | - | Git revision the workflows are changing from: also report trigger changes that would break existing activations |
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first validation error |
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
