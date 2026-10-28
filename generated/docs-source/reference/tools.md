@@ -2876,6 +2876,13 @@ If the target has finished (completed, or stopped by the user), this FAILS
 rather than silently doing nothing — use spawn(agent_id=...) to resume it
 instead.
 
+SUBJECT AND MESSAGE:
+Every message needs a short one-line subject (at most 100 characters) as well
+as the message itself. The chat shows agent-to-agent messages collapsed to
+their subject, so make it say what the message is about ("Tests pass; PR
+ready for review", "Blocked: need the staging DB URL"); put the detail in
+message.
+
 ---
 
 ### spawn_status

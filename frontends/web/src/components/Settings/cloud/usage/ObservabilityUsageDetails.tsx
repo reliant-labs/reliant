@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
 import { useState } from "react";
 import Card, { CardHeader } from "@/components/forge-ui/card";
+import DataTable from "@/components/forge-ui/data_table";
 import type { GetObservabilityStorageResponse, UsageBucket } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { useObsBillingDays, useObsBillingLimits, useObsBillingStorage, useObsLimitHistory, useUpdateObsLimits } from "@/hooks/observability-billing-queries";
 import { at, dailyTotals, day, dollars, gb, monthNow, usageCsv } from "./observabilityBillingModel";
@@ -73,15 +74,45 @@ export function DailyUsageTable({ buckets }: { buckets: UsageBucket[] }) {
       </div></div>)}
       <div className="flex flex-wrap gap-4">{Object.entries(SIGNAL_CLASSES).map(([signal, color]) => <span key={signal} className="flex items-center gap-1"><span className={`inline-block h-2 w-2 rounded ${color}`} />{signal}</span>)}</div>
     </figure>
-    <div className="overflow-x-auto"><table className="w-full text-left text-xs tabular-nums"><caption className="sr-only">Daily ingestion by signal and service</caption><thead><tr className="border-b border-border">{["UTC day", "Signal", "Service", "Ingested", "Billable", "Kept free above cap", "Rows"].map(h => <th scope="col" className="whitespace-nowrap px-2 py-2" key={h}>{h}</th>)}</tr></thead><tbody>
-      {buckets.map((b, index) => <tr className="border-b border-border/60" key={`${day(b.bucketStart)}/${b.signal}/${b.service}/${index}`}><td className="whitespace-nowrap px-2 py-2">{day(b.bucketStart)}</td><td className="px-2 py-2">{b.signal}</td><td className="max-w-48 break-words px-2 py-2">{b.service || "(no service name)"}</td><td className="whitespace-nowrap px-2 py-2">{gb(b.ingestedBytes)}</td><td className="whitespace-nowrap px-2 py-2">{gb(b.billedBytes)}</td><td className="whitespace-nowrap px-2 py-2">{gb(b.unchargedBytes)}</td><td className="px-2 py-2">{b.rows.toLocaleString()}</td></tr>)}
-    </tbody><tfoot><tr><th scope="row" colSpan={3} className="px-2 py-2">Total shown</th><td className="px-2 py-2">{gb(buckets.reduce((n, b) => n + b.ingestedBytes, 0n))}</td><td className="px-2 py-2">{gb(buckets.reduce((n, b) => n + b.billedBytes, 0n))}</td><td className="px-2 py-2">{gb(buckets.reduce((n, b) => n + b.unchargedBytes, 0n))}</td><td className="px-2 py-2">{buckets.reduce((n, b) => n + b.rows, 0n).toLocaleString()}</td></tr></tfoot></table></div>
+    <div className="forge-ui">
+      <DataTable<{ key: string; b: UsageBucket }>
+        compact
+        ariaLabel="Daily ingestion by signal and service"
+        columns={[
+          { key: "day", header: "UTC day", render: (_, { b }) => day(b.bucketStart) },
+          { key: "signal", header: "Signal", render: (_, { b }) => b.signal },
+          { key: "service", header: "Service", className: "max-w-48 whitespace-normal break-words", render: (_, { b }) => b.service || "(no service name)" },
+          { key: "ingested", header: "Ingested", numeric: true, render: (_, { b }) => gb(b.ingestedBytes) },
+          { key: "billable", header: "Billable", numeric: true, render: (_, { b }) => gb(b.billedBytes) },
+          { key: "free", header: "Kept free above cap", numeric: true, render: (_, { b }) => gb(b.unchargedBytes) },
+          { key: "rows", header: "Rows", numeric: true, render: (_, { b }) => b.rows.toLocaleString() },
+        ]}
+        data={buckets.map((b, index) => ({ key: `${day(b.bucketStart)}/${b.signal}/${b.service}/${index}`, b }))}
+        getRowKey={(r) => r.key}
+      />
+    </div>
+    <p className="mt-2 text-xs tabular-nums text-muted-foreground" data-testid="obs-usage-total">
+      Total shown: {gb(buckets.reduce((n, b) => n + b.ingestedBytes, 0n))} ingested · {gb(buckets.reduce((n, b) => n + b.billedBytes, 0n))} billable ·{" "}
+      {gb(buckets.reduce((n, b) => n + b.unchargedBytes, 0n))} kept free above cap · {buckets.reduce((n, b) => n + b.rows, 0n).toLocaleString()} rows
+    </p>
     <p className="mt-3 text-xs text-muted-foreground">Dollar charges are organization-wide, after the monthly allowance and cap; this API does not allocate invoice dollars to individual service rows. CSV exports exact bytes, not rounded GB.</p>
   </>;
 }
 export function StorageSnapshot({ storage }: { storage: GetObservabilityStorageResponse }) {
   return <Card><CardHeader title="What's stored now" description={storage.asOf ? `Snapshot as of ${at(storage.asOf)} · ${gb(storage.totalStoredBytes)} stored` : "No stored-now snapshot available yet."} />
-    {storage.asOf && (!storage.signals.length ? <p className="text-sm text-muted-foreground">The snapshot contains no stored telemetry.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{["Signal", "Stored now", "Rows", "Oldest data"].map(h => <th scope="col" className="py-2 pr-4" key={h}>{h}</th>)}</tr></thead><tbody>{storage.signals.map(s => <tr className="border-t border-border" key={s.signal}><th scope="row" className="py-3 pr-4 text-left font-medium">{s.signal}</th><td className="py-3 pr-4">{gb(s.storedBytes)}</td><td className="py-3 pr-4">{s.rows.toLocaleString()}</td><td className="py-3">{s.oldestAt ? at(s.oldestAt) : "No data"}</td></tr>)}</tbody></table></div>)}
+    {storage.asOf && (!storage.signals.length ? <p className="text-sm text-muted-foreground">The snapshot contains no stored telemetry.</p> : <div className="forge-ui">
+      <DataTable<{ signal: string; s: GetObservabilityStorageResponse["signals"][number] }>
+        ariaLabel="Stored telemetry by signal"
+        columns={[
+          { key: "signal", header: "Signal", className: "font-medium", render: (_, { s }) => s.signal },
+          { key: "stored", header: "Stored now", numeric: true, render: (_, { s }) => gb(s.storedBytes) },
+          { key: "rows", header: "Rows", numeric: true, render: (_, { s }) => s.rows.toLocaleString() },
+          { key: "oldest", header: "Oldest data", render: (_, { s }) => (s.oldestAt ? at(s.oldestAt) : "No data") },
+        ]}
+        data={storage.signals.map((s) => ({ signal: s.signal, s }))}
+        getRowKey={(r) => r.signal}
+      />
+    </div>)}
     {storage.signals.some(s => s.services.length > 0) && <details className="mt-3 text-sm"><summary>Per-service shares (estimates)</summary><p className="my-2 text-xs text-muted-foreground">Estimated from what arrived within each signal's retention, not exact current service storage.</p><ul>{storage.signals.flatMap(s => s.services.map(service => <li key={`${s.signal}/${service.service}`}>{s.signal} · {service.service || "(no service name)"}: {gb(service.estimatedBytes)} estimated</li>))}</ul></details>}
     <p className="mt-3 text-xs text-muted-foreground">Storage isn't billed separately. You pay once, when data arrives, and retention is included. Stored data shrinks as it ages out. See retention below.</p>
   </Card>;

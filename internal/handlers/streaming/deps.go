@@ -39,8 +39,8 @@ type Repository interface {
 	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
 	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
 
-	// GetAttachmentsByIDs, GetContextUsage and ListToolCallsByIDs are called
-	// directly too; the roles below already declare them.
+	// GetAttachmentsByIDs and GetContextUsage are called directly too; the
+	// roles below already declare them.
 	threads.Repository
 	messageproto.Reader
 }

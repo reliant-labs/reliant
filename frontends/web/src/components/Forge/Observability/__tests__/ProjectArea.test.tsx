@@ -49,7 +49,7 @@ describe("group-by", () => {
     expect(harness.current().groupBy).toEqual(["deployment.environment.name"]);
     await screen.findByTestId("obs-service-api-prod");
     expect(screen.getByTestId("obs-service-api-staging")).toBeInTheDocument();
-    expect(screen.getByTestId("obs-overview-group-header")).toHaveTextContent("Environment");
+    expect(screen.getByRole("columnheader", { name: "Environment" })).toBeInTheDocument();
     expect(callsOf(onCall, "GetServiceOverview").at(-1)).toMatchObject({ groupBy: ["deployment.environment.name"] });
 
     await user.click(within(screen.getByTestId("obs-service-api-prod")).getByRole("button", { name: "api" }));

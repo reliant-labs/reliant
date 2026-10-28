@@ -20,10 +20,11 @@ vi.mock("@/hooks/project-queries", async (importOriginal) => ({
 const startAskReliantChat = vi.hoisted(() => vi.fn());
 vi.mock("../startAskReliantChat", () => ({ startAskReliantChat }));
 const toastError = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/toast-manager", () => ({ toast: { error: toastError, success: vi.fn(), info: vi.fn() } }));
+const toastWarning = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/toast-manager", () => ({ toast: { error: toastError, warning: toastWarning, success: vi.fn(), info: vi.fn() } }));
 
 import { ForgeConsoleContext, type ForgeConsole } from "../../../Console/consoleContext";
-import { AskReliantButton, useAskReliant } from "../AskReliant";
+import { AskReliantActions, AskReliantButton, AskReliantMenu, useAskReliant } from "../AskReliant";
 import { ObsAskContextValue } from "../askReliantContext";
 
 const project = (id: string, forge?: string): Project => ({
@@ -59,6 +60,7 @@ describe("Ask Reliant", () => {
   beforeEach(() => {
     startAskReliantChat.mockReset().mockResolvedValue({ worktreeId: "w1" });
     toastError.mockReset();
+    toastWarning.mockReset();
   });
 
   it("starts a branched chat in the project that owns the forge project, with the references-only prompt", async () => {
@@ -165,5 +167,81 @@ describe("Ask Reliant", () => {
     await waitFor(() => expect(startAskReliantChat).toHaveBeenCalled());
     expect(startAskReliantChat.mock.calls[0][0].prompt).toContain("Alert rule HighErrorRate (fingerprint f1) in environment prod (forge project shop).");
     expect(startAskReliantChat.mock.calls[0][0].onChatCreated).toBe(onChatCreated);
+  });
+});
+
+describe("Investigate in chat / Fix with agent", () => {
+  beforeEach(() => {
+    startAskReliantChat.mockReset().mockResolvedValue({ worktreeId: "w1" });
+    toastError.mockReset();
+    toastWarning.mockReset();
+    setProjects([project("a", "shop")], null);
+  });
+
+  const renderActions = (props: Partial<Parameters<typeof AskReliantActions>[0]> = {}) =>
+    render(
+      <ForgeConsoleContext.Provider value={consoleFor("shop", "a")}>
+        <AskReliantActions subject={issue} {...props} />
+      </ForgeConsoleContext.Provider>
+    );
+
+  it("investigate leaves an investigation prompt unsent on an ask- branch", async () => {
+    const onChatCreated = vi.fn();
+    renderActions({ onChatCreated });
+    await userEvent.click(screen.getByTestId("ask-reliant-investigate"));
+
+    await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
+    const args = startAskReliantChat.mock.calls[0][0];
+    expect(args.send).toBe(false);
+    expect(args.workspaceName).toMatch(/^ask-issue-iss-7f3a-/);
+    expect(args.prompt).toMatch(/Don't change any code yet/);
+    expect(args.onChatCreated).toBe(onChatCreated);
+  });
+
+  it("fix sends a fix prompt at once, on a fix- branch", async () => {
+    renderActions();
+    await userEvent.click(screen.getByTestId("ask-reliant-fix"));
+
+    await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
+    const args = startAskReliantChat.mock.calls[0][0];
+    expect(args.send).toBe(true);
+    expect(args.workspaceName).toMatch(/^fix-issue-iss-7f3a-/);
+    expect(args.prompt).toMatch(/Then fix it\./);
+    expect(toastWarning).not.toHaveBeenCalled();
+  });
+
+  it("says the agent did not start, and where its prompt is, when the send fails", async () => {
+    startAskReliantChat.mockResolvedValueOnce({ worktreeId: "w1", sendError: new Error("machine asleep") });
+    renderActions();
+    await userEvent.click(screen.getByTestId("ask-reliant-fix"));
+
+    await waitFor(() => expect(toastWarning).toHaveBeenCalledWith(expect.stringMatching(/machine asleep.*waiting in the composer/)));
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("leads with a chat already started from the subject, and keeps a new one a menu away", async () => {
+    const open = vi.fn();
+    renderActions({ linkedChat: { label: "Fix the deadline", open } });
+    expect(screen.queryByTestId("ask-reliant-investigate")).toBeNull();
+
+    await userEvent.click(screen.getByTestId("ask-reliant-open-chat"));
+    expect(open).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByTestId("ask-reliant-menu"));
+    await userEvent.click(await screen.findByTestId("ask-reliant-fix"));
+    await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
+    expect(startAskReliantChat.mock.calls[0][0].send).toBe(true);
+  });
+
+  it("the row menu offers both", async () => {
+    render(
+      <ForgeConsoleContext.Provider value={consoleFor("shop", "a")}>
+        <AskReliantMenu subject={issue} testId="row-ask" />
+      </ForgeConsoleContext.Provider>
+    );
+    await userEvent.click(screen.getByTestId("row-ask"));
+    await userEvent.click(await screen.findByTestId("ask-reliant-investigate"));
+    await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
+    expect(startAskReliantChat.mock.calls[0][0].send).toBe(false);
   });
 });

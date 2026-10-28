@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 import { DevStackPanel } from "../DevStackPanel";
 import { classifyForgeResponse, type ForgeOutcome } from "@/services/forge/topology";
@@ -244,7 +244,8 @@ describe("no check is filtered out", () => {
     renderPanel(reportOutcome(allFiveReport()));
     expect(screen.getByTestId("forge-check-Cluster Workloads")).toBeTruthy();
     expect(screen.getByTestId("forge-check-App Health")).toBeTruthy();
-    expect(screen.getByTestId("forge-status-checks").children).toHaveLength(5);
+    // The header row, then one row per check.
+    expect(within(screen.getByTestId("forge-status-checks")).getAllByRole("row")).toHaveLength(1 + 5);
   });
 
   it("renders a check with no name rather than dropping it", () => {

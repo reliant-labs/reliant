@@ -170,7 +170,7 @@ func (s *Service) ListMessages(
 	}
 
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, messageIDs, blocksByMessageID, attachmentMap, viewingThreadID, 0)
+		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,

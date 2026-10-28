@@ -4,31 +4,35 @@
  * /apps — everything the user has built and deployed, with the links to open
  * it. The sidebar's Apps entry lands here.
  *
- * An app is a forge project (services/forge/apps.ts). Each card leads with
- * the app's live frontend, then one row per long-lived environment — its live
- * URLs, its health, and its last deploy — and opens the app's console for
- * everything else (releases, observability, secrets, domains).
+ * An app is a forge project (services/forge/apps.ts), and the page is ONE
+ * table of them (forge-ui DataTable, the list every console page is made of):
+ * the app, the site it is live at (its custom domain once that is live), the
+ * health of each long-lived environment, and its last deploy. A row opens the
+ * app's console for everything else (releases, observability, secrets,
+ * domains); the site link opens the app itself.
  *
  * The page answers "what have I shipped, and where is it?", so a user who has
  * shipped nothing is offered the way to: a chat that builds an app with forge
  * and deploys it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowRight, Boxes, CircleCheck, ExternalLink, Plus } from "lucide-react";
+import { CircleCheck, Plus } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
-import Card, { CardInset } from "@/components/forge-ui/card";
+import Card from "@/components/forge-ui/card";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import PageHeader from "@/components/forge-ui/page_header";
-import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
+import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import { isLive, primaryLink, type AppSummary } from "@/services/forge/apps";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
+import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
+import { verdictLabel } from "@/services/forge/topology";
 
 import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
-import { AppEnvRow } from "./appParts";
+import { LiveLink, verdictTone } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
 
 export function AppsPage() {
@@ -63,37 +67,169 @@ function AppsBody() {
     />
   );
 
-  let body: React.ReactNode;
-  if (loading) {
-    body = (
-      <Card padding="lg" aria-busy="true">
-        <SkeletonLoader variant="text" count={4} />
-      </Card>
-    );
-  } else if (apps.length === 0) {
-    body = <NoApps onBuild={startBuilding} />;
-  } else {
-    body = (
-      <div className="space-y-4" data-testid="apps-list">
-        {apps.map((app) => (
-          <AppCard
-            key={app.name}
-            app={app}
-            deploysKnown={availability === "available"}
-            highlighted={app.name === claimed.name}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5" data-testid="apps-page">
       {header}
       {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} />}
       <AvailabilityNote availability={availability} detail={detail} />
-      {body}
+      {!loading && apps.length === 0 ? (
+        <NoApps onBuild={startBuilding} />
+      ) : (
+        <AppsTable apps={apps} loading={loading} deploysKnown={availability === "available"} highlighted={claimed.name} />
+      )}
     </div>
+  );
+}
+
+type AppRow = { name: string; app: AppSummary };
+
+/**
+ * The apps, one row each. `deploysKnown` is false when the control plane could
+ * not be read: a row then cannot say "not deployed yet", only that it does not
+ * know.
+ */
+function AppsTable({
+  apps,
+  loading,
+  deploysKnown,
+  highlighted,
+}: {
+  apps: AppSummary[];
+  loading: boolean;
+  deploysKnown: boolean;
+  highlighted: string | null;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const rows = useMemo<AppRow[]>(() => apps.map((app) => ({ name: app.name, app })), [apps]);
+
+  // A just-claimed app is brought into view once its row exists.
+  const highlightedListed = !!highlighted && apps.some((app) => app.name === highlighted);
+  useEffect(() => {
+    if (!highlightedListed) return;
+    const row = container.current?.querySelector<HTMLElement>(`[data-app="${highlighted}"]`);
+    row?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [highlighted, highlightedListed]);
+
+  const columns: DataTableColumn<AppRow>[] = [
+    {
+      key: "name",
+      header: "App",
+      className: "truncate font-medium",
+      render: (_, { app }) => <span title={app.name}>{app.name}</span>,
+    },
+    {
+      key: "site",
+      header: "Site",
+      width: "36%",
+      interactive: true,
+      className: "truncate",
+      render: (_, { app }) => <SiteCell app={app} deploysKnown={deploysKnown} />,
+    },
+    {
+      key: "envs",
+      header: "Environments",
+      width: "26%",
+      className: "truncate max-lg:hidden",
+      headerClassName: "max-lg:hidden",
+      render: (_, { app }) => <EnvsCell app={app} />,
+    },
+    {
+      key: "deployed",
+      header: "Last deploy",
+      width: "9rem",
+      className: "text-ink-muted max-md:hidden",
+      headerClassName: "max-md:hidden",
+      render: (_, { app }) => <LastDeployCell app={app} deploysKnown={deploysKnown} />,
+    },
+  ];
+
+  return (
+    <div ref={container} className="forge-ui" data-testid="apps-list" aria-busy={loading || undefined}>
+      <DataTable<AppRow>
+        ariaLabel="Apps"
+        columns={columns}
+        data={rows}
+        loading={loading}
+        pageSize={3}
+        layout="fixed"
+        getRowKey={(row) => row.name}
+        getRowHref={(row) => consolePath(row.name, { kind: "overview" })}
+        getRowProps={(row) => ({
+          "data-testid": `app-row-${row.name}`,
+          "data-app": row.name,
+          "data-highlighted": row.name === highlighted ? "true" : undefined,
+          className: row.name === highlighted ? "bg-accent-surface" : undefined,
+        })}
+      />
+    </div>
+  );
+}
+
+/** The app's site — prod's, else the first environment's — or why there is none to open. */
+function SiteCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean }) {
+  const link = primaryLink(app);
+  if (link) return <LiveLink link={link} />;
+  if (app.envs.some((env) => env.loading)) {
+    return <span className="inline-block h-3 w-40 animate-pulse rounded bg-ink/5 align-middle motion-reduce:animate-none" aria-label="Loading" />;
+  }
+  const why = !deploysKnown ? "Unavailable" : isDeployed(app) ? "No public site" : "Not deployed yet";
+  return (
+    <span
+      className="text-ink-muted"
+      title={
+        why === "Not deployed yet"
+          ? "Ask the agent in a chat on this project to deploy it, or run `reliant forge env deploy prod` in its checkout."
+          : why === "No public site"
+            ? "Deployed, with no frontend to open. Its services are in the console."
+            : undefined
+      }
+    >
+      {why}
+    </span>
+  );
+}
+
+/** Each long-lived environment's health, prod first; previews are counted. */
+function EnvsCell({ app }: { app: AppSummary }) {
+  if (app.envs.length === 0 && app.previews === 0) return <span className="text-ink-muted">—</span>;
+  return (
+    <span className="inline-flex items-center gap-3">
+      {app.envs.map((env) => (
+        <EnvChip key={env.id} env={env} />
+      ))}
+      {app.previews > 0 && (
+        <span className="text-xs text-ink-muted">
+          +{app.previews} preview{app.previews === 1 ? "" : "s"}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function EnvChip({ env }: { env: AppEnv }) {
+  if (env.loading) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ink-muted" data-testid={`app-env-${env.name}`}>
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink/20 motion-reduce:animate-none" aria-hidden="true" />
+        {env.name}
+      </span>
+    );
+  }
+  const facts = [verdictLabel(env.verdict), env.release || "not deployed yet"].join(" · ");
+  return (
+    <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict}>
+      <Status tone={verdictTone(env.verdict)} label={env.name} size="sm" />
+      <span className="sr-only">: {facts}</span>
+    </span>
+  );
+}
+
+function LastDeployCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean }) {
+  if (!app.lastDeployedAt) return <span>{deploysKnown ? "Never" : "—"}</span>;
+  return (
+    <time dateTime={app.lastDeployedAt} title={formatAbsoluteTime(app.lastDeployedAt)} className="tabular-nums">
+      {formatRelativeTime(app.lastDeployedAt)}
+    </time>
   );
 }
 
@@ -137,81 +273,6 @@ function useClaimedApp(names: string[], loading: boolean): { name: string | null
   }, [claimed, navigate]);
 
   return { name, found: !loading && name !== null && names.includes(name) };
-}
-
-/**
- * `deploysKnown` is false when the control plane could not be read: the card
- * then cannot say "not deployed yet", only that it does not know.
- */
-function AppCard({ app, deploysKnown, highlighted }: { app: AppSummary; deploysKnown: boolean; highlighted: boolean }) {
-  const anchor = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (highlighted) anchor.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [highlighted]);
-  const primary = primaryLink(app);
-  const consoleHref = consolePath(app.name, { kind: "overview" });
-  return (
-    <div ref={anchor}>
-    <Card
-      padding="md"
-      data-testid={`app-card-${app.name}`}
-      data-highlighted={highlighted ? "true" : undefined}
-      className={highlighted ? "ring-2 ring-primary" : undefined}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Boxes className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <h2 className="truncate text-base font-semibold text-foreground">{app.name}</h2>
-            {isLive(app) && (
-              <span className="rounded bg-success/15 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-success-ink">Live</span>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {app.lastDeployedAt
-              ? `Last deployed ${formatRelativeTime(app.lastDeployedAt)}`
-              : deploysKnown
-                ? "Not deployed yet"
-                : "Deployments unavailable"}
-            {app.previews > 0 && ` · ${app.previews} preview${app.previews === 1 ? "" : "s"}`}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {primary && (
-            <Button
-              href={primary.url}
-              target="_blank"
-              rel="noreferrer"
-              size="sm"
-              variant="primary"
-              rightIcon={<ExternalLink aria-hidden="true" />}
-              data-testid="app-open-live"
-            >
-              Open app
-            </Button>
-          )}
-          <Button href={consoleHref} size="sm" variant="outline" rightIcon={<ArrowRight aria-hidden="true" />} data-testid="app-open-console">
-            Console
-          </Button>
-        </div>
-      </div>
-
-      {app.envs.length > 0 ? (
-        <CardInset className="mt-4 space-y-3" padding="sm">
-          {app.envs.map((env) => (
-            <AppEnvRow key={env.id} env={env} />
-          ))}
-        </CardInset>
-      ) : !deploysKnown ? null : (
-        <p className="mt-3 text-sm text-muted-foreground">
-          Its live links appear here once it is deployed. Ask the agent in a chat on this project to deploy it, or run{" "}
-          <code className="rounded bg-background px-1 py-0.5 font-mono text-xs text-foreground">reliant forge env deploy prod</code> in its
-          checkout.
-        </p>
-      )}
-    </Card>
-    </div>
-  );
 }
 
 function NoApps({ onBuild }: { onBuild: () => void }) {

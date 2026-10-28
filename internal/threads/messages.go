@@ -389,8 +389,23 @@ func (s *Service) LoadRecentDisplayMessages(ctx context.Context, threadID string
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
+	// The thread row normalizeVisualThread stamps onto the messages depends on
+	// nothing the walk reads, so it is read alongside the walk rather than
+	// after it: this is the chat-open path, where every serial round trip is
+	// paid before the first message renders.
+	type threadRow struct {
+		thread *db.Thread
+		err    error
+	}
+	threadCh := make(chan threadRow, 1)
+	go func() {
+		thread, err := s.repo.GetThread(ctx, threadID)
+		threadCh <- threadRow{thread, err}
+	}()
+
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		<-threadCh
 		if !isEmptyThread(err) {
 			return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
 		}
@@ -398,10 +413,11 @@ func (s *Service) LoadRecentDisplayMessages(ctx context.Context, threadID string
 	}
 
 	messages, err := s.recentDisplayMessagesFromCW(ctx, latestCW, limit)
+	row := <-threadCh
 	if err != nil {
 		return nil, err
 	}
-	return s.normalizeVisualThread(ctx, threadID, messages), nil
+	return normalizeVisualThreadWith(row.thread, row.err, threadID, messages), nil
 }
 
 // recentDisplayMessagesFromCW returns the last `limit` messages of what
@@ -515,7 +531,13 @@ func (s *Service) recentDisplayMessagesBeforeFromCW(ctx context.Context, latest 
 // path (full and bounded) so the display contract stays identical.
 func (s *Service) normalizeVisualThread(ctx context.Context, threadID string, messages []*db.Message) []*db.Message {
 	thread, err := s.repo.GetThread(ctx, threadID)
-	if err != nil {
+	return normalizeVisualThreadWith(thread, err, threadID, messages)
+}
+
+// normalizeVisualThreadWith is normalizeVisualThread with the thread row
+// (or the error reading it) already in hand.
+func normalizeVisualThreadWith(thread *db.Thread, err error, threadID string, messages []*db.Message) []*db.Message {
+	if err != nil || thread == nil {
 		// Thread might not exist yet - just normalize ThreadID without WorkflowID
 		for _, msg := range messages {
 			msg.ThreadID = threadID

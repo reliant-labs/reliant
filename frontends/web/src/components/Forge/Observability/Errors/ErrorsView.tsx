@@ -15,11 +15,14 @@
  */
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useCurrentIssueUser, useIssues, useOrgMembers, type IssueFilters } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import {
   ISSUE_PLATFORMS,
@@ -35,6 +38,7 @@ import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { AskReliantMenu } from "../AskReliant/AskReliant";
 import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
@@ -42,9 +46,9 @@ import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
-import { affectedNoun, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
+import { affectedNoun, issueAskSubject, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
+import { linkChatToIssue } from "./linkIssueChat";
 import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -291,6 +295,8 @@ function chip(active: boolean) {
   );
 }
 
+type IssueRow = { issue: Issue };
+
 function IssueTable({
   issues,
   hasMore,
@@ -305,72 +311,105 @@ function IssueTable({
   onOpen: (id: string) => void;
 }) {
   const now = Date.now();
+  // Captured at render: a chat's first send happens after this view has unmounted (linkIssueChat.ts).
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  const columns: DataTableColumn<IssueRow>[] = [
+    {
+      key: "issue",
+      header: "Issue",
+      className: "w-full max-w-0",
+      render: (_, { issue }) => (
+        <>
+          <span className="block truncate font-medium" data-testid={`obs-issue-open-${issue.id}`}>
+            {issueTitle(issue)}
+          </span>
+          {issue.culprit && <span className="block truncate font-mono text-xs text-ink-muted">{issue.culprit}</span>}
+          <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs font-normal text-ink-muted">
+            <span className="font-mono">{issue.service || "(unnamed)"}</span>
+            {issue.platform && <span>{PLATFORM_LABEL[issue.platform]}</span>}
+            {issue.envName && <span>{issue.envName}</span>}
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (_, { issue }) => (
+        <>
+          <StatusBadge status={issue.status} />
+          {issue.relatedCount > 0 && (
+            <span className="mt-1 block text-xs text-ink-muted" data-testid={`obs-issue-related-count-${issue.id}`} title="Other issues of the same incident">
+              +{issue.relatedCount} related
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      key: "assignee",
+      header: "Assignee",
+      render: (_, { issue }) => (
+        <span className="text-xs" data-testid={`obs-issue-assignee-${issue.id}`}>
+          {issue.assignee ? <span className="text-ink">{issue.assignee.name}</span> : <span className="text-ink-muted">—</span>}
+        </span>
+      ),
+    },
+    { key: "events", header: "Events", numeric: true, render: (_, { issue }) => formatCount(issue.events) },
+    {
+      key: "affected",
+      header: "Affected",
+      numeric: true,
+      render: (_, { issue }) => (
+        <span title={affectedNoun(issue.platform, issue.affected)}>
+          {formatCount(issue.affected)} <span className="text-xs text-ink-muted">{affectedNoun(issue.platform, issue.affected)}</span>
+        </span>
+      ),
+    },
+    { key: "trend", header: "Trend", render: (_, { issue }) => <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} /> },
+    {
+      key: "lastSeen",
+      header: "Last seen",
+      render: (_, { issue }) => (
+        <span className="text-xs text-ink-muted" title={issue.lastSeenMs ? formatWhen(issue.lastSeenMs, now) : undefined}>{issue.lastSeenMs ? formatAgo(issue.lastSeenMs, now) : "—"}</span>
+      ),
+    },
+    {
+      key: "firstSeen",
+      header: "First seen",
+      render: (_, { issue }) => (
+        <span className="text-xs text-ink-muted" title={issue.firstSeenMs ? formatWhen(issue.firstSeenMs, now) : undefined}>
+          {issue.firstSeenMs ? formatAgo(issue.firstSeenMs, now) : "—"}
+          {(issue.firstRelease || issue.firstVersion) && <span className="block font-mono">{issue.firstRelease || issue.firstVersion}</span>}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      width: "2.5rem",
+      className: "px-2 text-right",
+      render: (_, { issue }) => (
+        <AskReliantMenu subject={issueAskSubject(issue)} onChatCreated={linkChatToIssue(api, queryClient, issue.id)} testId={`obs-issue-ask-${issue.id}`} />
+      ),
+    },
+  ];
   return (
-    <Card padding="none" data-testid="obs-errors-list">
-      <div className="overflow-x-auto">
-        <StackedTable className="w-full text-sm">
-          <caption className="sr-only">Issues in scope</caption>
-          <thead>
-            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-              <th scope="col" className="px-4 py-2 font-medium">Issue</th>
-              <th scope="col" className="px-4 py-2 font-medium">Status</th>
-              <th scope="col" className="px-4 py-2 font-medium">Assignee</th>
-              <th scope="col" className="px-4 py-2 text-right font-medium">Events</th>
-              <th scope="col" className="px-4 py-2 text-right font-medium">Affected</th>
-              <th scope="col" className="px-4 py-2 font-medium">Trend</th>
-              <th scope="col" className="px-4 py-2 font-medium">Last seen</th>
-              <th scope="col" className="px-4 py-2 font-medium">First seen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {issues.map((issue) => (
-              <tr key={issue.id} className="border-b border-border/50 align-top last:border-b-0 hover:bg-ink/5" data-testid={`obs-issue-${issue.id}`} data-status={issue.status ?? ""}>
-                <th scope="row" className="max-w-[32rem] px-4 py-2 text-left font-normal">
-                  <button
-                    type="button"
-                    onClick={() => onOpen(issue.id)}
-                    className="block max-w-full truncate text-left font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    data-testid={`obs-issue-open-${issue.id}`}
-                  >
-                    {issue.title || issue.exceptionType || issue.fingerprint}
-                  </button>
-                  {issue.culprit && <p className="truncate font-mono text-xs text-ink-muted">{issue.culprit}</p>}
-                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-muted">
-                    <span className="font-mono">{issue.service || "(unnamed)"}</span>
-                    {issue.platform && <span>{PLATFORM_LABEL[issue.platform]}</span>}
-                    {issue.envName && <span>{issue.envName}</span>}
-                  </p>
-                </th>
-                <td className="px-4 py-2">
-                  <StatusBadge status={issue.status} />
-                  {issue.relatedCount > 0 && (
-                    <span className="mt-1 block text-xs text-ink-muted" data-testid={`obs-issue-related-count-${issue.id}`} title="Other issues of the same incident">
-                      +{issue.relatedCount} related
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-xs" data-testid={`obs-issue-assignee-${issue.id}`}>
-                  {issue.assignee ? <span className="text-ink">{issue.assignee.name}</span> : <span className="text-ink-muted">—</span>}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(issue.events)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-ink" title={affectedNoun(issue.platform, issue.affected)}>
-                  {formatCount(issue.affected)} <span className="text-xs text-ink-muted">{affectedNoun(issue.platform, issue.affected)}</span>
-                </td>
-                <td className="px-4 py-2">
-                  <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} />
-                </td>
-                <td className="whitespace-nowrap px-4 py-2 text-xs text-ink-muted" title={issue.lastSeenMs ? formatWhen(issue.lastSeenMs, now) : undefined}>
-                  {issue.lastSeenMs ? formatAgo(issue.lastSeenMs, now) : "—"}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2 text-xs text-ink-muted" title={issue.firstSeenMs ? formatWhen(issue.firstSeenMs, now) : undefined}>
-                  {issue.firstSeenMs ? formatAgo(issue.firstSeenMs, now) : "—"}
-                  {(issue.firstRelease || issue.firstVersion) && <span className="block font-mono">{issue.firstRelease || issue.firstVersion}</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </StackedTable>
-      </div>
+    <Card padding="none" className="overflow-hidden" data-testid="obs-errors-list">
+      <DataTable<IssueRow>
+        flush
+        stacked
+        ariaLabel="Issues in scope"
+        columns={columns}
+        data={issues.map((issue) => ({ issue }))}
+        getRowKey={({ issue }) => issue.id}
+        getRowAction={({ issue }) => () => onOpen(issue.id)}
+        getRowLabel={({ issue }) => issueTitle(issue)}
+        getRowProps={({ issue }) => ({ className: "align-top", "data-testid": `obs-issue-${issue.id}`, "data-status": issue.status ?? "" })}
+      />
       {hasMore && (
         <div className="border-t border-border/60 px-4 py-2">
           <Button variant="ghost" size="sm" onClick={onLoadMore} loading={loadingMore} data-testid="obs-errors-more">
@@ -380,4 +419,8 @@ function IssueTable({
       )}
     </Card>
   );
+}
+
+function issueTitle(issue: Issue): string {
+  return issue.title || issue.exceptionType || issue.fingerprint;
 }

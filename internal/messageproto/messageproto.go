@@ -14,6 +14,7 @@ package messageproto
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -59,7 +60,6 @@ type Options struct {
 // ToolCallReader is what AssembleForDisplay reads the durable tool-call rows
 // through.
 type ToolCallReader interface {
-	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
 }
 
@@ -120,6 +120,9 @@ func senderToProto(m *db.Message, titles map[string]string) *reliantv1.MessageSe
 	}
 	if m.SenderKind != nil {
 		sender.Kind = *m.SenderKind
+	}
+	if m.SenderSubject != nil {
+		sender.Subject = *m.SenderSubject
 	}
 	return sender
 }
@@ -325,73 +328,114 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 //
 // A caller cannot opt out of the enrichment: that's the point. If a read path
 // wants messages for display, it gets them assembled the same way as every
-// other read path.
+// other read path. A caller that must overlap the lookups with reads of its
+// own (the streaming snapshot) splits this into LoadDisplayLookups and
+// Assemble, which is exactly what it does.
 //
 // blocksByMessageID and attachments must already be fetched; this does the
-// per-message grouping and the tool-call lookups.
+// per-message grouping and the tool-call and sender lookups.
 func AssembleForDisplay(
 	ctx context.Context,
 	reader Reader,
 	messages []*db.Message,
-	messageIDs []string,
 	blocksByMessageID map[string][]*db.MessageContentBlock,
 	attachmentMap map[string]*db.Attachment,
 	viewingThreadID string,
 	sequenceNumber int64,
 ) []*reliantv1.Message {
-	// Durable tool-call rows: real status instead of the frontend inferring
-	// one from workflow activity, plus child_workflow_id for spawns.
-	//
-	// Read BOTH ways and merge. The by-message query depends on
-	// tool_calls.message_id, a link the writer must remember to set — and the
-	// two writers that run during a live tool call (the execute_tools activity
-	// and EmitToolCallStatus on the spawn path) have no message in hand, so
-	// their rows carry NULL and `WHERE message_id IN (...)` cannot see them at
-	// all. That is why a running spawn's block arrived with no
-	// child_workflow_id and its preview stayed on "Starting…" until a reload.
-	//
-	// The blocks always carry tool_call_id, so the by-id read finds those rows
-	// regardless. The by-message read is kept because it also returns calls
-	// whose block is not in this page.
-	toolCallStatusByCallID := make(map[string]*db.ToolCall)
-	calls, err := reader.ListToolCallsByMessageIDs(ctx, messageIDs)
-	if err != nil {
-		logging.WarnContext(ctx, "Failed to list tool calls for messages", "error", err, "messageCount", len(messageIDs))
-	} else {
-		for _, call := range calls {
-			toolCallStatusByCallID[call.ID] = call
+	lookups := LoadDisplayLookups(ctx, reader, messages, blocksByMessageID)
+	return Assemble(messages, blocksByMessageID, attachmentMap, lookups, viewingThreadID, sequenceNumber)
+}
+
+// DisplayLookups are the rows a page of messages is displayed with besides
+// its own blocks and attachments.
+type DisplayLookups struct {
+	// ToolCalls is the durable row of every tool call a block on the page
+	// names, by call id: real status instead of the frontend inferring one
+	// from workflow activity, plus child_workflow_id for spawns.
+	ToolCalls map[string]*db.ToolCall
+	// SenderTitles maps each sender thread on the page to its title.
+	SenderTitles map[string]string
+}
+
+// BlockToolCallIDs is every distinct tool_call_id the blocks name, in first
+// appearance order: the tool_call blocks whose status is shown and the
+// tool_result blocks whose tool name decides their preview.
+func BlockToolCallIDs(blocksByMessageID map[string][]*db.MessageContentBlock) []string {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for _, blocks := range blocksByMessageID {
+		for _, b := range blocks {
+			if b.ToolCallID == nil || *b.ToolCallID == "" {
+				continue
+			}
+			if _, dup := seen[*b.ToolCallID]; dup {
+				continue
+			}
+			seen[*b.ToolCallID] = struct{}{}
+			ids = append(ids, *b.ToolCallID)
 		}
 	}
+	return ids
+}
 
+// LoadDisplayLookups reads a page's DisplayLookups, both reads at once. A
+// failed read is logged and leaves its map empty: an unresolved status or
+// title degrades a card, never the transcript.
+//
+// Tool calls are read by the ids the blocks carry, never by
+// tool_calls.message_id. Every lookup Assemble makes is keyed by a block's
+// tool_call_id, so the primary-key read is complete by construction; the
+// message_id link is one the live writers (the execute_tools activity,
+// EmitToolCallStatus on the spawn path) have no message in hand to set, so a
+// read through it misses exactly the running spawns whose previews need it.
+// It used to run first anyway, with the by-id read filling its gaps after it:
+// two serial round trips for a superset of what one returns.
+func LoadDisplayLookups(ctx context.Context, reader Reader, messages []*db.Message, blocksByMessageID map[string][]*db.MessageContentBlock) DisplayLookups {
+	lookups := DisplayLookups{ToolCalls: make(map[string]*db.ToolCall)}
+	toolCallIDs := BlockToolCallIDs(blocksByMessageID)
+
+	var wg sync.WaitGroup
+	if len(toolCallIDs) > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			calls, err := reader.ListToolCallsByIDs(ctx, toolCallIDs)
+			if err != nil {
+				logging.WarnContext(ctx, "Failed to list tool calls by id", "error", err, "count", len(toolCallIDs))
+				return
+			}
+			for _, call := range calls {
+				lookups.ToolCalls[call.ID] = call
+			}
+		}()
+	}
+	lookups.SenderTitles = SenderTitles(ctx, reader, messages)
+	wg.Wait()
+	return lookups
+}
+
+// Assemble is AssembleForDisplay with its lookups already loaded: the pure
+// conversion, with no reads of its own.
+func Assemble(
+	messages []*db.Message,
+	blocksByMessageID map[string][]*db.MessageContentBlock,
+	attachmentMap map[string]*db.Attachment,
+	lookups DisplayLookups,
+	viewingThreadID string,
+	sequenceNumber int64,
+) []*reliantv1.Message {
 	// Tool names by call id, from the page's tool_call blocks: a tool_result
 	// block's own tool_name can be empty, and the name decides whether its
 	// content is previewed.
 	toolNameByCallID := make(map[string]string)
-	blockToolCallIDs := make([]string, 0)
 	for _, blocks := range blocksByMessageID {
 		for _, b := range blocks {
 			if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL && b.ToolCallID != nil && b.ToolName != nil {
 				toolNameByCallID[*b.ToolCallID] = *b.ToolName
 			}
-			if b.ToolCallID != nil && *b.ToolCallID != "" {
-				if _, found := toolCallStatusByCallID[*b.ToolCallID]; !found {
-					blockToolCallIDs = append(blockToolCallIDs, *b.ToolCallID)
-				}
-			}
 		}
 	}
-	if len(blockToolCallIDs) > 0 {
-		byID, err := reader.ListToolCallsByIDs(ctx, blockToolCallIDs)
-		if err != nil {
-			logging.WarnContext(ctx, "Failed to list tool calls by id", "error", err, "count", len(blockToolCallIDs))
-		} else {
-			for _, call := range byID {
-				toolCallStatusByCallID[call.ID] = call
-			}
-		}
-	}
-
-	senderTitles := SenderTitles(ctx, reader, messages)
 
 	protoMessages := make([]*reliantv1.Message, 0, len(messages))
 	for _, msg := range messages {
@@ -413,10 +457,10 @@ func AssembleForDisplay(
 		}
 
 		protoMessages = append(protoMessages, FromDB(msg, blocks, msgAttachments, &Options{
-			ToolCallStatusByCallID: toolCallStatusByCallID,
+			ToolCallStatusByCallID: lookups.ToolCalls,
 			ToolNameByCallID:       toolNameByCallID,
 			ViewingThreadID:        viewingThreadID,
-			SenderTitlesByThreadID: senderTitles,
+			SenderTitlesByThreadID: lookups.SenderTitles,
 			SequenceNumber:         sequenceNumber,
 		}))
 	}

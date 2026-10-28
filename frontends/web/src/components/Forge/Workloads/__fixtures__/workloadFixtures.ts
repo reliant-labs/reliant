@@ -113,8 +113,26 @@ export const FIXTURE_HOSTED: ReadonlyMap<string, ReadonlyMap<string, ForgeHosted
         hosted("reliant-temporal-worker", { verdict: "degraded", observed_state: "degraded", last_error: "container worker OOMKilled: exceeded its 1Gi memory limit (14 restarts)" }),
       ],
       ["litellm", hosted("litellm", { verdict: "diverged", observed_digest: DIGEST("7f3b9a"), desired_digest: DIGEST("e9a0c1d2"), drifted: true })],
-      ["web", hosted("web", { tier: "static", url: "https://valiant-caribou.sites.reliantlabs.dev" })],
-      ["docs", hosted("docs", { tier: "static", declared_run_state: "suspended", observed_state: "suspended", suspend_reason: "owner", url: "https://bright-otter.sites.reliantlabs.dev" })],
+      // The same bindings FIXTURE_DOMAINS holds, as GetStatus reports them on the deployment.
+      [
+        "web",
+        hosted("web", {
+          tier: "static",
+          url: "https://valiant-caribou.sites.reliantlabs.dev",
+          domains: [{ hostname: "app.reliantlabs.io", state: "live", serving_path: "edge" }],
+        }),
+      ],
+      [
+        "docs",
+        hosted("docs", {
+          tier: "static",
+          declared_run_state: "suspended",
+          observed_state: "suspended",
+          suspend_reason: "owner",
+          url: "https://bright-otter.sites.reliantlabs.dev",
+          domains: [{ hostname: "docs.reliantlabs.io", state: "pending-dns", serving_path: "unknown" }],
+        }),
+      ],
     ]),
   ],
   ["e2e", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server", { verdict: "converging", observed_state: "progressing" })]])],

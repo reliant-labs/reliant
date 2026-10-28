@@ -9,9 +9,9 @@
 
 import { Eye, EyeOff } from "lucide-react";
 
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { cn } from "@/lib/utils";
 
-import { StackedTable } from "@/components/Forge/StackedTable";
 import { formatValue, type ValueUnit } from "../format";
 import { TONE_SWATCH, type DisplaySeries } from "./ExplorerChart";
 import { seriesFigures } from "./seriesView";
@@ -23,75 +23,74 @@ export interface SeriesTableProps {
   onHidden: (hidden: string[]) => void;
 }
 
+type SeriesRow = { series: DisplaySeries };
+
 export function SeriesTable({ series, unit, hidden, onHidden }: SeriesTableProps) {
   if (series.length === 0) return null;
   const labels = series.map((s) => s.label);
   const soloed = (label: string) => hidden.length === labels.length - 1 && !hidden.includes(label);
+  const figuresOf = new Map(series.map((s) => [s.label, seriesFigures(s.values, s.partial)]));
+  const columns: DataTableColumn<SeriesRow>[] = [
+    {
+      key: "series",
+      header: "Series",
+      interactive: true,
+      className: "max-w-[24rem]",
+      render: (_, { series: s }) => {
+        const off = hidden.includes(s.label);
+        return (
+          <button
+            type="button"
+            onClick={() => onHidden(off ? hidden.filter((l) => l !== s.label) : [...hidden, s.label])}
+            aria-pressed={!off}
+            title={off ? "Show this series" : "Hide this series"}
+            className="inline-flex max-w-full items-center gap-2 truncate rounded text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            data-testid="metrics-series-toggle"
+          >
+            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", TONE_SWATCH[s.tone], off && "opacity-30")} aria-hidden="true" />
+            <span className={cn("truncate", off ? "text-ink-muted line-through" : "text-ink")}>{s.label}</span>
+            {off ? <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" /> : <Eye className="h-3 w-3 shrink-0 opacity-0" aria-hidden="true" />}
+          </button>
+        );
+      },
+    },
+    { key: "last", header: "Last", numeric: true, render: (_, { series: s }) => <span className="text-xs">{formatValue(figuresOf.get(s.label)!.last, unit)}</span> },
+    { key: "avg", header: "Avg", numeric: true, render: (_, { series: s }) => <span className="text-xs">{formatValue(figuresOf.get(s.label)!.avg, unit)}</span> },
+    { key: "max", header: "Max", numeric: true, render: (_, { series: s }) => <span className="text-xs">{formatValue(figuresOf.get(s.label)!.max, unit)}</span> },
+    {
+      key: "show",
+      header: "Show",
+      srHeader: true,
+      interactive: true,
+      width: "3rem",
+      className: "px-2 text-right",
+      render: (_, { series: s }) =>
+        series.length > 1 && (
+          <button
+            type="button"
+            onClick={() => onHidden(soloed(s.label) ? [] : labels.filter((l) => l !== s.label))}
+            aria-pressed={soloed(s.label)}
+            className="rounded px-1.5 py-0.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            aria-label={soloed(s.label) ? `Show every series again` : `Show only ${s.label}`}
+            data-testid="metrics-series-solo"
+          >
+            {soloed(s.label) ? "all" : "solo"}
+          </button>
+        ),
+    },
+  ];
   return (
-    <div className="max-h-72 overflow-auto">
-      <StackedTable className="w-full text-xs" data-testid="metrics-series-table">
-        <caption className="sr-only">Series: last, average and largest value</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-ink-muted">
-            <th scope="col" className="h-8 pr-3 font-medium">
-              Series
-            </th>
-            <th scope="col" className="h-8 pr-3 text-right font-medium">
-              Last
-            </th>
-            <th scope="col" className="h-8 pr-3 text-right font-medium">
-              Avg
-            </th>
-            <th scope="col" className="h-8 pr-3 text-right font-medium">
-              Max
-            </th>
-            <th scope="col" className="h-8 font-medium">
-              <span className="sr-only">Show</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {series.map((s) => {
-            const off = hidden.includes(s.label);
-            const figures = seriesFigures(s.values, s.partial);
-            return (
-              <tr key={s.label} className={cn("border-b border-border/70 last:border-b-0", off && "text-ink-muted")} data-series={s.label}>
-                <th scope="row" className="h-8 max-w-[24rem] pr-3 text-left font-normal">
-                  <button
-                    type="button"
-                    onClick={() => onHidden(off ? hidden.filter((l) => l !== s.label) : [...hidden, s.label])}
-                    aria-pressed={!off}
-                    title={off ? "Show this series" : "Hide this series"}
-                    className="inline-flex max-w-full items-center gap-2 truncate rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                    data-testid="metrics-series-toggle"
-                  >
-                    <span className={cn("h-2.5 w-2.5 shrink-0 rounded-sm", TONE_SWATCH[s.tone], off && "opacity-30")} aria-hidden="true" />
-                    <span className={cn("truncate", off ? "text-ink-muted line-through" : "text-ink")}>{s.label}</span>
-                    {off ? <EyeOff className="h-3 w-3 shrink-0" aria-hidden="true" /> : <Eye className="h-3 w-3 shrink-0 opacity-0" aria-hidden="true" />}
-                  </button>
-                </th>
-                <td className="h-8 pr-3 text-right tabular-nums">{formatValue(figures.last, unit)}</td>
-                <td className="h-8 pr-3 text-right tabular-nums">{formatValue(figures.avg, unit)}</td>
-                <td className="h-8 pr-3 text-right tabular-nums">{formatValue(figures.max, unit)}</td>
-                <td className="h-8 text-right">
-                  {series.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => onHidden(soloed(s.label) ? [] : labels.filter((l) => l !== s.label))}
-                      aria-pressed={soloed(s.label)}
-                      className="rounded px-1.5 py-0.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      aria-label={soloed(s.label) ? `Show every series again` : `Show only ${s.label}`}
-                      data-testid="metrics-series-solo"
-                    >
-                      {soloed(s.label) ? "all" : "solo"}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </StackedTable>
+    <div className="max-h-72 overflow-auto" data-testid="metrics-series-table">
+      <DataTable<SeriesRow>
+        flush
+        stacked
+        compact
+        ariaLabel="Series: last, average and largest value"
+        columns={columns}
+        data={series.map((s) => ({ series: s }))}
+        getRowKey={({ series: s }) => s.label}
+        getRowProps={({ series: s }) => ({ className: cn(hidden.includes(s.label) && "text-ink-muted"), "data-series": s.label })}
+      />
     </div>
   );
 }

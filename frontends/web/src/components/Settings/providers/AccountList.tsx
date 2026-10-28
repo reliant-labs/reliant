@@ -7,9 +7,19 @@ import type { ProviderAccount } from "../../../types/providerAccount";
 import { OnLimitDefault } from "./OnLimitDefault";
 import { useProviderAccountActions } from "../../../hooks/provider-account-queries";
 import { useRoutingMode, type RoutingMode } from "../../../hooks/provider-routing-queries";
-import { AccountRow } from "./AccountRow";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import {
+  AccountActionsCell,
+  AccountDetail,
+  AccountNameCell,
+  AccountOrderCell,
+  AccountUsageCell,
+} from "./AccountRow";
 import { ConnectPanel } from "./ConnectPanel";
-import { sortByPriority } from "./accountFormat";
+import { needsAttention, sortByPriority } from "./accountFormat";
+
+/** One account as its provider's table holds it. */
+type AccountTableRow = { id: string; account: ProviderAccount };
 import { accountNoun, addAnotherLabel, providerName, VISIBLE_PROVIDERS } from "./providerCatalog";
 import { ProviderMark } from "./ProviderMark";
 import { useNow } from "./useNow";
@@ -115,6 +125,8 @@ function ProviderCard({
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshNotes, setRefreshNotes] = useState<Record<string, string>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [expandedByUser, setExpandedByUser] = useState<Record<string, boolean>>({});
   const cardRef = useRef<HTMLElement>(null);
 
   // The page's "Add provider" picker opens this card's panel for a provider
@@ -167,6 +179,97 @@ function ProviderCard({
   const isReliant = provider === "reliant";
   const count = accounts.length;
   const noun = accountNoun(provider);
+  const several = count > 1;
+  const draggable = !mobile && several;
+
+  // null follows the account's state; a click pins it open or shut.
+  const isOpen = (account: ProviderAccount) => expandedByUser[account.id] ?? needsAttention(account, now);
+  const rows: AccountTableRow[] = accounts.map((account) => ({ id: account.id, account }));
+  const columns: DataTableColumn<AccountTableRow>[] = [
+    ...(several
+      ? [
+          {
+            key: "order",
+            header: "Priority",
+            srHeader: true,
+            width: mobile ? "2.5rem" : "4rem",
+            className: "px-3",
+            headerClassName: "px-3",
+            interactive: true,
+            render: (_: unknown, { account }: AccountTableRow) => {
+              const index = ids.indexOf(account.id);
+              return (
+                <AccountOrderCell
+                  account={account}
+                  index={index}
+                  count={count}
+                  onMove={(dir) => moveTo(account.id, index + dir)}
+                  drag={draggable ? { onDragStart: setDraggingId, onDragEnd: () => setDraggingId(null) } : undefined}
+                />
+              );
+            },
+          } satisfies DataTableColumn<AccountTableRow>,
+        ]
+      : []),
+    {
+      key: "account",
+      header: "Account",
+      render: (_, { account }) => (
+        <AccountNameCell
+          account={account}
+          now={now}
+          mobile={mobile}
+          renaming={renamingId === account.id}
+          onRename={(label) => void run(() => actions.rename(account, label))}
+          onRenameEnd={() => setRenamingId(null)}
+        />
+      ),
+    },
+    ...(mobile
+      ? []
+      : [
+          {
+            key: "usage",
+            header: "Usage",
+            width: "13rem",
+            className: "max-sm:hidden",
+            headerClassName: "max-sm:hidden",
+            render: (_: unknown, { account }: AccountTableRow) => (
+              <AccountUsageCell account={account} now={now} open={isOpen(account)} />
+            ),
+          } satisfies DataTableColumn<AccountTableRow>,
+        ]),
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      width: mobile ? "7rem" : accounts.some((a) => a.status === "needs_sign_in") ? "10.5rem" : "5.5rem",
+      className: "px-3",
+      headerClassName: "px-3",
+      render: (_, { account }) => {
+        const index = ids.indexOf(account.id);
+        return (
+          <AccountActionsCell
+            account={account}
+            index={index}
+            count={count}
+            mobile={mobile}
+            open={isOpen(account)}
+            onToggleOpen={() => setExpandedByUser((s) => ({ ...s, [account.id]: !isOpen(account) }))}
+            onStartRename={() => setRenamingId(account.id)}
+            onTogglePause={() => void run(() => actions.setPaused(account, account.status !== "paused"))}
+            onMove={(dir) => moveTo(account.id, index + dir)}
+            onReconnect={() => {
+              onAddingChange(false);
+              setReconnecting(account);
+            }}
+            onRemove={() => setRemoving(account)}
+          />
+        );
+      },
+    },
+  ];
 
   return (
     <section
@@ -261,47 +364,49 @@ function ProviderCard({
         </div>
       )}
 
-      <ol
-        className="mt-3 divide-y divide-border/60 rounded-lg border border-border/60 bg-background"
-        aria-label={`${displayName} accounts`}
-      >
-        {accounts.map((account, index) => (
-          <AccountRow
-            key={account.id}
-            account={account}
-            index={index}
-            count={count}
-            now={now}
-            variant={variant}
-            onRename={(label) => void run(() => actions.rename(account, label))}
-            onTogglePause={() =>
-              void run(() => actions.setPaused(account, account.status !== "paused"))
-            }
-            onMove={(dir) => moveTo(account.id, index + dir)}
-            onReconnect={() => {
-              onAddingChange(false);
-              setReconnecting(account);
-            }}
-            onRemove={() => setRemoving(account)}
-            onRefresh={() => void refresh(account)}
-            refreshing={refreshingId === account.id}
-            refreshNote={refreshNotes[account.id] || undefined}
-            drag={
-              mobile
-                ? undefined
-                : {
-                    onDragStart: setDraggingId,
-                    onDragEnd: () => setDraggingId(null),
-                    onDropOn: (targetId) => {
-                      if (draggingId) moveTo(draggingId, ids.indexOf(targetId));
-                      setDraggingId(null);
-                    },
-                    dragging: draggingId === account.id,
-                  }
-            }
-          />
-        ))}
-      </ol>
+      <div className="forge-ui mt-3 overflow-hidden rounded-lg border border-border/60 bg-background">
+        <DataTable<AccountTableRow>
+          ariaLabel={`${displayName} accounts`}
+          flush
+          layout="fixed"
+          columns={columns}
+          data={rows}
+          getRowKey={(row) => row.id}
+          getRowProps={({ account }) => ({
+            "data-testid": "account-row",
+            "data-account-id": account.id,
+            "data-expanded": String(isOpen(account)),
+            className: cn(
+              "bg-background",
+              draggingId === account.id && "opacity-50",
+              account.status === "paused" && "opacity-80",
+            ),
+            ...(draggable
+              ? {
+                  onDragOver: (e) => e.preventDefault(),
+                  onDrop: (e) => {
+                    e.preventDefault();
+                    if (draggingId) moveTo(draggingId, ids.indexOf(account.id));
+                    setDraggingId(null);
+                  },
+                }
+              : {}),
+          })}
+          getRowDetail={({ account }) =>
+            isOpen(account) ? (
+              <AccountDetail
+                account={account}
+                now={now}
+                mobile={mobile}
+                indent={several}
+                onRefresh={() => void refresh(account)}
+                refreshing={refreshingId === account.id}
+                refreshNote={refreshNotes[account.id] || undefined}
+              />
+            ) : undefined
+          }
+        />
+      </div>
 
       <ConfirmationDialog
         open={removing !== null}

@@ -57,7 +57,11 @@ func (s *Service) ImportWorktree(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	repos, err := s.listProjectRepos(ctx, project)
+	// An empty registry is reconciled against the machine the import would
+	// be placed on; a populated one reaches no daemon before confirm_move.
+	repos, err := s.listProjectRepos(ctx, userID, project, func() (machinewake.Target, error) {
+		return s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, "import")
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -121,7 +121,7 @@ describe("states", () => {
     expect(onDrill).toHaveBeenLastCalledWith(expect.objectContaining({ group: { "span.name": "orders.v1.OrdersService/CreateOrder" } }), expect.anything());
     const table: Panel = { ...grouped, kind: "table" };
     rerender(<PanelBody panel={table} query={ready(answer(table))} links={{ onDrill }} />);
-    await user.click(within(screen.getByTestId("obs-panel-table")).getAllByRole("row")[2]);
+    await user.click(within(within(screen.getByTestId("obs-panel-table")).getAllByRole("row")[2]).getByRole("button"));
     expect(onDrill).toHaveBeenLastCalledWith(expect.objectContaining({ group: { "span.name": "orders.v1.OrdersService/GetOrder" } }), expect.anything());
   });
 

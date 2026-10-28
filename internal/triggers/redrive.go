@@ -9,6 +9,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -121,7 +122,9 @@ func (r *Redriver) Run(ctx context.Context) {
 	ticker := time.NewTicker(redriveInterval)
 	defer ticker.Stop()
 	for {
-		if err := r.RedriveOnce(ctx); err != nil && ctx.Err() == nil {
+		// One trace per pass, so its queries and workflow starts nest under
+		// it rather than each opening an unparented trace of its own.
+		if err := observe.RunRoot(ctx, "worker.triggers.redrive", r.RedriveOnce); err != nil && ctx.Err() == nil {
 			logging.WarnContext(ctx, "trigger event redrive pass failed", "error", err)
 		}
 		select {

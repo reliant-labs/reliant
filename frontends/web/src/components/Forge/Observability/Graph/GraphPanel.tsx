@@ -1,83 +1,141 @@
 // Copyright (c) 2026 Reliant Labs
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import { AskReliantButton } from "../AskReliant/AskReliant";
 import { useObsAskContext } from "../AskReliant/askReliantContext";
 import { traceEnvName } from "../AskReliant/askReliantPrompt";
-import type { GraphEdge, GraphNode, RPCCatalog, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
+import type { GraphEdge, GraphNode, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { ObsNavigate } from "../obsSearch";
-import { graphModel, edgeLabel, type GraphFilters } from "./graphModel";
-import { GraphQuality } from "./GraphQuality";
+import { graphModel, unitLabel, type GraphFilters, type GraphLink, type NodeStats } from "./graphModel";
+import { fmtCount, fmtErrorRate, fmtLatency, histogramQuantile, shortService, sumHistograms } from "./graphStats";
 import { ProcessGraph } from "./ProcessGraph";
 
-export function GraphPanel({ graph, catalog, filters, scope, navigate, onRPC }: {
-  graph: ServiceGraph; catalog?: RPCCatalog; filters: GraphFilters; scope: ObsScope;
-  navigate: ObsNavigate; onRPC: (rpc: string) => void;
+export function GraphPanel({ graph, filters, scope, navigate, onRPC, envNames, onShowUnresolved }: {
+  graph: ServiceGraph; filters: GraphFilters; scope: ObsScope;
+  navigate: ObsNavigate; onRPC: (rpc: string) => void; envNames: ReadonlyMap<string, string>;
+  onShowUnresolved?: () => void;
 }) {
   const model = useMemo(() => graphModel(graph, filters), [graph, filters]);
-  const [selection, setSelection] = useState<{ kind: "node" | "edge"; id: string }>();
+  const [selection, setSelection] = useState<{ kind: "node" | "link"; id: string }>();
   const node = selection?.kind === "node" ? model.nodes.find((n) => n.id === selection.id) : undefined;
-  const edge = selection?.kind === "edge" ? model.edges.find((e) => e.id === selection.id) : undefined;
+  const link = selection?.kind === "link" ? model.links.find((l) => l.id === selection.id) : undefined;
+  const label = useCallback((id: string) => graph.nodes.find((n) => n.id === id)?.label ?? "Unknown", [graph.nodes]);
+  // A node's environment is named only where it disambiguates: the same
+  // service drawn once per environment. Never the environment's id.
+  const envLabel = useMemo(() => {
+    const envsByLabel = new Map<string, Set<string>>();
+    for (const n of model.nodes) envsByLabel.set(n.label, (envsByLabel.get(n.label) ?? new Set()).add(n.envId));
+    return (n: GraphNode) => (envsByLabel.get(n.label)?.size ?? 0) > 1 ? envNames.get(n.envId) ?? "other environment" : undefined;
+  }, [model.nodes, envNames]);
+  if (model.nodes.length === 0) {
+    return <div className="rounded-lg border border-border bg-surface p-10 text-center" data-testid="graph-empty">
+      <h3 className="font-medium text-ink">No traffic in this window</h3>
+      <p className="mt-1 text-sm text-ink-muted">{filters.rpcId || filters.errorsOnly ? "Nothing matches these filters. Clear them or widen the time range." : "Widen the time range, or check that your services export traces."}</p>
+    </div>;
+  }
   return <div className="space-y-3">
-    <GraphQuality quality={graph.quality} window={graph.window} />
-    {filters.declared && !graph.edges.some((e) => e.evidence === "declared") && <p role="status" className="text-sm">Declared dependency overlay unavailable in this scoped result. Only verified same-process bindings can appear; remote targets are never inferred from service names.</p>}
-    <div className="flex flex-wrap gap-4 text-xs text-ink-muted" aria-label="Graph legend">
-      <span>━ Observed</span><span>┄ Declared only</span><span>··· Unknown evidence</span>
-      <span>Async: publish / delivery, not requests</span><span>Virtual peers may be unresolved</span>
+    <ProcessGraph nodes={model.nodes} links={model.links} stats={model.stats} envLabel={envLabel} selectedId={node?.id}
+      onNode={(n) => setSelection({ kind: "node", id: n.id })} onLink={(l) => setSelection({ kind: "link", id: l.id })} />
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted" aria-label="Graph legend">
+      <span className="inline-flex items-center gap-1.5"><svg aria-hidden width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" strokeWidth="1.5" /></svg>Line width = traffic</span>
+      <span className="inline-flex items-center gap-1.5 text-danger-ink"><svg aria-hidden width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" strokeWidth="2" /></svg>Errors</span>
+      {filters.declared && <span className="inline-flex items-center gap-1.5"><svg aria-hidden width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="currentColor" strokeWidth="1.5" strokeDasharray="5 3" /></svg>Declared, not observed</span>}
+      <span>Hover a connection for details; click to pin.</span>
+      {model.hiddenUnresolved > 0 && onShowUnresolved && <span>{model.hiddenUnresolved} unresolved caller/peer node{model.hiddenUnresolved === 1 ? "" : "s"} hidden · <button type="button" className="text-primary hover:underline" onClick={onShowUnresolved}>Show</button></span>}
+      {(model.omittedNodes > 0 || model.omittedEdges > 0) && <span role="status">{model.omittedNodes + model.omittedEdges} smaller connections not drawn; filter by service to see them.</span>}
     </div>
-    {(model.omittedNodes > 0 || model.omittedEdges > 0 || model.inputTruncated) && <p role="status" className="text-sm">Display truncated: {model.omittedNodes} nodes / {model.omittedEdges} edges omitted. Narrow the RPC filter or time window.</p>}
-    {(model.conflicts > 0 || model.dangling > 0) && <p role="status" className="text-sm">Excluded {model.conflicts} conflicting IDs and {model.dangling} unmatched or out-of-scope endpoints. No inferred connections were added.</p>}
-    {model.nodes.length === 0 ? <div className="rounded-lg border border-border bg-surface p-8 text-center" data-testid="graph-empty"><h3 className="font-medium">No graph observations match</h3><p className="mt-2 text-sm text-ink-muted">Try another interval or RPC. No evidence does not establish zero traffic or a broken dependency.</p></div> : <>
-      <ProcessGraph nodes={model.nodes} edges={model.edges} selectedId={node?.id} onNode={(n) => setSelection({ kind: "node", id: n.id })} onEdge={(e) => setSelection({ kind: "edge", id: e.id })} />
-      <details className="rounded-lg border border-border bg-surface p-3"><summary className="cursor-pointer text-sm font-medium">Accessible node and connection list ({model.nodes.length} / {model.edges.length})</summary>
-        <ul className="mt-2 space-y-1">{model.nodes.map((n) => <li key={n.id}><button className="text-sm text-primary underline" onClick={() => setSelection({ kind: "node", id: n.id })}>{n.label || "Unknown identity"} · {n.kind}</button></li>)}</ul>
-        <ul className="mt-2 space-y-1">{model.edges.map((e) => <li key={e.id}><button className="text-left text-xs text-primary underline" onClick={() => setSelection({ kind: "edge", id: e.id })}>{graph.nodes.find((n) => n.id === e.source)?.label} → {graph.nodes.find((n) => n.id === e.target)?.label} · {e.rpcId || e.kind} · {edgeLabel(e)}</button></li>)}</ul>
-      </details>
-    </>}
-    {(node || edge) && <section aria-label="Graph detail" className="space-y-3 rounded-lg border border-border bg-surface p-4">
-      <div className="flex justify-between gap-3"><h3 className="break-all font-medium">{node?.label || edge?.rpcId || edge?.kind}</h3><Button variant="ghost" size="sm" onClick={() => setSelection(undefined)}>Close detail</Button></div>
-      {node && <NodeDetail node={node} graph={graph} catalog={catalog} onRPC={onRPC} />}
-      {edge && <EdgeDetail edge={edge} navigate={navigate} onRPC={onRPC} />}
-      <AskReference scope={scope} graph={graph} node={node} edge={edge} />
+    {(node || link) && <section aria-label="Graph detail" className="rounded-lg border border-border bg-surface p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <h3 className="min-w-0 break-words font-medium text-ink">{node ? node.label : `${label(link!.source)} → ${label(link!.target)}`}</h3>
+        <Button variant="ghost" size="sm" icon={<X />} aria-label="Close detail" onClick={() => setSelection(undefined)} />
+      </div>
+      {node && <NodeDetail node={node} stats={model.stats.get(node.id)} edges={model.edges} label={label} envName={envNames.get(node.envId)} onRPC={onRPC} />}
+      {link && <LinkDetail link={link} navigate={navigate} onRPC={onRPC} />}
+      <AskReference scope={scope} graph={graph} node={node} link={link} />
     </section>}
+    <details className="text-sm">
+      <summary className="cursor-pointer text-xs text-ink-muted">Connections as a list ({model.links.length})</summary>
+      <ul className="mt-2 space-y-1">{model.links.map((l) => <li key={l.id}><button className="text-left text-xs text-primary hover:underline" onClick={() => setSelection({ kind: "link", id: l.id })}>
+        {label(l.source)} → {label(l.target)} · {fmtCount(l.count)} {unitLabel(l.unit)}{l.faults > 0n ? ` · ${fmtErrorRate(l.faults, l.count)} errors` : ""}
+      </button></li>)}</ul>
+    </details>
   </div>;
 }
-function NodeDetail({ node, graph, catalog, onRPC }: { node: GraphNode; graph: ServiceGraph; catalog?: RPCCatalog; onRPC: (rpc: string) => void }) {
-  const children = graph.nodes.filter((n) => n.parentId === node.id);
-  const methods = catalog?.methods.filter((m) => m.processIds.includes(node.id)) ?? [];
-  return <div className="space-y-2 text-sm">
-    <p>{node.kind} · environment {node.envId || "unknown"}</p>
-    <p className="text-ink-muted">Source: {node.sourceUnavailableReason || "Exact source metadata unavailable"}</p>
-    <h4 className="font-medium">Nested RPC / method evidence</h4>
-    {!children.length && !methods.length && <p className="text-ink-muted">No nested method metadata supplied for this process.</p>}
-    {children.map((n) => <p key={n.id}>{n.kind}: {n.label}{n.rpcId && <button className="ml-2 text-primary underline" onClick={() => onRPC(n.rpcId)}>Filter full RPC</button>}</p>)}
-    {methods.map((m) => <p key={m.id}><button className="break-all text-primary underline" onClick={() => onRPC(m.id)}>{m.id}</button> · {m.evidence}</p>)}
-    <p className="text-xs text-ink-muted">Registration and composition describe capability, not proof every method was used.</p>
+
+function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+  return <div><dt className="text-xs text-ink-muted">{label}</dt><dd className={danger ? "tabular-nums text-danger-ink" : "tabular-nums text-ink"}>{value}</dd></div>;
+}
+
+interface MethodRow { rpcId: string; count: bigint; faults: bigint; p95?: number }
+function byMethod(edges: GraphEdge[]): MethodRow[] {
+  const rows = new Map<string, GraphEdge[]>();
+  for (const e of edges) if (e.rpcId && e.evidence === "observed") rows.set(e.rpcId, [...(rows.get(e.rpcId) ?? []), e]);
+  return [...rows].map(([rpcId, es]) => ({ rpcId, count: es.reduce((s, e) => s + e.count, 0n), faults: es.reduce((s, e) => s + e.faults, 0n),
+    p95: histogramQuantile(sumHistograms(es.map((e) => e.duration)), 0.95) }))
+    .sort((a, b) => (b.count > a.count ? 1 : b.count < a.count ? -1 : a.rpcId.localeCompare(b.rpcId)));
+}
+
+function MethodTable({ rows, onRPC }: { rows: MethodRow[]; onRPC: (rpc: string) => void }) {
+  if (!rows.length) return null;
+  return <table className="w-full text-left text-sm">
+    <thead className="text-xs text-ink-muted"><tr><th className="py-1 font-normal">Method</th><th className="py-1 text-right font-normal">Requests</th><th className="py-1 text-right font-normal">Errors</th><th className="py-1 text-right font-normal">p95</th></tr></thead>
+    <tbody>{rows.slice(0, 25).map((r) => { const [svc, m] = r.rpcId.split("/"); return <tr key={r.rpcId} className="border-t border-border/60">
+      <td className="py-1"><button className="text-left text-primary hover:underline" title={r.rpcId} onClick={() => onRPC(r.rpcId)}>{shortService(svc)}/{m}</button></td>
+      <td className="py-1 text-right tabular-nums">{fmtCount(r.count)}</td>
+      <td className={r.faults > 0n ? "py-1 text-right tabular-nums text-danger-ink" : "py-1 text-right tabular-nums"}>{fmtErrorRate(r.faults, r.count)}</td>
+      <td className="py-1 text-right tabular-nums">{fmtLatency(r.p95)}</td>
+    </tr>; })}</tbody>
+  </table>;
+}
+
+function NodeDetail({ node, stats, edges, label, envName, onRPC }: { node: GraphNode; stats?: NodeStats; edges: GraphEdge[]; label: (id: string) => string; envName?: string; onRPC: (rpc: string) => void }) {
+  const served = byMethod(edges.filter((e) => e.target === node.id && e.unit === "server_request"));
+  const calls = new Map<string, bigint>();
+  for (const e of edges) if (e.source === node.id && e.evidence === "observed") calls.set(e.target, (calls.get(e.target) ?? 0n) + e.count);
+  return <div className="space-y-4 text-sm">
+    <dl className="flex flex-wrap gap-x-8 gap-y-2">
+      {envName && <Stat label="Environment" value={envName} />}
+      <Stat label="Requests" value={stats ? fmtCount(stats.requests) : "—"} />
+      <Stat label="Error rate" value={stats ? fmtErrorRate(stats.faults, stats.requests) : "—"} danger={!!stats && stats.faults > 0n} />
+      <Stat label="p50" value={fmtLatency(histogramQuantile(stats?.duration, 0.5))} />
+      <Stat label="p95" value={fmtLatency(histogramQuantile(stats?.duration, 0.95))} />
+    </dl>
+    {served.length > 0 && <div><h4 className="mb-1 text-xs font-medium text-ink-muted">Methods served</h4><MethodTable rows={served} onRPC={onRPC} /></div>}
+    {calls.size > 0 && <div><h4 className="mb-1 text-xs font-medium text-ink-muted">Calls</h4>
+      <p className="text-ink">{[...calls].sort((a, b) => (b[1] > a[1] ? 1 : -1)).map(([id, n]) => `${label(id)} (${fmtCount(n)})`).join(" · ")}</p></div>}
   </div>;
 }
-function EdgeDetail({ edge, navigate, onRPC }: { edge: GraphEdge; navigate: ObsNavigate; onRPC: (rpc: string) => void }) {
-  return <div className="space-y-2 text-sm">
-    <p>{edgeLabel(edge)} · {edge.kind} · {edge.cohort || "Unknown cohort"}</p>
-    {edge.evidence === "observed" ? <><p>Server faults: {edge.faults.toString()} · user outcomes: {edge.userOutcomes.toString()} · cancelled: {edge.cancelled.toString()} · unknown status: {edge.unknownStatus.toString()}</p>
-    <p>Matched: {edge.matched.toString()} · unmatched: {edge.unmatched.toString()}</p>
-    {edge.firstSeenMs > 0 && edge.lastSeenMs > 0 && <p className="text-xs text-ink-muted">First / last seen: {new Date(edge.firstSeenMs).toISOString()} / {new Date(edge.lastSeenMs).toISOString()}</p>}
-    {edge.duration?.version === 1 && edge.duration.buckets.length === edge.duration.boundsSeconds.length + 1 ? <details><summary className="cursor-pointer text-sm">Received duration histogram (seconds)</summary><p className="text-xs text-ink-muted">{edge.duration.count.toString()} eligible durations · sum {edge.duration.sumSeconds} seconds. Noncumulative buckets; no averaged percentiles.</p><ul className="text-xs">{edge.duration.buckets.map((count, i) => <li key={i}>Upper bound {edge.duration!.boundsSeconds[i] ?? "+Inf"}s: {count.toString()}</li>)}</ul></details> : <p className="text-xs text-ink-muted">Duration histogram unavailable or unsupported. No latency inferred.</p>}</> : <p className="text-ink-muted">Traffic, errors and latency: not applicable to declared/unknown evidence. This is not a recorded call.</p>}
-    {edge.rpcId && <button className="text-primary underline" onClick={() => onRPC(edge.rpcId)}>Filter {edge.rpcId}</button>}
-    <h4 className="font-medium">Representative traces, not a complete list</h4>
-    {edge.exemplars.length === 0 && <p className="text-ink-muted">No trace reference supplied.</p>}
-    {edge.exemplars.map((x) => <div key={`${x.traceId}/${x.spanId}`}><button className="break-all text-primary underline" onClick={() => navigate({ view: "traces", trace: x.traceId, span: x.spanId || undefined, q: undefined })}>Open span waterfall · {x.traceId}</button>{x.availabilityUnknown && <p className="text-xs text-ink-muted">Aggregate retained; trace may not have survived sampling.</p>}</div>)}
+
+function LinkDetail({ link, navigate, onRPC }: { link: GraphLink; navigate: ObsNavigate; onRPC: (rpc: string) => void }) {
+  const exemplars = link.edges.flatMap((e) => e.exemplars).slice(0, 3);
+  return <div className="space-y-4 text-sm">
+    {link.evidence === "observed" ? <dl className="flex flex-wrap gap-x-8 gap-y-2">
+      <Stat label={unitLabel(link.unit).replace(/^./, (c) => c.toUpperCase())} value={fmtCount(link.count)} />
+      <Stat label="Error rate" value={fmtErrorRate(link.faults, link.count)} danger={link.faults > 0n} />
+      <Stat label="p50" value={fmtLatency(histogramQuantile(link.duration, 0.5))} />
+      <Stat label="p95" value={fmtLatency(histogramQuantile(link.duration, 0.95))} />
+    </dl> : <p className="text-ink-muted">Declared dependency; no traffic observed in this window.</p>}
+    <MethodTable rows={byMethod(link.edges)} onRPC={onRPC} />
+    {exemplars.length > 0 && <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-ink-muted">Example traces</span>
+      {exemplars.map((x, i) => <Button key={`${x.traceId}/${x.spanId}`} variant="outline" size="sm"
+        onClick={() => navigate({ view: "traces", trace: x.traceId, span: x.spanId || undefined, q: undefined })}>Trace {i + 1}</Button>)}
+    </div>}
   </div>;
 }
-function AskReference({ scope, graph, node, edge }: { scope: ObsScope; graph: ServiceGraph; node?: GraphNode; edge?: GraphEdge }) {
+
+function AskReference({ scope, graph, node, link }: { scope: ObsScope; graph: ServiceGraph; node?: GraphNode; link?: GraphLink }) {
   const askContext = useObsAskContext();
-  return <div className="border-t border-border pt-3"><AskReliantButton subject={{
+  const top = link?.edges.find((e) => e.rpcId);
+  return <div className="mt-4 border-t border-border pt-3"><AskReliantButton subject={{
     kind: "graph", env: traceEnvName(scope.envIds, askContext.environments, undefined),
     orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds,
     startMs: graph.window?.startMs, endMs: graph.window?.endMs,
-    nodeId: node?.id, edgeId: edge?.id, rpcId: edge?.rpcId || node?.rpcId,
-    traceIds: edge?.exemplars.map((x) => x.traceId) ?? [],
+    nodeId: node?.id, edgeId: top?.id, rpcId: top?.rpcId || node?.rpcId,
+    traceIds: link?.edges.flatMap((e) => e.exemplars.map((x) => x.traceId)).slice(0, 10) ?? [],
     origin: graph.quality?.origin || "unknown", truncated: graph.quality?.truncated ?? true,
     provisional: graph.quality?.provisional ?? true,
-  }} /><p className="mt-1 text-xs text-ink-muted">References only. Opens an unsent investigation draft on its own workspace.</p></div>;
+  }} /></div>;
 }

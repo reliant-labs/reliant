@@ -992,6 +992,7 @@ var generatedToolParams = map[string]ToolParams{
 	"spawn_send": {
 		Bindable: map[string]struct{}{
 			"message": {},
+			"subject": {},
 		},
 		Unbindable: map[string]string{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",
