@@ -27,6 +27,9 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # GitHub's native merge queue: each queued PR is gated again, as the merge
+  # tier, over main plus the entries ahead of it. "CI result" is the required check.
+  merge_group:
   push:
     branches: [main]
   schedule:
@@ -42,6 +45,7 @@ on:
 concurrency:
   group: ci-${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'main' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# (A merge group's ref is unique per queue entry, so it never shares a group.)
 
 permissions:
   contents: read
@@ -79,9 +83,12 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           PUSH_BEFORE: ${{ github.event.before }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
-          if [ "${EVENT_NAME}" = pull_request ]; then
+          if [ "${EVENT_NAME}" = merge_group ]; then
+            base=${GROUP_BASE}
+          elif [ "${EVENT_NAME}" = pull_request ]; then
             if [ "$(git rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]; then base=$(git rev-parse HEAD^1)
             else base=$(git merge-base "origin/${BASE_REF}" HEAD); fi
           elif [ -n "${PUSH_BEFORE}" ] && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
@@ -98,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           case "${EVENT_NAME}" in
-            pull_request) task ci:lanes -- --base "${BASE}" ;;
+            pull_request|merge_group) task ci:lanes -- --base "${BASE}" ;;
             # The control-plane contract judges what a push changed here.
             push) task ci:lanes -- --full --base "${BASE}" ;;
             *) task ci:lanes -- --full ;;
@@ -108,7 +115,7 @@ jobs:
   merge-gate:
     name: Merge gate
     needs: lanes
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -152,7 +159,7 @@ jobs:
   release-gate:
     name: Release gate
     needs: lanes
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:
@@ -374,10 +381,11 @@ jobs:
         run: |
           set -euo pipefail
           bad=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
-          gate=$([ "${EVENT_NAME}" = pull_request ] && echo merge-gate || echo release-gate)
+          merge_tier=$([ "${EVENT_NAME}" = pull_request ] || [ "${EVENT_NAME}" = merge_group ] && echo true || echo false)
+          gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-gate)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
-          if [ "${EVENT_NAME}" != pull_request ]; then
+          if [ "${merge_tier}" != true ]; then
             skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
