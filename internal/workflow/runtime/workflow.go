@@ -4644,6 +4644,7 @@ func executeToolsWithSpawnSupport(
 			if batchPark != nil {
 				askThreadInput.park = &askUserPark{batch: batchPark, progress: progress}
 			}
+			askThreadInput.resumeBlocking = resume != nil && i == resume.NextAsk
 			result := executeAskUserInline(
 				gCtx, split.askUserToolCalls[i],
 				rtx.ChatID, rtx.WorkflowID, rtx.Thread,
@@ -4778,7 +4779,7 @@ func executeAskUserInline(
 	// Async — the default: post the question and return at once
 	// (askUserAsync). The rule is versioned per call (askUserIsAsync), so a
 	// history recorded when a call without a flag blocked replays that wait.
-	if askUserIsAsync(ctx, toolCallID, toolInput) {
+	if !thread.resumeBlocking && askUserIsAsync(ctx, toolCallID, toolInput) {
 		metaObj["async"] = true
 		asyncMeta, _ := json.Marshal(metaObj)
 		return askUserAsync(ctx, toolCallID, askUserQuestionInput{

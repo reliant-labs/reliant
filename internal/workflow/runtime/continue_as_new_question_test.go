@@ -4,6 +4,9 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"go.temporal.io/sdk/workflow"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -83,6 +86,12 @@ func blockingAskUserCall(id string) map[string]interface{} {
 // that iteration, and the answer resolves it.
 func TestContinueAsNew_SpawnBlockedInQuestionCarriesPendingQuestion(t *testing.T) {
 	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) { runQuestionHandoff(t, legacy) })
+	}
+}
+
+func runQuestionHandoff(t *testing.T, legacy bool) {
 	const chatID = "chat-can-question"
 	childA, childB := canChildThread("tc-a"), canChildThread("tc-b")
 	parent := "thread-" + chatID
@@ -97,9 +106,14 @@ func TestContinueAsNew_SpawnBlockedInQuestionCarriesPendingQuestion(t *testing.T
 		{toolCalls: []map[string]interface{}{spawnToolCall("tc-b", "later work")}},
 		{toolCalls: nil}, // the root parks on its spawns
 	}
+	askCall := blockingAskUserCall("tc-ask")
+	if legacy {
+		askCall["input"] = strings.Replace(askCall["input"].(string), `"blocking":true,`, "", 1)
+		env1.OnGetVersion(askUserAsyncVersionID("tc-ask"), workflow.DefaultVersion, askUserAsyncByDefault).Return(workflow.DefaultVersion)
+	}
 	e1.scripts[childA] = []scriptedToolCallsResponse{
 		{toolCalls: []map[string]interface{}{noopToolCall("a-work")}},
-		{toolCalls: []map[string]interface{}{blockingAskUserCall("tc-ask")}},
+		{toolCalls: []map[string]interface{}{askCall}},
 	}
 	e1.scripts[childB] = repeatTurns("b", 3)
 

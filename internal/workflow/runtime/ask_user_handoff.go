@@ -181,6 +181,12 @@ func awaitAskUserPark(ctx workflow.Context, questionID string, p *askUserPark) *
 			}); err != nil {
 				return
 			}
+			// Temporal Await tests its predicate before cancellation. The answer
+			// may have cancelled this watcher in the same task that requested a
+			// handoff; never park a batch whose question already settled.
+			if gCtx.Err() != nil {
+				return
+			}
 			if workflow.GetVersion(gCtx, askUserParksVersionID(questionID, length), workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 				// Recorded before the park existed: that run kept waiting.
 				observed = length
