@@ -45,6 +45,7 @@ import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitche
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
+import { useOptionalViews } from "./useOptionalViews";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
@@ -161,6 +162,11 @@ export function ConsoleLayout() {
   // The caller's starred dashboards, nested under Dashboards — the same index
   // (and cache entry) the Dashboards page reads for this scope.
   const scopedEnvId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
+  // An unregistered scoped environment must not accidentally probe the whole project.
+  const discoveryScope = useMemo(() => org.orgId && settled && (env === ENV_ALL || scopedEnvId)
+    ? { orgId: org.orgId, projectId: forgeProject, envIds: scopedEnvId ? [scopedEnvId] : [], filters: [] }
+    : null, [org.orgId, settled, env, forgeProject, scopedEnvId]);
+  const optionalViews = useOptionalViews(discoveryScope);
   const dashboards = useDashboardIndex(org.orgId, forgeProject, scopedEnvId);
   const starred = useMemo(
     () =>
@@ -218,6 +224,7 @@ export function ConsoleLayout() {
       alertsFiring={alertsFiring}
       starred={starred}
       dashboardTitle={dashboardTitle}
+      optionalViews={optionalViews}
       scope={scope}
       onEnvChange={setEnv}
       user={user}

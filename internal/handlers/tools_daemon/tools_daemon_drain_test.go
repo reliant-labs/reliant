@@ -332,10 +332,12 @@ func ackFor(t *testing.T, conn *daemonConnection, within time.Duration) string {
 	}
 }
 
-// The usual case: the waiter is on this stream. The result goes to it and is
-// acknowledged, so the daemon can forget it.
-func TestToolResultIsAcknowledgedOnceHandedToItsWaiter(t *testing.T) {
+// Even the local waiter must acquire confirmed publication ownership before
+// the daemon can delete its durable copy.
+func TestToolResultIsAcknowledgedAfterLocalWaiterPublication(t *testing.T) {
 	svc := newTestService(nil)
+	pub := &fakeResultPublisher{}
+	svc.deps.ResultPublisher = pub
 	conn := newTestConn("user-1", "daemon-1", newParkedStream())
 	waiter := make(chan *toolexec.ToolExecutionResponse, 1)
 	conn.pendingToolRequests["req-1"] = waiter
@@ -346,6 +348,9 @@ func TestToolResultIsAcknowledgedOnceHandedToItsWaiter(t *testing.T) {
 	require.Equal(t, "ok", got.Content)
 	require.Equal(t, "daemon-1", got.DaemonID, "which machine ran it is the gateway's to say")
 	require.Equal(t, "req-1", ackFor(t, conn, time.Second))
+	pub.mu.Lock()
+	require.Len(t, pub.published, 1, "local buffering alone never authorizes deletion")
+	pub.mu.Unlock()
 }
 
 // Redelivery: a result whose request came in over another stream has no

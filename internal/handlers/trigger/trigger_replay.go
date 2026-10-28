@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -94,6 +96,9 @@ func (s *Service) PreviewReplay(
 ) (*connect.Response[reliantv1.PreviewReplayResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
+	if msg.GetTriggerId() != "" {
+		return s.previewAutomationEvent(ctx, msg)
+	}
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
@@ -127,6 +132,48 @@ func (s *Service) PreviewReplay(
 		inputs[name] = v
 	}
 	return connect.NewResponse(&reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: mapping.Prompt}), nil
+}
+
+// previewAutomationEvent is a read-only test of the stored automation's mapping.
+// Load by owner before inspecting payloads; project/owner/credentials are never
+// taken from the sample. No event id lookup, intake or launcher is involved.
+func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.PreviewReplayRequest) (*connect.Response[reliantv1.PreviewReplayResponse], error) {
+	trigger, err := s.ownedTrigger(ctx, msg.GetTriggerId())
+	if err != nil {
+		return nil, err
+	}
+	if !core.TriggerEventKind(trigger.Kind).IsInbound() {
+		return nil, svcerr.InvalidArgument("only event automations accept a test event")
+	}
+	if msg.GetReplay() == nil {
+		return nil, svcerr.InvalidArgument("a sample event is required")
+	}
+	if msg.GetReplay().GetPayload() != nil && proto.Size(msg.GetReplay().GetPayload()) > 64*1024 {
+		return nil, svcerr.InvalidArgument("sample event exceeds 64 KiB")
+	}
+	replay, err := triggers.ReplayFromProto(msg.GetReplay(), msg.GetSender())
+	if err != nil {
+		return nil, svcerr.InvalidArgument("Invalid sample event metadata.")
+	}
+	if replay.OccurredAt.IsZero() {
+		replay.OccurredAt = time.Now().UTC()
+	}
+	if trigger.Kind == core.TriggerKindWebhook {
+		// A real generic delivery's sender is this authenticated trigger, never
+		// a person claimed by its body (or by preview metadata).
+		replay.Sender = &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: trigger.ID, DisplayName: trigger.Name, Verified: true}
+	}
+	spec, err := triggers.PreviewEvent(ctx, s.deps.Repo, triggers.LaunchWorkflows{Repo: s.deps.Repo}, trigger, &core.TriggerEvent{
+		Kind: core.TriggerEventKind(trigger.Kind), Payload: replay.Payload, OccurredAt: replay.OccurredAt, Sender: replay.Sender,
+	})
+	if err != nil {
+		return nil, svcerr.InvalidArgument("This sample could not be mapped. Check its fields and the workflow's event settings.")
+	}
+	inputs := make(map[string]*structpb.Value, len(spec.Params))
+	for key, value := range spec.Params {
+		inputs[key] = value
+	}
+	return connect.NewResponse(&reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: spec.Messages[0].Content}), nil
 }
 
 // activationOf is the caller's own activation of the declared trigger a replay

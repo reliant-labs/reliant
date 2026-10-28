@@ -27,4 +27,5 @@ type Router interface {
 	IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error)
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 	RefreshLocalModels(ctx context.Context, userID, daemonID string) (*pb.LocalModelInventory, error)
+	RequestDaemonRestart(ctx context.Context, userID, daemonID string, request *pb.RestartRequested) (*pb.DaemonRestartStatus, error)
 }

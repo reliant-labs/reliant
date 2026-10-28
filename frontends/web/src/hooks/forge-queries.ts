@@ -1076,15 +1076,15 @@ export function useForgeDeployStatus(
  * staleTime is short (5s): this is the thing the user is actively changing.
  * They set a secret and come straight back expecting the row to have moved.
  */
-export function useManagedSecrets(
+export function managedSecretsQueryOptions(
   projectId: string | null | undefined,
   env: string | null | undefined,
   target: ManagedStoreTarget | null
 ) {
   const environmentId = target?.kind === "lookup" ? target.environmentId : "";
-  return useQuery<{ availability: ManagedStoreAvailability } & ManagedSecretListing>({
+  return {
     queryKey: [...forgeCloudKeys.managedSecrets(projectId ?? "", env ?? ""), target?.kind ?? "", environmentId],
-    queryFn: async () => {
+    queryFn: async (): Promise<{ availability: ManagedStoreAvailability } & ManagedSecretListing> => {
       // `protected: false` when nothing was read: an environment whose store
       // could not be read offers no write at all, so there is nothing for a
       // protection badge to qualify.
@@ -1099,10 +1099,20 @@ export function useManagedSecrets(
         return { availability: availabilityFromError(err), secrets: [], protected: false };
       }
     },
-    enabled: !!projectId && !!env && !!target,
+    // A cloud-only project has no local project id. Its live environment id
+    // is the lookup authority; keep project/env/org cache dimensions intact.
+    enabled: !!env && !!target && (target.kind !== "lookup" || !!environmentId),
     staleTime: 5_000,
     retry: forgeRetry,
-  });
+  };
+}
+
+export function useManagedSecrets(
+  projectId: string | null | undefined,
+  env: string | null | undefined,
+  target: ManagedStoreTarget | null
+) {
+  return useQuery(managedSecretsQueryOptions(projectId, env, target));
 }
 
 /**

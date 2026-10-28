@@ -29,6 +29,7 @@ export type AskEnv = string | null;
 export type AskSubject =
   | { kind: "issue"; issueId: string; env: AskEnv }
   | { kind: "trace"; traceId: string; env: AskEnv }
+  | { kind: "graph"; env: AskEnv; orgId: string; projectId?: string; envIds: string[]; startMs?: number; endMs?: number; nodeId?: string; edgeId?: string; rpcId?: string; traceIds: string[]; origin: string; truncated: boolean; provisional: boolean }
   | { kind: "alert"; rule: string; fingerprint: string; env: AskEnv }
   | { kind: "panel"; panel: Panel; dashboard?: string; window: RangePreset; env: AskEnv };
 
@@ -166,6 +167,13 @@ const RAW_VERB: Record<string, string> = { traces: "traces", logs: "logs", metri
 
 export function buildAskReliantPrompt(subject: AskSubject, ctx: AskContext = {}): string {
   switch (subject.kind) {
+    case "graph":
+      return `Investigate this service graph${where(subject, ctx)}. References only: ${JSON.stringify({
+        orgId: subject.orgId, projectId: subject.projectId, envIds: subject.envIds.slice(0, 50),
+        startMs: subject.startMs, endMs: subject.endMs, nodeId: subject.nodeId, edgeId: subject.edgeId,
+        rpcId: subject.rpcId, traceIds: subject.traceIds.slice(0, 3), origin: subject.origin,
+        truncated: subject.truncated, provisional: subject.provisional,
+      })}\n\nFetch evidence through authorized read-only observability tools. Missing observations are not zero traffic. Distinguish hypotheses from evidence; never invoke the explored RPC or mutate the app.`;
     case "issue":
       return issuePrompt(subject, ctx);
     case "trace":
@@ -196,6 +204,7 @@ export function traceEnvName(
 /** A workspace name for the investigation: ask-<kind>-<what>-<nonce>, a legal git branch. */
 export function askWorkspaceName(subject: AskSubject, nonce: string): string {
   const what =
+    subject.kind === "graph" ? subject.rpcId || subject.nodeId || subject.edgeId || "graph" :
     subject.kind === "issue"
       ? subject.issueId
       : subject.kind === "trace"

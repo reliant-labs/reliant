@@ -40,6 +40,21 @@ func Tools() []string {
 	return names
 }
 
+// Tags returns the tool-tag vocabulary — every tag a tools_config filter
+// entry (`tag:X`) may name — sorted, for deterministic error messages and
+// test output.
+//
+// It is the whole vocabulary, not the set of tags some tool currently
+// carries: `tag:mcp` expands against the chat's connected MCP servers at
+// run time and matches no statically registered tool, yet naming it is
+// correct. A tag outside this list matches nothing and never will, which is
+// what the validation layer reports.
+func Tags() []string {
+	tags := make([]string, len(generatedKnownTags))
+	copy(tags, generatedKnownTags)
+	return tags
+}
+
 // Lookup returns the bindable surface of one tool.
 func Lookup(toolName string) (ToolParams, bool) {
 	params, ok := generatedToolParams[toolName]

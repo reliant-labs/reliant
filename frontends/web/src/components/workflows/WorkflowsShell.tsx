@@ -2,10 +2,10 @@
 
 /**
  * The Workflows area's chrome (WORKFLOW_UI.md §1.2): a left sidebar —
- * Workflows · Runs — a header bar with the project scope and the exit, and
- * project resolution. It is the layout route every `/workflows/*` page
- * renders inside, so a cross-link between sections (workflow → its runs, run
- * → its workflow's trigger) stays inside one shell.
+ * Workflows · Runs — a sidebar-brand exit, a header bar with the section and
+ * project scope, and project resolution. It is the layout route every
+ * `/workflows/*` page renders inside, so a cross-link between sections
+ * (workflow → its runs, run → its workflow's trigger) stays inside one shell.
  *
  * No badge on the nav: the Inbox is the ONE place that says something needs
  * you (WORKFLOW_UI.md §8), and its sidebar badge is the one count. The
@@ -18,8 +18,8 @@
  * bar beside "Close", where they read as window chrome rather than as the
  * area's navigation. A labelled vertical nav is the app's standard for a
  * full-page area — Settings and Deployments (Forge/Console/ConsoleShell) both use one — so
- * the three full-page areas now share a shape, and the title bar is left to
- * what Deployments uses it for: the scope (project) and the way out.
+ * the three full-page areas now share a shape. Like the console, the brand
+ * row owns the way out; the title bar owns the breadcrumb and scope.
  *
  * PROJECT RESOLUTION is the same ladder as ForgeLayout, for the same reason:
  * these routes sit under the bare `_authenticated` layout, which never mounts
@@ -39,11 +39,12 @@
  * project is never a dead end.
  */
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { Activity, ArrowLeft, ChevronDown, Workflow, X } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
+import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { useRouteProjectResolution } from "@/hooks/useRouteProjectResolution";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
@@ -89,8 +90,12 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
   const activeTab = workflowsTabForPath(pathname);
   // The project and the scope ride along between sections, so switching keeps context.
   const search = useSearch({ strict: false }) as { project?: string; allProjects?: boolean };
-  const { trafficLightPadding } = useTitleBarChrome({ collapsedPadding: "0px" });
-  const [collapsed, setCollapsed] = useNarrowRail();
+  const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
+  const [collapsed, setCollapsed] = useState(false);
+  const narrow = useNarrowViewport();
+  // A 56px rail cannot contain the native macOS traffic-light inset. Keep
+  // collapse available, but put its exit in the main header in that case.
+  const railExitInHeader = !narrow && collapsed && trafficLightPadding !== "0px";
 
   // The button always leaves the area. Escape steps to the logical parent: a
   // detail page's list, or out of the area from a list.
@@ -124,41 +129,35 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         sidebarClassName="forge-ui"
         brand={
           <div
-            className="flex items-center transition-[padding] duration-200 ease-in-out"
-            style={{ paddingLeft: trafficLightPadding }}
+            className="flex min-w-0 items-center gap-1 transition-[padding] duration-200 ease-in-out"
+            style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}
+            data-testid="workflows-brand"
           >
-            <span className="text-sm font-semibold tracking-tight text-foreground">Workflows</span>
+            <WorkflowsCloseButton onClose={leave} />
+            <span className="truncate text-sm font-semibold tracking-tight text-foreground">Workflows</span>
+          </div>
+        }
+        brandCollapsed={
+          <div data-testid="workflows-brand-collapsed">
+            {!railExitInHeader && <WorkflowsCloseButton onClose={leave} />}
           </div>
         }
         navItems={navItems}
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
-        headerContent={<WorkflowsHeader onClose={leave} />}
+        headerContent={
+          <WorkflowsHeader
+            onClose={leave}
+            activeTab={activeTab}
+            showExit={narrow || railExitInHeader}
+          />
+        }
         contentLayout={isFillLayout(pathname) ? "fill" : "padded"}
       >
         {isFillLayout(pathname) ? children : <div className="mx-auto w-full max-w-6xl">{children}</div>}
       </SidebarLayout>
     </div>
   );
-}
-
-/**
- * On a phone the sidebar starts as the icon rail: a 240px sidebar leaves a
- * 390px screen 150px for the page. It follows the viewport across the `sm`
- * breakpoint; the toggle still expands it on demand.
- */
-function useNarrowRail(): [boolean, Dispatch<SetStateAction<boolean>>] {
-  const query = "(max-width: 639px)";
-  const narrow = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
-  const [collapsed, setCollapsed] = useState(narrow);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia(query);
-    const onChange = () => setCollapsed(media.matches);
-    media.addEventListener?.("change", onChange);
-    return () => media.removeEventListener?.("change", onChange);
-  }, []);
-  return [collapsed, setCollapsed];
 }
 
 /**
@@ -202,32 +201,50 @@ function useEscapeToLeave(onLeave: () => void) {
   }, [onLeave]);
 }
 
-/**
- * The header bar: the project everything below is read in, and the exit — the
- * same arrangement as Deployments' ForgeHeader, so the two areas match.
- */
-function WorkflowsHeader({ onClose }: { onClose: () => void }) {
-  const { isElectron, dragRegionStyle, noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
+/** The console pattern: a quiet exit in the brand row, also on the rail. */
+function WorkflowsCloseButton({ onClose }: { onClose: () => void }) {
+  const { isElectron, noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
   const exitLabel = isElectron ? "Close workflows" : "Back to app";
   return (
-    <div className={cn("flex w-full items-center gap-3", isElectron && "cursor-move")} style={dragRegionStyle}>
-      <div className="flex cursor-default items-center" style={noDragRegionStyle}>
+    <Tooltip content={`${exitLabel} (Esc)`} side="bottom" delay={300}>
+      <button
+        type="button"
+        onClick={onClose}
+        style={noDragRegionStyle}
+        aria-label={exitLabel}
+        data-testid="workflows-close"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      >
+        {isElectron ? <X className="h-4 w-4" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}
+      </button>
+    </Tooltip>
+  );
+}
+
+/** Breadcrumb and scope, leaving the way out on the left, never the right. */
+function WorkflowsHeader({ onClose, activeTab, showExit }: {
+  onClose: () => void;
+  activeTab: WorkflowsTab | null;
+  showExit: boolean;
+}) {
+  const { isElectron, trafficLightPadding, dragRegionStyle, noDragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
+  // The shell can remain mounted briefly while navigating out of the area.
+  const section = WORKFLOWS_TABS.find((tab) => tab.key === activeTab);
+  return (
+    <div
+      className={cn("flex min-w-0 flex-1 items-center gap-3", isElectron && "cursor-move")}
+      // With no brand exit visible (mobile drawer or native macOS rail),
+      // leave room for traffic lights before the leading header exit.
+      style={{ ...dragRegionStyle, paddingLeft: showExit ? trafficLightPadding : undefined }}
+    >
+      {showExit && <WorkflowsCloseButton onClose={onClose} />}
+      <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-muted-foreground">
+        <span className="hidden md:inline">Workflows</span>
+        <span aria-hidden="true" className="hidden md:inline">›</span>
+        <span aria-current="page" className="truncate font-medium text-foreground">{section?.label ?? "Workflows"}</span>
+      </nav>
+      <div className="flex min-w-0 max-w-xs cursor-default items-center max-md:max-w-48" style={noDragRegionStyle}>
         <ProjectSwitcher />
-      </div>
-      <div className="flex-1 self-stretch" style={dragRegionStyle} />
-      <div className="flex cursor-default items-center" style={noDragRegionStyle}>
-        <Tooltip content={`${exitLabel} (Esc)`} side="bottom" delay={300}>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={exitLabel}
-            data-testid="workflows-close"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
-            {isElectron ? <X className="h-4 w-4" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}
-            <span>{isElectron ? "Close" : "Back"}</span>
-          </button>
-        </Tooltip>
       </div>
     </div>
   );

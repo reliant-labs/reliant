@@ -284,7 +284,8 @@ export function ReleaseDetail({
         </div>
 
         <aside className="space-y-4" aria-label="About this release">
-          <Panel title="Promotion" testId="release-timeline">
+          <Panel title="Promotion history" testId="release-timeline">
+            <p className="mb-3 text-xs text-ink-muted">The canonical record of this release’s promotions, supersessions and rollbacks across environments.</p>
             <Chain entries={releaseTimeline(record, envs, data.promotions, data.ordered, data.names)} />
           </Panel>
           <Panel title="Details" testId="release-facts">
