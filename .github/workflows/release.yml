@@ -1156,7 +1156,7 @@ jobs:
 
           | Architecture | Universal | Debian/Ubuntu |
           |:------------|:----------|:--------------|
-          | **x64** (AMD/Intel) | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-x64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb) |
+          | **x64** (AMD/Intel) | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-x86_64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb) |
           | **ARM64** | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.deb) |
 
           EOF
@@ -1221,10 +1221,14 @@ jobs:
           # 404 and left the real feed cached: after v1.7.7 published, clients
           # were still served version 1.7.5 for ~20h (cf-cache-status HIT,
           # age 72856 against max-age 86400) while origin was already correct.
+          #
+          # Linux arm64 has a feed of its own, `<channel>-linux-arm64.yml`. It
+          # was missing from this list through v1.8.6, so arm64 Linux clients
+          # read a cached feed for up to a day after every release.
           if [[ "$CHANNEL" == "latest" ]]; then
-            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest.yml")
+            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-linux-arm64.yml" "${BASE_URL}/latest.yml")
           else
-            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha.yml")
+            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha-linux-arm64.yml" "${BASE_URL}/alpha.yml")
           fi
 
           # Purge versioned download URLs per platform
@@ -1396,3 +1400,43 @@ jobs:
           - **Job:** Finalize Release
           - **Duration:** ${MINS}m ${SECS}s
           EOF
+
+  # ============================================================================
+  # VERIFY: the release is downloadable, as a client sees it
+  # ============================================================================
+  # A green build has not meant "released": v1.8.1 failed late and v1.8.6's
+  # purge died, and both times the feeds kept serving the previous version
+  # while the run looked done. This job reads what downloads.reliantlabs.io
+  # serves through the CDN: every variant's installer and archive returns 200,
+  # every update feed of the channel reads this version, every file a feed
+  # names exists, and the GitHub Release page exists. Any miss fails the run,
+  # which release-health.yml turns into a `release:failed` issue.
+  #
+  # The web SPA is not checked here: app.reliantlabs.io ships with the prod
+  # API (control-plane scripts/promote-prod.sh), not with the tag, so that the
+  # SPA never calls RPCs the deployed API does not have yet.
+  verify-published:
+    name: Verify published release
+    needs: [prepare, finalize]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: always() && needs.prepare.result == 'success' && github.event.inputs.dry_run != 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Every variant and every feed is live
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: scripts/verify-release-artifacts.sh "$VERSION" --channel "$CHANNEL" --wait 600
+
+      - name: The GitHub Release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          gh release view "$VERSION" --json tagName,url -q '"\(.tagName) \(.url)"' \
+            || { echo "::error::no GitHub Release for $VERSION: Finalize's 'Publish the GitHub Release' did not run or failed"; exit 1; }

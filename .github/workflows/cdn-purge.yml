@@ -43,9 +43,9 @@ jobs:
           V=${VERSION#v}
           BASE_URL="https://downloads.reliantlabs.io"
           if [[ "$CHANNEL" == "latest" ]]; then
-            FILES=("$BASE_URL/latest-mac.yml" "$BASE_URL/latest-linux.yml" "$BASE_URL/latest.yml")
+            FILES=("$BASE_URL/latest-mac.yml" "$BASE_URL/latest-linux.yml" "$BASE_URL/latest-linux-arm64.yml" "$BASE_URL/latest.yml")
           else
-            FILES=("$BASE_URL/alpha-mac.yml" "$BASE_URL/alpha-linux.yml" "$BASE_URL/alpha.yml")
+            FILES=("$BASE_URL/alpha-mac.yml" "$BASE_URL/alpha-linux.yml" "$BASE_URL/alpha-linux-arm64.yml" "$BASE_URL/alpha.yml")
           fi
           for f in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip mac-arm64.dmg.blockmap mac-x64.dmg.blockmap \
                    linux-x86_64.AppImage linux-arm64.AppImage linux-amd64.deb linux-arm64.deb \
