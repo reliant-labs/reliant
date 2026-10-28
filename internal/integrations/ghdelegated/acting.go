@@ -108,7 +108,6 @@ var actionPermissions = map[string]map[string]string{
 	"pr.review_comment.reply": {"pull_requests": "write"},
 	"pr.update":               {"pull_requests": "write"},
 	"pr.create":               {"pull_requests": "write", "contents": "read"},
-	"pr.enqueue":              {"pull_requests": "write"},
 	// git_publish's push (writeledger.GitPushAction): a branch is contents.
 	"git.push": {"contents": "write"},
 }

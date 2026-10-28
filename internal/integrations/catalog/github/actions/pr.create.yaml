@@ -10,8 +10,8 @@ description: >-
   with issue.labels.add using the returned number. GitHub answers 422 when
   the branches are identical, have no commits between them, or a pull
   request for them is already open; the message says which. Merging is not
-  a direct action here; pr.enqueue can request GitHub's native queue without
-  bypassing rules. Returns the pull request's number, id, node id and URL.
+  an action here: a person merges. Returns the pull request's number, id,
+  node id and URL.
 keywords: [pull request, pr, open, create, draft, branch, propose]
 placement: server
 mutates: true

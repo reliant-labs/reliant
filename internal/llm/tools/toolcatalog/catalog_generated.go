@@ -442,17 +442,6 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
-	"github__pr_enqueue": {
-		Bindable: map[string]struct{}{
-			"connection":      {},
-			"expectedHeadOid": {},
-			"owner":           {},
-			"pull_number":     {},
-			"repo":            {},
-			"repository_id":   {},
-		},
-		Unbindable: map[string]string{},
-	},
 	"github__pr_get": {
 		Bindable: map[string]struct{}{
 			"connection":  {},

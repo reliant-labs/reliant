@@ -101,7 +101,6 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 		"pr.review.create":        {"pull_requests": "write"},
 		"pr.review_comment.reply": {"pull_requests": "write"},
 		"pr.create":               {"pull_requests": "write", "contents": "read"},
-		"pr.enqueue":              {"pull_requests": "write"},
 		"workflow.dispatch":       nil, // not in the table: control-plane's default cap
 	} {
 		t.Run(action, func(t *testing.T) {
@@ -138,7 +137,7 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 			e := newEnv(t)
 			inst := &fakeInstallations{err: tc.err}
 			cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
-				botReq(t, e.newRun("idp|alice"), "pr.enqueue", true, repoParams))
+				botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
 			require.Error(t, err)
 			assert.Nil(t, cred)
 			var ce *httpaction.CredentialError
