@@ -4,7 +4,6 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"sync"
 	"testing"
@@ -27,10 +26,6 @@ import (
 )
 
 // localModelRouter records the calls DaemonRegistryService makes.
-func (r *localModelRouter) RequestDaemonRestart(context.Context, string, string, *reliantv1.RestartRequested) (*reliantv1.DaemonRestartStatus, error) {
-	return nil, fmt.Errorf("restart not configured by this test")
-}
-
 type localModelRouter struct {
 	toolexectest.Recorder
 

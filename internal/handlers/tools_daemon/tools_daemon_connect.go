@@ -218,9 +218,6 @@ func (s *Service) ConnectDaemon(
 		return err
 	}
 
-	if _, err := uuid.Parse(reg.GetIncarnationId()); err != nil {
-		return svcerr.FailedPrecondition("daemon process identity is required")
-	}
 	if err := validateAssertedDaemonID(reg.GetDaemonId()); err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected malformed client-asserted daemon_id",
 			"userID", userID, "assertedDaemonID", truncateForLog(reg.GetDaemonId()))
@@ -313,9 +310,6 @@ func (s *Service) ConnectDaemon(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
-	conn.incarnationID = reg.GetIncarnationId()
-	// Closed to new work until durable intent has been restored below.
-	conn.restart.Store(&reliantv1.DaemonRestartStatus{})
 	// Register connection: keyed by daemonID, with secondary index by userID.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]
@@ -342,15 +336,8 @@ func (s *Service) ConnectDaemon(
 	// Close old connection if this daemon id was already connected.
 	s.supersedeIncumbent(oldConn)
 
-	// Notify listeners outside the mutex. Admission was set before the slot
-	// became visible; persist after ownership checks, before announcing it.
-	if err := s.restoreRestart(ctx, conn, reg); err != nil {
-		return svcerr.Wrap(err)
-	}
+	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
-	if conn.restart.Load() != nil {
-		s.notifyUpdating(userID, daemonID)
-	}
 	if s.deps.StatePublisher != nil {
 		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
@@ -431,9 +418,6 @@ func (s *Service) RegisterOutboundConnection(
 	if s.draining.Load() {
 		return nil, errGatewayDraining
 	}
-	if _, err := uuid.Parse(reg.GetIncarnationId()); err != nil {
-		return nil, svcerr.FailedPrecondition("daemon process identity is required")
-	}
 
 	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
@@ -495,9 +479,6 @@ func (s *Service) RegisterOutboundConnection(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
-	conn.incarnationID = reg.GetIncarnationId()
-	// Closed to new work until durable intent has been restored below.
-	conn.restart.Store(&reliantv1.DaemonRestartStatus{})
 	// Register connection.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]
@@ -516,14 +497,7 @@ func (s *Service) RegisterOutboundConnection(
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
 	}
 
-	if err := s.restoreRestart(ctx, conn, reg); err != nil {
-		s.teardownConnection(conn, "restart state write failed")
-		return nil, svcerr.Wrap(err)
-	}
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
-	if conn.restart.Load() != nil {
-		s.notifyUpdating(userID, daemonID)
-	}
 	if s.deps.StatePublisher != nil {
 		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}

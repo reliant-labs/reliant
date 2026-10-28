@@ -49,10 +49,8 @@ func (s *daemonServer) ConnectGateway(
 			// Server mode means the gateway dials in, which today only
 			// happens for a managed pod — but let the platform say so
 			// explicitly when it can. See resolveDaemonType.
-			DaemonType:    resolveDaemonType(d.host.DaemonType, "cloud"),
-			Labels:        d.registerLabels(),
-			RestartStatus: d.restartSnapshot(),
-			IncarnationId: d.incarnationID,
+			DaemonType: resolveDaemonType(d.host.DaemonType, "cloud"),
+			Labels:     d.registerLabels(),
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())

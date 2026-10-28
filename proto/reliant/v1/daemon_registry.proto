@@ -12,12 +12,6 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // DaemonRegistryService exposes daemon registry queries to the web UI.
 // All RPCs require a Supabase JWT — the CLI does not call this service.
 service DaemonRegistryService {
-  // Admin-only manual drain hook. No floor, quiet-point or rollout policy.
-  rpc RequestDaemonRestart(RequestDaemonRestartRequest) returns (RequestDaemonRestartResponse) {
-    option (forge.v1.method) = {
-      activity: {verb: "request_restart" target: {kind: "daemon" id: "daemon_id"}}
-    };
-  }
   // ListDaemons returns the authenticated user's registered daemons.
   rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
 
@@ -295,19 +289,6 @@ message DaemonInfo {
   string commit = 25;
   int64 commit_time_unix = 26;
   string forge_version = 27;
-  // Kept through disconnect, cleared by the replacement process registering.
-  DaemonRestartStatus restart_status = 28;
-}
-
-message RequestDaemonRestartRequest {
-  string daemon_id = 1;
-  string reason = 2;
-  // Zero uses the approved ten-minute drain; otherwise capped at ten minutes.
-  int64 deadline_unix_ms = 3;
-}
-
-message RequestDaemonRestartResponse {
-  DaemonRestartStatus restart_status = 1;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
@@ -337,8 +318,6 @@ enum DaemonStatus {
   DAEMON_STATUS_SUSPENDED = 5;
   // The machine failed to come up or crashed terminally.
   DAEMON_STATUS_FAILED = 6;
-  // Planned drain or bounded restart wait; no new work is routed here.
-  DAEMON_STATUS_UPDATING = 7;
 }
 
 // DaemonLifecyclePhase is the public lifecycle vocabulary for a managed

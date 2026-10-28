@@ -15,12 +15,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -334,19 +332,6 @@ func serveGateway(t *testing.T, authority tokenauthority.Authority) string {
 	return serveDaemonListener(t, newTestDaemonListener(t, authority, gateway))
 }
 
-// Each top-level fixture models one process identity, stable across retries
-// and reconnects in that fixture. Do not mint an incarnation per stream.
-var registrationProcessIDs sync.Map
-
-func fixtureIncarnationID(t *testing.T) string {
-	t.Helper()
-	id, loaded := registrationProcessIDs.LoadOrStore(t, uuid.NewString())
-	if !loaded {
-		t.Cleanup(func() { registrationProcessIDs.Delete(t) })
-	}
-	return id.(string)
-}
-
 // connectDaemon opens ConnectDaemon with bearer, registers, and returns the
 // first server message or the error the gateway answered with.
 func connectDaemon(t *testing.T, gatewayURL, bearer string) (*reliantv1.ServerMessage, error) {
@@ -361,7 +346,7 @@ func connectDaemon(t *testing.T, gatewayURL, bearer string) (*reliantv1.ServerMe
 		_ = stream.CloseResponse()
 	}()
 	if err := stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{Hostname: "e2e-host", Platform: "linux", DaemonType: "local", IncarnationId: fixtureIncarnationID(t)},
+		Register: &reliantv1.DaemonRegister{Hostname: "e2e-host", Platform: "linux", DaemonType: "local"},
 	}}); err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}

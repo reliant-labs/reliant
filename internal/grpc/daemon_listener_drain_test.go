@@ -123,7 +123,7 @@ func attachMovingDaemon(t *testing.T, gatewayURL, bearer string) *connect.BidiSt
 		_ = stream.CloseResponse()
 	})
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{Hostname: "drain-host", Platform: "linux", DaemonType: "local", MovesOnDrain: true, IncarnationId: fixtureIncarnationID(t)},
+		Register: &reliantv1.DaemonRegister{Hostname: "drain-host", Platform: "linux", DaemonType: "local", MovesOnDrain: true},
 	}}))
 	nextMessage(t, stream, "the registration ack", func(m *reliantv1.ServerMessage) bool { return m.GetRegistrationAck() != nil })
 	return stream

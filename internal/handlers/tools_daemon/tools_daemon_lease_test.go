@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -364,10 +363,6 @@ func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.Bi
 // dialDaemonAs is dialDaemon with the registration the test chooses.
 func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
-	reg = proto.Clone(reg).(*reliantv1.DaemonRegister)
-	if reg.IncarnationId == "" {
-		reg.IncarnationId = uuid.NewString()
-	}
 	routes := http.NewServeMux()
 	svc.Register(routes) // the production mount
 	// Streams.Install is the listener's edge: the abortable request body

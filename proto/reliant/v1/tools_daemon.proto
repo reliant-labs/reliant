@@ -120,9 +120,6 @@ message DaemonMessage {
     // serve. Sent after registration, whenever detection changes, and on
     // request (LocalModelRefresh). Replaces the daemon's previous inventory.
     LocalModelInventory local_model_inventory = 15;
-
-    // Planned daemon restart progress; never user activity.
-    DaemonRestartStatus restart_status = 16;
   }
 }
 
@@ -266,11 +263,6 @@ message DaemonRegister {
   int64 commit_time_unix = 15;
   // forge_version is the forge module version linked into the binary.
   string forge_version = 16;
-  // Current process-local observation; absence is not proof of replacement.
-  DaemonRestartStatus restart_status = 17;
-  // Random UUID created once per daemon process, never persisted across process
-  // starts. Stable across gateway reconnects. Not an authorization identity.
-  string incarnation_id = 18;
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -495,31 +487,7 @@ message ServerMessage {
 
     // The gateway has routed a ToolResponse to its caller. See ToolResultAck.
     ToolResultAck tool_result_ack = 21;
-
-    RestartRequested restart_requested = 22;
   }
-}
-
-// RestartRequested starts a bounded drain, not an update policy. The gateway
-// stops routing new work before sending it. The daemon finishes running calls
-// and waits for result acknowledgements until this deadline (at most ten
-// minutes), then reports drained. The supervisor/operator replaces it.
-message RestartRequested {
-  int64 deadline_unix_ms = 1;
-  string reason = 2;
-}
-
-// DaemonRestartStatus is repeated at registration so a gateway hand-over never
-// makes an updating process routable again. Drained means quiesced for replacement;
-// it does not mean an interrupted call's effects were rolled back.
-message DaemonRestartStatus {
-  int64 deadline_unix_ms = 1;
-  string reason = 2;
-  bool drained = 3;
-  bool timed_out = 4;
-  // The process this durable intent targets. Gateway writes bind it to the
-  // authenticated owner/daemon and current attachment, not caller metadata.
-  string incarnation_id = 5;
 }
 
 // GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
@@ -849,8 +817,6 @@ message DaemonCommandResponse {
   bool success = 3;
   bytes payload = 4; // JSON-encoded response
   string error_message = 5;
-  // DAEMON_UNDELIVERED means refused before execution during a planned drain.
-  string error_code = 6;
 }
 
 // ============================================
