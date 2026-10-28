@@ -38,36 +38,24 @@ Reliant is a **multi-tenant distributed system** with three server roles — **A
 
 Every log — backend, browser console, Electron — is under `.forge/logs/dev/` of the checkout that ran `forge env up dev`: `./.forge/logs/dev/` for this checkout's stack, `../control-plane/.forge/logs/dev/` for control-plane's (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_web.log` / `frontend_reliant-web.log` = UI `[browser:<level>]` lines). Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep. `./.reliant/tools/log-search.sh` greps them.
 
-## Merging to main: the merge-gate status is required
+## Merging to main: GitHub's native merge queue
 
-Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed, ~5 min), before every merge; the **release gate**, `task release:gate` (`scripts/release-gate.sh`: everything, `-race`, slow tests, integration, e2e; recorded per sha), before every release — `task release:tag` refuses a commit without a green record.
+Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed), before you ask for a merge; the **release gate**, `task release:gate`, before every release.
 
-GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
-commit status (ruleset "main: merge-gate required", head must be up to date
-with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
-merge queue merges main into the branch (never a rebase), squashes, runs
-`scripts/merge-gate.sh --amend` on that exact commit and posts the status:
-
-```bash
-/home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
-```
-
-Pool checkouts are granted first come, first served: a run prints its place in
-line and an estimated wait, and `merge_queue3.sh --status` shows the whole
-queue. A run you kill loses its place. When a run failed on a host flake or a
-test timeout, rerun it and it gets its old place back. For a test failure
-unrelated to your diff, rerun with `--flake-retry`.
-
-The only other way in is an audited waiver — a hotfix that cannot wait, or a
-gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
-comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:
+`main` merges only through GitHub's merge queue (ruleset "main: CI result +
+merge queue", **no bypass actors**). It requires the `CI result` check, which
+CI (`.github/workflows/ci.yml`) runs on the queue's own merge group, so the
+commit that lands is the commit that was tested. Queue a PR with:
 
 ```bash
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
+gh pr merge <pr> --squash --auto --match-head-commit <sha>
 ```
 
-GitHub CI (`.github/workflows/ci.yml`) is a thin wrapper over the same tasks: `task ci:merge` on a PR, `task release:gate` on main and nightly.
+The PR pipeline does this for you: label the PR `merge:queue` and stop. The
+`pr-review` workflow reviews the exact head; on `review:passed` it enqueues it.
+`review:changes` means fix, push, and re-add `merge:queue`. Design:
+control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
+script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
 
 ## Load these skills before touching their area
 

@@ -172,8 +172,8 @@ the gate and is named: `FAILED: docs never completed (no result row; ...)`.
 The verdict is also written to `$MG_LOGDIR/verdict`. A missing `jq` or an
 unparsable `plan.json` aborts the gate, because every lane would otherwise read
 as "not selected". reliant#1393 merged with docs-generate still queued; this is
-the check that stops that. The merge queue posts `merge-gate` SUCCESS only when
-the verdict is `OK`, and posts a FAILURE status carrying it otherwise.
+the check that stops that. CI's `Merge gate` job, and so `CI result`, fails
+unless the verdict is `OK`.
 
 ### The CPU budget
 
@@ -351,63 +351,19 @@ Say so in the release notes. There is no waiver for a red run: fix it.
 
 ## The merge queue
 
-The fleet's merge queue (`.fm-tools/merge_queue3.sh`, outside this repo) is a
-thin orchestrator over `scripts/merge-gate.sh`. Branches gate in parallel, one
-per pool checkout. There are three pools. The host's heavy slots are the
-limit, not the number of checkouts, so more pools would only add gates that
-queue for a slot.
+`main` merges only through GitHub's native merge queue. The ruleset
+"main: CI result + merge queue" requires the `CI result` check, squash-merges,
+and has **no bypass actors**. `ci.yml` runs on `merge_group`, so each queued PR
+is tested on main plus the entries ahead of it, and lands only if that run is
+green. Queue a PR with `gh pr merge <pr> --squash --auto --match-head-commit <sha>`;
+the `pr-review` workflow does this when a review passes (control-plane
+`docs/pr-pipeline.md`).
 
-Pools are granted **first come, first served** (`.fm-tools/mq3/sched.sh`). A
-branch takes a ticket when it arrives. It gets a pool once every earlier ticket
-has one. While it waits it prints its place in line and an estimated wait, from
-the median time recent runs held a pool. It prints this at the start and every
-3 minutes. `merge_queue3.sh --status` prints every queue. A run that dies loses
-its place, and the run behind it moves up at once. A rerun gets its old place
-back when the last run failed for a reason that was not the branch's:
+Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
+`Merge gate` job runs, and a red queue run costs every PR behind yours a retry.
 
-- a host flake (an OOM kill or a build-cache trim);
-- a test timeout;
-- main moving into its files until its gates ran out;
-- any other gate failure, if you rerun it with `--flake-retry`.
-
-A run keeps its old place for up to 6 hours and 3 reruns.
-`.fm-tools/mq3/sched_test.sh` tests the scheduler.
-
-On its pool checkout, each branch's run:
-
-1. merges main in (never a rebase);
-2. re-versions the branch's migrations above main's;
-3. squashes onto main;
-4. runs `scripts/merge-gate.sh --base <main> --amend` in one heavy slot.
-
-Only the land step is serialized under one lock: fetch, push, post the
-`merge-gate` commit status on the verified commit, and squash-merge. If main moved, the queue carries the verified commit onto the new
-main and re-checks only that it builds, as long as main's new commits are
-disjoint from the branch's files and from the project-wide inputs. Otherwise it
-runs the gate again. The queue's summary, posted into each merge PR's body,
-separates the time queued for a heavy slot from the time spent running.
-
-### The required status, and the audited waiver
-
-`main` accepts a merge only when the commit carries a SUCCESS `merge-gate`
-commit status: the ruleset "main: merge-gate required" requires it, requires the
-head to be up to date with `main`, and has **no bypass actors**, so `gh pr merge
---admin` is refused too. The queue posts that status on the exact squashed
-commit its gate verified:
-
-```sh
-.fm-tools/merge_queue3.sh <remote-branch>
-```
-
-The only other way in is an audited waiver, for a hotfix that cannot wait or a
-gate failure that reproduces identically on `main`. It posts
-`WAIVED: <reason>` as the status, comments on the PR and appends to the
-waiver log:
-
-```sh
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
-```
+The fleet's old local queue (`.fm-tools/merge_queue3.sh`), the `merge-gate`
+commit status and its audited waiver (`merge_gate_waive.sh`) are retired.
 
 There is no waiver for the release gate: a red release-gate run is fixed, not
 waived (`scripts/release-tag.sh --skip-release-gate` is the hotfix escape for
