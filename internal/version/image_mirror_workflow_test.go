@@ -209,7 +209,7 @@ func TestImageMirrorIsRequiredAfterInterpreterChecks(t *testing.T) {
 			mirror = i
 		}
 	}
-	if !(interpreter >= 0 && stage > interpreter && auth > stage && mirror > auth) {
+	if interpreter < 0 || stage <= interpreter || auth <= stage || mirror <= auth {
 		t.Fatalf("unsafe interpreter/staging/auth/mirror ordering: %d/%d/%d/%d", interpreter, stage, auth, mirror)
 	}
 	if !strings.Contains(string(workflow), "platforms: linux/amd64,linux/arm64") || !strings.Contains(string(workflow), `tags: ["v*.*.*"]`) {
