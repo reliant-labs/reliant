@@ -80,6 +80,9 @@ const (
 type askUserThreadInput struct {
 	tracker   *ChildWorkflowTracker
 	interrupt *ThreadInterrupt
+	// park, when set, lets the wait park its background spawn for a
+	// continue-as-new handoff (ask_user_handoff.go).
+	park *askUserPark
 }
 
 // awaitAskUserYield watches for new input for thread from the moment it is

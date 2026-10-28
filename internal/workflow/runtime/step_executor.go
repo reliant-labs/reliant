@@ -77,6 +77,17 @@ type StepExecutor struct {
 	// enclosingIter is the `iter` of the loop enclosing a sub-workflow body
 	// this executor runs, when that body's own inputs do not carry it.
 	enclosingIter map[string]interface{}
+	// askUserHandoff is set on the iterations of a background spawn's own
+	// agent loop: a blocking ask_user in its execute_tools batch can park
+	// the spawn for a continue-as-new handoff (ask_user_handoff.go).
+	askUserHandoff *toolBatchHandoff
+}
+
+// WithAskUserHandoff lets this executor's execute_tools batches park their
+// spawn inside a blocking ask_user wait (ask_user_handoff.go).
+func (e *StepExecutor) WithAskUserHandoff(h *toolBatchHandoff) *StepExecutor {
+	e.askUserHandoff = h
+	return e
 }
 
 // NewStepExecutor creates a new StepExecutor with all required context.
@@ -429,7 +440,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID)
+			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity(node, "unknown step type: "+stepType)
@@ -800,6 +811,7 @@ func (e *StepExecutor) startAction(
 	node *reliantv1.Node,
 	evalResult *reliantv1.Node,
 	preallocatedMessageID string,
+	event *core.WorkflowEvent,
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
@@ -871,8 +883,11 @@ func (e *StepExecutor) startAction(
 			"saveDelegated", delegated,
 		)
 
+		// Always set, nil included: a spawn dispatched from this batch runs
+		// on a context derived from this one and must not inherit it.
+		toolsCtx := withToolBatchHandoff(e.ctx, e.askUserHandoff.forBatch(node.GetId(), event, e.nodeOutputs))
 		future := executeToolsWithSpawnSupport(
-			e.ctx,
+			toolsCtx,
 			e.activityOptions(node),
 			rtx,
 			evalResult,
