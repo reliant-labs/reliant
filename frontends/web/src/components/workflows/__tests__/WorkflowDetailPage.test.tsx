@@ -232,6 +232,18 @@ describe("WorkflowDetailPage", () => {
     expect(await screen.findByRole("dialog", { name: "Run Triage" })).toBeInTheDocument();
   });
 
+  it("a trigger's Edit entry loads by id into the real unified form", async () => {
+    renderDetail();
+    const row = await screen.findByTestId("trigger-row-t1");
+    await userEvent.click(within(row).getByRole("button", { expanded: false }));
+    await userEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit automation" });
+    expect(within(dialog).getByLabelText("What should it do?")).toHaveValue("Go");
+    expect(within(dialog).getByRole("heading", { name: "When" })).toBeInTheDocument();
+    expect(mocks.getTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
+    expect(within(dialog).getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+  });
+
   it("Edit opens the builder", async () => {
     const { router } = renderDetail();
     await screen.findByRole("heading", { level: 1, name: "Triage" });
