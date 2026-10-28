@@ -17,7 +17,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 type capacityResolver struct{ wf *reliantv1.Workflow }
@@ -105,4 +107,13 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	third, err = f.firer.Fire(ctx, f.fireAt(4))
 	require.NoError(t, err)
 	require.Equal(t, string(core.TriggerEventSkipped), third.Outcome)
+	// No waiting work is needed to persist terminal evidence: periodic
+	// redrive scans occupied slots independently of delivery recovery.
+	starter.mu.Lock()
+	starter.descriptions[second.ChatID].WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	starter.mu.Unlock()
+	require.NoError(t, NewRedriver(f.repo, starter, "test-queue").RedriveOnce(ctx))
+	occupied, err := f.repo.ListTriggerCapacityExecutions(ctx, store.TriggerCapacityScope{UserID: f.trigger.UserID, ProjectID: f.trigger.ProjectID, WorkflowRef: workflowref.RefKey(f.trigger.Workflow)})
+	require.NoError(t, err)
+	require.Empty(t, occupied)
 }
