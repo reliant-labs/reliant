@@ -78,3 +78,38 @@ func TestActivationToolsRegistered(t *testing.T) {
 		require.NotNil(t, tool.ParamSchema())
 	}
 }
+
+type recordingActivationBackend struct {
+	activationBackend
+	params ActivationParams
+}
+
+func (b *recordingActivationBackend) PrepareActivation(_ context.Context, _ string, _ string, p ActivationParams) (ActivationPreview, error) {
+	b.params = p
+	return ActivationPreview{Title: "t", Hash: "h"}, nil
+}
+
+// The preview decodes a call exactly as Run does. A model that sends the
+// open `params` object as a JSON string (Claude does) was refused at approval
+// with no reason, though Run would have repaired it.
+func TestActivationPrepareRepairsStringifiedParams(t *testing.T) {
+	b := &recordingActivationBackend{}
+	tool := NewActivationTool(triggerCallerStore{chat: &db.Chat{UserID: "owner"}}, b, ToolCreateTriggerActivation)
+	ctx := rctx.NewToolContext(context.Background(), "chat", "thread", nil, nil)
+	input := `{"name":"n","workflow":"pr-review","workflow_trigger":"queued","project_id":"p","machine_id":"m","params":"{\"repos\": [\"o/a\", \"o/b\"]}"}`
+	_, ask, err := tool.(AutomationApprovalTool).PrepareAutomation(ctx, ToolCall{ID: "call", Name: ToolCreateTriggerActivation, Input: input}, false)
+	require.NoError(t, err)
+	require.True(t, ask)
+	require.Equal(t, map[string]any{"repos": []any{"o/a", "o/b"}}, b.params.Params)
+}
+
+// A refusal names the field and the type it needs, never the value sent.
+func TestActivationPrepareClassifiesBadInput(t *testing.T) {
+	tool := NewActivationTool(triggerCallerStore{chat: &db.Chat{UserID: "owner"}}, &activationBackend{}, ToolCreateTriggerActivation)
+	ctx := rctx.NewToolContext(context.Background(), "chat", "thread", nil, nil)
+	_, _, err := tool.(AutomationApprovalTool).PrepareAutomation(ctx, ToolCall{ID: "call", Name: ToolCreateTriggerActivation, Input: `{"name":"n","params":["secret-value"]}`}, false)
+	require.Error(t, err)
+	reason := ActivationRefusalReason(err)
+	require.Equal(t, "tool input field params must be a JSON object", reason)
+	require.NotContains(t, reason, "secret-value")
+}
