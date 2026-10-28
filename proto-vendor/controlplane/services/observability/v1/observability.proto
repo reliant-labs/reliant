@@ -711,6 +711,21 @@ message GetTraceResponse {
   repeated Span spans = 2;
   // True when the trace has more spans than the per-trace cap (10000).
   bool truncated = 3;
+  // Stored spans in other traces that link to this trace. These are causal
+  // references, NOT parent-child edges. Restricted to the same authorized org,
+  // environments and requested time range. Absence does not prove there was no
+  // backend call: sampling, retention or the range may exclude its spans.
+  repeated RelatedTrace related_traces = 4;
+  // At most 100 references are returned, in stable identity order.
+  bool related_traces_truncated = 5;
+}
+
+message RelatedTrace {
+  // Trace and span that carry the link (for example, a backend server span).
+  string trace_id = 1;
+  string span_id = 2;
+  // Span of the requested trace that the stored link points to.
+  string linked_span_id = 3;
 }
 
 message Span {

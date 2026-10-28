@@ -300,6 +300,7 @@ function mapSpan(s: WireSpan): Span {
     attributes: { ...s.attributes },
     resource: { ...s.resourceAttributes },
     events: s.events.map((e) => ({ timeMs: msOf(e.time), name: e.name, attributes: { ...e.attributes } })),
+    links: s.links.map((link) => ({ traceId: link.traceId, spanId: link.spanId })),
     source: s.source,
     operatorData: s.operatorData,
   };
@@ -308,7 +309,13 @@ function mapSpan(s: WireSpan): Span {
 /** Traces are kept 7 days, so a lookup by id searches all of them. */
 export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }): Promise<Trace> {
   const res = await client().getTrace({ scope: scope(req, req.window), traceId: req.traceId });
-  return { traceId: res.traceId || req.traceId, spans: res.spans.map(mapSpan), truncated: res.truncated };
+  return {
+    traceId: res.traceId || req.traceId,
+    spans: res.spans.map(mapSpan),
+    truncated: res.truncated,
+    relatedTraces: res.relatedTraces.map((ref) => ({ traceId: ref.traceId, spanId: ref.spanId, linkedSpanId: ref.linkedSpanId })),
+    relatedTracesTruncated: res.relatedTracesTruncated,
+  };
 }
 
 const KIND_OF: Partial<Record<WireMetricType, MetricKind>> = {

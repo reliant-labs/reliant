@@ -188,6 +188,8 @@ export interface Span extends Provenance {
   attributes: Record<string, string>;
   resource: Record<string, string>;
   events: SpanEvent[];
+  /** OTel links are causal references, not parent/child edges. */
+  links?: { traceId: string; spanId: string }[];
 }
 
 export interface Trace {
@@ -195,6 +197,9 @@ export interface Trace {
   spans: Span[];
   /** The server capped the span count; the waterfall is a lower bound. */
   truncated: boolean;
+  /** Spans in other traces that link to this trace, within the same authorized scope. */
+  relatedTraces?: { traceId: string; spanId: string; linkedSpanId: string }[];
+  relatedTracesTruncated?: boolean;
 }
 
 // ── Panels ───────────────────────────────────────────────────────────────────

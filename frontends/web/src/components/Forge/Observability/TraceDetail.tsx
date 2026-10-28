@@ -21,6 +21,7 @@ import Button from "@/components/forge-ui/button";
 import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
+import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { AskReliantButton } from "./AskReliant/AskReliant";
 import { useObsAskContext } from "./AskReliant/askReliantContext";
@@ -43,15 +44,17 @@ export function TraceDetail({
   subject,
   traceId,
   spanId,
+  range,
   navigate,
 }: {
   scope: ObsScope;
   subject: string;
   traceId: string;
   spanId: string | undefined;
+  range: RangePreset;
   navigate: ObsNavigate;
 }) {
-  const trace = useTrace(scope, traceId);
+  const trace = useTrace(scope, traceId, range);
   const { environments } = useObsAskContext();
   const spans = trace.data?.spans ?? [];
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
@@ -106,8 +109,8 @@ export function TraceDetail({
           data-testid="trace-empty"
           className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted"
         >
-          No spans were found for trace <span className="font-mono text-ink">{traceId}</span>. It may be older than
-          this environment keeps traces (7 days), or it was dropped by sampling.
+          No spans were found for trace <span className="font-mono text-ink">{traceId}</span> in the selected time range.
+          It may be outside this range, past retention, or dropped by sampling.
         </p>
       </div>
     );
@@ -174,6 +177,23 @@ export function TraceDetail({
         </div>
       </div>
 
+      <section aria-label="Related traces" className="space-y-2 rounded-lg border border-border bg-surface-sunken p-3 text-xs">
+        <h4 className="font-semibold text-ink">Related traces</h4>
+        <p className="text-ink-muted">Links preserve causality across trace boundaries; they are not parent/child spans. Results use the current environment and time range.</p>
+        {(trace.data?.relatedTraces?.length ?? 0) > 0 ? (
+          <ul className="space-y-1">
+            {trace.data?.relatedTraces?.map((ref) => (
+              <li key={`${ref.traceId}-${ref.spanId}-${ref.linkedSpanId}`}>
+                <Button variant="ghost" size="xs" onClick={() => navigate({ view: "traces", trace: ref.traceId, span: ref.spanId, service: undefined, q: undefined })}>
+                  Trace {shortId(ref.traceId)} · span {shortId(ref.spanId)} links to {shortId(ref.linkedSpanId)}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-ink-muted">No incoming links found. Related spans may be outside this range, sampled out, or past retention.</p>}
+        {trace.data?.relatedTracesTruncated && <p role="status" className="text-ink-muted">Showing the first 100 related spans. Narrow the time range to find more.</p>}
+      </section>
+
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">
           <TraceWaterfall
@@ -191,6 +211,7 @@ export function TraceDetail({
             profiles={profilesOf(selected.service)}
             onFlamegraph={() => navigate({ view: "profiles", trace: traceId, span: undefined, service: selected.service })}
             onClose={() => navigate({ span: undefined }, { replace: true })}
+            onLinkedSpan={(trace, span) => navigate({ view: "traces", trace, span, service: undefined, q: undefined })}
           />
         ) : (
           <p className="self-start rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-xs text-ink-muted">
@@ -212,6 +233,7 @@ function SpanDetails({
   profiles,
   onFlamegraph,
   onClose,
+  onLinkedSpan,
 }: {
   span: Span;
   originMs: number;
@@ -220,6 +242,7 @@ function SpanDetails({
   profiles: SignalState;
   onFlamegraph: () => void;
   onClose: () => void;
+  onLinkedSpan: (traceId: string, spanId: string) => void;
 }) {
   return (
     <Card padding="md" className="self-start" data-testid="span-details">
@@ -266,6 +289,21 @@ function SpanDetails({
         )}
       </div>
       <div className="space-y-3">
+        {(span.links?.length ?? 0) > 0 && (
+          <section aria-label="Span links">
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Span links</h4>
+            <p className="mb-1 text-xs text-ink-muted">Causal references, not parent/child edges. Linked spans may be outside this range, sampled out, or past retention.</p>
+            <ul className="space-y-1">
+              {span.links?.map((link, index) => (
+                <li key={`${link.traceId}-${link.spanId}-${index}`}>
+                  <Button variant="ghost" size="xs" onClick={() => onLinkedSpan(link.traceId, link.spanId)}>
+                    Trace {shortId(link.traceId)} · span {shortId(link.spanId)}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <AttributeTable title="Attributes" attributes={span.attributes} />
         {span.events.length > 0 && (
           <section aria-label="Events">

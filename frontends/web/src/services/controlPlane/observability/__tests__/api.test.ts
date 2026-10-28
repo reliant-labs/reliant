@@ -123,6 +123,8 @@ describe("response mapping", () => {
     client.getTrace.mockResolvedValue({
       traceId: "t",
       truncated: false,
+      relatedTraces: [{ traceId: "incoming", spanId: "server", linkedSpanId: "s" }],
+      relatedTracesTruncated: true,
       spans: [
         {
           spanId: "s",
@@ -137,7 +139,7 @@ describe("response mapping", () => {
           attributes: {},
           resourceAttributes: {},
           events: [],
-          links: [],
+          links: [{ traceId: "outgoing", spanId: "browser" }],
           source: "",
           operatorData: false,
         },
@@ -146,6 +148,10 @@ describe("response mapping", () => {
     const trace = await getTrace({ ...env, traceId: "t", window });
     expect(trace.spans[0]).toMatchObject({ kind: "server", status: "error", durationMs: 0.042 });
     expect(trace.spans[0].startMs - window.startMs).toBeCloseTo(0.25, 6);
+    expect(trace.spans[0].parentSpanId).toBe("");
+    expect(trace.spans[0].links).toEqual([{ traceId: "outgoing", spanId: "browser" }]);
+    expect(trace.relatedTraces).toEqual([{ traceId: "incoming", spanId: "server", linkedSpanId: "s" }]);
+    expect(trace.relatedTracesTruncated).toBe(true);
     expect(statusOf("Ok")).toBe("ok");
     expect(statusOf("")).toBe("unset");
   });

@@ -262,7 +262,12 @@ enum IssueSort {
 }
 
 message ListIssuesRequest {
-  option (buf.validate.message).oneof = {fields: ["assignee", "unassigned"]};
+  option (buf.validate.message).oneof = {
+    fields: [
+      "assignee",
+      "unassigned"
+    ]
+  };
 
   IssueScope scope = 1 [(buf.validate.field).required = true];
   // Only issues in one of these states. Empty = new, unresolved and regressed
