@@ -43,8 +43,9 @@ export function defaultMachine(opts: {
   lastUsed?: string;
 }): string {
   if (opts.needsNoMachine) return NO_MACHINE;
-  if (opts.lastUsed && opts.choices.some((c) => c.daemonId === opts.lastUsed && c.eligible)) return opts.lastUsed;
-  return defaultDaemonId([...opts.choices]) ?? "";
+  const available = opts.choices.filter((c) => c.eligible && c.statusLabel !== "failed");
+  if (opts.lastUsed && available.some((c) => c.daemonId === opts.lastUsed)) return opts.lastUsed;
+  return defaultDaemonId(available) ?? "";
 }
 
 // Idle is awake enough to start a run; these are woken first.

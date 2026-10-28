@@ -28,6 +28,7 @@ import {
   DraftAutomationResponseSchema,
   ListTriggersResponseSchema,
   ScheduleSourceSchema,
+  PreviewReplayResponseSchema,
   TriggerDefinitionSchema,
   TriggerOverlapPolicy,
   TriggerSchema,
@@ -36,6 +37,7 @@ import {
   type CreateTriggerRequest,
   type UpdateTriggerRequest,
 } from "@/gen/reliant/v1/trigger_pb";
+import { ChatSchema } from "@/gen/reliant/v1/chat_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { GetWorkflowResponseSchema, WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
@@ -47,8 +49,12 @@ import { renderAtRoute } from "../../__tests__/automationTestUtils";
 
 vi.mock("@/services/controlPlane/config", () => ({ hasControlPlane: true }));
 
+const listChats = vi.fn();
 const createTrigger = vi.fn();
 const updateTrigger = vi.fn();
+const previewReplay = vi.fn();
+const fireTrigger = vi.fn();
+const setTriggerEnabled = vi.fn();
 const listTriggers = vi.fn();
 const draftAutomation = vi.fn();
 const listWorkflows = vi.fn();
@@ -69,9 +75,10 @@ vi.mock("@/lib/connect", async (importOriginal) => ({
 
 setTransport(
   mockTransport({
+    ...serviceHandlers("ChatService", { listChats }),
     ...serviceHandlers("ConnectionService", { listConnections }),
     ...serviceHandlers("CatalogService", { searchCatalog }),
-    ...serviceHandlers("TriggerService", { createTrigger, updateTrigger, listTriggers, draftAutomation }),
+    ...serviceHandlers("TriggerService", { createTrigger, updateTrigger, listTriggers, draftAutomation, previewReplay, fireTrigger, setTriggerEnabled }),
     ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
     ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
     ...serviceHandlers("WorktreeService", { listWorktrees, getWorktree }),
@@ -113,6 +120,7 @@ beforeEach(() => {
   for (const mock of [createTrigger, updateTrigger, listTriggers, draftAutomation, listWorkflows, getWorkflow, listPresetsForWorkflow, getDefaultPresetsBatch, listWorktrees, getWorktree, listDaemons, listProjectDaemons]) {
     mock.mockReset();
   }
+  listChats.mockResolvedValue({ chats: [create(ChatSchema, { id: "recent", projectId: "proj-1", activeDaemonId: "daemon-1", updatedAt: "2026-10-27T12:00:00Z" })] });
   listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [] }));
   listWorkflows.mockResolvedValue({
     workflows: [
@@ -224,6 +232,38 @@ describe("InlineAutomationForm: new", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  it("validates on blur, links the error, and clears it while fixing the field", async () => {
+    renderAtRoute(<InlineAutomationForm onClose={vi.fn()} />);
+    await machineReady();
+    const prompt = screen.getByLabelText("What should it do?");
+    expect(prompt).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByText("Say what each run should do.")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 required field left");
+    fireEvent.blur(prompt);
+    expect(prompt).toHaveAttribute("aria-invalid", "true");
+    const error = screen.getByText("Say what each run should do.");
+    expect(prompt.getAttribute("aria-describedby")?.split(" ")).toContain(error.id);
+    fill(prompt, "Summarise CI");
+    expect(prompt).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByText("Say what each run should do.")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Ready to save");
+    expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it("validates the When group only on blur and clears it on correction", async () => {
+    renderAtRoute(<InlineAutomationForm onClose={vi.fn()} />);
+    await machineReady();
+    fill(screen.getByLabelText("At"), "");
+    const when = screen.getByRole("group", { name: "When it runs" });
+    expect(when).toHaveAttribute("aria-invalid", "false");
+    fireEvent.blur(screen.getByLabelText("At"));
+    expect(when).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(when.getAttribute("aria-describedby")!)).toHaveAttribute("role", "alert");
+    fill(screen.getByLabelText("At"), "10:00");
+    expect(when).toHaveAttribute("aria-invalid", "false");
+    expect(when).not.toHaveAttribute("aria-describedby");
+  });
+
   it("says what is missing instead of creating", async () => {
     const user = userEvent.setup();
     renderAtRoute(<InlineAutomationForm onClose={vi.fn()} />);
@@ -231,6 +271,17 @@ describe("InlineAutomationForm: new", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(await screen.findByText("Say what each run should do.")).toBeInTheDocument();
     expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it("defaults from the newest available chat in this project, not the selected machine", async () => {
+    listChats.mockResolvedValue({ chats: [
+      create(ChatSchema, { id: "other-project", projectId: "proj-2", activeDaemonId: "daemon-1", updatedAt: "2026-10-29T12:00:00Z" }),
+      create(ChatSchema, { id: "missing-machine", projectId: "proj-1", activeDaemonId: "deleted", updatedAt: "2026-10-28T12:00:00Z" }),
+      create(ChatSchema, { id: "recent", projectId: "proj-1", activeDaemonId: "daemon-2", updatedAt: "2026-10-27T12:00:00Z" }),
+    ] });
+    renderAtRoute(<InlineAutomationForm onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-2"));
+    expect(listChats).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1" }));
   });
 
   it("runs with no machine when the chosen workflow needs none", async () => {
@@ -250,7 +301,7 @@ describe("InlineAutomationForm: new", () => {
     const user = userEvent.setup();
     createTrigger.mockResolvedValue(
       create(CreateTriggerResponseSchema, {
-        trigger: create(TriggerSchema, { id: "hook-1", name: "On webhook · Deploy", projectId: "proj-1", webhookUrl: "/hooks/hook-1" }),
+        trigger: create(TriggerSchema, { id: "hook-1", name: "On webhook · Deploy", projectId: "proj-1", webhookUrl: "/hooks/hook-1", source: { case: "webhook", value: {} } }),
         webhook: create(WebhookCredentialSchema, { token: "tok_once", url: "/hooks/hook-1/tok_once" }),
       }),
     );
@@ -266,6 +317,15 @@ describe("InlineAutomationForm: new", () => {
     expect(await screen.findByRole("heading", { name: "On webhook · Deploy is on" })).toBeInTheDocument();
     expect(screen.getByLabelText("Token")).toHaveValue("tok_once");
     expect((screen.getByLabelText("Try it") as HTMLInputElement).value).toContain("Authorization: Bearer tok_once");
+    previewReplay.mockResolvedValue(create(PreviewReplayResponseSchema, { prompt: 'Deploy what was pushed. <trigger_event>{"body":{"hello":"world"}}</trigger_event>' }));
+    await user.click(screen.getByRole("button", { name: "Send a test event" }));
+    expect(screen.getByText(/Read-only preview: no workflow runs/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Preview message" }));
+    expect(await screen.findByText(/Deploy what was pushed. <trigger_event>/)).toBeInTheDocument();
+    expect(previewReplay).toHaveBeenCalledWith(expect.objectContaining({ triggerId: "hook-1", replay: expect.objectContaining({ payload: { body: { hello: "world" } } }) }));
+    expect(createTrigger).toHaveBeenCalledTimes(1);
+    expect(fireTrigger).not.toHaveBeenCalled();
+    expect(setTriggerEnabled).not.toHaveBeenCalled();
   });
 
   it("Describe it fills the form from a draft and creates nothing", async () => {
