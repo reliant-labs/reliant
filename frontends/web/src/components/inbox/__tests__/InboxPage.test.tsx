@@ -19,6 +19,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
+  InboxAutomationFailingSchema,
   InboxItemKind,
   InboxItemSchema,
   ListInboxResponseSchema,
@@ -222,13 +223,13 @@ describe("InboxPage item kinds", () => {
         itemId: "automation_failing:broken:trg-1:abc",
         payload: {
           case: "automationFailing",
-          value: {
+          value: create(InboxAutomationFailingSchema, {
             health: create(TriggerHealthSchema, {
               status: TriggerHealthStatus.BROKEN,
               lastFailureDetail: 'declared trigger "tick" of workflow "merge-steward": its workflow does not resolve',
             }),
             lastRunChatId: "chat-last",
-          },
+          }),
         },
       }),
     ]);
