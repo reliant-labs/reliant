@@ -39,6 +39,20 @@ import (
 // always-on machine nobody is using, which is the failure this file exists to
 // prevent.
 
+// ReasonHeldRunBackgroundWork is the reason the server re-asserts while a
+// process an agent backgrounded is still running and the agent's run is held
+// on a provider usage limit. The run is not abandoned, only parked off-machine
+// until the limit resets, and the process is its work in progress: a deploy or
+// a build that a suspend would kill mid-apply (2026-10-28, three times in one
+// night). Bounded on both sides, so an agent-started `while true` loop cannot
+// pin a machine (see the 2026-10-11 rule above): it counts only while the
+// hold is younger than reconciliation.heldRunAwakeFor and the process younger
+// than reconciliation.heldRunProcessMaxAge. A process of a run that is not held
+// (finished, or waiting on the user) never counts. When nothing is running the
+// machine sleeps through the hold and the run wakes it on resume
+// (toolexec.WakeForRun). See Reconciler.reassertHeldRunWork.
+const ReasonHeldRunBackgroundWork = "background process of a run held on a provider usage limit"
+
 // ReasonToolCallInFlight is the reason the gateway re-asserts while an agent's
 // tool call is still running on the machine, so a long test run or build is
 // never mistaken for idleness. See ToolsDaemonService.reassertInFlightActivity.
