@@ -207,6 +207,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
+| [`reliant forge obs issue assign`](#reliant-forge-obs-issue-assign) | Assign an issue to a person, or clear its assignee |
+| [`reliant forge obs issue comment`](#reliant-forge-obs-issue-comment) | Add a comment to an issue |
 | [`reliant forge obs issue ignore`](#reliant-forge-obs-issue-ignore) | Silence an issue, until a time or until unignored |
 | [`reliant forge obs issue resolve`](#reliant-forge-obs-issue-resolve) | Mark an issue resolved, now or in a release |
 | [`reliant forge obs issue unresolve`](#reliant-forge-obs-issue-unresolve) | Reopen a resolved or ignored issue |
@@ -259,6 +261,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge release bundle`](#reliant-forge-release-bundle) | Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters |
 | [`reliant forge release verify`](#reliant-forge-release-verify) | Prove every artifact a release names actually exists and matches |
 | [`reliant forge release where`](#reliant-forge-release-where) | Show which environments are currently bound to a release |
+| [`reliant forge report-bug`](#reliant-forge-report-bug) | Report a defect in forge itself to the Reliant engineering team |
 | [`reliant forge scaffold`](#reliant-forge-scaffold) | Scaffold code: bare, everything the protos imply; with a noun, exactly one thing |
 | [`reliant forge scaffold adapter`](#reliant-forge-scaffold-adapter) | Scaffold an outbound adapter (HTTP client, queue producer, storage gateway) |
 | [`reliant forge scaffold binary`](#reliant-forge-scaffold-binary) | Scaffold a non-server long-running binary |
@@ -1018,6 +1021,7 @@ reliant forge
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`registry`](#reliant-forge-registry) | Log in to and read refs from the registries an env's workloads declare |
 | [`release`](#reliant-forge-release) | Inspect and verify release ledgers |
+| [`report-bug`](#reliant-forge-report-bug) | Report a defect in forge itself to the Reliant engineering team |
 | [`scaffold`](#reliant-forge-scaffold) | Scaffold code: bare, everything the protos imply; with a noun, exactly one thing |
 | [`secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`skill`](#reliant-forge-skill) | Manage Forge skills — conventions and playbooks for LLM agents |
@@ -1153,6 +1157,7 @@ reliant forge build [environment] [flags]
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
+| `--image-builder` | `string` | - | How the project image is built: auto (default: docker when a daemon is reachable, otherwise assembled in-process from the binaries forge just built), docker (always docker build), in-process (never docker; fails if the Dockerfile's final stage needs one) |
 | `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default forge build runs forge generate when gen/ is missing or proto sources are newer than the generated tree. |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. Requires the environment argument. List an env's options with 'forge env options `<env>`'. |
 | `--output`, `-o` | `string` | `bin` | Output directory for binaries |
@@ -4112,6 +4117,7 @@ reliant forge env build <environment> [flags]
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
+| `--image-builder` | `string` | - | How the project image is built: auto (default: docker when a daemon is reachable, otherwise assembled in-process from the binaries forge just built), docker (always docker build), in-process (never docker; fails if the Dockerfile's final stage needs one) |
 | `--json` | `bool` | - | With --plan and snapshot composition: emit a machine-readable pending pre-build plan |
 | `--no-build` | `bool` | - | With --release: record the release over the digests an earlier --push already captured in .forge/state, without rebuilding. This is the cut-only half of a pipeline whose build and release are separate jobs. |
 | `--no-generate` | `bool` | - | Skip the pre-build code-generation check. By default this runs forge generate when gen/ is missing or proto sources are newer than the generated tree. |
@@ -4498,6 +4504,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--from-promotion` | `string` | - | With --from: the source promotion captured earlier; refused (exit 3, source_moved) if the source moved |
 | `--frontends-only` | `bool` | - | Deploy ONLY the env's shippable frontend(s) — build + ship to Firebase Hosting or a static-site bucket, skipping the entire k8s apply (Services, Operators, CronJobs, gateways). The inverse of --skip-frontend; the native 'ship just the frontend' path that doesn't touch kubectl. Mutually exclusive with --skip-frontend and --target. |
 | `--gate` | `stringArray` | `[]` | Pre-deploy evidence frozen onto the entry: a gate JSON file, or name=…,status=passed|failed|skipped|error[,url=…] (repeatable) |
+| `--image-builder` | `string` | - | How the project image is built: auto (default: docker when a daemon is reachable, otherwise assembled in-process from the binaries forge just built), docker (always docker build), in-process (never docker; fails if the Dockerfile's final stage needs one) |
 | `--json` | `bool` | - | Emit machine-readable JSON describing the whole invocation — mode (explain/dry_run/apply), the declared-cluster guard verdict, the target cluster + namespace, the preflight findings, per-image digest-vs-tag pinning, the resource identities applied, and the per-resource rollout outcome (ready / failed / timed_out / not_waited). Works with --explain and --dry-run, which is how a UI previews a deploy. Same exit codes as text mode; the human output moves to stderr so stdout carries exactly one JSON document. |
 | `--live-diff` | `bool` | - | Print the release bundle's diff against each live cluster with the plan (client-side kubectl diff; writes nothing; does not show fields the bundle stops setting). What a reviewer reads before --approve |
 | `--namespace` | `string` | - | Override namespace from environment config |
@@ -8005,13 +8012,18 @@ Show one error issue: the issue, its latest event and call site, its events per
 version, the issues that fire in the same traces, the release it first appeared
 in, and the suspect commits: the commits of that release's range (or, with no
 range known, the last 20) that touched the files the error was raised from,
-read from this checkout with git. [env] defaults to dev.
+read from this checkout with git. A hosted env also shows who it is assigned to,
+the incident it belongs to (the other issues with the same cause, first seen
+close together: related_count and incident_key), and the newest
+--timeline-limit timeline entries, oldest first. [env] defaults to dev.
 
   cli forge obs issue ISS-7f3a prod
   cli forge obs issue sfp1-0123456789abcdef dev --events 10
   cli forge obs issue resolve ISS-7f3a prod --in next
   cli forge obs issue ignore ISS-7f3a prod --until 72h
   cli forge obs issue unresolve ISS-7f3a prod
+  cli forge obs issue comment ISS-7f3a "checked the pool; it is the new retry loop" prod
+  cli forge obs issue assign ISS-7f3a \<user-id|none> prod
 
 Triage needs a hosted env: a local issue is a query over logs and has no state.
 
@@ -8024,6 +8036,15 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version.last_seen
   by_version.version
   co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
   events
   events.attributes.*
   events.message
@@ -8042,9 +8063,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.in_app
   frames.line
   incident_issue_ids
+  incident_issue_ids
   issue
   issue.affected
   issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
   issue.culprit
   issue.events
   issue.exception_type
@@ -8099,6 +8124,46 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   suspect_commits.subject
   suspect_commits.time
   suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
 Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
 
 ```
@@ -8109,6 +8174,8 @@ reliant forge obs issue <id> [env] [flags]
 
 | Command | Description |
 |---------|-------------|
+| [`assign`](#reliant-forge-obs-issue-assign) | Assign an issue to a person, or clear its assignee |
+| [`comment`](#reliant-forge-obs-issue-comment) | Add a comment to an issue |
 | [`ignore`](#reliant-forge-obs-issue-ignore) | Silence an issue, until a time or until unignored |
 | [`resolve`](#reliant-forge-obs-issue-resolve) | Mark an issue resolved, now or in a release |
 | [`unresolve`](#reliant-forge-obs-issue-unresolve) | Reopen a resolved or ignored issue |
@@ -8127,7 +8194,345 @@ reliant forge obs issue <id> [env] [flags]
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
+| `--timeline-limit` | `int` | `10` | newest timeline entries (comments, status changes, assignment, linked chats) to include, oldest first (0 = none; at most 100) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs issue assign
+
+Assign an issue to a person, or clear its assignee
+
+Set the issue's assignee to a user id, or clear it with "none". The user must be
+a member of the issue's organization. A hosted env only: a local issue carries
+no state, so this exits 2.
+
+  cli forge obs issue assign ISS-7f3a 7c1e2a90-0b1d-4a61-9e7d-5a1d3c9f2b10 prod
+  cli forge obs issue assign ISS-7f3a none prod
+
+There is no "me": the control plane cannot tell a machine credential which user
+it acts for. Take a user id from an issue's assignee or timeline.
+
+The write sends the row version it read, so a change made since is refused
+("changed since you read it", exit 1) instead of overwriting it. It is never
+retried: read the issue again, then decide.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.affected_unit
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  incident_issue_ids
+  incident_issue_ids
+  issue
+  issue.affected
+  issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.incident_key
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.related_count
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue assign <id> <user-id|none> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout |
+
+---
+
+#### reliant forge obs issue comment
+
+Add a comment to an issue
+
+Add a comment to an issue's timeline. The text is plain text or markdown, stored
+verbatim (at most 10000 characters); it is shown to everyone who can see the
+issue. A hosted env only: a local issue has no discussion, so this exits 2.
+
+  cli forge obs issue comment ISS-7f3a "reproduced on v1.4.0; the pool is exhausted" prod
+
+The document carries the stored comment (comment.id, comment.created_at). A
+credential that acts for no person cannot comment.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.affected_unit
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  incident_issue_ids
+  incident_issue_ids
+  issue
+  issue.affected
+  issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.incident_key
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.related_count
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue comment <id> <text> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout |
 
 ---
 
@@ -8149,6 +8554,15 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version.last_seen
   by_version.version
   co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
   events
   events.attributes.*
   events.message
@@ -8167,9 +8581,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.in_app
   frames.line
   incident_issue_ids
+  incident_issue_ids
   issue
   issue.affected
   issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
   issue.culprit
   issue.events
   issue.exception_type
@@ -8224,6 +8642,46 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   suspect_commits.subject
   suspect_commits.time
   suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
 Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
 
 ```
@@ -8259,6 +8717,15 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version.last_seen
   by_version.version
   co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
   events
   events.attributes.*
   events.message
@@ -8277,9 +8744,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.in_app
   frames.line
   incident_issue_ids
+  incident_issue_ids
   issue
   issue.affected
   issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
   issue.culprit
   issue.events
   issue.exception_type
@@ -8334,6 +8805,46 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   suspect_commits.subject
   suspect_commits.time
   suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
 Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
 
 ```
@@ -8369,6 +8880,15 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   by_version.last_seen
   by_version.version
   co_occurring_issue_ids
+  comment
+  comment.author
+  comment.author.id
+  comment.author.name
+  comment.body
+  comment.created_at
+  comment.id
+  comment.issue_id
+  comment.updated_at
   events
   events.attributes.*
   events.message
@@ -8387,9 +8907,13 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   frames.in_app
   frames.line
   incident_issue_ids
+  incident_issue_ids
   issue
   issue.affected
   issue.affected_unit
+  issue.assignee
+  issue.assignee.id
+  issue.assignee.name
   issue.culprit
   issue.events
   issue.exception_type
@@ -8444,6 +8968,46 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   suspect_commits.subject
   suspect_commits.time
   suspect_note
+  timeline
+  timeline.actor
+  timeline.actor.id
+  timeline.actor.kind
+  timeline.actor.name
+  timeline.assignment
+  timeline.assignment.from
+  timeline.assignment.from.id
+  timeline.assignment.from.name
+  timeline.assignment.to
+  timeline.assignment.to.id
+  timeline.assignment.to.name
+  timeline.chat
+  timeline.chat.chat_id
+  timeline.chat.linked_at
+  timeline.chat.linked_by
+  timeline.chat.linked_by.id
+  timeline.chat.linked_by.name
+  timeline.chat.title
+  timeline.comment
+  timeline.comment.author
+  timeline.comment.author.id
+  timeline.comment.author.name
+  timeline.comment.body
+  timeline.comment.created_at
+  timeline.comment.id
+  timeline.comment.issue_id
+  timeline.comment.updated_at
+  timeline.id
+  timeline.issue_id
+  timeline.kind
+  timeline.status
+  timeline.status.from
+  timeline.status.ignored_until
+  timeline.status.to
+  timeline.status.version
+  timeline.time
+  timeline_issue_id
+  timeline_note
+  timeline_omitted
 Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
 
 ```
@@ -8493,12 +9057,16 @@ within --incident-window of one another, in any service, share an incident_key.
 The list collapses them under the first, which shows "+N related"; nothing is
 merged and each keeps its own counts and triage state. forge obs issue `<id>`
 lists the rest of its incident.
+  cli forge obs issues prod --assignee 7c1e2a90-0b1d-4a61-9e7d-5a1d3c9f2b10
 
 JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   collapsed
   issues
   issues.affected
   issues.affected_unit
+  issues.assignee
+  issues.assignee.id
+  issues.assignee.name
   issues.culprit
   issues.events
   issues.exception_type
@@ -8543,6 +9111,7 @@ reliant forge obs issues [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--assignee` | `string` | - | only issues assigned to this user id (hosted env); the control plane has no filter for unassigned issues, and "me" cannot be resolved for a machine credential |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--expand-incidents` | `bool` | - | list every issue of an incident instead of collapsing each incident under its first issue |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -9071,7 +9640,7 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
-profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 72h; the
+profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 24h; the
 per-minute aggregate behind --since is kept 30 days. --sql prints the query so
 you can run it yourself against the ClickStack ClickHouse.
 
@@ -9095,7 +9664,7 @@ reliant forge obs profile [flags]
 | `--span` | `string` | - | narrow --trace to one span id |
 | `--sql` | `bool` | - | print the query and its parameters instead of running it |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
-| `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 72h) |
+| `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 24h) |
 | `--type` | `string` | `cpu` | sample type: cpu, alloc_space, inuse_space, alloc_objects, inuse_objects, goroutine |
 
 ---
@@ -10680,6 +11249,14 @@ gained, how far behind you are in lines, and how many lines in your copy no
 template accounts for. Adopt one by naming it:
 'forge project upgrade --force `<path>`'. Bare --force does not reach them.
 
+A scaffold-once file the project deleted stays deleted. The birth ledger
+(.forge/scaffolded.json) records every scaffold-once file forge has written, so a
+managed file the template ships that is absent AND recorded there — or declined
+('forge project disown `<path>` --absent'), or disowned — is the project's decision,
+not drift: upgrade never re-creates it (nor does 'forge generate'), and says so
+under "deleted by you". A file forge has never written is still born, and recorded.
+To have forge write a deleted one again: 'forge project rescaffold `<path>`'.
+
 Upgrade synchronizes every project module that requires Forge using
 GOWORK=off go get and go mod tidy, preserving module replacements and go.work.
 If either command fails, its module-file changes are rolled back and upgrade
@@ -11073,6 +11650,51 @@ reliant forge release where <version> [flags]
 | `--env` | `string` | - | Ask only this env's ledger (default: every env this checkout declares) |
 | `--json` | `bool` | - | Emit machine-readable JSON (same exit codes as text mode) |
 | `--token` | `string` | - | Credential for a hosted ledger, ahead of the env var and the credentials file |
+
+---
+
+### reliant forge report-bug
+
+Report a defect in forge itself to the Reliant engineering team
+
+Report a defect in forge itself to the Reliant engineering team. One call files it; there is nothing to follow up.
+
+Use it when forge misbehaves, not the user's code: a forge command fails, hangs or generates something wrong, or a forge lint, skill or doc is wrong.
+
+Do not use it for bugs in the user's own application, for test or build failures in their code, or for your own mistakes.
+
+File each defect once: a repeat of the same title within 30 minutes returns the first report's id and sends nothing. Put what you observed in evidence — exact commands, error text, file paths — never credentials or the user's file contents. Then carry on with your task, and still tell the user when the defect blocks them.
+
+What is sent: the report's fields, redacted of credential shapes and home
+directories; forge's version, OS and architecture; the command line with
+secrets removed; the project's pinned forge_version; the agent harness
+forge detected; and a random install id used only for rate limiting. Never
+file contents or environment values. --dry-run prints the exact payload
+without sending it. forge sends nothing unless someone runs this command.
+
+When you are logged in (forge login), the report carries your user id so
+the team can follow up; --anonymous leaves it off.
+
+Exit status is non-zero when the report could not be filed.
+
+```
+reliant forge report-bug --severity <level> --title <line> [--summary ...] [--expected ...] [--actual ...] [--evidence ...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--actual` | `string` | - | what happened instead, with the exact error text |
+| `--anonymous` | `bool` | - | do not attach your forge login, even when you are logged in |
+| `--dry-run` | `bool` | - | print exactly what would be sent, and send nothing |
+| `--evidence` | `string` | - | how to reproduce it: commands run, their output, file paths |
+| `--expected` | `string` | - | what should have happened |
+| `--json` | `bool` | - | read the report from stdin as a JSON object with the fields severity, title, summary, expected, actual, evidence |
+| `--output`, `-o` | `string` | `text` | text or json |
+| `--severity` | `string` | - | critical (data loss, or nothing can proceed), high (it blocks your task), medium (there is a workaround) or low (cosmetic) |
+| `--summary` | `string` | - | what happened, in a few sentences |
+| `--title` | `string` | - | one line naming the defect; ids and numbers go in --evidence |
 
 ---
 
