@@ -86,14 +86,14 @@ recorded() {
     git notes --ref=release-gate-origin list 2>/dev/null | cut -d' ' -f2
   } | sort -u
 }
-# A historical green without today's steps cannot certify today's release.
-# RG_ONLY never writes a record, and old greens must rerun with webbuild.
-result_of() {
+# A record certifies the run that wrote it. A step added to the gate since
+# (webbuild, 2026-10-27) runs in the next record; an older green stays green,
+# and `check` names what it predates (missing_steps).
+result_of() { record_of "$1" | jq -r '.result // empty' 2>/dev/null | tail -1; }
+missing_steps() {
   local required
   required=$(printf '%s\n' "${STEPS[@]}" | jq -R . | jq -s .)
-  record_of "$1" | jq -r --argjson required "$required" '
-    if .result == "PASS" and (($required - [.steps[] | select(.result == "PASS") | .name]) | length) > 0
-    then "INCOMPLETE" else (.result // empty) end' 2>/dev/null | tail -1
+  record_of "$1" | jq -r --argjson required "$required" '$required - [.steps[]?.name] | join(", ")' 2>/dev/null | tail -1
 }
 
 publish() {
@@ -133,7 +133,12 @@ cmd_check() {
   rev=${1:-HEAD}; sha=$(resolve "$rev")
   fetch_notes
   r=$(result_of "$sha")
-  if [ "$r" = PASS ]; then echo "release-gate: $(git rev-parse --short "$sha") is green ($(record_of "$sha" | jq -r '.finished'))"; return 0; fi
+  if [ "$r" = PASS ]; then
+    echo "release-gate: $(git rev-parse --short "$sha") is green ($(record_of "$sha" | jq -r '.finished'))"
+    local missing; missing=$(missing_steps "$sha")
+    [ -z "$missing" ] || echo "release-gate: note: that record predates step(s) $missing, which it did not run" >&2
+    return 0
+  fi
   if [ "$r" = FAIL ]; then echo "release-gate: $(git rev-parse --short "$sha") is RED: $(record_of "$sha" | jq -r '[.steps[] | select(.result != "PASS") | .name] | join(", ")')" >&2; return 1; fi
   local -A have; local x; while read -r x; do have[$x]=1; done < <(recorded)
   for a in $(git rev-list --first-parent -n 50 "$sha^" 2>/dev/null); do
