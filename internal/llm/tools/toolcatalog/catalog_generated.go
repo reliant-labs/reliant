@@ -1190,3 +1190,23 @@ var generatedToolParams = map[string]ToolParams{
 		Unbindable: map[string]string{},
 	},
 }
+
+// generatedKnownTags is the tool-tag vocabulary, projected from the
+// registry's TagDescriptions.
+var generatedKnownTags = []string{
+	"analysis",
+	"coding:default",
+	"coding:plan",
+	"execution",
+	"file",
+	"integration",
+	"mcp",
+	"media",
+	"planning",
+	"readonly",
+	"runs",
+	"search",
+	"shell",
+	"web",
+	"workflow",
+}

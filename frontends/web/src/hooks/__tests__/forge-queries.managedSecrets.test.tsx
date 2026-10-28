@@ -20,7 +20,7 @@ vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://127.0.0.1:8090",
 }));
 
-import { useManagedSecrets } from "../forge-queries";
+import { managedSecretsQueryOptions, useManagedSecrets } from "../forge-queries";
 import { managedStoreTarget } from "@/services/forge/secretStore";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -44,6 +44,15 @@ describe("useManagedSecrets", () => {
     expect(listSecretsRpc).toHaveBeenCalledTimes(1);
     expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_42" });
     expect(result.current.data?.secrets.map((s) => s.name)).toEqual(["DATABASE_URL"]);
+  });
+
+  it("loads a cloud-only environment without a local project and separates environment cache entries", async () => {
+    const target = managedStoreTarget({ destination: "hosted", endpoint: "http://127.0.0.1:8090", environment_id: "denv_cloud" });
+    const { result } = renderHook(() => useManagedSecrets(null, "prod", target), { wrapper });
+    await waitFor(() => expect(result.current.data?.availability).toBe("available"));
+    expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_cloud" });
+    const other = managedStoreTarget({ destination: "hosted", endpoint: "http://127.0.0.1:8090", environment_id: "denv_other_org" });
+    expect(managedSecretsQueryOptions(null, "prod", target).queryKey).not.toEqual(managedSecretsQueryOptions(null, "prod", other).queryKey);
   });
 
   it("makes NO call for a non-hosted env, and reports not-hosted", async () => {

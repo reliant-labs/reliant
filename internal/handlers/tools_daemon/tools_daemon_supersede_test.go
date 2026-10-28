@@ -77,6 +77,7 @@ func newTestConn(userID, daemonID string, stream daemonStream) *daemonConnection
 	return &daemonConnection{
 		userID:              userID,
 		daemonID:            daemonID,
+		incarnationID:       uuid.NewString(),
 		connectedAt:         time.Now().UTC(),
 		lastActivity:        time.Now().UTC(),
 		attachedAt:          leaseTime(time.Now()),

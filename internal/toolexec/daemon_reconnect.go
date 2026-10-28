@@ -190,7 +190,7 @@ func (r *NATSDaemonRouter) rideOutDisconnect(
 			if outcome == dispatchUndelivered {
 				seen = r.daemonLastSeen(ctx, userID, daemonID)
 			}
-			deadline = seen.Add(DaemonReconnectGrace)
+			deadline = r.reconnectDeadline(ctx, userID, daemonID, seen.Add(DaemonReconnectGrace))
 			if !time.Now().Before(deadline) {
 				// Away longer than a reconnect takes: fail as fast as ever.
 				return 0, err
@@ -236,6 +236,10 @@ func withWaitNote(err error, waited time.Duration) error {
 // between the two is not missed: the probe goes out on the same connection
 // after the subscription, and finds the daemon either way.
 func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID string, deadline time.Time, skipFirstProbe bool) error {
+	return r.awaitDaemonSubject(ctx, userID, daemonID, deadline, skipFirstProbe, toolOnlineSubject)
+}
+
+func (r *NATSDaemonRouter) awaitDaemonSubject(ctx context.Context, userID, daemonID string, deadline time.Time, skipFirstProbe bool, subject string) error {
 	if r.nc == nil {
 		return errors.New("no NATS connection to wait on")
 	}
@@ -259,7 +263,7 @@ func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID str
 	probe := time.NewTicker(reconnectProbeInterval)
 	defer probe.Stop()
 
-	if !skipFirstProbe && r.daemonAnswers(ctx, userID, daemonID, deadline) {
+	if !skipFirstProbe && r.daemonAnswersSubject(ctx, userID, daemonID, deadline, subject) {
 		return nil
 	}
 	for {
@@ -271,7 +275,7 @@ func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID str
 		case <-connected:
 		case <-probe.C:
 		}
-		if r.daemonAnswers(ctx, userID, daemonID, deadline) {
+		if r.daemonAnswersSubject(ctx, userID, daemonID, deadline, subject) {
 			return nil
 		}
 	}
@@ -280,13 +284,17 @@ func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID str
 // daemonAnswers reports whether a gateway holds daemonID's stream again: its
 // bridge answers the daemon's tools.online subject (NATSToolBridge).
 func (r *NATSDaemonRouter) daemonAnswers(ctx context.Context, userID, daemonID string, deadline time.Time) bool {
+	return r.daemonAnswersSubject(ctx, userID, daemonID, deadline, toolOnlineSubject)
+}
+
+func (r *NATSDaemonRouter) daemonAnswersSubject(ctx context.Context, userID, daemonID string, deadline time.Time, subject string) bool {
 	timeout := min(reconnectProbeTimeout, time.Until(deadline))
 	if timeout <= 0 {
 		return false
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	msg, err := r.nc.RequestWithContext(probeCtx, daemonSubject(toolOnlineSubject, userID, daemonID), nil)
+	msg, err := r.nc.RequestWithContext(probeCtx, daemonSubject(subject, userID, daemonID), nil)
 	return err == nil && string(msg.Data) == "true"
 }
 

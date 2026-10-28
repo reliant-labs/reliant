@@ -39,7 +39,7 @@
     "deploy/observability/spec/alert-service-trigger_gen.json": "f7313befa54d1362548bc498cb28b3b9bc2f249203627a0f446daed4de520f5a",
     "deploy/observability/spec/alert-service-workflow_gen.json": "46c17239abb1b1bcc46fb75779d0e3524f0a27448a4e97b98aed8a8e54aba07e",
     "deploy/observability/spec/alert-service-worktree_gen.json": "bca3edcc2da6f7b4141a2220119dea4a71230d4b1f9b85407cf99f6d8646a54d",
-    "deploy/observability/spec/project_gen.json": "a3e38d9246f44017d6ca1bb429a31e8c191ede6869dde0b76fe901d5d1c61b31",
+    "deploy/observability/spec/project_gen.json": "0fc6f218d37de6899b186d0882f4d198e6f9110290f08bfa77f4f94b5efcd4e7",
     "frontends/web/src/lib/config_schema_gen.json": "2a164ec49f2d8c36b828a7fc60aa120af12ee2593304464d5f3be153206aa72e"
   }
 }

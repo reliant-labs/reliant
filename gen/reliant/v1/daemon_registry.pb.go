@@ -54,6 +54,8 @@ const (
 	DaemonStatus_DAEMON_STATUS_SUSPENDED DaemonStatus = 5
 	// The machine failed to come up or crashed terminally.
 	DaemonStatus_DAEMON_STATUS_FAILED DaemonStatus = 6
+	// Planned drain or bounded restart wait; no new work is routed here.
+	DaemonStatus_DAEMON_STATUS_UPDATING DaemonStatus = 7
 )
 
 // Enum value maps for DaemonStatus.
@@ -66,6 +68,7 @@ var (
 		4: "DAEMON_STATUS_PENDING",
 		5: "DAEMON_STATUS_SUSPENDED",
 		6: "DAEMON_STATUS_FAILED",
+		7: "DAEMON_STATUS_UPDATING",
 	}
 	DaemonStatus_value = map[string]int32{
 		"DAEMON_STATUS_UNSPECIFIED":  0,
@@ -75,6 +78,7 @@ var (
 		"DAEMON_STATUS_PENDING":      4,
 		"DAEMON_STATUS_SUSPENDED":    5,
 		"DAEMON_STATUS_FAILED":       6,
+		"DAEMON_STATUS_UPDATING":     7,
 	}
 )
 
@@ -1063,8 +1067,10 @@ type DaemonInfo struct {
 	Commit         string `protobuf:"bytes,25,opt,name=commit,proto3" json:"commit,omitempty"`
 	CommitTimeUnix int64  `protobuf:"varint,26,opt,name=commit_time_unix,json=commitTimeUnix,proto3" json:"commit_time_unix,omitempty"`
 	ForgeVersion   string `protobuf:"bytes,27,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Kept through disconnect, cleared by the replacement process registering.
+	RestartStatus *DaemonRestartStatus `protobuf:"bytes,28,opt,name=restart_status,json=restartStatus,proto3" json:"restart_status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -1286,6 +1292,118 @@ func (x *DaemonInfo) GetForgeVersion() string {
 	return ""
 }
 
+func (x *DaemonInfo) GetRestartStatus() *DaemonRestartStatus {
+	if x != nil {
+		return x.RestartStatus
+	}
+	return nil
+}
+
+type RequestDaemonRestartRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	Reason   string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Zero uses the approved ten-minute drain; otherwise capped at ten minutes.
+	DeadlineUnixMs int64 `protobuf:"varint,3,opt,name=deadline_unix_ms,json=deadlineUnixMs,proto3" json:"deadline_unix_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RequestDaemonRestartRequest) Reset() {
+	*x = RequestDaemonRestartRequest{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestDaemonRestartRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestDaemonRestartRequest) ProtoMessage() {}
+
+func (x *RequestDaemonRestartRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestDaemonRestartRequest.ProtoReflect.Descriptor instead.
+func (*RequestDaemonRestartRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RequestDaemonRestartRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *RequestDaemonRestartRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *RequestDaemonRestartRequest) GetDeadlineUnixMs() int64 {
+	if x != nil {
+		return x.DeadlineUnixMs
+	}
+	return 0
+}
+
+type RequestDaemonRestartResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RestartStatus *DaemonRestartStatus   `protobuf:"bytes,1,opt,name=restart_status,json=restartStatus,proto3" json:"restart_status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestDaemonRestartResponse) Reset() {
+	*x = RequestDaemonRestartResponse{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestDaemonRestartResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestDaemonRestartResponse) ProtoMessage() {}
+
+func (x *RequestDaemonRestartResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestDaemonRestartResponse.ProtoReflect.Descriptor instead.
+func (*RequestDaemonRestartResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RequestDaemonRestartResponse) GetRestartStatus() *DaemonRestartStatus {
+	if x != nil {
+		return x.RestartStatus
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -1336,7 +1454,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
 	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
 	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
-	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xc3\t\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\x8b\n" +
+	"\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -1368,7 +1487,14 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\aversion\x18\x18 \x01(\tR\aversion\x12\x16\n" +
 	"\x06commit\x18\x19 \x01(\tR\x06commit\x12(\n" +
 	"\x10commit_time_unix\x18\x1a \x01(\x03R\x0ecommitTimeUnix\x12#\n" +
-	"\rforge_version\x18\x1b \x01(\tR\fforgeVersion*\xd1\x01\n" +
+	"\rforge_version\x18\x1b \x01(\tR\fforgeVersion\x12F\n" +
+	"\x0erestart_status\x18\x1c \x01(\v2\x1f.reliant.v1.DaemonRestartStatusR\rrestartStatus\"|\n" +
+	"\x1bRequestDaemonRestartRequest\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12(\n" +
+	"\x10deadline_unix_ms\x18\x03 \x01(\x03R\x0edeadlineUnixMs\"f\n" +
+	"\x1cRequestDaemonRestartResponse\x12F\n" +
+	"\x0erestart_status\x18\x01 \x01(\v2\x1f.reliant.v1.DaemonRestartStatusR\rrestartStatus*\xed\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
@@ -1376,7 +1502,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x03\x12\x19\n" +
 	"\x15DAEMON_STATUS_PENDING\x10\x04\x12\x1b\n" +
 	"\x17DAEMON_STATUS_SUSPENDED\x10\x05\x12\x18\n" +
-	"\x14DAEMON_STATUS_FAILED\x10\x06*\x9d\x02\n" +
+	"\x14DAEMON_STATUS_FAILED\x10\x06\x12\x1a\n" +
+	"\x16DAEMON_STATUS_UPDATING\x10\a*\x9d\x02\n" +
 	"\x14DaemonLifecyclePhase\x12&\n" +
 	"\"DAEMON_LIFECYCLE_PHASE_UNSPECIFIED\x10\x00\x12'\n" +
 	"#DAEMON_LIFECYCLE_PHASE_PROVISIONING\x10\x01\x12\"\n" +
@@ -1384,8 +1511,11 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xe8\a\n" +
-	"\x15DaemonRegistryService\x12P\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\x82\t\n" +
+	"\x15DaemonRegistryService\x12\x97\x01\n" +
+	"\x14RequestDaemonRestart\x12'.reliant.v1.RequestDaemonRestartRequest\x1a(.reliant.v1.RequestDaemonRestartResponse\",\xa2\xbb\x18(:&\n" +
+	"\x0frequest_restart\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_id\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
 	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12Y\n" +
 	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x03\x90\x02\x01\x12\xc7\x01\n" +
@@ -1411,7 +1541,7 @@ func file_reliant_v1_daemon_registry_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_daemon_registry_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	(DaemonStatus)(0),                      // 0: reliant.v1.DaemonStatus
 	(DaemonLifecyclePhase)(0),              // 1: reliant.v1.DaemonLifecyclePhase
@@ -1432,49 +1562,56 @@ var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	(*SetLocalModelEndpointsRequest)(nil),  // 16: reliant.v1.SetLocalModelEndpointsRequest
 	(*SetLocalModelEndpointsResponse)(nil), // 17: reliant.v1.SetLocalModelEndpointsResponse
 	(*DaemonInfo)(nil),                     // 18: reliant.v1.DaemonInfo
-	nil,                                    // 19: reliant.v1.ResolveDaemonRequest.LabelsEntry
-	(*LocalModelInventory)(nil),            // 20: reliant.v1.LocalModelInventory
-	(*DiscoveredProject)(nil),              // 21: reliant.v1.DiscoveredProject
-	(*timestamppb.Timestamp)(nil),          // 22: google.protobuf.Timestamp
-	(*DiskReport)(nil),                     // 23: reliant.v1.DiskReport
+	(*RequestDaemonRestartRequest)(nil),    // 19: reliant.v1.RequestDaemonRestartRequest
+	(*RequestDaemonRestartResponse)(nil),   // 20: reliant.v1.RequestDaemonRestartResponse
+	nil,                                    // 21: reliant.v1.ResolveDaemonRequest.LabelsEntry
+	(*LocalModelInventory)(nil),            // 22: reliant.v1.LocalModelInventory
+	(*DiscoveredProject)(nil),              // 23: reliant.v1.DiscoveredProject
+	(*timestamppb.Timestamp)(nil),          // 24: google.protobuf.Timestamp
+	(*DiskReport)(nil),                     // 25: reliant.v1.DiskReport
+	(*DaemonRestartStatus)(nil),            // 26: reliant.v1.DaemonRestartStatus
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.ClearMachineCachesResponse.skipped:type_name -> reliant.v1.ClearMachineCachesSkip
 	18, // 1: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
 	18, // 2: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	19, // 3: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
+	21, // 3: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
 	18, // 4: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	20, // 5: reliant.v1.RefreshLocalModelsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
-	20, // 6: reliant.v1.SetLocalModelEndpointsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	22, // 5: reliant.v1.RefreshLocalModelsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	22, // 6: reliant.v1.SetLocalModelEndpointsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
 	0,  // 7: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
-	21, // 8: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
-	22, // 9: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
-	22, // 10: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	23, // 8: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
+	24, // 9: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
+	24, // 10: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
 	1,  // 11: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
-	22, // 12: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	22, // 13: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	22, // 14: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
-	20, // 15: reliant.v1.DaemonInfo.local_models:type_name -> reliant.v1.LocalModelInventory
-	23, // 16: reliant.v1.DaemonInfo.disk:type_name -> reliant.v1.DiskReport
-	5,  // 17: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	7,  // 18: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	9,  // 19: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	11, // 20: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	14, // 21: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
-	16, // 22: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
-	2,  // 23: reliant.v1.DaemonRegistryService.ClearMachineCaches:input_type -> reliant.v1.ClearMachineCachesRequest
-	6,  // 24: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	8,  // 25: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	10, // 26: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	12, // 27: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	15, // 28: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
-	17, // 29: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
-	3,  // 30: reliant.v1.DaemonRegistryService.ClearMachineCaches:output_type -> reliant.v1.ClearMachineCachesResponse
-	24, // [24:31] is the sub-list for method output_type
-	17, // [17:24] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	24, // 12: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	24, // 13: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	24, // 14: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
+	22, // 15: reliant.v1.DaemonInfo.local_models:type_name -> reliant.v1.LocalModelInventory
+	25, // 16: reliant.v1.DaemonInfo.disk:type_name -> reliant.v1.DiskReport
+	26, // 17: reliant.v1.DaemonInfo.restart_status:type_name -> reliant.v1.DaemonRestartStatus
+	26, // 18: reliant.v1.RequestDaemonRestartResponse.restart_status:type_name -> reliant.v1.DaemonRestartStatus
+	19, // 19: reliant.v1.DaemonRegistryService.RequestDaemonRestart:input_type -> reliant.v1.RequestDaemonRestartRequest
+	5,  // 20: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	7,  // 21: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	9,  // 22: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	11, // 23: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	14, // 24: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
+	16, // 25: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
+	2,  // 26: reliant.v1.DaemonRegistryService.ClearMachineCaches:input_type -> reliant.v1.ClearMachineCachesRequest
+	20, // 27: reliant.v1.DaemonRegistryService.RequestDaemonRestart:output_type -> reliant.v1.RequestDaemonRestartResponse
+	6,  // 28: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	8,  // 29: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	10, // 30: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	12, // 31: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	15, // 32: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
+	17, // 33: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
+	3,  // 34: reliant.v1.DaemonRegistryService.ClearMachineCaches:output_type -> reliant.v1.ClearMachineCachesResponse
+	27, // [27:35] is the sub-list for method output_type
+	19, // [19:27] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }
@@ -1489,7 +1626,7 @@ func file_reliant_v1_daemon_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_daemon_registry_proto_rawDesc), len(file_reliant_v1_daemon_registry_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

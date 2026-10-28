@@ -452,6 +452,11 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		_ = msg.Respond([]byte("true"))
 	}))
 
+	// Recovery stays reachable while new-work availability is withdrawn.
+	addSub(b.nc.Subscribe(daemonSubject(toolRecoverySubject, userID, daemonID), func(msg *nats.Msg) {
+		_ = msg.Respond([]byte("true"))
+	}))
+
 	// 9. daemon.process.kill.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(daemonKillSubject, userID, daemonID), func(msg *nats.Msg) {
 		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.process.kill")
@@ -569,6 +574,29 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		})
 	})))
 
+	// Administrative transport survives a drain, so retries can observe it.
+	if restarter, ok := b.mgr.(interface {
+		RequestDaemonRestart(context.Context, string, string, *reliantv1.RestartRequested) (*reliantv1.DaemonRestartStatus, error)
+	}); ok {
+		addSub(b.nc.Subscribe(daemonSubject(daemonRestartSubject, userID, daemonID), func(msg *nats.Msg) {
+			var req reliantv1.RestartRequested
+			if json.Unmarshal(msg.Data, &req) != nil {
+				_ = msg.Respond([]byte(`{"error":"invalid restart request"}`))
+				return
+			}
+			b.goTracked(func() {
+				ctx, cancel := context.WithTimeout(b.ctx, 10*time.Second)
+				defer cancel()
+				status, err := restarter.RequestDaemonRestart(ctx, userID, daemonID, &req)
+				out := map[string]any{"status": status}
+				if err != nil {
+					out["error"] = err.Error()
+				}
+				data, _ := json.Marshal(out)
+				_ = msg.Respond(data)
+			})
+		}))
+	}
 	subs = append(subs, b.localModelSubscriptions(userID, daemonID)...)
 
 	b.finishDaemonConnected(daemonCtx, userID, daemonID, subs)
@@ -618,6 +646,7 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 		"success":       resp.Success,
 		"payload":       resp.Payload,
 		"error_message": resp.ErrorMessage,
+		"error_code":    resp.ErrorCode,
 	})
 	// A reply exceeding the NATS server's max_payload can't transit as a
 	// single message — and the old `_ = msg.Respond(...)` DISCARDED the
@@ -714,6 +743,9 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 // redials, but only for a request it knows is safe to repeat, and it cannot
 // tell that from a message.
 func transportErrorCode(err error) string {
+	if errors.Is(err, ErrDaemonUpdating) {
+		return ErrorCodeDaemonUndelivered
+	}
 	if errors.Is(err, ErrDaemonConnectionInterrupted) {
 		return ErrorCodeDaemonInterrupted
 	}
@@ -780,6 +812,17 @@ const drainFlushTimeout = 2 * time.Second
 // The flush is what makes the order hold: the server has dropped this
 // replica's interest before the daemon can register anywhere else.
 func (b *NATSToolBridge) OnDaemonDraining(userID, daemonID string) {
+	b.stopRouting(userID, daemonID, false)
+}
+
+// OnDaemonUpdating reuses the gateway drain, retaining only the administrative
+// status/retry subject beside cancel/background. A gateway hand-over retains
+// no administrative subject: only its successor may answer it.
+func (b *NATSToolBridge) OnDaemonUpdating(userID, daemonID string) {
+	b.stopRouting(userID, daemonID, true)
+}
+
+func (b *NATSToolBridge) stopRouting(userID, daemonID string, updating bool) {
 	key := daemonKey(userID, daemonID)
 	b.cancelsMu.Lock()
 	if stop, ok := b.pollCancels[key]; ok {
@@ -793,7 +836,7 @@ func (b *NATSToolBridge) OnDaemonDraining(userID, daemonID string) {
 	b.subsMu.Lock()
 	var kept, dropped []*nats.Subscription
 	for _, sub := range b.daemonSubs[key] {
-		if sub.Subject == keepCancel || sub.Subject == keepBackground {
+		if sub.Subject == keepCancel || sub.Subject == keepBackground || (updating && (sub.Subject == daemonSubject(daemonRestartSubject, userID, daemonID) || sub.Subject == daemonSubject(daemonCommandSubject, userID, daemonID) || sub.Subject == daemonSubject(toolRecoverySubject, userID, daemonID))) {
 			kept = append(kept, sub)
 			continue
 		}
