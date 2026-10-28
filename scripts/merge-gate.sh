@@ -32,7 +32,7 @@
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
-#              gen, node configs), forcing a check with checkout-local state,
+#              gen, node configs), incremental on state this checkout wrote,
 #              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error

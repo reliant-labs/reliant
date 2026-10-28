@@ -330,3 +330,30 @@ func TestTypecheckBackdatedCrossCheckoutAndHardlinks(t *testing.T) {
 		t.Fatal("other checkout's state was overwritten")
 	}
 }
+
+// The second run in a checkout reuses its own incremental state (no --force)
+// and still sees an edit made since.
+func TestTypecheckReusesOwnStateAndSeesNewEdits(t *testing.T) {
+	tsc := os.Getenv("TEST_TSC_BINARY")
+	if tsc == "" {
+		var err error
+		if tsc, err = exec.LookPath("tsc"); err != nil {
+			t.Skip("set TEST_TSC_BINARY to run real TypeScript regression")
+		}
+	}
+	a := scriptFixture(t, "web-typecheck.sh")
+	(&orderRepo{t: t}).git(a, "init", "-q")
+	putFixture(t, a, "frontends/web/tsconfig.json", `{"compilerOptions":{"composite":true,"declaration":true,"outDir":"node_modules/.tmp/tsc","tsBuildInfoFile":"node_modules/.tmp/state.tsbuildinfo"},"include":["src.ts"]}`, 0644)
+	putFixture(t, a, "frontends/web/package.json", `{"scripts":{"typecheck":"`+tsc+` -b"}}`, 0644)
+	putFixture(t, a, "frontends/web/src.ts", "export const n: number = 1;", 0644)
+	if out, err := runFixture(a, "web-typecheck.sh", nil); err != nil {
+		t.Fatalf("first run: %v %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(a, "frontends/web/node_modules/.tmp/.typecheck-owner")); err != nil {
+		t.Fatalf("first run left no owner stamp: %v", err)
+	}
+	putFixture(t, a, "frontends/web/src.ts", `export const n: number = "invalid";`, 0644)
+	if out, err := runFixture(a, "web-typecheck.sh", nil); err == nil || !strings.Contains(string(out), "TS2322") {
+		t.Fatalf("incremental run missed a new error: %v %s", err, out)
+	}
+}
