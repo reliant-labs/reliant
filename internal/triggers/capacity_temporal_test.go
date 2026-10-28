@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -34,6 +35,32 @@ func capacityChainWorkflow(ctx workflow.Context, continued bool) error {
 	var finish bool
 	workflow.GetSignalChannel(ctx, "finish").Receive(ctx, &finish)
 	return nil
+}
+
+func TestCapacityRealTemporalHumanReplySupersedesAdmittedChain(t *testing.T) {
+	c := temporalForTest(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	queue := "capacity-reply-" + uuid.NewString()
+	id := "capacity-reply-" + uuid.NewString()
+	w := worker.New(c, queue, temporaltest.WorkerOptions(worker.Options{}))
+	w.RegisterWorkflow(capacityChainWorkflow)
+	require.NoError(t, w.Start())
+	defer w.Stop()
+	original, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: id, TaskQueue: queue}, capacityChainWorkflow, true)
+	require.NoError(t, err)
+	boundary := &capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending}}
+	adapter := &realCapacityRepository{capacityBoundary: boundary, id: id, first: original.GetRunID()}
+	spec := launch.Spec{}
+	require.NoError(t, prepareCapacity(ctx, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, 1, &spec))
+	require.False(t, boundary.released)
+	reply, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: id, TaskQueue: queue, WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING}, capacityChainWorkflow, true)
+	require.NoError(t, err)
+	require.NotEqual(t, original.GetRunID(), reply.GetRunID())
+	require.NoError(t, prepareCapacity(ctx, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, 1, &spec))
+	require.True(t, boundary.released, "a human replacement chain cannot keep the closed automation slot")
+	require.NoError(t, c.SignalWorkflow(ctx, id, "", "finish", true))
+	require.NoError(t, reply.Get(ctx, nil))
 }
 
 func TestCapacityRealTemporalContinuedChainRetainsSlot(t *testing.T) {
