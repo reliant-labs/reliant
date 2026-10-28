@@ -157,6 +157,7 @@ describe("the URL round trip", () => {
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort", "assignee",
         "session", "t", "replay", "user", "cursor",
+        "declared", "internal", "rpcId", "rpcService",
       ].sort()
     );
   });
