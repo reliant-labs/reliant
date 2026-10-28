@@ -38,7 +38,7 @@ func (b *capacityBoundary) GetTriggerEventByDedupe(context.Context, core.Trigger
 	return b.event, nil
 }
 func (b *capacityBoundary) ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error) {
-	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: "workflow", FirstRunID: "first"}}, nil
+	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: "workflow", FirstRunID: "first", StartAttemptAged: true}}, nil
 }
 func (b *capacityBoundary) ReleaseTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error {
 	b.released = true

@@ -65,7 +65,7 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 				require.NoError(t, f.repo.DeleteChat(ctx, f.chatOfFire(t, f.fireAt(2))))
 			}
 
-			// Both Describes inside recovery see NotFound: the start has not landed.
+			// The fresh database attempt must hold before any external Describe can authorize release.
 			require.NoError(t, reconcileCapacityExecutions(ctx, f.repo, starter, occupied))
 			after, err := f.repo.ListTriggerCapacityExecutions(ctx, scope)
 			require.NoError(t, err)

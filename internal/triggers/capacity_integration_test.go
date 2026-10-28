@@ -88,6 +88,8 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	second, err = f.firer.Fire(ctx, f.fireAt(3))
 	require.NoError(t, err)
 	require.Equal(t, string(core.TriggerEventPending), second.Outcome)
+	_, err = f.repo.ORM().Bun().NewRaw(`UPDATE trigger_events SET capacity_start_attempt_at=now()-interval '1 hour' WHERE id=?`, first.EventID).Exec(ctx)
+	require.NoError(t, err)
 	starter.mu.Lock()
 	starter.descriptions[first.ChatID].WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	starter.mu.Unlock()
@@ -109,6 +111,8 @@ func TestCapacityFirerLaunchFIFOAndTemporalRelease(t *testing.T) {
 	require.Equal(t, string(core.TriggerEventSkipped), third.Outcome)
 	// No waiting work is needed to persist terminal evidence: periodic
 	// redrive scans occupied slots independently of delivery recovery.
+	_, err = f.repo.ORM().Bun().NewRaw(`UPDATE trigger_events SET capacity_start_attempt_at=now()-interval '1 hour' WHERE id=?`, second.EventID).Exec(ctx)
+	require.NoError(t, err)
 	starter.mu.Lock()
 	starter.descriptions[second.ChatID].WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	starter.mu.Unlock()

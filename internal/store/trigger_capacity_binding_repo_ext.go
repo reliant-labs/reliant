@@ -11,10 +11,12 @@ import (
 
 // TriggerCapacityExecution is immutable launch identity, not the chat's mutable current run.
 type TriggerCapacityExecution struct {
-	EventID    string     `bun:"id"`
-	WorkflowID string     `bun:"capacity_workflow_id"`
-	FirstRunID string     `bun:"capacity_first_run_id"`
-	BoundAt    *time.Time `bun:"capacity_bound_at"`
+	EventID          string     `bun:"id"`
+	WorkflowID       string     `bun:"capacity_workflow_id"`
+	FirstRunID       string     `bun:"capacity_first_run_id"`
+	BoundAt          *time.Time `bun:"capacity_bound_at"`
+	StartAttemptAt   *time.Time `bun:"capacity_start_attempt_at"`
+	StartAttemptAged bool       `bun:"capacity_start_attempt_aged"`
 }
 
 // PrepareTriggerCapacityExecution records identity before the external start,
@@ -64,9 +66,10 @@ func BindTriggerCapacityExecution(ctx context.Context, db orm.Context, eventID, 
 // ListTriggerCapacityExecutions includes every occupied slot, even if its activation/chat disappeared.
 func ListTriggerCapacityExecutions(ctx context.Context, db orm.Context, scope TriggerCapacityScope) ([]TriggerCapacityExecution, error) {
 	var rows []TriggerCapacityExecution
-	err := db.Bun().NewRaw(`SELECT id, COALESCE(capacity_workflow_id, '') AS capacity_workflow_id, COALESCE(capacity_first_run_id, '') AS capacity_first_run_id, capacity_bound_at
+	err := db.Bun().NewRaw(`SELECT id, COALESCE(capacity_workflow_id, '') AS capacity_workflow_id, COALESCE(capacity_first_run_id, '') AS capacity_first_run_id, capacity_bound_at, capacity_start_attempt_at,
+ COALESCE(capacity_start_attempt_at < now()-make_interval(secs => ?),false) AS capacity_start_attempt_aged
  FROM trigger_events WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ?
- AND outcome = 'launched' AND NOT capacity_released ORDER BY capacity_order`, scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
+ AND outcome = 'launched' AND NOT capacity_released ORDER BY capacity_order`, startAttemptBoundSeconds(), scope.UserID, scope.ProjectID, scope.WorkflowRef).Scan(ctx, &rows)
 	return rows, err
 }
 
@@ -82,8 +85,9 @@ func ListTriggerCapacityExecutionBatch(ctx context.Context, db orm.Context, limi
  ORDER BY capacity_checked_at NULLS FIRST,capacity_order LIMIT ? FOR UPDATE SKIP LOCKED
  ), touched AS (
  UPDATE trigger_events SET capacity_checked_at=now() WHERE id IN (SELECT id FROM selected)
- RETURNING id,COALESCE(capacity_workflow_id,'') AS capacity_workflow_id,COALESCE(capacity_first_run_id,'') AS capacity_first_run_id,capacity_bound_at
- ) SELECT * FROM touched`, limit).Scan(ctx, &rows)
+ RETURNING id,COALESCE(capacity_workflow_id,'') AS capacity_workflow_id,COALESCE(capacity_first_run_id,'') AS capacity_first_run_id,capacity_bound_at,capacity_start_attempt_at,
+ COALESCE(capacity_start_attempt_at < now()-make_interval(secs => ?),false) AS capacity_start_attempt_aged
+ ) SELECT * FROM touched`, limit, startAttemptBoundSeconds()).Scan(ctx, &rows)
 	return rows, err
 }
 
@@ -92,7 +96,10 @@ func ReleaseTriggerCapacityExecution(ctx context.Context, db orm.Context, execut
 	if execution.EventID == "" || execution.WorkflowID == "" || execution.FirstRunID == "" {
 		return errors.New("invalid capacity release identity")
 	}
-	_, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_released = true, capacity_released_at=now(), capacity_release_reason='confirmed_closed_or_superseded' WHERE id = ? AND capacity_workflow_id = ? AND capacity_first_run_id = ? AND outcome = 'launched' AND NOT capacity_released`, execution.EventID, execution.WorkflowID, execution.FirstRunID).Exec(ctx)
+	if !execution.StartAttemptAged || execution.StartAttemptAt == nil {
+		return nil
+	}
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events event SET capacity_released = true, capacity_released_at=now(), capacity_release_reason='confirmed_closed_or_superseded' WHERE id = ? AND capacity_workflow_id = ? AND capacity_first_run_id = ? AND outcome = 'launched' AND NOT capacity_released AND `+startAttemptAged+` AND capacity_start_attempt_at = ?`, execution.EventID, execution.WorkflowID, execution.FirstRunID, startAttemptBoundSeconds(), execution.StartAttemptAt).Exec(ctx)
 	return err
 }
 

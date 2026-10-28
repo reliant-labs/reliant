@@ -146,19 +146,20 @@ func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
 	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, ev.ID, "operator-root")
 	}))
-	ok, err := store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "external execution fenced")
+	ok, err := store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, capacitySnapshot(t, env, ev.ID), "owner", "external execution fenced")
 	require.NoError(t, err)
 	require.False(t, ok, "pending root can still start")
 	_, err = env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=2 WHERE id=$1`, "operator-root")
 	require.NoError(t, err)
-	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "external execution fenced")
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, capacitySnapshot(t, env, ev.ID), "owner", "external execution fenced")
 	require.NoError(t, err)
 	require.False(t, ok, "a start attempted inside the bound may still be accepted")
 	ageStartAttempt(t, env, ev.ID)
-	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "confirmed external execution terminated")
+	operatorObserved := capacitySnapshot(t, env, ev.ID)
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, operatorObserved, "owner", "confirmed external execution terminated")
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "second attempt")
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, operatorObserved, "owner", "second attempt")
 	require.NoError(t, err)
 	require.False(t, ok, "release is monotonic and idempotent")
 }
@@ -240,11 +241,17 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	require.NotNil(t, preserved.CapacityOrder)
 	require.Equal(t, "capacity-workflow", *preserved.CapacityWorkflowID)
 	require.Equal(t, "capacity-first-run", *preserved.CapacityFirstRunID)
-	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, store.TriggerCapacityExecution{EventID: first.ID, WorkflowID: "capacity-workflow", FirstRunID: "wrong-run"}))
+	ageStartAttempt(t, env, first.ID)
+	observed, err := store.ListTriggerCapacityExecutions(ctx, env.ORM, scope)
+	require.NoError(t, err)
+	require.Len(t, observed, 1)
+	wrongChain := observed[0]
+	wrongChain.FirstRunID = "wrong-run"
+	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, wrongChain))
 	claimed, err = claimCapacity(ctx, env, second.ID, scope, 1)
 	require.NoError(t, err)
 	require.False(t, claimed, "wrong chain cannot release a slot")
-	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, store.TriggerCapacityExecution{EventID: first.ID, WorkflowID: "capacity-workflow", FirstRunID: "capacity-first-run"}))
+	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, observed[0]))
 	claimed, err = claimCapacity(ctx, env, second.ID, scope, 1)
 	require.NoError(t, err)
 	require.True(t, claimed, "a 48-hour queue head was not lost to delivery expiry")
@@ -341,7 +348,20 @@ func launchedUnbound(t *testing.T, env *storetest.Env, id, root string, status c
 	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, id, root)
 	}))
-	return store.TriggerCapacityExecution{EventID: id, WorkflowID: root}
+	return capacitySnapshot(t, env, id)
+}
+
+func capacitySnapshot(t *testing.T, env *storetest.Env, id string) store.TriggerCapacityExecution {
+	t.Helper()
+	rows, err := store.ListTriggerCapacityExecutions(context.Background(), env.ORM, capacityScope())
+	require.NoError(t, err)
+	for _, row := range rows {
+		if row.EventID == id {
+			return row
+		}
+	}
+	t.Fatalf("capacity snapshot missing %s", id)
+	return store.TriggerCapacityExecution{}
 }
 
 func releasedFlag(t *testing.T, env *storetest.Env, id string) bool {
@@ -354,6 +374,32 @@ func releasedFlag(t *testing.T, env *storetest.Env, id string) bool {
 // B4-a: a root that left PENDING (Terminate's CANCELLED, or a missing row) is
 // not the fence. The release UPDATE itself requires the last start attempt to
 // be older than core.StartAttemptBound.
+func TestTriggerCapacityReleaseSnapshotCannotAgeIntoAuthority(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	e := launchedUnbound(t, env, "snapshot-event", "snapshot-root", core.Pending())
+	require.False(t, e.StartAttemptAged)
+	_, err := env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=2 WHERE id=$1`, e.WorkflowID)
+	require.NoError(t, err)
+	ageStartAttempt(t, env, e.EventID)
+	ok, err := store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "stale-observation")
+	require.NoError(t, err)
+	require.False(t, ok, "a fresh snapshot cannot gain authority while delayed")
+	observed := capacitySnapshot(t, env, e.EventID)
+	require.True(t, observed.StartAttemptAged)
+	// A newer attempt which later also ages still invalidates the old evidence.
+	_, err = env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_start_attempt_at=now()-interval '10 minutes' WHERE id=$1`, e.EventID)
+	require.NoError(t, err)
+	ok, err = store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, observed, "stale-after-new-attempt")
+	require.NoError(t, err)
+	require.False(t, ok, "exact stamp CAS refuses later claim even after it aged")
+	observed = capacitySnapshot(t, env, e.EventID)
+	require.True(t, observed.StartAttemptAged)
+	ok, err = store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, observed, "fresh-confirmation")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
 func TestTriggerCapacityUnboundReleaseRequiresAgedStartAttempt(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -369,6 +415,7 @@ func TestTriggerCapacityUnboundReleaseRequiresAgedStartAttempt(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, ok, "a missing root does not stand in for the aged stamp")
 	ageStartAttempt(t, env, e.EventID)
+	e = capacitySnapshot(t, env, e.EventID)
 	ok, err = store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "start_fenced_and_absent")
 	require.NoError(t, err)
 	require.True(t, ok)

@@ -33,10 +33,13 @@ func ReleaseUnboundTriggerCapacity(ctx context.Context, db orm.Context, e Trigge
 	if e.EventID == "" || e.WorkflowID == "" || e.FirstRunID != "" || reason == "" {
 		return false, errors.New("invalid unbound capacity recovery")
 	}
+	if !e.StartAttemptAged || e.StartAttemptAt == nil {
+		return false, nil
+	}
 	res, err := db.Bun().NewRaw(`UPDATE trigger_events event SET capacity_released=true,capacity_released_at=now(),capacity_release_reason=?
  WHERE event.id=? AND event.capacity_workflow_id=? AND event.capacity_first_run_id IS NULL
- AND event.outcome='launched' AND NOT event.capacity_released AND `+startAttemptAged+`
- AND NOT EXISTS(SELECT 1 FROM workflows root WHERE root.id=event.capacity_workflow_id AND root.state=1)`, reason, e.EventID, e.WorkflowID, startAttemptBoundSeconds()).Exec(ctx)
+ AND event.outcome='launched' AND NOT event.capacity_released AND `+startAttemptAged+` AND capacity_start_attempt_at = ?
+ AND NOT EXISTS(SELECT 1 FROM workflows root WHERE root.id=event.capacity_workflow_id AND root.state=1)`, reason, e.EventID, e.WorkflowID, startAttemptBoundSeconds(), e.StartAttemptAt).Exec(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -68,7 +71,7 @@ func FenceUnboundTriggerCapacityStart(ctx context.Context, db orm.Context, e Tri
 // retries. It is never enough by itself to release an accepted external run.
 func TriggerCapacityStartFenced(ctx context.Context, db orm.Context, e TriggerCapacityExecution) (bool, error) {
 	var fenced bool
-	err := db.Bun().NewRaw(`SELECT NOT EXISTS(SELECT 1 FROM workflows WHERE id=? AND state=1)`, e.WorkflowID).Scan(ctx, &fenced)
+	err := db.Bun().NewRaw(`SELECT EXISTS(SELECT 1 FROM trigger_events event WHERE event.id=? AND event.capacity_workflow_id=? AND NOT event.capacity_released AND event.capacity_start_attempt_at=? AND `+startAttemptAged+`) AND NOT EXISTS(SELECT 1 FROM workflows WHERE id=? AND state=1)`, e.EventID, e.WorkflowID, e.StartAttemptAt, startAttemptBoundSeconds(), e.WorkflowID).Scan(ctx, &fenced)
 	return fenced, err
 }
 
@@ -79,14 +82,18 @@ func TriggerCapacityStartFenced(ctx context.Context, db orm.Context, e TriggerCa
 // release a slot whose start may still be accepted. A bound chain's
 // termination in Temporal is the operator's prerequisite; it cannot be
 // checked here.
-func ReleaseTriggerCapacityByOperator(ctx context.Context, db orm.Context, eventID, actor, note string) (bool, error) {
+func ReleaseTriggerCapacityByOperator(ctx context.Context, db orm.Context, observed TriggerCapacityExecution, actor, note string) (bool, error) {
+	eventID := observed.EventID
 	if eventID == "" || strings.TrimSpace(actor) == "" || strings.TrimSpace(note) == "" {
 		return false, errors.New("operator identity and fencing evidence are required")
 	}
+	if !observed.StartAttemptAged || observed.StartAttemptAt == nil {
+		return false, nil
+	}
 	res, err := db.Bun().NewRaw(`UPDATE trigger_events event SET capacity_released=true,capacity_released_at=now(),capacity_release_reason=?
  WHERE event.id=? AND event.capacity_order IS NOT NULL AND event.outcome='launched' AND NOT event.capacity_released
- AND event.capacity_workflow_id IS NOT NULL AND `+startAttemptAged+`
- AND NOT EXISTS(SELECT 1 FROM workflows root WHERE root.id=event.capacity_workflow_id AND root.state=1)`, fmt.Sprintf("operator:%s:%s", actor, note), eventID, startAttemptBoundSeconds()).Exec(ctx)
+ AND event.capacity_workflow_id IS NOT NULL AND `+startAttemptAged+` AND capacity_start_attempt_at=?
+ AND NOT EXISTS(SELECT 1 FROM workflows root WHERE root.id=event.capacity_workflow_id AND root.state=1)`, fmt.Sprintf("operator:%s:%s", actor, note), eventID, startAttemptBoundSeconds(), observed.StartAttemptAt).Exec(ctx)
 	if err != nil {
 		return false, err
 	}

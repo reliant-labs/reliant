@@ -168,6 +168,14 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, err
 		}
 	}
+	if ev.CapacityOrder != nil && ev.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
+		if repo, ok := f.repo.(capacityRepository); ok {
+			spec.RecordExecution = repo.BindTriggerCapacityExecution
+			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+		} else {
+			return nil, errors.New("admitted retry storage unavailable")
+		}
+	}
 	res, launchErr := f.launcher.Launch(ctx, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,

@@ -111,7 +111,7 @@ func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, d
 
 func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
 	for _, execution := range []store.TriggerCapacityExecution{execution} {
-		if execution.WorkflowID == "" {
+		if execution.WorkflowID == "" || !execution.StartAttemptAged {
 			continue
 		}
 		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")

@@ -24,7 +24,7 @@ type realCapacityRepository struct {
 }
 
 func (r *realCapacityRepository) ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error) {
-	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: r.id, FirstRunID: r.first}}, nil
+	return []store.TriggerCapacityExecution{{EventID: "occupied", WorkflowID: r.id, FirstRunID: r.first, StartAttemptAged: true}}, nil
 }
 
 // The real server decides FirstRunId and current-chain status, including CAN.

@@ -54,10 +54,17 @@ An authorized operator must first fence launch retries (the root must no longer
 be PENDING), terminate/verify absence of the external execution, and record
 that evidence. `ReleaseTriggerCapacityByOperator` requires actor and note,
 conditionally releases one launched unreleased row with a non-pending/missing
-root, and emits a warning with the actor. It does not perform the external
-fence for the operator.
+root AND a durable start-attempt stamp older than `core.StartAttemptBound`
+(currently five minutes). Both checks are part of the UPDATE, not just a prior
+operator observation. It emits a warning with the actor. It does not perform
+the external fence for the operator.
 
-Equivalent audited SQL AFTER that external fencing/verification:
+Operator ordering is mandatory: FIRST wait until the database reports the
+last attempt older than `core.StartAttemptBound`; THEN fence/terminate and
+Describe the external execution; FINALLY run the guarded UPDATE using that
+same observed stamp. If any retry changes the stamp, repeat verification.
+
+Equivalent audited SQL AFTER that ordering and external fencing/verification:
 
 ```sql
 UPDATE trigger_events event
@@ -66,6 +73,9 @@ SET capacity_released = true, capacity_released_at = now(),
 WHERE event.id = '<event-id>' AND event.capacity_order IS NOT NULL
   AND event.outcome = 'launched' AND NOT event.capacity_released
   AND event.capacity_workflow_id IS NOT NULL
+  -- Must match core.StartAttemptBound; never remove this in-flight fence.
+  AND event.capacity_start_attempt_at < now() - interval '5 minutes'
+  AND event.capacity_start_attempt_at = '<observed-aged-stamp>'::timestamptz
   AND NOT EXISTS (SELECT 1 FROM workflows root
                   WHERE root.id = event.capacity_workflow_id AND root.state = 1);
 ```
