@@ -22,7 +22,11 @@ func ParseWorkflow(data []byte) (*reliantv1.Workflow, error) {
 		return nil, fmt.Errorf("v2yaml: expected document node")
 	}
 
-	return unmarshalWorkflow(doc.Content[0])
+	wf, err := unmarshalWorkflow(doc.Content[0])
+	if err != nil {
+		return nil, withVersionSkewHint(err)
+	}
+	return wf, nil
 }
 
 // MarshalWorkflow serializes a *reliantv1.Workflow to YAML bytes.
@@ -126,7 +130,7 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			sequenceNode = val
 
 		default:
-			return nil, fmt.Errorf("unknown workflow field: %q", key)
+			return nil, unknownField(key, "unknown workflow field: %q", key)
 		}
 
 		if err != nil {

@@ -42,7 +42,9 @@ import { answerQuestion } from "@/hooks/question-queries";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { useDeleteTrigger, useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
+import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/workflowsArea";
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
@@ -478,7 +480,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
     case "waitingForMachine":
       return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
     case "automationFailing":
-      return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
+      return (
+        <FailingAutomationAction
+          triggerId={item.triggerId}
+          triggerName={item.triggerName}
+          lastRunChatId={payload.value.lastRunChatId}
+          broken={payload.value.health?.status === TriggerHealthStatus.BROKEN}
+        />
+      );
     case "automationLaunchFailed":
       return <LaunchFailedAction triggerId={item.triggerId} />;
     case "automationNeedsSetup":
@@ -655,12 +664,62 @@ export function WakeMachineAction({
   );
 }
 
-function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: string; lastRunChatId?: string }) {
+/**
+ * Pause for a failing automation, after Open last run. A BROKEN one (its
+ * workflow changed so that it cannot fire: gone, unparseable, the trigger
+ * renamed) has no run worth opening; it gets Remove beside Pause, since
+ * fixing the workflow file is the only other way out.
+ */
+function FailingAutomationAction({
+  triggerId,
+  triggerName,
+  lastRunChatId,
+  broken,
+}: {
+  triggerId: string;
+  triggerName: string;
+  lastRunChatId?: string;
+  broken: boolean;
+}) {
   const setEnabled = useSetTriggerEnabled();
+  const remove = useDeleteTrigger();
   const queryClient = useQueryClient();
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const name = triggerName || "this automation";
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      {lastRunChatId && (
+      {broken && (
+        <>
+          <button type="button" className={actionButtonClass} disabled={remove.isPending} onClick={() => setConfirmingRemove(true)}>
+            Remove
+          </button>
+          <ConfirmationDialog
+            open={confirmingRemove}
+            title={`Remove ${name}?`}
+            description="It stops listening for this trigger. The workflow and the chats it already started are kept."
+            confirmLabel="Remove trigger"
+            loading={remove.isPending}
+            onConfirm={() =>
+              remove.mutate(
+                { id: triggerId },
+                {
+                  onSuccess: () => {
+                    setConfirmingRemove(false);
+                    toast.success(`Removed ${name}`);
+                    void queryClient.invalidateQueries({ queryKey: inboxServiceKeys.all });
+                  },
+                  onError: (error) => {
+                    setConfirmingRemove(false);
+                    toast.error(`Could not remove ${name}`, { description: errorText(error) });
+                  },
+                },
+              )
+            }
+            onCancel={() => setConfirmingRemove(false)}
+          />
+        </>
+      )}
+      {!broken && lastRunChatId && (
         <RunLink chatId={lastRunChatId} className={actionButtonClass}>
           Open last run
         </RunLink>

@@ -188,7 +188,7 @@ func unmarshalStructuralArgs(node *yaml.Node, v2node *reliantv1.Node, binding ge
 				}
 			}
 			if !hasInputArgsMapField {
-				return fmt.Errorf("node.%s: unknown key %q", yamlKeyArgs, childKey)
+				return unknownField(childKey, "node.%s: unknown key %q", yamlKeyArgs, childKey)
 			}
 			inputArgsEntries[childKey] = childVal
 		}
@@ -200,7 +200,7 @@ func unmarshalStructuralArgs(node *yaml.Node, v2node *reliantv1.Node, binding ge
 			continue
 		}
 		if !hasInputArgsMapField {
-			return fmt.Errorf("node: unknown structural arg key %q", key)
+			return unknownField(key, "node: unknown structural arg key %q", key)
 		}
 		inputArgsEntries[key] = val
 		delete(yamlMap, key)
@@ -338,7 +338,7 @@ func collectActivityArgsNode(node *yaml.Node, binding generatedNodeBinding) (*ya
 	for i := 0; i < len(argsNode.Content); i += 2 {
 		key := argsNode.Content[i].Value
 		if _, isArgKey := binding.argFieldKeys[key]; !isArgKey {
-			return nil, fmt.Errorf("node.%s: unknown key %q", yamlKeyArgs, key)
+			return nil, unknownField(key, "node.%s: unknown key %q", yamlKeyArgs, key)
 		}
 		if _, duplicated := inlineArgs[key]; duplicated {
 			return nil, fmt.Errorf("node: duplicate arg key %q across inline and %s", key, yamlKeyArgs)
@@ -360,7 +360,7 @@ func validateMappingKeys(node *yaml.Node, allowed map[string]struct{}, path stri
 	for i := 0; i < len(node.Content); i += 2 {
 		key := node.Content[i].Value
 		if _, ok := allowed[key]; !ok {
-			return fmt.Errorf("%s: unknown key %q", path, key)
+			return unknownField(key, "%s: unknown key %q", path, key)
 		}
 	}
 	return nil
