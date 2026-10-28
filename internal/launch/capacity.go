@@ -11,6 +11,8 @@ import (
 
 // ExecutionDescriber deliberately uses the existing Temporal boundary. An
 // admitted start's memo recovers an accepted-but-unacknowledged execution.
+var errAdmissionSuperseded = errors.New("admitted execution was superseded")
+
 type ExecutionDescriber interface {
 	DescribeWorkflowExecution(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 }
@@ -34,7 +36,7 @@ func (l *Launcher) recoverAdmission(ctx context.Context, eventID, workflowID str
 	var memoEvent string
 	payload := info.GetMemo().GetFields()["trigger_event_id"]
 	if payload == nil || converter.GetDefaultDataConverter().FromPayload(payload, &memoEvent) != nil || memoEvent != eventID {
-		return errors.New("admitted execution memo mismatch")
+		return errAdmissionSuperseded
 	}
 	return spec.RecordExecution(ctx, eventID, workflowID, info.GetFirstRunId())
 }

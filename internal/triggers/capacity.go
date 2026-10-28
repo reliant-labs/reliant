@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	enums "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/converter"
 )
@@ -115,6 +116,12 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 		}
 		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")
 		if err != nil {
+			var missing *serviceerror.NotFound
+			if execution.FirstRunID == "" && errors.As(err, &missing) {
+				if err := recoverMissingCapacityStart(ctx, repo, descriptions, execution); err != nil {
+					return err
+				}
+			}
 			// Unknown state cannot release capacity. A namespace outage or
 			// expired history requires explicit fenced operator resolution,
 			// never an elapsed-time guess that might over-admit live work.
@@ -128,6 +135,18 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 			var memoEvent string
 			payload := info.GetMemo().GetFields()["trigger_event_id"]
 			if payload == nil || converter.GetDefaultDataConverter().FromPayload(payload, &memoEvent) != nil || memoEvent != execution.EventID {
+				if recovery, ok := repo.(capacityStartRecovery); ok {
+					fenced, err := recovery.TriggerCapacityStartFenced(ctx, execution)
+					if err != nil {
+						return err
+					}
+					if fenced {
+						_, err = recovery.ReleaseUnboundTriggerCapacity(ctx, execution, "superseded_before_binding")
+						if err != nil {
+							return err
+						}
+					}
+				}
 				continue
 			}
 			if err := repo.BindTriggerCapacityExecution(ctx, execution.EventID, execution.WorkflowID, info.GetFirstRunId()); err != nil {

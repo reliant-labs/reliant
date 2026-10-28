@@ -127,6 +127,9 @@ type seedContent struct {
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
 	result, err := l.launch(ctx, ev, spec)
+	if errors.Is(err, errAdmissionSuperseded) {
+		return nil, &AlreadyLaunchedError{ChatID: spec.NewChatID}
+	}
 	var already *AlreadyLaunchedError
 	if spec.ClientMessageID != "" && errors.As(err, &already) && already.ChatID != "" {
 		// A start the client named is idempotent: its repeat is answered with

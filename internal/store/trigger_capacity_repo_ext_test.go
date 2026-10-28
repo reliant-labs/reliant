@@ -102,6 +102,32 @@ func TestTriggerCapacityUnboundStartDoesNotHidePendingScopeHead(t *testing.T) {
 	require.True(t, ids[second.ID], "pending scope head must not disappear behind an unbound launch")
 }
 
+func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	ev := capacityEvent("operator-event")
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, ev, scope))
+	claimed, err := claimCapacity(ctx, env, ev.ID, scope, 1)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	seedRun(t, env, "operator-root", core.Pending())
+	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, ev.ID, "operator-root")
+	}))
+	ok, err := store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "external execution fenced")
+	require.NoError(t, err)
+	require.False(t, ok, "pending root can still start")
+	_, err = env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=2 WHERE id=$1`, "operator-root")
+	require.NoError(t, err)
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "confirmed external execution terminated")
+	require.NoError(t, err)
+	require.True(t, ok)
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "second attempt")
+	require.NoError(t, err)
+	require.False(t, ok, "release is monotonic and idempotent")
+}
+
 func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
