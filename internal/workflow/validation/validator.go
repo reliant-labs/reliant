@@ -56,6 +56,13 @@ type ValidationOptions struct {
 	// ValueTypes resolves the input types integrations define
 	// (`type: github.repository`). Nil means the embedded catalog's.
 	ValueTypes ValueTypes
+
+	// Authoring is set where a definition is being written or checked (save,
+	// `reliant workflow validate`, the workflow tools), not run. Findings that
+	// depend on this release's vocabulary rather than the definition's
+	// correctness (CategoryToolTag) are errors only then: a workflow saved
+	// before a tag was renamed still starts, with a warning.
+	Authoring bool
 }
 
 // =============================================================================
@@ -173,6 +180,9 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	// so unlike the skill layer there is no optional dependency to skip on.
 	validateToolsConfigBindings(wf, result)
 
+	if !opts.Authoring {
+		result.demote(CategoryToolTag)
+	}
 	return result
 }
 
