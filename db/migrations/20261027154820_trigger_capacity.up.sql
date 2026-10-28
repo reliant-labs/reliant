@@ -9,6 +9,10 @@ ALTER TABLE trigger_events
     ADD COLUMN capacity_first_run_id text,
     ADD COLUMN capacity_released boolean NOT NULL DEFAULT false,
     ADD COLUMN capacity_redriven_at timestamptz,
+    ADD COLUMN capacity_checked_at timestamptz,
+    ADD COLUMN capacity_bound_at timestamptz,
+    ADD COLUMN capacity_released_at timestamptz,
+    ADD COLUMN capacity_release_reason text,
     ADD CONSTRAINT trigger_events_capacity_scope CHECK (
         (capacity_project_id IS NULL AND capacity_workflow_ref IS NULL AND capacity_order IS NULL)
         OR (capacity_project_id IS NOT NULL AND capacity_project_id <> ''
@@ -23,8 +27,17 @@ CREATE INDEX trigger_events_capacity_waiting ON trigger_events
 CREATE INDEX trigger_events_capacity_occupied ON trigger_events
     (user_id, capacity_project_id, capacity_workflow_ref)
     WHERE capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released;
+COMMENT ON COLUMN trigger_events.capacity_project_id IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_workflow_ref IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_order IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_workflow_id IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_first_run_id IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_released IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_bound_at IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_released_at IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_release_reason IS 'forge:immutable';
 ALTER TABLE trigger_events ADD CONSTRAINT trigger_events_capacity_binding CHECK (
     (capacity_workflow_id IS NULL AND capacity_first_run_id IS NULL)
     OR (capacity_order IS NOT NULL AND capacity_workflow_id IS NOT NULL AND capacity_workflow_id <> ''
-        AND capacity_first_run_id IS NOT NULL AND capacity_first_run_id <> '')
+        AND (capacity_first_run_id IS NULL OR capacity_first_run_id <> ''))
 );

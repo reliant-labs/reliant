@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 )
 
 const capacityWaiting = "waiting for workflow capacity"
@@ -21,6 +22,7 @@ type capacityRepository interface {
 	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
 	CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, uint32) (bool, error)
 	BindTriggerCapacityExecution(context.Context, string, string, string) error
+	PrepareTriggerCapacityExecution(context.Context, string, string) error
 	ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error)
 	ReleaseTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error
 	GetTriggerEventByDedupe(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
@@ -74,24 +76,8 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	if err != nil {
 		return err
 	}
-	for _, execution := range occupied {
-		if execution.WorkflowID == "" || execution.FirstRunID == "" {
-			continue
-		}
-		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")
-		if err != nil {
-			continue
-		}
-		info := desc.GetWorkflowExecutionInfo()
-		if info == nil || info.GetExecution().GetWorkflowId() != execution.WorkflowID || info.GetFirstRunId() != execution.FirstRunID {
-			continue
-		}
-		switch info.GetStatus() {
-		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
-				return fmt.Errorf("release workflow capacity: %w", err)
-			}
-		}
+	if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
+		return err
 	}
 	previous := spec.Guard
 	spec.Guard = func(ctx context.Context) (string, error) {
@@ -108,5 +94,53 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 		return "", nil
 	}
 	spec.RecordExecution = repo.BindTriggerCapacityExecution
+	spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+	return nil
+}
+
+func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, occupied []store.TriggerCapacityExecution) error {
+	for _, execution := range occupied {
+		if execution.WorkflowID == "" {
+			continue
+		}
+		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")
+		if err != nil {
+			// Unknown state cannot release capacity. A namespace outage or
+			// expired history requires explicit fenced operator resolution,
+			// never an elapsed-time guess that might over-admit live work.
+			continue
+		}
+		info := desc.GetWorkflowExecutionInfo()
+		if info == nil || info.GetExecution().GetWorkflowId() != execution.WorkflowID || info.GetFirstRunId() == "" {
+			continue
+		}
+		if execution.FirstRunID == "" {
+			var memoEvent string
+			payload := info.GetMemo().GetFields()["trigger_event_id"]
+			if payload == nil || converter.GetDefaultDataConverter().FromPayload(payload, &memoEvent) != nil || memoEvent != execution.EventID {
+				continue
+			}
+			if err := repo.BindTriggerCapacityExecution(ctx, execution.EventID, execution.WorkflowID, info.GetFirstRunId()); err != nil {
+				return err
+			}
+			execution.FirstRunID = info.GetFirstRunId()
+		}
+		// Temporal permits one open execution per workflow ID. A different
+		// current chain therefore proves the admitted chain is no longer open;
+		// this is how a later human turn may reuse the chat without pinning the
+		// automation's slot forever. Missing history/errors remain uncertainty.
+		if info.GetFirstRunId() != execution.FirstRunID {
+			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
+				return err
+			}
+			continue
+		}
+		switch info.GetStatus() {
+		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
+				return fmt.Errorf("release workflow capacity: %w", err)
+			}
+		}
+	}
 	return nil
 }

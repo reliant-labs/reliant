@@ -150,6 +150,9 @@ type Spec struct {
 	// RecordExecution persists immutable admission identity after Temporal accepts
 	// the idempotent start. A failed write is retried, never treated as free capacity.
 	RecordExecution func(ctx context.Context, eventID, workflowID, firstRunID string) error
+	// PrepareExecution records the immutable workflow ID in the SAME launch
+	// transaction, before Temporal may accept it or the activation disappears.
+	PrepareExecution func(ctx context.Context, eventID, workflowID string) error
 }
 
 // Result is what Launch produced.

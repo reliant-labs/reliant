@@ -28,6 +28,9 @@ func (b *capacityBoundary) EnqueueTriggerCapacity(context.Context, *core.Trigger
 func (b *capacityBoundary) CanLaunchTriggerCapacity(context.Context, string, store.TriggerCapacityScope, uint32) (bool, error) {
 	return b.released, nil
 }
+func (b *capacityBoundary) PrepareTriggerCapacityExecution(context.Context, string, string) error {
+	return nil
+}
 func (b *capacityBoundary) BindTriggerCapacityExecution(context.Context, string, string, string) error {
 	return nil
 }
@@ -56,7 +59,8 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 		{"running", enums.WORKFLOW_EXECUTION_STATUS_RUNNING, "first", false, false},
 		{"continued", enums.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, "first", false, false},
 		{"missing-first", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "", false, false},
-		{"different-chain", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "other", false, false},
+		{"different-chain", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "other", false, true},
+		{"different-running-chain", enums.WORKFLOW_EXECUTION_STATUS_RUNNING, "other", false, true},
 		{"outage", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "first", true, false},
 		{"completed", enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, "first", false, true},
 		{"failed", enums.WORKFLOW_EXECUTION_STATUS_FAILED, "first", false, true},

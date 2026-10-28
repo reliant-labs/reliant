@@ -145,6 +145,18 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 		}))
 	}
 	require.NoError(t, store.BindTriggerCapacityExecution(ctx, env.ORM, first.ID, "capacity-workflow", "capacity-first-run"))
+	// Full-replace generic updates must not erase the admission identity.
+	preserved, err := store.GetTriggerEventByID(ctx, env.ORM, first.ID)
+	require.NoError(t, err)
+	preserved.CapacityProjectID = nil
+	preserved.CapacityWorkflowRef = nil
+	preserved.CapacityOrder = nil
+	preserved.CapacityWorkflowID = nil
+	preserved.CapacityFirstRunID = nil
+	require.NoError(t, store.UpdateTriggerEvent(ctx, env.ORM, preserved))
+	require.NotNil(t, preserved.CapacityOrder)
+	require.Equal(t, "capacity-workflow", *preserved.CapacityWorkflowID)
+	require.Equal(t, "capacity-first-run", *preserved.CapacityFirstRunID)
 	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, store.TriggerCapacityExecution{EventID: first.ID, WorkflowID: "capacity-workflow", FirstRunID: "wrong-run"}))
 	claimed, err = claimCapacity(ctx, env, second.ID, scope, 1)
 	require.NoError(t, err)

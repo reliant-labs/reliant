@@ -482,6 +482,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
 		}
+		if spec.PrepareExecution != nil {
+			if err := spec.PrepareExecution(txCtx, eventRow.ID, workflowID); err != nil {
+				return err
+			}
+		}
 
 		if _, _, _, err := l.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
 			Workflow: rootWorkflow,
