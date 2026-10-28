@@ -19,7 +19,7 @@ const (
 	GetRunToolName    = "get_run"
 	getRunDescription = `Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.`
 
@@ -50,11 +50,19 @@ func (g *getRunTool) RequiresPermission(params GetRunParams) (bool, error) {
 
 // RunDetail is get_run's metadata.
 type RunDetail struct {
-	RunID          string                 `json:"run_id"`
-	Title          string                 `json:"title"`
-	Workflow       string                 `json:"workflow,omitempty"`
-	ProjectID      string                 `json:"project_id"`
-	State          string                 `json:"state"`
+	RunID     string `json:"run_id"`
+	Title     string `json:"title"`
+	Workflow  string `json:"workflow,omitempty"`
+	ProjectID string `json:"project_id"`
+	State     string `json:"state"`
+	// Waiting is what a live run is blocked on outside itself ("waiting for
+	// usage limit", "waiting for machine", "needs input"); empty otherwise.
+	Waiting             string `json:"waiting,omitempty"`
+	UsageLimitProvider  string `json:"usage_limit_provider,omitempty"`
+	UsageLimitRetriesAt string `json:"usage_limit_retries_at,omitempty"`
+	// WorkingThreads is how many of the run's threads (root and sub-agents)
+	// are doing work right now.
+	WorkingThreads int                    `json:"working_threads,omitempty"`
 	CreatedAt      string                 `json:"created_at"`
 	LastActiveAt   string                 `json:"last_active_at"`
 	LastMessage    string                 `json:"last_message,omitempty"`
@@ -83,6 +91,16 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 	if chat.WorkflowName != nil {
 		detail.Workflow = *chat.WorkflowName
 	}
+	if chat.Activity != nil {
+		detail.Waiting = runWaitLabel(*chat.Activity)
+	}
+	if detail.Waiting == "waiting for usage limit" {
+		detail.UsageLimitProvider = chat.UsageLimitProvider
+		if chat.UsageLimitResumesAt != nil {
+			detail.UsageLimitRetriesAt = formatRunTime(*chat.UsageLimitResumesAt)
+		}
+	}
+	detail.WorkingThreads = chat.WorkingThreads
 
 	// A run that has not started has no thread to read.
 	if rootThread := chat.MainThreadID(); rootThread != "" {
@@ -114,8 +132,22 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 		title = "(untitled)"
 	}
 	fmt.Fprintf(&sb, "Run %s: %s\n", detail.RunID, title)
-	fmt.Fprintf(&sb, "State: %s\nWorkflow: %s\nProject: %s\nCreated: %s\nLast active: %s\n",
-		detail.State, detail.Workflow, detail.ProjectID, detail.CreatedAt, detail.LastActiveAt)
+	fmt.Fprintf(&sb, "State: %s\n", detail.State)
+	if detail.Waiting != "" {
+		fmt.Fprintf(&sb, "Waiting: %s", detail.Waiting)
+		if detail.UsageLimitProvider != "" {
+			fmt.Fprintf(&sb, " (%s)", detail.UsageLimitProvider)
+		}
+		if detail.UsageLimitRetriesAt != "" {
+			fmt.Fprintf(&sb, ", retries by itself at %s", detail.UsageLimitRetriesAt)
+		}
+		sb.WriteString(". It is live: control_run cancel stops it and every sub-agent in it.\n")
+	}
+	if detail.WorkingThreads > 0 {
+		fmt.Fprintf(&sb, "Working threads: %d\n", detail.WorkingThreads)
+	}
+	fmt.Fprintf(&sb, "Workflow: %s\nProject: %s\nCreated: %s\nLast active: %s\n",
+		detail.Workflow, detail.ProjectID, detail.CreatedAt, detail.LastActiveAt)
 	if detail.LastMessage != "" {
 		fmt.Fprintf(&sb, "\nLast assistant message:\n%s\n", detail.LastMessage)
 	} else {
