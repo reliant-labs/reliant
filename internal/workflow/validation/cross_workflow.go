@@ -365,6 +365,8 @@ func validateProtoInputsAgainstSchema(
 					// Type-check nested value
 					if err := validateProtoInputType(key+"."+nestedKey, nestedVal, nestedInput, vt); err != nil {
 						result.AddError(CategoryCrossWorkflow, append(path, "args", key, nestedKey), "", err.Error())
+					} else if err := toolsInputTagError(key+"."+nestedKey, nestedVal, nestedInput); err != nil {
+						result.AddError(CategoryToolTag, append(path, "args", key, nestedKey), "", err.Error())
 					}
 				}
 			}
@@ -382,6 +384,8 @@ func validateProtoInputsAgainstSchema(
 		}
 		if err := validateProtoInputType(key, value, inputDef, vt); err != nil {
 			result.AddError(CategoryCrossWorkflow, append(path, "args", key), "", err.Error())
+		} else if err := toolsInputTagError(key, value, inputDef); err != nil {
+			result.AddError(CategoryToolTag, append(path, "args", key), "", err.Error())
 		}
 	}
 

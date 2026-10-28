@@ -223,12 +223,8 @@ func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, v
 			return fmt.Errorf("input '%s' expects array, got %T", name, value)
 		}
 		for index, item := range arrayValue {
-			entry, stringOK := item.(string)
-			if !stringOK {
+			if _, stringOK := item.(string); !stringOK {
 				return fmt.Errorf("input '%s' expects array of strings, item %d is %T", name, index, item)
-			}
-			if err := toolFilterTagError(entry); err != nil {
-				return fmt.Errorf("input '%s' item %d: %w", name, index, err)
 			}
 		}
 		return nil

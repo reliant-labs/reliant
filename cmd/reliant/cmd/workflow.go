@@ -958,6 +958,7 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 		PresetLoader:         presetLoader,
 		CanonicalWorkflowRef: canonicalWorkflowRef(ref),
 		RootLabel:            displayName,
+		Authoring:            true,
 	}
 	staticResult := validation.StaticAnalysisWithOptions(wf, opts)
 

@@ -4,10 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
+// The tag vocabulary is judged when a workflow is validated. The values a run
+// starts with (ValidateInputs) only type-check: a renamed tag in a saved
+// preset must not stop the run.
 func TestToolsInputTagVocabulary(t *testing.T) {
 	for _, tc := range []struct {
 		name, entry string
@@ -21,9 +26,13 @@ func TestToolsInputTagVocabulary(t *testing.T) {
 		{"expression", "{{inputs.tools}}", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateProtoInputType("tools", []any{tc.entry}, &pb.Input{Type: "tools"}, nil)
+			input := &pb.Input{Type: "tools"}
+			err := toolsInputTagError("tools", []any{tc.entry}, input)
 			if (err != nil) != tc.invalid {
 				t.Fatalf("entry %q: error=%v, want invalid=%v", tc.entry, err, tc.invalid)
+			}
+			if err := validateProtoInputType("tools", []any{tc.entry}, input, nil); err != nil {
+				t.Fatalf("entry %q rejected at run time: %v", tc.entry, err)
 			}
 		})
 	}
@@ -78,5 +87,22 @@ func TestToolsInputDefaultTagVocabulary(t *testing.T) {
 				t.Fatalf("unknown tools default was accepted: %s", result.Error())
 			}
 		})
+	}
+}
+
+// Authoring rejects an unknown tag; loading the same workflow to run it only
+// warns, so a definition saved before a tag was renamed still starts.
+func TestToolsInputTagIsAnErrorOnlyWhenAuthoring(t *testing.T) {
+	wf := actionWorkflow("http/request@1", map[string]*structpb.Value{"url": structpb.NewStringValue("https://example.com")})
+	wf.Inputs = map[string]*pb.Input{"tools": {Type: "tools", Config: &pb.Input_ToolsInput{ToolsInput: &pb.ToolsInputConfig{
+		Default: structpb.NewListValue(&structpb.ListValue{Values: []*structpb.Value{structpb.NewStringValue("tag:default")}}),
+	}}}}
+	authored := StaticAnalysisWithOptions(wf, &ValidationOptions{Authoring: true})
+	if len(authored.ByCategory(CategoryToolTag)) != 1 || !authored.HasErrors() {
+		t.Fatalf("authoring accepted an unknown tag: %s", authored.Error())
+	}
+	run := StaticAnalysisWithOptions(wf, &ValidationOptions{})
+	if run.HasErrors() || len(run.Warnings()) != 1 || run.Warnings()[0].Category != CategoryToolTag {
+		t.Fatalf("a run must start with a warning only: errors=%v warnings=%v", run.Errors(), run.Warnings())
 	}
 }

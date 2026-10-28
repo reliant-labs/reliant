@@ -161,6 +161,25 @@ func toolFilterTagError(entry string) error {
 	return fmt.Errorf("tool tag %q is not in the tool-tag vocabulary, so this entry matches no tool and contributes nothing to the filter (known tags: %s)", tag, strings.Join(toolcatalog.Tags(), ", "))
 }
 
+// toolsInputTagError judges the literal entries of a tools-typed value against
+// the tag vocabulary: a workflow's defaults and its literal child args. Never
+// the values a run is started with (ValidateInputs), and an error only when
+// authoring (ValidationOptions.Authoring): a workflow or preset saved before a
+// tag was renamed still starts, and the unknown entry matches nothing.
+func toolsInputTagError(name string, value any, input *reliantv1.Input) error {
+	if input.GetType() != "tools" {
+		return nil
+	}
+	items, _ := value.([]any)
+	for index, item := range items {
+		entry, _ := item.(string)
+		if err := toolFilterTagError(entry); err != nil {
+			return fmt.Errorf("input '%s' item %d: %w", name, index, err)
+		}
+	}
+	return nil
+}
+
 // Defaults must be checked before binding: an expression forwarding inputs.tools
 // hides the literal entries from the terminal call_llm's tools_config.
 func validateToolInputDefaults(inputs map[string]*reliantv1.Input, path []string, result *Result) {
@@ -175,6 +194,8 @@ func validateToolInputDefaults(inputs map[string]*reliantv1.Input, path []string
 		value := input.GetToolsInput().GetDefault().AsInterface()
 		if err := validateProtoInputType(name, value, input, nil); err != nil {
 			result.AddError(CategoryInput, joinPath(path, name), "default", err.Error())
+		} else if err := toolsInputTagError(name, value, input); err != nil {
+			result.AddError(CategoryToolTag, joinPath(path, name), "default", err.Error())
 		}
 	}
 }
