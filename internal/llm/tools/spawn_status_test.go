@@ -182,7 +182,7 @@ func TestSpawnStatus_SingleAgent_OwnChildWithNoMessages_ReturnsFriendlyMessage(t
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID})
 	require.False(t, resp.IsError, "response: %+v", resp)
-	require.Contains(t, resp.Content, "no activity yet")
+	require.Contains(t, resp.Content, "No assistant message yet")
 }
 
 // Single-agent mode must return only the LAST assistant message, not the
