@@ -87,7 +87,7 @@ func ListTriggerCapacityExecutionBatch(ctx context.Context, db orm.Context, limi
  UPDATE trigger_events SET capacity_checked_at=now() WHERE id IN (SELECT id FROM selected)
  RETURNING id,COALESCE(capacity_workflow_id,'') AS capacity_workflow_id,COALESCE(capacity_first_run_id,'') AS capacity_first_run_id,capacity_bound_at,capacity_start_attempt_at,
  COALESCE(capacity_start_attempt_at < now()-make_interval(secs => ?),false) AS capacity_start_attempt_aged
- ) SELECT * FROM touched`, limit, startAttemptBoundSeconds()).Scan(ctx, &rows)
+ ) SELECT id,capacity_workflow_id,capacity_first_run_id,capacity_bound_at,capacity_start_attempt_at,capacity_start_attempt_aged FROM touched`, limit, startAttemptBoundSeconds()).Scan(ctx, &rows)
 	return rows, err
 }
 

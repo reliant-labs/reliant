@@ -266,7 +266,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 ), touched AS (
  UPDATE trigger_events SET capacity_redriven_at = now() WHERE id IN (SELECT id FROM selected) RETURNING id
 )
-SELECT event.* FROM trigger_events event WHERE event.id IN (SELECT id FROM ordinary UNION ALL SELECT id FROM touched)
+SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event WHERE event.id IN (SELECT id FROM ordinary UNION ALL SELECT id FROM touched)
 ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
