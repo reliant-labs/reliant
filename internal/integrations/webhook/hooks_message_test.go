@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"go.temporal.io/sdk/client"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
