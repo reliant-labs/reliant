@@ -17,12 +17,15 @@ type TriggerCapacityExecution struct {
 	BoundAt    *time.Time `bun:"capacity_bound_at"`
 }
 
-// PrepareTriggerCapacityExecution records identity before the external start.
+// PrepareTriggerCapacityExecution records identity before the external start,
+// and stamps the launch's start attempt (see ReleaseUnboundTriggerCapacity).
 func PrepareTriggerCapacityExecution(ctx context.Context, db orm.Context, eventID, workflowID string) error {
 	if !orm.InTx(ctx) || eventID == "" || workflowID == "" {
 		return errors.New("capacity launch identity requires launch transaction")
 	}
-	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_workflow_id=? WHERE id=? AND capacity_order IS NOT NULL AND outcome='launched' AND (capacity_workflow_id IS NULL OR capacity_workflow_id=?)`, workflowID, eventID, workflowID).Exec(ctx)
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_workflow_id=?, capacity_start_attempt_at=clock_timestamp()
+ WHERE id=? AND capacity_order IS NOT NULL AND outcome='launched' AND NOT capacity_released
+ AND (capacity_workflow_id IS NULL OR capacity_workflow_id=?)`, workflowID, eventID, workflowID).Exec(ctx)
 	if err != nil {
 		return err
 	}
@@ -41,7 +44,8 @@ func BindTriggerCapacityExecution(ctx context.Context, db orm.Context, eventID, 
 	if eventID == "" || workflowID == "" || firstRunID == "" {
 		return errors.New("invalid capacity execution identity")
 	}
-	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_workflow_id = ?, capacity_first_run_id = ?, capacity_bound_at = COALESCE(capacity_bound_at,now())
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_workflow_id = ?, capacity_first_run_id = ?, capacity_bound_at = COALESCE(capacity_bound_at,now()),
+ capacity_start_attempt_at = COALESCE(capacity_start_attempt_at,clock_timestamp())
  WHERE id = ? AND capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released
  AND (capacity_workflow_id IS NULL OR capacity_workflow_id = ?) AND (capacity_first_run_id IS NULL OR capacity_first_run_id = ?)`, workflowID, firstRunID, eventID, workflowID, firstRunID).Exec(ctx)
 	if err != nil {

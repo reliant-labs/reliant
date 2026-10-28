@@ -444,7 +444,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// workflow's — until one ran out of attempts
 	// (TestConcurrentStartChatsTakeNoPredicateLocks).
 	launchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	// attemptAt precedes this attempt's durable stamp (PrepareExecution, in
+	// the transaction below), so the start's deadline is measured from no
+	// later than the stamp capacity recovery ages.
+	var attemptAt time.Time
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
+		attemptAt = time.Now()
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -543,6 +548,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		eventID:       eventRow.ID,
 		trigger:       TriggerInfoFromEvent(eventRow),
 		generateTitle: spec.GenerateTitle,
+		attemptAt:     attemptAt,
 	})
 }
 
@@ -850,6 +856,8 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	// it is conditional on the root still being PENDING: if a later fire
 	// abandoned it first, this fire's slot is spent and must not start a run
 	// beside the one that replaced it.
+	// attemptAt precedes the claim's durable start-attempt stamp; see start.
+	attemptAt := time.Now()
 	stillPending, err := l.repo.ClaimWorkflowStart(ctx, chat.ID)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to claim the start", Err: err}
@@ -870,6 +878,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		eventID:       recorded.ID,
 		trigger:       TriggerInfoFromEvent(recorded),
 		generateTitle: spec.GenerateTitle && chat.Title == "",
+		attemptAt:     attemptAt,
 	})
 }
 
@@ -1112,6 +1121,9 @@ type startParams struct {
 	eventID       string
 	trigger       *v2.TriggerInfo
 	generateTitle bool
+	// attemptAt is taken before this attempt's durable stamp (the launch
+	// transaction, or ClaimWorkflowStart for a retry).
+	attemptAt time.Time
 }
 
 // start brings the run in line with the committed intent: it issues the
@@ -1215,7 +1227,15 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 
 	// The root start stays synchronous. Returning before Temporal accepted
 	// it would hand the caller a committed chat that may never run.
-	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
+	//
+	// The start RPC carries a deadline of core.StartAttemptDeadline past
+	// attemptAt, propagated to Temporal, so no start of this attempt is
+	// accepted long after its durable stamp. Capacity recovery and the
+	// stranded-start sweep wait core.StartAttemptBound past that stamp
+	// before treating the start as no longer in flight.
+	startCtx, cancelStart := context.WithDeadline(ctx, p.attemptAt.Add(core.StartAttemptDeadline))
+	workflowRun, err := l.temporal.ExecuteWorkflow(startCtx, workflowOptions, v2.DynamicWorkflow, workflowInput)
+	cancelStart()
 	if err != nil && p.spec.RecordExecution != nil {
 		var already *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &already) {

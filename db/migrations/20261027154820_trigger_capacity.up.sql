@@ -13,6 +13,9 @@ ALTER TABLE trigger_events
     ADD COLUMN capacity_bound_at timestamptz,
     ADD COLUMN capacity_released_at timestamptz,
     ADD COLUMN capacity_release_reason text,
+    -- Last start attempt (launch transaction or retry claim): an unbound slot
+    -- is never released until this is older than the start-attempt bound.
+    ADD COLUMN capacity_start_attempt_at timestamptz,
     ADD CONSTRAINT trigger_events_capacity_scope CHECK (
         (capacity_project_id IS NULL AND capacity_workflow_ref IS NULL AND capacity_order IS NULL)
         OR (capacity_project_id IS NOT NULL AND capacity_project_id <> ''
@@ -36,6 +39,13 @@ COMMENT ON COLUMN trigger_events.capacity_released IS 'forge:immutable';
 COMMENT ON COLUMN trigger_events.capacity_bound_at IS 'forge:immutable';
 COMMENT ON COLUMN trigger_events.capacity_released_at IS 'forge:immutable';
 COMMENT ON COLUMN trigger_events.capacity_release_reason IS 'forge:immutable';
+COMMENT ON COLUMN trigger_events.capacity_start_attempt_at IS 'forge:immutable';
+-- A retry's claim finds the slot of the root it is about to start.
+CREATE INDEX trigger_events_capacity_workflow ON trigger_events (capacity_workflow_id)
+    WHERE capacity_workflow_id IS NOT NULL;
+ALTER TABLE trigger_events ADD CONSTRAINT trigger_events_capacity_start_attempt CHECK (
+    capacity_workflow_id IS NULL OR capacity_start_attempt_at IS NOT NULL
+);
 ALTER TABLE trigger_events ADD CONSTRAINT trigger_events_capacity_binding CHECK (
     (capacity_workflow_id IS NULL AND capacity_first_run_id IS NULL)
     OR (capacity_order IS NOT NULL AND capacity_workflow_id IS NOT NULL AND capacity_workflow_id <> ''

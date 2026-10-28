@@ -151,6 +151,10 @@ func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
 	require.False(t, ok, "pending root can still start")
 	_, err = env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=2 WHERE id=$1`, "operator-root")
 	require.NoError(t, err)
+	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "external execution fenced")
+	require.NoError(t, err)
+	require.False(t, ok, "a start attempted inside the bound may still be accepted")
+	ageStartAttempt(t, env, ev.ID)
 	ok, err = store.ReleaseTriggerCapacityByOperator(ctx, env.ORM, ev.ID, "owner", "confirmed external execution terminated")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -314,4 +318,140 @@ func TestTriggerCapacityScopeAndTransactionFences(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, claimed)
 	}
+}
+
+// ageStartAttempt moves an event's last start attempt past the start-attempt bound.
+func ageStartAttempt(t *testing.T, env *storetest.Env, id string) {
+	t.Helper()
+	_, err := env.SQL.ExecContext(context.Background(),
+		`UPDATE trigger_events SET capacity_start_attempt_at = now() - make_interval(secs => $2) - interval '1 second' WHERE id=$1`,
+		id, core.StartAttemptBound.Seconds())
+	require.NoError(t, err)
+}
+
+func launchedUnbound(t *testing.T, env *storetest.Env, id, root string, status core.WorkflowStatus) store.TriggerCapacityExecution {
+	t.Helper()
+	ctx := context.Background()
+	scope := capacityScope()
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, capacityEvent(id), scope))
+	claimed, err := claimCapacity(ctx, env, id, scope, 10)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	seedRun(t, env, root, status)
+	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, id, root)
+	}))
+	return store.TriggerCapacityExecution{EventID: id, WorkflowID: root}
+}
+
+func releasedFlag(t *testing.T, env *storetest.Env, id string) bool {
+	t.Helper()
+	var released bool
+	require.NoError(t, env.SQL.QueryRowContext(context.Background(), `SELECT capacity_released FROM trigger_events WHERE id=$1`, id).Scan(&released))
+	return released
+}
+
+// B4-a: a root that left PENDING (Terminate's CANCELLED, or a missing row) is
+// not the fence. The release UPDATE itself requires the last start attempt to
+// be older than core.StartAttemptBound.
+func TestTriggerCapacityUnboundReleaseRequiresAgedStartAttempt(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	e := launchedUnbound(t, env, "inflight-event", "inflight-root", core.Pending())
+	_, err := env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=3 WHERE id=$1`, e.WorkflowID)
+	require.NoError(t, err)
+	ok, err := store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "start_fenced_and_absent")
+	require.NoError(t, err)
+	require.False(t, ok, "a start stamped inside the bound may still be accepted")
+	_, err = env.SQL.ExecContext(ctx, `DELETE FROM workflows WHERE id=$1`, e.WorkflowID)
+	require.NoError(t, err)
+	ok, err = store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "start_fenced_and_absent")
+	require.NoError(t, err)
+	require.False(t, ok, "a missing root does not stand in for the aged stamp")
+	ageStartAttempt(t, env, e.EventID)
+	ok, err = store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "start_fenced_and_absent")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+// A retry's claim refreshes the stamp under the event row lock, so an aged
+// slot it claims is not releasable once its root then leaves PENDING; and a
+// slot already released refuses the claim.
+func TestTriggerCapacityRetryClaimRacesAgedRelease(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	e := launchedUnbound(t, env, "retry-event", "retry-root", core.Pending())
+	ageStartAttempt(t, env, e.EventID)
+	// The claim holds the event row while the release waits on it.
+	claimedTx := make(chan struct{})
+	commit := make(chan struct{})
+	txDone := make(chan error, 1)
+	go func() {
+		txDone <- env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+			ok, err := store.ClaimWorkflowStart(ctx, env.ORM, e.WorkflowID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errors.New("claim refused")
+			}
+			close(claimedTx)
+			<-commit
+			return nil
+		})
+	}()
+	<-claimedTx
+	// Terminate's write lands on the root as soon as the claim commits.
+	terminated := make(chan error, 1)
+	go func() {
+		_, err := env.SQL.ExecContext(ctx, `UPDATE workflows SET state=3,stop_reason=3 WHERE id=$1`, e.WorkflowID)
+		terminated <- err
+	}()
+	released := make(chan bool, 1)
+	go func() {
+		<-terminated
+		ok, err := store.ReleaseUnboundTriggerCapacity(ctx, env.ORM, e, "start_fenced_and_absent")
+		require.NoError(t, err)
+		released <- ok
+	}()
+	close(commit)
+	require.NoError(t, <-txDone)
+	require.False(t, <-released, "the claim's fresh stamp keeps the in-flight retry's slot")
+	require.False(t, releasedFlag(t, env, e.EventID))
+
+	// Released first: the claim must not start a run beside the freed slot.
+	r := launchedUnbound(t, env, "released-event", "released-root", core.Pending())
+	_, err := env.SQL.ExecContext(ctx, `UPDATE trigger_events SET capacity_released=true,capacity_released_at=now(),capacity_release_reason='test' WHERE id=$1`, r.EventID)
+	require.NoError(t, err)
+	ok, err := store.ClaimWorkflowStart(ctx, env.ORM, r.WorkflowID)
+	require.NoError(t, err)
+	require.False(t, ok, "a released slot is not this start's to use")
+
+	// A root with no capacity slot claims exactly as before.
+	seedRun(t, env, "plain-root", core.Pending())
+	ok, err = store.ClaimWorkflowStart(ctx, env.ORM, "plain-root")
+	require.NoError(t, err)
+	require.True(t, ok)
+}
+
+// The failed-start fence moves the root through the shared status writer
+// (completed_at stamped), and only once both the failure and the attempt aged.
+func TestTriggerCapacityFailedStartFenceRequiresAgedAttempt(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	e := launchedUnbound(t, env, "fence-event", "fence-root", core.Pending())
+	_, err := env.SQL.ExecContext(ctx, `UPDATE workflows SET start_failed_at = now() - interval '1 hour' WHERE id=$1`, e.WorkflowID)
+	require.NoError(t, err)
+	ok, err := store.FenceUnboundTriggerCapacityStart(ctx, env.ORM, e)
+	require.NoError(t, err)
+	require.False(t, ok, "the launch's own attempt is still inside the bound")
+	ageStartAttempt(t, env, e.EventID)
+	ok, err = store.FenceUnboundTriggerCapacityStart(ctx, env.ORM, e)
+	require.NoError(t, err)
+	require.True(t, ok)
+	var state, reason int
+	var completed bool
+	require.NoError(t, env.SQL.QueryRowContext(ctx, `SELECT state, stop_reason, completed_at IS NOT NULL FROM workflows WHERE id=$1`, e.WorkflowID).Scan(&state, &reason, &completed))
+	require.Equal(t, core.Failed().State, core.WorkflowState(state))
+	require.True(t, completed)
 }
