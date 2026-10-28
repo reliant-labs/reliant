@@ -42,6 +42,8 @@ describe("buildOrgNav", () => {
   it("lists Observability's views as its children, in the console's order", () => {
     const obs = buildOrgNav({ page: OVERVIEW, apps: APPS }).items[1]!;
     expect(obs.children?.map((child) => child.label)).toEqual([
+      "Service graph",
+      "RPC explorer",
       "Errors",
       "Sessions",
       "Logs",
@@ -52,6 +54,8 @@ describe("buildOrgNav", () => {
       "Alerts",
     ]);
     expect(obs.children?.map((child) => child.href)).toEqual([
+      "/forge/observability/graph",
+      "/forge/observability/rpc",
       "/forge/observability/errors",
       "/forge/observability/sessions",
       "/forge/observability/logs",

@@ -434,6 +434,16 @@ describe("the environment scope", () => {
 });
 
 describe("the nav", () => {
+  it("clears every graph-only search key when leaving Observability while preserving the environment scope", async () => {
+    const user = userEvent.setup();
+    const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
+    await screen.findByTestId("page");
+    expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
+    await user.click(screen.getByRole("link", { name: "Secrets" }));
+    await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
+    expect(router.state.location.search).toEqual({ env: "e2e" });
+  });
+
   it("opens an environment's page from Configure › Environments", async () => {
     const user = userEvent.setup();
     const router = renderAt("/forge/p/alpha/environments?env=prod");
