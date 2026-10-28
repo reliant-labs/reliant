@@ -126,6 +126,11 @@ type Reconciler struct {
 	// started, so the set and the loop's read are on different goroutines.
 	bgDaemons atomic.Pointer[backgroundProcessDaemonsHolder]
 
+	// heldRunActivity is where reassertHeldRunWork says a held run's
+	// background work keeps its machine awake. Unset disables it. Atomic for
+	// the same reason as bgDaemons.
+	heldRunActivity atomic.Pointer[heldRunActivityHolder]
+
 	// queued starts the runs that deliver undelivered messages: a wedged
 	// run's, and those queued for a machine that is back. Unset disables
 	// both. Atomic for the same reason as bgDaemons.

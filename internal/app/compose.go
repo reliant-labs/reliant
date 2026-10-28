@@ -817,6 +817,7 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Queued:     g.QueuedDeliverer(),
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
+		Activity:   g.DaemonStatePublisher(),
 	})
 }
 

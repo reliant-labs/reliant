@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -1083,6 +1084,9 @@ type WorkflowReconcilerDeps struct {
 	ResetGuard *v2workflow.ResetAttemptGuard
 	Queued     queueddelivery.Service
 	Router     *APIDaemonRouter
+	// Activity is where a held run's still-running background work is
+	// published as machine activity, so a suspend does not kill it.
+	Activity *daemonstate.Publisher
 }
 
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
@@ -1099,6 +1103,9 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	if d.Activity != nil {
+		r.SetHeldRunActivity(d.Activity)
+	}
 	return &WorkflowReconciler{r}, nil
 }
 
