@@ -3,9 +3,11 @@
   "steps": {
     "plan": 25,
     "npm-r": 60,
-    "npm-frontends-web": 60,
+    "pnpm-frontends-web": 60,
+    "npm-electron": 60,
     "npm-tools-protoc-gen-es": 15,
     "generate": 60,
+    "docs": 60,
     "plan-2": 20,
     "build": 45,
     "test": 120,

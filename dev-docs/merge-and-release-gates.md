@@ -1,13 +1,16 @@
 # The merge gate and the release gate
 
-**Owner contract (supersedes historical measurements/policies below): ≤300s on an idle 16-CPU host.**
-Merge runs affected compile, vet/forge lint, `go test -short` (no race), and proto lint.
-Web typecheck + affected vitest run only for a web change; migration checks only for changed migrations.
-Full test fallbacks, docs, Electron, production renderer builds, full lint, integration and e2e run at release.
-`--regen` runs only for changed generator inputs; generated-output-only diffs do not force generation.
-`scripts/merge-gate-budgets.json` pins step budgets; overruns say **GATE-HEALTH / requirement NOT MET**, not PR blame.
-Summary starts with exact failing Go tests + packages and vitest files + test names, never a log tail.
-The historical 236s warm run is not proof of the idle-host requirement or cold/broad batches.
+**Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
+2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
+scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
+whole Go `-short` lane and electron's tests (5m13s and 40s measured on a loaded
+host), and for a full web fallback `tsc -b` over every web source; the whole vitest
+suite (1033 files, ~22 min loaded) is the one lane left to the release gate's
+`task test`, noted in the summary. It also runs electron's tests when electron reads
+a changed file, and the docs-generate no-op check when a docs input changed. A
+deleted Go package compiles the module instead of forcing every lane.
+`scripts/merge-gate-budgets.json` pins step budgets; an overrun prints
+**GATE-HEALTH** (a gate-speed regression to fix, not PR blame).
 
 reliant has two local gates. The **merge gate** runs before every merge and
 judges only what the change can affect. The **release gate** runs on main
@@ -24,7 +27,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b --force` (checkout-local state) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration changed; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b --force` (checkout-local state) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
