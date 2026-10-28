@@ -91,11 +91,38 @@ func generate() ([]byte, error) {
 	}
 	buf.WriteString("}\n")
 
+	// The tag vocabulary, for validating tools_config filter entries
+	// (`tag:X`) against something real. Same argument as the params above:
+	// TagDescriptions is the single list the rest of the system reads, so
+	// projecting it here keeps a renamed tag from silently matching nothing.
+	buf.WriteString("\n")
+	buf.WriteString("// generatedKnownTags is the tool-tag vocabulary, projected from the\n")
+	buf.WriteString("// registry's TagDescriptions.\n")
+	buf.WriteString("var generatedKnownTags = []string{\n")
+	for _, tag := range knownTags() {
+		fmt.Fprintf(&buf, "\t%q,\n", tag)
+	}
+	buf.WriteString("}\n")
+
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("format generated source: %w\n%s", err, buf.String())
 	}
 	return formatted, nil
+}
+
+// knownTags is the tag vocabulary, sorted. It comes from TagDescriptions —
+// the same list TestTagDescriptionsAreComplete keeps complete — rather than
+// from the tags tools happen to carry, because a tag with no carrier today
+// (tag:mcp expands against the chat's live MCP tools, not the static
+// registry) is still a tag a workflow may legitimately name.
+func knownTags() []string {
+	tags := make([]string, 0, len(tools.TagDescriptions))
+	for tag := range tools.TagDescriptions {
+		tags = append(tags, string(tag))
+	}
+	sort.Strings(tags)
+	return tags
 }
 
 // collect instantiates every registered tool and reads its parameter schema.

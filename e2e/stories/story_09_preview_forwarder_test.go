@@ -210,9 +210,11 @@ func TestStory09_PreviewForwarder(t *testing.T) {
 
 	t.Run("no_listener_gets_actionable_502", func(t *testing.T) {
 		t.Parallel()
-		port := unusedLoopbackPort(t)
+		port := reserveNoListenerLoopbackPort(t)
 		resp, body := get(t, fmt.Sprintf("/%d/", port))
 		require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+		require.Equal(t, "upstream", resp.Header.Get("X-Reliant-Preview-Error"))
+		require.Equal(t, "text/plain; charset=utf-8", resp.Header.Get("Content-Type"))
 		require.Contains(t, body, fmt.Sprintf("nothing is listening on port %d", port))
 		require.Contains(t, body, "start your dev server")
 	})
@@ -304,7 +306,80 @@ func listenV6OnlyPort(t *testing.T) net.Listener {
 	return nil
 }
 
-// unusedLoopbackPort finds a port with no listener on either loopback family.
+// reserveNoListenerLoopbackPort holds bound TCP sockets WITHOUT calling listen.
+// The kernel refuses real connects while preventing another parallel story (or
+// process) from taking the port. Closing a probe listener before the request is
+// not safe: a new owner can accept and reset HTTP, correctly producing the
+// forwarder's generic upstream error instead of its no-listener diagnostic.
+func reserveNoListenerLoopbackPort(t *testing.T) int {
+	t.Helper()
+	for attempt := 0; attempt < 20; attempt++ {
+		port, close4, err := bindNoListenerLoopback(syscall.AF_INET, 0)
+		require.NoError(t, err, "reserve IPv4 loopback without listening")
+		_, close6, err := bindNoListenerLoopback(syscall.AF_INET6, port)
+		if errors.Is(err, syscall.EADDRINUSE) {
+			close4()
+			continue // Another owner already has this port on IPv6.
+		}
+		if err != nil && !errors.Is(err, syscall.EADDRNOTAVAIL) && !errors.Is(err, syscall.EAFNOSUPPORT) {
+			close4()
+			require.NoError(t, err, "reserve IPv6 loopback without listening")
+		}
+		t.Cleanup(close4)
+		families := []struct{ network, host string }{{"tcp4", "127.0.0.1"}}
+		if close6 != nil {
+			t.Cleanup(close6)
+			families = append(families, struct{ network, host string }{"tcp6", "::1"})
+		}
+		// Pin the reservation itself: even an explicitly bound listener cannot
+		// take either address during the real forwarder's network attempt.
+		for _, family := range families {
+			ln, listenErr := net.Listen(family.network, net.JoinHostPort(family.host, fmt.Sprint(port)))
+			if ln != nil {
+				_ = ln.Close()
+			}
+			require.ErrorIs(t, listenErr, syscall.EADDRINUSE, "reserved %s port %d was available for takeover", family.network, port)
+		}
+		return port
+	}
+	t.Fatal("could not reserve a no-listener port on both loopback families")
+	return 0
+}
+
+// bindNoListenerLoopback owns one socket until its returned cleanup is called.
+// No SO_REUSEADDR/SO_REUSEPORT: this reservation must exclude other binders.
+func bindNoListenerLoopback(family, port int) (int, func(), error) {
+	fd, err := syscall.Socket(family, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	if err != nil {
+		return 0, nil, err
+	}
+	syscall.CloseOnExec(fd)
+	closeSocket := func() { _ = syscall.Close(fd) }
+	var addr syscall.Sockaddr = &syscall.SockaddrInet4{Port: port, Addr: [4]byte{127, 0, 0, 1}}
+	if family == syscall.AF_INET6 {
+		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, 1); err != nil {
+			closeSocket()
+			return 0, nil, err
+		}
+		addr = &syscall.SockaddrInet6{Port: port, Addr: [16]byte{15: 1}}
+	}
+	if err := syscall.Bind(fd, addr); err != nil {
+		closeSocket()
+		return 0, nil, err
+	}
+	bound, err := syscall.Getsockname(fd)
+	if err != nil {
+		closeSocket()
+		return 0, nil, err
+	}
+	if addr4, ok := bound.(*syscall.SockaddrInet4); ok {
+		return addr4.Port, closeSocket, nil
+	}
+	return bound.(*syscall.SockaddrInet6).Port, closeSocket, nil
+}
+
+// unusedLoopbackPort finds a candidate for the child server, which must bind it
+// itself. Do not use it for a no-listener assertion: it releases its probes.
 func unusedLoopbackPort(t *testing.T) int {
 	t.Helper()
 	for attempt := 0; attempt < 20; attempt++ {

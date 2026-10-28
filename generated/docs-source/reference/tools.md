@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (26 tools)
+- [Workflow Management](#workflow-management) (27 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (69 tools)
+- [Other Tools](#other-tools) (70 tools)
 
 ---
 
@@ -1338,6 +1338,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`create_trigger_activation`](#create_trigger_activation) | workflow | Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validat... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
+| [`draft_automation`](#draft_automation) | workflow, readonly | Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull... |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
 | [`enable_trigger`](#enable_trigger) | workflow | Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Intera... |
@@ -1436,6 +1437,18 @@ Permanently removes the scenario from the workflow.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### draft_automation
+
+**Tags:** `workflow`, `readonly`
+
+Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull request, a Slack message, an email) or workflow outcome that starts a run by itself.
+
+Use it when the user asks for something to happen on its own — "every weekday at 9, summarise failed CI", "when a PR is opened, review it", "when my deploy workflow fails, open an issue". Fill in when it runs and the prompt each run starts from; leave the workflow empty to use their default agent unless one clearly fits (list_workflows).
+
+It creates NOTHING. The user sees the draft as a card with "Review & create", which opens the automation dialog prefilled: there they choose the project, the machine it runs on and the account it writes as, and press Create. Never tell the user the automation is running or turned on; say it is drafted and ready for them to review. This tool never turns it on. Separate activation tools require interactive owner approval; a draft is not that approval.
 
 ---
 
@@ -2131,6 +2144,7 @@ _Miscellaneous tools and utilities._
 | [`github__labels_create`](#github__labels_create) | integration | Create a label in a repository with a name, a six-digit hex color and an optional description. It... |
 | [`github__labels_list`](#github__labels_list) | integration | List the labels defined in a repository (not the labels on one issue), following GitHub's paginat... |
 | [`github__pr_create`](#github__pr_create) | integration | Open a pull request merging head into base. The head branch must already be pushed (from a worksp... |
+| [`github__pr_enqueue`](#github__pr_enqueue) | integration | Enqueue an open, non-draft, same-repository pull request targeting the default branch with its na... |
 | [`github__pr_get`](#github__pr_get) | integration | Return one pull request: title, body, state, draft and merged flags, the head and base refs (bran... |
 | [`github__pr_list_files`](#github__pr_list_files) | integration | List the files a pull request changes: filename, status (added, modified, removed, renamed, ...),... |
 | [`github__pr_review_comment_reply`](#github__pr_review_comment_reply) | integration | Post a reply to an inline review comment, in the same thread. comment_id is the id of a comment i... |
@@ -2468,7 +2482,15 @@ List the labels defined in a repository (not the labels on one issue), following
 
 **Tags:** `integration`
 
-Open a pull request merging head into base. The head branch must already be pushed (from a workspace, or created through GitHub). head is a branch name, or owner:branch for a branch in a fork. A pull request cannot be created with labels in the same request; add them afterwards with issue.labels.add using the returned number. GitHub answers 422 when the branches are identical, have no commits between them, or a pull request for them is already open; the message says which. Merging is not an action here: a person merges. Returns the pull request's number, id, node id and URL.
+Open a pull request merging head into base. The head branch must already be pushed (from a workspace, or created through GitHub). head is a branch name, or owner:branch for a branch in a fork. A pull request cannot be created with labels in the same request; add them afterwards with issue.labels.add using the returned number. GitHub answers 422 when the branches are identical, have no commits between them, or a pull request for them is already open; the message says which. Merging is not a direct action here; pr.enqueue can request GitHub's native queue without bypassing rules. Returns the pull request's number, id, node id and URL.
+
+---
+
+### github__pr_enqueue
+
+**Tags:** `integration`
+
+Enqueue an open, non-draft, same-repository pull request targeting the default branch with its native merge queue enabled. repository_id and expectedHeadOid must match authenticated current GitHub facts. Forks are deliberately refused initially. Returns accepted queue entry identity and position, not a merge or auto-merge flag. GitHub permissions and required checks remain authoritative; this action does not verify reviewer App identity or attest a trusted review. A private coordinator must validate its server-owned review before calling. Private organization repositories require GitHub Enterprise Cloud for native queue availability. No direct merge, queue jumping or protection bypass. Unknown mutation outcomes are reconciled by reading membership, not replayed blindly. Retrying starts with another authenticated membership/head read.
 
 ---
 

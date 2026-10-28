@@ -227,6 +227,9 @@ func (d *daemonClient) activateSession(s *gatewaySession) {
 	d.session.Store(s)
 	d.sendHeldResults(s, func(h *heldResult) bool { return !h.sentOn.open() })
 	d.retireIdleDrainingSessions()
+	d.restartMu.Lock()
+	d.publishRestartLocked()
+	d.restartMu.Unlock()
 }
 
 // beginSessionDrain records that the gateway serving s is draining. It reports
@@ -301,8 +304,14 @@ func (d *daemonClient) sessionEnded(s *gatewaySession) {
 // sends it: on the stream the request came in on while that is open, on the
 // current stream otherwise.
 func (d *daemonClient) sendToolResult(origin *gatewaySession, requestID string, result *toolexec.ExecutionResult) {
+	d.restartMu.Lock()
+	if d.restartAborted[requestID] {
+		d.restartMu.Unlock()
+		return
+	}
 	resp := d.toolResponse(requestID, result)
 	if requestID == "" {
+		d.restartMu.Unlock()
 		// Nothing could ever acknowledge it, or ask for it.
 		if err := d.reply(origin, resp); err != nil {
 			logSendFailure(logPrefix+" Failed to send tool response via stream", err, "request_id", requestID)
@@ -310,6 +319,7 @@ func (d *daemonClient) sendToolResult(origin *gatewaySession, requestID string, 
 		return
 	}
 	d.results.hold(requestID, resp, origin)
+	d.restartMu.Unlock()
 	for _, s := range []*gatewaySession{origin, d.session.Load()} {
 		if s.send(resp) == nil {
 			d.results.markSent(requestID, s)
@@ -335,6 +345,9 @@ func (d *daemonClient) sendHeldResults(s *gatewaySession, pick func(*heldResult)
 // handleToolResultAck forgets an acknowledged result. Idempotent: an ack for a
 // result already forgotten is a no-op.
 func (d *daemonClient) handleToolResultAck(requestID string) {
+	d.restartMu.Lock()
+	defer d.restartMu.Unlock()
+	defer d.restartProgressLocked()
 	h := d.results.ack(requestID)
 	if h == nil {
 		return

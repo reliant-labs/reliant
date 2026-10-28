@@ -4400,7 +4400,11 @@ type PreviewReplayRequest struct {
 	// Sender is who sent the original event, for templates that read
 	// trigger.sender. Carried here rather than on ReplayEvent because
 	// trigger.proto imports chat.proto, not the reverse.
-	Sender        *TriggerSender `protobuf:"bytes,4,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
+	Sender *TriggerSender `protobuf:"bytes,4,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
+	// Preview this owned automation, inline or declared, instead of a workflow's
+	// declaration. Uses its stored prompt/settings and the supplied sample payload.
+	// Returns the full seeded user message. Never enables, records or fires it.
+	TriggerId     *string `protobuf:"bytes,5,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4461,6 +4465,13 @@ func (x *PreviewReplayRequest) GetSender() *TriggerSender {
 		return x.Sender
 	}
 	return nil
+}
+
+func (x *PreviewReplayRequest) GetTriggerId() string {
+	if x != nil && x.TriggerId != nil {
+		return *x.TriggerId
+	}
+	return ""
 }
 
 type PreviewReplayResponse struct {
@@ -5059,14 +5070,17 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05event\x18\x01 \x01(\v2\x18.reliant.v1.TriggerEventR\x05event\x12!\n" +
 	"\ftrigger_name\x18\x02 \x01(\tR\vtriggerName\"O\n" +
 	"\x18ListReplayEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ReplayCandidateR\x06events\"\xc5\x01\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ReplayCandidateR\x06events\"\xf8\x01\n" +
 	"\x14PreviewReplayRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1a\n" +
 	"\bworkflow\x18\x02 \x01(\tR\bworkflow\x12/\n" +
 	"\x06replay\x18\x03 \x01(\v2\x17.reliant.v1.ReplayEventR\x06replay\x126\n" +
-	"\x06sender\x18\x04 \x01(\v2\x19.reliant.v1.TriggerSenderH\x00R\x06sender\x88\x01\x01B\t\n" +
-	"\a_sender\"\xc9\x01\n" +
+	"\x06sender\x18\x04 \x01(\v2\x19.reliant.v1.TriggerSenderH\x00R\x06sender\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"trigger_id\x18\x05 \x01(\tH\x01R\ttriggerId\x88\x01\x01B\t\n" +
+	"\a_senderB\r\n" +
+	"\v_trigger_id\"\xc9\x01\n" +
 	"\x15PreviewReplayResponse\x12E\n" +
 	"\x06inputs\x18\x01 \x03(\v2-.reliant.v1.PreviewReplayResponse.InputsEntryR\x06inputs\x12\x16\n" +
 	"\x06prompt\x18\x02 \x01(\tR\x06prompt\x1aQ\n" +
@@ -5134,7 +5148,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
 	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
-	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xb3\x0e\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xfd\x0e\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +
@@ -5165,8 +5179,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"project_id\x12q\n" +
 	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12_\n" +
 	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12Y\n" +
-	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01\x12\\\n" +
-	"\x0fDraftAutomation\x12\".reliant.v1.DraftAutomationRequest\x1a#.reliant.v1.DraftAutomationResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01\x12\xa5\x01\n" +
+	"\x0fDraftAutomation\x12\".reliant.v1.DraftAutomationRequest\x1a#.reliant.v1.DraftAutomationResponse\"I\xa2\xbb\x18E:C:AProposes an automation for review; only CreateTrigger persists itB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_trigger_proto_rawDescOnce sync.Once

@@ -75,7 +75,7 @@ function useSearchUpdater<T extends object>() {
 }
 
 export function ReleasesPage() {
-  const { forgeProject, env, setEnv, roster, href } = useForgeConsole();
+  const { forgeProject, env, roster, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as ReleasesSearch;
   const onSearch = useSearchUpdater<ReleasesSearch>();
   const { envs, loading } = useReleaseEnvs();
@@ -96,7 +96,6 @@ export function ReleasesPage() {
         search={search}
         onSearch={onSearch}
         releaseHref={releaseHref}
-        onSelectEnv={setEnv}
         promote={control}
         scopeIsLocal={roster.envs.some((candidate) => candidate.name === env && candidate.lifecycle === "local")}
       />

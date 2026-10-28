@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabase";
 import { getControlPlaneURL } from "../../lib/constants";
 import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
+import { AuthorizeOrgPicker, useAuthorizeOrg } from "../Orgs/AuthorizeOrgPicker";
 
 /**
  * CLI login consent: the human half of `forge login` / `reliant auth login`.
@@ -56,6 +57,8 @@ export function CliLogin() {
   const requested = (params.get("scope") ?? "").split(" ").filter(Boolean);
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  // `org` is forge's `login --org`: where the picker starts, never the answer.
+  const authorizeOrg = useAuthorizeOrg(params.get("org"));
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +89,7 @@ export function CliLogin() {
 
   const decide = useCallback(
     async (decision: "approve" | "deny") => {
-      if (phase.kind !== "ready") return;
+      if (phase.kind !== "ready" || (decision === "approve" && !authorizeOrg.ready)) return;
       setPhase({ kind: "submitting", email: phase.email, decision });
       const controlPlaneURL = getControlPlaneURL();
       if (!controlPlaneURL) {
@@ -105,11 +108,18 @@ export function CliLogin() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ query, approved: decision === "approve" }),
+          // The confirmed org wins over the request's `org` (docs/orgs.md).
+          // Approval is disabled until this choice can be shown and confirmed.
+          body: JSON.stringify({
+            query,
+            approved: decision === "approve",
+            ...(authorizeOrg.orgId ? { org_id: authorizeOrg.orgId } : {}),
+          }),
         });
         const data = (await response.json().catch(() => ({}))) as {
           redirect_to?: string;
           scopes?: string[];
+          org_id?: string;
           error_description?: string;
         };
         if (!response.ok || !data.redirect_to) {
@@ -126,7 +136,7 @@ export function CliLogin() {
         setPhase({ kind: "error", message: err instanceof Error ? err.message : "Login failed." });
       }
     },
-    [phase, query]
+    [phase, query, authorizeOrg.orgId, authorizeOrg.ready]
   );
 
   if (phase.kind === "loading") {
@@ -191,6 +201,15 @@ export function CliLogin() {
             <span className="text-muted-foreground">Signing in as</span>
             <span className="font-medium truncate ml-3">{phase.email}</span>
           </div>
+          <AuthorizeOrgPicker
+            orgs={authorizeOrg.orgs}
+            error={authorizeOrg.failed}
+            onRetry={authorizeOrg.retry}
+            orgId={authorizeOrg.orgId}
+            onChoose={authorizeOrg.choose}
+            disabled={busy}
+            noun="this login"
+          />
           {requested.length > 0 && (
             <div className="space-y-2 pt-1">
               <p className="text-xs text-muted-foreground uppercase tracking-wide">It asks to</p>
@@ -213,7 +232,12 @@ export function CliLogin() {
           <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void decide("deny")}>
             Deny
           </Button>
-          <Button variant="primary" className="flex-1" disabled={busy} onClick={() => void decide("approve")}>
+          <Button
+            variant="primary"
+            className="flex-1"
+            disabled={busy || !authorizeOrg.ready}
+            onClick={() => void decide("approve")}
+          >
             {busy && phase.decision === "approve" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Approve"}
           </Button>
         </div>

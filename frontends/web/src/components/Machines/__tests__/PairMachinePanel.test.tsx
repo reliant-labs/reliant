@@ -6,7 +6,8 @@
  * folds once Reliant is demonstrably installed, the terminal step says how to
  * open a terminal), and what counts as "connected" in each mode.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import { renderWithQuery as render } from "@/test/renderWithQuery";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,12 +31,20 @@ vi.mock("@/lib/constants", async (importOriginal) => ({
 
 const mockLookup = vi.fn();
 const mockDecide = vi.fn();
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  listMyOrganizations: async () => ({
+    orgs: [{ id: "org-a", name: "Acme", slug: "acme", role: "owner", isOwner: true, isDefault: true }],
+    defaultOrgId: "org-a",
+  }),
+}));
+vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.example.test", hasControlPlane: true }));
 vi.mock("@/services/controlPlane/pairing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/services/controlPlane/pairing")>();
   return {
     ...actual,
     lookupPendingMachine: (code: string) => mockLookup(code),
-    decidePendingMachine: (code: string, approved: boolean) => mockDecide(code, approved),
+    decidePendingMachine: (code: string, approved: boolean, orgId?: string | null) => mockDecide(code, approved, orgId),
   };
 });
 
@@ -92,7 +101,8 @@ describe("pairing by code", () => {
     expect(await screen.findByText("Approve machine build-box.local?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Approve" }));
 
-    expect(mockDecide).toHaveBeenCalledWith("BDFG-HJKL", true);
+    // The machine is approved into the org the picker shows (one org: the default).
+    await waitFor(() => expect(mockDecide).toHaveBeenCalledWith("BDFG-HJKL", true, "org-a"));
     expect(await screen.findByText(/Waiting for build-box.local to connect/)).toBeInTheDocument();
   });
 
@@ -102,7 +112,7 @@ describe("pairing by code", () => {
     await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(await screen.findByRole("button", { name: "Not my machine" }));
-    expect(mockDecide).toHaveBeenCalledWith("BDFG-HJKL", false);
+    expect(mockDecide).toHaveBeenCalledWith("BDFG-HJKL", false, null);
     expect(await screen.findByText(/Declined/)).toBeInTheDocument();
   });
 

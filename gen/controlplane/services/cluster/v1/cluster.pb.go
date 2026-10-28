@@ -269,7 +269,11 @@ func (x *Cluster) GetUpdatedAt() *timestamppb.Timestamp {
 }
 
 type ListClustersRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -302,6 +306,13 @@ func (x *ListClustersRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListClustersRequest.ProtoReflect.Descriptor instead.
 func (*ListClustersRequest) Descriptor() ([]byte, []int) {
 	return file_services_cluster_v1_cluster_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListClustersRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListClustersResponse struct {
@@ -350,8 +361,12 @@ func (x *ListClustersResponse) GetClusters() []*Cluster {
 }
 
 type GetClusterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,6 +404,13 @@ func (*GetClusterRequest) Descriptor() ([]byte, []int) {
 func (x *GetClusterRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *GetClusterRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -438,8 +460,12 @@ func (x *GetClusterResponse) GetCluster() *Cluster {
 }
 
 type RemoveClusterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -477,6 +503,13 @@ func (*RemoveClusterRequest) Descriptor() ([]byte, []int) {
 func (x *RemoveClusterRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *RemoveClusterRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -570,7 +603,11 @@ type ConnectClusterRequest struct {
 	//   present         it is replaced by this one;
 	//   present, empty  the registration is removed, and the store stops
 	//                   trusting the cluster.
-	Issuer        *ClusterIssuerRegistration `protobuf:"bytes,8,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	Issuer *ClusterIssuerRegistration `protobuf:"bytes,8,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,9,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -645,6 +682,13 @@ func (x *ConnectClusterRequest) GetIssuer() *ClusterIssuerRegistration {
 		return x.Issuer
 	}
 	return nil
+}
+
+func (x *ConnectClusterRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 // ClusterIssuerRegistration declares the service-account issuer of a cluster.
@@ -906,24 +950,32 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\x06issuer\x18\x0f \x01(\v2\x1e.controlplane.v1.ClusterIssuerR\x06issuer\x12%\n" +
 	"\x0eca_fingerprint\x18\x10 \x01(\tR\rcaFingerprint\x129\n" +
 	"\n" +
-	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\x04authR\rcloud_cluster\"\x15\n" +
-	"\x13ListClustersRequest\"L\n" +
+	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\x04authR\rcloud_cluster\"<\n" +
+	"\x13ListClustersRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"L\n" +
 	"\x14ListClustersResponse\x124\n" +
-	"\bclusters\x18\x01 \x03(\v2\x18.controlplane.v1.ClusterR\bclusters\"#\n" +
+	"\bclusters\x18\x01 \x03(\v2\x18.controlplane.v1.ClusterR\bclusters\"J\n" +
 	"\x11GetClusterRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"H\n" +
 	"\x12GetClusterResponse\x122\n" +
-	"\acluster\x18\x01 \x01(\v2\x18.controlplane.v1.ClusterR\acluster\"&\n" +
+	"\acluster\x18\x01 \x01(\v2\x18.controlplane.v1.ClusterR\acluster\"M\n" +
 	"\x14RemoveClusterRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RemoveClusterResponse\"\x9d\x02\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x17\n" +
+	"\x15RemoveClusterResponse\"\xc4\x02\n" +
 	"\x15ConnectClusterRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aaddress\x18\x03 \x01(\tR\aaddress\x12\x15\n" +
 	"\x06ca_pem\x18\x04 \x01(\tR\x05caPem\x12\x14\n" +
 	"\x05token\x18\x06 \x01(\tR\x05token\x12D\n" +
 	"\x10token_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0etokenExpiresAt\x12B\n" +
-	"\x06issuer\x18\b \x01(\v2*.controlplane.v1.ClusterIssuerRegistrationR\x06issuerJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06R\x04authR\rcloud_cluster\"o\n" +
+	"\x06issuer\x18\b \x01(\v2*.controlplane.v1.ClusterIssuerRegistrationR\x06issuer\x12\x1a\n" +
+	"\x06org_id\x18\t \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_idJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06R\x04authR\rcloud_cluster\"o\n" +
 	"\x19ClusterIssuerRegistration\x12\x16\n" +
 	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12\x1c\n" +
 	"\bdiscover\x18\x02 \x01(\bH\x00R\bdiscover\x12\x14\n" +
@@ -1016,6 +1068,10 @@ func file_services_cluster_v1_cluster_proto_init() {
 	if File_services_cluster_v1_cluster_proto != nil {
 		return
 	}
+	file_services_cluster_v1_cluster_proto_msgTypes[1].OneofWrappers = []any{}
+	file_services_cluster_v1_cluster_proto_msgTypes[3].OneofWrappers = []any{}
+	file_services_cluster_v1_cluster_proto_msgTypes[5].OneofWrappers = []any{}
+	file_services_cluster_v1_cluster_proto_msgTypes[7].OneofWrappers = []any{}
 	file_services_cluster_v1_cluster_proto_msgTypes[8].OneofWrappers = []any{
 		(*ClusterIssuerRegistration_Discover)(nil),
 		(*ClusterIssuerRegistration_Jwks)(nil),

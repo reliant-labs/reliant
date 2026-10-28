@@ -1,5 +1,6 @@
 import { useState, useEffect, Suspense, lazy, useRef, useMemo } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { SettingsHeader } from "./SettingsHeader";
+import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import {
   SettingsNavigation,
   getVisibleSettingsSectionIds,
@@ -20,11 +21,14 @@ interface SettingsViewerTabProps {
   // Called with the next section when the user clicks a nav item or uses arrow
   // keys. SettingsPage turns this into a navigate({to:'/settings/$section'}).
   onSectionChange: (section: SettingsSection) => void;
+  onClose: () => void;
 }
 
-export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTabProps) {
+export function SettingsViewerTab({ section, onSectionChange, onClose }: SettingsViewerTabProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const chrome = useTitleBarChrome();
 
   // Same order as SettingsNavigation sidebar (single source: settingsSections)
   const visibleSections = useMemo(
@@ -45,22 +49,10 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
   // Keyboard navigation for settings tabs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if we're in settings mode and not typing in an input
-      // Check if settings container is visible
-      if (!containerRef.current) return;
-
+      // Arrow keys belong to the navigation only, never a form, dialog or
+      // the exit button. Keep focus with the section the user just selected.
       const target = e.target as HTMLElement;
-      const isInputField =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.contentEditable === "true" ||
-        target.closest("input") !== null ||
-        target.closest("textarea") !== null ||
-        target.closest("[contenteditable='true']") !== null;
-
-      if (isInputField) {
-        return; // Don't interfere with typing
-      }
+      if (!navigationRef.current?.contains(target) || !target.closest("button[aria-current], button[aria-label]")) return;
 
       // Handle ArrowUp and ArrowDown for navigation
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -80,6 +72,8 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
         const newSection = visibleSections[newIndex];
         if (newSection) {
           onSectionChange(newSection);
+          const buttons = navigationRef.current.querySelectorAll<HTMLButtonElement>("nav button");
+          buttons[newIndex]?.focus();
         }
       }
     };
@@ -111,37 +105,27 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
   }, []);
 
   return (
-    <div ref={containerRef} className="flex h-full min-w-[500px] bg-background">
-      {/* Settings Navigation Sidebar */}
+    <div ref={containerRef} className="flex h-full min-w-0 bg-background">
+      {/* The exit stays put while a short window scrolls its section list. */}
       <aside
+        aria-label="Settings"
         className={cn(
-          "flex-shrink-0 overflow-y-auto border-r border-border/60 bg-card transition-all duration-200",
-          isCollapsed ? "w-16 min-w-16" : "w-[220px] min-w-[220px]"
+          "flex shrink-0 flex-col border-r border-border/60 bg-card",
+          // macOS's native traffic lights need 80px even in the compact rail.
+          isCollapsed ? (chrome.isMac && !chrome.isFullscreen ? "w-24" : "w-16") : "w-[220px]",
         )}
       >
-        <div className={cn("px-3 pb-2 pt-3", isCollapsed && "px-2")}>
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 p-2",
-              isCollapsed && "justify-center p-1.5"
-            )}
-          >
-            <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border/50 bg-card text-muted-foreground">
-              <SettingsIcon className="h-3.5 w-3.5" />
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0">
-                <h1 className="truncate text-sm font-semibold text-foreground">Settings</h1>
-                <p className="truncate text-xs text-muted-foreground">Configure Reliant</p>
-              </div>
-            )}
-          </div>
+        {chrome.isMac && !chrome.isFullscreen && (
+          <div aria-hidden="true" className="h-10 shrink-0" style={chrome.dragRegionStyle} />
+        )}
+        <SettingsHeader onClose={onClose} isCollapsed={isCollapsed} {...chrome} />
+        <div ref={navigationRef} className="min-h-0 flex-1 overflow-y-auto">
+          <SettingsNavigation
+            activeSection={section}
+            onSectionChange={onSectionChange}
+            isCollapsed={isCollapsed}
+          />
         </div>
-        <SettingsNavigation
-          activeSection={section}
-          onSectionChange={onSectionChange}
-          isCollapsed={isCollapsed}
-        />
       </aside>
 
       {/* Settings Content */}

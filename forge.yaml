@@ -40,11 +40,9 @@ config:
     enforce_typed_access: error
 lint:
     rules:
-        # forge's D3 rule ships hard-ERROR with no rollout default, and reliant
-        # has 189 mutating rpcs with no `(forge.v1.method).activity`
-        # declaration. Warn while the declarations are written; this goes back
-        # to error (delete the entry) once the D3 declarations land.
-        forgeconv-activity-declared: warn
+        # P7b Z: activity declarations are complete. Enforce them now rather
+        # than waiting for forge's v0.1.48 rollout default.
+        forgeconv-activity-declared: error
         # forge #993's tracing rules ship hard-ERROR, and reliant has 106
         # findings at the pin that introduced them (61 log-without-ctx, 18
         # raw-http-client, 18 contract-uninstrumented, 9 raw-sql-open). Warn

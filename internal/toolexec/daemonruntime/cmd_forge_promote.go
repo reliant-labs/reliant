@@ -165,6 +165,9 @@ type forgePromotePlanFacts struct {
 
 // forgePromoteArgs are the fields both commands need.
 type forgePromoteArgs struct {
+	// OrgID is the org forge acts in for this request (the web's active org).
+	// See ForgeOrgEnv. Empty: the daemon session's own org.
+	OrgID       string `json:"org_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	// Env is the environment to bind. Passed as `--to <env>`.
 	Env string `json:"env"`
@@ -328,6 +331,10 @@ func handleForgePromotePlan(ctx context.Context, payload []byte) ([]byte, error)
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
+	}
 	if err := req.validate(); err != nil {
 		return nil, err
 	}
@@ -423,6 +430,10 @@ func handleForgePromoteApply(ctx context.Context, payload []byte) ([]byte, error
 	var req forgePromoteApplyRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
 	}
 	if err := req.validate(); err != nil {
 		return nil, err

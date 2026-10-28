@@ -102,6 +102,8 @@ const SIGNALS_ON = (signal: string) => (
 );
 
 export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
+  graph: { about: "Service graph shows observed process dependencies, separate declared metadata, and explicit coverage gaps." },
+  rpc: { about: "RPC explorer browses observed methods and verified declared schemas and capabilities. It never executes requests." },
   overview: {
     about: "This page leads with requests, error rate and latency for every service and frontend, each marked with your releases.",
     source: "Forge services report requests, errors and latency on their own; a forge frontend adds page loads and web vitals.",

@@ -231,6 +231,11 @@ message ExchangeTokenRequest {
   // scopes requested. Empty asks for every exchangeable scope the calling
   // token holds.
   repeated string scopes = 2;
+  // org_id is the org the minted token acts in, which must be one the calling
+  // session's person belongs to. Unset: the org the calling session itself
+  // acts in. The control plane checks membership and clips the scopes to the
+  // person's grants IN that org.
+  optional string org_id = 3;
 }
 
 message ExchangeTokenResponse {
@@ -238,6 +243,7 @@ message ExchangeTokenResponse {
   string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
   string expires_at = 3;    // RFC 3339
   repeated string scopes = 4;  // What was actually granted
+  string org_id = 5;           // The org the token acts in
 }
 
 message GetGitTokenRequest {

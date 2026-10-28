@@ -1,79 +1,58 @@
 import { ArrowLeft, X, Activity } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { cn } from "../../lib/utils";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
-import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
+import type { CSSProperties } from "react";
 
 interface SettingsHeaderProps {
   onClose: () => void;
+  isCollapsed: boolean;
+  isElectron: boolean;
+  dragRegionStyle: CSSProperties;
+  noDragRegionStyle: CSSProperties;
 }
 
-export function SettingsHeader({ onClose }: SettingsHeaderProps) {
-  const {
-    isElectron,
-    trafficLightPadding,
-    dragRegionStyle,
-    noDragRegionStyle,
-  } = useTitleBarChrome({ collapsedPadding: "8px" });
-
+/** The sidebar's unboxed title and always-reachable exit, not a second title bar. */
+export function SettingsHeader({ onClose, isCollapsed, isElectron, dragRegionStyle, noDragRegionStyle }: SettingsHeaderProps) {
   return (
-    <header
-      className={`relative z-[100] flex h-12 select-none items-center border-b border-border/60 bg-card dense-ui ${isElectron ? "cursor-move" : ""}`}
-      style={dragRegionStyle}
-    >
-      {/* Left side - back/close button. Padded to clear the macOS traffic
-          lights in Electron (only on mac, only out of fullscreen). */}
-      <div
-        className="flex items-center transition-[padding] duration-200 ease-in-out"
-        style={{ paddingLeft: trafficLightPadding }}
-      >
-        <div
-          className="flex cursor-default items-center"
+    <header className="flex shrink-0 select-none flex-wrap items-center gap-2 p-2" style={dragRegionStyle}>
+      <Tooltip content={isElectron ? "Close Settings (Esc)" : "Back to app (Esc)"} side="right" delay={300}>
+        <button
+          type="button"
+          onClick={onClose}
           style={noDragRegionStyle}
+          className={cn(
+            "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            isCollapsed ? "w-11" : "px-3",
+          )}
+          aria-label={isElectron ? "Close Settings" : "Back to app"}
         >
-          {/* Close button — X in Electron (matches window controls aesthetic),
-              back arrow on web (no window-close semantics in a browser tab) */}
-          <Tooltip
-            content={isElectron ? "Close Settings (Esc)" : "Back to app (Esc)"}
-            side="bottom"
-            delay={300}
+          {isElectron ? <X className="h-4 w-4" aria-hidden="true" /> : <ArrowLeft className="h-4 w-4" aria-hidden="true" />}
+          {!isCollapsed && <span>{isElectron ? "Close" : "Back"}</span>}
+        </button>
+      </Tooltip>
+      {!isCollapsed && <span className="text-sm font-semibold text-foreground">Settings</span>}
+      {isDev && !isCollapsed && (
+        <Tooltip content="Open Temporal UI" side="bottom" delay={300}>
+          <button
+            type="button"
+            aria-label="Open Temporal UI"
+            style={noDragRegionStyle}
+            onClick={() => {
+              const port = window.RELIANT_CONFIG?.temporalUIPort || 8233;
+              void openExternalLink(`http://localhost:${port}`);
+            }}
+            className="ml-auto rounded-md p-1.5 text-muted-foreground hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <button
-              onClick={onClose}
-              className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70"
-              aria-label={isElectron ? "Close Settings" : "Back to app"}
-            >
-              {isElectron ? <X className="h-4 w-4" /> : <ArrowLeft className="h-4 w-4" />}
-              <span>{isElectron ? "Close" : "Back"}</span>
-            </button>
-          </Tooltip>
-        </div>
-      </div>
-
-      {/* Draggable filler */}
-      <div className="flex-1" style={dragRegionStyle} />
-
-      {/* Right side - secondary controls */}
-      <div
-        className="flex cursor-default items-center gap-1 pr-2"
-        style={noDragRegionStyle}
-      >
-        {/* Dev-only: Temporal UI button */}
-        {isDev && (
-          <Tooltip content="Open Temporal UI" side="bottom" delay={300}>
-            <button
-              onClick={() => {
-                const temporalUIPort = window.RELIANT_CONFIG?.temporalUIPort || 8233;
-                const temporalUIUrl = `http://localhost:${temporalUIPort}`;
-                void openExternalLink(temporalUIUrl);
-              }}
-              className="rounded-md p-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-              aria-label="Open Temporal UI"
-            >
-              <Activity className="h-4 w-4" />
-            </button>
-          </Tooltip>
-        )}
+            <Activity className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      )}
+      {/* Keep the current organization reachable when the sidebar becomes a rail. */}
+      <div className="min-w-0 w-full overflow-hidden" style={noDragRegionStyle}>
+        <OrgSwitcher />
       </div>
     </header>
   );

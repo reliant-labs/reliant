@@ -127,11 +127,11 @@ func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID strin
     SELECT id, chat_id FROM workflows WHERE id = ?0
     UNION ALL SELECT w.id, w.chat_id FROM workflows w JOIN tree t ON w.parent_id = t.id AND w.chat_id = t.chat_id
 ), picked AS (
- SELECT ` + columnsOf[StepExecution]("se") + ` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+ SELECT `+columnsOf[StepExecution]("se")+` FROM step_executions se JOIN tree t ON t.id = se.workflow_id
  WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'SaveMessage', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
  ORDER BY se.created_at DESC, se.id DESC LIMIT ?1
 ), budgeted AS (
- SELECT ` + columnsOf[StepExecution]("picked") + `, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
+ SELECT `+columnsOf[StepExecution]("picked")+`, sum(least(coalesce(octet_length(output_json), 0), 16385) + least(coalesce(octet_length(error_message), 0), 16385))
  OVER (ORDER BY created_at DESC, id DESC) AS scan_bytes FROM picked
 )
 SELECT se.id, se.workflow_id, se.step_id, se.activity_name,

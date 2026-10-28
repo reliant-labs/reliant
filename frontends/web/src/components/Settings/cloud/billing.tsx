@@ -113,6 +113,7 @@ import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
 // proxies to admin-api and therefore could never reach these RPCs at all.
 import { DeployUsageSection } from "./usage/DeployUsageSection";
 import { useDeployUsage } from "./usage/useDeployUsage";
+import { useActiveOrg } from "@/hooks/useOrgs";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -579,7 +580,7 @@ function OverviewTab({
   // number — the runway — so it is deliberately not allowed to gate anything:
   // if it fails or is empty, the credit band drops one line and every control
   // still works.
-  const orgId = walletQ.data?.overview?.organization?.id ?? "";
+  const orgId = useActiveOrg().activeOrgId ?? "";
   const spendWindow = useMemo(() => {
     const end = new Date();
     const start = new Date(end);

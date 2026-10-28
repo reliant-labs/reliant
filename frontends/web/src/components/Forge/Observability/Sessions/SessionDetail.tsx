@@ -110,7 +110,7 @@ function SessionBody({
   const [live] = useState(() => isLive(session));
   const now = Date.now();
 
-  const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined });
+  const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined, assignee: undefined });
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
 
   return (

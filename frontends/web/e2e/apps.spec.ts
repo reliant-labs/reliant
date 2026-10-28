@@ -11,7 +11,9 @@ import { PHONE } from './mobileMocks';
 test.describe('Apps', () => {
   test('the Apps page lists every app with its live links per environment', async ({ page }) => {
     await mockAppsBackend(page);
-    await page.goto('/apps');
+    // The index is ready when its cards render; an unrelated Monaco CDN
+    // loader can leave the document load event pending (CI trace 40471064815).
+    await page.goto('/apps', { waitUntil: 'domcontentloaded' });
 
     const store = page.getByTestId('app-card-storefront');
     await expect(store).toBeVisible({ timeout: 15_000 });
@@ -107,8 +109,12 @@ test.describe('Apps', () => {
     await page.goto('/forge/p/storefront');
     const live = page.getByTestId('overview-live-links');
     await expect(live).toBeVisible({ timeout: 15_000 });
-    await expect(live.getByTestId('overview-live-prod').getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toBeVisible();
-    await expect(live.getByTestId('overview-live-staging')).toBeVisible();
+    // Overview separates hosted frontends from API endpoints, rather than
+    // mixing both into the API URL strip. Neither live link may disappear.
+    await expect(live.getByTestId('overview-live-prod').getByRole('link', { name: /calm-heron\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://calm-heron.reliantapps.dev');
+    await expect(live.getByTestId('overview-live-staging').getByRole('link', { name: /brisk-lynx\.reliantapps\.dev/ })).toBeVisible();
+    const frontends = page.getByRole('list', { name: 'Frontends' });
+    await expect(frontends.getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
   });
 
   test('onboarding offers building an app as a peer of chatting', async ({ page }) => {

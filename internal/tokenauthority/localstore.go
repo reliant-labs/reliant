@@ -80,6 +80,9 @@ func (s *LocalStore) MintForUser(ctx context.Context, req MintRequest) (Minted, 
 	if strings.TrimSpace(req.UserID) == "" {
 		return Minted{}, fmt.Errorf("%w: user id is required", fat.ErrInvalidGrant)
 	}
+	if req.OrgID != "" && req.OrgID != req.UserID {
+		return Minted{}, fmt.Errorf("%w: a self-hosted server has no organizations to mint in", fat.ErrInvalidGrant)
+	}
 	if err := grant.Validate(s.now()); err != nil {
 		return Minted{}, err
 	}

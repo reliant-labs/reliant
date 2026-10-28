@@ -27,10 +27,12 @@ type fakeExchanger struct {
 	calls   []string
 	minted  int
 	lastAud string
+	orgs    []string
 }
 
-func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience string, scopes []string) (Exchanged, error) {
+func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience string, scopes []string, orgID string) (Exchanged, error) {
 	f.calls = append(f.calls, server)
+	f.orgs = append(f.orgs, orgID)
 	f.lastAud = audience
 	if err := f.refuse[server]; err != nil {
 		return Exchanged{}, err
@@ -58,8 +60,14 @@ func (f *fakeExchanger) narrow(asked []string) []string {
 
 func newTestHelper(t *testing.T, sessions []Session, ex *fakeExchanger, clock *time.Time) Service {
 	t.Helper()
+	return newOrgHelper(t, sessions, ex, clock, "")
+}
+
+func newOrgHelper(t *testing.T, sessions []Session, ex *fakeExchanger, clock *time.Time, org string) Service {
+	t.Helper()
 	ex.now = func() time.Time { return *clock }
 	return New(Deps{
+		Org:       org,
 		Sessions:  func() ([]Session, error) { return sessions, nil },
 		Exchanger: ex,
 		CachePath: filepath.Join(t.TempDir(), "forge-token-cache.json"),
@@ -286,5 +294,46 @@ func TestMint_ANarrowerTokenThanAskedIsNotCached(t *testing.T) {
 	// A complete answer is cached as before.
 	if third, _ := h.Mint(context.Background(), ask); third.Token != second.Token || ex.minted != 2 {
 		t.Fatalf("a token that covered the ask must be reused (minted=%d)", ex.minted)
+	}
+}
+
+// The org a token acts in is part of what makes it reusable: a token minted
+// for org A must never be handed out when forge asked for org B, and the
+// exchange must name the org asked for (and none when none was).
+func TestMint_ExchangeNamesTheOrgAndTheCacheIsKeyedByIt(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	sessions := []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}
+	path := filepath.Join(t.TempDir(), "forge-token-cache.json")
+	ex := &fakeExchanger{ttl: time.Hour, now: func() time.Time { return clock }}
+	helper := func(org string) Service {
+		return New(Deps{
+			Org: org, Sessions: func() ([]Session, error) { return sessions, nil },
+			Exchanger: ex, CachePath: path, Now: func() time.Time { return clock },
+		})
+	}
+
+	a1, err := helper("org-a").Mint(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b1, err := helper("org-b").Mint(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a1.Token == b1.Token || ex.minted != 2 {
+		t.Fatalf("org-b was served org-a's cached token (minted=%d)", ex.minted)
+	}
+	// Each org then reuses its own.
+	a2, _ := helper("org-a").Mint(context.Background(), req)
+	b2, _ := helper("org-b").Mint(context.Background(), req)
+	if a2.Token != a1.Token || b2.Token != b1.Token || ex.minted != 2 {
+		t.Fatalf("each org should reuse its own token: minted=%d", ex.minted)
+	}
+	// No org asked: a third identity, and the exchange names none.
+	if _, err := helper("").Mint(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ex.orgs, ","); got != "org-a,org-b," {
+		t.Fatalf("exchange orgs = %q, want org-a,org-b,<none>", got)
 	}
 }

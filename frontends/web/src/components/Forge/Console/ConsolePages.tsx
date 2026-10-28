@@ -15,9 +15,9 @@
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { KeyRound, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
 
-import Card, { CardHeader } from "@/components/forge-ui/card";
+import Card from "@/components/forge-ui/card";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Link from "@/components/forge-ui/link";
 import PageHeader, { type PageHeaderAction } from "@/components/forge-ui/page_header";
@@ -29,6 +29,7 @@ import type { RosterEnv } from "@/services/forge/roster";
 
 import { ActivityFeed } from "../Activity/ActivityFeed";
 import { Panel, SecretsTab } from "../EnvPage/EnvTabPanels";
+import { SecretsMatrix } from "../Secrets/SecretsMatrix";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
@@ -170,12 +171,9 @@ export function ObservabilityViewPage() {
 
 // ── Configure ───────────────────────────────────────────────────────────────
 
-/**
- * Secrets are set per environment, so with every environment in scope there
- * is no one list to show: the page asks which.
- */
+/** All scope compares metadata; a scoped environment owns the editing flow. */
 export function SecretsPage() {
-  const { env, roster, projectId, forgeProject, setEnv } = useForgeConsole();
+  const { env, roster, projectId, forgeProject, href } = useForgeConsole();
   const navigate = useNavigate();
   const { secret } = useSearch({ strict: false }) as { secret?: string };
   const selectSecret = useCallback(
@@ -195,22 +193,11 @@ export function SecretsPage() {
       {roster.isLoading || roster.resolvingName ? (
         <RosterLoading />
       ) : env === ENV_ALL ? (
-        <Card data-testid="secrets-pick-env">
-          <CardHeader title="Secrets are set per environment" description="Choose one to see its secrets." />
-          <div className="flex flex-wrap gap-2">
-            {roster.envs.map((candidate) => (
-              <button
-                key={candidate.name}
-                type="button"
-                onClick={() => setEnv(candidate.name)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <KeyRound className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
-                {candidate.name}
-              </button>
-            ))}
-          </div>
-        </Card>
+        <SecretsMatrix
+          envs={roster.envs}
+          projectId={projectId}
+          secretHref={(name, secretName) => href({ kind: "secrets" }, { env: name, secret: secretName })}
+        />
       ) : (
         <SecretsTab
           projectId={projectId}

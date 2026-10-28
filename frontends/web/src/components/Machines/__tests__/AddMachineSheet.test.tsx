@@ -108,6 +108,40 @@ describe("AddMachineSheet", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it.each([false, true])("finishes a delayed create after dismissal (reopen: %s) without duplicate creates", async (reopen) => {
+    let resolveCreate!: (result: unknown) => void;
+    const pending = new Promise((resolve) => { resolveCreate = resolve; });
+    mockCreateMachine.mockReturnValue(pending);
+    const onReady = vi.fn();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = renderWithQuery(<AddMachineSheet open onClose={onClose} onReady={onReady} />);
+    await user.click(await screen.findByRole("button", { name: "Create cloud-small-2" }));
+    expect(screen.getByText("Creating cloud-small-2…")).toBeInTheDocument();
+
+    // Model the owner's response to any dismissal (Escape, X, backdrop).
+    rerender(<AddMachineSheet open={false} onClose={onClose} onReady={onReady} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    if (reopen) {
+      rerender(<AddMachineSheet open onClose={onClose} onReady={onReady} />);
+      expect(screen.getByText("Creating cloud-small-2…")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Create cloud-small-2" })).not.toBeInTheDocument();
+      rerender(<AddMachineSheet open={false} onClose={onClose} onReady={onReady} />);
+    }
+
+    await act(async () => {
+      resolveCreate({ daemonId: "d-new", machineName: "cloud-small-2", repo: { kind: "none" } });
+      await pending;
+    });
+    expect(onReady).not.toHaveBeenCalled();
+    state.daemons = [...state.daemons, { daemonId: "d-new", name: "cloud-small-2", status: DaemonStatus.ACTIVE }];
+    rerender(<AddMachineSheet open={false} onClose={onClose} onReady={onReady} />);
+    expect(onReady).toHaveBeenCalledExactlyOnceWith({ daemonId: "d-new", name: "cloud-small-2" });
+    rerender(<AddMachineSheet open={false} onClose={onClose} onReady={onReady} />);
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(mockCreateMachine).toHaveBeenCalledOnce();
+  });
+
   it("shows a size above the plan as an upgrade, takes payment in place, and creates only on an explicit click", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddMachineSheet open onClose={vi.fn()} />);

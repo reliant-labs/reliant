@@ -133,7 +133,7 @@ func TestIntrospect_TransportErrorIsNotInactive(t *testing.T) {
 
 func TestMintForUser_SendsTheGrantAndDecodes(t *testing.T) {
 	srv := fakeCP(t, func(method string, body map[string]any) (int, string) {
-		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true {
+		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true || body["orgId"] != "org-b" {
 			t.Fatalf("got %s %v", method, body)
 		}
 		res, _ := body["resource"].(map[string]any)
@@ -145,7 +145,7 @@ func TestMintForUser_SendsTheGrantAndDecodes(t *testing.T) {
 	defer srv.Close()
 	m, err := New(Deps{BaseURL: srv.URL, Sign: sign}).MintForUser(context.Background(), MintRequest{
 		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeDeployWrite},
-		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true,
+		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true, OrgID: "org-b",
 	})
 	if err != nil {
 		t.Fatalf("MintForUser: %v", err)

@@ -29,16 +29,16 @@ export function useRunRoute(chatId: string): RunLoadState {
   const [state, setState] = useState<RunLoadState>({ status: "loading" });
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setState({ status: "loading" });
-    loadRunContext(chatId)
+    loadRunContext(chatId, controller.signal)
       .then((chat) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         useGlobalUpdatesStore.getState().connect();
         setState({ status: "ready", chat });
       })
       .catch((error: unknown) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (
           (error instanceof ConnectError && (error.code === Code.NotFound || error.code === Code.PermissionDenied)) ||
           error instanceof RunProjectUnavailableError
@@ -53,7 +53,7 @@ export function useRunRoute(chatId: string): RunLoadState {
         });
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [chatId, attempt]);
 

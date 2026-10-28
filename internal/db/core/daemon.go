@@ -42,6 +42,8 @@ type Daemon struct {
 	LastStatusChangedAt *time.Time
 	LastOOMKilledAt     *time.Time
 	OOMKillCount        int32
+	// RestartStatus is the daemon's planned-drain observation, kept through disconnect.
+	RestartStatus string
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied

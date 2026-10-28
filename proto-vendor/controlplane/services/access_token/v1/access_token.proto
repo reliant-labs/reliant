@@ -198,7 +198,12 @@ message OrgMemberGrants {
   repeated string scopes = 4;
 }
 
-message ListOrgMemberGrantsRequest {}
+message ListOrgMemberGrantsRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListOrgMemberGrantsResponse {
   repeated OrgMemberGrants members = 1;
@@ -214,6 +219,10 @@ message UpdateOrgMemberGrantsRequest {
   // here is revoked. Replacing the whole set makes the request idempotent and
   // means a concurrent edit cannot merge into a combination nobody chose.
   repeated string scopes = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message UpdateOrgMemberGrantsResponse {
@@ -249,6 +258,10 @@ message CreateTokenRequest {
   string name = 1;
   repeated string scopes = 2;
   google.protobuf.Timestamp expires_at = 3;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 4;
 }
 
 message CreateTokenResponse {
@@ -259,6 +272,10 @@ message CreateTokenResponse {
 
 message ListTokensRequest {
   optional bool include_revoked = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message ListTokensResponse {
@@ -267,6 +284,10 @@ message ListTokensResponse {
 
 message RevokeTokenRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RevokeTokenResponse {
@@ -284,6 +305,10 @@ message CreateMyTokenRequest {
   bool ephemeral = 5;
   // rotate replaces the caller's live token(s) with this name and scope set.
   bool rotate = 6;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 7;
 }
 
 message CreateMyTokenResponse {
@@ -298,6 +323,10 @@ message ListMyTokensRequest {
   optional bool include_revoked = 1;
   // scope, when set, restricts to tokens holding it.
   optional string scope = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message ListMyTokensResponse {
@@ -306,12 +335,20 @@ message ListMyTokensResponse {
 
 message RevokeMyTokenRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RevokeMyTokenResponse {}
 
 message ResetDaemonScopePolicyRequest {
   string daemon_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 message ResetDaemonScopePolicyResponse {}
 
@@ -331,6 +368,10 @@ message UpdateMyTokenRequest {
   // from one clearing them, and a token with no scopes cannot be minted at
   // all (accesstoken.NewSet refuses it).
   bool update_scopes = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message UpdateMyTokenResponse {

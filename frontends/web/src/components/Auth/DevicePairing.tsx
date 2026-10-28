@@ -3,6 +3,7 @@ import { Loader2, Monitor, ShieldAlert } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import { supabase } from "@/lib/supabase";
+import { AuthorizeOrgPicker, useAuthorizeOrg } from "@/components/Orgs/AuthorizeOrgPicker";
 import {
   decidePendingMachine,
   formatPairingCode,
@@ -34,6 +35,7 @@ export function DevicePairing() {
   const initial = new URLSearchParams(window.location.search).get("user_code") ?? "";
   const [code, setCode] = useState(formatPairingCode(initial));
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const authorizeOrg = useAuthorizeOrg(null);
 
   const lookUp = async (typed: string) => {
     setPhase({ kind: "loading" });
@@ -77,7 +79,7 @@ export function DevicePairing() {
   const decide = async (machine: PendingMachine, approved: boolean) => {
     setPhase({ kind: "confirm", machine, busy: true });
     try {
-      await decidePendingMachine(machine.userCode, approved);
+      await decidePendingMachine(machine.userCode, approved, approved ? authorizeOrg.orgId : null);
       setPhase({ kind: "done", approved, hostname: machine.hostname });
     } catch (err) {
       setPhase({ kind: "error", message: err instanceof Error ? err.message : "Could not record your answer." });
@@ -137,11 +139,26 @@ export function DevicePairing() {
             you. Only approve a machine you just started.
           </p>
         </div>
+        <AuthorizeOrgPicker
+          orgs={authorizeOrg.orgs}
+          error={authorizeOrg.failed}
+          onRetry={authorizeOrg.retry}
+          orgId={authorizeOrg.orgId}
+          onChoose={authorizeOrg.choose}
+          disabled={busy}
+          noun="this machine"
+        />
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void decide(machine, false)}>
             Not my machine
           </Button>
-          <Button variant="primary" className="flex-1" loading={busy} onClick={() => void decide(machine, true)}>
+          <Button
+            variant="primary"
+            className="flex-1"
+            loading={busy}
+            disabled={!authorizeOrg.ready}
+            onClick={() => void decide(machine, true)}
+          >
             Approve
           </Button>
         </div>

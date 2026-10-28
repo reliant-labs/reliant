@@ -92,6 +92,12 @@ export async function lookupPendingMachine(code: string): Promise<PendingMachine
 }
 
 /** Approve (or decline) the machine waiting with this code. */
-export async function decidePendingMachine(code: string, approved: boolean): Promise<void> {
-  await post("/oauth/device/approve", { user_code: normalizePairingCode(code), approved });
+export async function decidePendingMachine(code: string, approved: boolean, orgId?: string | null): Promise<void> {
+  // org_id: the org the machine's credential will act in, fixed when it is
+  // minted. Omitted, the control plane uses the person's default org.
+  await post("/oauth/device/approve", {
+    user_code: normalizePairingCode(code),
+    approved,
+    ...(orgId ? { org_id: orgId } : {}),
+  });
 }

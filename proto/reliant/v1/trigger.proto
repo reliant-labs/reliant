@@ -194,6 +194,11 @@ service TriggerService {
   // trigger's filter and origin_filter are not evaluated, because the person
   // replaying has decided the event is wanted.
   //
+  // With trigger_id, previews an owned inline or declared automation against
+  // a sample payload using the actual event-fire mapping, including the full
+  // seeded user message. Works while paused and never enables it. Neither
+  // preview mode tests delivery, authentication, filters or workflow execution.
+  //
   // It only reads (nothing is fired or recorded), and says so with
   // NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
   rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {
@@ -207,7 +212,11 @@ service TriggerService {
   // draft is written by the caller's own fast model, with the draft_automation
   // tool's schema as the structured output, and normalized by the same code
   // that tool runs.
-  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {}
+  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}
+    };
+  }
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -1286,6 +1295,11 @@ message PreviewReplayRequest {
   // trigger.sender. Carried here rather than on ReplayEvent because
   // trigger.proto imports chat.proto, not the reverse.
   optional TriggerSender sender = 4;
+
+  // Preview this owned automation, inline or declared, instead of a workflow's
+  // declaration. Uses its stored prompt/settings and the supplied sample payload.
+  // Returns the full seeded user message. Never enables, records or fires it.
+  optional string trigger_id = 5;
 }
 
 message PreviewReplayResponse {

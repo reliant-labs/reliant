@@ -31,8 +31,8 @@ export interface MemberPermissionsList {
   grantable: string[];
 }
 
-export async function listMemberPermissions(): Promise<MemberPermissionsList> {
-  const res = await getControlPlaneClient(AccessTokenService).listOrgMemberGrants({});
+export async function listMemberPermissions(orgId: string): Promise<MemberPermissionsList> {
+  const res = await getControlPlaneClient(AccessTokenService).listOrgMemberGrants({ orgId });
   return {
     members: res.members.map((m) => ({
       userId: m.userId,
@@ -53,11 +53,16 @@ export async function listMemberPermissions(): Promise<MemberPermissionsList> {
  */
 export async function updateMemberPermissions(
   userId: string,
-  scopes: string[]
+  scopes: string[],
+  orgId: string,
 ): Promise<MemberPermissions> {
+  // Pin the edited roster's org before the transport awaits authentication.
+  // This same message is retained by the transport's authentication retry.
+  if (!orgId) throw new Error("Choose an organization before editing permissions.");
   const res = await getControlPlaneClient(AccessTokenService).updateOrgMemberGrants({
     userId,
     scopes,
+    orgId,
   });
   const member = res.member;
   return {

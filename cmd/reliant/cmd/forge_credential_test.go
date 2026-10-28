@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -428,32 +429,55 @@ func containsString(list []string, want string) bool {
 // `forge login`, alone.
 func TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin(t *testing.T) {
 	credPath, _ := isolateForgeCredHome(t)
-	const server, other = "https://api.example.invalid", "https://api.other.invalid"
-	loginFor(t, server, "rlat_LOGGEDIN")
+	// Populate the cache through the real helper, not its private JSON format:
+	// a stale cache version is intentionally ignored and cannot prove isolation.
+	api := serveReliantAPI(t, testControlPlane)
+	otherAPI := serveReliantAPI(t, testControlPlane)
+	for _, endpoint := range []*reliantAPI{api, otherAPI} {
+		pat := endpoint.mintSession(t, "user-logout", append([]fat.Scope{fat.ScopeReliantAPI}, daemonCeiling...)...)
+		loginFor(t, endpoint.url, pat)
+		if err := auth.WriteDaemonCredentials(&auth.DaemonCredentials{PAT: pat, ServerURL: endpoint.url}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Both exchanges have the SAME audience, org and scopes. Only the source
+	// session server differs; pin discovery so neither request can reuse the other.
+	first, _ := runHelper(t, testControlPlane, "--daemon-server", api.url)
+	other, _ := runHelper(t, testControlPlane, "--daemon-server", otherAPI.url)
+	if first.Error != nil || other.Error != nil || first.Token == "" || other.Token == "" || first.Token == other.Token {
+		t.Fatalf("expected distinct exchanged tokens: first error=%v other error=%v", first.Error, other.Error)
+	}
 	if err := credentials.Store(credPath, testControlPlane, "forge-cli", credentials.Credential{Token: "rlat_HUMAN"}); err != nil {
 		t.Fatal(err)
 	}
-	exp := time.Now().Add(time.Hour).UTC()
-	seed, _ := json.Marshal(map[string]any{"version": 1, "entries": []map[string]any{
-		{"endpoint": testControlPlane, "server": server, "subject": "a", "token": "rlat_X1", "expires_at": exp},
-		{"endpoint": testControlPlane, "server": other, "subject": "b", "token": "rlat_X2", "expires_at": exp},
-	}})
-	if err := os.WriteFile(forgeTokenCachePath(), seed, 0o600); err != nil {
-		t.Fatal(err)
+	before, err := os.ReadFile(forgeTokenCachePath())
+	if err != nil || !strings.Contains(string(before), first.Token) || !strings.Contains(string(before), other.Token) {
+		t.Fatalf("both real exchanges must be cached before logout (read error=%v)", err)
 	}
 
-	if out, err := executeRoot(t, "auth", "logout", "--server", server); err != nil {
+	if out, err := executeRoot(t, "auth", "logout", "--server", api.url); err != nil {
 		t.Fatalf("logout: %v\n%s", err, out)
 	}
-	raw, _ := os.ReadFile(forgeTokenCachePath())
-	if strings.Contains(string(raw), "rlat_X1") {
+	raw, err := os.ReadFile(forgeTokenCachePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), first.Token) {
 		t.Error("a token exchanged from the signed-out server's session survived logout")
 	}
-	if !strings.Contains(string(raw), "rlat_X2") {
+	if !strings.Contains(string(raw), other.Token) {
 		t.Error("logout of one server dropped another server's token")
 	}
 	if human, _ := credentials.Lookup(credPath, testControlPlane, "forge-cli"); human.Token != "rlat_HUMAN" {
 		t.Error("`reliant auth logout` deleted the user's own `forge login`")
+	}
+	count := otherAPI.liveTokens(t, "user-logout")
+	again, _ := runHelper(t, testControlPlane, "--daemon-server", otherAPI.url)
+	if again.Error != nil || again.Token != other.Token {
+		t.Error("the other server's cached exchange was not reusable after logout")
+	}
+	if after := otherAPI.liveTokens(t, "user-logout"); after != count {
+		t.Error("logout forced another server to mint a replacement credential")
 	}
 }
 
@@ -518,5 +542,22 @@ func TestReliantForge_PointsForgeAtTheSession(t *testing.T) {
 	argv, err := cloudcred.ParseCommand(os.Getenv(cloudcred.HelperEnv))
 	if err != nil || len(argv) != 3 || argv[1] != "auth" || argv[2] != "forge-credential" {
 		t.Fatalf("after `reliant forge`, %s = %q (%v), want this binary's unpinned helper", cloudcred.HelperEnv, os.Getenv(cloudcred.HelperEnv), err)
+	}
+}
+
+func TestExchangeRequest_NamesTheOrgOnlyWhenAsked(t *testing.T) {
+	if got := exchangeRequest("https://cp.example", []string{"deploy:write"}, ""); got.OrgId != nil {
+		t.Fatalf("no org asked, yet the exchange names %q", got.GetOrgId())
+	}
+	if got := exchangeRequest("https://cp.example", nil, " org-b "); got.GetOrgId() != "org-b" {
+		t.Fatalf("org = %q, want org-b", got.GetOrgId())
+	}
+}
+
+// The daemon sets this name on the forge it runs; the helper reads it. They are
+// two constants in two packages, so a rename must break a test, not a deploy.
+func TestForgeOrgEnvMatchesTheDaemon(t *testing.T) {
+	if forgeOrgEnv != daemonruntime.ForgeOrgEnv {
+		t.Fatalf("helper reads %q, daemon sets %q", forgeOrgEnv, daemonruntime.ForgeOrgEnv)
 	}
 }

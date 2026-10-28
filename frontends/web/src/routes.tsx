@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
@@ -273,6 +274,7 @@ function RootShell() {
   // /m/*); ModernApp and the workflow builder contribute their handlers to it.
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
+      <ActiveOrgBinding />
       <ShortcutHost>
         <Outlet />
       </ShortcutHost>

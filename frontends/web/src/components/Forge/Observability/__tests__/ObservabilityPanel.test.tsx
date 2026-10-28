@@ -20,6 +20,19 @@ vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
 
 describe("ObservabilityPanel", () => {
+  it("Refresh advances a relative RPC catalog window to now", async () => {
+    let now = Date.UTC(2026, 9, 27, 12);
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const onCall = vi.fn();
+    try {
+      renderPanel(createFixtureApi({ onCall }), { view: "rpc", range: "15m" });
+      await screen.findByTestId("rpc-explorer");
+      const first = onCall.mock.calls.find(([rpc]) => rpc === "GetServiceGraphCatalog")![1].window;
+      now += 60000;
+      fireEvent.click(screen.getByTestId("obs-refresh"));
+      await waitFor(() => expect(onCall.mock.calls.some(([rpc, req]) => rpc === "GetServiceGraphCatalog" && req.window.endMs > first.endMs)).toBe(true));
+    } finally { clock.mockRestore(); }
+  });
   it("scopes every request to the caller's org and this environment", async () => {
     const onCall = vi.fn();
     renderPanel(createFixtureApi({ onCall }));

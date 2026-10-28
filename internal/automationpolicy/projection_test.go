@@ -1,10 +1,11 @@
 package automationpolicy
 
 import (
-	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSafeDefinitionWithholdsArbitrarySensitiveLiterals(t *testing.T) {

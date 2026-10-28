@@ -227,12 +227,26 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 	return &FireOutput{Outcome: string(outcome), Reason: detail, EventID: ev.ID}, nil
 }
 
+// PreviewEvent maps a sample through the exact event-fire seed path. It does
+// not persist, enable, or launch anything. The caller must authorize the trigger.
+func PreviewEvent(ctx context.Context, repo any, workflows WorkflowResolver, trigger *core.Trigger, ev *core.TriggerEvent) (launch.Spec, error) {
+	decl, err := activationFor(ctx, workflows, trigger)
+	if err != nil {
+		return launch.Spec{}, err
+	}
+	return eventSpec(ctx, repo, trigger, ev, decl)
+}
+
 // buildSpec is what an event-launched run is: owned by the trigger's user,
 // unattended, seeded with the trigger's prompt followed by the event as
 // labelled, untrusted data.
 func (f *EventFirer) buildSpec(ctx context.Context, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
+	return eventSpec(ctx, f.repo, trigger, ev, decl)
+}
+
+func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
-	scope := ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
+	scope := ActivationScope(ctx, repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 	if decl != nil {
 		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, scope)
 		if err != nil {

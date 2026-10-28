@@ -64,14 +64,14 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces a 10-stage authed chain in the documented order', async () => {
+  it('produces an 11-stage authed chain in the documented order', async () => {
     const { buildInterceptors, traceStage } = await import('../transport')
     const chain = buildInterceptors({ withAuth: true })
-    // error-normalize → timeout → auth → missing-token → daemon-last-seen →
+    // error-normalize → timeout → auth → missing-token → org → daemon-last-seen →
     // trace → error-log → upgrade → machine-wake → unauth
-    expect(chain).toHaveLength(10)
+    expect(chain).toHaveLength(11)
     // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
-    expect(chain[5]).toBe(traceStage)
+    expect(chain[6]).toBe(traceStage)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
       expect(typeof entry).toBe('function')
@@ -82,7 +82,7 @@ describe('buildInterceptors factory', () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 10 - 3 (auth, missing-token, unauth) = 7
+    // 11 - 4 (auth, missing-token, org, unauth) = 7
     expect(unauthed).toHaveLength(7)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
@@ -95,8 +95,8 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(10)
-    expect(buildInterceptors({})).toHaveLength(10)
+    expect(buildInterceptors()).toHaveLength(11)
+    expect(buildInterceptors({})).toHaveLength(11)
   })
 
   it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
@@ -138,7 +138,7 @@ describe('x-daemon-last-seen scoping', () => {
     await run({
       stream: false,
       service: { typeName: 'test.v1.TestService' },
-      method: { name: 'Ping' },
+      method: { name: 'Ping', input: { fields: [] } },
       header: new Headers(),
       signal: new AbortController().signal,
       message: {},

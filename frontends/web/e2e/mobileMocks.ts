@@ -1,4 +1,4 @@
-import type { Page, Route } from '@playwright/test';
+import { test, type Page, type Route } from '@playwright/test';
 
 // A signed-in, onboarded user with one project, three chats and a full inbox,
 // against no backend: every Connect RPC is answered here. Used by the mobile
@@ -246,6 +246,12 @@ const failingStream = (route: Route) => {
 
 export async function mockMobileBackend(page: Page, options: MobileMockOptions = {}): Promise<MobileMock> {
   const mock: MobileMock = { answered: [] };
+  const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
+  await page.route('**/config.js', route => route.fulfill({
+    contentType: 'text/javascript',
+    body: `window.__FORGE_CONFIG__ = ${JSON.stringify({ CONTROL_PLANE_API_URL: origin, SUPABASE_URL: `${origin}/supabase`, SUPABASE_ANON_KEY: 'anon-test-key' })};`,
+  }));
+  await page.route('**/supabase/**', route => json(route, {}));
   let inbox = [...(options.inbox ?? INBOX_ITEMS)];
   // The timeline's question rows; answering one resolves it, as the server does.
   let asyncQuestions: Record<string, unknown>[] = ASYNC_QUESTIONS.map((q) => ({ ...q }));

@@ -164,9 +164,10 @@ func TestAcceptedReturnsAuthenticatedPRIdentityDistinctFromQueueReceipt(t *testi
 			// and from the queue entry ID. None may be fabricated from params.
 			f.pr["databaseId"] = 7654321
 			f.pr["url"] = "https://github.com/Acme/Widgets/pull/42"
-			if mode == "existing" {
+			switch mode {
+			case "existing":
 				f.pr["mergeQueueEntry"] = queueEntry()
-			} else if mode == "reconciled" {
+			case "reconciled":
 				f.mutationStatus = 504
 				f.commitOnFailure = true
 			}

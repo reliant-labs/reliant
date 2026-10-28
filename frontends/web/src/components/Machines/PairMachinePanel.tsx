@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { AuthorizeOrgPicker, useAuthorizeOrg } from "@/components/Orgs/AuthorizeOrgPicker";
+import { getActiveOrgId } from "@/store/activeOrgStore";
 import { Check, Download, Loader2, Monitor, Terminal } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -98,6 +100,8 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
   const [code, setCode] = useState(formatPairingCode(initialCode));
   const [approval, setApproval] = useState<Approval>({ kind: "enter" });
   const [error, setError] = useState<string | null>(null);
+  // The org the machine being approved will act in. The active org is the starting point.
+  const authorizeOrg = useAuthorizeOrg(getActiveOrgId());
 
   // The machines that existed when the panel opened. In "add" mode none of
   // them is the one the user is setting up.
@@ -186,7 +190,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
     setError(null);
     setApproval({ kind: "deciding", machine, approved });
     try {
-      await decidePendingMachine(machine.userCode, approved);
+      await decidePendingMachine(machine.userCode, approved, approved ? authorizeOrg.orgId : null);
       setApproval(approved ? { kind: "approved", machine } : { kind: "declined" });
     } catch (err) {
       setApproval({ kind: "confirm", machine });
@@ -294,12 +298,21 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   </p>
                 </div>
               </div>
+              <AuthorizeOrgPicker
+                orgs={authorizeOrg.orgs}
+                error={authorizeOrg.failed}
+                onRetry={authorizeOrg.retry}
+                orgId={authorizeOrg.orgId}
+                onChoose={authorizeOrg.choose}
+                disabled={approval.kind === "deciding"}
+                noun="this machine"
+              />
               <div className="flex gap-2">
                 <Button
                   size="sm"
                   onClick={() => void decide(approval.machine, true)}
                   loading={approval.kind === "deciding" && approval.approved}
-                  disabled={approval.kind === "deciding"}
+                  disabled={approval.kind === "deciding" || !authorizeOrg.ready}
                 >
                   Approve
                 </Button>

@@ -23,11 +23,13 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
  * › Dashboards). Usage is not one: the organization's allowance is the app's
  * Settings › Billing.
  */
-export const OBS_VIEWS = ["overview", "alerts", "errors", "sessions", "logs", "traces", "profiles"] as const;
+export const OBS_VIEWS = ["overview", "graph", "rpc", "alerts", "errors", "sessions", "logs", "traces", "profiles"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
+  graph: "Service graph",
+  rpc: "RPC explorer",
   alerts: "Alerts",
   errors: "Errors",
   sessions: "Sessions",
@@ -78,6 +80,11 @@ export interface ObsSearch {
   view?: ObsView;
   range?: RangePreset;
   service?: string;
+  /** Graph/explorer: exact full proto service and service/method identities. */
+  rpcService?: string;
+  rpcId?: string;
+  declared?: boolean;
+  internal?: boolean;
   severity?: string;
   /** Logs: the query. Traces: the root operation. Errors: title or culprit. Sessions: entry path contains. */
   q?: string;
@@ -120,6 +127,8 @@ export interface ObsSearch {
   platform?: IssuePlatform;
   /** Errors: the order. Absent: most recently seen first. */
   isort?: IssueSort;
+  /** Errors: `me` or a user id (assigneeFilterOf). Absent: anyone's. */
+  assignee?: string;
   /** Sessions: the session open in detail (its rum.sessionId). */
   session?: string;
   /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
@@ -148,6 +157,10 @@ export const OBS_SEARCH_KEYS = [
   "view",
   "range",
   "service",
+  "rpcService",
+  "rpcId",
+  "declared",
+  "internal",
   "severity",
   "q",
   "trace",
@@ -168,6 +181,7 @@ export const OBS_SEARCH_KEYS = [
   "istatus",
   "platform",
   "isort",
+  "assignee",
   "session",
   "t",
   "replay",

@@ -33,14 +33,23 @@ describe("buildConsoleNav", () => {
 
   it("opens Observability's first view from its row: it has no home of its own", () => {
     const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
-    expect(items.find((item) => item.label === "Observability")?.href).toBe("/forge/p/shop/observability/errors?env=prod");
+    expect(items.find((item) => item.label === "Observability")?.href).toBe("/forge/p/shop/observability/graph?env=prod");
   });
 
   it("lists Observability's views as its children", () => {
     const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, alertsFiring: 2 });
     const obs = items.find((item) => item.label === "Observability")!;
-    expect(obs.children?.map((child) => child.label)).toEqual(["Errors", "Sessions", "Logs", "Traces", "Metrics", "Profiles", "Dashboards", "Alerts"]);
+    expect(obs.children?.map((child) => child.label)).toEqual(["Service graph", "RPC explorer", "Errors", "Sessions", "Logs", "Traces", "Metrics", "Profiles", "Dashboards", "Alerts"]);
     expect(obs.children?.find((child) => child.label === "Alerts")?.badge).toMatchObject({ type: "count", value: 2, tone: "danger" });
+  });
+
+  it("hides only known-empty optional views, retaining an active direct link", () => {
+    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { sessions: false, profiles: false } };
+    const labels = (page: Parameters<typeof buildConsoleNav>[0]["page"]) => buildConsoleNav({ ...base, page }).items.find((item) => item.label === "Observability")!.children!.map((child) => child.label);
+    expect(labels({ kind: "overview" })).not.toContain("Sessions");
+    expect(labels({ kind: "overview" })).not.toContain("Profiles");
+    expect(labels({ kind: "obs-view", view: "sessions" })).toContain("Sessions");
+    expect(labels({ kind: "obs-view", view: "profiles" })).toContain("Profiles");
   });
 
   it("files environments under Configure, previews collapsed into one entry", () => {
@@ -113,7 +122,7 @@ describe("starred dashboards in the nav", () => {
 describe("consoleCrumbs", () => {
   it("names the page, with its parent as a link", () => {
     expect(consoleCrumbs("shop", { kind: "obs-view", view: "traces" }, "prod")).toEqual([
-      { label: "Observability", href: "/forge/p/shop/observability/errors?env=prod" },
+      { label: "Observability", href: "/forge/p/shop/observability/graph?env=prod" },
       { label: "Traces" },
     ]);
     expect(consoleCrumbs("shop", { kind: "environment", env: "dev" }, "prod")).toEqual([
@@ -121,7 +130,7 @@ describe("consoleCrumbs", () => {
       { label: "dev" },
     ]);
     expect(consoleCrumbs("shop", { kind: "dashboard", dashKind: "workspace", key: "checkout-latency" }, "prod", "Checkout latency")).toEqual([
-      { label: "Observability", href: "/forge/p/shop/observability/errors?env=prod" },
+      { label: "Observability", href: "/forge/p/shop/observability/graph?env=prod" },
       { label: "Dashboards", href: "/forge/p/shop/observability/dashboards?env=prod" },
       { label: "Checkout latency" },
     ]);

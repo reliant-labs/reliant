@@ -82,6 +82,10 @@ export function conflictSummary(read: Issue, now: Issue): string {
     const by = now.status === "resolved" && now.resolvedVersion ? ` in ${now.resolvedVersion}` : "";
     return `It is ${STATUS_LABEL[now.status].toLowerCase()}${by} now, not ${read.status ? STATUS_LABEL[read.status].toLowerCase() : "what you read"}.`;
   }
+  if ((read.assignee?.id ?? "") !== (now.assignee?.id ?? "")) {
+    const was = read.assignee ? `assigned to ${read.assignee.name}` : "unassigned";
+    return now.assignee ? `It is assigned to ${now.assignee.name} now, not ${was}.` : `It is unassigned now, not ${was}.`;
+  }
   return "It changed since you opened it (new events, or another triage).";
 }
 

@@ -642,7 +642,12 @@ type ExchangeTokenRequest struct {
 	Audience string `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
 	// scopes requested. Empty asks for every exchangeable scope the calling
 	// token holds.
-	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Scopes []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// org_id is the org the minted token acts in, which must be one the calling
+	// session's person belongs to. Unset: the org the calling session itself
+	// acts in. The control plane checks membership and clips the scopes to the
+	// person's grants IN that org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,12 +696,20 @@ func (x *ExchangeTokenRequest) GetScopes() []string {
 	return nil
 }
 
+func (x *ExchangeTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type ExchangeTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // Raw rlat_ token — returned once
 	TokenPrefix   string                 `protobuf:"bytes,2,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // Display identifier, e.g. "rlat_A3f9Kd2p"
 	ExpiresAt     string                 `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`       // RFC 3339
 	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                              // What was actually granted
+	OrgId         string                 `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`                   // The org the token acts in
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,6 +770,13 @@ func (x *ExchangeTokenResponse) GetScopes() []string {
 		return x.Scopes
 	}
 	return nil
+}
+
+func (x *ExchangeTokenResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 type GetGitTokenRequest struct {
@@ -906,16 +926,19 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tScopeList\x12\x16\n" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"@\n" +
 	"\x13UpdateTokenResponse\x12)\n" +
-	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"J\n" +
+	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"q\n" +
 	"\x14ExchangeTokenRequest\x12\x1a\n" +
 	"\baudience\x18\x01 \x01(\tR\baudience\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\x87\x01\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x9e\x01\n" +
 	"\x15ExchangeTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
 	"\ftoken_prefix\x18\x02 \x01(\tR\vtokenPrefix\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x16\n" +
-	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"0\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12\x15\n" +
+	"\x06org_id\x18\x05 \x01(\tR\x05orgId\"0\n" +
 	"\x12GetGitTokenRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"W\n" +
 	"\x13GetGitTokenResponse\x12!\n" +
@@ -1006,6 +1029,7 @@ func file_reliant_v1_token_proto_init() {
 	}
 	file_reliant_v1_token_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_token_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_token_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

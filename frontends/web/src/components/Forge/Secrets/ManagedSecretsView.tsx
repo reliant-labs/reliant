@@ -74,6 +74,7 @@ import {
 
 import { formatCountdown } from "@/services/forge/stepUp";
 
+import { Ago } from "../Releases/releaseParts";
 import { SecretVersionHistory } from "./SecretVersionHistory";
 import { useNow } from "./useStepUpGate";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
@@ -489,7 +490,7 @@ function SecretList({
                 {row.summary && row.summary.currentVersion > 0 ? `v${row.summary.currentVersion}` : "—"}
               </td>
               <td className="px-4 py-2.5 text-xs text-ink-muted">
-                {formatShort(row.summary?.updatedAt)}
+                {row.summary?.updatedAt ? <Ago at={row.summary.updatedAt} /> : "—"}
               </td>
               <td className="px-4 py-2.5 text-xs text-ink-muted">
                 <DeclaredBy row={row} />
@@ -533,13 +534,6 @@ function DeclaredBy({ row }: { row: SecretSurfaceRow }) {
       {names.length > 2 && ` +${names.length - 2}`}
     </span>
   );
-}
-
-function formatShort(iso: string | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────

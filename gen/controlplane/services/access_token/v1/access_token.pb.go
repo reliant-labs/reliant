@@ -112,7 +112,11 @@ func (x *OrgMemberGrants) GetScopes() []string {
 }
 
 type ListOrgMemberGrantsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -145,6 +149,13 @@ func (x *ListOrgMemberGrantsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListOrgMemberGrantsRequest.ProtoReflect.Descriptor instead.
 func (*ListOrgMemberGrantsRequest) Descriptor() ([]byte, []int) {
 	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListOrgMemberGrantsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListOrgMemberGrantsResponse struct {
@@ -208,7 +219,11 @@ type UpdateOrgMemberGrantsRequest struct {
 	// scopes is the member's COMPLETE new set, not a delta: a permission absent
 	// here is revoked. Replacing the whole set makes the request idempotent and
 	// means a concurrent edit cannot merge into a combination nobody chose.
-	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Scopes []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -255,6 +270,13 @@ func (x *UpdateOrgMemberGrantsRequest) GetScopes() []string {
 		return x.Scopes
 	}
 	return nil
+}
+
+func (x *UpdateOrgMemberGrantsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type UpdateOrgMemberGrantsResponse struct {
@@ -498,10 +520,14 @@ func (x *AccessToken) GetEphemeral() bool {
 }
 
 type CreateTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Scopes        []string               `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Scopes    []string               `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -555,6 +581,13 @@ func (x *CreateTokenRequest) GetExpiresAt() *timestamppb.Timestamp {
 		return x.ExpiresAt
 	}
 	return nil
+}
+
+func (x *CreateTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type CreateTokenResponse struct {
@@ -613,8 +646,12 @@ func (x *CreateTokenResponse) GetSecret() string {
 type ListTokensRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	IncludeRevoked *bool                  `protobuf:"varint,1,opt,name=include_revoked,json=includeRevoked,proto3,oneof" json:"include_revoked,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListTokensRequest) Reset() {
@@ -652,6 +689,13 @@ func (x *ListTokensRequest) GetIncludeRevoked() bool {
 		return *x.IncludeRevoked
 	}
 	return false
+}
+
+func (x *ListTokensRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListTokensResponse struct {
@@ -699,8 +743,12 @@ func (x *ListTokensResponse) GetTokens() []*AccessToken {
 }
 
 type RevokeTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -738,6 +786,13 @@ func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
 func (x *RevokeTokenRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *RevokeTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -797,7 +852,11 @@ type CreateMyTokenRequest struct {
 	Resource  *ResourceBinding       `protobuf:"bytes,4,opt,name=resource,proto3" json:"resource,omitempty"`
 	Ephemeral bool                   `protobuf:"varint,5,opt,name=ephemeral,proto3" json:"ephemeral,omitempty"`
 	// rotate replaces the caller's live token(s) with this name and scope set.
-	Rotate        bool `protobuf:"varint,6,opt,name=rotate,proto3" json:"rotate,omitempty"`
+	Rotate bool `protobuf:"varint,6,opt,name=rotate,proto3" json:"rotate,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,7,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -874,6 +933,13 @@ func (x *CreateMyTokenRequest) GetRotate() bool {
 	return false
 }
 
+func (x *CreateMyTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type CreateMyTokenResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Token  *AccessToken           `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -940,7 +1006,11 @@ type ListMyTokensRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	IncludeRevoked *bool                  `protobuf:"varint,1,opt,name=include_revoked,json=includeRevoked,proto3,oneof" json:"include_revoked,omitempty"`
 	// scope, when set, restricts to tokens holding it.
-	Scope         *string `protobuf:"bytes,2,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
+	Scope *string `protobuf:"bytes,2,opt,name=scope,proto3,oneof" json:"scope,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -985,6 +1055,13 @@ func (x *ListMyTokensRequest) GetIncludeRevoked() bool {
 func (x *ListMyTokensRequest) GetScope() string {
 	if x != nil && x.Scope != nil {
 		return *x.Scope
+	}
+	return ""
+}
+
+func (x *ListMyTokensRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1034,8 +1111,12 @@ func (x *ListMyTokensResponse) GetTokens() []*AccessToken {
 }
 
 type RevokeMyTokenRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1077,6 +1158,13 @@ func (x *RevokeMyTokenRequest) GetId() string {
 	return ""
 }
 
+func (x *RevokeMyTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type RevokeMyTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1114,8 +1202,12 @@ func (*RevokeMyTokenResponse) Descriptor() ([]byte, []int) {
 }
 
 type ResetDaemonScopePolicyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1153,6 +1245,13 @@ func (*ResetDaemonScopePolicyRequest) Descriptor() ([]byte, []int) {
 func (x *ResetDaemonScopePolicyRequest) GetDaemonId() string {
 	if x != nil {
 		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *ResetDaemonScopePolicyRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1209,7 +1308,11 @@ type UpdateMyTokenRequest struct {
 	// the empty list". Without it a request omitting scopes is indistinguishable
 	// from one clearing them, and a token with no scopes cannot be minted at
 	// all (accesstoken.NewSet refuses it).
-	UpdateScopes  bool `protobuf:"varint,4,opt,name=update_scopes,json=updateScopes,proto3" json:"update_scopes,omitempty"`
+	UpdateScopes bool `protobuf:"varint,4,opt,name=update_scopes,json=updateScopes,proto3" json:"update_scopes,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1270,6 +1373,13 @@ func (x *UpdateMyTokenRequest) GetUpdateScopes() bool {
 		return x.UpdateScopes
 	}
 	return false
+}
+
+func (x *UpdateMyTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type UpdateMyTokenResponse struct {
@@ -1425,14 +1535,18 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12\x16\n" +
-	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"\x1c\n" +
-	"\x1aListOrgMemberGrantsRequest\"w\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"C\n" +
+	"\x1aListOrgMemberGrantsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"w\n" +
 	"\x1bListOrgMemberGrantsResponse\x12:\n" +
 	"\amembers\x18\x01 \x03(\v2 .controlplane.v1.OrgMemberGrantsR\amembers\x12\x1c\n" +
-	"\tgrantable\x18\x02 \x03(\tR\tgrantable\"O\n" +
+	"\tgrantable\x18\x02 \x03(\tR\tgrantable\"v\n" +
 	"\x1cUpdateOrgMemberGrantsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"Y\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"Y\n" +
 	"\x1dUpdateOrgMemberGrantsResponse\x128\n" +
 	"\x06member\x18\x01 \x01(\v2 .controlplane.v1.OrgMemberGrantsR\x06member\"5\n" +
 	"\x0fResourceBinding\x12\x12\n" +
@@ -1456,24 +1570,30 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	" \x01(\tR\x05orgId\x12$\n" +
 	"\x0eacting_user_id\x18\v \x01(\tR\factingUserId\x12<\n" +
 	"\bresource\x18\f \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
-	"\tephemeral\x18\r \x01(\bR\tephemeral\"{\n" +
+	"\tephemeral\x18\r \x01(\bR\tephemeral\"\xa2\x01\n" +
 	"\x12CreateTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"a\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"a\n" +
 	"\x13CreateTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
-	"\x06secret\x18\x02 \x01(\tR\x06secret\"U\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret\"|\n" +
 	"\x11ListTokensRequest\x12,\n" +
-	"\x0finclude_revoked\x18\x01 \x01(\bH\x00R\x0eincludeRevoked\x88\x01\x01B\x12\n" +
-	"\x10_include_revoked\"J\n" +
+	"\x0finclude_revoked\x18\x01 \x01(\bH\x00R\x0eincludeRevoked\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\x12\n" +
+	"\x10_include_revokedB\t\n" +
+	"\a_org_id\"J\n" +
 	"\x12ListTokensResponse\x124\n" +
-	"\x06tokens\x18\x01 \x03(\v2\x1c.controlplane.v1.AccessTokenR\x06tokens\"$\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1c.controlplane.v1.AccessTokenR\x06tokens\"K\n" +
 	"\x12RevokeTokenRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"I\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"I\n" +
 	"\x13RevokeTokenResponse\x122\n" +
-	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\"\xf1\x01\n" +
+	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\"\x98\x02\n" +
 	"\x14CreateMyTokenRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x129\n" +
@@ -1481,30 +1601,40 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12<\n" +
 	"\bresource\x18\x04 \x01(\v2 .controlplane.v1.ResourceBindingR\bresource\x12\x1c\n" +
 	"\tephemeral\x18\x05 \x01(\bR\tephemeral\x12\x16\n" +
-	"\x06rotate\x18\x06 \x01(\bR\x06rotate\"}\n" +
+	"\x06rotate\x18\x06 \x01(\bR\x06rotate\x12\x1a\n" +
+	"\x06org_id\x18\a \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"}\n" +
 	"\x15CreateMyTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
 	"\x06secret\x18\x02 \x01(\tR\x06secret\x12\x18\n" +
-	"\arotated\x18\x03 \x01(\bR\arotated\"|\n" +
+	"\arotated\x18\x03 \x01(\bR\arotated\"\xa3\x01\n" +
 	"\x13ListMyTokensRequest\x12,\n" +
 	"\x0finclude_revoked\x18\x01 \x01(\bH\x00R\x0eincludeRevoked\x88\x01\x01\x12\x19\n" +
-	"\x05scope\x18\x02 \x01(\tH\x01R\x05scope\x88\x01\x01B\x12\n" +
+	"\x05scope\x18\x02 \x01(\tH\x01R\x05scope\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\x12\n" +
 	"\x10_include_revokedB\b\n" +
-	"\x06_scope\"L\n" +
+	"\x06_scopeB\t\n" +
+	"\a_org_id\"L\n" +
 	"\x14ListMyTokensResponse\x124\n" +
-	"\x06tokens\x18\x01 \x03(\v2\x1c.controlplane.v1.AccessTokenR\x06tokens\"&\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1c.controlplane.v1.AccessTokenR\x06tokens\"M\n" +
 	"\x14RevokeMyTokenRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RevokeMyTokenResponse\"<\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x17\n" +
+	"\x15RevokeMyTokenResponse\"c\n" +
 	"\x1dResetDaemonScopePolicyRequest\x12\x1b\n" +
-	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\" \n" +
-	"\x1eResetDaemonScopePolicyResponse\"\x85\x01\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\" \n" +
+	"\x1eResetDaemonScopePolicyResponse\"\xac\x01\n" +
 	"\x14UpdateMyTokenRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x16\n" +
 	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12#\n" +
-	"\rupdate_scopes\x18\x04 \x01(\bR\fupdateScopesB\a\n" +
-	"\x05_name\"K\n" +
+	"\rupdate_scopes\x18\x04 \x01(\bR\fupdateScopes\x12\x1a\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x01R\x05orgId\x88\x01\x01B\a\n" +
+	"\x05_nameB\t\n" +
+	"\a_org_id\"K\n" +
 	"\x15UpdateMyTokenResponse\x122\n" +
 	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\".\n" +
 	"\x14ExchangeTokenRequest\x12\x16\n" +
@@ -1620,8 +1750,15 @@ func file_services_access_token_v1_access_token_proto_init() {
 	if File_services_access_token_v1_access_token_proto != nil {
 		return
 	}
+	file_services_access_token_v1_access_token_proto_msgTypes[1].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[3].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[7].OneofWrappers = []any{}
 	file_services_access_token_v1_access_token_proto_msgTypes[9].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[11].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[13].OneofWrappers = []any{}
 	file_services_access_token_v1_access_token_proto_msgTypes[15].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[17].OneofWrappers = []any{}
+	file_services_access_token_v1_access_token_proto_msgTypes[19].OneofWrappers = []any{}
 	file_services_access_token_v1_access_token_proto_msgTypes[21].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

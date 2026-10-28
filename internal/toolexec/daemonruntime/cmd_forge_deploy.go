@@ -245,6 +245,9 @@ type forgeDeployJob struct {
 	// twice at once from two checkouts) while the work happens in the
 	// checkout.
 	checkoutPath string
+	// orgID is the org forge acts in for this job (ForgeOrgEnv). The job
+	// outlives the request that started it, so it carries the org itself.
+	orgID string
 	// grantID is the connector grant that started this job, empty for a
 	// first-party caller. Handles are uuids rather than guessable ids, but
 	// ownership is still checked on every poll — the same stance
@@ -482,7 +485,8 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 	cmd.Dir = projectDir
 	// The deploy attempt forge records on the control plane says where it came
 	// from: this path is the console's Deploy dialog. Display only.
-	cmd.Env = append(os.Environ(), "FORGE_DEPLOY_SOURCE=console")
+	cmd.Env = append(os.Environ(), "FORGE_DEPLOY_SOURCE=console") //nolint:forbidigo // forwards the first-party forge child's inherited environment with console provenance; not a daemon configuration read
+	cmd.Env = append(cmd.Env, forgeOrgEnv(ctx)...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -515,6 +519,9 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 // skip` is the sharpest example: it would make every resource report
 // not_waited, which is an honest report of a deploy nobody watched converge.
 type forgeDeployArgs struct {
+	// OrgID is the org forge acts in for this request (the web's active org).
+	// See ForgeOrgEnv. Empty: the daemon session's own org.
+	OrgID       string `json:"org_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	// Env is forge's positional argument.
 	Env string `json:"env"`
@@ -982,6 +989,10 @@ func handleForgeDeployPlan(ctx context.Context, payload []byte) ([]byte, error) 
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
+	}
 	if err := req.validate(); err != nil {
 		return nil, err
 	}
@@ -1031,6 +1042,10 @@ func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, er
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
+	}
 	if err := req.validate(); err != nil {
 		return nil, err
 	}
@@ -1073,6 +1088,7 @@ func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, er
 		// the authorised checkout.
 		projectPath:  req.ProjectPath,
 		checkoutPath: checkout,
+		orgID:        forgeOrgOf(ctx),
 		grantID:      daemonpolicy.GrantIDFromContext(ctx),
 		startedAt:    time.Now(),
 		status:       forgeDeployJobStatusRunning,
@@ -1238,6 +1254,10 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
+	}
 	if err := req.validate(); err != nil {
 		return nil, err
 	}
@@ -1347,6 +1367,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 		env:          env,
 		projectPath:  req.ProjectPath,
 		checkoutPath: checkout,
+		orgID:        forgeOrgOf(ctx),
 		grantID:      daemonpolicy.GrantIDFromContext(ctx),
 		startedAt:    time.Now(),
 		status:       forgeDeployJobStatusRunning,
@@ -1514,7 +1535,7 @@ func startForgeDeployJob(job *forgeDeployJob, args []string) {
 	// in tests, the following test installing its own stub.
 	run := runForgeDeploy
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), forgeDeployInvocationTimeout)
+		ctx, cancel := context.WithTimeout(withForgeOrg(context.Background(), job.orgID), forgeDeployInvocationTimeout)
 		defer cancel()
 
 		dir := job.checkoutPath

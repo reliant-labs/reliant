@@ -50,6 +50,7 @@ import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SidebarApps } from "../Apps/SidebarApps";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -1805,6 +1806,8 @@ function SidebarComponent({
 
       <div className="border-t border-border/40 bg-card px-3 py-2">
         <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
+        {/* Renders nothing for a person with one org. */}
+        <OrgSwitcher />
         <SidebarNavButton
           icon={<Settings className="h-4 w-4" />}
           label="Settings"

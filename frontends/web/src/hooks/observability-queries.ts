@@ -16,7 +16,7 @@ import { useEffect, useMemo } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -24,13 +24,22 @@ import type { ActivityList } from "@/services/controlPlane/observability/activit
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
+  AddIssueCommentRequest,
+  AssignIssueRequest,
+  DeleteIssueCommentRequest,
   Issue,
+  IssueComment,
   IssueEventList,
   IssueList,
   IssuePlatform,
   IssueScope,
   IssueSort,
   IssueStatus,
+  IssueTimelineList,
+  IssueUser,
+  LinkIssueChatRequest,
+  LinkIssueChatResult,
+  UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "@/services/controlPlane/observability/issuesTypes";
 import type { GetMetricRequest, ListMetricExemplarsRequest, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
@@ -684,6 +693,8 @@ export interface IssueFilters {
   statuses: IssueStatus[];
   platform?: IssuePlatform;
   service?: string;
+  /** Only the issues assigned to this user id (the server filters). */
+  assignee?: string;
   sort: IssueSort;
   text: string;
 }
@@ -701,6 +712,43 @@ export const issueKeys = {
     [...issueKeys.root(), "list", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], filters] as const,
   detail: (issueId: string, range: RangePreset) => [...issueKeys.root(), "detail", issueId, range] as const,
   events: (issueId: string) => [...issueKeys.root(), "events", issueId] as const,
+  timelines: () => [...issueKeys.root(), "timeline"] as const,
+  timeline: (issueId: string) => [...issueKeys.timelines(), issueId] as const,
+};
+
+const issueRevocations = new WeakMap<QueryClient, Map<string, { generation: number; error: unknown }>>();
+
+/** A membership refusal revokes previously cached sensitive reads of this issue too. */
+async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey, read: () => Promise<T>): Promise<T> {
+  let revocations = issueRevocations.get(client);
+  if (!revocations) { revocations = new Map(); issueRevocations.set(client, revocations); }
+  const generation = revocations.get(issueId)?.generation ?? 0;
+  let result: T;
+  try {
+    result = await read();
+  } catch (error) {
+    if (error instanceof ConnectError && (error.code === Code.PermissionDenied || error.code === Code.Unauthenticated)) {
+      revocations.set(issueId, { generation: (revocations.get(issueId)?.generation ?? 0) + 1, error });
+      const queries = client.getQueryCache().findAll({ predicate: (query) => {
+        const k = query.queryKey;
+        return k[0] === "observability" && k[1] === "issues" && ["detail", "events", "timeline"].includes(String(k[2])) && k[3] === issueId;
+      } });
+      // Cancel siblings before scrubbing them: an older in-flight response must not restore revoked data.
+      await client.cancelQueries({ predicate: (query) => queries.includes(query) && hashKey(query.queryKey) !== hashKey(key) });
+      for (const query of queries) query.setState({ data: undefined, dataUpdatedAt: 0, error, status: "error" });
+    }
+    throw error;
+  }
+  const revoked = revocations.get(issueId);
+  // Some transports ignore cancellation. Never accept a response started before a refusal.
+  if (revoked && revoked.generation !== generation) throw revoked.error;
+  return result;
+}
+
+/** People change rarely; the roster and the reader are read once a while, not per issue. */
+export const peopleKeys = {
+  members: (orgId: string) => ["observability", "people", "members", orgId] as const,
+  me: () => ["observability", "people", "me"] as const,
 };
 
 /** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
@@ -716,6 +764,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         window,
         statuses: filters.statuses,
         platform: filters.platform,
+        assignee: filters.assignee,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
@@ -734,9 +783,11 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
 /** One issue with its latest event, frames, versions and first release; counts over `range`. */
 export function useIssue(issueId: string | undefined, range: RangePreset) {
   const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.detail(issueId ?? "", range);
   return useQuery({
-    queryKey: issueKeys.detail(issueId ?? "", range),
-    queryFn: () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }),
+    queryKey: key,
+    queryFn: () => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) })),
     enabled: !!issueId,
     staleTime: 30_000,
     retry: issuesRetry,
@@ -748,10 +799,12 @@ export const ISSUE_EVENTS_PAGE_SIZE = 20;
 /** One issue's events, newest first. */
 export function useIssueEvents(issueId: string | undefined) {
   const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.events(issueId ?? "");
   return useInfiniteQuery({
-    queryKey: issueKeys.events(issueId ?? ""),
+    queryKey: key,
     queryFn: ({ pageParam }): Promise<IssueEventList> =>
-      api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,
@@ -775,6 +828,106 @@ export function useUpdateIssueStatus() {
       void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
       void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
     },
+  });
+}
+
+export const ISSUE_TIMELINE_PAGE_SIZE = 100;
+
+/** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
+export function useIssueTimeline(issueId: string | undefined) {
+  // Discussion reads Postgres, not ClickHouse: quota pauses must not block it.
+  const api = useObservabilityApi();
+  const client = useQueryClient();
+  const key = issueKeys.timeline(issueId ?? "");
+  return useInfiniteQuery({
+    queryKey: key,
+    queryFn: ({ pageParam }): Promise<IssueTimelineList> =>
+      readIssue(client, issueId as string, key, () => api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined })),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextPageToken || undefined,
+    enabled: !!issueId,
+    staleTime: 15_000,
+    retry: issuesRetry,
+  });
+}
+
+/** The signed-in person: who "me" is, and whose comments are editable. */
+export function useCurrentIssueUser() {
+  const api = useObservabilityApi();
+  return useQuery<IssueUser | null>({
+    queryKey: peopleKeys.me(),
+    queryFn: () => api.getCurrentIssueUser(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+/** The explicit issue org's roster and caller role, independently cached across org switches. */
+export function useOrgMembers(orgId: string) {
+  const api = useObservabilityApi();
+  const query = useQuery({
+    queryKey: peopleKeys.members(orgId),
+    queryFn: () => api.listOrgMembers(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  // Never offer cached people or admin controls after a membership refusal.
+  return { ...query, data: query.error ? undefined : query.data };
+}
+
+/** Every write below never retries and never re-sends; a refusal is shown, and the reads are re-fetched either way. */
+export function useAddIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, AddIssueCommentRequest>({
+    mutationFn: (req) => api.addIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useUpdateIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<IssueComment, unknown, UpdateIssueCommentRequest>({
+    mutationFn: (req) => api.updateIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+export function useDeleteIssueComment() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<void, unknown, DeleteIssueCommentRequest>({
+    mutationFn: (req) => api.deleteIssueComment(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
+  });
+}
+
+/**
+ * Assign or unassign. Like a triage it echoes the version read, never retries,
+ * and on a stale one (Aborted: a conflict) re-reads the issue instead of
+ * re-sending, so the reader sees what changed.
+ */
+export function useAssignIssue() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<Issue, unknown, AssignIssueRequest>({
+    mutationFn: (req) => api.assignIssue(req),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+    },
+  });
+}
+
+/** Record a chat started from an issue. Idempotent per (issue, chat), so a repeat is harmless. */
+export function useLinkIssueChat() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<LinkIssueChatResult, unknown, LinkIssueChatRequest>({
+    mutationFn: (req) => api.linkIssueChat(req),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: issueKeys.timelines() }),
   });
 }
 

@@ -146,6 +146,12 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 			}
 		}
 
+		if status := msg.GetRestartStatus(); status != nil {
+			if err := s.recordRestart(ctx, conn, status); err != nil {
+				return err
+			}
+			continue
+		}
 		if tr := msg.GetToolResponse(); tr != nil {
 			s.routeToolResponse(conn, tr)
 			continue

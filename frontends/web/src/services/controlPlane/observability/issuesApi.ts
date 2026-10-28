@@ -18,20 +18,31 @@ import {
   IssuePlatform as WirePlatform,
   IssueStatus as WireStatus,
   type Issue as WireIssue,
+  type IssueUser as WireUser,
 } from "@/gen/controlplane/controlplane/v1/issues_pb";
 import {
+  IssueActor_Kind as WireActorKind,
   IssueResolveKind,
   IssueSort as WireSort,
   IssueStatusChange as WireStatusChange,
   IssuesService,
   type GetIssueResponse,
+  type IssueChatLink as WireChatLink,
+  type IssueComment as WireComment,
   type IssueEvent as WireEvent,
+  type IssueTimelineEntry as WireTimelineEntry,
 } from "@/gen/controlplane/services/issues/v1/issues_pb";
 
 import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import type {
+  AddIssueCommentRequest,
+  AssignIssueRequest,
+  DeleteIssueCommentRequest,
   Issue,
+  IssueActor,
+  IssueChatLink,
+  IssueComment,
   IssueDetail,
   IssueEvent,
   IssueEventList,
@@ -39,7 +50,13 @@ import type {
   IssuePlatform,
   IssueSort,
   IssueStatus,
+  IssueTimelineEntry,
+  IssueTimelineList,
+  IssueUser,
+  LinkIssueChatRequest,
+  LinkIssueChatResult,
   ListIssuesRequest,
+  UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "./issuesTypes";
 
@@ -118,7 +135,61 @@ export function mapIssue(i: WireIssue): Issue {
     mergedInto: i.mergedInto,
     symbolicated: i.symbolicated,
     version: i.version,
+    assignee: mapUser(i.assignee),
+    incidentKey: i.incidentKey,
+    relatedCount: i.relatedCount,
   };
+}
+
+export function mapUser(u: WireUser | undefined): IssueUser | null {
+  return u ? { id: u.id, name: u.name } : null;
+}
+
+export function mapComment(c: WireComment): IssueComment {
+  return { id: c.id, issueId: c.issueId, author: mapUser(c.author), body: c.body, createdMs: msOf(c.createdAt), updatedMs: msOf(c.updatedAt) };
+}
+
+export function mapChatLink(l: WireChatLink): IssueChatLink {
+  return { issueId: l.issueId, chatId: l.chatId, chatTitle: l.chatTitle, linkedBy: mapUser(l.linkedBy), linkedAtMs: msOf(l.linkedAt) };
+}
+
+const ACTOR_KIND: Record<WireActorKind, IssueActor["kind"] | null> = {
+  [WireActorKind.UNSPECIFIED]: null,
+  [WireActorKind.USER]: "user",
+  [WireActorKind.MACHINE]: "machine",
+  [WireActorKind.SYSTEM]: "system",
+};
+
+/** An entry with no body (a oneof this client does not know) is dropped: the timeline shows only what it can read. */
+export function mapTimelineEntry(e: WireTimelineEntry): IssueTimelineEntry | null {
+  const base = {
+    id: e.id,
+    timeMs: msOf(e.time),
+    issueId: e.issueId,
+    actor: e.actor && ACTOR_KIND[e.actor.kind] ? { kind: ACTOR_KIND[e.actor.kind] as IssueActor["kind"], id: e.actor.id, name: e.actor.name } : null,
+  };
+  const entry = e.entry;
+  switch (entry.case) {
+    case "status":
+      return {
+        ...base,
+        body: {
+          kind: "status",
+          from: STATUS_OF[entry.value.from] ?? null,
+          to: STATUS_OF[entry.value.to] ?? null,
+          version: entry.value.version,
+          ignoredUntilMs: msOf(entry.value.ignoredUntil),
+        },
+      };
+    case "comment":
+      return entry.value.comment ? { ...base, body: { kind: "comment", comment: mapComment(entry.value.comment) } } : null;
+    case "assignment":
+      return { ...base, body: { kind: "assignment", from: mapUser(entry.value.from), to: mapUser(entry.value.to) } };
+    case "chat":
+      return entry.value.link ? { ...base, body: { kind: "chat", link: mapChatLink(entry.value.link) } } : null;
+    default:
+      return null;
+  }
 }
 
 export function mapIssueEvent(e: WireEvent): IssueEvent {
@@ -149,6 +220,7 @@ export function mapIssueDetail(res: GetIssueResponse): IssueDetail {
       lastSeenMs: msOf(v.lastSeenAt),
     })),
     coOccurringIssueIds: [...res.coOccurringIssueIds],
+    incidentIssueIds: [...res.incidentIssueIds],
     firstRelease: release ? { version: release.version, gitCommit: release.gitCommit, commitRange: release.commitRange, promotedAtMs: msOf(release.promotedAt) } : null,
   };
 }
@@ -166,6 +238,7 @@ export async function listIssues(req: ListIssuesRequest): Promise<IssueList> {
     statuses: req.statuses.map((s) => WIRE_STATUS[s]),
     platform: req.platform ? WIRE_PLATFORM[req.platform] : undefined,
     text: req.text || undefined,
+    assignee: req.assignee || undefined,
     sort: WIRE_SORT[req.sort],
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
@@ -216,4 +289,40 @@ export async function updateIssueStatus(req: UpdateIssueStatusRequest): Promise<
   const res = await client().updateIssueStatus(wireStatusUpdate(req));
   if (!res.issue) throw new Error("UpdateIssueStatus answered without an issue");
   return mapIssue(res.issue);
+}
+
+export async function addIssueComment(req: AddIssueCommentRequest): Promise<IssueComment> {
+  const res = await client().addIssueComment({ issueId: req.issueId, body: req.body });
+  if (!res.comment) throw new Error("AddIssueComment answered without a comment");
+  return mapComment(res.comment);
+}
+
+export async function updateIssueComment(req: UpdateIssueCommentRequest): Promise<IssueComment> {
+  const res = await client().updateIssueComment({ issueId: req.issueId, commentId: req.commentId, body: req.body });
+  if (!res.comment) throw new Error("UpdateIssueComment answered without a comment");
+  return mapComment(res.comment);
+}
+
+export async function deleteIssueComment(req: DeleteIssueCommentRequest): Promise<void> {
+  await client().deleteIssueComment({ issueId: req.issueId, commentId: req.commentId });
+}
+
+/** Set or clear (empty `assigneeUserId`) the assignee; answers the issue as it now stands. A stale version is Aborted. */
+export async function assignIssue(req: AssignIssueRequest): Promise<Issue> {
+  const res = await client().assignIssue({ issueId: req.issueId, assigneeUserId: req.assigneeUserId, expectedVersion: req.expectedVersion });
+  if (!res.issue) throw new Error("AssignIssue answered without an issue");
+  return mapIssue(res.issue);
+}
+
+export async function linkIssueChat(req: LinkIssueChatRequest): Promise<LinkIssueChatResult> {
+  const res = await client().linkIssueChat({ issueId: req.issueId, chatId: req.chatId, chatTitle: req.chatTitle ?? "" });
+  if (!res.link) throw new Error("LinkIssueChat answered without a link");
+  return { link: mapChatLink(res.link), created: res.created };
+}
+
+/** One page of an issue's timeline, oldest first. A merged issue answers with the issue it was merged into (`issueId`). */
+export async function listIssueTimeline(req: { issueId: string; pageSize?: number; pageToken?: string }): Promise<IssueTimelineList> {
+  const res = await client().listIssueTimeline({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" });
+  const entries = res.entries.map(mapTimelineEntry).filter((e): e is IssueTimelineEntry => e !== null);
+  return { entries, nextPageToken: res.nextPageToken, issueId: res.issueId || req.issueId };
 }

@@ -114,6 +114,9 @@ type MintRequest struct {
 	// Rotate atomically replaces the user's live token(s) with this name and
 	// scope set.
 	Rotate bool
+	// OrgID is the org to mint in; it must be one the user belongs to.
+	// Empty: the user's default org.
+	OrgID string
 }
 
 // Minted is a freshly minted token. Plaintext is returned exactly once.
@@ -127,7 +130,7 @@ type Minted struct {
 	Scopes []string
 }
 
-// MintForUser mints a token acting as req.UserID in their primary org.
+// MintForUser mints a token acting as req.UserID in req.OrgID, else their default org.
 func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, error) {
 	body := map[string]any{
 		"userId":    req.UserID,
@@ -135,6 +138,9 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		"scopes":    scopeStrings(req.Scopes),
 		"ephemeral": req.Ephemeral,
 		"rotate":    req.Rotate,
+	}
+	if req.OrgID != "" {
+		body["orgId"] = req.OrgID
 	}
 	if req.Resource != nil {
 		body["resource"] = resourceJSON{Kind: string(req.Resource.Kind), ID: req.Resource.ID}
@@ -295,6 +301,7 @@ func IsNotFound(err error) bool {
 type RPCError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Reason  string `json:"-"`
 }
 
 func (e *RPCError) Error() string {
@@ -332,6 +339,7 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		rpcErr := &RPCError{Code: http.StatusText(resp.StatusCode)}
 		_ = json.Unmarshal(body, rpcErr)
+		rpcErr.Reason = resp.Header.Get("x-forge-error-reason")
 		return rpcErr
 	}
 	if err := json.Unmarshal(body, out); err != nil {

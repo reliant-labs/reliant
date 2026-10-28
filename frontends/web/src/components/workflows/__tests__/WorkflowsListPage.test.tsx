@@ -165,7 +165,11 @@ describe("WorkflowsListPage", () => {
     expect(within(triage).queryByRole("switch")).toBeNull();
     // Its scheduling affordance is the row menu's Add trigger….
     await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage (project, triage)" }));
-    expect(await screen.findByRole("menuitem", { name: "Add trigger…" })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Add trigger…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New automation" });
+    expect(within(dialog).getAllByRole("heading").slice(-2).map((h) => h.textContent)).toEqual(["When", "Do"]);
+    expect(within(dialog).getByText("Triage", { selector: "span.font-medium" })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Workflow")).not.toBeInTheDocument();
   });
 
   it("shows inline what runs it: its triggers, health, next run and its switch", async () => {
@@ -386,11 +390,13 @@ describe("WorkflowsListPage", () => {
 
   it("offers Set up… on a workflow that could run by itself and is not on here, and says Off", async () => {
     const library = libraryResponse();
+    const triggers = [create(WorkflowTriggerSchema, { name: "nightly", source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * *"], timezone: "UTC" }) } })];
     library.workflows[1] = {
       ...library.workflows[1]!,
-      triggers: [create(WorkflowTriggerSchema, { name: "nightly", source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * *"], timezone: "UTC" }) } })],
+      triggers,
     } as (typeof library.workflows)[number];
     mocks.listWorkflows.mockResolvedValue(library);
+    mocks.getWorkflow.mockResolvedValue({ source: "project", workflow: { name: "triage", inputs: {}, triggers } });
     mocks.listTriggers.mockResolvedValue({ triggers: [] });
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
@@ -398,6 +404,9 @@ describe("WorkflowsListPage", () => {
     await userEvent.click(within(triage).getByRole("button", { name: "Set up Triage (project, triage)" }));
     // The one automation dialog, for this workflow's declared triggers.
     expect(useAutomationDialogStore.getState().request).toMatchObject({ workflowRef: "triage", mode: "setup", showOpenWorkflow: true });
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Set by the workflow/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Turn on/ })).toBeInTheDocument();
     // A workflow that declares nothing has no Set up.
     expect(within(screen.getByTestId("workflow-row-builtin://agent")).queryByRole("button", { name: /^Set up/ })).toBeNull();
   });

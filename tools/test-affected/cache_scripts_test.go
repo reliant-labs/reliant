@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -103,15 +105,161 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := string(b)
-	selection := s[strings.Index(s, "j() {"):strings.Index(s, "load_selection || exit 1")]
-	deps := s[strings.Index(s, "prepare_dependencies() {"):strings.Index(s, "\nprepare_dependencies\n")]
-	putFixture(t, root, "plan-2.json", `{"go":{"full":true,"packages":[],"deferred":[]},"web":{"full":true,"tests":[]},"electron":{"full":true},"forge_generate":{"full":true},"docs_generate":{"full":true}}`, 0644)
-	// Exercise the actual selection/install functions, not a second implementation.
-	body := "#!/usr/bin/env bash\nset -euo pipefail\ncd \"" + root + "\"\nrun_plan=plan-2.json\nbase=unused\nregen=0\nfail=0\ngit() { echo frontends/web/generated.ts; }\n" + selection + deps + "\nnpm_install() { echo \"$1\" >>deps; }\nload_selection\nprepare_dependencies\n[[ $gofull = true && $webfull = true && $elec = true && $dgen = true && $typecheck = true ]]\nfor d in . frontends/web electron tools/protoc-gen-es; do grep -Fx \"$d\" deps; done\n"
-	putFixture(t, root, "scripts/selection.sh", body, 0755)
-	if out, err := runFixture(root, "selection.sh", nil); err != nil {
-		t.Fatalf("expanded plan selection/dependencies: %v %s", err, out)
+	// Extract the real functions, including npm_install: only package-manager
+	// executables are faked, so no network or shared node_modules is touched.
+	extract := func(start, end string) string {
+		t.Helper()
+		_, rest, ok := strings.Cut(string(b), start)
+		if !ok {
+			t.Fatalf("merge-gate missing fixture start %q", start)
+		}
+		body, _, ok := strings.Cut(rest, end)
+		if !ok {
+			t.Fatalf("merge-gate missing fixture end %q", end)
+		}
+		return start + body
+	}
+	selection := extract("j() {", "load_selection || exit 1")
+	deps := extract("npm_install() {", "\nprepare_dependencies\n")
+	full := LaneFull{Full: true}
+	for _, tc := range []struct {
+		name       string
+		initial    Plan
+		next       Plan
+		changedWeb bool
+		wantState  string // Go, web, Electron, docs, typecheck, forge, hooks-only, web test count
+		wantDeps   []string
+		failedDir  string
+	}{
+		{
+			name:      "expanded web tests and full generation",
+			next:      Plan{Go: GoPlan{LaneFull: full}, Web: WebPlan{Tests: []string{"generated.test.ts"}}, ForgeGen: ForgeGenPlan{LaneFull: full}},
+			wantState: "true|false|false|false|false|true|false|1",
+			wantDeps:  []string{"npm .", "npm tools/protoc-gen-es", "pnpm frontends/web"},
+		},
+		{
+			name:      "expanded full web lane",
+			next:      Plan{Web: WebPlan{LaneFull: full}},
+			wantState: "false|true|false|false|false|false|false|0",
+			wantDeps:  []string{"npm .", "pnpm frontends/web"},
+		},
+		{
+			name:       "generated web source needs typecheck without tests",
+			changedWeb: true,
+			wantState:  "false|false|false|false|true|false|false|0",
+			wantDeps:   []string{"npm .", "pnpm frontends/web"},
+		},
+		{
+			name:      "hook-only generation needs no protoc install",
+			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full, HooksOnly: true}},
+			wantState: "false|false|false|false|false|true|true|0",
+		},
+		{
+			name:      "hook-only to full generation prepares protoc",
+			initial:   Plan{ForgeGen: ForgeGenPlan{LaneFull: full, HooksOnly: true}},
+			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
+			wantState: "false|false|false|false|false|true|false|0",
+			wantDeps:  []string{"npm tools/protoc-gen-es"},
+		},
+		{
+			// Electron and docs are release-only in the merge tier (7e6b4ee5).
+			// Their flags still reload, but must not trigger irrelevant installs.
+			name:      "release-only lanes do not install merge dependencies",
+			next:      Plan{Electron: ElectronPlan{LaneFull: full}, DocGen: DocGenPlan{LaneFull: full}},
+			wantState: "false|false|true|true|false|false|false|0",
+		},
+		{
+			name:      "new dependency failure is propagated after waiting",
+			next:      Plan{ForgeGen: ForgeGenPlan{LaneFull: full}},
+			wantState: "false|false|false|false|false|true|false|0",
+			wantDeps:  []string{"npm tools/protoc-gen-es"},
+			failedDir: "tools/protoc-gen-es",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, plan := range map[string]Plan{"plan-1.json": tc.initial, "plan-2.json": tc.next} {
+				data, err := json.Marshal(plan)
+				if err != nil {
+					t.Fatal(err)
+				}
+				putFixture(t, dir, name, string(data), 0644)
+			}
+			for _, d := range []string{".", "electron", "tools/protoc-gen-es"} {
+				putFixture(t, dir, filepath.Join(d, "package-lock.json"), "{}", 0644)
+			}
+			putFixture(t, dir, "frontends/web/pnpm-lock.yaml", "lockfileVersion: '9.0'\n", 0644)
+			// Assert the actual frozen-install commands, not just selected dirs.
+			putFixture(t, dir, "bin/npm", `#!/usr/bin/env bash
+set -euo pipefail
+[[ $# = 7 && $1 = ci && $2 = --prefix && $4 = --ignore-scripts && $5 = --no-audit && $6 = --no-fund && $7 = --loglevel=error ]]
+printf 'npm %s\n' "$3" >>"$INSTALL_LOG"
+[[ $3 != "$FAILED_DIR" ]]
+`, 0755)
+			putFixture(t, dir, "bin/pnpm", `#!/usr/bin/env bash
+set -euo pipefail
+[[ $# = 7 && $1 = install && $2 = --dir && $3 = frontends/web && $4 = --frozen-lockfile && $5 = --ignore-scripts && $6 = --config.confirmModulesPurge=false && $7 = --reporter=silent ]]
+printf 'pnpm %s\n' "$3" >>"$INSTALL_LOG"
+[[ $3 != "$FAILED_DIR" ]]
+`, 0755)
+			putFixture(t, dir, "changed-1", "", 0644)
+			changed := ""
+			if tc.changedWeb {
+				changed = "frontends/web/generated.ts\n"
+			}
+			putFixture(t, dir, "changed-2", changed, 0644)
+			// Invoke initial and regenerated selection/preparation in ONE shell:
+			// stale flags and missing second-plan dependencies must both fail.
+			wantFail := "0"
+			if tc.failedDir != "" {
+				wantFail = "1"
+			}
+			body := `#!/usr/bin/env bash
+set -euo pipefail
+base=unused
+regen=0
+fail=0
+phase() { shift; "$@"; }
+git() { cat "$changed_file"; }
+` + selection + deps + `
+changed_file=changed-1
+run_plan=plan-1.json
+load_selection
+INSTALL_LOG="$PWD/initial-deps"
+export INSTALL_LOG
+prepare_dependencies
+[[ $fail = 0 ]]
+changed_file=changed-2
+run_plan=plan-2.json
+load_selection
+INSTALL_LOG="$PWD/regenerated-deps"
+prepare_dependencies
+printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$gofull" "$webfull" "$elec" "$dgen" "$typecheck" "$fgen" "$hooks_only" "$nweb"
+[[ $fail = ` + wantFail + ` ]]
+`
+			putFixture(t, dir, "scripts/selection.sh", body, 0755)
+			env := []string{"PATH=" + filepath.Join(dir, "bin") + ":" + os.Getenv("PATH"), "FAILED_DIR=" + tc.failedDir}
+			out, err := runFixture(dir, "selection.sh", env)
+			if err != nil || strings.TrimSpace(string(out)) != tc.wantState {
+				t.Fatalf("regenerated selection/dependencies: %v, state %q; want %q", err, out, tc.wantState)
+			}
+			readDeps := func(name string) []string {
+				t.Helper()
+				b, err := os.ReadFile(filepath.Join(dir, name))
+				if err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+				lines := strings.FieldsFunc(strings.TrimSpace(string(b)), func(r rune) bool { return r == '\n' })
+				slices.Sort(lines) // Installs run concurrently; completion order is not contractual.
+				return lines
+			}
+			if got := readDeps("initial-deps"); len(got) != 0 {
+				t.Fatalf("initial selection installed unselected dependencies: %q", got)
+			}
+			if got := readDeps("regenerated-deps"); !slices.Equal(got, tc.wantDeps) {
+				t.Fatalf("newly selected installs = %q; want exactly %q", got, tc.wantDeps)
+			}
+		})
 	}
 }
 

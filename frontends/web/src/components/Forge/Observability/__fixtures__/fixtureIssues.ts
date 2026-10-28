@@ -19,12 +19,18 @@ import type { ActivityEvent, ActivityList } from "@/services/controlPlane/observ
 import type { Promotion, ReleaseHealth, ReleaseVerdict } from "@/services/controlPlane/observability/deliveryTypes";
 import type {
   Issue,
+  IssueActor,
+  LinkIssueChatResult,
+  IssueComment,
   IssueDetail,
   IssueEvent,
   IssueEventList,
   IssueList,
   IssueStatus,
+  IssueTimelineEntry,
+  IssueTimelineList,
   IssueTrendPoint,
+  IssueUser,
 } from "@/services/controlPlane/observability/issuesTypes";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { TimeWindow } from "@/services/controlPlane/observability/types";
@@ -38,6 +44,14 @@ export interface IssuesFixtureOptions {
   issues?: "ok" | "empty" | "not-configured";
   /** The first triage finds the issue changed by someone else (Aborted). */
   issueConflict?: boolean;
+  /** The first assignment finds the issue assigned by someone else meanwhile (Aborted). */
+  assignConflict?: boolean;
+  /** The reader: "ada" (default; an org admin), "grace" (a plain member) or "none" (a credential that acts for no person). */
+  issueReader?: "ada" | "grace" | "none";
+  /** The member roster is closed to the reader (it needs token:read): PermissionDenied. */
+  rosterDenied?: boolean;
+  /** iss-checkout-total was merged into iss-orders-deadline, which carries its entries and refuses writes to it. */
+  mergedIssue?: boolean;
   /**
    * The release-health answer. Absent: judged from the story (prod's v1.8.3
    * fails, everything else passes). "unimplemented": an older control plane.
@@ -46,7 +60,19 @@ export interface IssuesFixtureOptions {
   health?: ReleaseVerdict | "unimplemented" | "not-evaluated";
 }
 
-type Seed = Omit<Issue, "events" | "affected" | "trend" | "version"> & { rate: number; affectedShare: number };
+type Seed = Omit<Issue, "events" | "affected" | "trend" | "version" | "assignee" | "incidentKey" | "relatedCount"> & {
+  rate: number;
+  affectedShare: number;
+  assignee?: IssueUser | null;
+  incidentKey?: string;
+};
+
+export const FIXTURE_USERS = {
+  ada: { id: "user-ada", name: "ada@example.com", role: "admin" },
+  grace: { id: "user-grace", name: "grace@example.com", role: "member" },
+  alan: { id: "user-alan", name: "alan@example.com", role: "member" },
+} as const;
+const userOf = (u: { id: string; name: string }): IssueUser => ({ id: u.id, name: u.name });
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
@@ -99,6 +125,8 @@ export function fixtureIssueSeeds(t0: number): Seed[] {
       culprit: "(*Service).CreateOrder in internal/handlers/orders/rpc_create_order.go",
       exceptionType: "context.DeadlineExceeded",
       status: "new",
+      assignee: userOf(FIXTURE_USERS.grace),
+      incidentKey: "sqlstate:53300",
       firstSeenMs: t0 - 38 * MIN,
       firstVersion: "v1.8.3",
       firstRelease: "v1.8.3",
@@ -119,6 +147,7 @@ export function fixtureIssueSeeds(t0: number): Seed[] {
       culprit: "(*Pool).Acquire in internal/db/pool.go",
       exceptionType: "*pq.Error",
       status: "unresolved",
+      incidentKey: "sqlstate:53300",
       firstSeenMs: t0 - 40 * DAY,
       firstVersion: "v1.7.2",
       firstRelease: "v1.7.2",
@@ -206,11 +235,20 @@ function trendOf(seed: Seed, window: TimeWindow): IssueTrendPoint[] {
   return out.slice(-24);
 }
 
-function issueOf(seed: Seed, window: TimeWindow, version: number): Issue {
-  const { rate: _rate, affectedShare, ...issue } = seed;
+function issueOf(seed: Seed, window: TimeWindow, version: number, relatedCount = 0): Issue {
+  const { rate: _rate, affectedShare, assignee, incidentKey, ...issue } = seed;
   const trend = trendOf(seed, window);
   const events = trend.reduce((sum, p) => sum + p.events, 0);
-  return { ...issue, trend, events, affected: Math.max(events ? 1 : 0, Math.round(events * affectedShare)), version };
+  return {
+    ...issue,
+    assignee: assignee ?? null,
+    incidentKey: incidentKey ?? "",
+    relatedCount,
+    trend,
+    events,
+    affected: Math.max(events ? 1 : 0, Math.round(events * affectedShare)),
+    version,
+  };
 }
 
 function framesOf(seed: Seed) {
@@ -247,7 +285,23 @@ function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
   };
 }
 
-type IssuesApi = Pick<ObservabilityApi, "listIssues" | "getIssue" | "listIssueEvents" | "updateIssueStatus" | "getReleaseHealth" | "listActivity">;
+type IssuesApi = Pick<
+  ObservabilityApi,
+  | "listIssues"
+  | "getIssue"
+  | "listIssueEvents"
+  | "updateIssueStatus"
+  | "getReleaseHealth"
+  | "listActivity"
+  | "listIssueTimeline"
+  | "addIssueComment"
+  | "updateIssueComment"
+  | "deleteIssueComment"
+  | "assignIssue"
+  | "linkIssueChat"
+  | "listOrgMembers"
+  | "getCurrentIssueUser"
+>;
 
 export function createIssuesFixture(
   options: IssuesFixtureOptions,
@@ -258,8 +312,61 @@ export function createIssuesFixture(
   const t0 = now();
   const mode = options.issues ?? "ok";
   const seeds = mode === "empty" ? [] : fixtureIssueSeeds(t0);
+  if (options.mergedIssue) {
+    const merged = seeds.find((s) => s.id === "iss-checkout-total");
+    if (merged) merged.mergedInto = "iss-orders-deadline";
+  }
   const versions = new Map(seeds.map((s) => [s.id, 1]));
   let conflictPending = !!options.issueConflict;
+  let assignConflictPending = !!options.assignConflict;
+  const readerKey = options.issueReader ?? "ada";
+  const reader = readerKey === "none" ? null : FIXTURE_USERS[readerKey];
+  const relatedOf = (seed: Seed) => (seed.incidentKey ? seeds.filter((o) => o.id !== seed.id && o.incidentKey === seed.incidentKey).length : 0);
+  const build = (seed: Seed, window: TimeWindow, version: number): Issue => issueOf(seed, window, version, relatedOf(seed));
+
+  // ── The discussion: one timeline per issue, kept for the fixture's lifetime.
+  let nextEntry = 1;
+  const SYSTEM: IssueActor = { kind: "system", id: "", name: "" };
+  const actorOf = (u: { id: string; name: string } | null): IssueActor => (u ? { kind: "user", id: u.id, name: u.name } : SYSTEM);
+  const timeline: IssueTimelineEntry[] = [];
+  const push = (issueId: string, timeMs: number, actor: IssueActor | null, body: IssueTimelineEntry["body"]): IssueTimelineEntry => {
+    const entry: IssueTimelineEntry = { id: `tl-${nextEntry++}`, timeMs, issueId, actor, body };
+    timeline.push(entry);
+    return entry;
+  };
+  const commentOf = (issueId: string, author: { id: string; name: string } | null, body: string, atMs: number): IssueComment => ({
+    id: `cmt-${nextEntry}`,
+    issueId,
+    author: author ? userOf(author) : null,
+    body,
+    createdMs: atMs,
+    updatedMs: atMs,
+  });
+  for (const seed of seeds) push(seed.id, seed.firstSeenMs, SYSTEM, { kind: "status", from: null, to: "new", version: seed.firstVersion, ignoredUntilMs: 0 });
+  if (seeds.length) {
+    push("iss-checkout-total", t0 - 4 * DAY, actorOf(FIXTURE_USERS.grace), { kind: "status", from: "unresolved", to: "resolved", version: "v1.8.2", ignoredUntilMs: 0 });
+    push("iss-checkout-total", t0 - 35 * MIN, SYSTEM, { kind: "status", from: "resolved", to: "regressed", version: "v1.8.3", ignoredUntilMs: 0 });
+    const c1 = commentOf("iss-checkout-total", FIXTURE_USERS.ada, "Back in **v1.8.3**. `renderSummary` reads `order.total` before the cart loads.\n\n<script>alert('not run')</script>\nSee [the fix](https://example.com/pr/4821).", t0 - 34 * MIN);
+    push("iss-checkout-total", c1.createdMs, actorOf(FIXTURE_USERS.ada), { kind: "comment", comment: c1 });
+    push("iss-orders-deadline", t0 - 30 * MIN, actorOf(FIXTURE_USERS.ada), { kind: "assignment", from: null, to: userOf(FIXTURE_USERS.grace) });
+    const c2 = commentOf("iss-orders-deadline", FIXTURE_USERS.grace, "Looks like the pool is exhausted: same cause as iss-worker-conns.", t0 - 26 * MIN);
+    push("iss-orders-deadline", c2.createdMs, actorOf(FIXTURE_USERS.grace), { kind: "comment", comment: c2 });
+    push("iss-orders-deadline", t0 - 20 * MIN, actorOf(FIXTURE_USERS.grace), {
+      kind: "chat",
+      link: { issueId: "iss-orders-deadline", chatId: "chat-4f2a91c07b", chatTitle: "Investigate CreateOrder timeouts", linkedBy: userOf(FIXTURE_USERS.grace), linkedAtMs: t0 - 20 * MIN },
+    });
+  }
+  const hidden = new Set<string>();
+  const rootOf = (id: string) => seedOf(id).mergedInto || id;
+  const refuseIfMerged = (id: string) => {
+    const seed = seedOf(id);
+    if (seed.mergedInto) throw new ConnectError(`this issue was merged into ${seed.mergedInto}; change that one`, Code.FailedPrecondition);
+    return seed;
+  };
+  const requireReader = () => {
+    if (!reader) throw new ConnectError("a credential that acts for no person cannot comment", Code.PermissionDenied);
+    return reader;
+  };
   const activity: ActivityEvent[] = [
     {
       id: "act-query-1",
@@ -331,7 +438,7 @@ export function createIssuesFixture(
     const verdict: ReleaseVerdict = options.health === "not-evaluated" ? "pass" : (options.health as ReleaseVerdict | undefined) ?? story;
     const failing = verdict === "fail";
     const window = { startMs: at, endMs: afterEnd };
-    const issue = (id: string) => issueOf(seedOf(id), window, versions.get(id) ?? 1);
+    const issue = (id: string) => build(seedOf(id), window, versions.get(id) ?? 1);
     return {
       promotion: { promotionId: promotion.promotionId, version: promotion.version, gitCommit: promotion.gitCommit, promotedAtMs: at, previousVersion: previous?.version ?? "" },
       before: { startMs: beforeStart, endMs: at },
@@ -386,8 +493,9 @@ export function createIssuesFixture(
           .filter((s) => s.status && statuses.includes(s.status))
           .filter((s) => !req.platform || s.platform === req.platform)
           .filter((s) => !req.services?.length || req.services.includes(s.service))
+          .filter((s) => !req.assignee || s.assignee?.id === req.assignee)
           .filter((s) => !text || s.title.toLowerCase().includes(text) || s.culprit.toLowerCase().includes(text))
-          .map((s) => issueOf(s, req.window, versions.get(s.id) ?? 1));
+          .map((s) => build(s, req.window, versions.get(s.id) ?? 1));
         const order: Record<typeof req.sort, (a: Issue, b: Issue) => number> = {
           last: (a, b) => b.lastSeenMs - a.lastSeenMs,
           first: (a, b) => b.firstSeenMs - a.firstSeenMs,
@@ -404,7 +512,7 @@ export function createIssuesFixture(
       gate("GetIssue", req, (): IssueDetail => {
         const seed = seedOf(req.issueId);
         const window = req.window ?? { startMs: now() - DAY, endMs: now() };
-        const issue = issueOf(seed, window, versions.get(seed.id) ?? 1);
+        const issue = build(seed, window, versions.get(seed.id) ?? 1);
         const release = ledger.find((p) => p.envId === seed.envId && p.version === seed.firstRelease);
         return {
           issue,
@@ -419,6 +527,7 @@ export function createIssuesFixture(
                     : []),
                 ]
               : [],
+          incidentIssueIds: seed.incidentKey ? seeds.filter((o) => o.id !== seed.id && o.incidentKey === seed.incidentKey).map((o) => o.id) : [],
           coOccurringIssueIds: seed.id === "iss-orders-deadline" ? ["iss-worker-conns"] : seed.id === "iss-worker-conns" ? ["iss-orders-deadline"] : [],
           firstRelease: release ? { version: release.version, gitCommit: release.gitCommit, commitRange: `${release.gitCommit.slice(0, 7)}~12..${release.gitCommit.slice(0, 7)}`, promotedAtMs: release.promotedAtMs } : null,
         };
@@ -466,6 +575,13 @@ export function createIssuesFixture(
         }
         detail.status = seed.status ?? "";
         versions.set(seed.id, current + 1);
+        push(seed.id, now(), actorOf(reader ?? FIXTURE_USERS.ada), {
+          kind: "status",
+          from,
+          to: seed.status,
+          version: seed.resolvedVersion,
+          ignoredUntilMs: seed.status === "ignored" ? seed.ignoredUntilMs : 0,
+        });
         activity.unshift({
           id: `act-triage-${activity.length + 1}`,
           atMs: now(),
@@ -477,8 +593,90 @@ export function createIssuesFixture(
           via: "console",
           detail,
         });
-        return issueOf(seed, { startMs: now() - DAY, endMs: now() }, current + 1);
+        return build(seed, { startMs: now() - DAY, endMs: now() }, current + 1);
       }),
+    listIssueTimeline: (req) =>
+      gate("ListIssueTimeline", req, (): IssueTimelineList => {
+        const root = rootOf(req.issueId);
+        const family = new Set([root, ...seeds.filter((s) => s.mergedInto === root).map((s) => s.id)]);
+        const all = timeline
+          .filter((e) => family.has(e.issueId) && !hidden.has(e.id))
+          .map((entry, index) => ({ entry, index }))
+          .sort((a, b) => a.entry.timeMs - b.entry.timeMs || a.index - b.index)
+          .map(({ entry }) => structuredClone(entry));
+        const size = req.pageSize || 50;
+        const offset = Number(req.pageToken || 0);
+        return { entries: all.slice(offset, offset + size), nextPageToken: offset + size < all.length ? String(offset + size) : "", issueId: root };
+      }),
+    addIssueComment: (req) =>
+      gate("AddIssueComment", req, (): IssueComment => {
+        const seed = refuseIfMerged(req.issueId);
+        const who = requireReader();
+        const comment = commentOf(seed.id, who, req.body, now());
+        push(seed.id, comment.createdMs, actorOf(who), { kind: "comment", comment });
+        return comment;
+      }),
+    updateIssueComment: (req) =>
+      gate("UpdateIssueComment", req, (): IssueComment => {
+        refuseIfMerged(req.issueId);
+        const who = requireReader();
+        const entry = timeline.find((e) => e.body.kind === "comment" && e.body.comment.id === req.commentId && !hidden.has(e.id));
+        if (!entry || entry.body.kind !== "comment") throw new ConnectError("no such comment", Code.NotFound);
+        if (entry.body.comment.author?.id !== who.id) throw new ConnectError("only a comment's author can edit it", Code.PermissionDenied);
+        entry.body.comment = { ...entry.body.comment, body: req.body, updatedMs: now() };
+        return entry.body.comment;
+      }),
+    deleteIssueComment: (req) =>
+      gate("DeleteIssueComment", req, (): void => {
+        refuseIfMerged(req.issueId);
+        const who = requireReader();
+        const entry = timeline.find((e) => e.body.kind === "comment" && e.body.comment.id === req.commentId && !hidden.has(e.id));
+        if (!entry || entry.body.kind !== "comment") throw new ConnectError("no such comment", Code.NotFound);
+        const isAdmin = FIXTURE_USERS[(Object.keys(FIXTURE_USERS) as (keyof typeof FIXTURE_USERS)[]).find((k) => FIXTURE_USERS[k].id === who.id) ?? "grace"].role === "admin";
+        if (entry.body.comment.author?.id !== who.id && !isAdmin) throw new ConnectError("only the author or an org admin can delete a comment", Code.PermissionDenied);
+        hidden.add(entry.id);
+      }),
+    assignIssue: (req) =>
+      gate("AssignIssue", req, (): Issue => {
+        const seed = refuseIfMerged(req.issueId);
+        const current = versions.get(seed.id) ?? 1;
+        if (assignConflictPending) {
+          // Someone else assigned it a moment ago.
+          assignConflictPending = false;
+          seed.assignee = userOf(FIXTURE_USERS.alan);
+          versions.set(seed.id, current + 1);
+          push(seed.id, now(), actorOf(FIXTURE_USERS.alan), { kind: "assignment", from: null, to: userOf(FIXTURE_USERS.alan) });
+          throw new ConnectError("issue changed since it was read (expected_version is stale)", Code.Aborted);
+        }
+        if (req.expectedVersion && req.expectedVersion !== current) {
+          throw new ConnectError("issue changed since it was read (expected_version is stale)", Code.Aborted);
+        }
+        const to = req.assigneeUserId ? Object.values(FIXTURE_USERS).find((u) => u.id === req.assigneeUserId) : undefined;
+        if (req.assigneeUserId && !to) throw new ConnectError("that user is not a member of the issue's organization", Code.InvalidArgument);
+        const from = seed.assignee ?? null;
+        seed.assignee = to ? userOf(to) : null;
+        versions.set(seed.id, current + 1);
+        push(seed.id, now(), actorOf(reader), { kind: "assignment", from, to: seed.assignee });
+        return build(seed, { startMs: now() - DAY, endMs: now() }, current + 1);
+      }),
+    linkIssueChat: (req) =>
+      gate("LinkIssueChat", req, (): LinkIssueChatResult => {
+        const seed = refuseIfMerged(req.issueId);
+        const existing = timeline.find((e) => e.body.kind === "chat" && e.issueId === seed.id && e.body.link.chatId === req.chatId);
+        if (existing && existing.body.kind === "chat") {
+          if (req.chatTitle) existing.body.link = { ...existing.body.link, chatTitle: req.chatTitle };
+          return { link: existing.body.link, created: false };
+        }
+        const link = { issueId: seed.id, chatId: req.chatId, chatTitle: req.chatTitle ?? "", linkedBy: reader ? userOf(reader) : null, linkedAtMs: now() };
+        push(seed.id, link.linkedAtMs, actorOf(reader), { kind: "chat", link });
+        return { link, created: true };
+      }),
+    listOrgMembers: (orgId) =>
+      call("ListAssignableUsers", { orgId }, () => {
+        if (!orgId || options.rosterDenied) throw new ConnectError("issue organization membership required", Code.PermissionDenied);
+        return { users: Object.values(FIXTURE_USERS).map((u) => ({ id: u.id, name: u.name })), callerRole: reader ? reader.role : null };
+      }),
+    getCurrentIssueUser: () => call("GetCurrentUser", {}, () => (reader ? userOf(reader) : null)),
     getReleaseHealth: (req) =>
       call("GetReleaseHealth", req, () => {
         if (options.health === "unimplemented") throw new ConnectError("unimplemented: GetReleaseHealth", Code.Unimplemented);
