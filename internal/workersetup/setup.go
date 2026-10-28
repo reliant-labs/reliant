@@ -243,6 +243,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
 		Name: triggers.FireWorkflowName,
 	})
+	w.RegisterWorkflow(triggers.TriggerCapacityRedriveWorkflow)
 	// Inbound triggers (webhook, integration, workflow event) fire through
 	// their own workflow: the api-server's receiver records the event and
 	// starts it, and its activity launches the recorded event.
@@ -271,11 +272,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 	if cfg.TriggerLauncher != nil {
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {

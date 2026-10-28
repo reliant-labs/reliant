@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -126,6 +127,9 @@ type seedContent struct {
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
 	result, err := l.launch(ctx, ev, spec)
+	if errors.Is(err, errAdmissionSuperseded) {
+		return nil, &AlreadyLaunchedError{ChatID: spec.NewChatID}
+	}
 	var already *AlreadyLaunchedError
 	if spec.ClientMessageID != "" && errors.As(err, &already) && already.ChatID != "" {
 		// A start the client named is idempotent: its repeat is answered with
@@ -440,7 +444,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// workflow's — until one ran out of attempts
 	// (TestConcurrentStartChatsTakeNoPredicateLocks).
 	launchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	// attemptAt precedes this attempt's durable stamp (PrepareExecution, in
+	// the transaction below), so the start's deadline is measured from no
+	// later than the stamp capacity recovery ages.
+	var attemptAt time.Time
 	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
+		attemptAt = time.Now()
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -480,6 +489,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 		if err := l.repo.UpdateTriggerEventOutcome(txCtx, eventRow.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 			return fmt.Errorf("failed to attach chat to trigger event: %w", err)
+		}
+		if spec.PrepareExecution != nil {
+			if err := spec.PrepareExecution(txCtx, eventRow.ID, workflowID); err != nil {
+				return err
+			}
 		}
 
 		if _, _, _, err := l.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
@@ -534,6 +548,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		eventID:       eventRow.ID,
 		trigger:       TriggerInfoFromEvent(eventRow),
 		generateTitle: spec.GenerateTitle,
+		attemptAt:     attemptAt,
 	})
 }
 
@@ -841,11 +856,16 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	// it is conditional on the root still being PENDING: if a later fire
 	// abandoned it first, this fire's slot is spent and must not start a run
 	// beside the one that replaced it.
+	// attemptAt precedes the claim's durable start-attempt stamp; see start.
+	attemptAt := time.Now()
 	stillPending, err := l.repo.ClaimWorkflowStart(ctx, chat.ID)
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to claim the start", Err: err}
 	}
 	if !stillPending {
+		if err := l.recoverAdmission(ctx, recorded.ID, chat.MainThreadID(), spec); err != nil {
+			return nil, &InternalError{Reason: "failed to recover admitted execution", Err: err}
+		}
 		return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: recorded.ID}
 	}
 
@@ -858,6 +878,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		eventID:       recorded.ID,
 		trigger:       TriggerInfoFromEvent(recorded),
 		generateTitle: spec.GenerateTitle && chat.Title == "",
+		attemptAt:     attemptAt,
 	})
 }
 
@@ -888,6 +909,9 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 			spec.WorktreeID = nil
 			return l.launchPending(ctx, ev, spec, seed)
 		}
+	}
+	if err := l.recoverAdmission(ctx, existing.ID, chat.MainThreadID(), spec); err != nil {
+		return nil, &InternalError{Reason: "failed to recover admitted execution", Err: err}
 	}
 	return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: existing.ID}
 }
@@ -1097,6 +1121,9 @@ type startParams struct {
 	eventID       string
 	trigger       *v2.TriggerInfo
 	generateTitle bool
+	// attemptAt is taken before this attempt's durable stamp (the launch
+	// transaction, or ClaimWorkflowStart for a retry).
+	attemptAt time.Time
 }
 
 // start brings the run in line with the committed intent: it issues the
@@ -1131,8 +1158,14 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		ID:                       workflowID,
 		TaskQueue:                l.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		Memo:                     map[string]interface{}{"trigger_event_id": p.eventID},
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
+	}
+	if p.spec.RecordExecution != nil {
+		// An acknowledged or completed admitted start must never create a
+		// second chain when a post-accept database write is retried.
+		workflowOptions.WorkflowIDReusePolicy = enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
 	}
 
 	// Inject session daemon if set on chat. A chat that reaches here still
@@ -1194,7 +1227,23 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 
 	// The root start stays synchronous. Returning before Temporal accepted
 	// it would hand the caller a committed chat that may never run.
-	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
+	//
+	// The start RPC carries a deadline of core.StartAttemptDeadline past
+	// attemptAt, propagated to Temporal, so no start of this attempt is
+	// accepted long after its durable stamp. Capacity recovery and the
+	// stranded-start sweep wait core.StartAttemptBound past that stamp
+	// before treating the start as no longer in flight.
+	startCtx, cancelStart := context.WithDeadline(ctx, p.attemptAt.Add(core.StartAttemptDeadline))
+	workflowRun, err := l.temporal.ExecuteWorkflow(startCtx, workflowOptions, v2.DynamicWorkflow, workflowInput)
+	cancelStart()
+	if err != nil && p.spec.RecordExecution != nil {
+		var already *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &already) {
+			if recoverErr := l.recoverAdmission(ctx, p.eventID, workflowID, p.spec); recoverErr == nil {
+				return nil, &AlreadyLaunchedError{ChatID: chatID, EventID: p.eventID}
+			}
+		}
+	}
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", chatID)
 		l.recordFailedStart(ctx, workflowID)
@@ -1202,6 +1251,9 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	}
 
 	runID := workflowRun.GetRunID()
+	if err := l.recoverAdmission(ctx, p.eventID, workflowID, p.spec); err != nil {
+		return nil, &InternalError{Reason: "failed to record admitted execution", Err: err}
+	}
 	l.runs.RecordRun(ctx, chatID, workflowID, runID)
 
 	// Close the pending window now rather than waiting for the run's own

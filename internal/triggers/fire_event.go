@@ -74,6 +74,7 @@ type EventFirer struct {
 	repo      EventRepo
 	launcher  Launcher
 	workflows WorkflowResolver
+	capacity  capacityDescriptions
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
@@ -85,6 +86,12 @@ func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
 // mapping is evaluated against the event at launch.
 func (f *EventFirer) WithWorkflows(workflows WorkflowResolver) *EventFirer {
 	f.workflows = workflows
+	return f
+}
+
+// WithCapacityDescriptions supplies authoritative Temporal state for an opt-in run cap.
+func (f *EventFirer) WithCapacityDescriptions(reader capacityDescriptions) *EventFirer {
+	f.capacity = reader
 	return f
 }
 
@@ -146,6 +153,29 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
 	}
+	maxRunning, err := capacityPolicy(ctx, f.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && maxRunning == 0 {
+		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
+	}
+	if maxRunning > 0 {
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
+			if errors.Is(err, errCapacityScopeChanged) {
+				return f.settle(ctx, ev, core.TriggerEventSkipped, err.Error(), nil)
+			}
+			return nil, err
+		}
+	}
+	if ev.CapacityOrder != nil && ev.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
+		if repo, ok := f.repo.(capacityRepository); ok {
+			spec.RecordExecution = repo.BindTriggerCapacityExecution
+			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+		} else {
+			return nil, errors.New("admitted retry storage unavailable")
+		}
+	}
 	res, launchErr := f.launcher.Launch(ctx, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,
@@ -171,6 +201,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		var declined *launch.DeclinedError
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
+		}
+		if reason == capacityWaiting {
+			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
 		return f.settle(ctx, ev, core.TriggerEventSkipped, reason, nil)
 	}

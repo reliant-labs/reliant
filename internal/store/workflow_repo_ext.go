@@ -250,7 +250,25 @@ func MarkWorkflowStartFailed(ctx context.Context, db orm.Context, id string) (bo
 // later trigger fire abandoned it (AbandonFailedWorkflowStart). One UPDATE,
 // so it serializes with that abandon on the row lock: whichever commits
 // first wins, and the other matches nothing.
+//
+// A root that holds a workflow-capacity slot is first stamped as a new start
+// attempt, under its trigger event's row lock, BEFORE the root is claimed.
+// That stamp is what keeps capacity recovery from releasing the slot while
+// this start is in flight (ReleaseUnboundTriggerCapacity requires it to be
+// older than core.StartAttemptBound). If recovery released the slot first,
+// the start is no longer the caller's to make, and false is returned without
+// claiming the root.
 func ClaimWorkflowStart(ctx context.Context, db orm.Context, id string) (bool, error) {
+	var released []bool
+	if err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_start_attempt_at = clock_timestamp()
+ WHERE capacity_workflow_id = ? AND outcome = 'launched' RETURNING capacity_released`, id).Scan(ctx, &released); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("stamp workflow capacity start attempt: %w", err)
+	}
+	for _, r := range released {
+		if r {
+			return false, nil
+		}
+	}
 	res, err := db.Bun().NewUpdate().Model((*Workflow)(nil)).
 		Set("start_failed_at = NULL").
 		Where("id = ?", id).

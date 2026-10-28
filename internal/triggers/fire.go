@@ -34,6 +34,7 @@ type Firer struct {
 	launcher  Launcher
 	workflows WorkflowResolver
 	now       func() time.Time
+	capacity  capacityDescriptions
 }
 
 // NewFirer builds the fire activity's receiver.
@@ -45,6 +46,12 @@ func NewFirer(repo Repo, launcher Launcher) *Firer {
 // an activation's fire is recorded as failed rather than guessed at.
 func (f *Firer) WithWorkflows(workflows WorkflowResolver) *Firer {
 	f.workflows = workflows
+	return f
+}
+
+// WithCapacityDescriptions supplies authoritative Temporal run state for an opt-in cap.
+func (f *Firer) WithCapacityDescriptions(reader capacityDescriptions) *Firer {
+	f.capacity = reader
 	return f
 }
 
@@ -69,7 +76,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	existing, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
 	switch {
 	case err == nil:
-		if existing.Outcome != core.TriggerEventLaunched {
+		if existing.Outcome != core.TriggerEventLaunched && !(existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil) {
 			return outputFromEvent(existing), nil
 		}
 	case errors.Is(err, core.ErrTriggerEventNotFound):
@@ -77,7 +84,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	default:
 		return nil, fmt.Errorf("load event for fire %s: %w", req.FireWorkflowID, err)
 	}
-	resuming := existing != nil
+	resuming := existing != nil && existing.Outcome == core.TriggerEventLaunched
 
 	trigger, err := f.repo.GetTrigger(ctx, req.TriggerID)
 	if err != nil {
@@ -150,14 +157,41 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return f.failPermanently(ctx, trigger, req, err.Error(), err)
 	}
-	if enforcePolicy && sched.SkipOnOverlap() {
+	maxRunning, err := capacityPolicy(ctx, f.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && maxRunning == 0 {
+		return f.recordSkip(ctx, trigger, req, "queued workflow capacity policy was removed")
+	}
+	if maxRunning == 0 && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
 		// trigger, so fires released together after an outage cannot all
 		// pass the check before any of them has launched.
 		spec.Guard = f.overlapGuard(trigger.ID)
 	}
 	ev := f.buildEvent(trigger, req)
+	if maxRunning > 0 {
+		row := &core.TriggerEvent{ID: uuid.NewString(), UserID: trigger.UserID, TriggerID: &trigger.ID, Kind: ev.Kind, DedupeKey: ev.DedupeKey, OccurredAt: ev.OccurredAt, CreatedAt: f.now(), Payload: ev.Payload, Outcome: core.TriggerEventPending}
+		if existing != nil {
+			row = existing
+		}
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
+			if errors.Is(err, errCapacityScopeChanged) {
+				return f.recordSkip(ctx, trigger, req, err.Error())
+			}
+			return nil, err
+		}
+	}
 
+	if existing != nil && existing.CapacityOrder != nil && existing.Outcome == core.TriggerEventLaunched && spec.RecordExecution == nil {
+		if repo, ok := f.repo.(capacityRepository); ok {
+			spec.RecordExecution = repo.BindTriggerCapacityExecution
+			spec.PrepareExecution = repo.PrepareTriggerCapacityExecution
+		} else {
+			return nil, errors.New("admitted retry storage unavailable")
+		}
+	}
 	res, launchErr := f.launcher.Launch(ctx, ev, spec)
 	switch {
 	case errors.Is(launchErr, launch.ErrDeclined):
@@ -165,6 +199,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		reason := launchErr.Error()
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
+		}
+		if reason == capacityWaiting {
+			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason}, nil
 		}
 		return f.recordSkip(ctx, trigger, req, reason)
 
@@ -445,6 +482,21 @@ func (f *Firer) recordOutcome(
 		stored, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
 		if err != nil {
 			return nil, fmt.Errorf("load existing event for fire %s: %w", req.FireWorkflowID, err)
+		}
+		if stored.Outcome == core.TriggerEventPending && stored.CapacityOrder != nil {
+			settler, ok := f.repo.(interface {
+				SettlePendingTriggerEvent(context.Context, string, core.TriggerEventOutcome, string) (bool, error)
+			})
+			if !ok {
+				return nil, errors.New("capacity queue settlement unavailable")
+			}
+			if _, err := settler.SettlePendingTriggerEvent(ctx, stored.ID, outcome, detail); err != nil {
+				return nil, err
+			}
+			stored, err = f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, req.FireWorkflowID)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return outputFromEvent(stored), nil
 	}

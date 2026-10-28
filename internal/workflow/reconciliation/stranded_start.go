@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -16,9 +17,9 @@ import (
 //
 // It must outlast any start still in flight, or a slow start is recorded as
 // failed and a trigger's next fire abandons it and runs beside it. A start
-// attempt is bounded by its caller's deadline: the fire activity's
-// StartToCloseTimeout (2 minutes, triggers.TriggerFireWorkflow) and an RPC's
-// deadline are both well inside it.
+// attempt is bounded by core.StartAttemptDeadline (the launcher's deadline on
+// the ExecuteWorkflow call), well inside it. It is core.StartAttemptBound, the
+// same bound workflow-capacity recovery requires of a start attempt's stamp.
 //
 // The cost of the bound is the other side of the trade-off: a launch whose
 // starter died between the commit and the start reads as in flight until the
@@ -26,7 +27,7 @@ import (
 // skips its fires for up to strandedStartBound plus one poll interval. That is
 // chosen over a shorter bound because the alternative failure, two runs of one
 // trigger at once, is the one overlap=skip exists to prevent.
-const strandedStartBound = 5 * time.Minute
+const strandedStartBound = core.StartAttemptBound
 
 // strandedStartBatch caps one pass's sweep. Stranded starts are rare (each is
 // a launcher that died or lost a write), so a full batch is itself a signal.

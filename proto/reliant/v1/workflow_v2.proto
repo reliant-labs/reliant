@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/annotations.proto";
 import "reliant/v1/trigger.proto";
@@ -2136,6 +2137,11 @@ message Workflow {
   // builder test run) start it. Unset, the default, means a chat can start it
   // like any other workflow.
   bool automation_only = 18;
+  // Concurrency optionally bounds trigger-launched runs across this owner's
+  // activations in one project. Excess firings wait durably in FIFO order.
+  // Paused or uncertain runs retain capacity. Interactive starts are outside
+  // this trigger policy; manual trigger fires participate.
+  WorkflowConcurrency concurrency = 20;
   // OnFailure is a finally-style handler: an inline graph (nodes, edges, entry)
   // that runs ONCE when a run of this workflow FAILS: a node error nothing
   // handled, an agent that never produced its required response, a node that
@@ -2145,4 +2151,9 @@ message Workflow {
   // had produced. The run still ends FAILED: the handler cannot mask the
   // failure, and an error in it is logged, never recursive.
   Workflow on_failure = 19;
+}
+
+// WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+message WorkflowConcurrency {
+  uint32 max_running = 1 [(buf.validate.field).uint32.gt = 0];
 }

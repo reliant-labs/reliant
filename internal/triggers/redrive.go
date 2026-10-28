@@ -4,10 +4,14 @@ package triggers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const (
@@ -63,10 +67,20 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 			}
 			continue
 		}
-		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) {
+		// A delivery that failed to launch can expire. A durable intent waiting
+		// for workflow capacity must never be discarded merely for waiting.
+		if ev.CapacityOrder == nil && ev.CreatedAt.Before(now.Add(-redriveGiveUp)) {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
 				"the event was never launched; it is too old to start now"); err != nil {
 				errs = append(errs, err)
+			}
+			continue
+		}
+		if ev.Kind == core.TriggerEventKindSchedule {
+			request := FireRequest{TriggerID: *ev.TriggerID, FireWorkflowID: ev.DedupeKey, ScheduledAt: ev.OccurredAt, Manual: ev.Payload[payloadManual] == true}
+			_, startErr := r.starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: r.taskQueue}, TriggerCapacityRedriveWorkflow, request)
+			if startErr != nil {
+				errs = append(errs, startErr)
 			}
 			continue
 		}
@@ -78,6 +92,21 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		}
 		if err := StartEventFire(ctx, r.starter, ev.ID, input, r.taskQueue); err != nil {
 			errs = append(errs, err)
+		}
+	}
+	// Capacity reconciliation cannot prevent unrelated delivery recovery.
+	if repo, ok := r.repo.(capacityRepository); ok {
+		if batch, ok := r.repo.(interface {
+			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
+		}); ok {
+			if descriptions, ok := r.starter.(capacityDescriptions); ok {
+				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
+				if err != nil {
+					errs = append(errs, err)
+				} else if err := reconcileCapacityExecutions(ctx, repo, descriptions, occupied); err != nil {
+					errs = append(errs, err)
+				}
+			}
 		}
 	}
 	return errors.Join(errs...)

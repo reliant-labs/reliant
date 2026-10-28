@@ -48,7 +48,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -242,11 +241,33 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit
 	}
-	rows, err := ListTriggerEvent(ctx, db,
-		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
-		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
-		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
-		orm.WithLimit(limit))
+	// Ordinary delivery recovery has its own budget. Capacity recovery rotates
+	// one head per scope by last-attempt time, so a large blocked pool cannot
+	// monopolize every tenant's redrive or expiry sweep. An unbound launch is a
+	// candidate only while it still holds its slot: a released one has nothing
+	// left to recover, and redriving it forever would starve the heads.
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`WITH ordinary AS (
+ SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
+ ORDER BY created_at,id LIMIT ?1
+), heads AS (
+ SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
+ FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
+ AND outcome = 'pending'
+ ORDER BY user_id,capacity_project_id,capacity_workflow_ref,capacity_order
+), candidates AS (
+ SELECT id,capacity_redriven_at,created_at FROM heads
+ UNION ALL
+ SELECT id,capacity_redriven_at,created_at FROM trigger_events
+ WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND NOT capacity_released
+ AND created_at < ?0
+), selected AS (
+ SELECT id FROM candidates ORDER BY capacity_redriven_at NULLS FIRST,created_at,id LIMIT ?1
+), touched AS (
+ UPDATE trigger_events SET capacity_redriven_at = now() WHERE id IN (SELECT id FROM selected) RETURNING id
+)
+SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event WHERE event.id IN (SELECT id FROM ordinary UNION ALL SELECT id FROM touched)
+ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
 	}
@@ -603,19 +624,22 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		}
 	}
 	ev := &core.TriggerEvent{
-		ID:            row.ID,
-		TriggerID:     row.TriggerID,
-		UserID:        row.UserID,
-		Kind:          row.Kind,
-		DedupeKey:     row.DedupeKey,
-		OccurredAt:    row.OccurredAt,
-		Payload:       payload,
-		Outcome:       row.Outcome,
-		OutcomeDetail: row.OutcomeDetail,
-		ChatID:        row.ChatID,
-		CreatedAt:     row.CreatedAt,
-		Sender:        sender,
-		Origin:        origin,
+		ID:                  row.ID,
+		TriggerID:           row.TriggerID,
+		UserID:              row.UserID,
+		Kind:                row.Kind,
+		DedupeKey:           row.DedupeKey,
+		OccurredAt:          row.OccurredAt,
+		Payload:             payload,
+		Outcome:             row.Outcome,
+		OutcomeDetail:       row.OutcomeDetail,
+		ChatID:              row.ChatID,
+		CreatedAt:           row.CreatedAt,
+		Sender:              sender,
+		Origin:              origin,
+		CapacityOrder:       row.CapacityOrder,
+		CapacityProjectID:   row.CapacityProjectID,
+		CapacityWorkflowRef: row.CapacityWorkflowRef,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus
