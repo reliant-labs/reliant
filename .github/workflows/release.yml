@@ -1264,7 +1264,12 @@ jobs:
           # stale feed a day later.
           missing=0
           for url in "${FILES[@]}"; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url")
+            # HEAD, not GET: a GET downloads the whole ~200 MB installer, which
+            # does not fit in --max-time, and curl's exit 28 under `bash -e`
+            # killed the step before anything was purged (v1.8.6: feeds stayed
+            # cached at 1.8.5 while origin served 1.8.6). A transport error is
+            # reported as code 000 rather than aborting the step.
+            code=$(curl -sI -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo 000)
             if [[ "$code" != "200" ]]; then
               echo "::error::purge target does not exist (HTTP ${code}): ${url}"
               missing=$((missing + 1))
