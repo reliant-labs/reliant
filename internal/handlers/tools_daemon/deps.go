@@ -30,6 +30,8 @@ type Repository interface {
 	UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error
 	RenewDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) (created bool, err error)
 	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
+	SetDaemonRestartStatus(ctx context.Context, userID, daemonID string, attachedAt time.Time, status string) error
+	CompareDaemonRestartStatus(ctx context.Context, userID, daemonID string, attachedAt time.Time, previous, status string) error
 	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
 	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
 

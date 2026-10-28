@@ -196,7 +196,7 @@ const (
 // as a lint/test/build failure.
 func IsTransportErrorCode(code string) bool {
 	switch code {
-	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted:
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted, ErrorCodeDaemonUndelivered:
 		return true
 	default:
 		return false

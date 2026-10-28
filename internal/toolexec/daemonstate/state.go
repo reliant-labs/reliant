@@ -43,6 +43,8 @@ const (
 	// current stream. This is the only state in which the daemon can serve
 	// tool calls.
 	StreamConnected Stream = "connected"
+	// StreamUpdating is quiescing for a planned process replacement.
+	StreamUpdating Stream = "updating"
 	// StreamDisconnected means the stream ended (or never came up). Detail
 	// carries the error that ended it.
 	StreamDisconnected Stream = "disconnected"

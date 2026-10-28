@@ -147,11 +147,10 @@ func (s *Service) routeToolResponse(conn *daemonConnection, tr *reliantv1.ToolRe
 		// this".
 		DaemonID: conn.daemonID,
 	}
-	if conn.deliverToolResponse(resp) {
-		// Handed to the waiter, which publishes it to the worker at once.
-		conn.ackToolResult(tr.RequestId)
-		return
-	}
+	// A buffered local waiter is not delivery ownership: its gateway may die
+	// before publishing the reply. Keep the daemon's durable copy until the
+	// result subject publication has been confirmed, even with a local waiter.
+	conn.deliverToolResponse(resp)
 	if s.deps.ResultPublisher == nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Tool result with no waiter and nowhere to publish it; leaving it with the daemon",
 			"daemonID", conn.daemonID, "requestID", tr.RequestId)
