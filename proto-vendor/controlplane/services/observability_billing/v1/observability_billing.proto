@@ -102,9 +102,7 @@ service ObservabilityBillingService {
   // The cap cannot be set below what the org has already been charged this
   // month: it is raised to that amount and spend_cap_raised_to_charged is set.
   rpc UpdateObservabilityLimits(UpdateObservabilityLimitsRequest) returns (UpdateObservabilityLimitsResponse) {
-    option (forge.v1.method) = {
-      auth_required: true
-    };
+    option (forge.v1.method) = {auth_required: true};
   }
 }
 
