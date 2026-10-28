@@ -1,0 +1,13 @@
+version: "v1.8.6"
+date: "2026-10-28"
+title: "Reliable question handoffs and queued workflow capacity"
+summary: "Background agents keep their pending questions across conversation handoffs, provider waits are visible sooner, and workflows can opt into a strict FIFO limit for triggered runs. These changes build on version 1.8.5."
+items:
+  - title: "Keep pending questions through conversation handoffs"
+    description: "A background agent waiting on a blocking question can now hand off without stalling other agents. The successor resumes the existing question and pending tool batch instead of asking again, calling the model again, or repeating tool calls that already finished."
+  - title: "See provider waits before an agent responds"
+    description: "Agent status can report a provider wait before the first assistant message, so an agent waiting for provider capacity is distinguishable from one that has not started responding."
+  - title: "Queue triggered workflows within a running limit"
+    description: "Workflows can opt into concurrency.max_running to limit triggered runs within a user, project and workflow reference. Excess trigger events wait in FIFO order. Paused or unverifiable executions retain their capacity until matching execution evidence confirms completion; queued work is retried through the normal recovery path. This does not limit arbitrary interactive chats or parallel loop iterations."
+  - title: "Preserve platform images when publishing releases"
+    description: "Release image mirroring preserves the multi-platform image index instead of copying only the publisher's platform. Publication verifies the mirrored image identity and reports a failure rather than silently accepting an incomplete mirror."
