@@ -1,15 +1,16 @@
 # The merge gate and the release gate
 
-**Target: ≤10 minutes wall time.** The merge gate runs what the diff can affect, and
-when the rules cannot scope a change (`go.mod`, `package.json`, config, an unclaimed
-path) it runs that **whole lane**: a full fallback is never deferred to the release
-gate. It also runs electron's tests when electron reads a changed file, and the
-docs-generate no-op check when a docs input changed. A deleted Go package compiles
-the module instead of forcing every lane. `scripts/merge-gate-budgets.json` pins step
-budgets; an overrun prints **GATE-HEALTH** (a gate-speed regression to fix, not PR
-blame). Measured on a loaded host (load 60–90, 2026-10-28): full Go `-short` lane
-5m13s, full vitest lane 22m (1033 files; per-file import, jsdom environment and setup
-overhead is ~6× the test bodies), so a full web fallback is the one case over target.
+**Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
+2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
+scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
+whole Go `-short` lane and electron's tests (5m13s and 40s measured on a loaded
+host), and for a full web fallback `tsc -b` over every web source; the whole vitest
+suite (1033 files, ~22 min loaded) is the one lane left to the release gate's
+`task test`, noted in the summary. It also runs electron's tests when electron reads
+a changed file, and the docs-generate no-op check when a docs input changed. A
+deleted Go package compiles the module instead of forcing every lane.
+`scripts/merge-gate-budgets.json` pins step budgets; an overrun prints
+**GATE-HEALTH** (a gate-speed regression to fix, not PR blame).
 
 reliant has two local gates. The **merge gate** runs before every merge and
 judges only what the change can affect. The **release gate** runs on main

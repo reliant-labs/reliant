@@ -26,7 +26,9 @@
 #              vitest files within two imports of a changed module, and the
 #              electron tests when electron/ changed; deeper dependents run in
 #              the release gate (MG_REACH=all for all). A change the rules cannot
-#              scope (go.mod, package.json, config) runs its whole lane. A Go
+#              scope (go.mod, package.json, config) runs its whole Go and
+#              electron lane; a full web fallback runs tsc here and the whole
+#              vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
@@ -358,10 +360,19 @@ build_check() {
 lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-markers
   --create-nullability --computed-fields --read-only-fields --db-grants
   --column-markers --closed-sets --tracing --guarded-fields)
+# The whole vitest suite (1033 files, ~20 min on a loaded host) is a release
+# blocker, not a merge blocker (owner, 2026-10-28: slow suites gate releases;
+# the merge gate aims at five minutes). A full web fallback still type-checks
+# every web source here; its tests run in the release gate's `task test`.
+test_lanes=go,web,electron
+if [ "$webfull" = true ]; then
+  test_lanes=go,electron
+  notes+=("web: FULL fallback; tsc -b runs here, the whole vitest suite in the release gate")
+fi
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi

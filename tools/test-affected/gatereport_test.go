@@ -20,12 +20,12 @@ func TestMergeGateBudgetContract(t *testing.T) {
 	if err = json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := gateBudgets{Wall: 600, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 120, "npm-tools-protoc-gen-es": 15, "generate": 180, "docs": 180, "plan-2": 20, "build": 45, "test": 300, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
+	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("budget changed: got %+v want %+v; fix slow checks, do not raise the 600s target", got, want)
+		t.Fatalf("budget changed: got %+v want %+v; fix slow checks or move them to the release gate; do not raise the 300s target", got, want)
 	}
 	// --amend critical path: plan, install, generate, replan, parallel readers.
-	if got.Steps["plan"]+60+got.Steps["generate"]+got.Steps["plan-2"]+got.Steps["test"] > got.Wall {
+	if got.Steps["plan"]+60+got.Steps["generate"]+got.Steps["plan-2"]+120 > got.Wall {
 		t.Fatal("critical path budgets exceed the wall target")
 	}
 }
@@ -36,7 +36,7 @@ func TestGateReportFailureFirstAndHealthNotPRBlame(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "test.log"), []byte(log), 0600)
 	os.WriteFile(filepath.Join(dir, "test.row"), []byte("test 1 301 0\n"), 0600)
 	var out bytes.Buffer
-	rc := runGateReport([]string{"-dir", dir, "-wall", "601", "-budgets", filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")}, &out, &out)
+	rc := runGateReport([]string{"-dir", dir, "-wall", "301", "-budgets", filepath.Join(repoRoot, "scripts/merge-gate-budgets.json")}, &out, &out)
 	if rc != 0 {
 		t.Fatalf("timing must not be PR failure: %d %s", rc, &out)
 	}
@@ -127,7 +127,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		return string(b)
 	}
 	merge, release := read("scripts/merge-gate.sh"), read("scripts/release-gate.sh")
-	for _, s := range []string{"plan -json", "-lanes go,web,electron -p", "phase docs gen_docs", "task generate:docs", "phase proto task proto:lint", "phase vet", "gate-report", "summary.md"} {
+	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -p", "test_lanes=go,electron", "phase docs gen_docs", "task generate:docs", "phase proto task proto:lint", "phase vet", "gate-report", "summary.md"} {
 		if !strings.Contains(merge, s) {
 			t.Errorf("merge missing %s", s)
 		}

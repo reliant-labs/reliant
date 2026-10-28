@@ -78,7 +78,7 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 		fmt.Fprintln(out)
 	}
 	if *wall > limits.Wall {
-		fmt.Fprintf(out, "!! GATE-HEALTH: wall %ds exceeds %ds; ten-minute target NOT MET. Gate infrastructure/tiering regression, NOT PR blame.\n", *wall, limits.Wall)
+		fmt.Fprintf(out, "!! GATE-HEALTH: wall %ds exceeds %ds; five-minute target NOT MET. Gate infrastructure/tiering regression, NOT PR blame.\n", *wall, limits.Wall)
 	}
 	rows, _ := filepath.Glob(filepath.Join(*dir, "*.row"))
 	for _, p := range rows {
