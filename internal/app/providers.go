@@ -405,8 +405,13 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 	return claimcheck.NewPostgresStore(d.DB.ORM()), nil
 }
 
-// TemporalClient is the process's client of the external Temporal server.
-type TemporalClient struct{ Client client.Client }
+// TemporalClient is the process's client of the external Temporal server, and
+// the namespace it was dialed for (a raw workflowservice request, such as a
+// reset, must name it itself).
+type TemporalClient struct {
+	Client    client.Client
+	Namespace string
+}
 
 // TemporalClientDeps is the server, and the boot context the first dial
 // waits under.
@@ -442,7 +447,7 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c}, nil
+	return &TemporalClient{Client: c, Namespace: namespace}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.
@@ -565,7 +570,9 @@ type PauseServiceDeps struct {
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	return v2workflow.NewPauseService(d.Temporal.Client, d.DB), nil
+	ps := v2workflow.NewPauseService(d.Temporal.Client, d.DB)
+	ps.SetNamespace(d.Temporal.Namespace)
+	return ps, nil
 }
 
 // TriggerPollersDeps is which integrations this deployment serves.

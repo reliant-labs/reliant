@@ -305,7 +305,7 @@ func TestResetExpiredWorkflow_Success(t *testing.T) {
 		},
 	}
 
-	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "old-run-id")
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "old-run-id")
 	require.NoError(t, err)
 	assert.Equal(t, "new-run-id", reset.NewRunID)
 
@@ -323,7 +323,7 @@ func TestResetExpiredWorkflow_NoHistory(t *testing.T) {
 		historyIter: &mockHistoryIterator{events: nil},
 	}
 
-	_, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	_, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "run-1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to find reset point")
 	assert.False(t, mc.resetCalled)
@@ -340,7 +340,7 @@ func TestResetExpiredWorkflow_ResetFails(t *testing.T) {
 		resetErr:    fmt.Errorf("workflow already terminated"),
 	}
 
-	_, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	_, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "run-1")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to reset workflow execution")
 }
@@ -363,7 +363,7 @@ func TestResetExpiredWorkflow_UsesCorrectResetPoint(t *testing.T) {
 		},
 	}
 
-	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "run-1")
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", reset.NewRunID)
 	assert.Equal(t, int64(6), mc.resetRequest.WorkflowTaskFinishEventId,
@@ -383,7 +383,7 @@ func TestResetExpiredWorkflow_SignalExcluded(t *testing.T) {
 		},
 	}
 
-	_, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	_, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "run-1")
 	require.NoError(t, err)
 	// Verify RESET_REAPPLY_EXCLUDE_TYPE_SIGNAL is in the exclude list
 	require.Len(t, mc.resetRequest.ResetReapplyExcludeTypes, 1)
@@ -633,7 +633,7 @@ func TestResetInterruptedWorkflow_FailedActivity_ResetsBeforeActivityAndExcludes
 		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "", "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", reset.NewRunID)
 	require.True(t, mc.resetCalled)
@@ -656,7 +656,7 @@ func TestResetInterruptedWorkflow_Terminated_UsesLastWFT(t *testing.T) {
 		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	_, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	_, err := ResetInterruptedWorkflow(context.Background(), mc, "", "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	require.NoError(t, err)
 	assert.Equal(t, int64(10), mc.resetRequest.WorkflowTaskFinishEventId)
 }
@@ -724,7 +724,7 @@ func TestResetInterruptedWorkflow_ReturnsResetPointTime(t *testing.T) {
 		resetResp: &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	reset, err := ResetInterruptedWorkflow(context.Background(), mc, "", "wf-1", "old-run", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", reset.NewRunID)
 	assert.True(t, at.Equal(reset.ResetPointTime), "got %v, want %v", reset.ResetPointTime, at)
@@ -737,7 +737,7 @@ func TestResetExpiredWorkflow_ReturnsResetPointTime(t *testing.T) {
 		resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 
-	reset, err := ResetExpiredWorkflow(context.Background(), mc, "wf-1", "run-1")
+	reset, err := ResetExpiredWorkflow(context.Background(), mc, "", "wf-1", "run-1")
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", reset.NewRunID)
 	assert.True(t, at.Equal(reset.ResetPointTime), "got %v, want %v", reset.ResetPointTime, at)
@@ -756,7 +756,7 @@ func TestResetExpiredWorkflow_IncludesWorkflowExecution(t *testing.T) {
 		},
 	}
 
-	_, err := ResetExpiredWorkflow(context.Background(), mc, "my-workflow-id", "my-run-id")
+	_, err := ResetExpiredWorkflow(context.Background(), mc, "", "my-workflow-id", "my-run-id")
 	require.NoError(t, err)
 
 	require.NotNil(t, mc.resetRequest.WorkflowExecution)
@@ -764,4 +764,35 @@ func TestResetExpiredWorkflow_IncludesWorkflowExecution(t *testing.T) {
 		WorkflowId: "my-workflow-id",
 		RunId:      "my-run-id",
 	}, mc.resetRequest.WorkflowExecution)
+}
+
+// The prod bug: every reset named the hardcoded TemporalNamespace, and prod's
+// runs live in the namespace its config names, so each reset-and-replay failed
+// "Namespace reliant is not found" and fell back to a coarse restart.
+func TestReset_NamesTheConfiguredNamespace(t *testing.T) {
+	events := []*historypb.HistoryEvent{
+		makeEvent(1, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
+		makeEvent(2, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED),
+		makeEvent(3, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED),
+		makeEvent(4, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+	}
+	for name, reset := range map[string]func(*mockTemporalClient) error{
+		"expired": func(mc *mockTemporalClient) error {
+			_, err := ResetExpiredWorkflow(context.Background(), mc, "prod-ns", "wf-1", "run-1")
+			return err
+		},
+		"interrupted": func(mc *mockTemporalClient) error {
+			_, err := ResetInterruptedWorkflow(context.Background(), mc, "prod-ns", "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mc := &mockTemporalClient{
+				historyIter: &mockHistoryIterator{events: events},
+				resetResp:   &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+			}
+			require.NoError(t, reset(mc))
+			assert.Equal(t, "prod-ns", mc.resetRequest.Namespace)
+		})
+	}
 }
