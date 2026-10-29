@@ -114,5 +114,16 @@ func TestBrokenWorkflowFailsClosed(t *testing.T) {
 	})
 	t.Run("a quoted, commented name is recovered", func(t *testing.T) {
 		require.Equal(t, "Release Train", recoverDeclaredName([]byte("x: [\nname: \"Release Train\" # the train\n")))
+		require.Equal(t, "Release #1", recoverDeclaredName([]byte("x: [\nname: \"Release #1\"\n")))
+		require.Equal(t, "Release #1", recoverDeclaredName([]byte("x: [\nname: 'Release #1' # first\n")))
+		require.Equal(t, "plain", recoverDeclaredName([]byte("x: [\nname: plain # note\n")))
+	})
+	t.Run("a broken file named unlike its workflow still blocks the nested copy", func(t *testing.T) {
+		ix := NewIndex([]File{
+			{Repo: "control-plane", Path: "release-1.yaml", Content: []byte(wf("Release #1"))},
+			{Path: "deploy.yaml", Content: []byte("name: \"Release #1\"\nentry: [x\n")},
+		})
+		_, err := ix.Lookup("release-1")
+		require.ErrorContains(t, err, "deploy.yaml does not parse")
 	})
 }

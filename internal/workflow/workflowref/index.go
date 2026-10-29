@@ -355,18 +355,22 @@ func declaredName(content []byte) (string, error) {
 	}
 }
 
-// recoverDeclaredName reads a top-level name: line out of a file that is not
-// valid YAML, or "" when there is none to read.
+// recoverDeclaredName reads the top-level name: out of a file that is not
+// valid YAML, or "" when there is none to read. Only the name: line itself is
+// decoded, as YAML, so quoting and comments mean what they mean in the file
+// ("Release #1" is a name; # starts a comment only outside quotes).
 func recoverDeclaredName(content []byte) string {
 	for _, line := range strings.Split(string(content), "\n") {
-		rest, ok := strings.CutPrefix(line, "name:")
-		if !ok {
+		if !strings.HasPrefix(line, "name:") {
 			continue
 		}
-		if i := strings.Index(rest, " #"); i >= 0 {
-			rest = rest[:i]
+		var doc struct {
+			Name yaml.Node `yaml:"name"`
 		}
-		return strings.Trim(strings.TrimSpace(rest), `"'`)
+		if err := yaml.Unmarshal([]byte(line), &doc); err != nil || doc.Name.Kind != yaml.ScalarNode {
+			return ""
+		}
+		return strings.TrimSpace(doc.Name.Value)
 	}
 	return ""
 }
