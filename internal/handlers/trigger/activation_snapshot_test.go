@@ -2,6 +2,7 @@ package trigger
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -269,4 +270,40 @@ nodes:
 	require.NotContains(t, summary, "sandbox")
 	require.NotContains(t, summary, "production")
 	require.Contains(t, summary, "owner=acme; repo="+unknownScope)
+}
+
+func TestEventInputContextsRefuseAnOversizedProductBeforeBuildingIt(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`name: wide
+inputs:
+  repos: {type: github.repository, multi: true}
+  orgs: {type: string, multi: true}
+  repo: {type: string, default: ''}
+  org: {type: string, default: ''}
+triggers:
+  - name: hook
+    integration:
+      integration: github
+      events: [issues.opened]
+      match: {repository: {input: repos}, organization: {input: orgs}}
+    inputs:
+      repo: '{{ trigger.payload.attributes.repository }}'
+      org: '{{ trigger.payload.attributes.organization }}'
+    prompt: go
+entry: [done]
+nodes:
+  - {id: done, type: save_message, args: {role: assistant, content: ok}}
+`))
+	require.NoError(t, err)
+	many := func(n int) []any {
+		out := make([]any, n)
+		for i := range out {
+			out[i] = fmt.Sprintf("acme/r%d", i)
+		}
+		return out
+	}
+	wt := wf.GetTriggers()[0]
+	_, _, err = eventInputContexts(wt, wf, map[string]any{"repos": many(8), "orgs": many(8)})
+	require.NoError(t, err, "8 x 8 is exactly the limit")
+	_, _, err = eventInputContexts(wt, wf, map[string]any{"repos": many(100000), "orgs": many(100000)})
+	require.ErrorContains(t, err, "exceed the activation approval limit")
 }

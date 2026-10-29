@@ -155,6 +155,10 @@ func eventInputContexts(wt *pb.WorkflowTrigger, wf *pb.Workflow, effective map[s
 
 	contexts := []map[string]any{base}
 	for _, axis := range axes {
+		// Refuse before allocating: the product of a few long lists is large.
+		if len(axis.values) > maxEventContexts/len(contexts) {
+			return nil, nil, refusedPrecondition("Event-supplied input combinations exceed the activation approval limit")
+		}
 		next := make([]map[string]any, 0, len(contexts)*len(axis.values))
 		for _, ctx := range contexts {
 			for _, value := range axis.values {
@@ -165,9 +169,6 @@ func eventInputContexts(wt *pb.WorkflowTrigger, wf *pb.Workflow, effective map[s
 				c[axis.name] = value
 				next = append(next, c)
 			}
-		}
-		if len(next) > maxEventContexts {
-			return nil, nil, refusedPrecondition("Event-supplied input combinations exceed the activation approval limit")
 		}
 		contexts = next
 	}
