@@ -246,7 +246,7 @@ func openSessionPool(url string) (*sql.DB, error) {
 const idleWarmInterval = 10 * time.Second
 
 // keepIdleWarm holds the pool at n idle connections until db is closed.
-// TODO(forge pin bump): forge's serverkit now owns this as DBPoolTuning.MinIdleConns (serverkit.KeepIdleWarm); set it in connectPostgres and delete keepIdleWarm/warmIdle.
+// TODO(forge pin bump): forge's serverkit now owns this as DBPoolTuning.SpareConns; set it in connectPostgres and delete keepIdleWarm/warmIdle.
 //
 // database/sql has no minimum-idle setting: it opens a connection when a
 // caller finds none idle, and that caller waits for the dial (TLS and auth,
