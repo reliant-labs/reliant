@@ -22,6 +22,9 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		fat.ScopeProxyPort,
 		// Token administration: reserved to a signed-in person.
 		fat.ScopeTokenRead, fat.ScopeTokenWrite,
+		// Machine management spends a person's money: forge never binds it
+		// to a daemon (accesstoken's personOnlyScopes).
+		fat.ScopeDaemonManage,
 	)
 	requested, err := fat.NewSet(ForgeScopes())
 	if err != nil {
