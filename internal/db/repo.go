@@ -529,9 +529,10 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		}
 
 		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
-		// inside the tx) are expected control flow for callers — log them
-		// quietly so genuine transaction failures stand out.
-		if errors.Is(result.err, sql.ErrNoRows) {
+		// inside the tx, or a TxOutcome such as a declined launch) are
+		// expected control flow for callers — log them quietly so genuine
+		// transaction failures stand out.
+		if isExpectedTxOutcome(result.err) {
 			logging.DebugContext(ctx, "Transaction returned business error (not retryable)",
 				"error", result.err,
 				"attempts", attempt+1,
@@ -556,6 +557,27 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		return errors.New("transaction failed after retries: " + lastErr.Error())
 	}
 	return errors.New("transaction failed after retries")
+}
+
+// TxOutcome marks an error a RunTx body returns to roll its transaction back ON
+// PURPOSE: a decision the caller acts on, not a failure. launch.DeclinedError
+// is one — a trigger waiting for workflow capacity declines its launch every
+// poll until a slot frees. RunTx logs such an error at DEBUG instead of ERROR
+// (an ERROR here becomes an issue in the error tracker, and the caller, which
+// owns the decision, reports it however it should be reported).
+type TxOutcome interface {
+	error
+	TxOutcome()
+}
+
+// isExpectedTxOutcome reports whether a RunTx body's error is expected
+// control flow rather than a transaction failure.
+func isExpectedTxOutcome(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	var outcome TxOutcome
+	return errors.As(err, &outcome)
 }
 
 // attemptTransaction tries to begin and execute a single transaction
