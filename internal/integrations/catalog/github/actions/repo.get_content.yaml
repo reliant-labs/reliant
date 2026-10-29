@@ -46,6 +46,7 @@ params:
       description: >-
         The 1-based line a file's window starts at. Follow next to page
         through a large file.
+      examples: [1, 613]
     line_count:
       type: integer
       minimum: 1
@@ -55,6 +56,7 @@ params:
         How many lines to return from start_line. Omit for as many as fit
         (~24,000 characters); a window that reaches that ceiling stops at
         a whole line and sets truncated.
+      examples: [200]
     connection: { $ref: ../schemas/connection.yaml }
 request:
   method: GET
