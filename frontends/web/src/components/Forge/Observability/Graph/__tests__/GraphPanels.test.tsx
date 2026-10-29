@@ -35,6 +35,15 @@ describe("service graph panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show" }));
     expect(onShow).toHaveBeenCalled();
   });
+  it("offers to show an unresolved caller when its errors are all a filter matches", () => {
+    const onShow = vi.fn();
+    const graph = fixtureGraph();
+    graph.edges = graph.edges.map((e) => (e.source === "unknown" ? e : { ...e, faults: 0n }));
+    render(<GraphPanel graph={graph} filters={{ errorsOnly: true }} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} onShowUnresolved={onShow} />);
+    expect(screen.queryByTestId("graph-empty")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    expect(onShow).toHaveBeenCalled();
+  });
   it("never prints environment ids or internal reason codes", () => {
     const { container } = render(<GraphPanel graph={fixtureGraph()} filters={{ showUnresolved: true }} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} />);
     fireEvent.click(screen.getByText(/api → orders/));

@@ -72,6 +72,35 @@ describe("bounded graph model", () => {
     expect(link.faults).toBe(3n);
     expect(link.duration?.count).toBe(200n);
   });
+  it("counts a link from one viewpoint: a client attempt and its server request are one call", () => {
+    const g = fixtureGraph();
+    g.edges.push(graphEdge("api-orders-client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 104n, faults: 5n }));
+    const link = graphModel(g).links.find((l) => l.source === "api" && l.target === "orders")!;
+    expect(link.edges).toHaveLength(2);
+    expect(link).toMatchObject({ count: 100n, faults: 3n, unit: "server_request", viewpoint: "server" });
+    expect(link.duration?.count).toBe(100n);
+  });
+  it("never sums different units between the same endpoints into one count", () => {
+    const g = fixtureGraph();
+    g.edges.push(graphEdge("orders-queue-delivery", "orders", "queue", { kind: "async-consume", unit: "delivery", viewpoint: "consumer", rpcId: "", count: 40n }));
+    const link = graphModel(g).links.find((l) => l.source === "orders" && l.target === "queue")!;
+    expect(link).toMatchObject({ count: 40n, unit: "delivery", viewpoint: "consumer" });
+    // Only the caller's view exists: it stands in, still unsummed with nothing.
+    const clientOnly = fixtureGraph();
+    clientOnly.edges = [graphEdge("c", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 7n })];
+    expect(graphModel(clientOnly).links[0]).toMatchObject({ count: 7n, unit: "client_attempt", viewpoint: "client" });
+  });
+  it("keeps a service whose only matching traffic is with a hidden unresolved caller", () => {
+    const g = fixtureGraph();
+    const rpc = "shop.v1.OrdersService/Refund";
+    g.edges.push(graphEdge("unknown-refund", "unknown", "orders", { rpcId: rpc, count: 2n, faults: 2n }));
+    const result = graphModel(g, { rpcId: rpc });
+    expect(result.nodes.map((n) => n.id)).toEqual(["orders"]);
+    expect(result.links).toHaveLength(0);
+    expect(result.hiddenUnresolved).toBe(1);
+    expect(result.stats.get("orders")?.requests).toBe(2n);
+    expect(graphModel(g, { rpcId: rpc, showUnresolved: true }).nodes.map((n) => n.id).sort()).toEqual(["orders", "unknown"]);
+  });
   it("lays callers left of callees and datastores in the last column", () => {
     const x = new Map(graphModel(fixtureGraph()).nodes.map((n) => [n.id, n.position.x]));
     expect(x.get("browser")!).toBeLessThan(x.get("api")!);

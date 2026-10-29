@@ -14,6 +14,12 @@ export interface NodeStats { requests: bigint; faults: bigint; duration?: Histog
  * One drawn connection: every observed edge between the same two nodes
  * (one per RPC, cohort and viewpoint on the wire) folded into a single line,
  * so a pair of services is one stroke, not a bundle of overlapping labels.
+ *
+ * count, faults and duration come from ONE viewpoint and unit: the edges of
+ * that pair's most authoritative viewpoint (see VIEWPOINT_RANK), summed across
+ * RPCs and cohorts, which partition traffic. The wire contract forbids summing
+ * viewpoints — a client attempt and the server request it became are the same
+ * call — and different units count different things.
  */
 export interface GraphLink {
   id: string;
@@ -25,8 +31,13 @@ export interface GraphLink {
   evidence: GraphEdge["evidence"];
   kind: GraphEdge["kind"];
   unit: string;
+  viewpoint: string;
   duration?: Histogram;
 }
+
+// The server saw the call complete, so its counts, outcomes and durations are
+// the authority; the caller's view stands in only where no server span exists.
+const VIEWPOINT_RANK: Record<string, number> = { server: 0, consumer: 1, client: 2, producer: 3, internal: 4 };
 
 /** Exact duplicate rows collapse, contradictory IDs are excluded, never summed.
  * The server owns aggregation; UI dedup must not double counts on replay. */
@@ -151,12 +162,15 @@ function linksOf(edges: GraphEdge[]): GraphLink[] {
   }
   return [...byPair.values()].map((group) => {
     const observed = group.filter((e) => e.evidence === "observed");
-    const first = observed[0] ?? group[0];
+    const rank = (e: GraphEdge) => VIEWPOINT_RANK[e.viewpoint] ?? Object.keys(VIEWPOINT_RANK).length;
+    const first = [...(observed.length ? observed : group)]
+      .sort((a, b) => rank(a) - rank(b) || a.viewpoint.localeCompare(b.viewpoint) || a.unit.localeCompare(b.unit) || a.id.localeCompare(b.id))[0];
+    const counted = observed.filter((e) => e.viewpoint === first.viewpoint && e.unit === first.unit);
     return {
       id: `${first.source}->${first.target}`, source: first.source, target: first.target, edges: group,
-      count: observed.reduce((s, e) => s + e.count, 0n), faults: observed.reduce((s, e) => s + e.faults, 0n),
+      count: counted.reduce((s, e) => s + e.count, 0n), faults: counted.reduce((s, e) => s + e.faults, 0n),
       evidence: observed.length ? "observed" : group.some((e) => e.evidence === "declared") ? "declared" : "unknown",
-      kind: first.kind, unit: first.unit, duration: sumHistograms(observed.map((e) => e.duration)),
+      kind: first.kind, unit: first.unit, viewpoint: first.viewpoint, duration: sumHistograms(counted.map((e) => e.duration)),
     } satisfies GraphLink;
   }).sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -203,11 +217,15 @@ export function graphModel(graph: ServiceGraph, filters: GraphFilters = {}) {
   const shown = eligible.filter((e) => !hidden.has(e.source) && !hidden.has(e.target));
   const edges = shown.slice(0, MAX_GRAPH_EDGES);
   const incident = new Set(edges.flatMap((e) => [e.source, e.target]));
+  // A known node whose matching traffic is only with a hidden unresolved
+  // node still matches the filter: it stays on the map, and the hidden
+  // count beside it offers to show the other end.
+  const matched = new Set(eligible.flatMap((e) => [e.source, e.target]));
   const filtered = !!filters.rpcId || !!filters.errorsOnly;
   // An unconnected service still belongs on the map; an unconnected
   // database/peer/queue/rpc is only an endpoint of an edge filtered away.
   const inventory = (n: GraphNode) => n.kind === "process" || n.kind === "frontend" || n.kind === "api" || n.kind === "service";
-  const candidates = ns.rows.filter((n) => !hidden.has(n.id) && (incident.has(n.id) || (!filtered && inventory(n))));
+  const candidates = ns.rows.filter((n) => !hidden.has(n.id) && (incident.has(n.id) || matched.has(n.id) || (!filtered && inventory(n))));
   // Prioritize incident nodes over isolated inventory entries.
   candidates.sort((a, b) => Number(incident.has(b.id)) - Number(incident.has(a.id)) || a.id.localeCompare(b.id));
   const nodes = candidates.slice(0, MAX_GRAPH_NODES);
