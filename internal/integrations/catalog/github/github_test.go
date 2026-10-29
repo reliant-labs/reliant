@@ -448,6 +448,28 @@ func TestPullRequestListFilesPaginates(t *testing.T) {
 	}, out["items"])
 }
 
+func TestPullRequestListFilesNarrowsByPathAndDropsPatches(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/pulls/17/files", jsonReply(200, `[
+	  {"sha":"s1","filename":"internal/auth/a.go","status":"modified","additions":3,"deletions":1,"changes":4,"patch":"@@ -1 +1 @@"},
+	  {"sha":"s2","filename":"web/b.ts","status":"modified","additions":1,"deletions":0,"changes":1,"patch":"@@ -2 +2 @@"},
+	  {"sha":"s3","filename":"pkg/c.go","status":"renamed","previous_filename":"internal/auth/c.go","additions":0,"deletions":0,"changes":0}]`))
+
+	out := data(t, f.run("pr.list_files", map[string]any{"owner": "acme", "repo": "app", "pull_number": 17, "path_prefix": "internal/auth/"}))
+	var names []any
+	for _, item := range out["items"].([]any) {
+		names = append(names, item.(map[string]any)["filename"])
+	}
+	assert.Equal(t, []any{"internal/auth/a.go", "pkg/c.go"}, names, "a rename matches on its old path too")
+
+	out = data(t, f.run("pr.list_files", map[string]any{"owner": "acme", "repo": "app", "pull_number": 17, "include_patch": false}))
+	items := out["items"].([]any)
+	require.Len(t, items, 3, "no prefix lists every file")
+	for _, item := range items {
+		assert.Nil(t, item.(map[string]any)["patch"])
+	}
+}
+
 func TestPullRequestReviewCreate(t *testing.T) {
 	f := newFake(t)
 	f.on("POST", "/repos/acme/app/pulls/17/reviews", jsonReply(200,
