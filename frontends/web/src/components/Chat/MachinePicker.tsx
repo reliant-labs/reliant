@@ -116,7 +116,7 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, onMakeD
                         <div className="flex items-center gap-1.5 font-medium">
                           <span className="truncate">{option.label}</span>
                           {isUserDefault && (
-                            <span className="flex-shrink-0 text-[10px] font-normal text-muted-foreground">Default</span>
+                            <span className="flex-shrink-0 text-2xs font-normal text-muted-foreground">Default</span>
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">{option.statusLabel}</div>
@@ -129,7 +129,7 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, onMakeD
                       type="button"
                       onClick={() => onMakeDefault(option.value)}
                       aria-label={`Make ${option.label} your default machine`}
-                      className="mr-2 flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                      className="mr-2 flex-shrink-0 rounded px-1.5 py-0.5 text-2xs text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       Make default
                     </button>
