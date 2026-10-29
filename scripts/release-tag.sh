@@ -40,6 +40,8 @@
 # push has to carry a human credential. That is this script.
 
 set -euo pipefail
+# shellcheck source=release-lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/release-lock.sh"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -260,6 +262,16 @@ if [[ "$DRY_RUN" == "true" ]]; then
     echo -e "${BLUE}  git tag $RELEASE_TAG $RELEASE_COMMIT${NC}"
     echo -e "${BLUE}  git push origin $RELEASE_TAG${NC}"
     exit 0
+fi
+
+# One release of a version at a time, across machines: a hand cut and the release
+# workflow cannot both tag it (release-lock.sh). Then re-check origin: a holder that
+# just finished released the lock after pushing the tag.
+release_lock_acquire "$RELEASE_TAG" || exit 1
+trap release_lock_release EXIT
+if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+    echo -e "${RED}Error: tag $RELEASE_TAG reached origin while waiting (another cut released it)${NC}" >&2
+    exit 1
 fi
 
 echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"

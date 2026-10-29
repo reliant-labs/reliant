@@ -42,6 +42,19 @@ type wftPoint struct {
 	at      time.Time
 }
 
+// resetNamespace is the namespace a reset request names. The SDK client does
+// NOT fill it in for ResetWorkflowExecution (unlike its signal and history
+// calls), so a reset must name the namespace the client was dialed for — a
+// hardcoded TemporalNamespace failed every prod reset with "Namespace reliant
+// is not found", because prod's runs live in the namespace its config names.
+// Empty means the client's own default (TemporalNamespace).
+func resetNamespace(namespace string) string {
+	if namespace == "" {
+		return TemporalNamespace
+	}
+	return namespace
+}
+
 // ResetExpiredWorkflow resets an expired (timed-out) workflow execution back to the
 // last WorkflowTaskCompleted event. This restores the workflow to its pause point
 // so it can be resumed with a fresh signal.
@@ -53,7 +66,7 @@ type wftPoint struct {
 //
 // After reset, the caller must send a SignalResume to the new run to unblock
 // the workflow from its Receive() loop.
-func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string) (ResetResult, error) {
+func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, namespace, workflowID, runID string) (ResetResult, error) {
 	point, err := findLastWorkflowTaskCompleted(ctx, tempClient, workflowID, runID)
 	if err != nil {
 		return ResetResult{}, fmt.Errorf("failed to find reset point in workflow history: %w", err)
@@ -67,7 +80,7 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 	)
 
 	resp, err := tempClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: TemporalNamespace,
+		Namespace: resetNamespace(namespace),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -118,7 +131,7 @@ func ResetExpiredWorkflow(ctx context.Context, tempClient client.Client, workflo
 //
 // Old pause/resume signals are excluded from reapply so they don't re-pause the
 // new run; the caller sends a fresh resume signal afterward.
-func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (ResetResult, error) {
+func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, namespace, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (ResetResult, error) {
 	point, err := findResumeResetPoint(ctx, tempClient, workflowID, runID, status)
 	if err != nil {
 		return ResetResult{}, fmt.Errorf("failed to find reset point in workflow history: %w", err)
@@ -133,7 +146,7 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 	)
 
 	resp, err := tempClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: TemporalNamespace,
+		Namespace: resetNamespace(namespace),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

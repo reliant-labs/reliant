@@ -64,8 +64,20 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 		return nil, fmt.Errorf("resolve project path: %w", err)
 	}
 
-	if !isDir(abs) {
+	// The stat error is kept: its "no such file or directory" is how the
+	// daemon's caller tells a missing project folder from a failed scan.
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, fmt.Errorf("project path: %w", err)
+	}
+	if !info.IsDir() {
 		return nil, fmt.Errorf("project path is not a directory: %s", abs)
+	}
+	// WalkDir does not follow a symlinked root (it visits the link and stops),
+	// so a project opened through a symlink would find none of its nested
+	// repos. Walk the target; relative paths are the same either way.
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
 	}
 
 	rootIsGit := isGitDir(abs)
@@ -156,14 +168,6 @@ func isGitDir(dir string) bool {
 	}
 	_ = info
 	return true
-}
-
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
 }
 
 // readRemoteURL returns origin.url at the given repo path, or "" if the

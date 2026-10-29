@@ -205,22 +205,6 @@ func GetProjectConfigVersion(ctx context.Context, db orm.Context, projectID stri
 	return fmt.Sprintf("%d/%s", updatedAt.Time.UnixMicro(), xmin), nil
 }
 
-// GetProjectWorkflowSnapshot reads only workflow contents and the last
-// project snapshot's source daemon for missing-workflow diagnostics.
-func GetProjectWorkflowSnapshot(ctx context.Context, db orm.Context, projectID string) (*string, string, error) {
-	var row ProjectConfig
-	err := db.Bun().NewSelect().Model(&row).
-		Column(ProjectConfigFieldProjectWorkflowsJSON, ProjectConfigFieldDaemonID).
-		Where("project_id = ?", projectID).Limit(1).Scan(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, "", missing("project config")
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	return row.ProjectWorkflowsJSON, row.DaemonID, nil
-}
-
 // GetProjectWorkflowsJSON reads the synced .reliant/workflows.
 func GetProjectWorkflowsJSON(ctx context.Context, db orm.Context, projectID string) (*string, error) {
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldProjectWorkflowsJSON)

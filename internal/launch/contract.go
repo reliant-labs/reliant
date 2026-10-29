@@ -355,6 +355,14 @@ type WorkflowResolver interface {
 	// db.Repo.GetProjectWorkflowsJSON.
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// One machine's own synced catalog (workflowsource.MachineStore), which a
+	// trigger's run on that machine resolves against; synced is false when
+	// the machine has never synced the project.
+	GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (workflows *string, synced bool, err error)
+	GetProjectMachinePresetsJSON(ctx context.Context, projectID, daemonID string) (presets *string, synced bool, err error)
+	// WorkflowSourceDiagnostic (workflowsource.SourceDiagnostics) says, on a
+	// miss, which machine provides the workflow and at which path.
+	WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID, ref string) (string, error)
 }
 
 // ProjectLookup resolves the project, worktrees and settings a launch runs in.
