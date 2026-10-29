@@ -101,8 +101,6 @@ export const ERROR_REASONS = [
   "claimable_session_released",
   /** CompleteClaim (PermissionDenied): the caller is still anonymous or has no verified email. Back to /upgrade. */
   "claimable_upgrade_required",
-  /** CompleteClaim (PermissionDenied): the email already belongs to a Reliant account. */
-  "claimable_existing_account",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

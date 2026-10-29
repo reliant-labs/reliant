@@ -131,18 +131,18 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       expect(page.url()).not.toContain('rcl_');
     });
 
-    test('an existing signed-in user is told to run forge login, and cannot claim', async ({ page }) => {
+    test('an existing signed-in user is offered to claim into their account, not sent to /upgrade', async ({ page }) => {
       await arrive(page, { signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false } });
-      const block = page.getByTestId('claim-existing-account');
+      const block = page.getByTestId('claim-into-account');
       await expect(block).toBeVisible(LOADED);
-      await expect(block).toContainText('Already on Reliant?');
-      await expect(block).toContainText('forge login');
-      await expect(block).toContainText(/deploy again under your account/i);
-      await expect(page.getByTestId('claim-existing-account-button')).toBeDisabled();
+      await expect(page.getByTestId('claim-signed-in-as')).toContainText('me@example.com');
+      await expect(block).toContainText(/you'll own it/i);
+      await expect(block).toContainText(/one static site/i);
+      await expect(page.getByTestId('claim-into-account-button')).toBeEnabled();
       await expect(page.getByTestId('claim-submit')).toHaveCount(0);
       await expect(page.getByTestId('claim-site')).toBeVisible();
       await noSidewaysScroll(page);
-      await shot(page, 'existing-account');
+      await shot(page, 'claim-into-account');
     });
 
     test('a different anonymous account is warned about before it is replaced', async ({ page }) => {
@@ -175,7 +175,7 @@ test.describe('the whole new-human flow', () => {
     //    with the claim's returnTo. The page is claim-aware, not a second form.
     await expect(page).toHaveURL(/\/upgrade\?returnTo=%2Fclaim$/, LOADED);
     await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible(LOADED);
-    await expect(page.getByTestId('claim-existing-account')).toBeVisible();
+    await expect(page.getByTestId('claim-existing-account')).toContainText(/signs out of the site's temporary account/i);
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession']);
     await shot(page, 'upgrade');
 
@@ -265,17 +265,39 @@ test.describe('the whole new-human flow', () => {
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
   });
 
-  test('claimable_existing_account shows the existing-account block beside the site', async ({ page }) => {
-    await arrive(page, { completeError: { code: 'permission_denied', reason: 'claimable_existing_account' } });
-    await page.getByTestId('claim-submit').click();
-    await expect(page).toHaveURL(/\/upgrade/, LOADED);
-    await upgradeWithEmail(page);
+  test('an existing user claims into their account: CompleteClaim as themselves, then /apps with the app highlighted', async ({ page }) => {
+    const errors = collectErrors(page);
+    const mock = await arrive(page, {
+      signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false },
+      completeClaimPath: 'membership',
+    });
 
-    await expect(page.getByTestId('claim-existing-account')).toBeVisible(LOADED);
-    await expect(page.getByTestId('claim-existing-account')).toContainText('forge login');
-    await expect(page.getByTestId('claim-site')).toBeVisible();
-    await expect(page.getByTestId('claim-submit')).toHaveCount(0);
-    await shot(page, 'complete-existing-account');
+    await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    // No session was released, nothing was signed out, and the account was never upgraded.
+    expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'CompleteClaim']);
+    expect(mock.gotrue.some((g) => g.includes('/logout'))).toBe(false);
+    await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    expect(errors).toEqual([]);
+  });
+
+  test('an existing user over the free site allowance is told what happens', async ({ page }) => {
+    await arrive(page, {
+      signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false },
+      completeClaimPath: 'membership',
+      exceedsFreeSiteAllowance: true,
+    });
+    await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+    await expect(page.getByTestId('apps-claimed-over-allowance')).toContainText(/oldest live/i, LOADED);
+  });
+
+  test('"Sign in to claim" for someone not signed in goes to /auth and keeps the link good', async ({ page }) => {
+    const mock = await arrive(page);
+    await page.getByTestId('claim-existing-account-button').click({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/auth\?redirect=%2Fclaim$/, LOADED);
+    // No session was released for this, so the link still works for anyone.
+    expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim']);
   });
 
   test('a reason the page does not know gets a generic screen with a retry', async ({ page }) => {

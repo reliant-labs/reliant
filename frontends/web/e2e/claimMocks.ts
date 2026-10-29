@@ -34,6 +34,10 @@ export interface ClaimMockOptions {
   openSessionError?: { code: string; reason?: string; status?: number };
   /** Make CompleteClaim fail with this error, `times` calls in a row (default: every call). */
   completeError?: { code: string; reason?: string; status?: number; times?: number };
+  /** The claim path CompleteClaim answers with (default: "upgrade"). */
+  completeClaimPath?: 'upgrade' | 'membership';
+  /** A membership claim that put the claimer over the one free static site. */
+  exceedsFreeSiteAllowance?: boolean;
   /** Start already signed in as this user (a real account, or a different anonymous one). */
   signedInAs?: { id: string; email?: string; anonymous: boolean };
 }
@@ -187,13 +191,32 @@ export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {
   );
   await claimRpc(
     'CompleteClaim',
-    () => ({ orgId: 'org_claimed', claimPath: 'upgrade', hostnames: ['amber-quokka.sites.reliantlabs.dev'], holds: [] }),
+    () => ({
+      orgId: 'org_claimed',
+      claimPath: options.completeClaimPath ?? 'upgrade',
+      hostnames: ['amber-quokka.sites.reliantlabs.dev'],
+      holds: [],
+      exceedsFreeSiteAllowance: options.exceedsFreeSiteAllowance ?? false,
+    }),
     options.completeError,
   );
 
   // ── the rest of the app, enough for /apps after a claim ─────────────────
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
     json(route, { user: { id: 'user_claimed', email: 'new@example.com', onboardingCompleted: false } }),
+  );
+  // The orgs the signed-in person belongs to. A membership claim adds the
+  // claimed org and the page switches to it, so the list names both.
+  await page.route('**/controlplane.v1.OrganizationService/ListMyOrganizations', (route) =>
+    json(route, {
+      organizations: [
+        { id: 'org_own', name: 'My workspace', slug: 'my-workspace', role: 'owner', isOwner: true, isDefault: true, createdAt: hours(-2000) },
+        ...(options.completeClaimPath === 'membership'
+          ? [{ id: 'org_claimed', name: 'Personal workspace', slug: 'personal-claimed', role: 'owner', isOwner: true, isDefault: false, createdAt: hours(-72) }]
+          : []),
+      ],
+      defaultOrgId: 'org_own',
+    }),
   );
   await page.route('**/controlplane.v1.DeployService/ListEnvironments', (route) =>
     json(route, {

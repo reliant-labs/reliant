@@ -370,6 +370,185 @@ func (*GetClaimableChallengeRequest) Descriptor() ([]byte, []int) {
 	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{3}
 }
 
+type GetClaimableAvailabilityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetClaimableAvailabilityRequest) Reset() {
+	*x = GetClaimableAvailabilityRequest{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetClaimableAvailabilityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetClaimableAvailabilityRequest) ProtoMessage() {}
+
+func (x *GetClaimableAvailabilityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetClaimableAvailabilityRequest.ProtoReflect.Descriptor instead.
+func (*GetClaimableAvailabilityRequest) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{4}
+}
+
+type GetClaimableAvailabilityResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A start would be admitted as far as switches and configuration go (the
+	// rate limits and the proof of work are judged per request). Enough for an
+	// anonymous static site.
+	Available bool `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	// Why not, when available is false. Empty otherwise.
+	Causes []*ClaimableUnavailableCause `protobuf:"bytes,2,rep,name=causes,proto3" json:"causes,omitempty"`
+	// An unclaimed service and database could run too (needs available).
+	ComputeAvailable bool `protobuf:"varint,3,opt,name=compute_available,json=computeAvailable,proto3" json:"compute_available,omitempty"`
+	// Why not, when compute_available is false, beyond causes.
+	ComputeCauses []*ClaimableUnavailableCause `protobuf:"bytes,4,rep,name=compute_causes,json=computeCauses,proto3" json:"compute_causes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetClaimableAvailabilityResponse) Reset() {
+	*x = GetClaimableAvailabilityResponse{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetClaimableAvailabilityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetClaimableAvailabilityResponse) ProtoMessage() {}
+
+func (x *GetClaimableAvailabilityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetClaimableAvailabilityResponse.ProtoReflect.Descriptor instead.
+func (*GetClaimableAvailabilityResponse) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetClaimableAvailabilityResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *GetClaimableAvailabilityResponse) GetCauses() []*ClaimableUnavailableCause {
+	if x != nil {
+		return x.Causes
+	}
+	return nil
+}
+
+func (x *GetClaimableAvailabilityResponse) GetComputeAvailable() bool {
+	if x != nil {
+		return x.ComputeAvailable
+	}
+	return false
+}
+
+func (x *GetClaimableAvailabilityResponse) GetComputeCauses() []*ClaimableUnavailableCause {
+	if x != nil {
+		return x.ComputeCauses
+	}
+	return nil
+}
+
+// ClaimableUnavailableCause is one reason claimable deploys, or their compute,
+// are unavailable.
+type ClaimableUnavailableCause struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "disabled" (an operator's switch, its configured default or a runtime
+	// override), "dependency_unavailable" (component names what is missing), or
+	// "not_supported" (this build of the platform cannot do it yet).
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The switch (claimable_deploys.enabled, claimable_deploys.compute) or the
+	// dependency: admission, claim_secret, anonymous_signup, account_store,
+	// claim_page, content_scan_web_risk, content_scan_clamav, network_policing.
+	Component string `protobuf:"bytes,2,opt,name=component,proto3" json:"component,omitempty"`
+	// A sentence a person can read. Names components, never values or secrets.
+	Message       string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimableUnavailableCause) Reset() {
+	*x = ClaimableUnavailableCause{}
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimableUnavailableCause) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimableUnavailableCause) ProtoMessage() {}
+
+func (x *ClaimableUnavailableCause) ProtoReflect() protoreflect.Message {
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimableUnavailableCause.ProtoReflect.Descriptor instead.
+func (*ClaimableUnavailableCause) Descriptor() ([]byte, []int) {
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ClaimableUnavailableCause) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ClaimableUnavailableCause) GetComponent() string {
+	if x != nil {
+		return x.Component
+	}
+	return ""
+}
+
+func (x *ClaimableUnavailableCause) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 // GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
 // the server verifies and forge's solver implements:
 //
@@ -395,7 +574,7 @@ type GetClaimableChallengeResponse struct {
 
 func (x *GetClaimableChallengeResponse) Reset() {
 	*x = GetClaimableChallengeResponse{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[4]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +586,7 @@ func (x *GetClaimableChallengeResponse) String() string {
 func (*GetClaimableChallengeResponse) ProtoMessage() {}
 
 func (x *GetClaimableChallengeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[4]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +599,7 @@ func (x *GetClaimableChallengeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClaimableChallengeResponse.ProtoReflect.Descriptor instead.
 func (*GetClaimableChallengeResponse) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{4}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetClaimableChallengeResponse) GetChallenge() string {
@@ -453,7 +632,7 @@ type GetClaimRequest struct {
 
 func (x *GetClaimRequest) Reset() {
 	*x = GetClaimRequest{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[5]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -465,7 +644,7 @@ func (x *GetClaimRequest) String() string {
 func (*GetClaimRequest) ProtoMessage() {}
 
 func (x *GetClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[5]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -478,7 +657,7 @@ func (x *GetClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClaimRequest.ProtoReflect.Descriptor instead.
 func (*GetClaimRequest) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{5}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetClaimRequest) GetClaimToken() string {
@@ -510,7 +689,7 @@ type GetClaimResponse struct {
 
 func (x *GetClaimResponse) Reset() {
 	*x = GetClaimResponse{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[6]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -522,7 +701,7 @@ func (x *GetClaimResponse) String() string {
 func (*GetClaimResponse) ProtoMessage() {}
 
 func (x *GetClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[6]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -535,7 +714,7 @@ func (x *GetClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetClaimResponse.ProtoReflect.Descriptor instead.
 func (*GetClaimResponse) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{6}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetClaimResponse) GetState() ClaimableState {
@@ -603,7 +782,7 @@ type OpenClaimSessionRequest struct {
 
 func (x *OpenClaimSessionRequest) Reset() {
 	*x = OpenClaimSessionRequest{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[7]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -615,7 +794,7 @@ func (x *OpenClaimSessionRequest) String() string {
 func (*OpenClaimSessionRequest) ProtoMessage() {}
 
 func (x *OpenClaimSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[7]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -628,7 +807,7 @@ func (x *OpenClaimSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenClaimSessionRequest.ProtoReflect.Descriptor instead.
 func (*OpenClaimSessionRequest) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{7}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *OpenClaimSessionRequest) GetClaimToken() string {
@@ -652,7 +831,7 @@ type OpenClaimSessionResponse struct {
 
 func (x *OpenClaimSessionResponse) Reset() {
 	*x = OpenClaimSessionResponse{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[8]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +843,7 @@ func (x *OpenClaimSessionResponse) String() string {
 func (*OpenClaimSessionResponse) ProtoMessage() {}
 
 func (x *OpenClaimSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[8]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +856,7 @@ func (x *OpenClaimSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenClaimSessionResponse.ProtoReflect.Descriptor instead.
 func (*OpenClaimSessionResponse) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{8}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *OpenClaimSessionResponse) GetAccessToken() string {
@@ -710,7 +889,7 @@ type CompleteClaimRequest struct {
 
 func (x *CompleteClaimRequest) Reset() {
 	*x = CompleteClaimRequest{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[9]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +901,7 @@ func (x *CompleteClaimRequest) String() string {
 func (*CompleteClaimRequest) ProtoMessage() {}
 
 func (x *CompleteClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[9]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +914,7 @@ func (x *CompleteClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaimRequest.ProtoReflect.Descriptor instead.
 func (*CompleteClaimRequest) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{9}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CompleteClaimRequest) GetClaimToken() string {
@@ -755,14 +934,19 @@ type CompleteClaimResponse struct {
 	Hostnames []string `protobuf:"bytes,3,rep,name=hostnames,proto3" json:"hostnames,omitempty"`
 	// Open holds on the claimed org's deploys, if any: the claimed org is
 	// ordinary, so billing rules apply from here on.
-	Holds         []*v1.DeployHold `protobuf:"bytes,4,rep,name=holds,proto3" json:"holds,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Holds []*v1.DeployHold `protobuf:"bytes,4,rep,name=holds,proto3" json:"holds,omitempty"`
+	// Path "membership" only. True when the claimer now owns more static sites
+	// than the one free site per person allows (docs/orgs.md): the platform
+	// serves the OLDEST of their sites free and suspends the rest until they
+	// subscribe or delete one. The claim still succeeded.
+	ExceedsFreeSiteAllowance bool `protobuf:"varint,5,opt,name=exceeds_free_site_allowance,json=exceedsFreeSiteAllowance,proto3" json:"exceeds_free_site_allowance,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *CompleteClaimResponse) Reset() {
 	*x = CompleteClaimResponse{}
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[10]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -774,7 +958,7 @@ func (x *CompleteClaimResponse) String() string {
 func (*CompleteClaimResponse) ProtoMessage() {}
 
 func (x *CompleteClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_claimable_v1_claimable_proto_msgTypes[10]
+	mi := &file_services_claimable_v1_claimable_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -787,7 +971,7 @@ func (x *CompleteClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaimResponse.ProtoReflect.Descriptor instead.
 func (*CompleteClaimResponse) Descriptor() ([]byte, []int) {
-	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{10}
+	return file_services_claimable_v1_claimable_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CompleteClaimResponse) GetOrgId() string {
@@ -818,6 +1002,13 @@ func (x *CompleteClaimResponse) GetHolds() []*v1.DeployHold {
 	return nil
 }
 
+func (x *CompleteClaimResponse) GetExceedsFreeSiteAllowance() bool {
+	if x != nil {
+		return x.ExceedsFreeSiteAllowance
+	}
+	return false
+}
+
 var File_services_claimable_v1_claimable_proto protoreflect.FileDescriptor
 
 const file_services_claimable_v1_claimable_proto_rawDesc = "" +
@@ -841,7 +1032,17 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"\x11ClaimableThrottle\x12.\n" +
 	"\x13retry_after_seconds\x18\x01 \x01(\x03R\x11retryAfterSeconds\x12\x14\n" +
 	"\x05scope\x18\x02 \x01(\tR\x05scope\"\x1e\n" +
-	"\x1cGetClaimableChallengeRequest\"\xa1\x01\n" +
+	"\x1cGetClaimableChallengeRequest\"!\n" +
+	"\x1fGetClaimableAvailabilityRequest\"\x84\x02\n" +
+	" GetClaimableAvailabilityResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12B\n" +
+	"\x06causes\x18\x02 \x03(\v2*.controlplane.v1.ClaimableUnavailableCauseR\x06causes\x12+\n" +
+	"\x11compute_available\x18\x03 \x01(\bR\x10computeAvailable\x12Q\n" +
+	"\x0ecompute_causes\x18\x04 \x03(\v2*.controlplane.v1.ClaimableUnavailableCauseR\rcomputeCauses\"g\n" +
+	"\x19ClaimableUnavailableCause\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x1c\n" +
+	"\tcomponent\x18\x02 \x01(\tR\tcomponent\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"\xa1\x01\n" +
 	"\x1dGetClaimableChallengeResponse\x12\x1c\n" +
 	"\tchallenge\x18\x01 \x01(\tR\tchallenge\x12'\n" +
 	"\x0fdifficulty_bits\x18\x02 \x01(\rR\x0edifficultyBits\x129\n" +
@@ -872,23 +1073,25 @@ const file_services_claimable_v1_claimable_proto_rawDesc = "" +
 	"expires_in\x18\x03 \x01(\x03R\texpiresIn\"7\n" +
 	"\x14CompleteClaimRequest\x12\x1f\n" +
 	"\vclaim_token\x18\x01 \x01(\tR\n" +
-	"claimToken\"\x9e\x01\n" +
+	"claimToken\"\xdd\x01\n" +
 	"\x15CompleteClaimResponse\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1d\n" +
 	"\n" +
 	"claim_path\x18\x02 \x01(\tR\tclaimPath\x12\x1c\n" +
 	"\thostnames\x18\x03 \x03(\tR\thostnames\x121\n" +
-	"\x05holds\x18\x04 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds*\xc4\x01\n" +
+	"\x05holds\x18\x04 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\x12=\n" +
+	"\x1bexceeds_free_site_allowance\x18\x05 \x01(\bR\x18exceedsFreeSiteAllowance*\xc4\x01\n" +
 	"\x0eClaimableState\x12\x1f\n" +
 	"\x1bCLAIMABLE_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CLAIMABLE_STATE_LIVE\x10\x01\x12\x1d\n" +
 	"\x19CLAIMABLE_STATE_SUSPENDED\x10\x02\x12\x1b\n" +
 	"\x17CLAIMABLE_STATE_CLAIMED\x10\x03\x12\x1e\n" +
 	"\x1aCLAIMABLE_STATE_TAKEN_DOWN\x10\x04\x12\x1b\n" +
-	"\x17CLAIMABLE_STATE_EXPIRED\x10\x052\x99\x04\n" +
+	"\x17CLAIMABLE_STATE_EXPIRED\x10\x052\x9a\x05\n" +
 	"\x10ClaimableService\x12s\n" +
 	"\x14StartClaimableDeploy\x12,.controlplane.v1.StartClaimableDeployRequest\x1a-.controlplane.v1.StartClaimableDeployResponse\x12v\n" +
-	"\x15GetClaimableChallenge\x12-.controlplane.v1.GetClaimableChallengeRequest\x1a..controlplane.v1.GetClaimableChallengeResponse\x12O\n" +
+	"\x15GetClaimableChallenge\x12-.controlplane.v1.GetClaimableChallengeRequest\x1a..controlplane.v1.GetClaimableChallengeResponse\x12\x7f\n" +
+	"\x18GetClaimableAvailability\x120.controlplane.v1.GetClaimableAvailabilityRequest\x1a1.controlplane.v1.GetClaimableAvailabilityResponse\x12O\n" +
 	"\bGetClaim\x12 .controlplane.v1.GetClaimRequest\x1a!.controlplane.v1.GetClaimResponse\x12g\n" +
 	"\x10OpenClaimSession\x12(.controlplane.v1.OpenClaimSessionRequest\x1a).controlplane.v1.OpenClaimSessionResponse\x12^\n" +
 	"\rCompleteClaim\x12%.controlplane.v1.CompleteClaimRequest\x1a&.controlplane.v1.CompleteClaimResponseB\xd9\x01\n" +
@@ -907,47 +1110,54 @@ func file_services_claimable_v1_claimable_proto_rawDescGZIP() []byte {
 }
 
 var file_services_claimable_v1_claimable_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_services_claimable_v1_claimable_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_services_claimable_v1_claimable_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_services_claimable_v1_claimable_proto_goTypes = []any{
-	(ClaimableState)(0),                   // 0: controlplane.v1.ClaimableState
-	(*StartClaimableDeployRequest)(nil),   // 1: controlplane.v1.StartClaimableDeployRequest
-	(*StartClaimableDeployResponse)(nil),  // 2: controlplane.v1.StartClaimableDeployResponse
-	(*ClaimableThrottle)(nil),             // 3: controlplane.v1.ClaimableThrottle
-	(*GetClaimableChallengeRequest)(nil),  // 4: controlplane.v1.GetClaimableChallengeRequest
-	(*GetClaimableChallengeResponse)(nil), // 5: controlplane.v1.GetClaimableChallengeResponse
-	(*GetClaimRequest)(nil),               // 6: controlplane.v1.GetClaimRequest
-	(*GetClaimResponse)(nil),              // 7: controlplane.v1.GetClaimResponse
-	(*OpenClaimSessionRequest)(nil),       // 8: controlplane.v1.OpenClaimSessionRequest
-	(*OpenClaimSessionResponse)(nil),      // 9: controlplane.v1.OpenClaimSessionResponse
-	(*CompleteClaimRequest)(nil),          // 10: controlplane.v1.CompleteClaimRequest
-	(*CompleteClaimResponse)(nil),         // 11: controlplane.v1.CompleteClaimResponse
-	(*timestamppb.Timestamp)(nil),         // 12: google.protobuf.Timestamp
-	(*v1.DeployHold)(nil),                 // 13: controlplane.v1.DeployHold
+	(ClaimableState)(0),                      // 0: controlplane.v1.ClaimableState
+	(*StartClaimableDeployRequest)(nil),      // 1: controlplane.v1.StartClaimableDeployRequest
+	(*StartClaimableDeployResponse)(nil),     // 2: controlplane.v1.StartClaimableDeployResponse
+	(*ClaimableThrottle)(nil),                // 3: controlplane.v1.ClaimableThrottle
+	(*GetClaimableChallengeRequest)(nil),     // 4: controlplane.v1.GetClaimableChallengeRequest
+	(*GetClaimableAvailabilityRequest)(nil),  // 5: controlplane.v1.GetClaimableAvailabilityRequest
+	(*GetClaimableAvailabilityResponse)(nil), // 6: controlplane.v1.GetClaimableAvailabilityResponse
+	(*ClaimableUnavailableCause)(nil),        // 7: controlplane.v1.ClaimableUnavailableCause
+	(*GetClaimableChallengeResponse)(nil),    // 8: controlplane.v1.GetClaimableChallengeResponse
+	(*GetClaimRequest)(nil),                  // 9: controlplane.v1.GetClaimRequest
+	(*GetClaimResponse)(nil),                 // 10: controlplane.v1.GetClaimResponse
+	(*OpenClaimSessionRequest)(nil),          // 11: controlplane.v1.OpenClaimSessionRequest
+	(*OpenClaimSessionResponse)(nil),         // 12: controlplane.v1.OpenClaimSessionResponse
+	(*CompleteClaimRequest)(nil),             // 13: controlplane.v1.CompleteClaimRequest
+	(*CompleteClaimResponse)(nil),            // 14: controlplane.v1.CompleteClaimResponse
+	(*timestamppb.Timestamp)(nil),            // 15: google.protobuf.Timestamp
+	(*v1.DeployHold)(nil),                    // 16: controlplane.v1.DeployHold
 }
 var file_services_claimable_v1_claimable_proto_depIdxs = []int32{
-	12, // 0: controlplane.v1.StartClaimableDeployResponse.expires_at:type_name -> google.protobuf.Timestamp
-	12, // 1: controlplane.v1.StartClaimableDeployResponse.purge_after:type_name -> google.protobuf.Timestamp
-	12, // 2: controlplane.v1.GetClaimableChallengeResponse.expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 3: controlplane.v1.GetClaimResponse.state:type_name -> controlplane.v1.ClaimableState
-	12, // 4: controlplane.v1.GetClaimResponse.expires_at:type_name -> google.protobuf.Timestamp
-	12, // 5: controlplane.v1.GetClaimResponse.purge_after:type_name -> google.protobuf.Timestamp
-	12, // 6: controlplane.v1.GetClaimResponse.claimed_at:type_name -> google.protobuf.Timestamp
-	13, // 7: controlplane.v1.CompleteClaimResponse.holds:type_name -> controlplane.v1.DeployHold
-	1,  // 8: controlplane.v1.ClaimableService.StartClaimableDeploy:input_type -> controlplane.v1.StartClaimableDeployRequest
-	4,  // 9: controlplane.v1.ClaimableService.GetClaimableChallenge:input_type -> controlplane.v1.GetClaimableChallengeRequest
-	6,  // 10: controlplane.v1.ClaimableService.GetClaim:input_type -> controlplane.v1.GetClaimRequest
-	8,  // 11: controlplane.v1.ClaimableService.OpenClaimSession:input_type -> controlplane.v1.OpenClaimSessionRequest
-	10, // 12: controlplane.v1.ClaimableService.CompleteClaim:input_type -> controlplane.v1.CompleteClaimRequest
-	2,  // 13: controlplane.v1.ClaimableService.StartClaimableDeploy:output_type -> controlplane.v1.StartClaimableDeployResponse
-	5,  // 14: controlplane.v1.ClaimableService.GetClaimableChallenge:output_type -> controlplane.v1.GetClaimableChallengeResponse
-	7,  // 15: controlplane.v1.ClaimableService.GetClaim:output_type -> controlplane.v1.GetClaimResponse
-	9,  // 16: controlplane.v1.ClaimableService.OpenClaimSession:output_type -> controlplane.v1.OpenClaimSessionResponse
-	11, // 17: controlplane.v1.ClaimableService.CompleteClaim:output_type -> controlplane.v1.CompleteClaimResponse
-	13, // [13:18] is the sub-list for method output_type
-	8,  // [8:13] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	15, // 0: controlplane.v1.StartClaimableDeployResponse.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 1: controlplane.v1.StartClaimableDeployResponse.purge_after:type_name -> google.protobuf.Timestamp
+	7,  // 2: controlplane.v1.GetClaimableAvailabilityResponse.causes:type_name -> controlplane.v1.ClaimableUnavailableCause
+	7,  // 3: controlplane.v1.GetClaimableAvailabilityResponse.compute_causes:type_name -> controlplane.v1.ClaimableUnavailableCause
+	15, // 4: controlplane.v1.GetClaimableChallengeResponse.expires_at:type_name -> google.protobuf.Timestamp
+	0,  // 5: controlplane.v1.GetClaimResponse.state:type_name -> controlplane.v1.ClaimableState
+	15, // 6: controlplane.v1.GetClaimResponse.expires_at:type_name -> google.protobuf.Timestamp
+	15, // 7: controlplane.v1.GetClaimResponse.purge_after:type_name -> google.protobuf.Timestamp
+	15, // 8: controlplane.v1.GetClaimResponse.claimed_at:type_name -> google.protobuf.Timestamp
+	16, // 9: controlplane.v1.CompleteClaimResponse.holds:type_name -> controlplane.v1.DeployHold
+	1,  // 10: controlplane.v1.ClaimableService.StartClaimableDeploy:input_type -> controlplane.v1.StartClaimableDeployRequest
+	4,  // 11: controlplane.v1.ClaimableService.GetClaimableChallenge:input_type -> controlplane.v1.GetClaimableChallengeRequest
+	5,  // 12: controlplane.v1.ClaimableService.GetClaimableAvailability:input_type -> controlplane.v1.GetClaimableAvailabilityRequest
+	9,  // 13: controlplane.v1.ClaimableService.GetClaim:input_type -> controlplane.v1.GetClaimRequest
+	11, // 14: controlplane.v1.ClaimableService.OpenClaimSession:input_type -> controlplane.v1.OpenClaimSessionRequest
+	13, // 15: controlplane.v1.ClaimableService.CompleteClaim:input_type -> controlplane.v1.CompleteClaimRequest
+	2,  // 16: controlplane.v1.ClaimableService.StartClaimableDeploy:output_type -> controlplane.v1.StartClaimableDeployResponse
+	8,  // 17: controlplane.v1.ClaimableService.GetClaimableChallenge:output_type -> controlplane.v1.GetClaimableChallengeResponse
+	6,  // 18: controlplane.v1.ClaimableService.GetClaimableAvailability:output_type -> controlplane.v1.GetClaimableAvailabilityResponse
+	10, // 19: controlplane.v1.ClaimableService.GetClaim:output_type -> controlplane.v1.GetClaimResponse
+	12, // 20: controlplane.v1.ClaimableService.OpenClaimSession:output_type -> controlplane.v1.OpenClaimSessionResponse
+	14, // 21: controlplane.v1.ClaimableService.CompleteClaim:output_type -> controlplane.v1.CompleteClaimResponse
+	16, // [16:22] is the sub-list for method output_type
+	10, // [10:16] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_services_claimable_v1_claimable_proto_init() }
@@ -961,7 +1171,7 @@ func file_services_claimable_v1_claimable_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_claimable_v1_claimable_proto_rawDesc), len(file_services_claimable_v1_claimable_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

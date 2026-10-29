@@ -23,6 +23,7 @@ import Card, { CardInset } from "@/components/forge-ui/card";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useApps } from "@/hooks/apps-queries";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isLive, primaryLink, type AppSummary } from "@/services/forge/apps";
 
@@ -90,7 +91,9 @@ function AppsBody() {
   return (
     <div className="space-y-5" data-testid="apps-page">
       {header}
-      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} />}
+      {claimed.name && (
+        <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} overAllowance={claimed.overAllowance} />
+      )}
       <AvailabilityNote availability={availability} detail={detail} />
       {body}
     </div>
@@ -102,7 +105,18 @@ function AppsBody() {
  * the user's own org by the time this shows; the list below may still be
  * catching up, which the banner says rather than leaving the user to wonder.
  */
-function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolean; loading: boolean }) {
+function ClaimedBanner({
+  name,
+  listed,
+  loading,
+  overAllowance,
+}: {
+  name: string;
+  listed: boolean;
+  loading: boolean;
+  overAllowance: boolean;
+}) {
+  const goToBilling = useGoToBilling("upgrade");
   return (
     <p
       className="flex items-start gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground"
@@ -113,6 +127,17 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
       <span>
         <strong className="font-semibold">{name}</strong> is yours now.
         {!loading && !listed && " It can take a moment to appear in this list."}
+        {overAllowance && (
+          <span data-testid="apps-claimed-over-allowance">
+            {" "}
+            You already have a free static site, and the free plan includes one: Reliant keeps your oldest live and pauses
+            the other until you{" "}
+            <button type="button" onClick={goToBilling} className="font-medium underline underline-offset-2">
+              subscribe
+            </button>{" "}
+            or delete a site.
+          </span>
+        )}
       </span>
     </p>
   );
@@ -125,18 +150,20 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
  * until the list has loaded: the claim moved the site into the user's org, and
  * the list is what shows it.
  */
-function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean } {
+function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean; overAllowance: boolean } {
   const navigate = useNavigate();
-  const { claimed } = useSearch({ strict: false }) as { claimed?: string };
+  const { claimed, overAllowance: over } = useSearch({ strict: false }) as { claimed?: string; overAllowance?: boolean };
   const [name, setName] = useState<string | null>(null);
+  const [overAllowance, setOverAllowance] = useState(false);
 
   useEffect(() => {
     if (!claimed) return;
     setName(claimed);
+    setOverAllowance(over === true);
     void navigate({ to: "/apps", search: {}, replace: true });
-  }, [claimed, navigate]);
+  }, [claimed, over, navigate]);
 
-  return { name, found: !loading && name !== null && names.includes(name) };
+  return { name, found: !loading && name !== null && names.includes(name), overAllowance };
 }
 
 /**

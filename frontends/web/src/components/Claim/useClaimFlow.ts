@@ -2,7 +2,9 @@
 
 /**
  * The /claim page's state machine (design: control-plane
- * docs/design/claimable-deploys.md §4, path 1).
+ * docs/design/claimable-deploys.md §4).
+ *
+ * Path 1, a new human:
  *
  *   read the pending claim (lib/claimLink.ts)
  *     └ GetClaim ............... preview, shown BEFORE anyone signs in
@@ -12,6 +14,16 @@
  *                     (same user id) and returns here
  *                     └ CompleteClaim ... the org and site are the human's
  *                         └ /apps, with the app highlighted
+ *
+ * Path 2, someone who already has an account (W11):
+ *
+ *   GetClaim (preview)
+ *     └ signed in already ...... "Claim into my account" → CompleteClaim as
+ *     │                          themselves: they join the site's org as its
+ *     │                          owner → switch to that org → /apps
+ *     └ not signed in .......... "Sign in to claim" → /auth, which returns here
+ *                                (the token stays in storage) → the line above
+ *                                No session is released, so the link stays good.
  *
  * The page remounts at each hop (the upgrade flow leaves it, and a provider
  * redirect or an emailed link comes back to a fresh load), so nothing here
@@ -41,6 +53,7 @@ import { logger } from "@/lib/logger";
 import { queryClient } from "@/lib/query-client";
 import { supabase } from "@/lib/supabase";
 import { hasControlPlane } from "@/services/controlPlane/config";
+import { switchToJoinedOrg } from "@/services/controlPlane/orgs";
 import {
   claimRefusalOf,
   completeActionOf,
@@ -75,6 +88,8 @@ export interface ClaimFlow {
   view: ClaimView;
   /** "Claim it, it's free": release the session and start the upgrade. */
   claim: () => void;
+  /** "Claim into my account": CompleteClaim as the signed-in person, who joins the org as owner. */
+  claimIntoAccount: () => void;
   /** CompleteClaim again, after it failed for a reason a retry can fix. */
   retryFinish: () => void;
   /** Load the preview again, after the control plane could not be reached. */
@@ -101,22 +116,21 @@ export function useClaimFlow(): ClaimFlow {
   // so a failed install must be retried with these, not with a second open.
   const released = useRef<ReleasedSession | null>(null);
   const decided = useRef(false);
-  // CompleteClaim can decide the situation the page could not see from the
-  // session (an email that already has an account): a preview retry keeps it.
-  const forcedSituation = useRef<ClaimSituation | null>(null);
 
   useEffect(() => {
     if (!initialized) void initialize();
   }, [initialized, initialize]);
 
   const toApps = useCallback(
-    (project: string | undefined) => {
-      void navigate({ to: "/apps", search: project ? { claimed: project } : {}, replace: true });
+    (project: string | undefined, overAllowance = false) => {
+      const search = {
+        ...(project ? { claimed: project } : {}),
+        ...(overAllowance ? { overAllowance: true } : {}),
+      };
+      void navigate({ to: "/apps", search, replace: true });
     },
     [navigate],
   );
-
-  const loadPreviewRef = useRef<(pending: PendingClaim, situation: ClaimSituation) => Promise<void>>(async () => undefined);
 
   const finish = useCallback(
     async (pending: PendingClaim) => {
@@ -134,11 +148,25 @@ export function useClaimFlow(): ClaimFlow {
           logger.warn("[Claim] refreshSession threw", { message: messageOf(refreshErr, "unknown") });
         }
         const done = await completeClaim(pending.token);
-        trackEvent("claim_completed", { claimPath: done.claimPath, holds: done.holds });
+        trackEvent("claim_completed", {
+          claimPath: done.claimPath,
+          holds: done.holds,
+          exceedsFreeSiteAllowance: done.exceedsFreeSiteAllowance,
+        });
         clearPendingClaim();
+        // A membership claim added an org the person did not have: act in it,
+        // so /apps lists the site they just claimed. A failure here must not
+        // undo the claim; the org is in their switcher either way.
+        if (done.claimPath === "membership" && done.orgId) {
+          try {
+            await switchToJoinedOrg(done.orgId);
+          } catch (switchErr) {
+            logger.warn("[Claim] could not switch to the claimed org", { reason: failureReasonOf(switchErr) });
+          }
+        }
         // The org's environments are now the user's own: read them afresh.
         await queryClient.invalidateQueries({ queryKey: ["forge"] });
-        toApps(pending.project);
+        toApps(pending.project, done.exceedsFreeSiteAllowance);
       } catch (err) {
         trackEvent("claim_failed", { stage: "complete", reason: failureReasonOf(err) });
         const refusal = claimRefusalOf(err);
@@ -157,11 +185,6 @@ export function useClaimFlow(): ClaimFlow {
           }
           updatePendingClaim({ upgradeSent: true });
           void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
-          return;
-        }
-        if (action === "claimable_existing_account") {
-          forcedSituation.current = "existing-account";
-          await loadPreviewRef.current(pending, "existing-account");
           return;
         }
         if (isDeclined(err)) {
@@ -207,7 +230,6 @@ export function useClaimFlow(): ClaimFlow {
     },
     [],
   );
-  loadPreviewRef.current = loadPreview;
 
   // Decide once, when auth has settled, where in the flow this load is.
   useEffect(() => {
@@ -275,6 +297,16 @@ export function useClaimFlow(): ClaimFlow {
     })();
   }, [view, signOut, adoptSession, navigate]);
 
+  const claimIntoAccount = useCallback(() => {
+    const pending = readPendingClaim();
+    if (!pending) {
+      setView({ kind: "no-link" });
+      return;
+    }
+    trackEvent("claim_started", { situation: "existing-account" });
+    void finish(pending);
+  }, [finish]);
+
   const retryFinish = useCallback(() => {
     const pending = readPendingClaim();
     if (pending) void finish(pending);
@@ -287,8 +319,8 @@ export function useClaimFlow(): ClaimFlow {
       setView({ kind: "no-link" });
       return;
     }
-    void loadPreview(pending, forcedSituation.current ?? claimSituation(useAuthStore.getState().user, pending));
+    void loadPreview(pending, claimSituation(useAuthStore.getState().user, pending));
   }, [loadPreview]);
 
-  return { view, claim, retryFinish, retryPreview };
+  return { view, claim, claimIntoAccount, retryFinish, retryPreview };
 }

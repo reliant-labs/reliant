@@ -148,13 +148,13 @@ export function AuthScreen() {
 
     try {
       if (provider === 'google') {
-        await signInWithGoogle()
+        await signInWithGoogle(linkState)
         // For web, OAuth will redirect. For Electron, window will open.
         // Don't navigate here - let the OAuth callback handle it
       } else if (provider === 'github') {
-        await signInWithGithub()
+        await signInWithGithub(linkState)
       } else if (provider === 'apple') {
-        await signInWithApple()
+        await signInWithApple(linkState)
       }
     } catch (err: unknown) {
       let errorMessage = `Failed to sign in with ${provider}`

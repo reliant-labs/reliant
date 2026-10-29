@@ -107,9 +107,9 @@ interface AuthState {
     password: string,
     state?: OAuthRedirectState,
   ) => Promise<{ user: User | null; verificationRequired: boolean }>
-  signInWithGoogle: () => Promise<void>
+  signInWithGoogle: (state?: OAuthRedirectState) => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
-  signInWithApple: () => Promise<void>
+  signInWithApple: (state?: OAuthRedirectState) => Promise<void>
   linkOAuthIdentity: (provider: LinkableProvider, state?: OAuthRedirectState) => Promise<void>
   linkGoogleAccount: (state?: OAuthRedirectState) => Promise<void>
   linkAppleAccount: (state?: OAuthRedirectState) => Promise<void>
@@ -347,8 +347,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // SAME exchangeCodeForSession call in both. Nothing about sign-in depends on
   // the daemon, so it works whether the daemon is local, remote, or absent —
   // unlike Claude/Codex OAuth, whose credentials are daemon-scoped by design.
-  signInWithGoogle: async () => {
-    await runOAuthSignIn('google')
+  signInWithGoogle: async (state?: OAuthRedirectState) => {
+    await runOAuthSignIn('google', state)
   },
 
   signInWithGithub: async (state?: OAuthRedirectState) => {
@@ -360,8 +360,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await runOAuthSignIn('github', state)
   },
 
-  signInWithApple: async () => {
-    await runOAuthSignIn('apple')
+  signInWithApple: async (state?: OAuthRedirectState) => {
+    await runOAuthSignIn('apple', state)
   },
 
 

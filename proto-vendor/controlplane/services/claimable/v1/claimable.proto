@@ -48,8 +48,13 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/claimabl
 //	                       anonymous sign-up limit; carries a ClaimableThrottle
 //	                       error detail with the retry-after. Nothing was
 //	                       created. Clients must NOT retry on their own.
-//	claimable_unavailable  Unavailable        a switch is off, or GoTrue
-//	                       demands a CAPTCHA. The remedy is `forge login`.
+//	claimable_unavailable  Unavailable        a switch is off, or a dependency
+//	                       is missing (GoTrue's anonymous sign-up, the claim
+//	                       secret, the content scan). The message names every
+//	                       cause; metadata x-forge-error-unavailable-cause
+//	                       (disabled | dependency_unavailable | not_supported)
+//	                       and x-forge-error-unavailable-component carry the
+//	                       first. GetClaimableAvailability lists them all.
 //	claimable_claimed      FailedPrecondition the deploy was already claimed
 //	claimable_expired      FailedPrecondition expired and purged (or past
 //	                       purge_after and no longer revivable)
@@ -96,6 +101,17 @@ service ClaimableService {
     option (forge.v1.method) = {auth_required: false};
   }
 
+  // GetClaimableAvailability says whether a claimable deploy can start right
+  // now, and if not, every reason why: an operator's switch, or a dependency
+  // this deployment lacks. Separately, whether an unclaimed SERVICE or
+  // DATABASE could run, which a static site does not need. It reads only
+  // configuration and the kill switches, creates nothing and solves no proof
+  // of work, so forge calls it before any build (`forge env deploy
+  // --claimable`) and in the local preview (`--claimable --plan-only`).
+  rpc GetClaimableAvailability(GetClaimableAvailabilityRequest) returns (GetClaimableAvailabilityResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
   // GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
   // what is being claimed, whether it still can be, and when it expires. It
   // returns no secret and no token of any kind.
@@ -122,8 +138,12 @@ service ClaimableService {
   //
   // Path "upgrade": the caller IS the anonymous user, now upgraded in place
   // (same user id, now with an email). Path "membership": the caller is a
-  // different, existing user who joins the anonymous org as owner (off until
-  // users belong to more than one org in practice, design §9 M1).
+  // different, existing user. In the claim's own transaction they become an
+  // owner member of the anonymous org and organizations.owner_id moves to
+  // them (this is the only way an org's owner changes; there is no general
+  // transfer). The anonymous user and its sign-in identity are then retired.
+  // The org is one more org the caller belongs to; it is not made their
+  // default.
   //
   // Completion is ONE compare-and-set on the claimable_deploys row; the first
   // completion wins. It revokes the CLI's token.
@@ -193,6 +213,36 @@ message ClaimableThrottle {
 }
 
 message GetClaimableChallengeRequest {}
+
+message GetClaimableAvailabilityRequest {}
+
+message GetClaimableAvailabilityResponse {
+  // A start would be admitted as far as switches and configuration go (the
+  // rate limits and the proof of work are judged per request). Enough for an
+  // anonymous static site.
+  bool available = 1;
+  // Why not, when available is false. Empty otherwise.
+  repeated ClaimableUnavailableCause causes = 2;
+  // An unclaimed service and database could run too (needs available).
+  bool compute_available = 3;
+  // Why not, when compute_available is false, beyond causes.
+  repeated ClaimableUnavailableCause compute_causes = 4;
+}
+
+// ClaimableUnavailableCause is one reason claimable deploys, or their compute,
+// are unavailable.
+message ClaimableUnavailableCause {
+  // "disabled" (an operator's switch, its configured default or a runtime
+  // override), "dependency_unavailable" (component names what is missing), or
+  // "not_supported" (this build of the platform cannot do it yet).
+  string code = 1;
+  // The switch (claimable_deploys.enabled, claimable_deploys.compute) or the
+  // dependency: admission, claim_secret, anonymous_signup, account_store,
+  // claim_page, content_scan_web_risk, content_scan_clamav, network_policing.
+  string component = 2;
+  // A sentence a person can read. Names components, never values or secrets.
+  string message = 3;
+}
 
 // GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
 // the server verifies and forge's solver implements:
@@ -278,4 +328,9 @@ message CompleteClaimResponse {
   // Open holds on the claimed org's deploys, if any: the claimed org is
   // ordinary, so billing rules apply from here on.
   repeated DeployHold holds = 4;
+  // Path "membership" only. True when the claimer now owns more static sites
+  // than the one free site per person allows (docs/orgs.md): the platform
+  // serves the OLDEST of their sites free and suspends the rest until they
+  // subscribe or delete one. The claim still succeeded.
+  bool exceeds_free_site_allowance = 5;
 }

@@ -163,7 +163,19 @@ describe('completeClaim', () => {
       claimPath: 'upgrade',
       hostnames: ['a.sites.reliantlabs.dev'],
       holds: 1,
+      exceedsFreeSiteAllowance: false,
     })
+  })
+
+  it('reports a membership claim that put the person over the free site', async () => {
+    setTransport(
+      mockTransport({
+        'ClaimableService.CompleteClaim': {
+          response: { orgId: 'org_1', claimPath: 'membership', hostnames: [], holds: [], exceedsFreeSiteAllowance: true },
+        },
+      }),
+    )
+    expect(await completeClaim(TOKEN)).toMatchObject({ claimPath: 'membership', exceedsFreeSiteAllowance: true })
   })
 
   it('a lost race is refused as claimed', async () => {
@@ -197,9 +209,15 @@ describe('claimRefusalOf / failureReasonOf', () => {
 })
 
 describe('completeActionOf / isDeclined', () => {
-  it.each(['claimable_upgrade_required', 'claimable_existing_account'] as const)('reads %s as an action, never a refusal', (reason) => {
-    const err = refused(reason, Code.PermissionDenied)
-    expect(completeActionOf(err)).toBe(reason)
+  it('reads claimable_upgrade_required as an action, never a refusal', () => {
+    const err = refused('claimable_upgrade_required', Code.PermissionDenied)
+    expect(completeActionOf(err)).toBe('claimable_upgrade_required')
+    expect(claimRefusalOf(err)).toBeNull()
+  })
+
+  it('no longer knows claimable_existing_account: the server joins the org instead of asking', () => {
+    const err = refused('claimable_existing_account', Code.PermissionDenied)
+    expect(completeActionOf(err)).toBeNull()
     expect(claimRefusalOf(err)).toBeNull()
   })
 

@@ -67,11 +67,17 @@ export interface ReleasedSession {
 
 export interface CompletedClaim {
   orgId: string;
-  /** "upgrade" (the same user, now with an email) or "membership". */
+  /** "upgrade" (the same user, now with an email) or "membership" (an existing user joined the org as owner). */
   claimPath: string;
   hostnames: string[];
   /** Deploys held by billing: the claimed org is ordinary from here on. */
   holds: number;
+  /**
+   * Membership claims only: the claimer now owns more static sites than the
+   * one free site per person allows, so Reliant serves their oldest free and
+   * pauses the rest until they subscribe or delete one.
+   */
+  exceedsFreeSiteAllowance: boolean;
 }
 
 function date(ts: Timestamp | undefined): Date | undefined {
@@ -99,10 +105,10 @@ export function claimRefusalOf(err: unknown): ClaimRefusal | null {
 }
 
 /**
- * What CompleteClaim can ask the page to DO rather than just report: both are
- * PermissionDenied, and neither ends the claim.
+ * What CompleteClaim can ask the page to DO rather than just report: it is
+ * PermissionDenied, and it does not end the claim.
  */
-export const COMPLETE_ACTIONS = ["claimable_upgrade_required", "claimable_existing_account"] as const satisfies readonly ErrorReason[];
+export const COMPLETE_ACTIONS = ["claimable_upgrade_required"] as const satisfies readonly ErrorReason[];
 
 export type CompleteAction = (typeof COMPLETE_ACTIONS)[number];
 
@@ -174,5 +180,6 @@ export async function completeClaim(claimToken: string): Promise<CompletedClaim>
     claimPath: res.claimPath,
     hostnames: res.hostnames,
     holds: res.holds.length,
+    exceedsFreeSiteAllowance: res.exceedsFreeSiteAllowance,
   };
 }

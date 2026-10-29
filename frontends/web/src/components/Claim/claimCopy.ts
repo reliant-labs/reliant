@@ -34,8 +34,10 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   },
   claimable_session_released: {
     title: "This claim is open in another browser",
-    body: "A claim can be started in one browser only. Continue there, or sign in to an existing account.",
-    next: { label: "Sign in", href: "/auth" },
+    body: "A claim can be started in one browser only. Continue there, or sign in to an account you already have and claim it into that.",
+    // Returns here, where the claim is still in storage; the site is claimed
+    // into the account that signs in, which needs no session from this link.
+    next: { label: "Sign in to claim", href: "/auth?redirect=%2Fclaim" },
   },
 };
 
@@ -50,15 +52,31 @@ export const UPGRADE_STILL_REQUIRED_MESSAGE =
   "We couldn't confirm your email yet. Check that you've verified it, then try again.";
 
 /**
- * What an existing Reliant user is told. The way in for them (joining the
- * site's org) needs users to belong to more than one org, which is not built
- * (design §9, slice M1a); a signed-in redeploy gets them the same site.
- *
- * ONE place, so W11 replaces this block and nothing else.
+ * Someone who may already have a Reliant account, and is not signed in to it
+ * here (signed out, or holding the site's temporary account). They sign in and
+ * come back to this page, where ClaimIntoAccount takes over.
  */
 export const EXISTING_ACCOUNT_COPY = {
   heading: "Already on Reliant?",
-  command: "forge login",
+  body: "Sign in to your account and this site is added to it, as an organization you own.",
+  button: "Sign in to claim",
+  /** Said only when leaving would drop the site's temporary account. */
+  temporary: "This signs out of the site's temporary account. The site is still yours to claim from your own account.",
+} as const;
+
+/**
+ * Someone signed in to a real account: claiming joins the site's organization
+ * as its owner. Said before they confirm, because it is a different kind of
+ * claim from "keep it as a new account".
+ */
+export const CLAIM_INTO_ACCOUNT_COPY = {
+  heading: "Claim it into your account",
+  /** Takes the signed-in email. */
+  signedInAs: (email: string) => `You're signed in as ${email}.`,
+  body: "The site comes with its own organization. You'll own it, and it appears beside your other organizations; your own stays your default.",
+  freeSite: "The free plan includes one static site. If you already have one, Reliant keeps your oldest live and pauses this one until you subscribe or delete a site.",
+  button: "Claim into my account",
+  switchAccount: "Not you? Use a different account",
 } as const;
 
 /** Why signing in as a different account does not claim the site. */

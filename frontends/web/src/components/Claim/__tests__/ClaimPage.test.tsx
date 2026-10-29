@@ -33,11 +33,17 @@ vi.mock('@/lib/analytics', () => ({ trackEvent: (...a: unknown[]) => track(...a)
 const refreshSession = vi.fn(async () => ({ data: {}, error: null }))
 vi.mock('@/lib/supabase', () => ({ supabase: { auth: { refreshSession: () => refreshSession() } } }))
 
+const hardNavigate = vi.fn()
+vi.mock('@/lib/hardNavigate', () => ({ hardNavigate: (p: string) => hardNavigate(p) }))
+
+const switchToJoinedOrg = vi.fn(async (_orgId: string) => undefined)
+vi.mock('@/services/controlPlane/orgs', () => ({ switchToJoinedOrg: (id: string) => switchToJoinedOrg(id) }))
+
 const invalidateQueries = vi.fn(async (_arg?: unknown) => undefined)
 vi.mock('@/lib/query-client', () => ({ queryClient: { invalidateQueries: (arg: unknown) => invalidateQueries(arg) } }))
 
 // ── a controllable auth store ──────────────────────────────────────────────
-type TestUser = { id: string; is_anonymous?: boolean } | null
+type TestUser = { id: string; email?: string; is_anonymous?: boolean } | null
 const auth = {
   user: null as TestUser,
   initialized: true,
@@ -184,7 +190,7 @@ describe('every refusal the proto names', () => {
 
     const card = await screen.findByTestId('claim-refused-claimable_session_released')
     expect(card).toHaveTextContent(/another browser/i)
-    expect(card.querySelector('a[href="/auth"]')).not.toBeNull()
+    expect(card.querySelector('a')?.getAttribute('href')).toBe('/auth?redirect=%2Fclaim')
     expect(auth.adoptSession).not.toHaveBeenCalled()
   })
 
@@ -277,25 +283,136 @@ describe('"Claim it, it\'s free" (a new human)', () => {
   })
 })
 
-describe('an existing signed-in user (the one branch W11 replaces)', () => {
+describe('an existing signed-in user (W11: claim into my account)', () => {
   beforeEach(() => {
-    auth.user = { id: 'real-user', is_anonymous: false }
+    auth.user = { id: 'real-user', email: 'me@example.com', is_anonymous: false }
   })
 
-  it('is told to run forge login and deploy again, and is not offered a claim', async () => {
+  const MEMBERSHIP = { orgId: 'org_claimed', claimPath: 'membership', hostnames: [], holds: [], exceedsFreeSiteAllowance: false }
+
+  it('is offered to claim into their account, says what that means, and is not sent to /upgrade', async () => {
     arrive({ 'ClaimableService.GetClaim': { response: LIVE } })
 
-    const block = await screen.findByTestId('claim-existing-account')
-    expect(block).toHaveTextContent('Already on Reliant?')
-    expect(block).toHaveTextContent('forge login')
-    expect(block).toHaveTextContent(/deploy again under your account/i)
-    expect(screen.getByTestId('claim-existing-account-button')).toBeDisabled()
+    const block = await screen.findByTestId('claim-into-account')
+    expect(screen.getByTestId('claim-signed-in-as')).toHaveTextContent('me@example.com')
+    expect(block).toHaveTextContent(/you'll own it/i)
+    expect(block).toHaveTextContent(/beside your other organizations/i)
+    expect(block).toHaveTextContent(/one static site/i)
+    expect(screen.getByTestId('claim-into-account-button')).toBeEnabled()
     expect(screen.queryByTestId('claim-submit')).toBeNull()
+    expect(screen.getByTestId('claim-site')).toBeInTheDocument()
   })
 
-  it('still shows the site', async () => {
+  it('confirming calls CompleteClaim as themselves, joins the org, and lands on /apps with the app highlighted', async () => {
+    const rpcs = vi.fn()
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.OpenClaimSession': () => (rpcs('OpenClaimSession'), {}),
+      'ClaimableService.CompleteClaim': (input) => (rpcs('CompleteClaim', input), MEMBERSHIP),
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    // No session was released: this person is not the anonymous user.
+    expect(rpcNames(rpcs)).toEqual(['CompleteClaim'])
+    expect(auth.adoptSession).not.toHaveBeenCalled()
+    expect(auth.signOut).not.toHaveBeenCalled()
+    // The org they joined is the one the page acts in, before the list reloads.
+    expect(switchToJoinedOrg).toHaveBeenCalledWith('org_claimed')
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['forge'] })
+    expect(readPendingClaim()).toBeNull()
+    expect(track).toHaveBeenCalledWith('claim_started', { situation: 'existing-account' })
+    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'membership', holds: 0, exceedsFreeSiteAllowance: false })
+  })
+
+  it('a failure to switch org does not undo or hide the claim', async () => {
+    switchToJoinedOrg.mockRejectedValueOnce(new Error('list failed'))
+    arrive({ 'ClaimableService.GetClaim': { response: LIVE }, 'ClaimableService.CompleteClaim': { response: MEMBERSHIP } })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    expect(readPendingClaim()).toBeNull()
+  })
+
+  it('an in-place upgrade does not switch org', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.CompleteClaim': { response: { ...MEMBERSHIP, claimPath: 'upgrade' } },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await waitFor(() => expect(navigate).toHaveBeenCalled())
+    expect(switchToJoinedOrg).not.toHaveBeenCalled()
+  })
+
+  it('reports it when the claimer is over the free site allowance, and still lands on /apps', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.CompleteClaim': { response: { ...MEMBERSHIP, exceedsFreeSiteAllowance: true } },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', overAllowance: true }, replace: true }))
+    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'membership', holds: 0, exceedsFreeSiteAllowance: true })
+  })
+
+  it('a lost race shows the claimed card and keeps nothing half done', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.CompleteClaim': { error: refused('claimable_claimed') },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    expect(await screen.findByTestId('claim-refused-claimable_claimed')).toBeInTheDocument()
+    expect(switchToJoinedOrg).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('a server error keeps the claim and offers a retry that does not need a new link', async () => {
+    let attempts = 0
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.CompleteClaim': () => {
+        attempts += 1
+        if (attempts === 1) throw new ConnectError('db down', Code.Unavailable)
+        return MEMBERSHIP
+      },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    fireEvent.click(await screen.findByRole('button', { name: /try again/i }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    expect(attempts).toBe(2)
+  })
+
+  it('"use a different account" signs out and returns here after signing in, keeping the claim', async () => {
     arrive({ 'ClaimableService.GetClaim': { response: LIVE } })
-    expect(await screen.findByTestId('claim-site')).toBeInTheDocument()
+    fireEvent.click(await screen.findByTestId('claim-switch-account'))
+    await waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/auth?redirect=%2Fclaim'))
+    expect(auth.signOut).toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+  })
+})
+
+describe('someone with an account who is not signed in to it', () => {
+  it('is offered to sign in and come back, beside the new-account claim', async () => {
+    arrive({ 'ClaimableService.GetClaim': { response: LIVE } })
+    expect(await screen.findByTestId('claim-submit')).toBeInTheDocument()
+    const block = screen.getByTestId('claim-existing-account')
+    expect(block).toHaveTextContent('Already on Reliant?')
+    expect(block).toHaveTextContent(/as an organization you own/i)
+
+    fireEvent.click(screen.getByTestId('claim-existing-account-button'))
+    await waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/auth?redirect=%2Fclaim'))
+    // Nothing to sign out of, no session was released, and the link is still good.
+    expect(auth.signOut).not.toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+  })
+
+  it('holding the temporary account says that signing in leaves it, and signs out first', async () => {
+    auth.user = { id: 'anon-1', is_anonymous: true }
+    updatePendingClaim({ anonUserId: 'anon-1' })
+    arrive({ 'ClaimableService.GetClaim': { response: LIVE } })
+
+    expect(await screen.findByTestId('claim-existing-account')).toHaveTextContent(/signs out of the site's temporary account/i)
+    fireEvent.click(screen.getByTestId('claim-existing-account-button'))
+    await waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/auth?redirect=%2Fclaim'))
+    expect(auth.signOut).toHaveBeenCalled()
   })
 })
 
@@ -316,7 +433,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(preview).not.toHaveBeenCalled()
     expect(readPendingClaim()).toBeNull()
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['forge'] })
-    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'upgrade', holds: 0 })
+    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'upgrade', holds: 0, exceedsFreeSiteAllowance: false })
   })
 
   it('refreshes the session first, so a JWT that still says anonymous is re-issued', async () => {
@@ -381,20 +498,13 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('claimable_existing_account: the ExistingAccount block, the site, and no claim button', async () => {
-    const preview = vi.fn(() => LIVE)
+  it('a retired reason (claimable_existing_account) is just an unknown refusal now', async () => {
     arrive({
       'ClaimableService.CompleteClaim': { error: refused('claimable_existing_account', Code.PermissionDenied) },
-      'ClaimableService.GetClaim': preview,
+      'ClaimableService.GetClaim': { response: LIVE },
     })
-
-    const block = await screen.findByTestId('claim-existing-account')
-    expect(block).toHaveTextContent('forge login')
-    expect(await screen.findByTestId('claim-site')).toBeInTheDocument()
-    expect(screen.queryByTestId('claim-submit')).toBeNull()
-    expect(navigate).not.toHaveBeenCalled()
-    expect(readPendingClaim()?.token).toBe(TOKEN)
-    expect(track).toHaveBeenCalledWith('claim_failed', { stage: 'complete', reason: 'claimable_existing_account' })
+    expect(await screen.findByTestId('claim-finish-declined')).toBeInTheDocument()
+    expect(screen.queryByTestId('claim-existing-account')).toBeNull()
   })
 
   it('an unknown reason shows a generic screen, keeps the claim, and offers a retry', async () => {

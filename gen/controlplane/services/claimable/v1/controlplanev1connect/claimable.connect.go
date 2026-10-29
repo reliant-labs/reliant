@@ -45,6 +45,9 @@ const (
 	// ClaimableServiceGetClaimableChallengeProcedure is the fully-qualified name of the
 	// ClaimableService's GetClaimableChallenge RPC.
 	ClaimableServiceGetClaimableChallengeProcedure = "/controlplane.v1.ClaimableService/GetClaimableChallenge"
+	// ClaimableServiceGetClaimableAvailabilityProcedure is the fully-qualified name of the
+	// ClaimableService's GetClaimableAvailability RPC.
+	ClaimableServiceGetClaimableAvailabilityProcedure = "/controlplane.v1.ClaimableService/GetClaimableAvailability"
 	// ClaimableServiceGetClaimProcedure is the fully-qualified name of the ClaimableService's GetClaim
 	// RPC.
 	ClaimableServiceGetClaimProcedure = "/controlplane.v1.ClaimableService/GetClaim"
@@ -75,6 +78,14 @@ type ClaimableServiceClient interface {
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
 	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
+	// GetClaimableAvailability says whether a claimable deploy can start right
+	// now, and if not, every reason why: an operator's switch, or a dependency
+	// this deployment lacks. Separately, whether an unclaimed SERVICE or
+	// DATABASE could run, which a static site does not need. It reads only
+	// configuration and the kill switches, creates nothing and solves no proof
+	// of work, so forge calls it before any build (`forge env deploy
+	// --claimable`) and in the local preview (`--claimable --plan-only`).
+	GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error)
 	// GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
 	// what is being claimed, whether it still can be, and when it expires. It
 	// returns no secret and no token of any kind.
@@ -92,8 +103,12 @@ type ClaimableServiceClient interface {
 	//
 	// Path "upgrade": the caller IS the anonymous user, now upgraded in place
 	// (same user id, now with an email). Path "membership": the caller is a
-	// different, existing user who joins the anonymous org as owner (off until
-	// users belong to more than one org in practice, design §9 M1).
+	// different, existing user. In the claim's own transaction they become an
+	// owner member of the anonymous org and organizations.owner_id moves to
+	// them (this is the only way an org's owner changes; there is no general
+	// transfer). The anonymous user and its sign-in identity are then retired.
+	// The org is one more org the caller belongs to; it is not made their
+	// default.
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
@@ -123,6 +138,12 @@ func NewClaimableServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(claimableServiceMethods.ByName("GetClaimableChallenge")),
 			connect.WithClientOptions(opts...),
 		),
+		getClaimableAvailability: connect.NewClient[v1.GetClaimableAvailabilityRequest, v1.GetClaimableAvailabilityResponse](
+			httpClient,
+			baseURL+ClaimableServiceGetClaimableAvailabilityProcedure,
+			connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
+			connect.WithClientOptions(opts...),
+		),
 		getClaim: connect.NewClient[v1.GetClaimRequest, v1.GetClaimResponse](
 			httpClient,
 			baseURL+ClaimableServiceGetClaimProcedure,
@@ -146,11 +167,12 @@ func NewClaimableServiceClient(httpClient connect.HTTPClient, baseURL string, op
 
 // claimableServiceClient implements ClaimableServiceClient.
 type claimableServiceClient struct {
-	startClaimableDeploy  *connect.Client[v1.StartClaimableDeployRequest, v1.StartClaimableDeployResponse]
-	getClaimableChallenge *connect.Client[v1.GetClaimableChallengeRequest, v1.GetClaimableChallengeResponse]
-	getClaim              *connect.Client[v1.GetClaimRequest, v1.GetClaimResponse]
-	openClaimSession      *connect.Client[v1.OpenClaimSessionRequest, v1.OpenClaimSessionResponse]
-	completeClaim         *connect.Client[v1.CompleteClaimRequest, v1.CompleteClaimResponse]
+	startClaimableDeploy     *connect.Client[v1.StartClaimableDeployRequest, v1.StartClaimableDeployResponse]
+	getClaimableChallenge    *connect.Client[v1.GetClaimableChallengeRequest, v1.GetClaimableChallengeResponse]
+	getClaimableAvailability *connect.Client[v1.GetClaimableAvailabilityRequest, v1.GetClaimableAvailabilityResponse]
+	getClaim                 *connect.Client[v1.GetClaimRequest, v1.GetClaimResponse]
+	openClaimSession         *connect.Client[v1.OpenClaimSessionRequest, v1.OpenClaimSessionResponse]
+	completeClaim            *connect.Client[v1.CompleteClaimRequest, v1.CompleteClaimResponse]
 }
 
 // StartClaimableDeploy calls controlplane.v1.ClaimableService.StartClaimableDeploy.
@@ -161,6 +183,11 @@ func (c *claimableServiceClient) StartClaimableDeploy(ctx context.Context, req *
 // GetClaimableChallenge calls controlplane.v1.ClaimableService.GetClaimableChallenge.
 func (c *claimableServiceClient) GetClaimableChallenge(ctx context.Context, req *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error) {
 	return c.getClaimableChallenge.CallUnary(ctx, req)
+}
+
+// GetClaimableAvailability calls controlplane.v1.ClaimableService.GetClaimableAvailability.
+func (c *claimableServiceClient) GetClaimableAvailability(ctx context.Context, req *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error) {
+	return c.getClaimableAvailability.CallUnary(ctx, req)
 }
 
 // GetClaim calls controlplane.v1.ClaimableService.GetClaim.
@@ -197,6 +224,14 @@ type ClaimableServiceHandler interface {
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
 	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
+	// GetClaimableAvailability says whether a claimable deploy can start right
+	// now, and if not, every reason why: an operator's switch, or a dependency
+	// this deployment lacks. Separately, whether an unclaimed SERVICE or
+	// DATABASE could run, which a static site does not need. It reads only
+	// configuration and the kill switches, creates nothing and solves no proof
+	// of work, so forge calls it before any build (`forge env deploy
+	// --claimable`) and in the local preview (`--claimable --plan-only`).
+	GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error)
 	// GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
 	// what is being claimed, whether it still can be, and when it expires. It
 	// returns no secret and no token of any kind.
@@ -214,8 +249,12 @@ type ClaimableServiceHandler interface {
 	//
 	// Path "upgrade": the caller IS the anonymous user, now upgraded in place
 	// (same user id, now with an email). Path "membership": the caller is a
-	// different, existing user who joins the anonymous org as owner (off until
-	// users belong to more than one org in practice, design §9 M1).
+	// different, existing user. In the claim's own transaction they become an
+	// owner member of the anonymous org and organizations.owner_id moves to
+	// them (this is the only way an org's owner changes; there is no general
+	// transfer). The anonymous user and its sign-in identity are then retired.
+	// The org is one more org the caller belongs to; it is not made their
+	// default.
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
@@ -239,6 +278,12 @@ func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.Han
 		ClaimableServiceGetClaimableChallengeProcedure,
 		svc.GetClaimableChallenge,
 		connect.WithSchema(claimableServiceMethods.ByName("GetClaimableChallenge")),
+		connect.WithHandlerOptions(opts...),
+	)
+	claimableServiceGetClaimableAvailabilityHandler := connect.NewUnaryHandler(
+		ClaimableServiceGetClaimableAvailabilityProcedure,
+		svc.GetClaimableAvailability,
+		connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
 		connect.WithHandlerOptions(opts...),
 	)
 	claimableServiceGetClaimHandler := connect.NewUnaryHandler(
@@ -265,6 +310,8 @@ func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.Han
 			claimableServiceStartClaimableDeployHandler.ServeHTTP(w, r)
 		case ClaimableServiceGetClaimableChallengeProcedure:
 			claimableServiceGetClaimableChallengeHandler.ServeHTTP(w, r)
+		case ClaimableServiceGetClaimableAvailabilityProcedure:
+			claimableServiceGetClaimableAvailabilityHandler.ServeHTTP(w, r)
 		case ClaimableServiceGetClaimProcedure:
 			claimableServiceGetClaimHandler.ServeHTTP(w, r)
 		case ClaimableServiceOpenClaimSessionProcedure:
@@ -286,6 +333,10 @@ func (UnimplementedClaimableServiceHandler) StartClaimableDeploy(context.Context
 
 func (UnimplementedClaimableServiceHandler) GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimableChallenge is not implemented"))
+}
+
+func (UnimplementedClaimableServiceHandler) GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimableAvailability is not implemented"))
 }
 
 func (UnimplementedClaimableServiceHandler) GetClaim(context.Context, *connect.Request[v1.GetClaimRequest]) (*connect.Response[v1.GetClaimResponse], error) {

@@ -181,6 +181,9 @@ export const authSearchSchema = z.object({
 // dropped once the page has shown it.
 export const appsSearchSchema = z.object({
   claimed: z.string().optional(),
+  // The claim put the person over the one free static site: the page says what
+  // happens to the site and what to do about it.
+  overAllowance: z.boolean().optional(),
 });
 
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
