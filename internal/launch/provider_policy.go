@@ -126,7 +126,7 @@ func (l *Launcher) ResolveProviderPolicy(ctx context.Context, userID string, cha
 	}
 	delete(base, v2.InputKeyProviderPolicy)
 	if chat != nil && len(chat.SelectedPresets) > 0 {
-		fromPresets := l.applyPresets(ctx, userID, chat.ProjectID, map[string]interface{}{}, chat.SelectedPresets)
+		fromPresets := l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), map[string]interface{}{}, chat.SelectedPresets)
 		if value, ok := fromPresets[v2.InputKeyProviderPolicy]; ok {
 			base[v2.InputKeyProviderPolicy] = value
 		}

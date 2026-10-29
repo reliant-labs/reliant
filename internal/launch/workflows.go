@@ -115,7 +115,7 @@ func (l *Launcher) BuildWorkflowInputs(
 	selectedPresets map[string]string,
 	userParams map[string]*structpb.Value,
 ) map[string]interface{} {
-	return l.buildWorkflowInputs(ctx, userID, checkout, projectID, workflowName, selectedPresets, nil, paramValues(userParams))
+	return l.buildWorkflowInputs(ctx, userID, checkout, projectID, "", workflowName, selectedPresets, nil, paramValues(userParams))
 }
 
 // BuildChatWorkflowInputs is BuildWorkflowInputs for a chat's run, with the
@@ -144,7 +144,7 @@ func (l *Launcher) buildChatWorkflowInputs(
 	selectedPresets map[string]string,
 	send map[string]interface{},
 ) map[string]interface{} {
-	inputs := l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName,
+	inputs := l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, RunMachine(chat), workflowName,
 		selectedPresets, l.ChatSelectionParams(ctx, chat.ID, workflowName), send)
 	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
 	return inputs
@@ -202,12 +202,15 @@ func paramValues(params map[string]*structpb.Value) map[string]interface{} {
 // selection, then the send, then schema defaults. The selection and the send
 // combine first, the send replacing the selection key by key and whole (a model
 // selector is a value, not a bag of fields to merge), and only then go over the
-// presets, which is where a group's params merge with the preset's.
+// presets, which is where a group's params merge with the preset's. A
+// project preset is read from daemonID's synced catalog (the run's machine),
+// or the union of every machine's when it is empty.
 func (l *Launcher) buildWorkflowInputs(
 	ctx context.Context,
 	userID string,
 	checkout Checkout,
 	projectID string,
+	daemonID string,
 	workflowName string,
 	selectedPresets map[string]string,
 	selection map[string]interface{},
@@ -221,7 +224,7 @@ func (l *Launcher) buildWorkflowInputs(
 	}
 	logging.DebugContext(ctx, "[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
 	if len(selectedPresets) > 0 {
-		initialData = l.applyPresets(ctx, userID, projectID, initialData, selectedPresets)
+		initialData = l.applyPresets(ctx, userID, projectID, daemonID, initialData, selectedPresets)
 	} else {
 		logging.DebugContext(ctx, "[buildWorkflowInputs] No presets selected")
 	}
@@ -293,9 +296,10 @@ func (l *Launcher) buildWorkflowInputs(
 }
 
 // applyPresets applies each selected preset's params onto data, in place of
-// the map it returns.
-func (l *Launcher) applyPresets(ctx context.Context, userID, projectID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{} {
-	loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID)
+// the map it returns. Project presets come from daemonID's catalog (see
+// buildWorkflowInputs).
+func (l *Launcher) applyPresets(ctx context.Context, userID, projectID, daemonID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{} {
+	loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID, daemonID)
 	for groupName, presetName := range selectedPresets {
 		if presetName == "" {
 			continue
@@ -347,7 +351,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	}
 	update := make(map[string]interface{})
 	if len(changedPresets) > 0 {
-		update = l.applyPresets(ctx, userID, chat.ProjectID, update, changedPresets)
+		update = l.applyPresets(ctx, userID, chat.ProjectID, RunMachine(chat), update, changedPresets)
 	}
 	for key, value := range paramValues(requestParams) {
 		if workflow.RuntimeInjectedInputs[key] {
@@ -631,8 +635,8 @@ func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, use
 	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
 }
 
-func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, l.repo, Scope{UserID: userID, ProjectID: projectID, draftRoot: draftRoot}, workflowName)
+func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
 }
 
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
@@ -655,9 +659,9 @@ func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope,
 	return resolved.Workflow, nil
 }
 
-func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, projectID, draftRoot string) validation.WorkflowLoader {
+func (l *Launcher) createChatWorkflowLoader(ctx context.Context, scope Scope) validation.WorkflowLoader {
 	return func(workflowName string) (*reliantv1.Workflow, error) {
-		return l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
+		return l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	}
 }
 
@@ -668,15 +672,17 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, project
 // A workflow that cannot be LOADED is an invalid argument; one that loads but
 // does not validate is a failed precondition.
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
-	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, Event{Kind: core.TriggerEventKindChatStart})
+	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "", Event{Kind: core.TriggerEventKindChatStart})
 }
 
 // validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:
 // its kind decides which workflow may be a draft (see draftRootFor) and
-// whether the workflow's Chat trigger must be on.
-func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID string, ev Event) error {
-	draftRoot := draftRootFor(ev, workflowName)
-	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
+// whether the workflow's Chat trigger must be on. daemonID is the machine the
+// run will execute on: the tree is admitted against that machine's synced
+// catalog, the one the run's own loads read (the union when it is empty).
+func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID string, ev Event) error {
+	scope := Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, draftRoot: draftRootFor(ev, workflowName)}
+	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
 		var lookupErr *WorkflowLookupError
 		if errors.As(err, &lookupErr) {
@@ -689,7 +695,7 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 		return err
 	}
 
-	return validateResolvedWorkflowTree(ctx, l.repo, Scope{UserID: userID, ProjectID: projectID, draftRoot: draftRoot}, workflowName, wf)
+	return validateResolvedWorkflowTree(ctx, l.repo, scope, workflowName, wf)
 }
 
 func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string, wf *reliantv1.Workflow) error {
@@ -753,7 +759,7 @@ func refuseChatStart(kind core.TriggerEventKind, workflowName string, wf *relian
 // creates a no-machine chat without launching it (a "Continue without machine"
 // branch) refuse up front rather than leave a chat whose first send must fail.
 func (l *Launcher) ValidateNoMachine(ctx context.Context, userID, workflowName, projectID string) error {
-	return l.validateNoMachine(ctx, userID, workflowName, projectID, "")
+	return l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: projectID}, workflowName)
 }
 
 // validateNoMachine refuses a no-machine launch of a workflow with a node that
@@ -762,13 +768,13 @@ func (l *Launcher) ValidateNoMachine(ctx context.Context, userID, workflowName, 
 // the subset that runs without a machine. The trigger write path is stricter
 // (see TriggerService), because an unattended run's silent downgrade has no one
 // watching it.
-func (l *Launcher) validateNoMachine(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
-	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
+func (l *Launcher) validateNoMachine(ctx context.Context, scope Scope, workflowName string) error {
+	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
 		// validateWorkflowTree already reported a load failure; nothing new.
 		return nil
 	}
-	loader := l.createChatWorkflowLoader(ctx, userID, projectID, draftRoot)
+	loader := l.createChatWorkflowLoader(ctx, scope)
 	req := v2.MachineRequirements(wf, nil, v2.WorkflowRefLoader(loader), tools.PreflightConfig())
 	if len(req.Hard) > 0 {
 		return &ValidationError{
@@ -781,10 +787,20 @@ func (l *Launcher) validateNoMachine(ctx context.Context, userID, workflowName, 
 
 // createDBPresetLoaderFull returns a function that loads full preset objects from all runtime sources.
 // Used by BuildWorkflowInputs where the full preset is needed for ApplyToInputs.
-func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, projectID string) func(name string) (*preset.Preset, error) {
+func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, projectID, daemonID string) func(name string) (*preset.Preset, error) {
 	return func(name string) (*preset.Preset, error) {
-		return l.LoadPresetFromDB(ctx, userID, projectID, name)
+		return loadPresetFromDB(ctx, l.repo, userID, projectID, daemonID, name)
 	}
+}
+
+// RunMachine is the machine a chat's runs execute on, whose synced catalog
+// their workflows and presets resolve against: the chat's pin, or "" (the
+// union of every machine's) for a chat with no machine or none pinned yet.
+func RunMachine(chat *db.Chat) string {
+	if chat == nil || chat.NoMachine || chat.ActiveDaemonID == nil {
+		return ""
+	}
+	return *chat.ActiveDaemonID
 }
 
 // LoadPresetFromDB loads a preset by name. Priority: user presets > stored project presets > builtins.

@@ -66,7 +66,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 	require.Equal(t, "plan", params["mode"])
 
 	// LoadWorkflow's validation preset loader.
-	params, err = (&LoadWorkflowActivity{repo: spy}).createPresetLoader(ctx, "test-project")("project-reviewer")
+	params, err = (&LoadWorkflowActivity{repo: spy}).createPresetLoader(ctx, &workflowContext{projectID: "test-project"})("project-reviewer")
 	require.NoError(t, err)
 	require.Equal(t, "plan", params["mode"])
 
