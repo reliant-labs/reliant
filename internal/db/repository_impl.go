@@ -2766,13 +2766,26 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
 
+// mapTriggerNameConflict turns a unique violation on the trigger's
+// (user, project, name) key into core.ErrTriggerNameTaken: AlreadyExists to the
+// caller instead of an opaque Internal "database error". Like
+// mapWorkflowSlugConflict, the PgError is not wrapped (%w), so the retry ladder
+// does not re-run a permanent conflict.
+func mapTriggerNameConflict(err error, name string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == store.TriggerConstraintUserIDProjectIDNameKey {
+		return fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, name)
+	}
+	return err
+}
+
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
@@ -2827,7 +2840,7 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
 		}
 		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
