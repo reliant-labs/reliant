@@ -131,13 +131,16 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
+	// The user's own machines: list them; start, stop or resize one.
+	ToolListMachines  = "list_machines"
+	ToolManageMachine = "manage_machine"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

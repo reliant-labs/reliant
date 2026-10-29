@@ -87,6 +87,11 @@ type ToolsOptions struct {
 	TriggerFirer       TriggerFirer
 	TriggerEventLister TriggerEventLister
 	ActivationManager  ActivationManager
+	// MachineController lists, starts, stops and resizes the user's own
+	// machines for list_machines and manage_machine. Optional: nil means
+	// both report they are unavailable here (self-hosted, or the daemon
+	// runtime).
+	MachineController MachineController
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -506,6 +511,14 @@ func (f *ToolsFactory) EnableTrigger() Tool {
 }
 func (f *ToolsFactory) PauseTrigger() Tool {
 	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolPauseTrigger)
+}
+
+func (f *ToolsFactory) ListMachines() Tool {
+	return NewListMachinesTool(f.store(), f.opts.MachineController)
+}
+
+func (f *ToolsFactory) ManageMachine() Tool {
+	return NewManageMachineTool(f.store(), f.opts.MachineController)
 }
 
 func (f *ToolsFactory) ListTriggers() Tool {

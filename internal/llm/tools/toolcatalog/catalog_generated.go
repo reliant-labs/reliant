@@ -627,6 +627,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_machines": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_pending_questions": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -680,6 +684,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_machine": {
+		Bindable: map[string]struct{}{
+			"action":     {},
+			"machine_id": {},
+			"size":       {},
 		},
 		Unbindable: map[string]string{},
 	},
