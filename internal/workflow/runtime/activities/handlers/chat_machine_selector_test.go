@@ -29,6 +29,33 @@ func TestChatDaemonSelector(t *testing.T) {
 		require.NotNil(t, sel)
 		assert.Equal(t, "thread-owner", sel.ID)
 	})
+	// A run launched before its chat was moved to the workspace's machine
+	// (worktree_owner_backfill, SetChatDaemon) carries the old pin as an
+	// explicit id selector for its whole life. The checkout is on the owner
+	// alone, so tools and workspace repair go there, never to the old pin.
+	t.Run("a stale id pin to another machine yields to the workspace owner", func(t *testing.T) {
+		moved := "owner"
+		migrated := &db.Chat{ActiveDaemonID: &moved}
+		oldRun := &types.DaemonSelector{ID: "former-pin"}
+		sel := toolDaemonSelector("owner", chatDaemonSelector(migrated, oldRun))
+		require.NotNil(t, sel)
+		assert.Equal(t, "owner", sel.ID)
+	})
+	t.Run("deliberate node routing keeps precedence over the workspace owner", func(t *testing.T) {
+		for _, explicit := range []*types.DaemonSelector{
+			{Name: "cicd"}, {Type: "cloud"}, {Labels: map[string]string{"role": "ci"}}, {ID: "owner", Labels: map[string]string{"gpu": "1"}},
+		} {
+			sel := toolDaemonSelector("owner", explicit)
+			require.NotNil(t, sel)
+			assert.Equal(t, explicit.Name, sel.Name)
+			assert.Equal(t, explicit.Type, sel.Type)
+			assert.Equal(t, explicit.Labels, sel.Labels)
+		}
+		// No workspace owner (the main checkout): an id pin is the route.
+		sel := toolDaemonSelector("", &types.DaemonSelector{ID: "former-pin"})
+		require.NotNil(t, sel)
+		assert.Equal(t, "former-pin", sel.ID)
+	})
 	t.Run("unbound and no-machine chats do not acquire routes", func(t *testing.T) {
 		assert.Nil(t, chatDaemonSelector(nil, nil))
 		assert.Nil(t, chatDaemonSelector(&db.Chat{}, nil))

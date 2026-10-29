@@ -94,8 +94,13 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 	if err := daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, requested); err != nil {
 		return machinewake.Target{}, err
 	}
-	if _, conflict := daemonplacement.WorkspaceMachineConflict(source, requested); conflict {
-		return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the source workspace's machine: a copy of a workspace is made on the machine that holds it")
+	// The source's owner as the resolver finds it, not just as its row
+	// records it: an unattributed source settled on another machine is a
+	// conflict too, or the copy is made where the source's files are not.
+	if source != nil {
+		if owner := s.owner(ctx, userID, source); owner != "" && owner != requested {
+			return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the source workspace's machine: a copy of a workspace is made on the machine that holds it")
+		}
 	}
 	if chatID != nil && *chatID != "" {
 		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
@@ -104,6 +109,9 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		}
 		if chat == nil || chat.UserID != userID {
 			return machinewake.Target{}, svcerr.NotFound("chat")
+		}
+		if chat.ProjectID != projectID {
+			return machinewake.Target{}, svcerr.InvalidArgument("chat belongs to a different project")
 		}
 		chatDaemon, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
