@@ -228,6 +228,19 @@ export function callTotals(edges: GraphEdge[], nodeId: string): Map<string, bigi
   return new Map([...byTarget].map(([target, es]) => [target, authoritativeCohort(es).counted.reduce((s, e) => s + e.count, 0n)]));
 }
 
+/** Each method's authoritative cohort on each connection, kept whole when it has a fault. */
+function faultyCohorts(edges: GraphEdge[]): GraphEdge[] {
+  const groups = new Map<string, GraphEdge[]>();
+  for (const e of edges) {
+    const key = `${e.source}\u0000${e.target}\u0000${e.rpcId}`;
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
+  return [...groups.values()].flatMap((group) => {
+    const { counted } = rpcCohort(group);
+    return counted.some((e) => e.faults > 0n) ? counted : [];
+  });
+}
+
 function statsOf(edges: GraphEdge[]): Map<string, NodeStats> {
   const stats = new Map<string, NodeStats & { hs: GraphEdge["duration"][] }>();
   const get = (id: string) => {
@@ -254,14 +267,17 @@ export function graphModel(graph: ServiceGraph, filters: GraphFilters = {}) {
   const es = canonical(graph.edges.slice(0, inputLimit));
   const known = new Map(ns.rows.map((n) => [n.id, n]));
   let dangling = 0;
-  const eligible = es.rows.filter((e) => {
+  const scoped = es.rows.filter((e) => {
     if (!known.has(e.source) || !known.has(e.target)) { dangling++; return false; }
     if (e.envId !== known.get(e.source)?.envId || e.envId !== known.get(e.target)?.envId) { dangling++; return false; }
     return (!filters.rpcId || e.rpcId === filters.rpcId) &&
-      (!filters.errorsOnly || e.faults > 0n) &&
       (filters.declared || e.evidence !== "declared") &&
       (filters.internal || e.kind !== "internal");
   });
+  // Errors only selects among cohorts chosen over the whole scoped set, never
+  // the reverse: dropping a zero-fault server edge first would promote the
+  // caller's view of the same calls and show its faults instead.
+  const eligible = filters.errorsOnly ? faultyCohorts(scoped) : scoped;
   // Node stats count every eligible request, including ones from an
   // unresolved caller that the default view does not draw.
   const stats = statsOf(eligible);
@@ -286,6 +302,9 @@ export function graphModel(graph: ServiceGraph, filters: GraphFilters = {}) {
   const links = linksOf(visibleEdges);
   return {
     nodes: layoutGraph(nodes, links), edges: visibleEdges, links, stats,
+    // Every edge the filters keep, drawn or not: a node's detail (its stats,
+    // methods and calls) includes traffic with hidden unresolved peers.
+    eligibleEdges: eligible,
     hiddenUnresolved: ns.rows.filter((n) => hidden.has(n.id) && eligible.some((e) => e.source === n.id || e.target === n.id)).length,
     conflicts: ns.conflicts + es.conflicts, dangling,
     omittedNodes: candidates.length - nodes.length,

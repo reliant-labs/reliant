@@ -51,7 +51,7 @@ export function GraphPanel({ graph, filters, scope, navigate, onRPC, envNames, o
         <h3 className="min-w-0 break-words font-medium text-ink">{node ? node.label : `${label(link!.source)} → ${label(link!.target)}`}</h3>
         <Button variant="ghost" size="sm" icon={<X />} aria-label="Close detail" onClick={() => setSelection(undefined)} />
       </div>
-      {node && <NodeDetail node={node} stats={model.stats.get(node.id)} edges={model.edges} label={label} envName={envNames.get(node.envId)} onRPC={onRPC} />}
+      {node && <NodeDetail node={node} stats={model.stats.get(node.id)} edges={model.eligibleEdges} label={label} envName={envNames.get(node.envId)} onRPC={onRPC} />}
       {link && <LinkDetail link={link} navigate={navigate} onRPC={onRPC} />}
       <AskReference scope={scope} graph={graph} node={node} link={link} />
     </section>}

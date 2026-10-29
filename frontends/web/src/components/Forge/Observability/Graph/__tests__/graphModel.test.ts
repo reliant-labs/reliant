@@ -99,6 +99,19 @@ describe("bounded graph model", () => {
       .toEqual([{ rpcId: GRAPH_RPC, count: 100n, faults: 3n }, { rpcId: "shop.v1.OrdersService/ListOrders", count: 20n, faults: 4n }]);
     expect(callTotals(g.edges, "api").get("orders")).toBe(120n);
   });
+  it("errors only filters by the authoritative view's faults, never promoting the caller's", () => {
+    const g = fixtureGraph();
+    // The server saw 100 requests and no faults; the caller saw 5 failed attempts at the same calls.
+    g.edges = [graphEdge("server", "api", "orders", { faults: 0n }), graphEdge("client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 104n, faults: 5n })];
+    expect(graphModel(g).links[0]).toMatchObject({ count: 100n, faults: 0n, viewpoint: "server" });
+    const errors = graphModel(g, { errorsOnly: true });
+    expect(errors.links).toHaveLength(0);
+    expect(errors.edges).toHaveLength(0);
+    // With server faults the whole server cohort stays, so the rate is the real one.
+    g.edges = [graphEdge("server", "api", "orders", { faults: 3n }), graphEdge("server-browser", "api", "orders", { cohort: "browser", count: 50n, faults: 0n }),
+      graphEdge("client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 160n, faults: 9n })];
+    expect(graphModel(g, { errorsOnly: true }).links[0]).toMatchObject({ count: 150n, faults: 3n, viewpoint: "server" });
+  });
   it("never sums different units between the same endpoints into one count", () => {
     const g = fixtureGraph();
     g.edges.push(graphEdge("orders-queue-delivery", "orders", "queue", { kind: "async-consume", unit: "delivery", viewpoint: "consumer", rpcId: "", count: 40n }));

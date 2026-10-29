@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { fixtureCatalog, fixtureGraph, graphEdge, GRAPH_RPC } from "../../__fixtures__/fixtureGraph";
 import { GraphPanel } from "../GraphPanel";
 import { catalogNotes, RPCExplorer } from "../RPCExplorer";
-vi.mock("../ProcessGraph", () => ({ ProcessGraph: () => <div data-testid="process-graph" /> }));
+vi.mock("../ProcessGraph", () => ({ ProcessGraph: ({ nodes, onNode }: { nodes: { id: string; label: string }[]; onNode: (n: unknown) => void }) =>
+  <div data-testid="process-graph">{nodes.map((n) => <button key={n.id} onClick={() => onNode(n)}>node {n.label}</button>)}</div> }));
 vi.mock("../../AskReliant/AskReliant", () => ({ AskReliantButton: () => <button>Ask Reliant</button> }));
 const scope = { orgId: "org", projectId: "shop", envIds: ["env-prod"], filters: [] };
 const envNames = new Map([["env-prod", "prod"]]);
@@ -53,6 +54,15 @@ describe("service graph panel", () => {
     const row = within(detail).getByRole("button", { name: /GetOrder/ }).closest("tr")!;
     expect(row).toHaveTextContent("100");
     expect(row).not.toHaveTextContent("204");
+  });
+  it("details a service's methods even when all its traffic comes from a hidden caller", () => {
+    const graph = fixtureGraph();
+    graph.edges = [graphEdge("unknown-refund", "unknown", "orders", { rpcId: "shop.v1.OrdersService/Refund", count: 7n, faults: 0n })];
+    render(<GraphPanel graph={graph} filters={{}} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} />);
+    expect(screen.queryByText("node unknown")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("node orders"));
+    const detail = screen.getByRole("region", { name: "Graph detail" });
+    expect(within(detail).getByRole("button", { name: /Refund/ })).toBeInTheDocument();
   });
   it("never prints environment ids or internal reason codes", () => {
     const { container } = render(<GraphPanel graph={fixtureGraph()} filters={{ showUnresolved: true }} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} />);
