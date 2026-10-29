@@ -128,7 +128,7 @@ func (a *ExecuteToolsActivity) WithConfigProvider(provider cfgpkg.ConfigProvider
 // It used to read the whole config row and re-parse every skill on each skill
 // call: 18 MB per call in prod. The worker's provider is cached per config
 // version, so a call costs one version read.
-func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID string) []cfgpkg.StoredSkill {
+func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID, daemonID string) []cfgpkg.StoredSkill {
 	if projectID == "" {
 		return nil
 	}
@@ -136,7 +136,7 @@ func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID stri
 		logging.WarnContext(ctx, "[ExecuteTools] No config provider wired; the skill tool sees no project skills", "projectID", projectID)
 		return nil
 	}
-	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
+	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID, DaemonID: daemonID})
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Project skills could not be loaded", "projectID", projectID, "error", err)
 		return nil

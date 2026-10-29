@@ -718,7 +718,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// executor's factory has none of its own, and a worker-local copy is what
 	// a restart used to lose.
 	if toolName == tools.ToolSkill && tec.project != nil {
-		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID))
+		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, runMachine(tec.chat)))
 	}
 
 	// Daemon routing priority: explicit node/workflow selector > durable chat

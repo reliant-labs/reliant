@@ -997,7 +997,10 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	}
 }
 
-func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project) (*cfgpkg.Config, error) {
+// getProjectConfig reads the project's config as daemonID (the run's
+// machine) synced it: its skills, memories and MCP servers, not the last
+// pusher's.
+func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project, daemonID string) (*cfgpkg.Config, error) {
 	if project == nil {
 		return nil, fmt.Errorf("project is nil")
 	}
@@ -1008,6 +1011,7 @@ func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Proj
 
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{
 		ProjectID: project.ID,
+		DaemonID:  daemonID,
 	})
 	if err != nil {
 		return nil, err
@@ -1083,7 +1087,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 	projectPath := project.Path
 
-	projectCfg, err := a.getProjectConfig(ctx, project)
+	projectCfg, err := a.getProjectConfig(ctx, project, runMachine(chat))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}

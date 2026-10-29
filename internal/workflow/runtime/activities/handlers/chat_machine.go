@@ -18,3 +18,13 @@ func chatDaemonSelector(chat *db.Chat, explicit *types.DaemonSelector) *types.Da
 	}
 	return &types.DaemonSelector{ID: *chat.ActiveDaemonID}
 }
+
+// runMachine is the machine chat's runs execute on, whose synced project
+// config (skills, memories, MCP servers) they read: its pin, or "" (the
+// project's record) for a chat with no machine or none pinned yet.
+func runMachine(chat *db.Chat) string {
+	if chat == nil || chat.NoMachine || chat.ActiveDaemonID == nil {
+		return ""
+	}
+	return *chat.ActiveDaemonID
+}

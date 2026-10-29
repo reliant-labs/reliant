@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -22,8 +23,15 @@ import (
 // union over every machine's catalog (config.UnionWorkflows). So a machine
 // without a checkout cannot erase the workflows another machine provides —
 // the incident where a new machine's empty snapshot made every trigger's
-// workflow vanish. The rest of the record (config, MCP, memories, skills,
-// scenarios) is still the last pusher's.
+// workflow vanish.
+//
+// The rest of the snapshot is stored on the machine's row too
+// (store.ProjectMachineConfig), which is what a run on that machine reads
+// (GetProjectMachineConfigRecord). On the record, skills, repo memories and
+// scenarios are likewise the union over every machine's
+// (config.UnionSkills), so a machine syncing without a nested checkout no
+// longer erases that checkout's skills; only the single-valued parts (config
+// YAML, global and project memory, MCP) are the last pusher's.
 //
 // Unless force, a snapshot no newer than the one this machine last pushed is
 // dropped whole, and one no newer than the record's last push from any
@@ -88,6 +96,22 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		}); err != nil {
 			return err
 		}
+		if err := store.SetProjectMachineConfig(txCtx, r.ORM(), &store.ProjectMachineConfig{
+			ProjectID:         record.ProjectID,
+			DaemonID:          record.DaemonID,
+			UserConfigYAML:    record.UserConfigYAML,
+			ProjectConfigYAML: record.ProjectConfigYAML,
+			LocalConfigYAML:   record.LocalConfigYAML,
+			GlobalMemoryMD:    record.GlobalMemoryMD,
+			ProjectMemoryMD:   record.ProjectMemoryMD,
+			MCPConfigs:        record.MCPConfigs,
+			ScenariosJSON:     record.ProjectScenariosJSON,
+			SkillsJSON:        record.ProjectSkillsJSON,
+			RepoMemoriesJSON:  record.RepoMemoriesJSON,
+			RuntimeType:       record.RuntimeType,
+		}); err != nil {
+			return err
+		}
 		if err := store.SetProjectMachineRepoStates(txCtx, r.ORM(), record.ProjectID, record.DaemonID, record.RepoStatesJSON); err != nil {
 			return err
 		}
@@ -105,6 +129,11 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		if err != nil {
 			return err
 		}
+		union, err := r.projectFilesUnion(txCtx, record.ProjectID)
+		if err != nil {
+			return err
+		}
+		union.WorkflowsJSON, union.PresetsJSON = workflowsJSON, presetsJSON
 
 		recordPushedAt, err := store.GetProjectConfigPushedAt(txCtx, r.ORM(), record.ProjectID)
 		hasRecord := err == nil
@@ -112,7 +141,7 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 			return err
 		}
 		if hasRecord && !force && !record.PushedAt.After(recordPushedAt) {
-			return store.SetProjectConfigCatalogUnion(txCtx, r.ORM(), record.ProjectID, workflowsJSON, presetsJSON, now)
+			return store.SetProjectConfigCatalogUnion(txCtx, r.ORM(), record.ProjectID, union, now)
 		}
 		whole := *record
 		if whole.ID == "" {
@@ -120,6 +149,9 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		}
 		whole.ProjectWorkflowsJSON = workflowsJSON
 		whole.ProjectPresetsJSON = presetsJSON
+		whole.ProjectSkillsJSON = union.SkillsJSON
+		whole.RepoMemoriesJSON = union.RepoMemoriesJSON
+		whole.ProjectScenariosJSON = union.ScenariosJSON
 		return store.UpsertProjectConfigRecord(txCtx, r.ORM(), &whole)
 	})
 	if err != nil {
@@ -150,6 +182,75 @@ func (r *Repo) ProjectMachineRepoStates(ctx context.Context, projectID string) (
 		}
 	}
 	return out, nil
+}
+
+// projectFilesUnion is the union of every machine's skills, repo memories and
+// scenarios of a project (config.UnionSkills).
+func (r *Repo) projectFilesUnion(ctx context.Context, projectID string) (store.ProjectConfigUnion, error) {
+	rows, err := store.ListProjectMachineFiles(ctx, r.ORM(), projectID)
+	if err != nil {
+		return store.ProjectConfigUnion{}, err
+	}
+	machines := make([]config.MachineFiles, 0, len(rows))
+	for _, row := range rows {
+		m := config.MachineFiles{DaemonID: row.DaemonID, PushedAt: row.PushedAt}
+		if m.Skills, err = config.ParseStoredSkills(row.SkillsJSON); err != nil {
+			return store.ProjectConfigUnion{}, err
+		}
+		if m.RepoMemories, err = config.ParseRepoMemories(row.RepoMemoriesJSON); err != nil {
+			return store.ProjectConfigUnion{}, err
+		}
+		if m.Scenarios, err = config.ParseStoredScenarios(row.ScenariosJSON); err != nil {
+			return store.ProjectConfigUnion{}, err
+		}
+		machines = append(machines, m)
+	}
+	var union store.ProjectConfigUnion
+	if union.SkillsJSON, err = config.EncodeCatalogJSON(config.UnionSkills(machines)); err != nil {
+		return union, err
+	}
+	if union.ScenariosJSON, err = config.EncodeCatalogJSON(config.UnionScenarios(machines)); err != nil {
+		return union, err
+	}
+	if memories := config.UnionRepoMemories(machines); len(memories) > 0 {
+		encoded, err := json.Marshal(memories)
+		if err != nil {
+			return union, err
+		}
+		s := string(encoded)
+		union.RepoMemoriesJSON = &s
+	}
+	return union, nil
+}
+
+// GetProjectMachineConfigRecord reads one machine's own snapshot of a project
+// as a config record: what a run on that machine reads its skills, memories,
+// MCP servers and config from. synced is false when the machine has never
+// synced a whole snapshot of the project (no row, or one written before the
+// row carried the config), which is not the same as having synced nothing.
+func (r *Repo) GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*ProjectConfigRecord, bool, error) {
+	if projectID == "" || daemonID == "" {
+		return nil, false, fmt.Errorf("project ID and daemon ID are required")
+	}
+	row, err := store.GetProjectMachineConfig(ctx, r.ORM(), projectID, daemonID)
+	if err != nil || row == nil || !row.Synced {
+		return nil, false, err
+	}
+	return &ProjectConfigRecord{
+		ProjectID:            row.ProjectID,
+		DaemonID:             row.DaemonID,
+		UserConfigYAML:       row.UserConfigYAML,
+		ProjectConfigYAML:    row.ProjectConfigYAML,
+		LocalConfigYAML:      row.LocalConfigYAML,
+		GlobalMemoryMD:       row.GlobalMemoryMD,
+		ProjectMemoryMD:      row.ProjectMemoryMD,
+		MCPConfigs:           row.MCPConfigs,
+		ProjectScenariosJSON: row.ScenariosJSON,
+		ProjectSkillsJSON:    row.SkillsJSON,
+		RepoMemoriesJSON:     row.RepoMemoriesJSON,
+		RuntimeType:          row.RuntimeType,
+		PushedAt:             row.PushedAt,
+	}, true, nil
 }
 
 // ProjectMachineCatalogs reads every machine's catalog of a project.

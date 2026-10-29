@@ -45,18 +45,18 @@ func (a *ExecuteToolsActivity) worktreeAddSuggestion(ctx context.Context, caps *
 	if len(targets) == 0 {
 		return ""
 	}
-	return tools.WorktreeAddSuggestion(targets, a.memoryWorktreeRoots(ctx, tec.project.ID))
+	return tools.WorktreeAddSuggestion(targets, a.memoryWorktreeRoots(ctx, tec.project.ID, runMachine(tec.chat)))
 }
 
 // memoryWorktreeRoots are the worktree directories the user's and project's
 // memory files name — the same memory call_llm puts in front of the model.
 // A rule there wins over the suggestion. Read only for a call that made a
 // worktree, through the worker's provider, which is cached per config version.
-func (a *ExecuteToolsActivity) memoryWorktreeRoots(ctx context.Context, projectID string) []string {
+func (a *ExecuteToolsActivity) memoryWorktreeRoots(ctx context.Context, projectID, daemonID string) []string {
 	if a.configProvider == nil {
 		return nil
 	}
-	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
+	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID, DaemonID: daemonID})
 	if err != nil {
 		logging.WarnContext(ctx, "[ExecuteTools] Project memory could not be loaded; worktree rules in it are not consulted", "projectID", projectID, "error", err)
 		return nil

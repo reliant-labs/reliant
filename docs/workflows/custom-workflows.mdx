@@ -110,6 +110,7 @@ Each machine a project is checked out on syncs its own `.reliant/workflows` (and
 - **The workflow library, the workflow selector and chats** read the project's combined set: every file any machine provides. When two machines hold the same file, the copy synced most recently is used.
 - **An automation resolves its workflow on its machine**, because its runs execute there. If that machine does not have the workflow, the automation is **broken**, listed in your inbox, and the reason names where the workflow is: `machine "cicd" has no workflow "release"; it is defined on machine "default" at control-plane/.reliant/workflows/release.yaml`. Check that repository out on the automation's machine, or point the automation at a machine that has it. A machine that has never synced the project falls back to the combined set until it does.
 - When no machine provides a workflow any more, the error names the file and machine it was last synced from.
+- **Skills, memories and MCP servers follow the same rule.** Each machine's `.reliant/skills`, `reliant.md` files, MCP configuration and config are kept separately too, and a run reads its own machine's: a skill or MCP server is used on the machine that has it. Listings with no machine read the combined skills and memories, so a machine syncing without a checkout no longer removes that checkout's skills for everyone.
 
 ## Anatomy of a Workflow
 
