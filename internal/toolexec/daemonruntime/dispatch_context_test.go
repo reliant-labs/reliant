@@ -45,3 +45,21 @@ func TestDispatchContextNeedsThePropagator(t *testing.T) {
 		t.Error("expected the no-op propagator to drop the context")
 	}
 }
+
+// A daemon command runs under the gateway's `gateway.daemon.command` span the
+// same way, from DaemonCommandRequest.trace_context.
+func TestCommandDispatchContextContinuesTheGatewaysTrace(t *testing.T) {
+	prev := otel.GetTextMapPropagator()
+	observability.InstallPropagation()
+	t.Cleanup(func() { otel.SetTextMapPropagator(prev) })
+
+	const traceparent = "00-0102030405060708090a0b0c0d0e0f10-0102030405060708-01"
+	ctx := commandDispatchContext(&reliantv1.DaemonCommandRequest{TraceContext: map[string]string{"traceparent": traceparent}})
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() || sc.TraceID().String() != "0102030405060708090a0b0c0d0e0f10" || sc.SpanID().String() != "0102030405060708" {
+		t.Fatalf("command context did not continue the gateway span: %+v", sc)
+	}
+	if trace.SpanContextFromContext(commandDispatchContext(&reliantv1.DaemonCommandRequest{})).IsValid() {
+		t.Error("a command with no trace context must not gain one")
+	}
+}

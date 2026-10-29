@@ -28,6 +28,7 @@ import { AlertTriangle, ArrowUpRight, BellOff, CheckCircle2, ChevronDown, Chevro
 
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { CommandLine, DOCS } from "@/components/Forge/GettingStarted";
 import { useAlertHistory, useAlerts } from "@/hooks/observability-queries";
 import type { AlertEvent, AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
@@ -36,7 +37,8 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
-import { AskReliantButton } from "./AskReliant/AskReliant";
+import { AskReliantActions, AskReliantMenu } from "./AskReliant/AskReliant";
+import type { AskSubject } from "./AskReliant/askReliantPrompt";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
@@ -45,7 +47,6 @@ import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlac
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
 import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export const ALERTS_TAB_LABELS: Record<AlertsTab, string> = {
   firing: "Firing",
@@ -201,6 +202,28 @@ export function silenceMatchersFor(alert: Pick<AlertInstance, "rule" | "labels">
     .filter((name) => !name.startsWith("reliant_") && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name))
     .sort((a, b) => (a === "alertname" ? -1 : b === "alertname" ? 1 : a.localeCompare(b)))
     .map((name) => ({ name, value: labels[name], isRegex: false, isEqual: true }));
+}
+
+/**
+ * What a chat about an alert instance is handed: references only
+ * (askReliantPrompt.ts) — its rule, fingerprint, environment, state and since
+ * when; never its labels or annotations, which `obs status` reads.
+ */
+export function alertAskSubject(alert: Pick<AlertInstance, "rule" | "fingerprint" | "state" | "firingAtMs" | "activeAtMs">, env: string | null): Extract<AskSubject, { kind: "alert" }> {
+  return {
+    kind: "alert",
+    rule: alert.rule,
+    fingerprint: alert.fingerprint,
+    env,
+    state: alert.state,
+    sinceMs: (alert.state === "firing" ? alert.firingAtMs : alert.activeAtMs) ?? null,
+  };
+}
+
+/** The instance a rule's actions are about: the longest-firing one, else the longest-pending. */
+function leadInstance(active: AlertInstance[]): AlertInstance | undefined {
+  const since = (a: AlertInstance) => (a.state === "firing" ? a.firingAtMs : a.activeAtMs) ?? Number.MAX_SAFE_INTEGER;
+  return [...active].sort((a, b) => (a.state === b.state ? since(a) - since(b) : a.state === "firing" ? -1 : 1))[0];
 }
 
 // ── States ───────────────────────────────────────────────────────────────────
@@ -379,7 +402,11 @@ function FiringTab({
                   <LabelChips labels={a.labels} skip={["alertname", "severity"]} />
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <AskReliantButton subject={{ kind: "alert", rule: a.rule, fingerprint: a.fingerprint, env: environments.find((env) => env.id === a.envId)?.name ?? null }} />
+                  <AskReliantMenu
+                    subject={alertAskSubject(a, environments.find((env) => env.id === a.envId)?.name ?? null)}
+                    appearance="button"
+                    testId={`obs-alert-ask-${a.rule}`}
+                  />
                   {declared && (
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule
@@ -490,42 +517,46 @@ function HistoryTab({
       </Frame>
     );
   }
+  const columns: DataTableColumn<AlertEventRow>[] = [
+    {
+      key: "when",
+      header: "When",
+      render: (_, { event }) => <span className="text-xs tabular-nums text-ink-muted" title={formatTimestamp(event.atMs)}>{formatAgo(event.atMs)}</span>,
+    },
+    {
+      key: "change",
+      header: "Change",
+      render: (_, { event }) => <span className={cn("text-xs font-medium capitalize", TRANSITION_TONE[event.transition])}>{event.transition}</span>,
+    },
+    { key: "rule", header: "Rule", stackTitle: true, render: (_, { event }) => <span className="font-mono text-xs">{event.rule}</span> },
+    { key: "env", header: "Environment", render: (_, { event }) => <span className="font-mono text-xs text-ink-muted">{envName(event.envId)}</span> },
+    { key: "labels", header: "Labels", render: (_, { event }) => <LabelChips labels={event.labels} /> },
+    {
+      key: "value",
+      header: "Value",
+      numeric: true,
+      render: (_, { event }) => <span className="text-xs">{Number.isInteger(event.value) ? event.value : event.value.toPrecision(3)}</span>,
+    },
+  ];
   return (
-    <Card padding="none" data-testid="obs-alert-history">
+    <Card padding="none" className="overflow-hidden" data-testid="obs-alert-history">
       <div className="max-h-[32rem] overflow-auto">
-        <StackedTable className="w-full text-sm">
-          <caption className="sr-only">Alert state changes, newest first</caption>
-          <thead className="sticky top-0 bg-surface">
-            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-              <th scope="col" className="px-4 py-2 font-medium">When</th>
-              <th scope="col" className="px-4 py-2 font-medium">Change</th>
-              <th scope="col" className="px-4 py-2 font-medium">Rule</th>
-              <th scope="col" className="px-4 py-2 font-medium">Environment</th>
-              <th scope="col" className="px-4 py-2 font-medium">Labels</th>
-              <th scope="col" className="px-4 py-2 text-right font-medium">Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((e, i) => (
-              <tr key={`${e.fingerprint}-${e.atMs}-${i}`} className="border-b border-border/50 align-top last:border-b-0" data-testid="obs-alert-event" data-transition={e.transition}>
-                <td className="whitespace-nowrap px-4 py-1.5 text-xs tabular-nums text-ink-muted" title={formatTimestamp(e.atMs)}>
-                  {formatAgo(e.atMs)}
-                </td>
-                <td className={cn("px-4 py-1.5 text-xs font-medium capitalize", TRANSITION_TONE[e.transition])}>{e.transition}</td>
-                <td className="px-4 py-1.5 font-mono text-xs text-ink">{e.rule}</td>
-                <td className="px-4 py-1.5 font-mono text-xs text-ink-muted">{envName(e.envId)}</td>
-                <td className="px-4 py-1.5">
-                  <LabelChips labels={e.labels} />
-                </td>
-                <td className="px-4 py-1.5 text-right text-xs tabular-nums">{Number.isInteger(e.value) ? e.value : e.value.toPrecision(3)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </StackedTable>
+        <DataTable<AlertEventRow>
+          flush
+          stacked
+          compact
+          ariaLabel="Alert state changes, newest first"
+          columns={columns}
+          data={events.map((event, i) => ({ event, key: `${event.fingerprint}-${event.atMs}-${i}` }))}
+          getRowKey={({ key }) => key}
+          getRowProps={({ event }) => ({ className: "align-top", "data-testid": "obs-alert-event", "data-transition": event.transition })}
+        />
       </div>
     </Card>
   );
 }
+
+type AlertEventRow = { event: AlertEvent; key: string };
 
 // ── Rules ────────────────────────────────────────────────────────────────────
 
@@ -611,7 +642,7 @@ function RulesTab({
         </Card>
       </div>
       {open ? (
-        <RuleDetail entry={open} />
+        <RuleDetail entry={open} active={firing.filter((a) => a.envId === open.env.id && a.rule === open.rule.alert)} />
       ) : (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-rule-pick">
           Choose a rule to see its query and the code that declares it.
@@ -621,10 +652,11 @@ function RulesTab({
   );
 }
 
-function RuleDetail({ entry }: { entry: EnvRule }) {
+function RuleDetail({ entry, active }: { entry: EnvRule; active: AlertInstance[] }) {
   const { rule, env } = entry;
   const exploreHref = useExploreHref();
   const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
+  const lead = leadInstance(active);
   return (
     <Card padding="md" data-testid="obs-rule-detail">
       <div className="space-y-4">
@@ -646,6 +678,14 @@ function RuleDetail({ entry }: { entry: EnvRule }) {
             evaluated every {rule.interval || "1m"}
             {rule.keepFiringFor ? ` · keeps firing ${rule.keepFiringFor} after it clears` : ""}
           </p>
+          {lead && (
+            <div className="flex flex-wrap items-center gap-2 pt-1" data-testid="obs-rule-ask">
+              <span className={cn("text-xs font-medium", lead.state === "firing" ? "text-danger-ink" : "text-warning-ink")}>
+                {active.length > 1 ? `${active.length} instances ${lead.state === "firing" ? "firing" : "pending"}` : lead.state === "firing" ? "Firing now" : "Pending now"}
+              </span>
+              <AskReliantActions subject={alertAskSubject(lead, env.name)} />
+            </div>
+          )}
         </div>
         <div>
           <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>

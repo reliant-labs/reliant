@@ -12,6 +12,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type {
   IssueActor,
+  IssueChatLink,
   IssueComment,
   IssueTimelineBody,
   IssueTimelineEntry,
@@ -96,6 +97,19 @@ export function describeAssignment(actor: IssueActor | null, from: IssueUser | n
 
 export function chatLabel(link: { chatId: string; chatTitle: string }): string {
   return link.chatTitle.trim() || `chat ${link.chatId.slice(0, 8)}`;
+}
+
+/**
+ * The newest chat started from the issue (or one merged into it) among the
+ * entries read so far, so the issue can lead with it instead of offering a
+ * duplicate. Null when none has been read.
+ */
+export function latestChatLink(entries: readonly IssueTimelineEntry[]): IssueChatLink | null {
+  let latest: IssueTimelineEntry | null = null;
+  for (const entry of entries) {
+    if (entry.body.kind === "chat" && (!latest || entry.timeMs >= latest.timeMs)) latest = entry;
+  }
+  return latest?.body.kind === "chat" ? latest.body.link : null;
 }
 
 export function isEdited(comment: IssueComment): boolean {

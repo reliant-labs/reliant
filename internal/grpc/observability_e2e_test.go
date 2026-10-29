@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/observe"
@@ -141,4 +142,56 @@ func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
 			require.Equal(t, remoteTrace, span.Links[0].SpanContext.TraceID().String())
 		})
 	}
+}
+
+// A browser's server stream (StreamChatUpdates, StreamUserUpdates) joins its
+// trace exactly as a unary call does: the user chain adopts the traceparent
+// the web transport sends, so the stream's server span is the child of the
+// browser's fetch span instead of a root of its own.
+func TestUserChainContinuesTheCallerTraceOnServerStreams(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previousProvider := otel.GetTracerProvider()
+	previousPropagator := otel.GetTextMapPropagator()
+	otel.SetTracerProvider(provider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		otel.SetTextMapPropagator(previousPropagator)
+		require.NoError(t, provider.Shutdown(context.Background()))
+	})
+
+	const streamProcedure = "/reliant.observability.v1.EchoService/EchoStream"
+	handler := connect.NewServerStreamHandler(streamProcedure,
+		func(_ context.Context, _ *connect.Request[emptypb.Empty], stream *connect.ServerStream[emptypb.Empty]) error {
+			return stream.Send(&emptypb.Empty{})
+		}, connect.WithInterceptors(userChainInterceptors(t)...))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	const remoteTrace = "0af7651916cd43dd8448eb211c80319c"
+	const remoteSpan = "b7ad6b7169203331"
+	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+streamProcedure)
+	req := connect.NewRequest(&emptypb.Empty{})
+	req.Header().Set("traceparent", "00-"+remoteTrace+"-"+remoteSpan+"-01")
+	stream, err := client.CallServerStream(context.Background(), req)
+	require.NoError(t, err)
+	for stream.Receive() {
+	}
+	require.NoError(t, stream.Err())
+	require.NoError(t, stream.Close())
+
+	var serverSpans []tracetest.SpanStub
+	require.Eventually(t, func() bool {
+		serverSpans = serverSpans[:0]
+		for _, span := range exporter.GetSpans() {
+			if span.SpanKind == oteltrace.SpanKindServer {
+				serverSpans = append(serverSpans, span)
+			}
+		}
+		return len(serverSpans) == 1
+	}, 5*time.Second, 10*time.Millisecond, "the stream's server span never ended")
+	span := serverSpans[0]
+	require.Equal(t, remoteTrace, span.SpanContext.TraceID().String())
+	require.Equal(t, remoteSpan, span.Parent.SpanID().String(), "the browser's span must be the stream span's parent")
 }

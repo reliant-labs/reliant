@@ -1444,8 +1444,8 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 		nodeState.Metadata = map[string]string{"node_path": scope.NodePath}
 	}
 
-	// Use a background context with timeout for the DB write
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Survives the activity's cancellation, stays in its trace.
+	writeCtx, cancel := detachedWriteContext(ctx)
 	defer cancel()
 
 	// Best-effort write to chat_updates
@@ -1754,6 +1754,21 @@ func toMapInterface(v interface{}) map[string]interface{} {
 	return m
 }
 
+// bestEffortWriteTimeout bounds a bookkeeping write made after the activity's
+// own context may already be over.
+const bestEffortWriteTimeout = 5 * time.Second
+
+// detachedWriteContext is the context for a best-effort bookkeeping write that
+// must outlive the activity's cancellation: it drops ctx's deadline and
+// cancellation (context.WithoutCancel) and sets its own, but keeps ctx's
+// values. Those values are the trace — the RunActivity span the Temporal
+// tracing interceptor opened — so the write's ORM and SQL spans stay children
+// of the activity. context.Background() here made every one of them a
+// one-span root trace with no parent.
+func detachedWriteContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), bestEffortWriteTimeout)
+}
+
 // writeStepExecution writes a step execution record for workflow history tracking.
 // This enables CEL expressions to query step history (e.g., size(history.filter(exit_code != 0)) >= 3).
 func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt stepAttempt) {
@@ -1770,11 +1785,12 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 	exec := buildStepExecution(attempt)
 	verdict := recordedVerdict{ExitCode: exec.ExitCode, Success: exec.Success}
 
-	// Use a background context with timeout for the DB write.
-	// The activity context may be cancelled or about to be cancelled,
-	// which could cause the write to fail. Using a fresh context ensures the
-	// step execution is written even if the activity is being terminated.
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Detach from the activity's cancellation, not from its values. The
+	// activity context may be cancelled or about to be cancelled, which could
+	// cause the write to fail, so the write gets its own deadline; but it keeps
+	// the activity's span, so the INSERT is a child of RunActivity instead of
+	// an orphan `orm.CreateStepExecution` root trace (detachedWriteContext).
+	writeCtx, cancel := detachedWriteContext(ctx)
 	defer cancel()
 
 	// Best-effort write to step_executions (don't fail activity if this fails)
