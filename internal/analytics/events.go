@@ -17,6 +17,9 @@ const (
 	EventWorkflowDraftCreated EventType = "workflow_draft_created"
 	EventWorkflowDraftSaved   EventType = "workflow_draft_saved"
 
+	// LLM usage
+	EventLLMCallCompleted EventType = "llm_call_completed"
+
 	// Project and settings usage events
 	EventProjectOpened          EventType = "project_opened"
 	EventPreferencesUpdated     EventType = "preferences_updated"
@@ -36,6 +39,24 @@ const (
 	EventOnboardingCompleted     EventType = "onboarding_completed"
 	EventOnboardingSkipped       EventType = "onboarding_skipped"
 )
+
+// LLMCallMetrics describes one model call finishing: counts and metadata
+// only, never prompt or reply text.
+type LLMCallMetrics struct {
+	Provider         string // anthropic, openai, gemini, ...
+	Model            string
+	InputTokens      int
+	OutputTokens     int
+	CacheReadTokens  int
+	CacheWriteTokens int
+	LatencyMs        int64
+	Success          bool
+	ErrorType        string // rate_limit, context_length, auth, timeout, ...; empty on success
+	IsStreaming      bool
+	WorkflowID       string
+	ChatID           string
+	StepName         string // the workflow node that made the call
+}
 
 // APIKeyConfiguredMetrics tracks when a provider API key is configured
 type APIKeyConfiguredMetrics struct {

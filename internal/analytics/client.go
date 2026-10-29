@@ -279,6 +279,30 @@ func (t Tracker) TrackPageVisited(m PageVisitedMetrics) {
 	t.emit(EventPageVisited, m.PageName, fields...)
 }
 
+// TrackLLMCallCompleted records one model call finishing.
+func (t Tracker) TrackLLMCallCompleted(m LLMCallMetrics) {
+	fields := []slog.Attr{
+		slog.String("provider", m.Provider),
+		slog.String("model", m.Model),
+		slog.Int("input_tokens", m.InputTokens),
+		slog.Int("output_tokens", m.OutputTokens),
+		slog.Int64("latency_ms", m.LatencyMs),
+		slog.Bool("success", m.Success),
+		slog.Bool("is_streaming", m.IsStreaming),
+	}
+	fields = appendNonEmpty(fields, "error_type", m.ErrorType)
+	fields = appendNonEmpty(fields, "workflow_id", m.WorkflowID)
+	fields = appendNonEmpty(fields, "chat_id", m.ChatID)
+	fields = appendNonEmpty(fields, "step_name", m.StepName)
+	if m.CacheReadTokens > 0 {
+		fields = append(fields, slog.Int("cache_read_tokens", m.CacheReadTokens))
+	}
+	if m.CacheWriteTokens > 0 {
+		fields = append(fields, slog.Int("cache_write_tokens", m.CacheWriteTokens))
+	}
+	t.emit(EventLLMCallCompleted, "", fields...)
+}
+
 // TrackAPIKeyConfigured records a provider API key being configured.
 func (t Tracker) TrackAPIKeyConfigured(m APIKeyConfiguredMetrics) {
 	t.emit(EventAPIKeyConfigured, "",
