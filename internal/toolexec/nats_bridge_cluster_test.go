@@ -507,6 +507,42 @@ func TestDrainPendingCommands_Cluster_ExactlyOnceInOrderWithExistingConsumer(t *
 	}, 10*time.Second, 100*time.Millisecond, "acked commands must leave the WorkQueue stream")
 }
 
+// The drain that creates a daemon's consumer delivers what is queued, every
+// time. Pulling right after the create can reach a member that has not yet
+// heard of the new leader's pull subscription (fetchFoundNoConsumerLeader);
+// one create per test made that a 1-in-70 flake, so this makes many. The
+// drains run at once, as they do when a gateway restarts with every daemon
+// reconnecting: each one ends only after an empty pull's FetchMaxWait, and
+// one after another they would outlast the first consumer's
+// InactiveThreshold.
+func TestDrainPendingCommands_Cluster_DrainThatCreatesTheConsumerDelivers(t *testing.T) {
+	env := newPendingClusterEnv(t)
+	mgr := &recordingDaemonMgr{}
+	bridge := env.newBridge(mgr)
+	defer bridge.cancel()
+
+	const daemons = 16
+	var want []string
+	for d := 0; d < daemons; d++ {
+		req := fmt.Sprintf("req-%d", d)
+		env.publish(t, fmt.Sprintf("daemon-fresh-%d", d), req)
+		want = append(want, req)
+	}
+	var wg sync.WaitGroup
+	for d := 0; d < daemons; d++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			bridge.drainPendingCommands(context.Background(), pendingDrainUser, fmt.Sprintf("daemon-fresh-%d", d))
+		}()
+	}
+	wg.Wait()
+
+	assert.ElementsMatch(t, want, requestIDs(mgr), "the drain that created each daemon's consumer delivers its command")
+	assert.Equal(t, daemons, env.consumerCount(t), "one consumer per daemon")
+	env.cluster.assertHealthy(t, "after creating a consumer per daemon")
+}
+
 // A durable left behind by the previous release (same name, same filter,
 // created by the old per-poll CreateOrUpdate and never deleted because a drain
 // was interrupted or had a Nak) is adopted, not duplicated or rejected.
