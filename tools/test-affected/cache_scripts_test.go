@@ -132,15 +132,16 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 		failedDir  string
 	}{
 		{
+			// A selected web lane type-checks too (#1768): vitest strips types.
 			name:      "expanded web tests and full generation",
 			next:      Plan{Go: GoPlan{LaneFull: full}, Web: WebPlan{Tests: []string{"generated.test.ts"}}, ForgeGen: ForgeGenPlan{LaneFull: full}},
-			wantState: "true|false|false|false|false|true|false|1",
+			wantState: "true|false|false|false|true|true|false|1",
 			wantDeps:  []string{"npm .", "npm tools/protoc-gen-es", "pnpm frontends/web"},
 		},
 		{
 			name:      "expanded full web lane",
 			next:      Plan{Web: WebPlan{LaneFull: full}},
-			wantState: "false|true|false|false|false|false|false|0",
+			wantState: "false|true|false|false|true|false|false|0",
 			wantDeps:  []string{"npm .", "pnpm frontends/web"},
 		},
 		{
@@ -162,11 +163,13 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			wantDeps:  []string{"npm tools/protoc-gen-es"},
 		},
 		{
-			// Electron and docs are release-only in the merge tier (7e6b4ee5).
-			// Their flags still reload, but must not trigger irrelevant installs.
-			name:      "release-only lanes do not install merge dependencies",
+			// Electron and docs run in the merge gate again (#1768). Electron's
+			// tests need its node_modules (with its install script, which
+			// fetches the binary); docs generation installs nothing.
+			name:      "electron lane installs electron; docs installs nothing",
 			next:      Plan{Electron: ElectronPlan{LaneFull: full}, DocGen: DocGenPlan{LaneFull: full}},
 			wantState: "false|false|true|true|false|false|false|0",
+			wantDeps:  []string{"npm .", "npm electron"},
 		},
 		{
 			name:      "new dependency failure is propagated after waiting",
@@ -192,7 +195,12 @@ func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 			// Assert the actual frozen-install commands, not just selected dirs.
 			putFixture(t, dir, "bin/npm", `#!/usr/bin/env bash
 set -euo pipefail
-[[ $# = 7 && $1 = ci && $2 = --prefix && $4 = --ignore-scripts && $5 = --no-audit && $6 = --no-fund && $7 = --loglevel=error ]]
+# electron keeps its install script (it fetches the binary); everything else ignores scripts.
+if [[ $3 = electron ]]; then
+  [[ $# = 6 && $1 = ci && $2 = --prefix && $4 = --no-audit && $5 = --no-fund && $6 = --loglevel=error ]]
+else
+  [[ $# = 7 && $1 = ci && $2 = --prefix && $4 = --ignore-scripts && $5 = --no-audit && $6 = --no-fund && $7 = --loglevel=error ]]
+fi
 printf 'npm %s\n' "$3" >>"$INSTALL_LOG"
 [[ $3 != "$FAILED_DIR" ]]
 `, 0755)
