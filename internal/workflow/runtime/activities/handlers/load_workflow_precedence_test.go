@@ -47,3 +47,35 @@ func TestLoadWorkflowActivity_AutomationRunsTheProjectsWorkflow(t *testing.T) {
 	assert.Contains(t, load(&db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID}), "the project's")
 	assert.Contains(t, load(&db.Chat{ID: "chat", UserID: "u", ProjectID: "p"}), "mine")
 }
+
+// Both rules at once, on two machines: an automation's run on cicd loads
+// cicd's project workflow, not the union's newest (the laptop's), and not the
+// owner's same-named account workflow.
+func TestLoadWorkflowActivity_AutomationOnAMachineRunsThatMachinesProjectWorkflow(t *testing.T) {
+	t.Parallel()
+	wf := func(description string) string {
+		return "name: release\ndescription: " + description + "\napiVersion: v2\nentry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"
+	}
+	catalog := func(description string) *string {
+		j := mustMarshalJSON(t, []map[string]string{{"slug": "release", "name": "release", "relative_path": "control-plane/.reliant/workflows/release.yaml", "yaml_content": wf(description)}})
+		return &j
+	}
+	triggerID, cicd := "trigger-1", "cicd"
+	chat := &db.Chat{ID: "auto", UserID: "u", ProjectID: "p", TriggerID: &triggerID, ActiveDaemonID: &cicd}
+	store := &MockLoadWorkflowStore{
+		GetChatFunc:                 func(context.Context, string) (*db.Chat, error) { return chat, nil },
+		GetProjectFunc:              func(context.Context, string) (*db.Project, error) { return &db.Project{ID: "p"}, nil },
+		GetProjectWorkflowsJSONFunc: func(context.Context, string) (*string, error) { return catalog("the laptop's"), nil },
+		GetProjectMachineWorkflowsJSONFunc: func(_ context.Context, _, daemonID string) (*string, bool, error) {
+			require.Equal(t, cicd, daemonID)
+			return catalog("cicd's"), true, nil
+		},
+		GetUsableWorkflowBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) {
+			return &db.WorkflowDraft{Definition: wf("mine")}, nil
+		},
+		GetWorkflowDraftBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, nil },
+	}
+	out, err := NewLoadWorkflowActivity(store).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
+	require.NoError(t, err)
+	assert.Contains(t, string(out.YAML), "cicd's")
+}
