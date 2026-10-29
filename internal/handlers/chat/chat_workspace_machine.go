@@ -1,0 +1,48 @@
+// Copyright (c) 2025 Reliant Labs
+package chat
+
+import (
+	"context"
+	"errors"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// checkWorkspaceMachine refuses running a chat in worktreeID on daemonID when
+// the worktree's checkout lives on another machine. A branch workspace exists
+// on one machine's disk only: a chat pinned elsewhere has tools, Files and a
+// terminal pointed at a directory that is not there ("Its workspace was
+// archived or removed from the machine").
+//
+// Refused rather than silently moved to the owner: the caller named a machine,
+// and quietly running somewhere else is a surprise the user cannot see. The
+// new-chat composer never sends the combination — selecting a workspace
+// selects its machine — so this is the server's half of that rule. The error
+// names the machine to pick.
+//
+// A workspace whose row records no machine (made before owners were
+// recorded) is settled first (daemonplacement.Resolver), so the check — and
+// the placement of a chat that names no machine, which reads the recorded
+// owner — sees where it really is. That is why it runs with daemonID "" too.
+//
+// An empty worktreeID or daemonID, the main checkout, a row no connected
+// machine could settle, and a worktree that no longer exists never conflict.
+func (s *Service) checkWorkspaceMachine(ctx context.Context, userID, worktreeID, daemonID string) error {
+	if worktreeID == "" {
+		return nil
+	}
+	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
+	if errors.Is(err, core.ErrWorktreeNotFound) {
+		return nil
+	}
+	if err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to load the workspace"))
+	}
+	owner := s.workspaceOwners().Owner(ctx, userID, worktree)
+	if daemonID == "" || owner == "" || owner == daemonID {
+		return nil
+	}
+	return svcerr.FailedPrecondition(daemonplacement.WorkspaceElsewhereMessage(ctx, s.deps.Repo, owner))
+}

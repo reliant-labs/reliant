@@ -615,7 +615,9 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
 
   const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", _processWorktreeId?: string) => {
     if (source === "package") {
-      await killProcessMutation.mutateAsync({ processId });
+      // Stopped on the machine it runs on, which is not always the default.
+      const daemonId = processesQuery.data.find((p) => p.id === processId)?.daemon_id;
+      await killProcessMutation.mutateAsync({ processId, daemonId });
       return;
     }
     try {
@@ -628,7 +630,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
       }
       throw error;
     }
-  }, [killProcessMutation, killBackgroundProcess, queryClient]);
+  }, [killProcessMutation, killBackgroundProcess, queryClient, processesQuery.data]);
 
   const handleSelectProcess = useCallback((process: UnifiedProcess) => {
     setSelectedProcessId(process.id);

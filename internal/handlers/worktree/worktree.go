@@ -235,6 +235,12 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 		proto.ChatId = w.ChatID
 	}
 
+	// The machine holding the checkout, so the new-chat composer can run a
+	// chat in this workspace on that machine and nowhere else.
+	if owner := daemonplacement.WorktreeOwner(w); owner != "" {
+		proto.DaemonId = &owner
+	}
+
 	if w.DeletedAt != nil {
 		deletedAt := w.DeletedAt.Format(time.RFC3339)
 		proto.DeletedAt = &deletedAt
@@ -386,7 +392,7 @@ func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, 
 		Exists bool   `json:"exists"`
 		Error  string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
 		return daemonerr.Error("access the worktree directory", err)
 	}
 	if !resp.Exists {

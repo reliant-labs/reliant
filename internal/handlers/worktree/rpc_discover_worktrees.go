@@ -60,7 +60,7 @@ func (s *Service) ImportWorktree(
 	// An empty registry is reconciled against the machine the import would
 	// be placed on; a populated one reaches no daemon before confirm_move.
 	repos, err := s.listProjectRepos(ctx, userID, project, func() (machinewake.Target, error) {
-		return s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, "import")
+		return s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
 	})
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (s *Service) ImportWorktree(
 		return nil, svcerr.InvalidArgument("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue")
 	}
 
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, "import")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (s *Service) DiscoverWorktrees(
 	}
 
 	// The same machine a new workspace for this project would be placed on.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, "discover")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "discover")
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +416,7 @@ func (s *Service) PruneWorktrees(
 	if err != nil {
 		return nil, err
 	}
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, "prune")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "prune")
 	if err != nil {
 		return nil, err
 	}

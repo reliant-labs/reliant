@@ -9,12 +9,14 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // Deps holds dependencies for the package_commands service. The composition
 // graph constructs it (internal/app/compose.go); every rpc reaches a daemon
-// through the router, because command discovery runs on the user's machine.
+// through the router, because command discovery and every package-command
+// process run on the machine that holds the workspace.
 // The rpc methods on *Service are where this service's logic lives; see the
 // forge `api` / `services` skill.
 type Deps struct {
@@ -25,9 +27,6 @@ type Deps struct {
 	Router Router
 	// Repo resolves worktrees and stores command favorites.
 	Repo Repository
-	// Processes runs package commands and tracks their processes, on this
-	// server (see RunCommand).
-	Processes Processes
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -45,9 +44,6 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("package_commands: Deps.Repo is required")
 	}
-	if d.Processes == nil {
-		return fmt.Errorf("package_commands: Deps.Processes is required")
-	}
 	return nil
 }
 
@@ -55,6 +51,8 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedPackageCommandsServiceHandler
 	deps Deps
+	// owners settles the machine of a workspace whose row records none.
+	owners *daemonplacement.Resolver
 }
 
 // New creates a new package_commands service instance with the supplied Deps.
@@ -63,7 +61,8 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	return &Service{deps: deps}, nil
+	probe, _ := deps.Router.(daemonplacement.OwnerProbe)
+	return &Service{deps: deps, owners: daemonplacement.NewResolver(deps.Repo, probe)}, nil
 }
 
 // Name returns the service name for logging and registry.

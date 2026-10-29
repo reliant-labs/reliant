@@ -87,6 +87,12 @@ export interface PackageProcess {
   start_time: string;
   end_time?: string;
   exit_code?: number;
+  /**
+   * The machine the process runs on — the one holding its workspace. Its
+   * logs, output stream and kill go there. Absent for a process the default
+   * machine runs, and for one known only from a stream event.
+   */
+  daemon_id?: string;
 }
 
 export interface OutputLine {
@@ -134,6 +140,7 @@ export function packageProcessFromProto(proto: ProtoPackageProcess): PackageProc
     start_time: proto.startTime,
     end_time: proto.endTime,
     exit_code: proto.exitCode,
+    daemon_id: proto.daemonId || undefined,
   };
 }
 
@@ -147,6 +154,7 @@ function packageProcessToProto(process: PackageProcess): ProtoPackageProcess {
     startTime: process.start_time,
     endTime: process.end_time,
     exitCode: process.exit_code,
+    daemonId: process.daemon_id ?? "",
   });
 }
 
@@ -181,9 +189,9 @@ export function usePackageProcesses(worktreeId?: string) {
 // Module-level, so React Query re-maps only when the response changes.
 const packageProcessesOf = (response: ListPackageProcessesResponse) => response.processes.map(packageProcessFromProto);
 
-/** A process's captured logs, fetched while `processId` is set. */
-export function useProcessLogs(processId: string | null) {
-  const query = useGetPackageProcessLogs({ processId: processId ?? "" }, { enabled: !!processId });
+/** A process's captured logs, read from its machine, fetched while `processId` is set. */
+export function useProcessLogs(processId: string | null, daemonId?: string) {
+  const query = useGetPackageProcessLogs({ processId: processId ?? "", daemonId }, { enabled: !!processId });
   const response = query.data;
   const data = useMemo<ProcessLogsResponse | undefined>(
     () =>
@@ -237,7 +245,10 @@ export function runCommandRequest(input: RunCommandInput) {
 /** Run a command (`mutateAsync(runCommandRequest(...))`); refetches the process lists. */
 export const useRunCommand = useRunCommandRpc;
 
-/** Stop a process a command started (`mutateAsync({ processId })`); refetches the process lists. */
+/**
+ * Stop a process a command started (`mutateAsync({ processId, daemonId })`,
+ * daemonId being the process's machine); refetches the process lists.
+ */
 export const useKillPackageProcess = useKillPackageProcessRpc;
 
 /**

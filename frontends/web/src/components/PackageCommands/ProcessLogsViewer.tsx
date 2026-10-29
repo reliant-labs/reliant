@@ -42,6 +42,8 @@ export function ProcessLogsViewer({
   const streamingServiceRef = useRef<ProcessOutputStreamingService | null>(null);
 
   const process = processes.find((p) => p.id === processId);
+  // The output streams from the machine the process runs on.
+  const processDaemonId = process?.daemon_id;
 
   // Build combined text from output lines for stdout/stderr fields
   const buildLogsFromLines = useCallback((lines: OutputLine[]): ProcessLogsResponse => {
@@ -121,7 +123,7 @@ export function ProcessLogsViewer({
           setIsLoading(false);
         }
       },
-    });
+    }, processDaemonId);
 
     streamingServiceRef.current = service;
     service.start();
@@ -130,7 +132,7 @@ export function ProcessLogsViewer({
       service.stop();
       streamingServiceRef.current = null;
     };
-  }, [processId, buildLogsFromLines]);
+  }, [processId, processDaemonId, buildLogsFromLines]);
 
   // Manual refresh - restart stream to get fresh data
   const handleRefresh = useCallback(() => {
@@ -167,10 +169,10 @@ export function ProcessLogsViewer({
       onStatusChange: (status) => {
         if (status === "connected") setIsLoading(false);
       },
-    });
+    }, processDaemonId);
     streamingServiceRef.current = service;
     service.start();
-  }, [processId, buildLogsFromLines]);
+  }, [processId, processDaemonId, buildLogsFromLines]);
 
   if (!process) {
     return (
@@ -207,7 +209,7 @@ export function ProcessLogsViewer({
       onRefresh={handleRefresh}
       onKill={
         process.status === BackgroundProcessStatus.RUNNING
-          ? () => killProcessMutation.mutate({ processId })
+          ? () => killProcessMutation.mutate({ processId, daemonId: process.daemon_id })
           : undefined
       }
       onOpenPort={onOpenPort}
