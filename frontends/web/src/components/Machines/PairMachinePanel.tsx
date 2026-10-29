@@ -173,7 +173,15 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
     setError(null);
     setApproval({ kind: "looking" });
     try {
-      setApproval({ kind: "confirm", machine: await lookupPendingMachine(code) });
+      const machine = await lookupPendingMachine(code);
+      if (machine.kind === "cli_login") {
+        // This sheet waits for a machine to connect. A CLI sign-in's code is
+        // approved on the page its terminal linked, which says what it is.
+        setApproval({ kind: "enter" });
+        setError("That code signs in the Reliant CLI, not a machine. Open the link your terminal printed to approve it.");
+        return;
+      }
+      setApproval({ kind: "confirm", machine });
     } catch (err) {
       setApproval({ kind: "enter" });
       setError(

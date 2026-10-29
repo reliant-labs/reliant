@@ -68,6 +68,27 @@ type introspectResponse struct {
 	Resource     *resourceJSON `json:"resource"`
 	Ephemeral    bool          `json:"ephemeral"`
 	ExpiresAt    *time.Time    `json:"expiresAt"`
+	// AllScopes marks a daemon credential: Scopes is the control plane's
+	// resolution of "every scope", against ITS catalog.
+	AllScopes bool `json:"allScopes"`
+}
+
+// wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
+// this binary does not know. The control plane may run a newer forge than
+// this server; a scope only it knows is held by definition and nothing here
+// can exercise it, so refusing the credential over it would take every daemon
+// offline between the control plane's deploy and this one's. An explicit list
+// still goes through fat.NewSet and is refused whole.
+//
+// forge (after v0.1.47) exports this as accesstoken.KnownScopes.
+func wildcardScopes(raw []string) fat.Set {
+	out := fat.Set{}
+	for _, s := range raw {
+		if scope, ok := fat.ParseScope(s); ok {
+			out[scope] = struct{}{}
+		}
+	}
+	return out
 }
 
 // Introspect resolves a presented token, uncached. A token that is not even
@@ -83,11 +104,17 @@ func (c *Client) Introspect(ctx context.Context, token string) (*fat.Principal, 
 	if !out.Active {
 		return nil, ErrInactive
 	}
-	scopes, err := fat.NewSet(out.Scopes)
-	if err != nil {
-		// A scope this binary cannot evaluate refuses, rather than
-		// authenticating with the understood subset.
-		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
+	scopes := wildcardScopes(out.Scopes)
+	if !out.AllScopes {
+		var err error
+		if scopes, err = fat.NewSet(out.Scopes); err != nil {
+			// A scope this binary cannot evaluate refuses, rather than
+			// authenticating with the understood subset.
+			return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
+		}
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("accesstokenclient: token %s carries no scope this server recognises", out.TokenID)
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,
