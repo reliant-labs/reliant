@@ -160,9 +160,13 @@ function packageProcessToProto(process: PackageProcess): ProtoPackageProcess {
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
-/** The commands a worktree (or, with none, a project directory) offers. */
-export function usePackageCommands(worktreeId?: string, path?: string) {
-  const query = useListCommands({ worktreeId, path }, { enabled: !!(worktreeId || path) });
+/**
+ * The commands a worktree (or, with none, a project directory) offers.
+ * `chatId` is the chat the panel is beside: for the main checkout, the server
+ * asks that chat's machine, as the Files tab and terminal do.
+ */
+export function usePackageCommands(worktreeId?: string, path?: string, chatId?: string) {
+  const query = useListCommands({ worktreeId, path, chatId: chatId || undefined }, { enabled: !!(worktreeId || path) });
   const response = query.data;
   const data = useMemo<ListCommandsResponse | undefined>(
     () =>
@@ -223,6 +227,8 @@ export function useCommandFavorites(projectId: string | undefined) {
 export interface RunCommandInput {
   worktreeId?: string;
   path?: string;
+  /** The chat the panel is beside; picks the machine for the main checkout. */
+  chatId?: string;
   commandName: string;
   packageType: PackageType;
   /** The directory to run from (the command's working_dir). */
@@ -235,6 +241,7 @@ export function runCommandRequest(input: RunCommandInput) {
   return {
     worktreeId: input.worktreeId,
     path: input.path,
+    chatId: input.chatId || undefined,
     commandName: input.commandName,
     packageType: STRING_TO_PACKAGE_TYPE[input.packageType] ?? ProtoPackageType.MAKEFILE,
     env: input.env ?? {},

@@ -99,6 +99,10 @@ message ListPackageCommandsRequest {
   optional string path = 2;
   // Additional directories to search for commands (relative paths like "electron")
   repeated string custom_directories = 3;
+  // The chat the panel is beside. For a workspace with no owner of its own
+  // (the main checkout) the chat's machine is the one to ask, as for its
+  // Files tab and terminal. Another user's chat is not found.
+  optional string chat_id = 4;
 }
 
 // CommandsByType groups commands by package type
@@ -123,6 +127,8 @@ message RunPackageCommandRequest {
   PackageType package_type = 4;
   map<string, string> env = 5;
   optional string working_dir = 6;    // Directory to run command from (from command.working_dir)
+  // The chat the panel is beside (see ListPackageCommandsRequest.chat_id).
+  optional string chat_id = 7;
 }
 
 message RunPackageCommandResponse {
@@ -142,6 +148,9 @@ message ListPackageProcessesRequest {
   // holding it. Unset (or empty) lists the package-command processes of every
   // connected machine; one that is asleep is skipped, not woken.
   optional string worktree_id = 1;
+  // The chat the panel is beside (see ListPackageCommandsRequest.chat_id):
+  // with worktree_id, the machine its processes are read from.
+  optional string chat_id = 2;
 }
 
 message ListPackageProcessesResponse {

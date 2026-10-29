@@ -304,8 +304,12 @@ type ListPackageCommandsRequest struct {
 	Path       *string `protobuf:"bytes,2,opt,name=path,proto3,oneof" json:"path,omitempty"`
 	// Additional directories to search for commands (relative paths like "electron")
 	CustomDirectories []string `protobuf:"bytes,3,rep,name=custom_directories,json=customDirectories,proto3" json:"custom_directories,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The chat the panel is beside. For a workspace with no owner of its own
+	// (the main checkout) the chat's machine is the one to ask, as for its
+	// Files tab and terminal. Another user's chat is not found.
+	ChatId        *string `protobuf:"bytes,4,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListPackageCommandsRequest) Reset() {
@@ -357,6 +361,13 @@ func (x *ListPackageCommandsRequest) GetCustomDirectories() []string {
 		return x.CustomDirectories
 	}
 	return nil
+}
+
+func (x *ListPackageCommandsRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
 }
 
 // CommandsByType groups commands by package type
@@ -458,13 +469,15 @@ func (x *ListPackageCommandsResponse) GetDetectedTypes() []string {
 }
 
 type RunPackageCommandRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WorktreeId    *string                `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	Path          *string                `protobuf:"bytes,2,opt,name=path,proto3,oneof" json:"path,omitempty"` // Root project path (deprecated, use working_dir)
-	CommandName   string                 `protobuf:"bytes,3,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
-	PackageType   PackageType            `protobuf:"varint,4,opt,name=package_type,json=packageType,proto3,enum=reliant.v1.PackageType" json:"package_type,omitempty"`
-	Env           map[string]string      `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	WorkingDir    *string                `protobuf:"bytes,6,opt,name=working_dir,json=workingDir,proto3,oneof" json:"working_dir,omitempty"` // Directory to run command from (from command.working_dir)
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WorktreeId  *string                `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	Path        *string                `protobuf:"bytes,2,opt,name=path,proto3,oneof" json:"path,omitempty"` // Root project path (deprecated, use working_dir)
+	CommandName string                 `protobuf:"bytes,3,opt,name=command_name,json=commandName,proto3" json:"command_name,omitempty"`
+	PackageType PackageType            `protobuf:"varint,4,opt,name=package_type,json=packageType,proto3,enum=reliant.v1.PackageType" json:"package_type,omitempty"`
+	Env         map[string]string      `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	WorkingDir  *string                `protobuf:"bytes,6,opt,name=working_dir,json=workingDir,proto3,oneof" json:"working_dir,omitempty"` // Directory to run command from (from command.working_dir)
+	// The chat the panel is beside (see ListPackageCommandsRequest.chat_id).
+	ChatId        *string `protobuf:"bytes,7,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -537,6 +550,13 @@ func (x *RunPackageCommandRequest) GetEnv() map[string]string {
 func (x *RunPackageCommandRequest) GetWorkingDir() string {
 	if x != nil && x.WorkingDir != nil {
 		return *x.WorkingDir
+	}
+	return ""
+}
+
+func (x *RunPackageCommandRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
 	}
 	return ""
 }
@@ -615,7 +635,10 @@ type ListPackageProcessesRequest struct {
 	// WorktreeId keeps only that worktree's processes, read from the machine
 	// holding it. Unset (or empty) lists the package-command processes of every
 	// connected machine; one that is asleep is skipped, not woken.
-	WorktreeId    *string `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	WorktreeId *string `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	// The chat the panel is beside (see ListPackageCommandsRequest.chat_id):
+	// with worktree_id, the machine its processes are read from.
+	ChatId        *string `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -653,6 +676,13 @@ func (*ListPackageProcessesRequest) Descriptor() ([]byte, []int) {
 func (x *ListPackageProcessesRequest) GetWorktreeId() string {
 	if x != nil && x.WorktreeId != nil {
 		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *ListPackageProcessesRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
 	}
 	return ""
 }
@@ -1291,14 +1321,17 @@ const file_reliant_v1_package_commands_proto_rawDesc = "" +
 	"\f_worktree_idB\v\n" +
 	"\t_end_timeB\f\n" +
 	"\n" +
-	"_exit_code\"\xa3\x01\n" +
+	"_exit_code\"\xcd\x01\n" +
 	"\x1aListPackageCommandsRequest\x12$\n" +
 	"\vworktree_id\x18\x01 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12\x17\n" +
 	"\x04path\x18\x02 \x01(\tH\x01R\x04path\x88\x01\x01\x12-\n" +
-	"\x12custom_directories\x18\x03 \x03(\tR\x11customDirectoriesB\x0e\n" +
+	"\x12custom_directories\x18\x03 \x03(\tR\x11customDirectories\x12\x1c\n" +
+	"\achat_id\x18\x04 \x01(\tH\x02R\x06chatId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\a\n" +
-	"\x05_path\"H\n" +
+	"\x05_pathB\n" +
+	"\n" +
+	"\b_chat_id\"H\n" +
 	"\x0eCommandsByType\x126\n" +
 	"\bcommands\x18\x01 \x03(\v2\x1a.reliant.v1.PackageCommandR\bcommands\"\xf0\x01\n" +
 	"\x1bListPackageCommandsResponse\x12Q\n" +
@@ -1306,7 +1339,7 @@ const file_reliant_v1_package_commands_proto_rawDesc = "" +
 	"\x0edetected_types\x18\x02 \x03(\tR\rdetectedTypes\x1aW\n" +
 	"\rCommandsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.CommandsByTypeR\x05value:\x028\x01\"\x80\x03\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.CommandsByTypeR\x05value:\x028\x01\"\xaa\x03\n" +
 	"\x18RunPackageCommandRequest\x12$\n" +
 	"\vworktree_id\x18\x01 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12\x17\n" +
@@ -1315,24 +1348,30 @@ const file_reliant_v1_package_commands_proto_rawDesc = "" +
 	"\fpackage_type\x18\x04 \x01(\x0e2\x17.reliant.v1.PackageTypeR\vpackageType\x12?\n" +
 	"\x03env\x18\x05 \x03(\v2-.reliant.v1.RunPackageCommandRequest.EnvEntryR\x03env\x12$\n" +
 	"\vworking_dir\x18\x06 \x01(\tH\x02R\n" +
-	"workingDir\x88\x01\x01\x1a6\n" +
+	"workingDir\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\a \x01(\tH\x03R\x06chatId\x88\x01\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
 	"\f_worktree_idB\a\n" +
 	"\x05_pathB\x0e\n" +
-	"\f_working_dir\"\x90\x01\n" +
+	"\f_working_dirB\n" +
+	"\n" +
+	"\b_chat_id\"\x90\x01\n" +
 	"\x19RunPackageCommandResponse\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x18\n" +
 	"\acommand\x18\x02 \x01(\tR\acommand\x12\x1d\n" +
 	"\n" +
 	"start_time\x18\x03 \x01(\tR\tstartTime\x12\x1b\n" +
-	"\tdaemon_id\x18\x04 \x01(\tR\bdaemonId\"S\n" +
+	"\tdaemon_id\x18\x04 \x01(\tR\bdaemonId\"}\n" +
 	"\x1bListPackageProcessesRequest\x12$\n" +
 	"\vworktree_id\x18\x01 \x01(\tH\x00R\n" +
-	"worktreeId\x88\x01\x01B\x0e\n" +
-	"\f_worktree_id\"X\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x02 \x01(\tH\x01R\x06chatId\x88\x01\x01B\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_id\"X\n" +
 	"\x1cListPackageProcessesResponse\x128\n" +
 	"\tprocesses\x18\x01 \x03(\v2\x1a.reliant.v1.PackageProcessR\tprocesses\"i\n" +
 	"\x18GetPackageProcessRequest\x12\x1d\n" +

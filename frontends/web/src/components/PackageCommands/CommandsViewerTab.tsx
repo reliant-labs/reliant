@@ -28,6 +28,7 @@ import { hasErrorReason } from "../../lib/errorReasons";
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { useActiveChatId } from "../../store/chatStoreHooks";
 import { isElectron } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
@@ -394,7 +395,10 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const currentWorktree = useWorktreeById(effectiveWorktreeId) ?? null;
 
   // Package commands via React Query (needs effectiveWorktreeId/projectPath)
-  const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath);
+  // The chat beside the panel: its machine runs the main checkout's commands,
+  // as it serves that chat's Files tab and terminal.
+  const activeChatId = useActiveChatId() ?? undefined;
+  const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath, activeChatId);
   const commands = commandsQuery.data?.commands ?? ({} as Record<PackageType, PackageCommand[]>);
   const detectedTypes = commandsQuery.data?.detected_types ?? [];
   const isLoadingCommands = commandsQuery.isLoading;
@@ -589,6 +593,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         runCommandRequest({
           worktreeId: effectiveWorktreeId,
           path: projectPath,
+          chatId: activeChatId,
           commandName: cmd.name,
           packageType: cmd.package_type,
           workingDir: cmd.working_dir,
@@ -611,7 +616,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     } finally {
       setRunningCommandKey(null);
     }
-  }, [runCommandMutation, effectiveWorktreeId, projectPath]);
+  }, [runCommandMutation, effectiveWorktreeId, projectPath, activeChatId]);
 
   const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", _processWorktreeId?: string) => {
     if (source === "package") {

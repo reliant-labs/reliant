@@ -84,7 +84,7 @@ func (s *Service) resolveWorkingDir(
 
 	switch {
 	case worktreeID != "":
-		return s.workspace(ctx, userID, worktreeID)
+		return s.workspace(ctx, userID, worktreeID, msg.GetChatId())
 	case path != "":
 		return path, "", nil
 	default:

@@ -23060,6 +23060,11 @@
             "Name": "custom_directories",
             "ProtoType": "[]string",
             "IsOptional": false
+          },
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ListPackageCommandsResponse": [
@@ -23077,6 +23082,11 @@
         "ListPackageProcessesRequest": [
           {
             "Name": "worktree_id",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": true
           }
@@ -23117,6 +23127,11 @@
           },
           {
             "Name": "working_dir",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": true
           }
@@ -23248,6 +23263,11 @@
             "name": "custom_directories",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListPackageCommandsResponse": [
@@ -23267,6 +23287,11 @@
         "reliant.v1.ListPackageProcessesRequest": [
           {
             "name": "worktree_id",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "chat_id",
             "kind": "string",
             "optional": true
           }
@@ -23396,6 +23421,11 @@
           },
           {
             "name": "working_dir",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "chat_id",
             "kind": "string",
             "optional": true
           }

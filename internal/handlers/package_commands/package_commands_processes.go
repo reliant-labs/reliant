@@ -3,6 +3,7 @@ package package_commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -37,9 +38,11 @@ const (
 )
 
 // workspace is the caller's worktree a request names: its checkout path and
-// the machine holding it ("" for default resolution — the main checkout, or a
-// row no connected machine could settle).
-func (s *Service) workspace(ctx context.Context, userID, worktreeID string) (path, daemonID string, err error) {
+// the machine holding it, by the rule the Files tab and terminal use
+// (daemonplacement.WorkspaceDaemon): a branch workspace's owner, else the
+// machine of the chat the panel is beside (chatID, "" for none), else the
+// project-aware default.
+func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID string) (path, daemonID string, err error) {
 	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
@@ -48,7 +51,10 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID string) (pat
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, s.owners, userID, worktree.ProjectID, worktree.ID, "")
+	ws, err := daemonplacement.WorkspaceDaemon(ctx, s.deps.Repo, s.owners, userID, worktree.ProjectID, worktree.ID, chatID)
+	if errors.Is(err, daemonplacement.ErrForeignChat) {
+		return "", "", svcerr.NotFound("chat")
+	}
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
@@ -60,9 +66,19 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID string) (pat
 	// resolution, which may pick a machine without this project and run a
 	// command in whatever sits at the same path there. The concrete machine is
 	// carried through discovery, the start and every process lookup.
+	// A failed lookup is reported, never routed around: falling back to
+	// project-blind default resolution could run an unrelated command on a
+	// machine without this project. Only "the user has no machine at all"
+	// leaves the dispatch to report that, as default resolution would.
 	if machines, ok := s.deps.Router.(daemonplacement.Machines); ok {
-		if daemonID, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, worktree.ProjectID); err == nil {
+		daemonID, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, worktree.ProjectID)
+		switch {
+		case err == nil:
 			return worktree.Path, daemonID, nil
+		case errors.Is(err, toolexec.ErrNoDaemon):
+			return worktree.Path, "", nil
+		default:
+			return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the project's machine"))
 		}
 	}
 	return worktree.Path, "", nil
@@ -110,7 +126,7 @@ func (s *Service) RunCommand(
 	var rootDir, daemonID string
 	switch {
 	case worktreeID != "":
-		rootDir, daemonID, err = s.workspace(ctx, userID, worktreeID)
+		rootDir, daemonID, err = s.workspace(ctx, userID, worktreeID, req.Msg.GetChatId())
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +196,7 @@ func (s *Service) ListProcesses(
 	worktreeID := req.Msg.GetWorktreeId()
 	var processes []*reliantv1.PackageProcess
 	if worktreeID != "" {
-		_, daemonID, err := s.workspace(ctx, userID, worktreeID)
+		_, daemonID, err := s.workspace(ctx, userID, worktreeID, req.Msg.GetChatId())
 		if err != nil {
 			return nil, err
 		}

@@ -143,6 +143,7 @@ type processesRepo struct {
 	daemons   map[string]*db.Daemon
 	adopted   map[string]string
 	installs  map[string][]*core.ProjectDaemon // project -> its installs
+	chats     map[string]*db.Chat
 }
 
 func newProcessesRepo() *processesRepo {
@@ -187,7 +188,13 @@ func (r *processesRepo) GetProject(_ context.Context, id string) (*db.Project, e
 	return &db.Project{ID: id, UserID: r.owners[id]}, nil
 }
 
-func (r *processesRepo) GetChat(context.Context, string) (*db.Chat, error) {
+func (r *processesRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.chats[id]; ok {
+		cp := *c
+		return &cp, nil
+	}
 	return nil, core.ErrChatNotFound
 }
 
@@ -322,6 +329,66 @@ func TestRunCommand_MainCheckoutRunsWhereTheProjectIsInstalled(t *testing.T) {
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_start"))
 	assert.Equal(t, "daemon-b", resp.Msg.DaemonId, "the concrete machine is carried to the process rpcs")
 	assert.Empty(t, router.machinesFor("fs.stat"), "the main checkout is never probed for an owner")
+}
+
+// The main checkout beside a chat pinned to B runs on B, whatever the
+// project default is: the chat's Files tab and terminal are on B, so a build
+// clicked beside it builds B's checkout. Another user's chat is not found.
+func TestRunCommand_MainCheckoutBesideAChatRunsOnTheChatsMachine(t *testing.T) {
+	router := &placingRouter{machineRouter: &machineRouter{}, defaultMachine: "daemon-a"}
+	repo := newProcessesRepo()
+	repo.machine("daemon-a", "test-user")
+	repo.machine("daemon-b", "test-user")
+	repo.installs = map[string][]*core.ProjectDaemon{"p1": {
+		{ProjectID: "p1", DaemonID: "daemon-a", InstallState: core.ProjectInstallInstalled},
+		{ProjectID: "p1", DaemonID: "daemon-b", InstallState: core.ProjectInstallInstalled},
+	}}
+	repo.worktree("wt-main", "p1", "")
+	repo.worktrees["wt-main"].IsMain = true
+	pinned := "daemon-b"
+	repo.chats = map[string]*db.Chat{
+		"chat-b":     {ID: "chat-b", UserID: "test-user", ProjectID: "p1", ActiveDaemonID: &pinned},
+		"chat-other": {ID: "chat-other", UserID: "someone-else", ProjectID: "p1", ActiveDaemonID: &pinned},
+	}
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo}))
+
+	resp, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+		WorktreeId: ptr.Of("wt-main"), ChatId: ptr.Of("chat-b"), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("pkg.list_commands"))
+	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_start"))
+	assert.Equal(t, "daemon-b", resp.Msg.DaemonId)
+
+	_, err = svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
+		WorktreeId: ptr.Of("wt-main"), ChatId: ptr.Of("chat-other"),
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's chat is not found")
+}
+
+// failingInstallsRepo fails the project-install lookup.
+type failingInstallsRepo struct{ *processesRepo }
+
+func (failingInstallsRepo) ListProjectDaemonsForProject(context.Context, string) ([]*core.ProjectDaemon, error) {
+	return nil, errors.New("database unavailable")
+}
+
+// A failed install lookup is reported, never routed around: project-blind
+// default resolution could discover and run a command on a machine without
+// this project.
+func TestRunCommand_InstallLookupFailureDispatchesNothing(t *testing.T) {
+	router := &placingRouter{machineRouter: &machineRouter{}, defaultMachine: "daemon-a"}
+	repo := newProcessesRepo()
+	repo.machine("daemon-a", "test-user")
+	repo.worktree("wt-main", "p1", "")
+	repo.worktrees["wt-main"].IsMain = true
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: failingInstallsRepo{repo}}))
+
+	_, err := runBuild(svc, "wt-main")
+	require.Error(t, err)
+	assert.Empty(t, router.machinesFor("pkg.list_commands"), "nothing is discovered on a guessed machine")
+	assert.Empty(t, router.machinesFor("exec.bg_start"), "nothing is run on a guessed machine")
 }
 
 // A workspace whose row records no machine is settled on first use: the one
