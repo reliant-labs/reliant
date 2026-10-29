@@ -687,7 +687,7 @@ func TestRepoGetContentReadsAFileAsText(t *testing.T) {
 		"sha": "3d21ec53a331a6f037a91c368710b99387d012c1", "size": float64(len(source)),
 		"html_url": "https://github.com/acme/app/blob/dev/src/main.go",
 		"content":  source, "binary": false, "too_large": false,
-		"start_line": float64(1), "end_line": float64(12), "total_lines": float64(12),
+		"start_line": float64(1), "start_column": float64(1), "end_line": float64(12), "total_lines": float64(12),
 		"truncated": false, "next": nil,
 		"target": nil, "submodule_git_url": nil,
 	}, out)
@@ -731,6 +731,21 @@ func TestRepoGetContentPagesALargeFileByLine(t *testing.T) {
 
 	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev", "start_line": 2995}))
 	assert.Equal(t, float64(3000), out["end_line"])
+	assert.Nil(t, out["next"])
+}
+
+// A line longer than one window continues at a byte column, so a minified
+// file is still readable in full.
+func TestRepoGetContentContinuesAnOversizedLine(t *testing.T) {
+	source := strings.Repeat("x", 30000)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/min.js", jsonReply(200, contentJSON(t, "min.js", "base64", []byte(source))))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "min.js"}))
+	first := out["content"].(string)
+	require.Less(t, len(first), len(source))
+	assert.Equal(t, fmt.Sprintf("Lines 1-1 of 1 shown (line 1 is longer than one window and continues). To continue, call again with the same path and ref and start_line=1 start_column=%d.", len(first)+1), out["next"])
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "min.js", "start_line": 1, "start_column": len(first) + 1}))
+	assert.Equal(t, source, first+out["content"].(string))
 	assert.Nil(t, out["next"])
 }
 

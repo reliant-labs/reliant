@@ -47,6 +47,15 @@ params:
         The 1-based line a file's window starts at. Follow next to page
         through a large file.
       examples: [1, 613]
+    start_column:
+      type: integer
+      minimum: 1
+      default: 1
+      title: First column
+      description: >-
+        The 1-based byte of start_line to start at. Only needed to continue
+        a line longer than one window; next names it.
+      examples: [24001]
     line_count:
       type: integer
       minimum: 1
@@ -134,7 +143,8 @@ output:
           base64.decode(response.?content.orValue('')).text().orValue(null) : null,
       cel.bind(win,
         text == null ? null :
-          text.lineWindow(params.?start_line.orValue(1), params.?line_count.orValue(0), 24000),
+          text.lineWindow(params.?start_line.orValue(1), params.?start_column.orValue(1),
+                          params.?line_count.orValue(0), 24000),
       {"type": response.type,
        "path": response.path,
        "name": response.name,
@@ -146,10 +156,13 @@ output:
        "end_line": win == null ? null : win.end_line,
        "total_lines": win == null ? null : win.total_lines,
        "truncated": win == null ? false : win.truncated,
-       "next": win == null || win.end_line >= win.total_lines ? null : dyn(
+       "start_column": win == null ? null : win.start_column,
+       "next": win == null || win.next_line == null ? null : dyn(
          "Lines " + string(win.start_line) + "-" + string(win.end_line) + " of " +
-         string(win.total_lines) + " shown. To continue, call again with the same path and ref and start_line=" +
-         string(win.end_line + 1) + "."),
+         string(win.total_lines) + " shown" +
+         (win.next_line == win.end_line ? " (line " + string(win.end_line) + " is longer than one window and continues)" : "") +
+         ". To continue, call again with the same path and ref and start_line=" + string(win.next_line) +
+         (win.next_column > 1 ? " start_column=" + string(win.next_column) : "") + "."),
        "binary": response.?encoding.orValue('') == 'base64' && text == null,
        "too_large": response.?encoding.orValue('') == 'none',
        "target": response.?target.orValue(null),
@@ -170,7 +183,8 @@ output:
       end_line: { type: [integer, "null"], description: The last line of content; start_line - 1 when start_line is past the end. }
       total_lines: { type: [integer, "null"], description: How many lines the whole file has. }
       truncated: { type: boolean, description: The window stopped short of line_count (or of the file's end) at the size ceiling. }
-      next: { type: [string, "null"], description: "Set when lines follow end_line: the exact call that reads the next window." }
+      start_column: { type: [integer, "null"], description: The byte of start_line content begins at (1 unless continuing a long line). }
+      next: { type: [string, "null"], description: "Set when more follows: the exact call that reads the next window." }
       binary: { type: boolean, description: The file is not text, so content is null. }
       too_large: { type: boolean, description: "The file is over 1 MB, which the contents API does not serve, so content is null." }
       target: { type: [string, "null"], description: A symlink's target path. }

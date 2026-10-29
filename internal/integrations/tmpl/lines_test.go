@@ -29,7 +29,7 @@ func TestLineWindow(t *testing.T) {
 		"oversized first line":      {"abcdefghij\nk\n", 1, 0, 4, want{"abcd", 1, 1, 2, true}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got := LineWindow(tc.text, tc.start, tc.count, tc.budget)
+			got := LineWindow(tc.text, tc.start, 1, tc.count, tc.budget)
 			g := want{got["content"].(string), got["start_line"].(int64), got["end_line"].(int64), got["total_lines"].(int64), got["truncated"].(bool)}
 			if g != tc.want {
 				t.Fatalf("got %+v want %+v", g, tc.want)
@@ -42,7 +42,7 @@ func TestLineWindow(t *testing.T) {
 // action result reaches an agent: a window never outgrows it.
 func TestLineWindowBudgetIsTheEncodedSize(t *testing.T) {
 	text := strings.Repeat("if a < b && \"q\" != `\\` {\t}\n", 5000)
-	got := LineWindow(text, 1, 0, 24000)
+	got := LineWindow(text, 1, 1, 0, 24000)
 	enc, err := json.Marshal(got["content"])
 	if err != nil {
 		t.Fatal(err)
@@ -53,12 +53,47 @@ func TestLineWindowBudgetIsTheEncodedSize(t *testing.T) {
 }
 
 func TestLineWindowFromCEL(t *testing.T) {
-	got, err := EvalExpr(`cel.bind(w, params.text.lineWindow(params.start, 2.0, 1000), w.content + string(w.total_lines))`,
+	got, err := EvalExpr(`cel.bind(w, params.text.lineWindow(params.start, 1, 2.0, 1000), w.content + string(w.total_lines))`,
 		map[string]any{"params": map[string]any{"text": "a\nb\nc\n", "start": 2.0}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "b\nc\n3" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// Following next_line/next_column from the first window reconstructs the
+// file byte for byte, including lines longer than one window (a minified
+// file, a long line between ordinary ones) and multi-byte runes at a cut.
+func TestLineWindowPagingReconstructsTheFile(t *testing.T) {
+	for name, text := range map[string]string{
+		"one oversized line":             strings.Repeat("x", 25000),
+		"oversized line between others":  "a\n" + strings.Repeat("é<", 9000) + "\nb\nc",
+		"ordinary lines":                 strings.Repeat("line of text\n", 4000),
+		"oversized last line no newline": "head\n" + strings.Repeat("y", 50001),
+	} {
+		t.Run(name, func(t *testing.T) {
+			var got strings.Builder
+			line, col := int64(1), int64(1)
+			for calls := 0; ; calls++ {
+				if calls > 1000 {
+					t.Fatal("paging did not terminate")
+				}
+				w := LineWindow(text, line, col, 0, 24000)
+				got.WriteString(w["content"].(string))
+				if w["next_line"] == nil {
+					break
+				}
+				nl, nc := w["next_line"].(int64), w["next_column"].(int64)
+				if nl < line || (nl == line && nc <= col) {
+					t.Fatalf("window at %d:%d did not advance (next %d:%d)", line, col, nl, nc)
+				}
+				line, col = nl, nc
+			}
+			if got.String() != text {
+				t.Fatalf("reconstructed %d bytes, want %d", got.Len(), len(text))
+			}
+		})
 	}
 }
