@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"google.golang.org/protobuf/proto"
 )
 
 // A declared trigger's `inputs:` mapping fills workflow inputs from each event
@@ -26,11 +27,24 @@ import (
 // acme/app}` — can only ever take one of those values, because the dispatcher
 // delivers no other event. So the snapshot resolves the graph once per
 // possible value and discloses the union. An input mapped from anything else
-// is unbounded: it is disclosed as such, and resolved at the workflow's own
-// default, the same as an unset input.
+// is unbounded: it takes the opaque eventSupplied value, which a target field
+// discloses as dynamic, and which fails the approval closed wherever it
+// would choose a privilege (a child workflow or preset, a tool, spawn or
+// permission declaration) — no default stands in for what an event decides.
 
 // maxEventContexts bounds the product of the bounded inputs' value sets.
 const maxEventContexts = maxApprovalDependencies
+
+// eventSupplied is an unbounded event input's value during approval. It is
+// not a scope identifier (discloseScope withholds it as dynamic) and no real
+// value contains it, so a privilege resolved from it is recognisable.
+const eventSupplied = "\u27e8event-supplied\u27e9"
+
+// dependsOnEvent reports whether a resolved privilege-bearing message took
+// any part of its value from an unbounded event input.
+func dependsOnEvent(m proto.Message) bool {
+	return strings.Contains(canonicalProto(m), eventSupplied)
+}
 
 var eventAttributeTemplate = regexp.MustCompile(`^\{\{\s*trigger\.payload\.attributes\.([A-Za-z0-9_]+)\s*\}\}$`)
 
@@ -84,7 +98,8 @@ func eventInputContexts(wt *pb.WorkflowTrigger, wf *pb.Workflow, effective map[s
 			}
 		}
 		if bound == "" {
-			lines = append(lines, fmt.Sprintf("Event-supplied input %s: set by each event; unbounded by this approval (resolved here at its default; anything derived from it varies per event)", name))
+			lines = append(lines, fmt.Sprintf("Event-supplied input %s: set by each event; unbounded by this approval (targets derived from it are dynamic; it may not choose a workflow, preset or tool)", name))
+			base[name] = eventSupplied
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("Event-supplied input %s: set by each event; bounded: %s. Privileges below are resolved for every one of those values", name, bound))

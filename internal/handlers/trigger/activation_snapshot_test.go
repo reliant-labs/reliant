@@ -161,3 +161,45 @@ nodes:
 	require.Contains(t, summary, "* (every tool)")
 	require.Contains(t, summary, "mcp__github__create_issue")
 }
+
+func TestActivationSnapshotRefusesAPrivilegeAnUnboundedEventChooses(t *testing.T) {
+	// The event names the child workflow. No default may stand in for it: a
+	// benign default would be approved and a later event could pick another.
+	yaml := `name: event-chooses
+inputs:
+  agent: {type: string, default: project://harmless}
+triggers:
+  - name: hook
+    integration: {integration: github, events: [issues.opened]}
+    inputs: {agent: '{{ trigger.payload.data.issue.title }}'}
+    prompt: go
+entry: [child]
+nodes:
+  - id: child
+    type: workflow
+    ref: '{{ inputs.agent }}'
+`
+	_, err := snapshotFor(t, yaml, "hook", nil)
+	require.ErrorContains(t, err, "must resolve before activation approval")
+
+	tools := `name: event-tools
+inputs:
+  tools: {type: string, default: view}
+triggers:
+  - name: hook
+    integration: {integration: github, events: [issues.opened]}
+    inputs: {tools: '{{ trigger.payload.data.issue.title }}'}
+    prompt: go
+entry: [agent]
+nodes:
+  - id: agent
+    type: call_llm
+    args:
+      model: {tags: [fast]}
+      tools_config:
+        preloaded_tools: ["{{ inputs.tools }}"]
+        loadable_tools: []
+`
+	_, err = snapshotFor(t, tools, "hook", nil)
+	require.ErrorContains(t, err, "fixed privilege choices")
+}

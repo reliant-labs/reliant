@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
 // `reliant trigger activate` turns on the triggers a workflow declares in its
@@ -33,17 +35,18 @@ type activateFlags struct {
 	worktreeID  string
 	machine     string
 	noMachine   bool
-	// daemonLister overrides the registry client built from the connection;
-	// tests set it.
-	daemonLister triggerDaemonLister
-	params       []string
-	paramsJSON   string
-	presets      []string
-	connections  []string
-	message      string
-	namePrefix   string
-	actingAs     string
-	notify       bool
+	// daemonLister and workflowGetter override the clients built from the
+	// connection; tests set them.
+	daemonLister   triggerDaemonLister
+	workflowGetter activateWorkflowGetter
+	params         []string
+	paramsJSON     string
+	presets        []string
+	connections    []string
+	message        string
+	namePrefix     string
+	actingAs       string
+	notify         bool
 }
 
 // activateChoices is activateFlags resolved against the server: ids instead
@@ -107,9 +110,13 @@ brought to them.
 				}
 				return nil
 			}
+			integrations, err := f.declaredIntegrations(cmd.Context(), conn, choices)
+			if err != nil {
+				return err
+			}
 			for _, name := range f.triggers {
 				resp, err := client.CreateTrigger(cmd.Context(),
-					connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: f.triggerDefinition(name, choices)}))
+					connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: f.triggerDefinition(name, integrations[name], choices)}))
 				if err != nil {
 					return conn.annotate(fmt.Errorf("activating trigger %q of workflow %q: %w", name, f.workflow, err))
 				}
@@ -253,9 +260,65 @@ func (f *activateFlags) enableRequest(c *activateChoices) *reliantv1.EnableWorkf
 	}
 }
 
+// activateWorkflowGetter is the one workflow call --trigger with --connection
+// needs.
+type activateWorkflowGetter interface {
+	GetWorkflow(context.Context, *connect.Request[reliantv1.GetWorkflowRequest]) (*connect.Response[reliantv1.GetWorkflowResponse], error)
+}
+
+// declaredIntegrations maps each named declared trigger to the integration it
+// listens to, so --connection routes by integration exactly as EnableWorkflow
+// does. Without --connection there is nothing to route, so nothing is fetched.
+func (f *activateFlags) declaredIntegrations(ctx context.Context, conn *connection, c *activateChoices) (map[string]string, error) {
+	if len(c.connections) == 0 {
+		return nil, nil
+	}
+	getter := f.workflowGetter
+	if getter == nil {
+		getter = reliantv1connect.NewWorkflowServiceClient(conn.httpClient(), conn.ServerURL)
+	}
+	req := &reliantv1.GetWorkflowRequest{ProjectId: c.projectID, Name: f.workflow, WorktreeId: c.worktreeID}
+	resp, err := getter.GetWorkflow(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, fmt.Errorf("reading workflow %q to route --connection by integration: %w", f.workflow, err)
+	}
+	declared := map[string]string{}
+	for _, wt := range resp.Msg.GetWorkflow().GetTriggers() {
+		declared[wt.GetName()] = wt.GetIntegration().GetIntegration()
+	}
+	out := map[string]string{}
+	used := map[string]bool{}
+	for _, name := range f.triggers {
+		integration, ok := declared[name]
+		if !ok {
+			return nil, fmt.Errorf("workflow %q declares no trigger %q", f.workflow, name)
+		}
+		out[name] = integration
+		used[integration] = true
+	}
+	for integration := range c.connections {
+		if !used[integration] {
+			return nil, fmt.Errorf("--connection %s=… matches none of the named triggers; they listen to: %s", integration, joinedKeys(used))
+		}
+	}
+	return out, nil
+}
+
+func joinedKeys(m map[string]bool) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		if k == "" {
+			k = "(no integration)"
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
 // triggerDefinition is the per-trigger activation: what EnableWorkflow would
-// write for this one declared trigger.
-func (f *activateFlags) triggerDefinition(trigger string, c *activateChoices) *reliantv1.TriggerDefinition {
+// write for this one declared trigger, which listens to integration.
+func (f *activateFlags) triggerDefinition(trigger, integration string, c *activateChoices) *reliantv1.TriggerDefinition {
 	prefix := f.namePrefix
 	if prefix == "" {
 		prefix = f.workflow
@@ -274,12 +337,8 @@ func (f *activateFlags) triggerDefinition(trigger string, c *activateChoices) *r
 		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: trigger},
 		ActingIdentity:   c.acting,
 	}
-	// One connection flag names the integration; a per-trigger activation
-	// takes it when exactly one is given.
-	if len(c.connections) == 1 {
-		for _, id := range c.connections {
-			def.ConnectionId = &id
-		}
+	if id, ok := c.connections[integration]; ok && integration != "" {
+		def.ConnectionId = &id
 	}
 	return def
 }

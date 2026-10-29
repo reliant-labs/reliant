@@ -232,7 +232,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							}
 							for _, value := range choices {
 								if value != "" {
-									if strings.Contains(value, "{{") {
+									if strings.Contains(value, "{{") || strings.Contains(value, eventSupplied) {
 										return svcerr.FailedPrecondition("Preset dependencies must resolve before activation approval")
 									}
 									if _, err := loadPreset(value); err != nil {
@@ -304,6 +304,9 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
 						}
 						a = resolved.(*pb.SubWorkflowArgs)
+						if dependsOnEvent(&pb.SubWorkflowArgs{Ref: a.GetRef(), Presets: a.GetPresets()}) {
+							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
+						}
 						childRef = model.CelStringValue(a.GetRef())
 						childPresets = a.GetPresets()
 						params := map[string]any{}
@@ -357,6 +360,9 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							return svcerr.FailedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
 						}
 						a = resolved.(*pb.LoopArgs)
+						if dependsOnEvent(&pb.LoopArgs{Ref: a.GetRef(), Presets: a.GetPresets()}) {
+							return svcerr.FailedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
+						}
 						if ref := model.CelStringValue(a.GetRef()); ref != "" {
 							if _, err := load(ref); err != nil {
 								return err
@@ -412,6 +418,11 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						tc = resolved.(*pb.ToolsConfig)
 						declarations := model.CelStringListValue(tc.GetPreloadedTools())
 						declarations = append(declarations, model.CelStringListValue(tc.GetLoadableTools())...)
+						for _, choice := range append(append([]string{model.CelStringValue(tc.GetPermission())}, declarations...), model.CelStringListValue(tc.GetSpawn())...) {
+							if strings.Contains(choice, eventSupplied) || strings.Contains(choice, "{{") {
+								return svcerr.FailedPrecondition("Tool privileges depend on runtime/event values; activation approval requires fixed privilege choices")
+							}
+						}
 						if tc.GetLoadableTools() == nil {
 							declarations = append(declarations, "*")
 						}
