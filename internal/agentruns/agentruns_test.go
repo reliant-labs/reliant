@@ -83,14 +83,18 @@ func TestStartRun_LaunchesNotUnattendedWithAgentStartRunEvent(t *testing.T) {
 	assert.False(t, launcher.event.OccurredAt.IsZero())
 }
 
-func TestStartRun_GeneratesATitleWhenNoneIsGiven(t *testing.T) {
+// With no title the run is named for its workflow and the message's first
+// line, never generated: a title made from "Run the cicd-probe workflow …"
+// read "Run CICD Probe Workflow" on every copy.
+func TestStartRun_TitlesItByWorkflowAndSubjectWhenNoneIsGiven(t *testing.T) {
 	launcher := &fakeLauncher{res: &launch.Result{Chat: &db.Chat{ID: "c"}}}
 	_, err := New(launcher, nil).StartRun(context.Background(), tools.StartRunRequest{
-		OwnerUserID: "o", ProjectID: "p", Workflow: "w", Message: "m", DedupeKey: "k",
+		OwnerUserID: "o", ProjectID: "p", Workflow: "project://cicd-probe", Message: "inventory the machine\nthen report", DedupeKey: "k",
 	})
 	require.NoError(t, err)
-	assert.True(t, launcher.spec.GenerateTitle)
-	assert.Nil(t, launcher.spec.Title)
+	assert.False(t, launcher.spec.GenerateTitle)
+	require.NotNil(t, launcher.spec.Title)
+	assert.Equal(t, "cicd-probe · inventory the machine", *launcher.spec.Title)
 }
 
 func TestStartRun_AlreadyLaunchedAttachesInsteadOfFailing(t *testing.T) {

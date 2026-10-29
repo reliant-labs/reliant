@@ -39,6 +39,7 @@ func TestListInSidebarTruthTable(t *testing.T) {
 		{"agent.start_run", core.TriggerEventKindAgentStartRun},
 		{"manual.run", core.TriggerEventKindManualRun},
 		{"builder.test", core.TriggerEventKindBuilderTest},
+		{"cli.run", core.TriggerEventKindCLIRun},
 	}
 
 	for _, lk := range launchKinds {

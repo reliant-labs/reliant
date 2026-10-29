@@ -10,6 +10,7 @@
 --   3 AGENT         an agent's start_run (agent.start_run)
 --   4 MANUAL_RUN    Run now (manual.run; adopted at birth)
 --   5 BUILDER_TEST  a workflow builder's test run (builder.test)
+--   6 CLI           the command line, `reliant workflow run` (cli.run)
 --
 -- Until now the chat list's policy was derived on every read from the kind of
 -- the chat's FIRST trigger_events row (a lateral join), with "no event" and
@@ -25,7 +26,7 @@
 -- its launch event, with the same mapping.
 ALTER TABLE chats
     ADD COLUMN origin integer NOT NULL DEFAULT 1,
-    ADD CONSTRAINT chats_origin_check CHECK (origin BETWEEN 1 AND 5);
+    ADD CONSTRAINT chats_origin_check CHECK (origin BETWEEN 1 AND 6);
 
 COMMENT ON COLUMN chats.origin IS 'forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.ChatOrigin';
 
@@ -37,6 +38,7 @@ SET origin = CASE le.kind
         WHEN 'agent.start_run' THEN 3
         WHEN 'manual.run' THEN 4
         WHEN 'builder.test' THEN 5
+        WHEN 'cli.run' THEN 6
         ELSE 2 -- schedule, webhook, integration, workflow_event
     END
 FROM (

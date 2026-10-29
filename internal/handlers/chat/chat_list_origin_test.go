@@ -40,6 +40,7 @@ func TestChatListSurfacesKeyOnOrigin(t *testing.T) {
 		"agent":        core.ChatOriginAgent,
 		"manual-run":   core.ChatOriginManualRun,
 		"builder-test": core.ChatOriginBuilderTest,
+		"cli":          core.ChatOriginCLI,
 	}
 	create := func(id string, origin core.ChatOrigin, archived, adopted bool) {
 		t.Helper()

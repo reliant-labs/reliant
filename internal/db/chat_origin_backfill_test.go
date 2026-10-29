@@ -44,6 +44,7 @@ func TestChatOriginMigrationBackfillsFromLaunchEvent(t *testing.T) {
 		core.TriggerEventKindAgentStartRun,
 		core.TriggerEventKindManualRun,
 		core.TriggerEventKindBuilderTest,
+		core.TriggerEventKindCLIRun,
 	}
 	for _, kind := range kinds {
 		id := "bf-" + string(kind)

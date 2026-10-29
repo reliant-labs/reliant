@@ -94,6 +94,7 @@ func TestChatOriginOf(t *testing.T) {
 		TriggerEventKindAgentStartRun: ChatOriginAgent,
 		TriggerEventKindManualRun:     ChatOriginManualRun,
 		TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
+		TriggerEventKindCLIRun:        ChatOriginCLI,
 	}
 	for kind, origin := range want {
 		if got := ChatOriginOf(kind); got != origin {

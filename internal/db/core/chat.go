@@ -37,6 +37,7 @@ const (
 	ChatOriginAgent       ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_AGENT
 	ChatOriginManualRun   ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_MANUAL_RUN
 	ChatOriginBuilderTest ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_BUILDER_TEST
+	ChatOriginCLI         ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_CLI
 )
 
 // WorkflowState is where a run IS; WorkflowStopReason is why a stopped run

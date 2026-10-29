@@ -62,7 +62,7 @@ describe("launch classification", () => {
 describe("origin policy", () => {
   it("treats every origin but USER as a run", () => {
     expect(isRun({ origin: ChatOrigin.USER })).toBe(false);
-    for (const origin of [ChatOrigin.AUTOMATION, ChatOrigin.AGENT, ChatOrigin.MANUAL_RUN, ChatOrigin.BUILDER_TEST]) {
+    for (const origin of [ChatOrigin.AUTOMATION, ChatOrigin.AGENT, ChatOrigin.MANUAL_RUN, ChatOrigin.BUILDER_TEST, ChatOrigin.CLI]) {
       expect(isRun({ origin })).toBe(true);
     }
   });
