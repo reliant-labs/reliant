@@ -1534,8 +1534,12 @@ type MessageSender struct {
 	ThreadId string                 `protobuf:"bytes,1,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	// title is the sender thread's title, resolved when the message is read; empty
 	// when the thread is untitled or no longer exists.
-	Title         string           `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Kind          AgentMessageKind `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.AgentMessageKind" json:"kind,omitempty"`
+	Title string           `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Kind  AgentMessageKind `protobuf:"varint,3,opt,name=kind,proto3,enum=reliant.v1.AgentMessageKind" json:"kind,omitempty"`
+	// subject is the one-line summary the sending agent gave the message
+	// (spawn_send's `subject`); the transcript shows the message collapsed to
+	// it. Empty for kinds that carry none.
+	Subject       string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1589,6 +1593,13 @@ func (x *MessageSender) GetKind() AgentMessageKind {
 		return x.Kind
 	}
 	return AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED
+}
+
+func (x *MessageSender) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
 }
 
 // ContentBlock represents a granular message content piece
@@ -7147,11 +7158,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\x10\n" +
 	"\x0e_display_styleB\n" +
 	"\n" +
-	"\b_node_id\"t\n" +
+	"\b_node_id\"\x8e\x01\n" +
 	"\rMessageSender\x12\x1b\n" +
 	"\tthread_id\x18\x01 \x01(\tR\bthreadId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x120\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x1c.reliant.v1.AgentMessageKindR\x04kind\"\xe1\x05\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x1c.reliant.v1.AgentMessageKindR\x04kind\x12\x18\n" +
+	"\asubject\x18\x04 \x01(\tR\asubject\"\xe1\x05\n" +
 	"\fContentBlock\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\x05R\x05index\x120\n" +
