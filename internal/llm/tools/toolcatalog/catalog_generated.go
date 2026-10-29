@@ -453,10 +453,12 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__pr_list_files": {
 		Bindable: map[string]struct{}{
-			"connection":  {},
-			"owner":       {},
-			"pull_number": {},
-			"repo":        {},
+			"connection":    {},
+			"include_patch": {},
+			"owner":         {},
+			"path_prefix":   {},
+			"pull_number":   {},
+			"repo":          {},
 		},
 		Unbindable: map[string]string{},
 	},

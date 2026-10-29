@@ -7,7 +7,9 @@ description: >-
   modified, removed, renamed, ...), line counts and the unified diff hunk
   (patch). patch is null for binary files and very large diffs. Follows
   GitHub's pagination up to 1000 files; GitHub itself caps the list at
-  3000.
+  3000. For a large pull request, list it with include_patch false (names
+  and line counts only), then fetch diffs a directory at a time with
+  path_prefix.
 keywords: [pull request, pr, diff, files, changes, patch, review]
 placement: server
 mutates: false
@@ -21,6 +23,16 @@ params:
     owner: { $ref: ../schemas/owner.yaml }
     repo: { $ref: ../schemas/repo.yaml }
     pull_number: { $ref: ../schemas/pull_number.yaml }
+    path_prefix:
+      type: string
+      title: Path prefix
+      description: Only files whose path starts with this (e.g. internal/auth/). A renamed file matches on its new or old path.
+      examples: [internal/handlers/]
+    include_patch:
+      type: boolean
+      default: true
+      title: Include diffs
+      description: False returns every file without its patch, so a pull request of hundreds of files fits in one response.
     connection: { $ref: ../schemas/connection.yaml }
 request:
   method: GET
@@ -31,12 +43,15 @@ request:
   errors: { $ref: ../schemas/github_errors.yaml }
 output:
   select: >-
-    response.map(f, {"filename": f.filename,
+    response.filter(f, !has(params.path_prefix) || f.filename.startsWith(params.path_prefix) ||
+                       (has(f.previous_filename) && f.previous_filename != null &&
+                        f.previous_filename.startsWith(params.path_prefix)))
+            .map(f, {"filename": f.filename,
                      "status": f.status,
                      "additions": f.additions,
                      "deletions": f.deletions,
                      "changes": f.changes,
-                     "patch": f.?patch.orValue(null),
+                     "patch": params.?include_patch.orValue(true) ? f.?patch.orValue(null) : null,
                      "previous_filename": f.?previous_filename.orValue(null),
                      "sha": f.?sha.orValue(null)})
   schema:
