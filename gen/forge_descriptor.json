@@ -5755,6 +5755,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
           "InputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsRequest",
           "OutputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsResponse",
           "InputProtoFile": "reliant/v1/chat.proto",

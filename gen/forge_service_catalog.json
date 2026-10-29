@@ -3889,6 +3889,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ChatService/GetWorkflowNodeExecutions",
+          "name": "GetWorkflowNodeExecutions",
+          "input": "reliant.v1.GetWorkflowNodeExecutionsRequest",
+          "output": "reliant.v1.GetWorkflowNodeExecutionsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "IDEMPOTENCY_UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ChatService/InterruptThread",
           "name": "InterruptThread",
           "input": "reliant.v1.InterruptThreadRequest",
@@ -4769,6 +4779,23 @@
             }
           },
           {
+            "Name": "GetWorkflowNodeExecutions",
+            "InputType": "GetWorkflowNodeExecutionsRequest",
+            "OutputType": "GetWorkflowNodeExecutionsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsRequest",
+            "OutputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
             "Name": "GetThreadWorkflowInputs",
             "InputType": "GetThreadWorkflowInputsRequest",
             "OutputType": "GetThreadWorkflowInputsResponse",
@@ -5114,6 +5141,26 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.WorkflowExecution"
+            }
+          ],
+          "GetWorkflowNodeExecutionsRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "workflow_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetWorkflowNodeExecutionsResponse": [
+            {
+              "Name": "updates",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatUpdate"
             }
           ],
           "InterruptThreadRequest": [
@@ -6569,6 +6616,30 @@
               "repeated": true
             }
           ],
+          "reliant.v1.GetWorkflowNodeExecutionsRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "workflow_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.GetWorkflowNodeExecutionsResponse": [
+            {
+              "name": "updates",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatUpdate",
+              "repeated": true
+            }
+          ],
           "reliant.v1.InputMessage": [
             {
               "name": "role",
@@ -7778,6 +7849,8 @@
           "reliant.v1.GetToolResultResponse": "reliant/v1/chat.proto",
           "reliant.v1.GetWorkflowExecutionsRequest": "reliant/v1/chat.proto",
           "reliant.v1.GetWorkflowExecutionsResponse": "reliant/v1/chat.proto",
+          "reliant.v1.GetWorkflowNodeExecutionsRequest": "reliant/v1/chat.proto",
+          "reliant.v1.GetWorkflowNodeExecutionsResponse": "reliant/v1/chat.proto",
           "reliant.v1.InputMessage": "reliant/v1/chat.proto",
           "reliant.v1.InterruptThreadRequest": "reliant/v1/chat.proto",
           "reliant.v1.InterruptThreadResponse": "reliant/v1/chat.proto",
@@ -45812,7 +45885,7 @@
           "legacy_name": "chat.CancelQueuedAgentMessage",
           "source": {
             "path": "internal/handlers/chat/rpc_queued_agent_messages.go",
-            "line": 84
+            "line": 80
           }
         },
         {
@@ -45912,6 +45985,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
             "line": 282
+          }
+        },
+        {
+          "id": "method1:e4305ca7b8e75642670b02304bebeef581020f8def4b093ab1ac822bf3270e58",
+          "name": "GetWorkflowNodeExecutions",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetWorkflowNodeExecutionsRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetWorkflowNodeExecutionsResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.GetWorkflowNodeExecutions",
+          "source": {
+            "path": "internal/handlers/chat/chat_node_executions.go",
+            "line": 24
           }
         },
         {
@@ -46395,7 +46479,7 @@
           "legacy_name": "chat.checkParamsActuallyChanged",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 78
+            "line": 88
           }
         },
         {
@@ -46494,7 +46578,7 @@
           "legacy_name": "chat.getChatForUser",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 51
+            "line": 61
           }
         },
         {
@@ -46703,7 +46787,7 @@
           "legacy_name": "chat.queryRunInputs",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 97
+            "line": 107
           }
         },
         {
@@ -46759,6 +46843,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_provider_policy.go",
             "line": 97
+          }
+        },
+        {
+          "id": "method1:dce98e2073dcabb255b8070d947bbf53e3b13004f203b0690036c021d8e07462",
+          "name": "requireChatOwner",
+          "signature": "func(ctx context.Context, chatID string, userID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.requireChatOwner",
+          "source": {
+            "path": "internal/handlers/chat/chat_helpers.go",
+            "line": 53
           }
         },
         {
@@ -47066,7 +47161,7 @@
           "legacy_name": "chat.trackMessageSent",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 258
+            "line": 268
           }
         },
         {
@@ -47077,7 +47172,7 @@
           "legacy_name": "chat.trackStartedChatMessage",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 237
+            "line": 247
           }
         },
         {
@@ -48583,7 +48678,7 @@
           "legacy_name": "db.AbandonFailedWorkflowStart",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2623
+            "line": 2646
           }
         },
         {
@@ -48594,7 +48689,7 @@
           "legacy_name": "db.AddCommandFavorite",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3879
+            "line": 3902
           }
         },
         {
@@ -48605,7 +48700,7 @@
           "legacy_name": "db.AdoptWorktreeDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1691
+            "line": 1714
           }
         },
         {
@@ -48616,7 +48711,7 @@
           "legacy_name": "db.AllocateContextWindowSequence",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3498
+            "line": 3521
           }
         },
         {
@@ -48627,7 +48722,7 @@
           "legacy_name": "db.AllocateMessageOrder",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 489
+            "line": 512
           }
         },
         {
@@ -48638,7 +48733,7 @@
           "legacy_name": "db.AppendToContentBlock",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 824
+            "line": 847
           }
         },
         {
@@ -48649,7 +48744,7 @@
           "legacy_name": "db.AppendToolInputDelta",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 832
+            "line": 855
           }
         },
         {
@@ -48660,7 +48755,7 @@
           "legacy_name": "db.ApplyDaemonLifecycle",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1154
+            "line": 1177
           }
         },
         {
@@ -48682,7 +48777,7 @@
           "legacy_name": "db.ArchiveWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1712
+            "line": 1735
           }
         },
         {
@@ -48781,7 +48876,7 @@
           "legacy_name": "db.CascadeTerminalStatusToDescendants",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2721
+            "line": 2744
           }
         },
         {
@@ -48792,7 +48887,7 @@
           "legacy_name": "db.CascadeTerminalStatusToThreadSubtree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3412
+            "line": 3435
           }
         },
         {
@@ -48825,7 +48920,7 @@
           "legacy_name": "db.ClaimPendingTriggerEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3194
+            "line": 3217
           }
         },
         {
@@ -48847,7 +48942,7 @@
           "legacy_name": "db.ClaimRunEvents",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3107
+            "line": 3130
           }
         },
         {
@@ -48869,7 +48964,7 @@
           "legacy_name": "db.ClaimWorkflowStart",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2615
+            "line": 2638
           }
         },
         {
@@ -48891,7 +48986,7 @@
           "legacy_name": "db.CleanupOldBackgroundProcesses",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2247
+            "line": 2270
           }
         },
         {
@@ -48957,7 +49052,7 @@
           "legacy_name": "db.CompareAndSwapWorkflowStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2582
+            "line": 2605
           }
         },
         {
@@ -49001,7 +49096,7 @@
           "legacy_name": "db.CountLiveLaunchedRuns",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2973
+            "line": 2996
           }
         },
         {
@@ -49012,7 +49107,7 @@
           "legacy_name": "db.CountMessagesByContextWindow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 558
+            "line": 581
           }
         },
         {
@@ -49023,7 +49118,7 @@
           "legacy_name": "db.CountMessagesByContextWindowUpToSeq",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 569
+            "line": 592
           }
         },
         {
@@ -49034,7 +49129,7 @@
           "legacy_name": "db.CountMessagesInChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 548
+            "line": 571
           }
         },
         {
@@ -49045,7 +49140,7 @@
           "legacy_name": "db.CountMessagesInChatOutsideThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 606
+            "line": 629
           }
         },
         {
@@ -49056,7 +49151,7 @@
           "legacy_name": "db.CountMessagesInThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 697
+            "line": 720
           }
         },
         {
@@ -49067,7 +49162,7 @@
           "legacy_name": "db.CountOtherPendingBlockers",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3099
+            "line": 3122
           }
         },
         {
@@ -49089,7 +49184,7 @@
           "legacy_name": "db.CountThreadsInConversation",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3465
+            "line": 3488
           }
         },
         {
@@ -49100,7 +49195,7 @@
           "legacy_name": "db.CreateApproval",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 865
+            "line": 888
           }
         },
         {
@@ -49111,7 +49206,7 @@
           "legacy_name": "db.CreateAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2269
+            "line": 2292
           }
         },
         {
@@ -49122,7 +49217,7 @@
           "legacy_name": "db.CreateBackgroundProcess",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2202
+            "line": 2225
           }
         },
         {
@@ -49133,7 +49228,7 @@
           "legacy_name": "db.CreateBackgroundProcessOutputBatch",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2253
+            "line": 2276
           }
         },
         {
@@ -49166,7 +49261,7 @@
           "legacy_name": "db.CreateContentBlock",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 754
+            "line": 777
           }
         },
         {
@@ -49177,7 +49272,7 @@
           "legacy_name": "db.CreateContentBlockIfNotExists",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 767
+            "line": 790
           }
         },
         {
@@ -49188,7 +49283,7 @@
           "legacy_name": "db.CreateContextWindow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3475
+            "line": 3498
           }
         },
         {
@@ -49210,7 +49305,7 @@
           "legacy_name": "db.CreateMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 114
+            "line": 137
           }
         },
         {
@@ -49221,7 +49316,7 @@
           "legacy_name": "db.CreateMessageOnce",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 137
+            "line": 160
           }
         },
         {
@@ -49243,7 +49338,7 @@
           "legacy_name": "db.CreateNumberedMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 508
+            "line": 531
           }
         },
         {
@@ -49254,7 +49349,7 @@
           "legacy_name": "db.CreatePlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1984
+            "line": 2007
           }
         },
         {
@@ -49265,7 +49360,7 @@
           "legacy_name": "db.CreatePreset",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3793
+            "line": 3816
           }
         },
         {
@@ -49276,7 +49371,7 @@
           "legacy_name": "db.CreateProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 918
+            "line": 941
           }
         },
         {
@@ -49287,7 +49382,7 @@
           "legacy_name": "db.CreateQuestion",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3889
+            "line": 3912
           }
         },
         {
@@ -49298,7 +49393,7 @@
           "legacy_name": "db.CreateRepo",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1730
+            "line": 1753
           }
         },
         {
@@ -49309,7 +49404,7 @@
           "legacy_name": "db.CreateRunEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3052
+            "line": 3075
           }
         },
         {
@@ -49320,7 +49415,7 @@
           "legacy_name": "db.CreateSetting",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1771
+            "line": 1794
           }
         },
         {
@@ -49331,7 +49426,7 @@
           "legacy_name": "db.CreateStepExecution",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3222
+            "line": 3245
           }
         },
         {
@@ -49342,7 +49437,7 @@
           "legacy_name": "db.CreateTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2050
+            "line": 2073
           }
         },
         {
@@ -49353,7 +49448,7 @@
           "legacy_name": "db.CreateTaskDependency",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2152
+            "line": 2175
           }
         },
         {
@@ -49364,7 +49459,7 @@
           "legacy_name": "db.CreateThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3301
+            "line": 3324
           }
         },
         {
@@ -49375,7 +49470,7 @@
           "legacy_name": "db.CreateTrigger",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2803
+            "line": 2826
           }
         },
         {
@@ -49386,7 +49481,7 @@
           "legacy_name": "db.CreateTriggerEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2935
+            "line": 2958
           }
         },
         {
@@ -49397,7 +49492,7 @@
           "legacy_name": "db.CreateUserUpdate",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1178
+            "line": 1195
           }
         },
         {
@@ -49408,7 +49503,7 @@
           "legacy_name": "db.CreateWorkflow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2528
+            "line": 2551
           }
         },
         {
@@ -49419,7 +49514,7 @@
           "legacy_name": "db.CreateWorkflowDraft",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3594
+            "line": 3617
           }
         },
         {
@@ -49430,7 +49525,7 @@
           "legacy_name": "db.CreateWorkflowScenario",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3839
+            "line": 3862
           }
         },
         {
@@ -49441,7 +49536,7 @@
           "legacy_name": "db.CreateWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1582
+            "line": 1605
           }
         },
         {
@@ -49463,7 +49558,7 @@
           "legacy_name": "db.DaemonLastSeenAt",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1438
+            "line": 1461
           }
         },
         {
@@ -49474,7 +49569,7 @@
           "legacy_name": "db.DeleteAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2281
+            "line": 2304
           }
         },
         {
@@ -49485,7 +49580,7 @@
           "legacy_name": "db.DeleteAutomationToken",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1902
+            "line": 1925
           }
         },
         {
@@ -49496,7 +49591,7 @@
           "legacy_name": "db.DeleteChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 79
+            "line": 102
           }
         },
         {
@@ -49507,7 +49602,7 @@
           "legacy_name": "db.DeleteDispatchedRunEventsBefore",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3124
+            "line": 3147
           }
         },
         {
@@ -49518,7 +49613,7 @@
           "legacy_name": "db.DeleteMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 855
+            "line": 878
           }
         },
         {
@@ -49540,7 +49635,7 @@
           "legacy_name": "db.DeletePlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2041
+            "line": 2064
           }
         },
         {
@@ -49551,7 +49646,7 @@
           "legacy_name": "db.DeletePreset",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3833
+            "line": 3856
           }
         },
         {
@@ -49562,7 +49657,7 @@
           "legacy_name": "db.DeleteProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1017
+            "line": 1040
           }
         },
         {
@@ -49573,7 +49668,7 @@
           "legacy_name": "db.DeleteProjectDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1091
+            "line": 1114
           }
         },
         {
@@ -49595,7 +49690,7 @@
           "legacy_name": "db.DeleteRepo",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1764
+            "line": 1787
           }
         },
         {
@@ -49606,7 +49701,7 @@
           "legacy_name": "db.DeleteSetting",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1829
+            "line": 1852
           }
         },
         {
@@ -49617,7 +49712,7 @@
           "legacy_name": "db.DeleteStaleDaemonAttachments",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1467
+            "line": 1490
           }
         },
         {
@@ -49628,7 +49723,7 @@
           "legacy_name": "db.DeleteTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2143
+            "line": 2166
           }
         },
         {
@@ -49639,7 +49734,7 @@
           "legacy_name": "db.DeleteTaskDependencyByPair",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2193
+            "line": 2216
           }
         },
         {
@@ -49650,7 +49745,7 @@
           "legacy_name": "db.DeleteTrigger",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2874
+            "line": 2897
           }
         },
         {
@@ -49672,7 +49767,7 @@
           "legacy_name": "db.DeleteWorkflowCheckpoint",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3290
+            "line": 3313
           }
         },
         {
@@ -49683,7 +49778,7 @@
           "legacy_name": "db.DeleteWorkflowDraftBySlug",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3758
+            "line": 3781
           }
         },
         {
@@ -49694,7 +49789,7 @@
           "legacy_name": "db.DeleteWorkflowScenario",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3869
+            "line": 3892
           }
         },
         {
@@ -49705,7 +49800,7 @@
           "legacy_name": "db.DeleteWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1705
+            "line": 1728
           }
         },
         {
@@ -49716,7 +49811,7 @@
           "legacy_name": "db.DismissInboxItems",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3036
+            "line": 3059
           }
         },
         {
@@ -49749,7 +49844,7 @@
           "legacy_name": "db.EmitNodeExecutionEvent",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1483
+            "line": 1500
           }
         },
         {
@@ -49826,7 +49921,7 @@
           "legacy_name": "db.EnableCredentialSealing",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3941
+            "line": 3964
           }
         },
         {
@@ -49903,7 +49998,7 @@
           "legacy_name": "db.EnsureWorkflowRunning",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2680
+            "line": 2703
           }
         },
         {
@@ -49947,7 +50042,7 @@
           "legacy_name": "db.FiringsSinceLastSuccess",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3149
+            "line": 3172
           }
         },
         {
@@ -49991,7 +50086,7 @@
           "legacy_name": "db.GetApproval",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 874
+            "line": 897
           }
         },
         {
@@ -50002,7 +50097,7 @@
           "legacy_name": "db.GetApprovalByEntityID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 879
+            "line": 902
           }
         },
         {
@@ -50013,7 +50108,7 @@
           "legacy_name": "db.GetAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2273
+            "line": 2296
           }
         },
         {
@@ -50024,7 +50119,7 @@
           "legacy_name": "db.GetAttachmentsByIDs",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2277
+            "line": 2300
           }
         },
         {
@@ -50035,7 +50130,7 @@
           "legacy_name": "db.GetAutomationToken",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1888
+            "line": 1911
           }
         },
         {
@@ -50046,7 +50141,7 @@
           "legacy_name": "db.GetBackgroundProcess",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2221
+            "line": 2244
           }
         },
         {
@@ -50057,7 +50152,7 @@
           "legacy_name": "db.GetBackgroundProcessOutput",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2257
+            "line": 2280
           }
         },
         {
@@ -50068,7 +50163,7 @@
           "legacy_name": "db.GetBasicStepExecutionsForChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3238
+            "line": 3261
           }
         },
         {
@@ -50094,6 +50189,28 @@
           }
         },
         {
+          "id": "method1:5a701af3c4f2aaaef93466e549512df01ecfdf127f3260f95686ef364e563aeb",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetChatRow",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "line": 46
+          }
+        },
+        {
+          "id": "method1:65fe096eff005250330d3a627be9ed8280736220abaf17fd724920aaab1a46b9",
+          "name": "GetChatRowWithUserCheck",
+          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetChatRowWithUserCheck",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "line": 57
+          }
+        },
+        {
           "id": "method1:a6ac4a597f2ebe53c2ebfabbe9c279e8deaf1d1d6015d196e51a84ca63ff3951",
           "name": "GetChatSelection",
           "signature": "func(ctx context.Context, chatID string) (*github.com/reliant-labs/reliant/internal/chatselection.Selection, error)",
@@ -50112,7 +50229,7 @@
           "legacy_name": "db.GetChatWithUserCheck",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 44
+            "line": 67
           }
         },
         {
@@ -50123,7 +50240,7 @@
           "legacy_name": "db.GetContentBlock",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 780
+            "line": 803
           }
         },
         {
@@ -50134,7 +50251,7 @@
           "legacy_name": "db.GetContentBlockByToolCallID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 796
+            "line": 819
           }
         },
         {
@@ -50145,7 +50262,7 @@
           "legacy_name": "db.GetContextUsage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2433
+            "line": 2456
           }
         },
         {
@@ -50156,7 +50273,7 @@
           "legacy_name": "db.GetContextWindow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3511
+            "line": 3534
           }
         },
         {
@@ -50167,7 +50284,7 @@
           "legacy_name": "db.GetContextWindowBySequence",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3525
+            "line": 3548
           }
         },
         {
@@ -50178,7 +50295,7 @@
           "legacy_name": "db.GetContextWindowWithThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3539
+            "line": 3562
           }
         },
         {
@@ -50189,7 +50306,7 @@
           "legacy_name": "db.GetDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1134
+            "line": 1157
           }
         },
         {
@@ -50200,7 +50317,7 @@
           "legacy_name": "db.GetDaemonStorageState",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1370
+            "line": 1393
           }
         },
         {
@@ -50211,7 +50328,7 @@
           "legacy_name": "db.GetDefaultPresetAssignments",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1976
+            "line": 1999
           }
         },
         {
@@ -50222,7 +50339,7 @@
           "legacy_name": "db.GetEffectiveMessageCount",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 741
+            "line": 764
           }
         },
         {
@@ -50255,7 +50372,7 @@
           "legacy_name": "db.GetItemDefault",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1954
+            "line": 1977
           }
         },
         {
@@ -50266,7 +50383,7 @@
           "legacy_name": "db.GetLatestContextWindow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3518
+            "line": 3541
           }
         },
         {
@@ -50277,7 +50394,7 @@
           "legacy_name": "db.GetLatestMessageInThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 617
+            "line": 640
           }
         },
         {
@@ -50288,7 +50405,7 @@
           "legacy_name": "db.GetLatestMessageWithTokensInThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 689
+            "line": 712
           }
         },
         {
@@ -50310,7 +50427,7 @@
           "legacy_name": "db.GetLatestTriggerEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3158
+            "line": 3181
           }
         },
         {
@@ -50332,7 +50449,18 @@
           "legacy_name": "db.GetLatestUserUpdateSequence",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1142
+            "line": 1159
+          }
+        },
+        {
+          "id": "method1:66aca8be10e52a28df8925f47d229214d1888bcbb8d5ee96fb0f8c2f9d47b807",
+          "name": "GetLatestWorkflowNodeUpdates",
+          "signature": "func(ctx context.Context, chatID string, workflowID string) ([]github.com/reliant-labs/reliant/internal/db.ChatUpdate, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetLatestWorkflowNodeUpdates",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 910
           }
         },
         {
@@ -50343,7 +50471,7 @@
           "legacy_name": "db.GetLiveChatIDForWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 57
+            "line": 80
           }
         },
         {
@@ -50354,7 +50482,7 @@
           "legacy_name": "db.GetLiveWorktreeByName",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1622
+            "line": 1645
           }
         },
         {
@@ -50365,7 +50493,7 @@
           "legacy_name": "db.GetMaxSequenceForThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3553
+            "line": 3576
           }
         },
         {
@@ -50376,7 +50504,7 @@
           "legacy_name": "db.GetMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 470
+            "line": 493
           }
         },
         {
@@ -50409,7 +50537,7 @@
           "legacy_name": "db.GetMessagesByContextWindow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 707
+            "line": 730
           }
         },
         {
@@ -50431,7 +50559,7 @@
           "legacy_name": "db.GetPlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1998
+            "line": 2021
           }
         },
         {
@@ -50442,7 +50570,7 @@
           "legacy_name": "db.GetPlanByThreadID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2006
+            "line": 2029
           }
         },
         {
@@ -50453,7 +50581,7 @@
           "legacy_name": "db.GetPreset",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3801
+            "line": 3824
           }
         },
         {
@@ -50464,7 +50592,7 @@
           "legacy_name": "db.GetPresetBySlug",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3805
+            "line": 3828
           }
         },
         {
@@ -50475,7 +50603,7 @@
           "legacy_name": "db.GetPresetBySlugAndProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3809
+            "line": 3832
           }
         },
         {
@@ -50497,7 +50625,7 @@
           "legacy_name": "db.GetProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 935
+            "line": 958
           }
         },
         {
@@ -50508,7 +50636,7 @@
           "legacy_name": "db.GetProjectByPath",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 943
+            "line": 966
           }
         },
         {
@@ -50519,7 +50647,7 @@
           "legacy_name": "db.GetProjectByPathAndUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 951
+            "line": 974
           }
         },
         {
@@ -50530,7 +50658,7 @@
           "legacy_name": "db.GetProjectByRemoteURLAndUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 962
+            "line": 985
           }
         },
         {
@@ -50552,7 +50680,7 @@
           "legacy_name": "db.GetProjectConfigRecord",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1543
+            "line": 1566
           }
         },
         {
@@ -50574,7 +50702,7 @@
           "legacy_name": "db.GetProjectMCPConfigsJSON",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1575
+            "line": 1598
           }
         },
         {
@@ -50618,7 +50746,7 @@
           "legacy_name": "db.GetProjectPresetsJSON",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1565
+            "line": 1588
           }
         },
         {
@@ -50640,7 +50768,7 @@
           "legacy_name": "db.GetProjectWithUserCheck",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 973
+            "line": 996
           }
         },
         {
@@ -50651,7 +50779,7 @@
           "legacy_name": "db.GetProjectWorkflowsJSON",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1555
+            "line": 1578
           }
         },
         {
@@ -50673,7 +50801,7 @@
           "legacy_name": "db.GetQuestionByID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3903
+            "line": 3926
           }
         },
         {
@@ -50684,7 +50812,7 @@
           "legacy_name": "db.GetQuestionsByWorkflowStepIteration",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3910
+            "line": 3933
           }
         },
         {
@@ -50695,7 +50823,7 @@
           "legacy_name": "db.GetRepo",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1743
+            "line": 1766
           }
         },
         {
@@ -50706,7 +50834,7 @@
           "legacy_name": "db.GetRepoByProjectAndPath",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1750
+            "line": 1773
           }
         },
         {
@@ -50717,7 +50845,7 @@
           "legacy_name": "db.GetRootThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3325
+            "line": 3348
           }
         },
         {
@@ -50728,7 +50856,7 @@
           "legacy_name": "db.GetRootWorkflowStatusForChats",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2564
+            "line": 2587
           }
         },
         {
@@ -50739,7 +50867,7 @@
           "legacy_name": "db.GetRunEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3065
+            "line": 3088
           }
         },
         {
@@ -50750,7 +50878,7 @@
           "legacy_name": "db.GetRunEventByDedupe",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3073
+            "line": 3096
           }
         },
         {
@@ -50761,7 +50889,7 @@
           "legacy_name": "db.GetRunningBackgroundProcesses",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2239
+            "line": 2262
           }
         },
         {
@@ -50772,7 +50900,7 @@
           "legacy_name": "db.GetSetting",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1788
+            "line": 1811
           }
         },
         {
@@ -50783,7 +50911,7 @@
           "legacy_name": "db.GetSettingValue",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1318
+            "line": 1341
           }
         },
         {
@@ -50794,7 +50922,7 @@
           "legacy_name": "db.GetStepExecution",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3230
+            "line": 3253
           }
         },
         {
@@ -50805,7 +50933,7 @@
           "legacy_name": "db.GetStepExecutionsByWorkflow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3265
+            "line": 3288
           }
         },
         {
@@ -50816,7 +50944,7 @@
           "legacy_name": "db.GetStepExecutionsForChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3244
+            "line": 3267
           }
         },
         {
@@ -50838,7 +50966,7 @@
           "legacy_name": "db.GetTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2064
+            "line": 2087
           }
         },
         {
@@ -50849,7 +50977,7 @@
           "legacy_name": "db.GetTaskByPosition",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2072
+            "line": 2095
           }
         },
         {
@@ -50860,7 +50988,7 @@
           "legacy_name": "db.GetTaskDependency",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2165
+            "line": 2188
           }
         },
         {
@@ -50871,7 +50999,7 @@
           "legacy_name": "db.GetTaskStatsByPlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2096
+            "line": 2119
           }
         },
         {
@@ -50882,7 +51010,7 @@
           "legacy_name": "db.GetThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3314
+            "line": 3337
           }
         },
         {
@@ -50904,7 +51032,7 @@
           "legacy_name": "db.GetThreadTokenCount",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2330
+            "line": 2353
           }
         },
         {
@@ -50915,7 +51043,7 @@
           "legacy_name": "db.GetThreadWithParent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3332
+            "line": 3355
           }
         },
         {
@@ -50970,7 +51098,7 @@
           "legacy_name": "db.GetTrigger",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2819
+            "line": 2842
           }
         },
         {
@@ -50981,7 +51109,7 @@
           "legacy_name": "db.GetTriggerEventByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2964
+            "line": 2987
           }
         },
         {
@@ -50992,7 +51120,7 @@
           "legacy_name": "db.GetTriggerEventByChatID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2955
+            "line": 2978
           }
         },
         {
@@ -51003,7 +51131,7 @@
           "legacy_name": "db.GetTriggerEventByDedupe",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2948
+            "line": 2971
           }
         },
         {
@@ -51014,7 +51142,7 @@
           "legacy_name": "db.GetTriggerRegistration",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3202
+            "line": 3225
           }
         },
         {
@@ -51025,7 +51153,7 @@
           "legacy_name": "db.GetTriggerWebhookCredentials",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3179
+            "line": 3202
           }
         },
         {
@@ -51036,7 +51164,7 @@
           "legacy_name": "db.GetUpdatesSince",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 900
+            "line": 917
           }
         },
         {
@@ -51047,7 +51175,7 @@
           "legacy_name": "db.GetUsableWorkflowBySlug",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3686
+            "line": 3709
           }
         },
         {
@@ -51058,7 +51186,7 @@
           "legacy_name": "db.GetUserUpdatesSince",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1199
+            "line": 1216
           }
         },
         {
@@ -51069,7 +51197,7 @@
           "legacy_name": "db.GetVisibilityOverride",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1912
+            "line": 1935
           }
         },
         {
@@ -51080,7 +51208,7 @@
           "legacy_name": "db.GetWorkflow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2544
+            "line": 2567
           }
         },
         {
@@ -51091,7 +51219,7 @@
           "legacy_name": "db.GetWorkflowByThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2548
+            "line": 2571
           }
         },
         {
@@ -51102,7 +51230,7 @@
           "legacy_name": "db.GetWorkflowCheckpoint",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3286
+            "line": 3309
           }
         },
         {
@@ -51113,7 +51241,7 @@
           "legacy_name": "db.GetWorkflowDraft",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3663
+            "line": 3686
           }
         },
         {
@@ -51124,7 +51252,7 @@
           "legacy_name": "db.GetWorkflowDraftByName",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3678
+            "line": 3701
           }
         },
         {
@@ -51135,7 +51263,7 @@
           "legacy_name": "db.GetWorkflowDraftBySlug",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3674
+            "line": 3697
           }
         },
         {
@@ -51146,7 +51274,7 @@
           "legacy_name": "db.GetWorkflowScenario",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3846
+            "line": 3869
           }
         },
         {
@@ -51157,7 +51285,7 @@
           "legacy_name": "db.GetWorkflowScenarioByName",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3850
+            "line": 3873
           }
         },
         {
@@ -51168,7 +51296,7 @@
           "legacy_name": "db.GetWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1595
+            "line": 1618
           }
         },
         {
@@ -51179,7 +51307,7 @@
           "legacy_name": "db.GetWorktreeByIdempotencyKey",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1611
+            "line": 1634
           }
         },
         {
@@ -51190,7 +51318,7 @@
           "legacy_name": "db.GetWorktreeByPath",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1602
+            "line": 1625
           }
         },
         {
@@ -51212,7 +51340,7 @@
           "legacy_name": "db.HasEnabledTriggerOfKind",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3082
+            "line": 3105
           }
         },
         {
@@ -51234,7 +51362,7 @@
           "legacy_name": "db.IsDaemonAttached",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1478
+            "line": 1501
           }
         },
         {
@@ -51245,7 +51373,7 @@
           "legacy_name": "db.IsDaemonIDAttached",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1486
+            "line": 1509
           }
         },
         {
@@ -51267,7 +51395,7 @@
           "legacy_name": "db.LastRunPerWorkflow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 101
+            "line": 124
           }
         },
         {
@@ -51333,7 +51461,7 @@
           "legacy_name": "db.ListAllDaemonAttachments",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1501
+            "line": 1524
           }
         },
         {
@@ -51344,7 +51472,7 @@
           "legacy_name": "db.ListAllTriggers",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2833
+            "line": 2856
           }
         },
         {
@@ -51355,7 +51483,7 @@
           "legacy_name": "db.ListAllWorkflowTriggerActivations",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2926
+            "line": 2949
           }
         },
         {
@@ -51388,7 +51516,7 @@
           "legacy_name": "db.ListApprovalsByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 889
+            "line": 912
           }
         },
         {
@@ -51399,7 +51527,7 @@
           "legacy_name": "db.ListArchivedChats",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 86
+            "line": 109
           }
         },
         {
@@ -51421,7 +51549,7 @@
           "legacy_name": "db.ListAttachedDaemonIDsForUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1516
+            "line": 1539
           }
         },
         {
@@ -51432,7 +51560,7 @@
           "legacy_name": "db.ListBackgroundProcesses",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2228
+            "line": 2251
           }
         },
         {
@@ -51454,7 +51582,7 @@
           "legacy_name": "db.ListBlockersForTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2179
+            "line": 2202
           }
         },
         {
@@ -51476,7 +51604,7 @@
           "legacy_name": "db.ListChats",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 61
+            "line": 84
           }
         },
         {
@@ -51487,7 +51615,7 @@
           "legacy_name": "db.ListChatsPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1418
+            "line": 1435
           }
         },
         {
@@ -51498,7 +51626,7 @@
           "legacy_name": "db.ListChatsQueuedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1396
+            "line": 1413
           }
         },
         {
@@ -51509,7 +51637,7 @@
           "legacy_name": "db.ListChatsWaitingForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1424
+            "line": 1441
           }
         },
         {
@@ -51520,7 +51648,7 @@
           "legacy_name": "db.ListChildThreads",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3346
+            "line": 3369
           }
         },
         {
@@ -51531,7 +51659,7 @@
           "legacy_name": "db.ListChildWorkflows",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2556
+            "line": 2579
           }
         },
         {
@@ -51542,7 +51670,7 @@
           "legacy_name": "db.ListCommandFavorites",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3875
+            "line": 3898
           }
         },
         {
@@ -51553,7 +51681,7 @@
           "legacy_name": "db.ListContentBlocks",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 810
+            "line": 833
           }
         },
         {
@@ -51564,7 +51692,7 @@
           "legacy_name": "db.ListContentBlocksForMessages",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 817
+            "line": 840
           }
         },
         {
@@ -51575,7 +51703,7 @@
           "legacy_name": "db.ListContextWindowsByThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3546
+            "line": 3569
           }
         },
         {
@@ -51586,7 +51714,7 @@
           "legacy_name": "db.ListDaemonLocalModels",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1306
+            "line": 1329
           }
         },
         {
@@ -51597,7 +51725,7 @@
           "legacy_name": "db.ListDaemonStorageState",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1383
+            "line": 1406
           }
         },
         {
@@ -51608,7 +51736,7 @@
           "legacy_name": "db.ListDaemonsByUserID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1168
+            "line": 1191
           }
         },
         {
@@ -51619,7 +51747,7 @@
           "legacy_name": "db.ListDependenciesByPlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2186
+            "line": 2209
           }
         },
         {
@@ -51630,7 +51758,7 @@
           "legacy_name": "db.ListDismissedInboxItemIDs",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3029
+            "line": 3052
           }
         },
         {
@@ -51641,7 +51769,7 @@
           "legacy_name": "db.ListForkedThreadIDs",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3532
+            "line": 3555
           }
         },
         {
@@ -51652,7 +51780,7 @@
           "legacy_name": "db.ListFreshDaemonAttachmentsForUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1509
+            "line": 1532
           }
         },
         {
@@ -51663,7 +51791,7 @@
           "legacy_name": "db.ListHeldWorktreesForUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1698
+            "line": 1721
           }
         },
         {
@@ -51674,7 +51802,7 @@
           "legacy_name": "db.ListHiddenItemDefaults",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1966
+            "line": 1989
           }
         },
         {
@@ -51685,7 +51813,7 @@
           "legacy_name": "db.ListInboxPending",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3022
+            "line": 3045
           }
         },
         {
@@ -51718,7 +51846,7 @@
           "legacy_name": "db.ListIntegrationTriggers",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3186
+            "line": 3209
           }
         },
         {
@@ -51751,7 +51879,7 @@
           "legacy_name": "db.ListLiveWorktreePathsForUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1675
+            "line": 1698
           }
         },
         {
@@ -51762,7 +51890,7 @@
           "legacy_name": "db.ListMainWorktreesForUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1648
+            "line": 1671
           }
         },
         {
@@ -51773,7 +51901,7 @@
           "legacy_name": "db.ListMessages",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 522
+            "line": 545
           }
         },
         {
@@ -51795,7 +51923,7 @@
           "legacy_name": "db.ListOutboundAttachments",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1493
+            "line": 1516
           }
         },
         {
@@ -51806,7 +51934,7 @@
           "legacy_name": "db.ListPendingApprovalsByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 884
+            "line": 907
           }
         },
         {
@@ -51839,7 +51967,7 @@
           "legacy_name": "db.ListPlansByChatID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2022
+            "line": 2045
           }
         },
         {
@@ -51850,7 +51978,7 @@
           "legacy_name": "db.ListPlansByThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2014
+            "line": 2037
           }
         },
         {
@@ -51861,7 +51989,7 @@
           "legacy_name": "db.ListPresetsByTag",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3825
+            "line": 3848
           }
         },
         {
@@ -51872,7 +52000,7 @@
           "legacy_name": "db.ListProjectDaemonsForDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1084
+            "line": 1107
           }
         },
         {
@@ -51883,7 +52011,7 @@
           "legacy_name": "db.ListProjectDaemonsForProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1077
+            "line": 1100
           }
         },
         {
@@ -51894,7 +52022,7 @@
           "legacy_name": "db.ListProjects",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 984
+            "line": 1007
           }
         },
         {
@@ -51949,7 +52077,7 @@
           "legacy_name": "db.ListRecentMessagesInContextWindowBeforeSeq",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 580
+            "line": 603
           }
         },
         {
@@ -51960,7 +52088,7 @@
           "legacy_name": "db.ListRecentTranscriptSiblingMessages",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 536
+            "line": 559
           }
         },
         {
@@ -51971,7 +52099,7 @@
           "legacy_name": "db.ListReposByProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1757
+            "line": 1780
           }
         },
         {
@@ -51982,7 +52110,7 @@
           "legacy_name": "db.ListRootWorkflows",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2560
+            "line": 2583
           }
         },
         {
@@ -51993,7 +52121,7 @@
           "legacy_name": "db.ListRunNodeExecutions",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3249
+            "line": 3272
           }
         },
         {
@@ -52004,7 +52132,7 @@
           "legacy_name": "db.ListRuns",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 91
+            "line": 114
           }
         },
         {
@@ -52015,7 +52143,7 @@
           "legacy_name": "db.ListSettings",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1799
+            "line": 1822
           }
         },
         {
@@ -52026,7 +52154,7 @@
           "legacy_name": "db.ListSettingsByKey",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1807
+            "line": 1830
           }
         },
         {
@@ -52048,7 +52176,7 @@
           "legacy_name": "db.ListStalePendingTriggerEvents",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3190
+            "line": 3213
           }
         },
         {
@@ -52059,7 +52187,7 @@
           "legacy_name": "db.ListStepExecutionRecordsForChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3261
+            "line": 3284
           }
         },
         {
@@ -52103,7 +52231,7 @@
           "legacy_name": "db.ListStrandedWorkflowStarts",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2646
+            "line": 2669
           }
         },
         {
@@ -52114,7 +52242,7 @@
           "legacy_name": "db.ListTaskDependenciesByTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2172
+            "line": 2195
           }
         },
         {
@@ -52125,7 +52253,7 @@
           "legacy_name": "db.ListTasksByPlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2088
+            "line": 2111
           }
         },
         {
@@ -52147,7 +52275,7 @@
           "legacy_name": "db.ListThreadsByConversation",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3339
+            "line": 3362
           }
         },
         {
@@ -52158,7 +52286,7 @@
           "legacy_name": "db.ListThreadsByIDs",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3321
+            "line": 3344
           }
         },
         {
@@ -52169,7 +52297,7 @@
           "legacy_name": "db.ListThreadsByOrigin",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3458
+            "line": 3481
           }
         },
         {
@@ -52246,7 +52374,7 @@
           "legacy_name": "db.ListTranscriptSiblingMessagesInRange",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 593
+            "line": 616
           }
         },
         {
@@ -52279,7 +52407,7 @@
           "legacy_name": "db.ListTriggerChanges",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2915
+            "line": 2938
           }
         },
         {
@@ -52290,7 +52418,7 @@
           "legacy_name": "db.ListTriggerEvents",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3010
+            "line": 3033
           }
         },
         {
@@ -52301,7 +52429,7 @@
           "legacy_name": "db.ListTriggerRegistrations",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3206
+            "line": 3229
           }
         },
         {
@@ -52312,7 +52440,7 @@
           "legacy_name": "db.ListTriggers",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2826
+            "line": 2849
           }
         },
         {
@@ -52323,7 +52451,7 @@
           "legacy_name": "db.ListUnlaunchedTriggerEvents",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 97
+            "line": 120
           }
         },
         {
@@ -52334,7 +52462,7 @@
           "legacy_name": "db.ListUserIDsWithProviderAccount",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3964
+            "line": 3987
           }
         },
         {
@@ -52345,7 +52473,7 @@
           "legacy_name": "db.ListUserPresets",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3813
+            "line": 3836
           }
         },
         {
@@ -52356,7 +52484,7 @@
           "legacy_name": "db.ListUserPresetsByProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3821
+            "line": 3844
           }
         },
         {
@@ -52367,7 +52495,7 @@
           "legacy_name": "db.ListUserPresetsGlobal",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3817
+            "line": 3840
           }
         },
         {
@@ -52378,7 +52506,7 @@
           "legacy_name": "db.ListVisibilityOverrides",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1927
+            "line": 1950
           }
         },
         {
@@ -52389,7 +52517,7 @@
           "legacy_name": "db.ListWorkflowDraftsByUser",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3701
+            "line": 3724
           }
         },
         {
@@ -52400,7 +52528,7 @@
           "legacy_name": "db.ListWorkflowScenariosByDraft",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3854
+            "line": 3877
           }
         },
         {
@@ -52411,7 +52539,7 @@
           "legacy_name": "db.ListWorkflowsByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2552
+            "line": 2575
           }
         },
         {
@@ -52422,7 +52550,7 @@
           "legacy_name": "db.ListWorkflowsByStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3269
+            "line": 3292
           }
         },
         {
@@ -52444,7 +52572,7 @@
           "legacy_name": "db.ListWorktrees",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1638
+            "line": 1661
           }
         },
         {
@@ -52455,7 +52583,7 @@
           "legacy_name": "db.ListWorktreesByBranch",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1631
+            "line": 1654
           }
         },
         {
@@ -52466,7 +52594,7 @@
           "legacy_name": "db.ListWorktreesByIDs",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1642
+            "line": 1665
           }
         },
         {
@@ -52477,7 +52605,7 @@
           "legacy_name": "db.ListWorktreesForReclaim",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1671
+            "line": 1694
           }
         },
         {
@@ -52488,7 +52616,7 @@
           "legacy_name": "db.LockActivationDependencies",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2911
+            "line": 2934
           }
         },
         {
@@ -52499,7 +52627,7 @@
           "legacy_name": "db.LockChatForRunEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3090
+            "line": 3113
           }
         },
         {
@@ -52532,7 +52660,7 @@
           "legacy_name": "db.LockTrigger",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2838
+            "line": 2861
           }
         },
         {
@@ -52554,7 +52682,7 @@
           "legacy_name": "db.MarkDeclaredFailureNode",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3255
+            "line": 3278
           }
         },
         {
@@ -52565,7 +52693,7 @@
           "legacy_name": "db.MarkProjectDaemonInstalled",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1070
+            "line": 1093
           }
         },
         {
@@ -52598,7 +52726,7 @@
           "legacy_name": "db.MarkRunEventDispatched",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3115
+            "line": 3138
           }
         },
         {
@@ -52609,7 +52737,7 @@
           "legacy_name": "db.MarkStaleProcesses",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2243
+            "line": 2266
           }
         },
         {
@@ -52620,7 +52748,7 @@
           "legacy_name": "db.MarkWorkflowStartFailed",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2608
+            "line": 2631
           }
         },
         {
@@ -52631,7 +52759,7 @@
           "legacy_name": "db.MergeWorktreeCleanupMetadata",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1684
+            "line": 1707
           }
         },
         {
@@ -52686,7 +52814,7 @@
           "legacy_name": "db.PauseRunningWorkflowsByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2764
+            "line": 2787
           }
         },
         {
@@ -52708,7 +52836,7 @@
           "legacy_name": "db.PinChatDaemonIfUnset",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1318
+            "line": 1335
           }
         },
         {
@@ -52774,7 +52902,7 @@
           "legacy_name": "db.ReapOrphanedThreads",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3439
+            "line": 3462
           }
         },
         {
@@ -52785,7 +52913,7 @@
           "legacy_name": "db.ReapOrphanedWorkflowDescendants",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2732
+            "line": 2755
           }
         },
         {
@@ -52807,7 +52935,7 @@
           "legacy_name": "db.RecentTriggerFirings",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3130
+            "line": 3153
           }
         },
         {
@@ -52818,7 +52946,7 @@
           "legacy_name": "db.RecentTriggerOutcomes",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3139
+            "line": 3162
           }
         },
         {
@@ -52884,7 +53012,7 @@
           "legacy_name": "db.ReleaseDaemonAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1417
+            "line": 1440
           }
         },
         {
@@ -52917,7 +53045,7 @@
           "legacy_name": "db.RemoveCommandFavorite",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3883
+            "line": 3906
           }
         },
         {
@@ -52939,7 +53067,7 @@
           "legacy_name": "db.RenewDaemonAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1242
+            "line": 1265
           }
         },
         {
@@ -52972,7 +53100,7 @@
           "legacy_name": "db.ResolveQuestion",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3914
+            "line": 3937
           }
         },
         {
@@ -52983,7 +53111,7 @@
           "legacy_name": "db.ResolveQueuedProjectDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1061
+            "line": 1084
           }
         },
         {
@@ -52994,7 +53122,7 @@
           "legacy_name": "db.RestoreInboxItems",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3043
+            "line": 3066
           }
         },
         {
@@ -53005,7 +53133,7 @@
           "legacy_name": "db.ResumeWorkflowsByChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2773
+            "line": 2796
           }
         },
         {
@@ -53016,7 +53144,7 @@
           "legacy_name": "db.ReviveSubtreeLiveAt",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2757
+            "line": 2780
           }
         },
         {
@@ -53027,7 +53155,7 @@
           "legacy_name": "db.ReviveThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3385
+            "line": 3408
           }
         },
         {
@@ -53082,7 +53210,7 @@
           "legacy_name": "db.SaveMessageToThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 185
+            "line": 208
           }
         },
         {
@@ -53093,7 +53221,7 @@
           "legacy_name": "db.SaveMessageToThreadOnce",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 204
+            "line": 227
           }
         },
         {
@@ -53104,7 +53232,7 @@
           "legacy_name": "db.SaveMessageToThreadWithID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 191
+            "line": 214
           }
         },
         {
@@ -53126,7 +53254,7 @@
           "legacy_name": "db.SearchChats",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 65
+            "line": 88
           }
         },
         {
@@ -53159,7 +53287,7 @@
           "legacy_name": "db.SetAutomationToken",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1895
+            "line": 1918
           }
         },
         {
@@ -53170,7 +53298,7 @@
           "legacy_name": "db.SetChatAdopted",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1349
+            "line": 1366
           }
         },
         {
@@ -53181,7 +53309,7 @@
           "legacy_name": "db.SetChatDaemonBlocked",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1366
+            "line": 1383
           }
         },
         {
@@ -53192,7 +53320,7 @@
           "legacy_name": "db.SetChatPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1411
+            "line": 1428
           }
         },
         {
@@ -53203,7 +53331,7 @@
           "legacy_name": "db.SetChatQueuedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1380
+            "line": 1397
           }
         },
         {
@@ -53214,7 +53342,7 @@
           "legacy_name": "db.SetChatRunID",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1404
+            "line": 1421
           }
         },
         {
@@ -53225,7 +53353,7 @@
           "legacy_name": "db.SetCompactionSummaryMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3560
+            "line": 3583
           }
         },
         {
@@ -53236,7 +53364,7 @@
           "legacy_name": "db.SetDaemonLocalModels",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1292
+            "line": 1315
           }
         },
         {
@@ -53247,7 +53375,7 @@
           "legacy_name": "db.SetDaemonStorageState",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1358
+            "line": 1381
           }
         },
         {
@@ -53258,7 +53386,7 @@
           "legacy_name": "db.SetLaunchEventRunFailureDetail",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2988
+            "line": 3011
           }
         },
         {
@@ -53269,7 +53397,7 @@
           "legacy_name": "db.SetLaunchEventRunStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2994
+            "line": 3017
           }
         },
         {
@@ -53302,7 +53430,7 @@
           "legacy_name": "db.SetProjectForgeName",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1001
+            "line": 1024
           }
         },
         {
@@ -53313,7 +53441,7 @@
           "legacy_name": "db.SetString",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1854
+            "line": 1877
           }
         },
         {
@@ -53335,7 +53463,7 @@
           "legacy_name": "db.SetTriggerEnabled",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2881
+            "line": 2904
           }
         },
         {
@@ -53346,7 +53474,7 @@
           "legacy_name": "db.SetTriggerProjection",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2919
+            "line": 2942
           }
         },
         {
@@ -53357,7 +53485,7 @@
           "legacy_name": "db.SetTriggerWebhookSecret",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3172
+            "line": 3195
           }
         },
         {
@@ -53368,7 +53496,7 @@
           "legacy_name": "db.SetTriggerWebhookTokenHash",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3165
+            "line": 3188
           }
         },
         {
@@ -53390,7 +53518,7 @@
           "legacy_name": "db.SetVisibilityOverride",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1939
+            "line": 1962
           }
         },
         {
@@ -53401,7 +53529,7 @@
           "legacy_name": "db.SetWorkflowDraftHidden",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3742
+            "line": 3765
           }
         },
         {
@@ -53412,7 +53540,7 @@
           "legacy_name": "db.SetWorkflowDraftStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3726
+            "line": 3749
           }
         },
         {
@@ -53423,7 +53551,7 @@
           "legacy_name": "db.SetWorkflowOutcome",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2671
+            "line": 2694
           }
         },
         {
@@ -53434,7 +53562,7 @@
           "legacy_name": "db.SettlePendingTriggerEvent",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3198
+            "line": 3221
           }
         },
         {
@@ -53467,7 +53595,7 @@
           "legacy_name": "db.ThreadAwaitsReply",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 628
+            "line": 651
           }
         },
         {
@@ -53478,7 +53606,7 @@
           "legacy_name": "db.TouchProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1010
+            "line": 1033
           }
         },
         {
@@ -53500,7 +53628,7 @@
           "legacy_name": "db.TryAdvisoryLock",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1336
+            "line": 1359
           }
         },
         {
@@ -53511,7 +53639,7 @@
           "legacy_name": "db.UnarchiveWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1719
+            "line": 1742
           }
         },
         {
@@ -53522,7 +53650,7 @@
           "legacy_name": "db.UpdateApprovalStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 894
+            "line": 917
           }
         },
         {
@@ -53533,7 +53661,7 @@
           "legacy_name": "db.UpdateBackgroundProcessStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2232
+            "line": 2255
           }
         },
         {
@@ -53544,7 +53672,7 @@
           "legacy_name": "db.UpdateChat",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 69
+            "line": 92
           }
         },
         {
@@ -53555,7 +53683,7 @@
           "legacy_name": "db.UpdateChatActiveDaemon",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1309
+            "line": 1326
           }
         },
         {
@@ -53566,7 +53694,7 @@
           "legacy_name": "db.UpdateChatState",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1207
+            "line": 1224
           }
         },
         {
@@ -53577,7 +53705,7 @@
           "legacy_name": "db.UpdateChatUnread",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1429
+            "line": 1446
           }
         },
         {
@@ -53588,7 +53716,7 @@
           "legacy_name": "db.UpdateDaemonAttachmentMemory",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1264
+            "line": 1287
           }
         },
         {
@@ -53599,7 +53727,7 @@
           "legacy_name": "db.UpdateDaemonAttachmentPorts",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1279
+            "line": 1302
           }
         },
         {
@@ -53610,7 +53738,7 @@
           "legacy_name": "db.UpdateMessage",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 843
+            "line": 866
           }
         },
         {
@@ -53632,7 +53760,7 @@
           "legacy_name": "db.UpdatePlan",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2030
+            "line": 2053
           }
         },
         {
@@ -53643,7 +53771,7 @@
           "legacy_name": "db.UpdatePreset",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3829
+            "line": 3852
           }
         },
         {
@@ -53654,7 +53782,7 @@
           "legacy_name": "db.UpdateProject",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 988
+            "line": 1011
           }
         },
         {
@@ -53665,7 +53793,7 @@
           "legacy_name": "db.UpdateSetting",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1818
+            "line": 1841
           }
         },
         {
@@ -53676,7 +53804,7 @@
           "legacy_name": "db.UpdateTask",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2132
+            "line": 2155
           }
         },
         {
@@ -53687,7 +53815,7 @@
           "legacy_name": "db.UpdateThreadStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3360
+            "line": 3383
           }
         },
         {
@@ -53698,7 +53826,7 @@
           "legacy_name": "db.UpdateThreadWorkflow",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3353
+            "line": 3376
           }
         },
         {
@@ -53709,7 +53837,7 @@
           "legacy_name": "db.UpdateTrigger",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2845
+            "line": 2868
           }
         },
         {
@@ -53720,7 +53848,7 @@
           "legacy_name": "db.UpdateTriggerEventOutcome",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2980
+            "line": 3003
           }
         },
         {
@@ -53731,7 +53859,7 @@
           "legacy_name": "db.UpdateTriggerEventPayload",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3001
+            "line": 3024
           }
         },
         {
@@ -53742,7 +53870,7 @@
           "legacy_name": "db.UpdateWorkflowDraft",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3705
+            "line": 3728
           }
         },
         {
@@ -53753,7 +53881,7 @@
           "legacy_name": "db.UpdateWorkflowDraftDefinition",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3717
+            "line": 3740
           }
         },
         {
@@ -53764,7 +53892,7 @@
           "legacy_name": "db.UpdateWorkflowForkedFrom",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3775
+            "line": 3798
           }
         },
         {
@@ -53775,7 +53903,7 @@
           "legacy_name": "db.UpdateWorkflowName",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2710
+            "line": 2733
           }
         },
         {
@@ -53786,7 +53914,7 @@
           "legacy_name": "db.UpdateWorkflowScenario",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3858
+            "line": 3881
           }
         },
         {
@@ -53797,7 +53925,7 @@
           "legacy_name": "db.UpdateWorkflowScenarioResult",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3865
+            "line": 3888
           }
         },
         {
@@ -53808,7 +53936,7 @@
           "legacy_name": "db.UpdateWorkflowStatus",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2650
+            "line": 2673
           }
         },
         {
@@ -53819,7 +53947,7 @@
           "legacy_name": "db.UpdateWorktree",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1652
+            "line": 1675
           }
         },
         {
@@ -53830,7 +53958,7 @@
           "legacy_name": "db.UpdateWorktreeCleanupMetadata",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1663
+            "line": 1686
           }
         },
         {
@@ -53852,7 +53980,7 @@
           "legacy_name": "db.UpsertDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1106
+            "line": 1129
           }
         },
         {
@@ -53863,7 +53991,7 @@
           "legacy_name": "db.UpsertDaemonAttachment",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1179
+            "line": 1202
           }
         },
         {
@@ -53885,7 +54013,7 @@
           "legacy_name": "db.UpsertPreset",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3797
+            "line": 3820
           }
         },
         {
@@ -53896,7 +54024,7 @@
           "legacy_name": "db.UpsertProjectConfigRecord",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1523
+            "line": 1546
           }
         },
         {
@@ -53907,7 +54035,7 @@
           "legacy_name": "db.UpsertProjectDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1028
+            "line": 1051
           }
         },
         {
@@ -53929,7 +54057,7 @@
           "legacy_name": "db.UpsertQueuedProjectDaemon",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1042
+            "line": 1065
           }
         },
         {
@@ -53962,7 +54090,7 @@
           "legacy_name": "db.UpsertTriggerRegistration",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3213
+            "line": 3236
           }
         },
         {
@@ -53973,7 +54101,7 @@
           "legacy_name": "db.UpsertWorkflowCheckpoint",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3277
+            "line": 3300
           }
         },
         {
@@ -53984,7 +54112,7 @@
           "legacy_name": "db.UpsertWorkflowDraft",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3606
+            "line": 3629
           }
         },
         {
@@ -54017,7 +54145,7 @@
           "legacy_name": "db.WorkflowSlugExists",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3771
+            "line": 3794
           }
         },
         {
@@ -54094,7 +54222,7 @@
           "legacy_name": "db.backfillAPIKeys",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3948
+            "line": 3971
           }
         },
         {
@@ -54149,7 +54277,7 @@
           "legacy_name": "db.countMessages",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2299
+            "line": 2322
           }
         },
         {
@@ -54160,7 +54288,7 @@
           "legacy_name": "db.countUnsealedAPIKeys",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3953
+            "line": 3976
           }
         },
         {
@@ -54193,7 +54321,7 @@
           "legacy_name": "db.enrichMessageUpdate",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 939
+            "line": 956
           }
         },
         {
@@ -54215,7 +54343,7 @@
           "legacy_name": "db.getBoolOrDefault",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1838
+            "line": 1861
           }
         },
         {
@@ -54237,7 +54365,7 @@
           "legacy_name": "db.getMaxContextSequenceInThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 639
+            "line": 662
           }
         },
         {
@@ -54248,7 +54376,7 @@
           "legacy_name": "db.getThreadTokenCountDirect",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2417
+            "line": 2440
           }
         },
         {
@@ -54325,7 +54453,7 @@
           "legacy_name": "db.publishWorkflowDraftUpdated",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3630
+            "line": 3653
           }
         },
         {
@@ -54336,7 +54464,7 @@
           "legacy_name": "db.publishWorkflowDraftUpdatedByID",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3655
+            "line": 3678
           }
         },
         {
@@ -54369,7 +54497,7 @@
           "legacy_name": "db.resolveThreadCompactionThreshold",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2487
+            "line": 2510
           }
         },
         {
@@ -54391,7 +54519,7 @@
           "legacy_name": "db.runWorkflowDraftTx",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3579
+            "line": 3602
           }
         },
         {
@@ -54402,7 +54530,7 @@
           "legacy_name": "db.saveMessageToThread",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 211
+            "line": 234
           }
         },
         {
@@ -54435,7 +54563,7 @@
           "legacy_name": "db.setBool",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1858
+            "line": 1881
           }
         },
         {
@@ -54457,7 +54585,7 @@
           "legacy_name": "db.threadTokenCount",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2337
+            "line": 2360
           }
         },
         {
@@ -54468,7 +54596,7 @@
           "legacy_name": "db.threadTokenCountAt",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 2290
+            "line": 2313
           }
         },
         {
@@ -54479,7 +54607,7 @@
           "legacy_name": "db.upsertSetting",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 1862
+            "line": 1885
           }
         },
         {
@@ -54490,7 +54618,7 @@
           "legacy_name": "db.validateAPIKeysSealedConstraint",
           "source": {
             "path": "internal/db/repository_impl.go",
-            "line": 3958
+            "line": 3981
           }
         }
       ],
@@ -60310,12 +60438,12 @@
         {
           "id": "method1:3e9e4973556affa761af80f18e1ccd634bf08129d7651d083b379c1465915196",
           "name": "buildChatSnapshot",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat) (snapshot *github.com/reliant-labs/reliant/gen/reliant/v1.ChatSyncSnapshot, latestSeq int64, err error)",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.ChatRow) (snapshot *github.com/reliant-labs/reliant/gen/reliant/v1.ChatSyncSnapshot, latestSeq int64, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
           "legacy_name": "streaming.buildChatSnapshot",
           "source": {
             "path": "internal/handlers/streaming/streaming.go",
-            "line": 282
+            "line": 283
           }
         },
         {
@@ -60326,7 +60454,7 @@
           "legacy_name": "streaming.contentBlocks",
           "source": {
             "path": "internal/handlers/streaming/streaming.go",
-            "line": 606
+            "line": 620
           }
         },
         {
@@ -60337,18 +60465,18 @@
           "legacy_name": "streaming.getNonMessageUpdates",
           "source": {
             "path": "internal/handlers/streaming/streaming.go",
-            "line": 643
+            "line": 657
           }
         },
         {
           "id": "method1:5eac260e99f5426019defa1be1284c5dffe28842175cdfcb14ce286bb9db97f0",
           "name": "sendChatSnapshot",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, stream *connectrpc.com/connect.ServerStream[github.com/reliant-labs/reliant/gen/reliant/v1.ChatStreamEvent]) (int64, error)",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.ChatRow, stream *connectrpc.com/connect.ServerStream[github.com/reliant-labs/reliant/gen/reliant/v1.ChatStreamEvent]) (int64, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
           "legacy_name": "streaming.sendChatSnapshot",
           "source": {
             "path": "internal/handlers/streaming/chat_stream.go",
-            "line": 337
+            "line": 341
           }
         },
         {
@@ -60359,7 +60487,7 @@
           "legacy_name": "streaming.sendChatUpdateBatches",
           "source": {
             "path": "internal/handlers/streaming/chat_stream.go",
-            "line": 362
+            "line": 366
           }
         },
         {
@@ -60376,12 +60504,12 @@
         {
           "id": "method1:4b7a4f7c61a3c1e403231c0a440beb6b780233b0e32a311de5804926187b7833",
           "name": "sendInitialChatSync",
-          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.Chat, sinceSeq int64, stream *connectrpc.com/connect.ServerStream[github.com/reliant-labs/reliant/gen/reliant/v1.ChatStreamEvent]) (_ int64, err error)",
+          "signature": "func(ctx context.Context, chat *github.com/reliant-labs/reliant/internal/db.ChatRow, sinceSeq int64, stream *connectrpc.com/connect.ServerStream[github.com/reliant-labs/reliant/gen/reliant/v1.ChatStreamEvent]) (_ int64, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
           "legacy_name": "streaming.sendInitialChatSync",
           "source": {
             "path": "internal/handlers/streaming/chat_stream.go",
-            "line": 216
+            "line": 220
           }
         },
         {
@@ -60392,7 +60520,7 @@
           "legacy_name": "streaming.sendSingleChatUpdate",
           "source": {
             "path": "internal/handlers/streaming/chat_stream.go",
-            "line": 287
+            "line": 291
           }
         },
         {
@@ -60414,7 +60542,7 @@
           "legacy_name": "streaming.sendStreamingDelta",
           "source": {
             "path": "internal/handlers/streaming/chat_stream.go",
-            "line": 304
+            "line": 308
           }
         },
         {
@@ -60425,7 +60553,7 @@
           "legacy_name": "streaming.sendUserUpdateBatches",
           "source": {
             "path": "internal/handlers/streaming/streaming.go",
-            "line": 1009
+            "line": 1023
           }
         },
         {
@@ -63681,7 +63809,7 @@
           "legacy_name": "app.CancelQueuedAgentMessage",
           "source": {
             "path": "internal/handlers/chat/rpc_queued_agent_messages.go",
-            "line": 84
+            "line": 80
           }
         },
         {
@@ -63781,6 +63909,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_workflow.go",
             "line": 282
+          }
+        },
+        {
+          "id": "method1:b92976ca4749eb3300bf20824af083772659b7a8dbf4573cdbf039fb33a83a71",
+          "name": "GetWorkflowNodeExecutions",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetWorkflowNodeExecutionsRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetWorkflowNodeExecutionsResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.GetWorkflowNodeExecutions",
+          "source": {
+            "path": "internal/handlers/chat/chat_node_executions.go",
+            "line": 24
           }
         },
         {
@@ -64264,7 +64403,7 @@
           "legacy_name": "app.checkParamsActuallyChanged",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 78
+            "line": 88
           }
         },
         {
@@ -64363,7 +64502,7 @@
           "legacy_name": "app.getChatForUser",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 51
+            "line": 61
           }
         },
         {
@@ -64572,7 +64711,7 @@
           "legacy_name": "app.queryRunInputs",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 97
+            "line": 107
           }
         },
         {
@@ -64628,6 +64767,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_provider_policy.go",
             "line": 97
+          }
+        },
+        {
+          "id": "method1:6e0fe2bc88270ad71fc367627ef773ee8708530ec32914b7fbf2ba05f03107ab",
+          "name": "requireChatOwner",
+          "signature": "func(ctx context.Context, chatID string, userID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.requireChatOwner",
+          "source": {
+            "path": "internal/handlers/chat/chat_helpers.go",
+            "line": 53
           }
         },
         {
@@ -64935,7 +65085,7 @@
           "legacy_name": "app.trackMessageSent",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 258
+            "line": 268
           }
         },
         {
@@ -64946,7 +65096,7 @@
           "legacy_name": "app.trackStartedChatMessage",
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
-            "line": 237
+            "line": 247
           }
         },
         {
@@ -69211,11 +69361,11 @@
           }
         },
         {
-          "id": "method1:c64e77af3b72fa7cedea4227758fd78acb95e5f190640494f4274759dae7e4a1",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:5be0b34af7904cb4018eb8b6c10c91cdb5904c154d986a96d89253e4a1948e6f",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/approval",
-          "legacy_name": "approval.GetChat",
+          "legacy_name": "approval.GetChatRow",
           "source": {
             "path": "internal/handlers/approval/deps.go",
             "line": 18
@@ -69668,7 +69818,7 @@
           "legacy_name": "chat.CancelQueuedAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 69
+            "line": 74
           }
         },
         {
@@ -69789,7 +69939,7 @@
           "legacy_name": "chat.CountMessagesInChatOutsideThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 52
+            "line": 57
           }
         },
         {
@@ -69800,7 +69950,7 @@
           "legacy_name": "chat.CountMessagesInThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 51
+            "line": 56
           }
         },
         {
@@ -69811,7 +69961,7 @@
           "legacy_name": "chat.CountQueuedAgentMessagesForThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 71
+            "line": 76
           }
         },
         {
@@ -69877,7 +70027,7 @@
           "legacy_name": "chat.CreateNumberedMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 106
+            "line": 112
           }
         },
         {
@@ -69888,7 +70038,7 @@
           "legacy_name": "chat.CreatePlan",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 75
+            "line": 80
           }
         },
         {
@@ -69899,7 +70049,7 @@
           "legacy_name": "chat.CreateTask",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 76
+            "line": 81
           }
         },
         {
@@ -69954,7 +70104,7 @@
           "legacy_name": "chat.DeleteChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 33
+            "line": 38
           }
         },
         {
@@ -69976,7 +70126,7 @@
           "legacy_name": "chat.DeleteUndeliveredAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 70
+            "line": 75
           }
         },
         {
@@ -70009,7 +70159,7 @@
           "legacy_name": "chat.EnqueueAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 66
+            "line": 71
           }
         },
         {
@@ -70020,7 +70170,7 @@
           "legacy_name": "chat.EnqueueAgentMessageOnce",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 67
+            "line": 72
           }
         },
         {
@@ -70042,7 +70192,7 @@
           "legacy_name": "chat.GetAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 68
+            "line": 73
           }
         },
         {
@@ -70075,7 +70225,7 @@
           "legacy_name": "chat.GetBasicStepExecutionsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 82
+            "line": 87
           }
         },
         {
@@ -70087,6 +70237,28 @@
           "source": {
             "path": "internal/runs/contract.go",
             "line": 29
+          }
+        },
+        {
+          "id": "method1:7e18d391f7dc1a0d031c4fd679bc19818c04b41282da81647a101e04f3d690a5",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.GetChatRow",
+          "source": {
+            "path": "internal/handlers/chat/deps.go",
+            "line": 32
+          }
+        },
+        {
+          "id": "method1:70ef8536bcf4716b6b882d1c55cd8bfc1013eaa3819a89e378a63ac7993e19a9",
+          "name": "GetChatRowWithUserCheck",
+          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.GetChatRowWithUserCheck",
+          "source": {
+            "path": "internal/handlers/chat/deps.go",
+            "line": 33
           }
         },
         {
@@ -70107,8 +70279,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
           "legacy_name": "chat.GetChatWithUserCheck",
           "source": {
-            "path": "internal/threads/service.go",
-            "line": 21
+            "path": "internal/handlers/chat/deps.go",
+            "line": 35
           }
         },
         {
@@ -70207,7 +70379,7 @@
           "legacy_name": "chat.GetLatestUpdateSequence",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 86
+            "line": 91
           }
         },
         {
@@ -70218,7 +70390,18 @@
           "legacy_name": "chat.GetLatestUserUpdateSequence",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 88
+            "line": 94
+          }
+        },
+        {
+          "id": "method1:55fc42df0b771477ad37d8ba7eb9b91a49ed5315237794b0b3b1feb2b5ac6208",
+          "name": "GetLatestWorkflowNodeUpdates",
+          "signature": "func(ctx context.Context, chatID string, workflowID string) ([]github.com/reliant-labs/reliant/internal/db.ChatUpdate, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.GetLatestWorkflowNodeUpdates",
+          "source": {
+            "path": "internal/handlers/chat/deps.go",
+            "line": 93
           }
         },
         {
@@ -70394,7 +70577,7 @@
           "legacy_name": "chat.GetStepExecutionsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 81
+            "line": 86
           }
         },
         {
@@ -70405,7 +70588,7 @@
           "legacy_name": "chat.GetStoppedSpawnAgent",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 102
+            "line": 108
           }
         },
         {
@@ -70438,7 +70621,7 @@
           "legacy_name": "chat.GetToolCall",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 60
+            "line": 65
           }
         },
         {
@@ -70449,7 +70632,7 @@
           "legacy_name": "chat.GetToolResultBlock",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 61
+            "line": 66
           }
         },
         {
@@ -70460,7 +70643,7 @@
           "legacy_name": "chat.GetTriggerEventByChatID",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 103
+            "line": 109
           }
         },
         {
@@ -70482,7 +70665,7 @@
           "legacy_name": "chat.GetUpdatesSince",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 87
+            "line": 92
           }
         },
         {
@@ -70515,7 +70698,7 @@
           "legacy_name": "chat.GetWorkflowByThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 54
+            "line": 59
           }
         },
         {
@@ -70526,7 +70709,7 @@
           "legacy_name": "chat.GetWorkflowCheckpoint",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 99
+            "line": 105
           }
         },
         {
@@ -70559,7 +70742,7 @@
           "legacy_name": "chat.IsLatestTurnInThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 50
+            "line": 55
           }
         },
         {
@@ -70570,7 +70753,7 @@
           "legacy_name": "chat.ListArchivedChats",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 32
+            "line": 37
           }
         },
         {
@@ -70581,7 +70764,7 @@
           "legacy_name": "chat.ListCapacityWakeTargets",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 42
+            "line": 47
           }
         },
         {
@@ -70614,7 +70797,7 @@
           "legacy_name": "chat.ListContentBlocksForMessages",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 59
+            "line": 64
           }
         },
         {
@@ -70625,7 +70808,7 @@
           "legacy_name": "chat.ListForkedThreadIDs",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 47
+            "line": 52
           }
         },
         {
@@ -70636,7 +70819,7 @@
           "legacy_name": "chat.ListInheritedSpawnChildren",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 48
+            "line": 53
           }
         },
         {
@@ -70647,7 +70830,7 @@
           "legacy_name": "chat.ListLiveBackgroundSpawns",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 100
+            "line": 106
           }
         },
         {
@@ -70658,7 +70841,7 @@
           "legacy_name": "chat.ListMainWorktreesForUser",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 92
+            "line": 98
           }
         },
         {
@@ -70669,7 +70852,7 @@
           "legacy_name": "chat.ListMessages",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 58
+            "line": 63
           }
         },
         {
@@ -70691,7 +70874,7 @@
           "legacy_name": "chat.ListPlansByChatID",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 77
+            "line": 82
           }
         },
         {
@@ -70713,7 +70896,7 @@
           "legacy_name": "chat.ListQueuedAgentMessagesForThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 72
+            "line": 77
           }
         },
         {
@@ -70735,7 +70918,7 @@
           "legacy_name": "chat.ListStepExecutionRecordsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 83
+            "line": 88
           }
         },
         {
@@ -70746,7 +70929,7 @@
           "legacy_name": "chat.ListTasksByPlan",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 78
+            "line": 83
           }
         },
         {
@@ -70757,7 +70940,7 @@
           "legacy_name": "chat.ListThreadsByConversation",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 45
+            "line": 50
           }
         },
         {
@@ -70812,7 +70995,7 @@
           "legacy_name": "chat.ListToolGrants",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 101
+            "line": 107
           }
         },
         {
@@ -70823,7 +71006,7 @@
           "legacy_name": "chat.ListToolResultBlocks",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 62
+            "line": 67
           }
         },
         {
@@ -70834,7 +71017,7 @@
           "legacy_name": "chat.ListTranscriptSiblingMessagesInRange",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 53
+            "line": 58
           }
         },
         {
@@ -70845,7 +71028,7 @@
           "legacy_name": "chat.ListWorkflowsByChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 55
+            "line": 60
           }
         },
         {
@@ -70867,7 +71050,7 @@
           "legacy_name": "chat.ListWorktreesByIDs",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 91
+            "line": 97
           }
         },
         {
@@ -70911,7 +71094,7 @@
           "legacy_name": "chat.PendingQuestionsByThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 63
+            "line": 68
           }
         },
         {
@@ -70944,7 +71127,7 @@
           "legacy_name": "chat.ReviveThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 46
+            "line": 51
           }
         },
         {
@@ -70999,7 +71182,7 @@
           "legacy_name": "chat.SearchChats",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 31
+            "line": 36
           }
         },
         {
@@ -71021,7 +71204,7 @@
           "legacy_name": "chat.SetChatAdopted",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 36
+            "line": 41
           }
         },
         {
@@ -71032,7 +71215,7 @@
           "legacy_name": "chat.SetChatDaemonBlocked",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 37
+            "line": 42
           }
         },
         {
@@ -71043,7 +71226,7 @@
           "legacy_name": "chat.SetChatPausedForMachine",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 38
+            "line": 43
           }
         },
         {
@@ -71054,7 +71237,7 @@
           "legacy_name": "chat.SetChatQueuedForMachine",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 39
+            "line": 44
           }
         },
         {
@@ -71076,7 +71259,7 @@
           "legacy_name": "chat.ThreadAwaitsReply",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 49
+            "line": 54
           }
         },
         {
@@ -71087,7 +71270,7 @@
           "legacy_name": "chat.UnarchiveWorktree",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 93
+            "line": 99
           }
         },
         {
@@ -71120,7 +71303,7 @@
           "legacy_name": "chat.UpdateChatState",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 34
+            "line": 39
           }
         },
         {
@@ -71131,7 +71314,7 @@
           "legacy_name": "chat.UpdateChatUnread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 35
+            "line": 40
           }
         },
         {
@@ -73889,11 +74072,11 @@
           }
         },
         {
-          "id": "method1:b8aff0f4ffa7200b2089aa7d1bb0db8b857136eef25bf8ece7ed8f95476cd576",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:1cdf2139f47da1d8cd414f5e34c9fb024154400769d3a45ba79c18455f9c7bff",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/message",
-          "legacy_name": "message.GetChat",
+          "legacy_name": "message.GetChatRow",
           "source": {
             "path": "internal/handlers/message/deps.go",
             "line": 15
@@ -74398,11 +74581,11 @@
           }
         },
         {
-          "id": "method1:84386616e0ff726f8026d2fb5f198667ca7cfdbd857ff26b2f7bf8136de2e927",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:f88a250b2c14ac12331e0c35ef81b0a8b7f0b687a768c73253977cc8f4f3361f",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/plan",
-          "legacy_name": "plan.GetChat",
+          "legacy_name": "plan.GetChatRow",
           "source": {
             "path": "internal/handlers/plan/deps.go",
             "line": 14
@@ -75129,11 +75312,11 @@
           }
         },
         {
-          "id": "method1:6b717bf53edb021b42de0b9f666b5c36ccea6c0d2f2b98704c4b022b27ffead5",
-          "name": "GetChatWithUserCheck",
-          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:b496374d0e864a85449ab518aeee105a352d82c2fa888e70ed2091784bf3f6f9",
+          "name": "GetChatRowWithUserCheck",
+          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/provider_account",
-          "legacy_name": "provider_account.GetChatWithUserCheck",
+          "legacy_name": "provider_account.GetChatRowWithUserCheck",
           "source": {
             "path": "internal/handlers/provider_account/service.go",
             "line": 28
@@ -75273,7 +75456,7 @@
           "legacy_name": "question.SendAgentMessage",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 41
+            "line": 42
           }
         },
         {
@@ -75284,7 +75467,7 @@
           "legacy_name": "question.SendMessage",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 40
+            "line": 41
           }
         }
       ],
@@ -75310,7 +75493,7 @@
           "legacy_name": "question.EmitQuestionUpdate",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 26
+            "line": 27
           }
         },
         {
@@ -75321,7 +75504,7 @@
           "legacy_name": "question.EmitUserRefetch",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 24
+            "line": 25
           }
         },
         {
@@ -75332,7 +75515,7 @@
           "legacy_name": "question.EnqueueAgentMessageOnce",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 23
+            "line": 24
           }
         },
         {
@@ -75347,6 +75530,17 @@
           }
         },
         {
+          "id": "method1:7a704070c47fb6e599ccaa652241c2928ce0028b828e8bd4156264f3da908d6f",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/question",
+          "legacy_name": "question.GetChatRow",
+          "source": {
+            "path": "internal/handlers/question/deps.go",
+            "line": 18
+          }
+        },
+        {
           "id": "method1:23bb4b30f2382c03071bdcece6c287afb4426a4b52c432ff8b343268c87ba636",
           "name": "GetQuestionByID",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Question, error)",
@@ -75354,7 +75548,7 @@
           "legacy_name": "question.GetQuestionByID",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 18
+            "line": 19
           }
         },
         {
@@ -75365,7 +75559,7 @@
           "legacy_name": "question.ListAnswerablePendingQuestionsByChat",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 19
+            "line": 20
           }
         },
         {
@@ -75376,7 +75570,7 @@
           "legacy_name": "question.ListAnswerablePendingQuestionsByUser",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 20
+            "line": 21
           }
         },
         {
@@ -75387,7 +75581,7 @@
           "legacy_name": "question.ListAsyncQuestionsByChat",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 21
+            "line": 22
           }
         },
         {
@@ -75398,7 +75592,7 @@
           "legacy_name": "question.PendingQuestionsByThread",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 22
+            "line": 23
           }
         },
         {
@@ -75409,7 +75603,7 @@
           "legacy_name": "question.ResolveQuestion",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 25
+            "line": 26
           }
         },
         {
@@ -75420,7 +75614,7 @@
           "legacy_name": "question.SaveMessageToThread",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 27
+            "line": 28
           }
         }
       ],
@@ -75445,7 +75639,7 @@
           "legacy_name": "question.SignalWithRecovery",
           "source": {
             "path": "internal/handlers/question/deps.go",
-            "line": 33
+            "line": 34
           }
         }
       ],
@@ -75645,7 +75839,7 @@
           "legacy_name": "run.InterruptThread",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 36
+            "line": 37
           }
         },
         {
@@ -75656,7 +75850,7 @@
           "legacy_name": "run.PauseChat",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 33
+            "line": 34
           }
         },
         {
@@ -75667,7 +75861,7 @@
           "legacy_name": "run.ResumeChat",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 34
+            "line": 35
           }
         },
         {
@@ -75678,7 +75872,7 @@
           "legacy_name": "run.SendMessage",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 32
+            "line": 33
           }
         },
         {
@@ -75689,7 +75883,7 @@
           "legacy_name": "run.StartChat",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 31
+            "line": 32
           }
         },
         {
@@ -75700,7 +75894,7 @@
           "legacy_name": "run.TerminateChat",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 35
+            "line": 36
           }
         }
       ],
@@ -75730,6 +75924,17 @@
           }
         },
         {
+          "id": "method1:bf98e832622c963396a1cb9c3df59f5eb97c8f498ee9aa9c84634821e685cbb4",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/run",
+          "legacy_name": "run.GetChatRow",
+          "source": {
+            "path": "internal/handlers/run/deps.go",
+            "line": 20
+          }
+        },
+        {
           "id": "method1:f42640d8e2f5f5c3699c2ed1ca6dc6dab6072646adfffe7398ccaf971696d94a",
           "name": "GetWorkflow",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Workflow, error)",
@@ -75748,7 +75953,7 @@
           "legacy_name": "run.LastRunPerWorkflow",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 25
+            "line": 26
           }
         },
         {
@@ -75759,7 +75964,7 @@
           "legacy_name": "run.ListChildWorkflows",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 21
+            "line": 22
           }
         },
         {
@@ -75770,7 +75975,7 @@
           "legacy_name": "run.ListProjects",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 20
+            "line": 21
           }
         },
         {
@@ -75781,7 +75986,7 @@
           "legacy_name": "run.ListRootWorkflows",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 22
+            "line": 23
           }
         },
         {
@@ -75803,7 +76008,7 @@
           "legacy_name": "run.ListRuns",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 23
+            "line": 24
           }
         },
         {
@@ -75814,7 +76019,7 @@
           "legacy_name": "run.ListUnlaunchedTriggerEvents",
           "source": {
             "path": "internal/handlers/run/deps.go",
-            "line": 24
+            "line": 25
           }
         }
       ],
@@ -76340,7 +76545,7 @@
           "legacy_name": "streaming.CountMessagesInChat",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 36
+            "line": 37
           }
         },
         {
@@ -76454,22 +76659,22 @@
           }
         },
         {
-          "id": "method1:bce1e3edd536046ee5fd85c616e2237751ad105df8f65bf60dbced95022e2228",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:05f373fc16af8239acc4de91ee7988fcbcd1d53dbdc486ec726fcdd420c2d041",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
-          "legacy_name": "streaming.GetChat",
+          "legacy_name": "streaming.GetChatRow",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 24
+            "line": 25
           }
         },
         {
-          "id": "method1:184a0b4fe32c6b743e91e69c05a0da0f43859245b75c705c5f4cd2fa13f84963",
-          "name": "GetChatWithUserCheck",
-          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:5a7dce8684b805d4047e2e18bfec9ea9a332af20d07825ca9acfd38b037b3ee5",
+          "name": "GetChatRowWithUserCheck",
+          "signature": "func(ctx context.Context, id string, userID string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
-          "legacy_name": "streaming.GetChatWithUserCheck",
+          "legacy_name": "streaming.GetChatRowWithUserCheck",
           "source": {
             "path": "internal/threads/service.go",
             "line": 21
@@ -76560,7 +76765,7 @@
           "legacy_name": "streaming.GetLatestNonMessageUpdatesPerEntity",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 30
+            "line": 31
           }
         },
         {
@@ -76571,7 +76776,7 @@
           "legacy_name": "streaming.GetLatestUpdateSequence",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 28
+            "line": 29
           }
         },
         {
@@ -76582,7 +76787,7 @@
           "legacy_name": "streaming.GetLatestUserUpdateSequence",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 31
+            "line": 32
           }
         },
         {
@@ -76681,7 +76886,7 @@
           "legacy_name": "streaming.GetTriggerEventByChat",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 25
+            "line": 26
           }
         },
         {
@@ -76692,7 +76897,7 @@
           "legacy_name": "streaming.GetUpdatesSince",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 29
+            "line": 30
           }
         },
         {
@@ -76703,7 +76908,7 @@
           "legacy_name": "streaming.GetUserUpdatesSince",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 32
+            "line": 33
           }
         },
         {
@@ -76725,7 +76930,7 @@
           "legacy_name": "streaming.ListContentBlocksForMessages",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 38
+            "line": 39
           }
         },
         {
@@ -76736,7 +76941,7 @@
           "legacy_name": "streaming.ListLiveToolCallsByChat",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 39
+            "line": 40
           }
         },
         {
@@ -76758,7 +76963,7 @@
           "legacy_name": "streaming.ListRecentTranscriptSiblingMessages",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 37
+            "line": 38
           }
         },
         {
@@ -76769,7 +76974,7 @@
           "legacy_name": "streaming.ListThreadsByConversation",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 35
+            "line": 36
           }
         },
         {
@@ -76868,7 +77073,7 @@
           "legacy_name": "streaming.SpawnToolCallIDsByChildThread",
           "source": {
             "path": "internal/handlers/streaming/deps.go",
-            "line": 40
+            "line": 41
           }
         },
         {
@@ -77048,11 +77253,11 @@
           }
         },
         {
-          "id": "method1:88b3bd142da2f5acea4eae80e33f38d8b77880330353984a43208a1b10752dec",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:cb3368e4580293b9760b9085295547962a7c618bc89fcab3e7974bab9193bc3c",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/task",
-          "legacy_name": "task.GetChat",
+          "legacy_name": "task.GetChatRow",
           "source": {
             "path": "internal/handlers/task/deps.go",
             "line": 14
@@ -77916,7 +78121,7 @@
           "legacy_name": "tool_call.CompareAndSwapWorkflowStatus",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 20
+            "line": 21
           }
         },
         {
@@ -77927,7 +78132,7 @@
           "legacy_name": "tool_call.EmitToolCallBackgroundedUpdate",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 25
+            "line": 26
           }
         },
         {
@@ -77938,7 +78143,7 @@
           "legacy_name": "tool_call.EmitToolCallCancelledUpdate",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 24
+            "line": 25
           }
         },
         {
@@ -77953,6 +78158,17 @@
           }
         },
         {
+          "id": "method1:cdc7041a39ca47de52c19e5dd661ab3a5e0a04a7afcfe81b947821d874f33457",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/tool_call",
+          "legacy_name": "tool_call.GetChatRow",
+          "source": {
+            "path": "internal/handlers/tool_call/deps.go",
+            "line": 17
+          }
+        },
+        {
           "id": "method1:3785bf44ae297b7a26e98792a66a48b871b4cd5a35a8561bd5e903e434c35225",
           "name": "GetContentBlockByToolCallID",
           "signature": "func(ctx context.Context, toolCallID string) (*github.com/reliant-labs/reliant/internal/db.MessageContentBlock, error)",
@@ -77960,7 +78176,7 @@
           "legacy_name": "tool_call.GetContentBlockByToolCallID",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 18
+            "line": 19
           }
         },
         {
@@ -77971,7 +78187,7 @@
           "legacy_name": "tool_call.GetMessage",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 17
+            "line": 18
           }
         },
         {
@@ -77982,7 +78198,7 @@
           "legacy_name": "tool_call.GetToolCall",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 21
+            "line": 22
           }
         },
         {
@@ -77993,7 +78209,7 @@
           "legacy_name": "tool_call.GetWorkflow",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 19
+            "line": 20
           }
         },
         {
@@ -78004,7 +78220,7 @@
           "legacy_name": "tool_call.ListToolCallsByIDs",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 22
+            "line": 23
           }
         },
         {
@@ -78015,7 +78231,7 @@
           "legacy_name": "tool_call.UpsertToolCall",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 23
+            "line": 24
           }
         }
       ],
@@ -78040,7 +78256,7 @@
           "legacy_name": "tool_call.SendToolExecutionBackground",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 32
+            "line": 33
           }
         },
         {
@@ -78051,7 +78267,7 @@
           "legacy_name": "tool_call.SendToolExecutionCancel",
           "source": {
             "path": "internal/handlers/tool_call/deps.go",
-            "line": 31
+            "line": 32
           }
         }
       ],
@@ -79318,11 +79534,11 @@
           }
         },
         {
-          "id": "method1:ad41e15aa06edfd517debbee115efd7952aa4078eec1e3fcdbefa31016cb66b4",
-          "name": "GetChat",
-          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "id": "method1:097b924076ad8eb2e685d343a54c54a24106463bc8aaa36131da51ebdb392c50",
+          "name": "GetChatRow",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.ChatRow, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
-          "legacy_name": "trigger.GetChat",
+          "legacy_name": "trigger.GetChatRow",
           "source": {
             "path": "internal/handlers/trigger/deps.go",
             "line": 51
