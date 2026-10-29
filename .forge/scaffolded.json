@@ -32,6 +32,9 @@
     "deploy/kcl/dev/config.k": {
       "scaffolded_at": "2026-10-22T23:48:18Z"
     },
+    "deploy/observability/dashboards/reliant-overview.json": {
+      "scaffolded_at": "2026-10-29T15:27:48Z"
+    },
     "frontends/web/src/hooks/account-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-25T18:02:36Z"
     },

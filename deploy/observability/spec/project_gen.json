@@ -47,8 +47,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "unit": "count",
@@ -78,8 +83,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "unit": "count",
@@ -103,8 +113,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "unit": "s",
@@ -127,8 +142,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -168,8 +188,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -196,8 +221,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -222,8 +252,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           },
           {
             "field": "span.kind",
@@ -266,8 +301,13 @@
         "where": [
           {
             "field": "resource.attr.k8s.workload.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -294,8 +334,13 @@
         "where": [
           {
             "field": "resource.attr.k8s.workload.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -322,8 +367,13 @@
         "where": [
           {
             "field": "resource.attr.k8s.workload.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           }
         ],
         "groupBy": [
@@ -347,8 +397,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           },
           {
             "field": "span.kind",
@@ -371,8 +426,13 @@
         "where": [
           {
             "field": "service.name",
-            "op": "eq",
-            "value": "__forge_no_deployed_process__"
+            "op": "in",
+            "values": [
+              "daemon-gateway",
+              "reliant-api-server",
+              "reliant-migrate",
+              "reliant-temporal-worker"
+            ]
           },
           {
             "field": "log.severity",
