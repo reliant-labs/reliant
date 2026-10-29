@@ -84,7 +84,7 @@ func TestActingAsApp_MintsAScopedTokenForTheRunOwner(t *testing.T) {
 	assert.Equal(t, "idp|alice", got.ExternalUserID, "the owner comes from the run record, by external id")
 	assert.Equal(t, "acme", got.Owner)
 	assert.Equal(t, "widgets", got.Repo)
-	assert.Equal(t, map[string]string{"issues": "write"}, got.Permissions, "a comment needs issues, not contents")
+	assert.Equal(t, map[string]string{"issues": "write", "pull_requests": "write"}, got.Permissions, "a comment needs issues and (its number may be a pull request) pull_requests, not contents")
 	assert.Empty(t, e.cp.asked, "the owner's own token is never fetched for the bot's write")
 
 	assert.Equal(t, "Bearer ghs_bot_token_5d8e", applied(t, cred, "https://api.github.com/repos/acme/widgets/issues/7/comments"))
@@ -97,7 +97,8 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 	t.Parallel()
 	for action, want := range map[string]map[string]string{
 		"issue.create":            {"issues": "write"},
-		"issue.labels.add":        {"issues": "write"},
+		"issue.labels.add":        {"issues": "write", "pull_requests": "write"},
+		"issue.labels.remove":     {"issues": "write", "pull_requests": "write"},
 		"pr.review.create":        {"pull_requests": "write"},
 		"pr.review_comment.reply": {"pull_requests": "write"},
 		"pr.create":               {"pull_requests": "write", "contents": "read"},
