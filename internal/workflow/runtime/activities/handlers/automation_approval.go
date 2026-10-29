@@ -49,7 +49,7 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 		// field has the wrong type.
 		var names tools.ActivationParams
 		_ = json.Unmarshal([]byte(in.ToolInput), &names)
-		logging.Warn("Activation approval refused",
+		logging.WarnContext(ctx, "Activation approval refused",
 			"tool", in.ToolName, "chat_id", in.ChatID, "tool_call_id", in.ToolCallID,
 			"workflow_ref", names.Workflow, "workflow_trigger", names.WorkflowTrigger, "trigger_id", names.TriggerID,
 			"reason", reason, "code", svcerr.Code(err).String(), "error", err)

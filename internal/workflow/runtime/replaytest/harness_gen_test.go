@@ -344,12 +344,11 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:    slog.Default(),
-		Config:    &typedconfig.Config{},
-		Repo:      s.Repo,
-		Temporal:  s.Temporal,
-		Pause:     pause,
-		TaskQueue: workersetup.TaskQueueName(taskQueueSuffix),
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Temporal: s.Temporal,
+		Pause:    pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
