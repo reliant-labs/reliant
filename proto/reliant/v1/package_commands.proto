@@ -16,7 +16,9 @@ enum PackageType {
   PACKAGE_TYPE_TASKFILE = 3;
 }
 
-// PackageCommandsService handles package command discovery and execution
+// PackageCommandsService handles package command discovery and execution.
+// Discovery and every process run on the machine (daemon) that holds the
+// workspace's checkout — never on the api-server, which has no user files.
 service PackageCommandsService {
   // ListCommands returns available commands for a directory
   rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {}
@@ -82,6 +84,9 @@ message PackageProcess {
   string start_time = 6;
   optional string end_time = 7;
   optional int32 exit_code = 8;
+  // The machine the process runs on: the one holding its workspace's
+  // checkout. GetProcess, GetProcessLogs and KillProcess take it back.
+  string daemon_id = 9;
 }
 
 // ============================================
@@ -124,6 +129,8 @@ message RunPackageCommandResponse {
   string process_id = 1;
   string command = 2;
   string start_time = 3;
+  // The machine the process was started on (PackageProcess.daemon_id).
+  string daemon_id = 4;
 }
 
 // ============================================
@@ -131,8 +138,9 @@ message RunPackageCommandResponse {
 // ============================================
 
 message ListPackageProcessesRequest {
-  // WorktreeId keeps only that worktree's processes. Unset (or empty) lists
-  // every process.
+  // WorktreeId keeps only that worktree's processes, read from the machine
+  // holding it. Unset (or empty) lists the package-command processes of every
+  // connected machine; one that is asleep is skipped, not woken.
   optional string worktree_id = 1;
 }
 
@@ -146,6 +154,9 @@ message ListPackageProcessesResponse {
 
 message GetPackageProcessRequest {
   string process_id = 1;
+  // The machine the process runs on (PackageProcess.daemon_id). Unset asks
+  // the default machine.
+  optional string daemon_id = 2;
 }
 
 message GetPackageProcessResponse {
@@ -158,6 +169,9 @@ message GetPackageProcessResponse {
 
 message GetPackageProcessLogsRequest {
   string process_id = 1;
+  // The machine the process runs on (PackageProcess.daemon_id). Unset asks
+  // the default machine.
+  optional string daemon_id = 2;
 }
 
 // OutputLine represents a single line of output with its source type
@@ -179,6 +193,9 @@ message GetPackageProcessLogsResponse {
 
 message KillPackageProcessRequest {
   string process_id = 1;
+  // The machine the process runs on (PackageProcess.daemon_id). Unset asks
+  // the default machine.
+  optional string daemon_id = 2;
 }
 
 message KillPackageProcessResponse {

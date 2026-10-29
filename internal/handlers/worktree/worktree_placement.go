@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/daemonchoice"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -29,8 +30,16 @@ import (
 // rule that pins it, not by whichever machine connected last
 // (research/CHAT_MACHINE_PLACEMENT.md).
 //
+// requested is the machine the caller named (the new-chat composer's "Runs
+// on"), "" for none. It must be one of the caller's machines the project is
+// installed on, and it may not contradict the chat's machine or the source
+// workspace's: the new checkout belongs with them.
+//
 // verb names the operation in the no-daemon error ("create", "import").
-func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, verb string) (machinewake.Target, error) {
+func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, requested *string, verb string) (machinewake.Target, error) {
+	if requested != nil && *requested != "" {
+		return s.placeOnRequestedMachine(ctx, userID, projectID, chatID, source, *requested)
+	}
 	noMachine := false
 	if chatID != nil && *chatID != "" {
 		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
@@ -54,7 +63,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 		noMachine = chat.NoMachine
 	}
 
-	if owner := daemonplacement.WorktreeOwner(source); owner != "" {
+	if owner := s.owner(ctx, userID, source); owner != "" {
 		return machinewake.Target{DaemonID: owner, NoMachine: noMachine}, nil
 	}
 
@@ -79,6 +88,34 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	return machinewake.Target{DaemonID: daemonID, NoMachine: noMachine}, nil
 }
 
+// placeOnRequestedMachine checks a machine the caller named for a new
+// workspace and returns it as the placement.
+func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, requested string) (machinewake.Target, error) {
+	if err := daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, requested); err != nil {
+		return machinewake.Target{}, err
+	}
+	if _, conflict := daemonplacement.WorkspaceMachineConflict(source, requested); conflict {
+		return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the source workspace's machine: a copy of a workspace is made on the machine that holds it")
+	}
+	if chatID != nil && *chatID != "" {
+		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+		if err != nil {
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+		}
+		if chat == nil || chat.UserID != userID {
+			return machinewake.Target{}, svcerr.NotFound("chat")
+		}
+		chatDaemon, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
+		if err != nil {
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
+		}
+		if chatDaemon != "" && chatDaemon != requested {
+			return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the chat's machine: a chat's workspace is made where the chat runs")
+		}
+	}
+	return machinewake.Target{DaemonID: requested}, nil
+}
+
 // defaultMachine is the project-aware default (daemonplacement.
 // ProjectDefaultDaemonID) when the router can place a machine, and plain
 // default resolution when it cannot (a test double, or a router with no
@@ -92,4 +129,14 @@ func (s *Service) defaultMachine(ctx context.Context, userID, projectID string) 
 		return s.deps.Router.ResolveDaemonID(ctx, userID)
 	}
 	return daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, projectID)
+}
+
+// owner is the machine holding worktree's checkout ("" for default
+// resolution): the one its row records, or, for a row from before owners were
+// recorded, the one connected machine found to hold it, recorded on the row
+// (daemonplacement.Resolver). Every command about an existing workspace goes
+// through here, so an unattributed workspace is settled the first time it is
+// opened instead of being sent to the user's default machine.
+func (s *Service) owner(ctx context.Context, userID string, worktree *db.Worktree) string {
+	return s.owners.Owner(ctx, userID, worktree)
 }

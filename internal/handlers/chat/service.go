@@ -115,6 +115,11 @@ type Service struct {
 	// for the same reason the launcher is.
 	pinnerOnce sync.Once
 	pinnerImpl *daemonplacement.Pinner
+
+	// owners settles the machine of a workspace whose row records none, so a
+	// chat started in it is placed and checked against its real machine.
+	ownersOnce sync.Once
+	ownersImpl *daemonplacement.Resolver
 }
 
 // New creates a new chat service instance with the supplied Deps.
@@ -160,6 +165,18 @@ func (s *Service) chatPinner() *daemonplacement.Pinner {
 		s.pinnerImpl = daemonplacement.NewPinner(s.deps.Repo, machines)
 	})
 	return s.pinnerImpl
+}
+
+// workspaceOwners returns the resolver every check of a chat's workspace
+// machine goes through. A router that cannot report which machines are
+// connected (none wired, or a test double) leaves unattributed rows as they
+// are.
+func (s *Service) workspaceOwners() *daemonplacement.Resolver {
+	s.ownersOnce.Do(func() {
+		probe, _ := s.deps.Router.(daemonplacement.OwnerProbe)
+		s.ownersImpl = daemonplacement.NewResolver(s.deps.Repo, probe)
+	})
+	return s.ownersImpl
 }
 
 // Name returns the service name for logging and registry.

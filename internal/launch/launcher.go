@@ -20,6 +20,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -333,6 +334,18 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 	chat.WorktreeID = worktreeID
 	if spec.DaemonID != "" {
+		// A branch workspace's checkout is on one machine; a chat pinned to
+		// another would run its tools against a directory that is not there.
+		// StartChat refuses this first, naming the machine; this covers every
+		// other caller of Launch.
+		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil {
+			if _, conflict := daemonplacement.WorkspaceMachineConflict(wt, spec.DaemonID); conflict {
+				return nil, &ValidationError{
+					Kind:   ValidationFailedPrecondition,
+					Reason: "this workspace's checkout lives on another machine, so a chat in it cannot run on the one named: omit daemon_id or name the workspace's machine",
+				}
+			}
+		}
 		chat.ActiveDaemonID = &spec.DaemonID
 	} else if l.pinner != nil && !chat.NoMachine {
 		// No machine chosen: the chat still lands on exactly one, decided now

@@ -564,7 +564,11 @@ type StreamProcessOutputRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	// If true, skip sending existing output and only stream new lines
-	NewOnly       bool `protobuf:"varint,2,opt,name=new_only,json=newOnly,proto3" json:"new_only,omitempty"`
+	NewOnly bool `protobuf:"varint,2,opt,name=new_only,json=newOnly,proto3" json:"new_only,omitempty"`
+	// The machine the process runs on (a package command's
+	// PackageProcess.daemon_id). Unset streams from the default machine. It
+	// must be one of the caller's machines; another is not found.
+	DaemonId      *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -611,6 +615,13 @@ func (x *StreamProcessOutputRequest) GetNewOnly() bool {
 		return x.NewOnly
 	}
 	return false
+}
+
+func (x *StreamProcessOutputRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
 }
 
 // ProcessOutputEvent represents a single output event in the stream
@@ -970,11 +981,14 @@ const file_reliant_v1_background_proto_rawDesc = "" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\"/\n" +
 	"\x13KillProcessResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"V\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\x86\x01\n" +
 	"\x1aStreamProcessOutputRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x19\n" +
-	"\bnew_only\x18\x02 \x01(\bR\anewOnly\"\xd4\x01\n" +
+	"\bnew_only\x18\x02 \x01(\bR\anewOnly\x12 \n" +
+	"\tdaemon_id\x18\x03 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"\xd4\x01\n" +
 	"\x12ProcessOutputEvent\x123\n" +
 	"\x04line\x18\x01 \x01(\v2\x1d.reliant.v1.ProcessOutputLineH\x00R\x04line\x12?\n" +
 	"\bcomplete\x18\x02 \x01(\v2!.reliant.v1.ProcessOutputCompleteH\x00R\bcomplete\x12?\n" +
@@ -1071,6 +1085,7 @@ func file_reliant_v1_background_proto_init() {
 	file_reliant_v1_common_proto_init()
 	file_reliant_v1_background_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[3].OneofWrappers = []any{}
+	file_reliant_v1_background_proto_msgTypes[9].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[10].OneofWrappers = []any{
 		(*ProcessOutputEvent_Line)(nil),
 		(*ProcessOutputEvent_Complete)(nil),
