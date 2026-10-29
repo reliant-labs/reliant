@@ -57,7 +57,7 @@ export default defineConfig({
   // the file-backed logging that only the Electron build otherwise has. See
   // vite-plugin-browser-logs.ts.
   // versionJson bakes this bundle's release identity in as __RELIANT_BUILD__
-  // (the About page, Sentry's release) and emits dist/version.json, a real
+  // (the About page, telemetry's service.version) and emits dist/version.json, a real
   // static file so the SPA rewrite cannot swallow a request for it. It FAILS a
   // production build that cannot name its version. Inactive under vitest. See
   // vite-plugin-version-json.ts.

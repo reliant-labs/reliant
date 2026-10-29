@@ -20,8 +20,11 @@ import { ConnectClientError } from "@reliantlabs/forge-web-runtime/interceptors"
 import { DaemonRegistryService, DaemonWakingSchema } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ChatService } from "@/gen/reliant/v1/chat_pb";
 
-const sentry = vi.hoisted(() => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
-vi.mock("@sentry/react", () => sentry);
+const reporting = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportFailure: vi.fn(),
+}));
+vi.mock("@/lib/errorReporting", () => reporting);
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -133,7 +136,7 @@ describe("a server error, through the full chain", () => {
     expect(
       classifyRpcFailure(err, { serviceTypeName: ChatService.typeName, signalAborted: false }),
     ).toBe("machine-wait");
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 
   it("reaches a generated hook's error as a ConnectError", async () => {

@@ -97,31 +97,6 @@
       "source": "runtime"
     },
     {
-      "name": "SENTRY_DSN",
-      "type": "string",
-      "source": "config"
-    },
-    {
-      "name": "SENTRY_ENABLED",
-      "type": "string",
-      "source": "config"
-    },
-    {
-      "name": "SENTRY_REPLAYS_ERROR_SAMPLE_RATE",
-      "type": "string",
-      "source": "config"
-    },
-    {
-      "name": "SENTRY_REPLAYS_SESSION_SAMPLE_RATE",
-      "type": "string",
-      "source": "config"
-    },
-    {
-      "name": "SENTRY_TRACES_SAMPLE_RATE",
-      "type": "string",
-      "source": "config"
-    },
-    {
       "name": "STRIPE_PUBLISHABLE_KEY",
       "type": "string",
       "source": "config"
@@ -148,11 +123,6 @@
         }
       ],
       "default": "http://127.0.0.1:54321"
-    },
-    {
-      "name": "TELEMETRY_SINKS",
-      "type": "string",
-      "source": "config"
     }
   ]
 }

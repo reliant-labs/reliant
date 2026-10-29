@@ -2,9 +2,9 @@
  * Browser telemetry on forge's web runtime (the HyperDX / ClickStack SDK).
  *
  * Errors, page loads, fetch/XHR spans and masked session replay go to the
- * runtime config's OTEL_ENDPOINT. Nothing starts unless that is set AND the
- * `clickstack` sink is on (telemetrySinks.ts), so a build that configures
- * neither is unchanged. Sentry runs beside this until it is removed.
+ * runtime config's OTEL_ENDPOINT. Nothing starts unless that is set
+ * (telemetryEndpoint.ts). A failure the app catches itself is reported through
+ * errorReporting.ts.
  *
  * Consent: init only when crash reporting is on. Turning it off mid-session
  * calls the runtime's disableTelemetry(). The SDK has no off switch for its own
@@ -16,11 +16,7 @@
  * can hold chat content.
  */
 
-import {
-  disableTelemetry,
-  reportException,
-  setTelemetryUser,
-} from "@reliantlabs/forge-web-runtime";
+import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
@@ -30,7 +26,8 @@ import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
-import { clickstackEnabled } from "./telemetrySinks";
+import { reportError } from "./errorReporting";
+import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
@@ -286,8 +283,19 @@ function safeStorage(
   }
 }
 
-/** Attach the signed-in user's id (never the email) to telemetry, or clear it. */
+/**
+ * Attach the signed-in user's id (never the email) to telemetry, or clear it:
+ * this page's, and the Electron main process's, whose own telemetry cannot see
+ * the renderer's user.
+ */
 export function setTelemetryUserId(user: { id: string } | null): void {
+  if (!isDev) {
+    try {
+      void window.electronAPI?.setTelemetryUser?.(user ? user.id : null)?.catch(() => {});
+    } catch {
+      // Best-effort.
+    }
+  }
   if (!clickstackEnabled()) return;
   setTelemetryUser(user ? user.id : null);
 }
@@ -300,9 +308,8 @@ export function reportErrorToTelemetry(
   error: unknown,
   componentStack?: string | null,
 ): void {
-  if (!clickstackEnabled()) return;
   if (!privacyConsent().crashReportingEnabled) return;
-  reportException(
+  reportError(
     error,
     componentStack
       ? { componentStack: componentStack.slice(0, MAX_COMPONENT_STACK_CHARS) }

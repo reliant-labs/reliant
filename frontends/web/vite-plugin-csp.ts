@@ -119,10 +119,6 @@ export const RUNTIME_ORIGIN_KEYS = [
 const FIXED_CONNECT = [
   ...LOOPBACK,
   MONACO_CDN,
-  // Sentry tunnels envelopes to the project's ingest subdomain; the DSN names
-  // it exactly, but session-replay can address a sibling.
-  "https://*.ingest.us.sentry.io",
-  "https://*.ingest.sentry.io",
   ...ICON_HOSTS,
 ];
 
@@ -130,14 +126,13 @@ const FIXED_CONNECT = [
  * The inline bootstrap that appends policy 2 (see the file header). Plain
  * ES5 with no dependencies: it runs before any module, from <head>.
  *
- * For each origin key (and SENTRY_DSN, whose credential `URL.host` already
- * drops) it allows the http(s) origin, plus wss:// for an https one — the
+ * For each origin key it allows the http(s) origin, plus wss:// for an https one — the
  * terminal WebSocket rides the API origin, and connect-src matches on scheme,
  * so an https entry alone does NOT authorise the upgrade. Anything absent,
  * relative or unparseable contributes nothing rather than a junk token.
  */
 export function runtimeConnectScript(): string {
-  const keys = JSON.stringify([...RUNTIME_ORIGIN_KEYS, "SENTRY_DSN"]);
+  const keys = JSON.stringify(RUNTIME_ORIGIN_KEYS);
   const fixed = JSON.stringify(FIXED_CONNECT);
   return (
     "(function(){" +
