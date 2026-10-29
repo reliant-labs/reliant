@@ -51,6 +51,11 @@ func (catchupChatRepo) GetLatestContextWindow(context.Context, string) (*db.Cont
 	return nil, sql.ErrNoRows
 }
 
+// The main thread's row is read alongside its context-window walk.
+func (catchupChatRepo) GetThread(context.Context, string) (*db.Thread, error) {
+	return nil, sql.ErrNoRows
+}
+
 // streamingTestClient serves svc over h2c, as the API server does, and
 // returns a client for it. Everything is torn down at test end.
 func streamingTestClient(t *testing.T, svc *Service) reliantv1connect.StreamingServiceClient {
