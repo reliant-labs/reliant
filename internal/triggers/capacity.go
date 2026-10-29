@@ -27,6 +27,7 @@ type capacityRepository interface {
 	PrepareTriggerCapacityExecution(context.Context, string, string) error
 	ListTriggerCapacityExecutions(context.Context, store.TriggerCapacityScope) ([]store.TriggerCapacityExecution, error)
 	ReleaseTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error
+	ReleaseClosedTriggerCapacityExecution(context.Context, store.TriggerCapacityExecution) error
 	GetTriggerEventByDedupe(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 }
 
@@ -112,14 +113,19 @@ func reconcileCapacityExecutions(ctx context.Context, repo capacityRepository, d
 
 func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, descriptions capacityDescriptions, execution store.TriggerCapacityExecution) error {
 	for _, execution := range []store.TriggerCapacityExecution{execution} {
-		if execution.WorkflowID == "" || !execution.StartAttemptAged {
+		if execution.WorkflowID == "" {
 			continue
 		}
+		// Only ABSENCE needs the start-attempt bound: a start still in flight
+		// looks missing, or superseded, until it lands. A chain Temporal shows
+		// is evidence at once, so a finished run frees its slot on the next
+		// pass rather than core.StartAttemptBound after its launch.
 		desc, err := descriptions.DescribeWorkflowExecution(ctx, execution.WorkflowID, "")
 		if err != nil {
 			var missing *serviceerror.NotFound
-			if !errors.As(err, &missing) {
-				// An outage is uncertainty: hold the slot and look again on the next fire.
+			if !errors.As(err, &missing) || !execution.StartAttemptAged {
+				// An outage is uncertainty, and so is a young start: hold the
+				// slot and look again on the next fire.
 				continue
 			}
 			if execution.FirstRunID == "" {
@@ -144,6 +150,10 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 			var memoEvent string
 			payload := info.GetMemo().GetFields()["trigger_event_id"]
 			if payload == nil || converter.GetDefaultDataConverter().FromPayload(payload, &memoEvent) != nil || memoEvent != execution.EventID {
+				if !execution.StartAttemptAged {
+					// The admitted start may still land behind this chain.
+					continue
+				}
 				if recovery, ok := repo.(capacityStartRecovery); ok {
 					fenced, err := recovery.TriggerCapacityStartFenced(ctx, execution)
 					if err != nil {
@@ -168,14 +178,14 @@ func reconcileCapacityExecution(ctx context.Context, repo capacityRepository, de
 		// this is how a later human turn may reuse the chat without pinning the
 		// automation's slot forever. Missing history/errors remain uncertainty.
 		if info.GetFirstRunId() != execution.FirstRunID {
-			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
+			if err := repo.ReleaseClosedTriggerCapacityExecution(ctx, execution); err != nil {
 				return err
 			}
 			continue
 		}
 		switch info.GetStatus() {
 		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED, enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-			if err := repo.ReleaseTriggerCapacityExecution(ctx, execution); err != nil {
+			if err := repo.ReleaseClosedTriggerCapacityExecution(ctx, execution); err != nil {
 				return fmt.Errorf("release workflow capacity: %w", err)
 			}
 		}

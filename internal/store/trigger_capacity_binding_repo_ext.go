@@ -91,7 +91,11 @@ func ListTriggerCapacityExecutionBatch(ctx context.Context, db orm.Context, limi
 	return rows, err
 }
 
-// ReleaseTriggerCapacityExecution accepts only the exact immutable chain observed by the caller.
+// ReleaseTriggerCapacityExecution releases a bound chain whose history Temporal
+// no longer has. Absence is evidence only once no start can still be in flight,
+// so the UPDATE requires the exact observed start attempt to be older than
+// core.StartAttemptBound. A chain Temporal reports closed is released by
+// ReleaseClosedTriggerCapacityExecution instead, which needs no such wait.
 func ReleaseTriggerCapacityExecution(ctx context.Context, db orm.Context, execution TriggerCapacityExecution) error {
 	if execution.EventID == "" || execution.WorkflowID == "" || execution.FirstRunID == "" {
 		return errors.New("invalid capacity release identity")
@@ -99,7 +103,27 @@ func ReleaseTriggerCapacityExecution(ctx context.Context, db orm.Context, execut
 	if !execution.StartAttemptAged || execution.StartAttemptAt == nil {
 		return nil
 	}
-	_, err := db.Bun().NewRaw(`UPDATE trigger_events event SET capacity_released = true, capacity_released_at=now(), capacity_release_reason='confirmed_closed_or_superseded' WHERE id = ? AND capacity_workflow_id = ? AND capacity_first_run_id = ? AND outcome = 'launched' AND NOT capacity_released AND `+startAttemptAged+` AND capacity_start_attempt_at = ?`, execution.EventID, execution.WorkflowID, execution.FirstRunID, startAttemptBoundSeconds(), execution.StartAttemptAt).Exec(ctx)
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events event SET capacity_released = true, capacity_released_at=now(), capacity_release_reason='history_expired' WHERE id = ? AND capacity_workflow_id = ? AND capacity_first_run_id = ? AND outcome = 'launched' AND NOT capacity_released AND `+startAttemptAged+` AND capacity_start_attempt_at = ?`, execution.EventID, execution.WorkflowID, execution.FirstRunID, startAttemptBoundSeconds(), execution.StartAttemptAt).Exec(ctx)
+	return err
+}
+
+// ReleaseClosedTriggerCapacityExecution releases the exact bound chain the
+// caller just saw Temporal report closed: a terminal status on that chain, or a
+// different current chain under its workflow ID (Temporal keeps one open
+// execution per ID).
+//
+// It does not wait out core.StartAttemptBound, because nothing is left in flight
+// to wait for. Admitted starts use WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, so
+// once the admitted chain exists and has closed, no start attempt (one still in
+// flight, or a later retry) can open another chain under this workflow ID. The
+// bound is the fence for a start whose outcome is UNKNOWN; holding a slot for it
+// after the run finished made every capacity queue drain one launch per five
+// minutes however quickly each run completed.
+func ReleaseClosedTriggerCapacityExecution(ctx context.Context, db orm.Context, execution TriggerCapacityExecution) error {
+	if execution.EventID == "" || execution.WorkflowID == "" || execution.FirstRunID == "" {
+		return errors.New("invalid capacity release identity")
+	}
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events SET capacity_released = true, capacity_released_at=now(), capacity_release_reason='confirmed_closed_or_superseded' WHERE id = ? AND capacity_workflow_id = ? AND capacity_first_run_id = ? AND outcome = 'launched' AND NOT capacity_released`, execution.EventID, execution.WorkflowID, execution.FirstRunID).Exec(ctx)
 	return err
 }
 

@@ -21,6 +21,13 @@ reports NotFound has closed and aged past retention (Temporal deletes only close
 histories), so it is released. A row that cannot be reconciled is logged and keeps
 its slot; it never fails the fire, so one bad row cannot stop a scope.
 
+Only absence waits out `core.StartAttemptBound`: a start still in flight looks
+missing or superseded until it lands. A chain Temporal shows closed (terminal, or
+replaced by a different current chain) is released on the next reconcile however
+young its start attempt, because admitted starts reject workflow-ID reuse and no
+attempt can open a second chain after it. Holding finished runs for the bound made
+a queue drain one launch per five minutes (2026-10-29, release-reliant).
+
 The launch transaction atomically claims capacity and creates the chat. A
 Temporal memo carries the event ID to recover an accepted start whose binding
 reply was lost; admitted launches reject duplicate workflow-ID reuse. Queued
