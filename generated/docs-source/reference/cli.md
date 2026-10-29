@@ -4207,15 +4207,21 @@ reliant forge env config <env> [flags]
 
 Tear down a HOSTED environment on the control plane (destructive)
 
-Delete a hosted environment: its deployments, Flux objects, custom resources
-and namespaces on the control plane.
+Delete a hosted environment and everything it runs on the control plane: its
+deployments, workloads, URLs, Flux objects, custom resources, namespaces AND
+its managed databases' data (Postgres clusters and volumes). IRREVERSIBLE.
 
   forge env delete preview             prompts: type the env name to confirm
   forge env delete preview --yes       no prompt (required with no TTY or CI=1)
+  forge env delete preview --keep-data keep the databases (still billed as storage)
 
-DATA RETENTION: a ManagedDatabase's data is RETAINED but orphaned. A later
-deploy of the same name creates a NEW environment and does NOT reattach that
-data; recovering it is a support operation.
+--keep-data RETAINS each managed database: it keeps running and billing as
+storage, is listed by the control plane as a retained database, and stays
+until purged (DeleteRetainedDatabase). A later deploy of the same name creates
+a NEW environment and does NOT reattach it.
+
+KEPT EITHER WAY: the project's release images in the registry. They belong to
+the project, not the environment, and other environments promote them.
 
 Only hosted environments: for a local stack use `forge env down`, which never
 deletes anything on a control plane and which this command never uses.
@@ -4228,6 +4234,7 @@ reliant forge env delete <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--keep-data` | `bool` | - | Keep the environment's managed databases (retained, still billed as storage) instead of destroying them |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 | `--yes` | `bool` | - | Confirm the deletion without the typed-name prompt (required when non-interactive) |
 

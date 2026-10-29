@@ -24,7 +24,7 @@
             "metricType": "sum"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -54,7 +54,7 @@
             "metricType": "sum"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -83,7 +83,7 @@
             "metricType": "histogram"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "numberFormat": {
           "output": "number",
@@ -112,7 +112,7 @@
             "metricType": "sum"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ServiceName",
         "granularity": "auto",
@@ -151,7 +151,7 @@
             "metricType": "sum"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ServiceName",
         "granularity": "auto",
@@ -182,7 +182,7 @@
             "metricType": "histogram"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ServiceName",
         "granularity": "auto",
@@ -211,7 +211,7 @@
             "alias": "sampled faults"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__' AND SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND lower(StatusCode) = 'error'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker') AND SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND lower(StatusCode) = 'error'",
         "whereLanguage": "sql",
         "groupBy": "ServiceName, SpanName, StatusMessage"
       }
@@ -235,7 +235,7 @@
             "metricType": "gauge"
           }
         ],
-        "where": "ResourceAttributes['k8s.workload.name'] = '__forge_no_deployed_process__'",
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ResourceAttributes['k8s.workload.name']",
         "granularity": "auto",
@@ -264,7 +264,7 @@
             "metricType": "gauge"
           }
         ],
-        "where": "ResourceAttributes['k8s.workload.name'] = '__forge_no_deployed_process__'",
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ResourceAttributes['k8s.workload.name']",
         "granularity": "auto",
@@ -293,7 +293,7 @@
             "metricType": "gauge"
           }
         ],
-        "where": "ResourceAttributes['k8s.workload.name'] = '__forge_no_deployed_process__'",
+        "where": "ResourceAttributes['k8s.workload.name'] IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker')",
         "whereLanguage": "sql",
         "groupBy": "ResourceAttributes['k8s.workload.name']",
         "granularity": "auto",
@@ -321,7 +321,7 @@
             "alias": "requests"
           }
         ],
-        "where": "ServiceName = '__forge_no_deployed_process__' AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker') AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')",
         "whereLanguage": "sql",
         "groupBy": "ResourceAttributes['service.version']",
         "granularity": "auto",
@@ -343,7 +343,7 @@
         "source": "Logs",
         "displayType": "search",
         "select": "Timestamp, ServiceName, SeverityText, Body",
-        "where": "ServiceName = '__forge_no_deployed_process__' AND lower(SeverityText) = 'error'",
+        "where": "ServiceName IN ('daemon-gateway', 'reliant-api-server', 'reliant-migrate', 'reliant-temporal-worker') AND lower(SeverityText) = 'error'",
         "whereLanguage": "sql"
       }
     }
