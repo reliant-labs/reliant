@@ -13,8 +13,8 @@ export interface DataTableColumn<T> {
   numeric?: boolean;
   /**
    * The cell holds its own controls (a menu, a button). In a table with
-   * `getRowHref` the whole row is a link; an interactive cell is lifted above
-   * it so its controls keep their own clicks.
+   * `getRowHref` or `getRowAction` the whole row is a target; an interactive
+   * cell is lifted above it so its controls keep their own clicks.
    */
   interactive?: boolean;
   /** Extra classes for this column's cells (alignment, truncation). */
@@ -23,11 +23,18 @@ export interface DataTableColumn<T> {
   headerClassName?: string;
   /** Render the header for screen readers only. */
   srHeader?: boolean;
+  /** In a `stacked` table, this column's cell leads each row's card. Defaults to the first column. */
+  stackTitle?: boolean;
 }
 
-/** Attributes a caller may set on a body row: a test id, a highlight. */
+/** Attributes a caller may set on a body row: a test id, a highlight, the current item. */
 export type DataTableRowProps = {
   className?: string;
+  /** Marks the row that is the current item (the open project, the active env). */
+  "aria-current"?: "true" | "page" | "location";
+  /** A reorderable list: the row is a drop target for a dragged row's handle. */
+  onDragOver?: React.DragEventHandler<HTMLTableRowElement>;
+  onDrop?: React.DragEventHandler<HTMLTableRowElement>;
 } & { [dataAttribute: `data-${string}`]: string | undefined };
 
 export interface DataTableProps<T extends Record<string, unknown>> {
@@ -62,6 +69,30 @@ export interface DataTableProps<T extends Record<string, unknown>> {
    */
   getRowHref?: (row: T, index: number) => string | undefined;
   /**
+   * Make each row run an action instead — for a row whose opening is more
+   * than a navigation (select it in a store, then go). Same shape as
+   * getRowHref: the first column's content is a button stretched across the
+   * row, so the row stays one keyboard stop named by its first column. Return
+   * undefined for a row with no action; a row getRowHref links ignores it.
+   * The action gets the click, for one that anchors a popover where it landed.
+   */
+  getRowAction?: (
+    row: T,
+    index: number,
+  ) => ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /**
+   * The row target's accessible name, when the first column's text would make
+   * a poor one (it carries a sub-line or tags). Defaults to that text.
+   */
+  getRowLabel?: (row: T, index: number) => string | undefined;
+  /**
+   * A row's expanded detail, drawn under it across every column; undefined
+   * keeps the row collapsed. The caller owns the toggle: put it in an
+   * `interactive` column, with `aria-expanded` and `aria-controls` naming an id
+   * inside the detail.
+   */
+  getRowDetail?: (row: T, index: number) => React.ReactNode | undefined;
+  /**
    * A stable key per row. Defaults to the row index, which is wrong for any
    * list that re-sorts or filters: React then reuses one row's DOM (and its
    * open menus, focus) for a different record.
@@ -83,9 +114,43 @@ export interface DataTableProps<T extends Record<string, unknown>> {
    * table in a card: that is a card in a card.
    */
   flush?: boolean;
+  /**
+   * Below `md`, read as a list of cards instead of a table: each row is a
+   * card led by its title cell (the `stackTitle` column, else the first), and
+   * every other cell is a "Header · value" line. Eight columns squeezed to
+   * 390px are unreadable, and a table scrolling sideways inside a card hides
+   * the columns that matter. The header row stays for screen readers.
+   */
+  stacked?: boolean;
   /** The table's accessible name. */
   ariaLabel?: string;
 }
+
+/** The first cell's link or button, stretched over its row so the whole row is the target. */
+const ROW_TARGET =
+  "after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent";
+
+/**
+ * `stacked`: the phone layout. Variant utilities outrank a column's own
+ * `className` (`truncate`, `w-px`), which assumes a column layout that no
+ * longer exists below `md`. A labelled cell prints its header from
+ * `data-label`, so the header text stays the one place a column is named.
+ *
+ * Exported for the few tables DataTable cannot draw — a virtualized list, a
+ * comparison grid whose headers are controls — so they stack the same way:
+ * put `row` on each body row, `cell` plus `title` or `labelled` on each cell,
+ * and the column's header text in a labelled cell's `data-label`.
+ */
+export const STACK = {
+  table: "max-md:block",
+  head: "max-md:sr-only",
+  body: "max-md:block",
+  row: "max-md:flex max-md:flex-col max-md:px-4 max-md:py-2.5",
+  cell: "max-md:block max-md:h-auto max-md:w-full max-md:max-w-none max-md:overflow-visible max-md:whitespace-normal max-md:px-0 max-md:py-0.5 max-md:text-left max-md:[overflow-wrap:anywhere]",
+  title: "max-md:order-first max-md:pb-1 max-md:font-medium",
+  labelled:
+    "max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-3 max-md:before:shrink-0 max-md:before:text-xs max-md:before:font-normal max-md:before:text-ink-muted max-md:before:content-[attr(data-label)]",
+};
 
 function SkeletonRow({ cols, height }: { cols: number; height: string }) {
   return (
@@ -136,14 +201,22 @@ export default function DataTable<T extends Record<string, unknown>>({
   selectable = false,
   paginated,
   getRowHref,
+  getRowAction,
+  getRowLabel,
+  getRowDetail,
   getRowKey,
   getRowProps,
   layout = "auto",
   compact = false,
   flush = false,
+  stacked = false,
   ariaLabel,
 }: DataTableProps<T>) {
   const rowHeight = compact ? "h-8" : "h-10";
+  const titleIndex = Math.max(
+    0,
+    columns.findIndex((col) => col.stackTitle),
+  );
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -193,10 +266,12 @@ export default function DataTable<T extends Record<string, unknown>>({
     <div className={flush ? "" : "overflow-hidden rounded-lg border border-border bg-surface"}>
       <div className="overflow-x-auto">
         <table
-          className={`min-w-full border-collapse ${layout === "fixed" ? "w-full table-fixed" : ""}`}
+          className={`min-w-full border-collapse ${layout === "fixed" ? "w-full table-fixed" : ""} ${
+            stacked ? STACK.table : ""
+          }`}
           aria-label={ariaLabel}
         >
-          <thead>
+          <thead className={stacked ? STACK.head : undefined}>
             <tr className="border-b border-border">
               {selectable && (
                 <th className="h-9 w-10 px-4">
@@ -245,7 +320,7 @@ export default function DataTable<T extends Record<string, unknown>>({
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={stacked ? STACK.body : undefined}>
             {loading ? (
               Array.from({ length: pageSize }).map((_, i) => (
                 <SkeletonRow key={i} cols={allCols} height={rowHeight} />
@@ -260,50 +335,77 @@ export default function DataTable<T extends Record<string, unknown>>({
               data.map((row, i) => {
                 const { className: rowClassName, ...rowAttributes } = getRowProps?.(row, i) ?? {};
                 const href = getRowHref?.(row, i);
+                const action = href ? undefined : getRowAction?.(row, i);
+                const label = href || action ? getRowLabel?.(row, i) : undefined;
+                const detail = getRowDetail?.(row, i);
                 return (
-                  <tr
-                    key={getRowKey ? getRowKey(row, i) : i}
-                    {...rowAttributes}
-                    className={`border-t border-border/70 first:border-t-0 ${
-                      href ? "relative cursor-pointer hover:bg-ink/5" : ""
-                    } ${selected.has(i) ? "bg-accent-surface" : ""} ${rowClassName ?? ""}`}
-                  >
-                    {selectable && (
-                      <td className={`${rowHeight} relative z-10 px-4`}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select row ${i + 1}`}
-                          checked={selected.has(i)}
-                          onChange={() => toggleRow(i)}
-                          className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
-                        />
-                      </td>
-                    )}
-                    {columns.map((col, ci) => {
-                      const content = col.render
-                        ? col.render(row[col.key], row)
-                        : String(row[col.key] ?? "");
-                      return (
+                  <React.Fragment key={getRowKey ? getRowKey(row, i) : i}>
+                    <tr
+                      {...rowAttributes}
+                      className={`border-t border-border/70 first:border-t-0 ${
+                        href || action ? "relative cursor-pointer hover:bg-ink/5" : ""
+                      } ${selected.has(i) ? "bg-accent-surface" : ""} ${stacked ? STACK.row : ""} ${
+                        rowClassName ?? ""
+                      }`}
+                    >
+                      {selectable && (
                         <td
-                          key={col.key}
-                          className={`${rowHeight} whitespace-nowrap px-4 text-sm text-ink ${
-                            col.numeric ? "text-right tabular-nums" : ""
-                          } ${col.interactive ? "relative z-10" : ""} ${col.className ?? ""}`}
+                          className={`${rowHeight} relative z-10 px-4 ${stacked ? STACK.cell : ""}`}
                         >
-                          {href && ci === 0 ? (
-                            <Link
-                              href={href}
-                              className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
-                            >
-                              {content}
-                            </Link>
-                          ) : (
-                            content
-                          )}
+                          <input
+                            type="checkbox"
+                            aria-label={`Select row ${i + 1}`}
+                            checked={selected.has(i)}
+                            onChange={() => toggleRow(i)}
+                            className="h-4 w-4 rounded border-border-strong text-accent focus:ring-accent"
+                          />
                         </td>
-                      );
-                    })}
-                  </tr>
+                      )}
+                      {columns.map((col, ci) => {
+                        const content = col.render
+                          ? col.render(row[col.key], row)
+                          : String(row[col.key] ?? "");
+                        const isTitle = ci === titleIndex;
+                        return (
+                          <td
+                            key={col.key}
+                            data-label={stacked && !isTitle ? col.header : undefined}
+                            className={`${rowHeight} whitespace-nowrap px-4 text-sm text-ink ${
+                              col.numeric ? "text-right tabular-nums" : ""
+                            } ${col.interactive ? "relative z-10" : ""} ${col.className ?? ""} ${
+                              stacked
+                                ? `${STACK.cell} ${isTitle ? STACK.title : STACK.labelled}`
+                                : ""
+                            }`}
+                          >
+                            {href && ci === 0 ? (
+                              <Link href={href} aria-label={label} className={ROW_TARGET}>
+                                {content}
+                              </Link>
+                            ) : action && ci === 0 ? (
+                              <button
+                                type="button"
+                                onClick={action}
+                                aria-label={label}
+                                className={`${ROW_TARGET} max-w-full text-left`}
+                              >
+                                {content}
+                              </button>
+                            ) : (
+                              content
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    {detail != null && detail !== false && (
+                      <tr data-row-detail="true">
+                        <td colSpan={allCols} className="px-4 pb-3 text-sm text-ink">
+                          {detail}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })
             )}

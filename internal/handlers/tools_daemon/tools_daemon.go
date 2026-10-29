@@ -144,6 +144,10 @@ type daemonConnection struct {
 	build   db.DaemonBuild
 	podIP   *string
 	podPort *int
+	// network is where an INBOUND daemon dialed from (its client address and
+	// any load-balancer geo), stamped on this connection's spans. Outbound
+	// connections leave it zero: their address is podIP. See daemonNetworkOf.
+	network daemonNetwork
 	// leaseMu orders lease renewals against teardown's release, so a renewal
 	// can never land after teardownConnection released the row and leave a
 	// lease for a stream that is gone.

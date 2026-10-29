@@ -47,7 +47,7 @@ const PROJECT: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environme
 
 const startedWith = async () => {
   await waitFor(() => expect(startAskReliantChat).toHaveBeenCalledTimes(1));
-  return startAskReliantChat.mock.calls[0][0] as { project: Project; prompt: string; workspaceName: string };
+  return startAskReliantChat.mock.calls[0][0] as { project: Project; prompt: string; workspaceName: string; send?: boolean; onChatCreated?: (chatId: string) => void };
 };
 
 // What each fixture surface shows that a prompt must never repeat.
@@ -63,21 +63,40 @@ describe("Ask Reliant on the observability surfaces", () => {
     useProjectStore.setState({ currentProject: project });
   });
 
-  it("an issue: its id and environment, and the issue verb", async () => {
+  it("an issue: its id, environment, release and latest trace, and the issue verb; its chat leads", async () => {
     const user = userEvent.setup();
     renderPanel(createFixtureApi(), { view: "errors" }, PROJECT);
     await user.click(await screen.findByTestId("obs-issue-open-iss-orders-deadline"));
     const detail = await screen.findByTestId("obs-issue");
     await waitFor(() => expect(detail).toHaveAttribute("data-state", "ready"));
 
-    await user.click(within(detail).getByTestId("ask-reliant"));
+    // A chat was already started from this issue (the fixture's timeline): it leads, and a new one is a menu away.
+    expect(await within(detail).findByTestId("ask-reliant-open-chat")).toBeInTheDocument();
+    await user.click(within(detail).getByTestId("ask-reliant-menu"));
+    await user.click(await screen.findByTestId("ask-reliant-investigate"));
     const started = await startedWith();
     expect(started.project).toBe(project);
     expect(started.workspaceName).toMatch(/^ask-issue-iss-orders-deadline-/);
     expect(started.prompt).toBe(
-      `Issue iss-orders-deadline in environment prod (forge project ${FIXTURE_PROJECT}).\n\n` +
-        "Fetch the details yourself with the forge CLI, starting with `reliant forge obs issue iss-orders-deadline prod`."
+      `Issue iss-orders-deadline in environment prod (forge project ${FIXTURE_PROJECT}).\nSeen in v1.8.3.\n\n` +
+        "Fetch the details yourself with the forge CLI, starting with `reliant forge obs issue iss-orders-deadline prod` " +
+        `(its latest event's trace: \`reliant forge obs trace ${FIXTURE_TRACE_ID} prod\`).\n\n` +
+        "Find the root cause and explain it, with the evidence for it. Don't change any code yet: say what you would change, and why."
     );
+    expectNoTelemetry(started.prompt);
+  });
+
+  it("an issue row: fix with agent, sent at once, linked back to the issue", async () => {
+    const user = userEvent.setup();
+    renderPanel(createFixtureApi(), { view: "errors" }, PROJECT);
+    await user.click(await screen.findByTestId("obs-issue-ask-iss-orders-deadline"));
+    await user.click(await screen.findByTestId("ask-reliant-fix"));
+    const started = await startedWith();
+    expect(started.send).toBe(true);
+    expect(started.workspaceName).toMatch(/^fix-issue-iss-orders-deadline-/);
+    expect(started.prompt).toMatch(/^Issue iss-orders-deadline in environment prod/);
+    expect(started.prompt).toMatch(/Then fix it\./);
+    expect(typeof started.onChatCreated).toBe("function");
     expectNoTelemetry(started.prompt);
   });
 
@@ -98,15 +117,30 @@ describe("Ask Reliant on the observability surfaces", () => {
     const user = userEvent.setup();
     renderPanel(createFixtureApi(), { view: "alerts" }, PROJECT);
     const checkout = await screen.findByTestId("obs-alert-CheckoutP95High", {}, { timeout: 10_000 });
-    await user.click(within(checkout).getByTestId("ask-reliant"));
+    await user.click(within(checkout).getByTestId("obs-alert-ask-CheckoutP95High"));
+    await user.click(await screen.findByTestId("ask-reliant-investigate"));
     const started = await startedWith();
     expect(started.prompt).toMatch(
       new RegExp(
-        `^Alert rule CheckoutP95High \\(fingerprint \\S+\\) in environment prod \\(forge project ${FIXTURE_PROJECT}\\)\\.\\n\\n` +
+        `^Alert rule CheckoutP95High \\(fingerprint \\S+\\) in environment prod \\(forge project ${FIXTURE_PROJECT}\\)\\.\\n(Firing|Pending)( since \\S+)?\\.\\n\\n` +
           "Fetch the details yourself with the forge CLI: `reliant forge obs status prod --json --fields alerts` lists what is firing, and " +
-          "`reliant forge obs alerts check --env prod --rule CheckoutP95High --sql` prints the rule's expression\\.$"
+          "`reliant forge obs alerts check --env prod --rule CheckoutP95High --sql` prints the rule's expression\\.\\n\\n" +
+          "Find the root cause and explain it"
       )
     );
+    expectNoTelemetry(started.prompt);
+  });
+
+  it("a firing rule's detail: fix with agent, sent at once, about its firing instance", async () => {
+    const user = userEvent.setup();
+    renderPanel(createFixtureApi(), { view: "alerts", alerts: "rules", rule: "prod/CheckoutP95High" }, PROJECT);
+    const actions = await screen.findByTestId("obs-rule-ask", {}, { timeout: 10_000 });
+    await user.click(within(actions).getByTestId("ask-reliant-fix"));
+    const started = await startedWith();
+    expect(started.send).toBe(true);
+    expect(started.workspaceName).toMatch(/^fix-alert-checkoutp95high-/);
+    expect(started.prompt).toMatch(/^Alert rule CheckoutP95High \(fingerprint \S+\) in environment prod/);
+    expect(started.prompt).toMatch(/in its KCL, rather than the service\.$/);
     expectNoTelemetry(started.prompt);
   });
 });
