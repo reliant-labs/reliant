@@ -1,9 +1,9 @@
 # Reliant
 
-**Production apps, built and run by AI agents.**
+**The whole stack for building with AI agents, from first prompt to production.**
 
 <p align="center">
-<img width="1200" height="630" alt="Reliant: production apps, built and run by AI agents" src="https://reliantlabs.io/og-image.png" />
+<img width="1200" height="630" alt="Reliant: the whole stack for building with AI agents" src="https://reliantlabs.io/og-image.png" />
 </p>
 
 <p align="center">
@@ -16,27 +16,115 @@
   <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA">Slack</a>
 </p>
 
-Reliant is an agent harness for the whole life of an app: agents that build it,
-ship it, watch it and fix it when it breaks. Chat with an agent in the desktop or
-web app, or hand the loop to workflows that run on their own: review every pull
-request, turn a labelled issue into a tested PR, answer an alert at 2am with the
-cause and a proposed fix.
+Reliant is the agent harness for automation: a desktop and web app where you chat with agents, workflows that run on their own when something happens, and always-on machines that keep working after you close the lid. Paired with [Forge](https://github.com/reliant-labs/forge), our open-source Go + React framework, it is the whole stack in one place: like Cursor + Lovable + Vercel + Google Cloud + Datadog, built for your agents.
 
-Reliant works on any codebase. It works best on an app built with
-[Forge](https://github.com/reliant-labs/forge), our open-source framework: every
-Forge app has the same shape, tracing on every request, and linters that catch
-whole classes of bugs, so agents know your app from the start and can see what it
-is doing in production.
+Reliant works on any codebase. Forge is what turns that from "an agent edits files" into "an agent builds, ships, watches and fixes a production app" (see [Better with Forge](#better-with-forge)).
 
-## Key Features
+## Workflows do anything
 
-- **Agents that keep working** — workflows run on your laptop, a server you own, or a Reliant cloud machine, and keep going after you close the lid
-- **Autopilot** — built-in workflows for on-call, issue → pull request, PR review, security review and review responses, set off by alerts, pull requests, labels and comments
-- **Programmable workflows** — define repeatable multi-step processes in YAML under `.reliant/workflows/`, versioned with your code, and trigger them on a schedule, a webhook, or a GitHub or Slack event
-- **Multi-agent patterns** — spawn parallel agents, race attempts in separate git worktrees, chain specialized roles
-- **Build and ship with Forge** — `reliant forge` runs the Forge built into Reliant, already signed in; deploys land on Reliant hosting with dashboards and alerts
-- **Any model, no token markup** — bring your own key (Anthropic, OpenAI, Google, Bedrock, Azure, Groq, OpenRouter and more) or your ChatGPT plan; your provider bills you at their prices
-- **MCP support** — extend agents with Model Context Protocol servers
+A workflow is a YAML file in `.reliant/workflows/`, versioned with your code. It starts from a trigger (a pull request, a label, a comment, a schedule, a webhook, an alert, a GitHub, Slack, Gmail or Twilio event, or another run finishing) and runs a graph of steps: agents, shell commands, approvals, and actions on outside services (`http/request@1` reaches any API). Edges between steps carry conditions, so you decide where a run goes next. That makes a workflow an LLM-integrated CI/CD pipeline if you want one.
+
+It is not only for dev work. One of ours places stock trades every market day: a scheduled workflow, an agent that decides, and an app we built with Forge on the other end.
+
+This one runs when a pull request opens, looks at its size, sends big ones to a deep review, and tells Slack:
+
+```yaml
+name: pr-triage
+description: Look at every new pull request; send big ones to a deep review and tell Slack
+inputs:
+  repos: {type: github.repository, multi: true, required: true, min_items: 1}
+  repo: {type: string, default: ""}
+  pr_number: {type: integer, default: 0}
+
+triggers:
+  - name: pr-opened
+    integration:
+      integration: github
+      events: [pull_request.opened]
+      match: {repository: {input: repos}}
+    inputs:
+      repo: "{{ trigger.payload.attributes.repository }}"
+      pr_number: "{{ trigger.payload.data.pull_request.number }}"
+
+entry: [pr]
+nodes:
+  - id: pr
+    type: action
+    uses: github/pr.get@1
+    with:
+      owner: "{{ inputs.repo.split('/')[0] }}"
+      repo: "{{ inputs.repo.split('/')[1] }}"
+      pull_number: "{{ inputs.pr_number }}"
+
+  - id: size
+    type: compute
+    outputs:
+      big: "{{ nodes.pr.data.changed_files > 20 }}"
+
+  - id: deep_review
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: new
+      inject:
+        role: user
+        content: "Review {{ inputs.repo }}#{{ inputs.pr_number }} in depth. It touches {{ nodes.pr.data.changed_files }} files."
+
+  - id: tell_slack
+    type: action
+    uses: slack/message.post@1
+    with:
+      channel: C0123ABCD
+      text: "Big PR: {{ inputs.repo }}#{{ inputs.pr_number }}, deep review done"
+
+edges:
+  - from: pr
+    default: size
+  - from: size
+    cases:
+      - to: deep_review
+        condition: nodes.size.big == true
+        label: big
+  - from: deep_review
+    default: tell_slack
+```
+
+Check a file with `reliant workflow validate path/to/workflow.yaml`. The [workflows overview](https://docs.reliantlabs.io/workflows/overview), [custom workflows](https://docs.reliantlabs.io/workflows/custom-workflows) and [automations](https://docs.reliantlabs.io/automations/overview) cover the rest. Built-ins such as Get It Right and Best of Three (parallel attempts in separate git worktrees, then a judge) ship with the app, and agents can spawn sub-agents of their own.
+
+## Autopilot: a team out of the box
+
+Autopilot is five built-in workflows for GitHub. You turn each on for the repositories you pick; each leaves its work as ordinary reviews, issues, comments and pull requests that you can read and overrule. None of them merges, approves, or pushes to your default branch.
+
+| Role | Workflow | What sets it off |
+| --- | --- | --- |
+| Code reviewer | `autopilot-pr-review` | A pull request is opened or marked ready; the re-review label; `/autopilot re-review` |
+| Security reviewer | `autopilot-security-review` | A pull request is opened, reopened, marked ready or gets new commits; `/autopilot security-review` |
+| Engineer | `autopilot-issue-worker` | `agent:ready` added to an issue, or an `@reliant` mention. Writes a failing test and the fix, opens a PR |
+| Author's assistant | `autopilot-review-responder` | A review or comment on an `agent:authored` pull request. Pushes the fix to that PR's branch and replies |
+| On-call | `autopilot-oncall` | Your alerts, and new, regressed or spiking errors. Files an issue with severity, evidence, cause and a proposed fix |
+
+On-call files issues for a human to promote with `agent:ready`, which hands them to the engineer, which opens a PR that the reviewer reads: a loop with a person at the merge. Details in the [Autopilot guide](https://docs.reliantlabs.io/guides/autopilot).
+
+## Always-on machines
+
+An agent runs where you tell it to: your desktop, a server you own, or a Reliant cloud machine (from $20/mo; it wakes on demand and suspends when idle, and your checkout and tools are waiting when it wakes). Runs continue with your laptop closed, and workflows that only talk to GitHub, Slack, Gmail or the web need no machine at all. See [machines](https://docs.reliantlabs.io/machines/overview).
+
+## Better with Forge
+
+[Forge](https://github.com/reliant-labs/forge) is an open-source, opinionated framework for Go + React apps (Next.js, Vite or Expo frontends) that ships what you would otherwise stitch together: SQL migrations with safety checks, multiple environments and secrets from the first commit, logs, traces, metrics and error tracking, dashboards and default alerts, releases promoted by digest, and deploys to your own Kubernetes or to Reliant hosting. Scaffolding and custom linters are guardrails against AI slop.
+
+Reliant and Forge are built for each other:
+
+- **Reliant already knows Forge.** Every Forge skill is available to the agent, so it uses the framework's conventions from the first prompt.
+- **`reliant forge` is built in**, and already signed in. Agents' shells have it too.
+- **Cloud machines are authenticated to Forge and Reliant hosting**, so an agent can deploy what it built.
+- **On-call reacts to Forge's alerts and errors** and opens the fix, closing the loop from production back to the code.
+
+Forge is best for new apps, but you can bring an existing app as-is and migrate over time (the built-in Move to Forge workflow does the porting). See the [Forge docs](https://docs.reliantlabs.io/forge/overview).
+
+## Any model, no token markup
+
+Bring your own key (Anthropic, OpenAI, Google, GitHub Copilot, AWS Bedrock, Azure OpenAI, Groq, OpenRouter, or any OpenAI-compatible endpoint) or sign in with your ChatGPT plan. Your provider bills you at their prices. Extend agents with [MCP servers](https://docs.reliantlabs.io/settings/mcp-servers).
 
 ## Installation
 
@@ -60,88 +148,20 @@ brew install --cask reliant-labs/reliant/reliant
 ## Quick Start
 
 1. **Sign in** at [app.reliantlabs.io](https://app.reliantlabs.io) or in the desktop app
-2. **Pick a machine** — a Reliant cloud machine, or your own computer
-3. **Pick a model** — your own API key, or Reliant's managed provider
-4. **Start chatting**, or run a built-in workflow like Get It Right
+2. **Pick a machine**: a Reliant cloud machine, or your own computer
+3. **Pick a model**: your own API key or ChatGPT plan, or Reliant's managed provider
+4. **Start chatting**, or turn on an [Autopilot](https://docs.reliantlabs.io/guides/autopilot) workflow
 
-See the [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start) for the full walkthrough.
+The [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start) has the full walkthrough.
 
 ## Documentation
 
-Full documentation at [docs.reliantlabs.io](https://docs.reliantlabs.io)
-
-- [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start)
-- [Machines: your computer or the cloud](https://docs.reliantlabs.io/machines/overview)
-- [Autopilot](https://docs.reliantlabs.io/guides/autopilot)
-- [Workflows Overview](https://docs.reliantlabs.io/workflows/overview)
-- [Multi-Agent Patterns](https://docs.reliantlabs.io/workflows/patterns)
-- [Custom Workflows](https://docs.reliantlabs.io/workflows/custom-workflows)
-- [Presets Reference](https://docs.reliantlabs.io/workflows/presets)
-- [Forge: build, deploy and host apps](https://docs.reliantlabs.io/forge/overview)
-- [MCP Servers](https://docs.reliantlabs.io/settings/mcp-servers)
-
-## How It Works
-
-When you send a message, Reliant runs a workflow. The default `agent` workflow:
-
-```
-Your Message → Call LLM → Run LLM Tool Calls → Loop while working → Response
-```
-
-The agent reads your codebase, plans changes, implements them, and verifies they work—all within this loop. A single message like "add input validation to the signup form" might trigger dozens of iterations as the agent explores, plans, and implements.
-
-### Execution Modes
-
-| Mode       | Description                                         |
-| ---------- | --------------------------------------------------- |
-| **Auto**   | Agent works autonomously, auto-approving tool calls |
-| **Manual** | You approve each tool execution                     |
-| **Plan**   | Read-only exploration, outputs a task plan          |
-
-### Workflows as Code
-
-Workflows live in `.reliant/workflows/*.yaml` and are versioned with your code:
-
-```yaml
-name: review-pr
-description: Review a pull request
-
-nodes:
-  - id: analyze
-    workflow: builtin://agent
-    inputs:
-      prompt: "Review the changes in this PR for bugs, security issues, and style"
-      mode: plan
-
-  - id: summarize
-    workflow: builtin://agent
-    inputs:
-      prompt: "Summarize the review findings"
-```
-
-## Supported Providers
-
-We support the latest models from:
-
-| Provider       |
-| -------------- |
-| Anthropic      |
-| OpenAI         |
-| Google         |
-| GitHub Copilot |
-| AWS Bedrock    |
-| Azure OpenAI   |
-| Groq           |
-| OpenRouter     |
-| Bring Your Own |
-
-You can also configure Reliant to point to your own ChatGPT compatible provider.
+[docs.reliantlabs.io](https://docs.reliantlabs.io): [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start) · [Machines](https://docs.reliantlabs.io/machines/overview) · [Autopilot](https://docs.reliantlabs.io/guides/autopilot) · [Workflows](https://docs.reliantlabs.io/workflows/overview) · [Automations](https://docs.reliantlabs.io/automations/overview) · [Integrations](https://docs.reliantlabs.io/integrations/overview) · [Forge](https://docs.reliantlabs.io/forge/overview)
 
 ## Community
 
-- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA) — Get help and share workflows
-- [GitHub Issues](https://github.com/reliant-labs/reliant/issues) — Report bugs and request features
-- [Documentation](https://docs.reliantlabs.io) — Guides and reference
+- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA): get help and share workflows
+- [GitHub Issues](https://github.com/reliant-labs/reliant/issues): report bugs and request features
 
 ## Development
 
