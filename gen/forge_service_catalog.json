@@ -32783,6 +32783,12 @@
               "kind": "message",
               "type_name": "reliant.v1.ConnectorPolicy",
               "optional": true
+            },
+            {
+              "name": "trace_context",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
             }
           ],
           "reliant.v1.DaemonCommandResponse": [
@@ -32805,6 +32811,10 @@
             {
               "name": "error_message",
               "kind": "string"
+            },
+            {
+              "name": "handler_elapsed_ms",
+              "kind": "int64"
             }
           ],
           "reliant.v1.DaemonHeartbeat": [
@@ -61364,7 +61374,7 @@
           "legacy_name": "tools_daemon.AddConnectionListener",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 387
+            "line": 391
           }
         },
         {
@@ -61386,7 +61396,7 @@
           "legacy_name": "tools_daemon.Close",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 270
+            "line": 274
           }
         },
         {
@@ -61397,7 +61407,7 @@
           "legacy_name": "tools_daemon.ConnectDaemon",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 168
+            "line": 169
           }
         },
         {
@@ -61573,7 +61583,7 @@
           "legacy_name": "tools_daemon.RegisterOutboundConnection",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 407
+            "line": 411
           }
         },
         {
@@ -61661,7 +61671,7 @@
           "legacy_name": "tools_daemon.SendToolExecutionBackground",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_dispatch.go",
-            "line": 466
+            "line": 478
           }
         },
         {
@@ -61672,7 +61682,7 @@
           "legacy_name": "tools_daemon.SendToolExecutionCancel",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_dispatch.go",
-            "line": 499
+            "line": 511
           }
         },
         {
@@ -61694,7 +61704,7 @@
           "legacy_name": "tools_daemon.SendToolRequestSync",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_dispatch.go",
-            "line": 363
+            "line": 371
           }
         },
         {
@@ -61727,7 +61737,7 @@
           "legacy_name": "tools_daemon.Start",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 298
+            "line": 302
           }
         },
         {
@@ -61771,7 +61781,7 @@
           "legacy_name": "tools_daemon.WhoAmI",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 156
+            "line": 157
           }
         },
         {
@@ -61793,7 +61803,7 @@
           "legacy_name": "tools_daemon.cancelDaemonCommand",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_dispatch.go",
-            "line": 453
+            "line": 465
           }
         },
         {
@@ -61958,7 +61968,7 @@
           "legacy_name": "tools_daemon.listAllProjectPaths",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 577
+            "line": 581
           }
         },
         {
@@ -61969,7 +61979,7 @@
           "legacy_name": "tools_daemon.notifyConnected",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 399
+            "line": 403
           }
         },
         {
@@ -61980,7 +61990,7 @@
           "legacy_name": "tools_daemon.notifyDisconnected",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 413
+            "line": 417
           }
         },
         {
@@ -62079,7 +62089,7 @@
           "legacy_name": "tools_daemon.rejectForeignDaemon",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 134
+            "line": 135
           }
         },
         {
@@ -62090,7 +62100,7 @@
           "legacy_name": "tools_daemon.releaseLease",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 518
+            "line": 522
           }
         },
         {
@@ -62101,7 +62111,7 @@
           "legacy_name": "tools_daemon.removeConnection",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 430
+            "line": 434
           }
         },
         {
@@ -62173,7 +62183,7 @@
         {
           "id": "method1:8f96fb6504f8fdf9deb5b4edea8e8e97d866fd3c17eef88ae644c4bf1e0b199c",
           "name": "sendCommandToConn",
-          "signature": "func(ctx context.Context, conn *github.com/reliant-labs/reliant/internal/handlers/tools_daemon.daemonConnection, req *github.com/reliant-labs/reliant/gen/reliant/v1.DaemonCommandRequest) (*github.com/reliant-labs/reliant/gen/reliant/v1.DaemonCommandResponse, error)",
+          "signature": "func(ctx context.Context, conn *github.com/reliant-labs/reliant/internal/handlers/tools_daemon.daemonConnection, req *github.com/reliant-labs/reliant/gen/reliant/v1.DaemonCommandRequest) (resp *github.com/reliant-labs/reliant/gen/reliant/v1.DaemonCommandResponse, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon",
           "legacy_name": "tools_daemon.sendCommandToConn",
           "source": {
@@ -62217,12 +62227,12 @@
         {
           "id": "method1:c5cdfc9ee68f2a48849b41e9413e8be159897af8b3112cf50449ff9b6d69225d",
           "name": "sendToolRequestToConn",
-          "signature": "func(ctx context.Context, conn *github.com/reliant-labs/reliant/internal/handlers/tools_daemon.daemonConnection, request *github.com/reliant-labs/reliant/internal/toolexec.ToolExecutionRequest) (*github.com/reliant-labs/reliant/internal/toolexec.ToolExecutionResponse, error)",
+          "signature": "func(ctx context.Context, conn *github.com/reliant-labs/reliant/internal/handlers/tools_daemon.daemonConnection, request *github.com/reliant-labs/reliant/internal/toolexec.ToolExecutionRequest) (resp *github.com/reliant-labs/reliant/internal/toolexec.ToolExecutionResponse, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon",
           "legacy_name": "tools_daemon.sendToolRequestToConn",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_dispatch.go",
-            "line": 376
+            "line": 384
           }
         },
         {
@@ -62255,7 +62265,7 @@
           "legacy_name": "tools_daemon.supersedeIncumbent",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 588
+            "line": 592
           }
         },
         {
@@ -62266,7 +62276,7 @@
           "legacy_name": "tools_daemon.sweepStaleConnections",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 329
+            "line": 333
           }
         },
         {
@@ -62277,7 +62287,7 @@
           "legacy_name": "tools_daemon.teardownConnection",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon.go",
-            "line": 465
+            "line": 469
           }
         }
       ],
@@ -78805,7 +78815,7 @@
           "legacy_name": "tools_daemon.ListDaemonsByUserID",
           "source": {
             "path": "internal/handlers/tools_daemon/tools_daemon_connect.go",
-            "line": 38
+            "line": 39
           }
         },
         {

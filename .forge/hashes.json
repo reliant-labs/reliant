@@ -40,6 +40,6 @@
     "deploy/observability/spec/alert-service-worktree_gen.json": "bca3edcc2da6f7b4141a2220119dea4a71230d4b1f9b85407cf99f6d8646a54d",
     "deploy/observability/spec/project_gen.json": "a317ee44390f5a3263e830665b6ea196d3c6943907d29d70057da8afc74f6e99",
     "frontends/web/src/lib/config_schema_gen.json": "2a164ec49f2d8c36b828a7fc60aa120af12ee2593304464d5f3be153206aa72e",
-    "gen/forge_service_catalog.json": "3bc91b46ad9e00982a8fe0aa7f3e6106be9081437856868cd164ea2f6b6ae039"
+    "gen/forge_service_catalog.json": "a38fd5a9741e4be19ae5d36390142e1c334a572919fbd0f42e45813c1e718947"
   }
 }
