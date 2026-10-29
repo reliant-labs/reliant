@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { collapseHomePath, splitPathForDisplay } from "@/lib/pathUtils";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -22,9 +23,11 @@ import { REMOVE_PROJECT_HINT } from "../../Projects/projectCopy";
  * it is the same for every cloud project, and "workspace" in it names the
  * machine, not a Reliant workspace.
  *
- * A real table (`<th scope>` per column, actions right-aligned), in the same
- * vocabulary as forge's EnvironmentTable, so a project list reads like every
- * other list of things in the app.
+ * forge-ui's DataTable, the list every console page is made of, so a project
+ * list reads like every other list of things in the app. The whole row opens
+ * the project (getRowAction — opening selects it in the store, then
+ * navigates); the action cell keeps its own buttons. Must render inside a
+ * `.forge-ui` ancestor (ProjectsSection is one).
  */
 export interface ProjectsTableProps {
   projects: Project[];
@@ -37,9 +40,8 @@ export interface ProjectsTableProps {
   openingProjectId?: string | null;
 }
 
-const HEADER_CELL =
-  "whitespace-nowrap px-3 py-2 text-left text-2xs font-medium uppercase tracking-wide text-muted-foreground";
-const CELL = "px-3 py-2.5 align-middle";
+type ProjectRow = { id: string; project: Project };
+
 const ICON_BUTTON =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
@@ -59,164 +61,166 @@ export function ProjectsTable({
     // An empty or unchanged name is a cancel.
     if (name && name !== project.name) onRename?.(project, name);
   };
-  return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card" data-testid="settings-projects-table">
-      <table className="w-full min-w-[40rem] table-fixed border-collapse text-sm">
-        <caption className="sr-only">
-          Every project in Reliant: its name, where it lives, where it came from, and when you last used it.
-        </caption>
-        <colgroup>
-          <col className="w-[24%]" />
-          <col />
-          <col className="w-[24%]" />
-          <col className="w-28" />
-          <col className="w-28" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={HEADER_CELL}>
-              Project
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Location
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Source
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Last active
-            </th>
-            <th scope="col" className={cn(HEADER_CELL, "text-right")}>
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((project) => {
-            const isCurrent = project.id === currentProjectId;
-            const displayPath = collapseHomePath(project.path);
-            const { head, tail } = splitPathForDisplay(displayPath);
-            const source = describeProjectSource(project);
-            const relative = formatRelativeTime(project.last_active);
-            return (
-              <tr
-                key={project.id}
-                data-testid={`settings-project-row-${project.id}`}
-                data-current={isCurrent || undefined}
-                aria-current={isCurrent ? "true" : undefined}
-                className="border-b border-border/60 last:border-0"
+
+  const columns: DataTableColumn<ProjectRow>[] = [
+    {
+      key: "name",
+      header: "Project",
+      className: "truncate",
+      render: (_, { project }) =>
+        renamingId === project.id ? (
+          <input
+            autoFocus
+            aria-label={`Rename ${project.name}`}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => commitRename(project)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitRename(project);
+              if (event.key === "Escape") setRenamingId(null);
+            }}
+            data-testid={`settings-project-rename-input-${project.id}`}
+            className="h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        ) : (
+          <span className="inline-flex max-w-full items-center gap-2 align-middle">
+            <span className="truncate font-medium" title={project.name}>
+              {project.name}
+            </span>
+            {project.id === currentProjectId && <Badge label="Current" variant="info" size="sm" />}
+          </span>
+        ),
+    },
+    {
+      key: "location",
+      header: "Location",
+      width: "32%",
+      render: (_, { project }) => <ProjectLocation path={project.path} />,
+    },
+    {
+      key: "source",
+      header: "Source",
+      width: "24%",
+      className: "max-md:hidden",
+      headerClassName: "max-md:hidden",
+      render: (_, { project }) => {
+        const source = describeProjectSource(project);
+        return (
+          <span className="flex min-w-0 flex-col gap-0.5 py-1.5">
+            <span
+              className={cn("truncate", source.mono ? "font-mono text-xs" : "text-sm")}
+              title={project.remote_url ?? source.primary}
+            >
+              {source.primary}
+            </span>
+            {source.secondary && <span className="truncate text-2xs text-ink-muted">{source.secondary}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lastActive",
+      header: "Last active",
+      width: "7.5rem",
+      className: "text-xs tabular-nums text-ink-muted max-sm:hidden",
+      headerClassName: "max-sm:hidden",
+      render: (_, { project }) => {
+        const relative = formatRelativeTime(project.last_active);
+        return relative ? (
+          <time dateTime={project.last_active} title={formatAbsoluteTime(project.last_active)}>
+            {relative}
+          </time>
+        ) : (
+          <span aria-label="never">—</span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      width: "7rem",
+      interactive: true,
+      render: (_, { project }) => (
+        <span className="flex items-center justify-end gap-0.5">
+          <Tooltip content="Open" delay={300}>
+            <button
+              type="button"
+              onClick={() => onOpen(project)}
+              disabled={!!openingProjectId}
+              aria-label={`Open ${project.name}`}
+              data-testid={`settings-project-open-${project.id}`}
+              className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
+            >
+              <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </Tooltip>
+          {onRename && (
+            <Tooltip content="Rename" delay={300}>
+              <button
+                type="button"
+                onClick={() => {
+                  setRenamingId(project.id);
+                  setDraft(project.name);
+                }}
+                aria-label={`Rename ${project.name}`}
+                data-testid={`settings-project-rename-${project.id}`}
+                className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
               >
-                <th scope="row" className={cn(CELL, "text-left font-normal")}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    {renamingId === project.id ? (
-                      <input
-                        autoFocus
-                        aria-label={`Rename ${project.name}`}
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        onBlur={() => commitRename(project)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") commitRename(project);
-                          if (event.key === "Escape") setRenamingId(null);
-                        }}
-                        data-testid={`settings-project-rename-input-${project.id}`}
-                        className="h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    ) : (
-                      <span className="truncate font-medium text-foreground" title={project.name}>
-                        {project.name}
-                      </span>
-                    )}
-                    {isCurrent && renamingId !== project.id && <Badge label="Current" variant="info" size="sm" />}
-                  </div>
-                </th>
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content={REMOVE_PROJECT_HINT} side="left" delay={300}>
+            <button
+              type="button"
+              onClick={() => onRemove(project)}
+              aria-label={`Remove ${project.name} from Reliant`}
+              data-testid={`settings-project-remove-${project.id}`}
+              className={cn(ICON_BUTTON, "hover:bg-destructive/10 hover:text-destructive")}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </span>
+      ),
+    },
+  ];
 
-                {/* Middle-truncated: the head gives way under pressure while the
-                    leaf directory stays pinned, so two checkouts of the same
-                    repo remain distinguishable. */}
-                {isCloudProjectPath(project.path) ? (
-                  <td className={cn(CELL, "text-xs text-muted-foreground")}>On a cloud machine</td>
-                ) : (
-                  <td className={CELL} title={displayPath}>
-                    <div className="flex min-w-0 items-baseline font-mono text-xs text-muted-foreground">
-                      <span className="truncate">{head}</span>
-                      <span className="shrink-0 text-foreground/80">{tail}</span>
-                    </div>
-                  </td>
-                )}
-
-                <td className={CELL}>
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span
-                      className={cn("truncate text-foreground", source.mono ? "font-mono text-xs" : "text-sm")}
-                      title={project.remote_url ?? source.primary}
-                    >
-                      {source.primary}
-                    </span>
-                    {source.secondary && (
-                      <span className="truncate text-2xs text-muted-foreground">{source.secondary}</span>
-                    )}
-                  </div>
-                </td>
-
-                <td className={cn(CELL, "whitespace-nowrap text-xs tabular-nums text-muted-foreground")}>
-                  {relative ? (
-                    <time dateTime={project.last_active} title={formatAbsoluteTime(project.last_active)}>
-                      {relative}
-                    </time>
-                  ) : (
-                    <span aria-label="never">—</span>
-                  )}
-                </td>
-
-                <td className={cn(CELL, "whitespace-nowrap")}>
-                  <div className="flex items-center justify-end gap-0.5">
-                    <Tooltip content="Open" delay={300}>
-                      <button
-                        type="button"
-                        onClick={() => onOpen(project)}
-                        disabled={!!openingProjectId}
-                        aria-label={`Open ${project.name}`}
-                        data-testid={`settings-project-open-${project.id}`}
-                        className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
-                      >
-                        <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </Tooltip>
-                    {onRename && (
-                      <Tooltip content="Rename" delay={300}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRenamingId(project.id);
-                            setDraft(project.name);
-                          }}
-                          aria-label={`Rename ${project.name}`}
-                          data-testid={`settings-project-rename-${project.id}`}
-                          className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
-                        >
-                          <Pencil className="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      </Tooltip>
-                    )}
-                    <Tooltip content={REMOVE_PROJECT_HINT} side="left" delay={300}>
-                      <button
-                        type="button"
-                        onClick={() => onRemove(project)}
-                        aria-label={`Remove ${project.name} from Reliant`}
-                        data-testid={`settings-project-remove-${project.id}`}
-                        className={cn(ICON_BUTTON, "hover:bg-destructive/10 hover:text-destructive")}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+  return (
+    <div data-testid="settings-projects-table">
+      <DataTable<ProjectRow>
+        ariaLabel="Projects"
+        columns={columns}
+        data={projects.map((project) => ({ id: project.id, project }))}
+        layout="fixed"
+        getRowKey={(row) => row.id}
+        // A row being renamed holds an input, which cannot sit inside the row's button.
+        getRowAction={({ project }) =>
+          renamingId === project.id || openingProjectId ? undefined : () => onOpen(project)
+        }
+        getRowProps={({ project }) => ({
+          "data-testid": `settings-project-row-${project.id}`,
+          "data-current": project.id === currentProjectId ? "true" : undefined,
+          "aria-current": project.id === currentProjectId ? "true" : undefined,
+        })}
+      />
     </div>
+  );
+}
+
+/**
+ * Middle-truncated: the head gives way under pressure while the leaf directory
+ * stays pinned, so two checkouts of the same repo remain distinguishable.
+ */
+function ProjectLocation({ path }: { path: string }) {
+  if (isCloudProjectPath(path)) return <span className="text-xs text-ink-muted">On a cloud machine</span>;
+  const displayPath = collapseHomePath(path);
+  const { head, tail } = splitPathForDisplay(displayPath);
+  return (
+    <span className="flex min-w-0 items-baseline font-mono text-xs text-ink-muted" title={displayPath}>
+      <span className="truncate">{head}</span>
+      <span className="shrink-0 text-ink">{tail}</span>
+    </span>
   );
 }

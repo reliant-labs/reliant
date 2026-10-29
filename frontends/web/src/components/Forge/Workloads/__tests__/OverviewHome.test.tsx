@@ -59,7 +59,7 @@ describe("the Overview", () => {
     // A workload with restarts that the server calls degraded reads Degraded (not Crash-looping).
     expect(within(table).getByTestId("overview-service-litellm")).toHaveTextContent("Degraded");
     // The whole row opens the workload, in its environment.
-    expect(within(worker).getByRole("link", { name: "reliant-temporal-worker" })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
+    expect(within(worker).getByRole("link", { name: /^reliant-temporal-worker\b/ })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
     // Only prod's: no environment column, no other env's rows.
     expect(within(table).queryByText("Environment")).toBeNull();
     expect(within(table).getAllByRole("row")).toHaveLength(1 + 6);

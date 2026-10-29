@@ -14,18 +14,18 @@
  * PURE PROPS, like every forge presentation component: rows and callbacks in,
  * no fetching, so the contract tests hand it object literals.
  *
- * It is a REAL table — each fact in its own `<td>` under its own
- * `<th scope="col">`, actions in a right-aligned column — for the reason the
- * old topology matrix learned the hard way: stacking facts into the row header
- * makes 200px rows that line up with nothing.
+ * It is a REAL table (forge-ui's DataTable) — each fact in its own column,
+ * actions in a right-aligned one — for the reason the old topology matrix
+ * learned the hard way: stacking facts into the row header makes 200px rows
+ * that line up with nothing. The whole row opens the environment.
  */
 
 import { ChevronRight, Clock } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Tooltip from "@/components/forge-ui/tooltip";
-import { cn } from "@/lib/utils";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 import {
   declaredNotBuilt,
@@ -37,7 +37,6 @@ import {
 } from "@/services/forge/live";
 
 import { HealthChip } from "../EnvBadges";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface EnvironmentRow {
   env: LiveEnv;
@@ -51,126 +50,94 @@ export interface EnvironmentTableProps {
   onOpen: (env: string) => void;
 }
 
-const HEADER_CELL =
-  "whitespace-nowrap px-3 py-2 text-left text-2xs font-medium uppercase tracking-wide text-ink-muted";
-const CELL = "px-3 py-2.5 align-middle";
+type EnvTableRow = { name: string; row: EnvironmentRow };
 
 export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
+  const columns: DataTableColumn<EnvTableRow>[] = [
+    {
+      key: "name",
+      header: "Environment",
+      className: "font-mono font-medium",
+      render: (_, { row }) => row.env.name,
+    },
+    {
+      key: "runsOn",
+      header: "Runs on",
+      render: (_, { row }) => <Badge label={liveKindLabel(row.env.kind)} variant="neutral" size="sm" />,
+    },
+    { key: "release", header: "Release", render: (_, { row }) => <ReleaseCell env={row.env} /> },
+    {
+      key: "health",
+      header: "Health",
+      // Health is an OBSERVATION, and only the platform makes one. A
+      // self-managed env is applied by forge with no server-side observer, so
+      // the honest cell is "not reported" — never a green chip inferred from a
+      // promotion.
+      render: (_, { row: { env, status, statusLoading } }) =>
+        isPlacedKind(env.kind) ? (
+          <HealthChip
+            env={env.name}
+            health={{
+              kind: "hosted",
+              verdict: status?.verdict ?? "unknown",
+              loading: statusLoading && !status,
+            }}
+          />
+        ) : (
+          <Dash label="not observed from here" />
+        ),
+    },
+    {
+      // "Promoted", never "deployed": promotion writes a pointer, deployment moves bytes.
+      key: "promoted",
+      header: "Promoted",
+      interactive: true,
+      render: (_, { row: { env } }) =>
+        env.promotedAt ? (
+          <Tooltip content="When this environment was PROMOTED to the release — not when it was deployed. Promotion writes a pointer; deployment moves bytes.">
+            <span data-testid={`promoted-${env.name}`} className="inline-flex items-center gap-1 text-xs text-ink-muted">
+              <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="sr-only">promoted </span>
+              {formatTimestamp(env.promotedAt)}
+            </span>
+          </Tooltip>
+        ) : (
+          <Dash label="never promoted" />
+        ),
+    },
+    {
+      // Promote, deploy and history live on the environment's page, in its
+      // header, where they can say why one is unavailable.
+      key: "open",
+      header: "Open",
+      srHeader: true,
+      interactive: true,
+      className: "text-right",
+      render: (_, { row: { env } }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onOpen(env.name)}
+          data-testid={`env-row-open-${env.name}`}
+          aria-label={`Open ${env.name}`}
+          rightIcon={<ChevronRight className="h-3.5 w-3.5" />}
+        >
+          Open
+        </Button>
+      ),
+    },
+  ];
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface" data-testid="forge-env-table">
-      <StackedTable className="w-full border-collapse text-sm">
-        <caption className="sr-only">
-          Every environment in this project: where it runs, its release, where that release came
-          from, its health, and when it last moved.
-        </caption>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={HEADER_CELL}>
-              Environment
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Runs on
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Release
-            </th>
-            <th scope="col" className={HEADER_CELL}>
-              Health
-            </th>
-            {/* "Promoted", never "deployed": promotion writes a pointer,
-                deployment moves bytes. */}
-            <th scope="col" className={HEADER_CELL}>
-              Promoted
-            </th>
-            <th scope="col" className={cn(HEADER_CELL, "text-right")}>
-              <span className="sr-only">Open</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ env, status, statusLoading }) => (
-            <tr
-              key={env.name}
-              data-testid={`env-row-${env.name}`}
-              data-kind={env.kind}
-              className="border-b border-border/60 last:border-0"
-            >
-              <th scope="row" className={cn(CELL, "text-left font-normal")}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(env.name)}
-                  aria-label={`Open ${env.name}`}
-                  data-testid={`env-open-${env.name}`}
-                  className="rounded-sm font-mono text-sm font-medium text-ink hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {env.name}
-                </button>
-              </th>
-
-              <td className={CELL}>
-                <Badge label={liveKindLabel(env.kind)} variant="neutral" size="sm" />
-              </td>
-
-              <td className={cn(CELL, "whitespace-nowrap")}>
-                <ReleaseCell env={env} />
-              </td>
-
-              <td className={CELL}>
-                {/* Health is an OBSERVATION, and only the platform makes one.
-                    A self-managed env is applied by forge with no server-side
-                    observer, so the honest cell is "not reported" — never a
-                    green chip inferred from a promotion. */}
-                {isPlacedKind(env.kind) ? (
-                  <HealthChip
-                    env={env.name}
-                    health={{
-                      kind: "hosted",
-                      verdict: status?.verdict ?? "unknown",
-                      loading: statusLoading && !status,
-                    }}
-                  />
-                ) : (
-                  <Dash label="not observed from here" />
-                )}
-              </td>
-
-              <td className={cn(CELL, "whitespace-nowrap")}>
-                {env.promotedAt ? (
-                  <Tooltip content="When this environment was PROMOTED to the release — not when it was deployed. Promotion writes a pointer; deployment moves bytes.">
-                    <span
-                      data-testid={`promoted-${env.name}`}
-                      className="inline-flex items-center gap-1 text-xs text-ink-muted"
-                    >
-                      <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="sr-only">promoted </span>
-                      {formatTimestamp(env.promotedAt)}
-                    </span>
-                  </Tooltip>
-                ) : (
-                  <Dash label="never promoted" />
-                )}
-              </td>
-
-              <td className={cn(CELL, "whitespace-nowrap text-right")}>
-                {/* Promote, deploy and history live on the environment's page,
-                    in its header, where they can say why one is unavailable.
-                    A row button that opened a daemon-only tab promised an
-                    action it could not take from here. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onOpen(env.name)}
-                  data-testid={`env-row-open-${env.name}`}
-                  aria-label={`Open ${env.name}`}
-                  rightIcon={<ChevronRight className="h-3.5 w-3.5" />}
-                >
-                  Open
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
+    <div data-testid="forge-env-table">
+      <DataTable<EnvTableRow>
+        stacked
+        ariaLabel="Environments in this project"
+        columns={columns}
+        data={rows.map((row) => ({ name: row.env.name, row }))}
+        getRowKey={(r) => r.name}
+        getRowAction={(r) => () => onOpen(r.name)}
+        getRowProps={({ row }) => ({ "data-testid": `env-row-${row.env.name}`, "data-kind": row.env.kind })}
+      />
     </div>
   );
 }

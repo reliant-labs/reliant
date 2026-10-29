@@ -107,7 +107,7 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
       {!deploy.queued && (
         <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {links.map((link) => (
-            <LiveLink key={link.url} link={link} showKind={links.length > 1} className="text-xs" />
+            <LiveLink key={link.url} link={link} className="text-xs" />
           ))}
           {loading && <span className="inline-block h-3 w-36 animate-pulse rounded bg-muted motion-reduce:animate-none" aria-hidden="true" />}
         </span>

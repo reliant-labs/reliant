@@ -27,6 +27,7 @@ import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square, Undo2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
@@ -42,11 +43,11 @@ import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
-import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
+import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadPod, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
 import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
-import { workloadLastError, workloadLink, type ForgeHostedWorkload } from "@/services/forge/topology";
+import { workloadLastError, workloadOpenUrl, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
 import { ExploreLink } from "../Observability/Metrics/ExploreLink";
@@ -86,7 +87,6 @@ import {
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
 const ObservabilityPanel = lazy(() =>
@@ -423,7 +423,7 @@ function WorkloadHeader({
     { label: "Open in Activity", href: hrefs.activity, testId: "workload-menu-activity" },
     { label: "View declared spec", onSelect: () => onTab("config"), testId: "workload-menu-config" },
   ];
-  const link = observed ? workloadLink(observed) : "";
+  const link = observed ? workloadOpenUrl(observed) : "";
   const lastError = observed ? plainErrorText(workloadLastError(observed)) : "";
 
   return (
@@ -913,8 +913,170 @@ function UsageChart({
   );
 }
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
+type PodRow = { key: string; pod: WorkloadPod; now: number };
+
+const POD_COLUMNS: DataTableColumn<PodRow>[] = [
+  { key: "name", header: "Name", render: (_, { pod }) => <Mono value={pod.name} length={48} /> },
+  {
+    key: "status",
+    header: "Status",
+    render: (_, { pod }) => {
+      const warning = pod.latestWarning;
+      const status =
+        pod.state === "gone"
+          ? { tone: "neutral" as const, label: "Gone" }
+          : warning
+            ? { tone: "warning" as const, label: eventHeadline(warning) }
+            : pod.state === "running"
+              ? { tone: "success" as const, label: "Running" }
+              : { tone: "neutral" as const, label: "Unknown" };
+      return (
+        <span title={warning ? plainErrorText(warning.message) : undefined}>
+          <Status tone={status.tone} label={status.label} />
+        </span>
+      );
+    },
+  },
+  {
+    key: "restarts",
+    header: "Restarts",
+    numeric: true,
+    render: (_, { pod }) => <span className={cn(pod.restarts === 0 && "text-ink-muted")}>{pod.restarts}</span>,
+  },
+  {
+    key: "lastExit",
+    header: "Last exit",
+    render: (_, { pod }) => (
+      <span
+        className={pod.lastExitReason ? "text-warning-ink" : "text-ink-muted"}
+        title={pod.lastExitAtMs ? new Date(pod.lastExitAtMs).toLocaleString() : undefined}
+      >
+        {pod.lastExitReason ? exitPhrase(pod.lastExitReason) : "·"}
+      </span>
+    ),
+  },
+  {
+    key: "age",
+    header: "Age",
+    numeric: true,
+    className: "text-ink-muted",
+    render: (_, { pod, now }) => {
+      const age = podAgeMs(pod, now);
+      return (
+        <span title={pod.ageIsLowerBound ? "Older than the window" : undefined}>
+          {age === null ? "—" : `${pod.ageIsLowerBound ? "≥" : ""}${formatAge(age)}`}
+        </span>
+      );
+    },
+  },
+];
+
+type RunRow = { key: string; run: WorkloadJob };
+
+function runColumns(hrefs: WorkloadDetailHrefs): DataTableColumn<RunRow>[] {
+  return [
+    { key: "run", header: "Run", render: (_, { run }) => <Mono value={run.name} length={48} /> },
+    {
+      key: "result",
+      header: "Result",
+      render: (_, { run }) => {
+        const status = JOB_STATUS[run.result];
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <Status tone={status.tone} label={status.label} />
+            {run.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(run.reason)}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: "release",
+      header: "Release",
+      render: (_, { run }) =>
+        run.releaseVersion ? (
+          <Link href={hrefs.release(run.releaseVersion)} className={INK_LINK}>
+            {shortVersion(run.releaseVersion)}
+          </Link>
+        ) : (
+          <span className="text-ink-muted">unknown</span>
+        ),
+    },
+    {
+      key: "started",
+      header: "Started",
+      className: "text-ink-muted",
+      render: (_, { run }) => (run.startedAtMs ? formatAgo(run.startedAtMs) : "not observed"),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      numeric: true,
+      render: (_, { run }) => (run.durationSeconds ? formatSeconds(run.durationSeconds) : <span className="text-ink-muted">—</span>),
+    },
+  ];
+}
+
+type EventRow = { key: string; event: WorkloadEvent };
+
+const EVENT_COLUMNS: DataTableColumn<EventRow>[] = [
+  {
+    key: "when",
+    header: "When",
+    className: "text-ink-muted",
+    render: (_, { event }) => <span title={new Date(event.timeMs).toLocaleString()}>{formatAgo(event.timeMs)}</span>,
+  },
+  {
+    key: "reason",
+    header: "Reason",
+    render: (_, { event }) => (
+      <>
+        <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
+        {eventRawReason(event) && (
+          <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
+            {eventRawReason(event)}
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "object",
+    header: "Object",
+    className: "text-ink-muted",
+    render: (_, { event }) => (event.objectName ? <Mono value={event.objectName} length={32} copy={false} /> : "—"),
+  },
+  {
+    key: "message",
+    header: "Message",
+    // The message takes what the other columns leave, wrapping to two lines.
+    className: "w-full max-w-0 whitespace-normal py-2",
+    render: (_, { event }) => (
+      <span className="line-clamp-2" title={plainErrorText(event.message)}>
+        {plainErrorText(event.message)}
+      </span>
+    ),
+  },
+  {
+    key: "count",
+    header: "Count",
+    numeric: true,
+    className: "text-ink-muted",
+    render: (_, { event }) => (event.count > 1 ? `×${event.count}` : ""),
+  },
+];
+
+type ImageRow = { key: string; c: WorkloadDetailData["imageChanges"][number] };
+
+const IMAGE_COLUMNS: DataTableColumn<ImageRow>[] = [
+  { key: "container", header: "Container", render: (_, { c }) => c.container },
+  {
+    key: "image",
+    header: "Image",
+    render: (_, { c }) => <Mono value={`${c.imageName}${c.imageTag ? `:${c.imageTag}` : ""}`} length={48} />,
+  },
+  { key: "firstSeen", header: "First seen", className: "text-ink-muted", render: (_, { c }) => formatAgo(c.firstSeenMs) },
+  { key: "lastSeen", header: "Last seen", className: "text-ink-muted", render: (_, { c }) => formatAgo(c.lastSeenMs) },
+];
 
 function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () => void }) {
   const pods = summary?.pods ?? [];
@@ -935,60 +1097,15 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
       {pods.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No pod reported in the window. A workload scaled to zero, or one Reliant cannot see yet, looks like this.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Pods">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Name
-                </th>
-                <th scope="col" className={TH}>
-                  Status
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Restarts
-                </th>
-                <th scope="col" className={TH}>
-                  Last exit
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Age
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pods.map((pod) => {
-                const age = podAgeMs(pod, now);
-                const warning = pod.latestWarning;
-                const status =
-                  pod.state === "gone"
-                    ? { tone: "neutral" as const, label: "Gone" }
-                    : warning
-                      ? { tone: "warning" as const, label: eventHeadline(warning) }
-                      : pod.state === "running"
-                        ? { tone: "success" as const, label: "Running" }
-                        : { tone: "neutral" as const, label: "Unknown" };
-                return (
-                  <tr key={pod.uid || pod.name} className="border-t border-border/70 first:border-t-0" data-testid={`workload-pod-${pod.name}`} data-state={pod.state}>
-                    <td className={TD}>
-                      <Mono value={pod.name} length={48} />
-                    </td>
-                    <td className={TD} title={warning ? plainErrorText(warning.message) : undefined}>
-                      <Status tone={status.tone} label={status.label} />
-                    </td>
-                    <td className={cn(TD, "text-right tabular-nums", pod.restarts === 0 && "text-ink-muted")}>{pod.restarts}</td>
-                    <td className={cn(TD, pod.lastExitReason ? "text-warning-ink" : "text-ink-muted")} title={pod.lastExitAtMs ? new Date(pod.lastExitAtMs).toLocaleString() : undefined}>
-                      {pod.lastExitReason ? exitPhrase(pod.lastExitReason) : "·"}
-                    </td>
-                    <td className={cn(TD, "text-right tabular-nums text-ink-muted")} title={pod.ageIsLowerBound ? "Older than the window" : undefined}>
-                      {age === null ? "—" : `${pod.ageIsLowerBound ? "≥" : ""}${formatAge(age)}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<PodRow>
+          flush
+          stacked
+          ariaLabel="Pods"
+          columns={POD_COLUMNS}
+          data={pods.map((pod) => ({ key: pod.uid || pod.name, pod, now }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ pod }) => ({ "data-testid": `workload-pod-${pod.name}`, "data-state": pod.state })}
+        />
       )}
     </Panel>
   );
@@ -1000,58 +1117,15 @@ function RunsPanel({ runs, hrefs }: { runs: WorkloadJob[]; hrefs: WorkloadDetail
       {runs.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No run of this job in the window.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Runs">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Run
-                </th>
-                <th scope="col" className={TH}>
-                  Result
-                </th>
-                <th scope="col" className={TH}>
-                  Release
-                </th>
-                <th scope="col" className={TH}>
-                  Started
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Duration
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => {
-                const status = JOB_STATUS[run.result];
-                return (
-                  <tr key={run.name} className="border-t border-border/70 first:border-t-0" data-testid={`workload-run-${run.name}`}>
-                    <td className={TD}>
-                      <Mono value={run.name} length={48} />
-                    </td>
-                    <td className={TD}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Status tone={status.tone} label={status.label} />
-                        {run.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(run.reason)}</span>}
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      {run.releaseVersion ? (
-                        <Link href={hrefs.release(run.releaseVersion)} className={INK_LINK}>
-                          {shortVersion(run.releaseVersion)}
-                        </Link>
-                      ) : (
-                        <span className="text-ink-muted">unknown</span>
-                      )}
-                    </td>
-                    <td className={cn(TD, "text-ink-muted")}>{run.startedAtMs ? formatAgo(run.startedAtMs) : "not observed"}</td>
-                    <td className={cn(TD, "text-right tabular-nums")}>{run.durationSeconds ? formatSeconds(run.durationSeconds) : <span className="text-ink-muted">—</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<RunRow>
+          flush
+          stacked
+          ariaLabel="Runs"
+          columns={runColumns(hrefs)}
+          data={runs.map((run) => ({ key: run.name, run }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ run }) => ({ "data-testid": `workload-run-${run.name}` })}
+        />
       )}
     </Panel>
   );
@@ -1071,53 +1145,15 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
       {ordered.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No Kubernetes event in the {RANGE_LABELS[range].toLowerCase()}. A steady workload is quiet.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Kubernetes events">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  When
-                </th>
-                <th scope="col" className={TH}>
-                  Reason
-                </th>
-                <th scope="col" className={TH}>
-                  Object
-                </th>
-                <th scope="col" className={cn(TH, "w-full")}>
-                  Message
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Count
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((event, index) => (
-                <tr key={`${event.timeMs}-${event.reason}-${index}`} className="border-t border-border/70 first:border-t-0" data-type={event.type}>
-                  <td className={cn(TD, "text-ink-muted")} title={new Date(event.timeMs).toLocaleString()}>
-                    {formatAgo(event.timeMs)}
-                  </td>
-                  <td className={TD}>
-                    <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
-                    {eventRawReason(event) && (
-                      <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
-                        {eventRawReason(event)}
-                      </span>
-                    )}
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>{event.objectName ? <Mono value={event.objectName} length={32} copy={false} /> : "—"}</td>
-                  <td className="max-w-0 px-4 py-2 text-sm text-ink">
-                    <span className="line-clamp-2" title={plainErrorText(event.message)}>
-                      {plainErrorText(event.message)}
-                    </span>
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums text-ink-muted")}>{event.count > 1 ? `×${event.count}` : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<EventRow>
+          flush
+          stacked
+          ariaLabel="Kubernetes events"
+          columns={EVENT_COLUMNS}
+          data={ordered.map((event, index) => ({ key: `${event.timeMs}-${event.reason}-${index}`, event }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ event }) => ({ "data-type": event.type })}
+        />
       )}
     </Panel>
   );
@@ -1165,36 +1201,14 @@ function HistoryTab({
         {images.length === 0 ? (
           <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No image was observed in the window.</p>
         ) : (
-          <StackedTable className="min-w-full border-collapse" aria-label="Images">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Container
-                </th>
-                <th scope="col" className={TH}>
-                  Image
-                </th>
-                <th scope="col" className={TH}>
-                  First seen
-                </th>
-                <th scope="col" className={TH}>
-                  Last seen
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {images.map((c) => (
-                <tr key={`${c.container}-${c.imageTag}-${c.firstSeenMs}`} className="border-t border-border/70 first:border-t-0">
-                  <td className={TD}>{c.container}</td>
-                  <td className={TD}>
-                    <Mono value={`${c.imageName}${c.imageTag ? `:${c.imageTag}` : ""}`} length={48} />
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>{formatAgo(c.firstSeenMs)}</td>
-                  <td className={cn(TD, "text-ink-muted")}>{formatAgo(c.lastSeenMs)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </StackedTable>
+          <DataTable<ImageRow>
+            flush
+            stacked
+            ariaLabel="Images"
+            columns={IMAGE_COLUMNS}
+            data={images.map((c) => ({ key: `${c.container}-${c.imageTag}-${c.firstSeenMs}`, c }))}
+            getRowKey={(r) => r.key}
+          />
         )}
       </Panel>
       {runs.length > 0 && <RunsPanel runs={runs} hrefs={hrefs} />}

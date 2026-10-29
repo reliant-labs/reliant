@@ -30,17 +30,12 @@ import {
 
 import { cn } from "../../../lib/utils";
 import Button from "@/components/forge-ui/button";
+import DataTable from "@/components/forge-ui/data_table";
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Badge,
   EmptyState,
 } from "./ui";
@@ -438,28 +433,24 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
                   No AI spend recorded in the last 30 days.
                 </p>
               ) : (
-                <Table>
-                  <Thead>
-                    <Tr>
-                      <Th>Model</Th>
-                      <Th>Requests</Th>
-                      <Th>Spend</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {spendByModel.map((row) => (
-                      <Tr key={row.model}>
-                        <Td className="font-medium text-foreground">
-                          {formatModelLabel(row.model)}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {row.requests.toLocaleString("en-US")}
-                        </Td>
-                        <Td className="text-muted-foreground">{usd(row.spend)}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                <div className="forge-ui">
+                  <DataTable<{ model: string; row: (typeof spendByModel)[number] }>
+                    ariaLabel="Spend by model"
+                    columns={[
+                      { key: "model", header: "Model", className: "font-medium", render: (_, { row }) => formatModelLabel(row.model) },
+                      {
+                        key: "requests",
+                        header: "Requests",
+                        numeric: true,
+                        className: "text-muted-foreground",
+                        render: (_, { row }) => row.requests.toLocaleString("en-US"),
+                      },
+                      { key: "spend", header: "Spend", numeric: true, className: "text-muted-foreground", render: (_, { row }) => usd(row.spend) },
+                    ]}
+                    data={spendByModel.map((row) => ({ model: row.model, row }))}
+                    getRowKey={(r) => r.model}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -477,42 +468,30 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
                   No AI usage yet. Your first request will appear here.
                 </p>
               ) : (
-                <Table>
-                  <Thead>
-                    <Tr>
-                      <Th>Key</Th>
-                      <Th>Model</Th>
-                      <Th>Requests</Th>
-                      <Th>Spend</Th>
-                      {/* No "Period" column. It rendered
-                          `formatTimestamp(e.periodStart)`, and GetLLMSpend
-                          does not populate period_start — entries are
-                          aggregated per (key, model) across the whole
-                          requested range, so there is no per-entry period to
-                          show. Every row printed an em dash under a heading
-                          promising a date, which reads as missing data rather
-                          than as a column that never had any. The range is
-                          the same for every row and belongs in the card
-                          header, not repeated down a column. */}
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {spendEntries.map((e, i) => (
-                      <Tr key={`${e.keyId}-${e.model}-${i}`}>
-                        <Td className="font-medium text-foreground">
-                          {e.keyName || e.keyId || "—"}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {formatModelLabel(e.model)}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {Number(e.requests ?? 0n).toLocaleString("en-US")}
-                        </Td>
-                        <Td className="text-muted-foreground">{usd(e.spend)}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                // No "Period" column. It rendered `formatTimestamp(e.periodStart)`,
+                // and GetLLMSpend does not populate period_start — entries are
+                // aggregated per (key, model) across the whole requested range,
+                // so there is no per-entry period to show. The range is the same
+                // for every row and belongs in the card header.
+                <div className="forge-ui">
+                  <DataTable<{ key: string; e: (typeof spendEntries)[number] }>
+                    ariaLabel="Recent usage"
+                    columns={[
+                      { key: "keyName", header: "Key", className: "font-medium", render: (_, { e }) => e.keyName || e.keyId || "—" },
+                      { key: "model", header: "Model", className: "text-muted-foreground", render: (_, { e }) => formatModelLabel(e.model) },
+                      {
+                        key: "requests",
+                        header: "Requests",
+                        numeric: true,
+                        className: "text-muted-foreground",
+                        render: (_, { e }) => Number(e.requests ?? 0n).toLocaleString("en-US"),
+                      },
+                      { key: "spend", header: "Spend", numeric: true, className: "text-muted-foreground", render: (_, { e }) => usd(e.spend) },
+                    ]}
+                    data={spendEntries.map((e, i) => ({ key: `${e.keyId}-${e.model}-${i}`, e }))}
+                    getRowKey={(r) => r.key}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -696,70 +675,54 @@ function LLMKeysCard({
             Reliant gateway.
           </p>
         ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Name</Th>
-                <Th>Status</Th>
-                <Th>Budget</Th>
-                <Th>Spend</Th>
-                <Th>Created</Th>
-                <Th className="text-right">Actions</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {keys.map((k) => {
-                const status = keyStatusMeta(k.status);
-                const budget =
-                  k.maxBudget !== undefined
-                    ? (() => {
-                        const dur = formatBudgetDuration(k.budgetDuration);
-                        const amount = usd(k.maxBudget);
-                        return dur ? `${amount} / ${dur}` : amount;
-                      })()
-                    : "—";
-                return (
-                  <Tr key={k.id}>
-                    <Td className="font-medium text-foreground">{k.name}</Td>
-                    <Td>
-                      <Badge label={status.label} variant={status.variant} />
-                    </Td>
-                    <Td className="text-muted-foreground">{budget}</Td>
-                    <Td className="text-muted-foreground">
-                      {k.spend !== undefined ? usd(k.spend) : "—"}
-                    </Td>
-                    <Td className="text-muted-foreground">
-                      {formatTimestamp(k.createdAt)}
-                    </Td>
-                    <Td className="text-right">
-                      {status.isActive && (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="md"
-                            onClick={() => onRotate(k)}
-                            disabled={rotating}
-                            leftIcon={<RefreshCw />}
-                          >
-                            Rotate
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="md"
-                            onClick={() => onRevoke(k)}
-                            disabled={revoking === k.id}
-                            leftIcon={<Trash2 />}
-                          >
-                            Revoke
-                          </Button>
-                        </div>
-                      )}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
+          <div className="forge-ui">
+            <DataTable<{ id: string; k: LLMKey }>
+              ariaLabel="LLM keys"
+              columns={[
+                { key: "name", header: "Name", className: "font-medium", render: (_, { k }) => k.name },
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (_, { k }) => {
+                    const status = keyStatusMeta(k.status);
+                    return <Badge label={status.label} variant={status.variant} />;
+                  },
+                },
+                {
+                  key: "budget",
+                  header: "Budget",
+                  className: "text-muted-foreground",
+                  render: (_, { k }) => {
+                    if (k.maxBudget === undefined) return "—";
+                    const dur = formatBudgetDuration(k.budgetDuration);
+                    const amount = usd(k.maxBudget);
+                    return dur ? `${amount} / ${dur}` : amount;
+                  },
+                },
+                { key: "spend", header: "Spend", className: "text-muted-foreground", render: (_, { k }) => (k.spend !== undefined ? usd(k.spend) : "—") },
+                { key: "created", header: "Created", className: "text-muted-foreground", render: (_, { k }) => formatTimestamp(k.createdAt) },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  srHeader: true,
+                  className: "text-right",
+                  render: (_, { k }) =>
+                    keyStatusMeta(k.status).isActive && (
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="md" onClick={() => onRotate(k)} disabled={rotating} leftIcon={<RefreshCw />}>
+                          Rotate
+                        </Button>
+                        <Button variant="outline" size="md" onClick={() => onRevoke(k)} disabled={revoking === k.id} leftIcon={<Trash2 />}>
+                          Revoke
+                        </Button>
+                      </div>
+                    ),
+                },
+              ]}
+              data={keys.map((k) => ({ id: k.id, k }))}
+              getRowKey={(r) => r.id}
+            />
+          </div>
         )}
       </CardContent>
     </Card>

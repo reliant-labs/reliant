@@ -73,11 +73,15 @@ function renderTab(over: Partial<OverviewTabProps> = {}) {
 }
 
 describe("the environment page's Frontends panel", () => {
-  it("shows each site at its default platform address, with the release and an open link", () => {
+  it("shows each site at the address it is opened at, with the release and an open link", () => {
     renderTab();
     const panel = screen.getByTestId("env-frontends");
     const web = within(panel).getByTestId("frontend-prod-web");
-    expect(within(web).getByTestId("frontend-url")).toHaveAttribute("href", "https://valiant-caribou.sites.reliantlabs.dev");
+    // web's custom domain is live, so it leads; the generated address stays beside it.
+    expect(within(web).getByTestId("frontend-url")).toHaveAttribute("href", "https://app.reliantlabs.io");
+    expect(within(web).getByTestId("frontend-platform-url")).toHaveTextContent("valiant-caribou.sites.reliantlabs.dev");
+    const docs = within(panel).getByTestId("frontend-prod-docs");
+    expect(within(docs).getByTestId("frontend-url")).toHaveAttribute("href", "https://bright-otter.sites.reliantlabs.dev");
     expect(within(web).getByTestId("frontend-release")).toHaveTextContent("v1.7.15");
     expect(within(web).getAllByTestId("frontend-copy").length).toBeGreaterThan(0);
     // Services are not frontends.
