@@ -52,3 +52,23 @@ func TestBoundsRedactBeforeCutAndBudget(t *testing.T) {
 	require.Contains(t, bounded(strings.Repeat("earlier\n", 15000)+"final error", TailBytes, 50), "omitted")
 	require.Contains(t, Failure([]*core.StepExecution{{StepID: "test", ErrorMessage: sql.NullString{String: "bad", Valid: true}}}), "Node test failed: bad")
 }
+
+// A save_message node is shown like any node; once it is marked as the node
+// that declared the run's outcome: failure, its error carries the redacted
+// text it wrote, and a completed save_message does not echo its text.
+func TestSaveMessageNodeErrorCarriesItsRedactedText(t *testing.T) {
+	failed := &core.StepExecution{ID: "stopped", StepID: "stopped", ActivityName: "SaveMessage",
+		Success:      sql.NullBool{Bool: false, Valid: true},
+		ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
+		OutputJSON:   sql.NullString{String: `{"message":"Review did not finish: Bearer abcdefghijklmnop"}`, Valid: true}}
+	done := &core.StepExecution{ID: "done", StepID: "done", ActivityName: "SaveMessage",
+		Success: sql.NullBool{Bool: true, Valid: true}, OutputJSON: sql.NullString{String: `{"message":"all good"}`, Valid: true}}
+	nodes := Nodes([]*core.StepExecution{failed, done})
+	require.Equal(t, "failed", nodes[0].Status)
+	require.Contains(t, nodes[0].Error, "declared the run's outcome: failure: ")
+	require.NotContains(t, nodes[0].Error, "abcdefghijklmnop")
+	require.Contains(t, nodes[0].Error, "Review did not finish")
+	require.Equal(t, "completed", nodes[1].Status)
+	require.Empty(t, nodes[1].Error)
+	require.Contains(t, Failure([]*core.StepExecution{failed, done}), "Node stopped failed: declared the run's outcome: failure: ")
+}

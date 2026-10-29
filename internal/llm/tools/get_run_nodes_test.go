@@ -97,3 +97,28 @@ func TestRunNodesEmptyIsExplicit(t *testing.T) {
 	writeRunNodes(&b, []*pb.RunNodeExecution{}, false)
 	require.Contains(t, b.String(), "No recorded nodes yet")
 }
+
+// Bug 938cc4e2: a run that went through an inline sub-workflow and then ended
+// at an `outcome: failure` save_message showed only the sub-workflow's
+// children and a generic failure. Every node attempt is listed — the nested
+// children by path, and the node after the sub-workflow with the redacted text
+// it wrote as the error.
+func TestGetRunShowsNestedNodesAndTheDeclaringNode(t *testing.T) {
+	rows := []*db.StepExecution{
+		{ID: "s", WorkflowID: "root", StepID: "stopped", ActivityName: "SaveMessage", Attempt: sql.NullInt32{Int32: 1, Valid: true},
+			Success:      sql.NullBool{Bool: false, Valid: true},
+			ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
+			OutputJSON:   sql.NullString{String: `{"message":"Review did not finish: Bearer abcdefghijklmnop"}`, Valid: true}},
+		{ID: "c", WorkflowID: "root", StepID: "confirm", ActivityName: "GitHubAction", Success: sql.NullBool{Bool: true, Valid: true}},
+		{ID: "l", WorkflowID: "root", StepID: "call_llm", NodePath: sql.NullString{String: "review.agent_loop.call_llm", Valid: true},
+			ActivityName: "CallLLM", Success: sql.NullBool{Bool: true, Valid: true}, LoopIteration: sql.NullInt64{Int64: 3, Valid: true}},
+	}
+	var b strings.Builder
+	writeRunNodes(&b, rundiagnostics.Nodes(rows), false)
+	out := b.String()
+	require.Contains(t, out, "- stopped [failed]")
+	require.Contains(t, out, "Error: declared the run's outcome: failure: Review did not finish: Bearer [REDACTED]")
+	require.NotContains(t, out, "abcdefghijklmnop")
+	require.Contains(t, out, "- confirm [completed]")
+	require.Contains(t, out, "- review.agent_loop.call_llm [completed] (workflow root, attempt 0, iteration 3)")
+}

@@ -376,6 +376,7 @@ type WorkflowCheckpointStore interface {
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
 	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
