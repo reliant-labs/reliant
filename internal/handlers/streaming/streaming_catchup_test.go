@@ -180,10 +180,10 @@ func TestStreamChatUpdates_CaughtUpAfterSnapshot(t *testing.T) {
 }
 
 func TestStreamChatUpdates_CaughtUpAfterMultiBatchReplay(t *testing.T) {
-	// 250 updates is three replay batches. The client must not be told it
-	// caught up after the first.
+	// Two and a half batches is three replay frames. The client must not be
+	// told it caught up after the first.
 	const cursor = 10
-	repo := newCatchupChatRepo(cursor + 250)
+	repo := newCatchupChatRepo(cursor + 2*chatReplayBatchSize + chatReplayBatchSize/2)
 	chatID := raceTestChatID
 	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: cursor})

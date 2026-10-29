@@ -116,12 +116,6 @@ func (r *snapshotGateRepo) GetContextUsage(context.Context, string, string) (*db
 	return nil, nil
 }
 
-// The snapshot enriches tool-call blocks with their durable rows (status and,
-// for a spawn, the thread it owns) via messageproto.AssembleForDisplay.
-func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
-	return nil, nil
-}
-
 func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) ([]db.ChatUpdate, error) {
 	return nil, nil
 }

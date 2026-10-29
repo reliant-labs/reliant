@@ -73,7 +73,7 @@ func TestChatSnapshot_ToolCallsAreBoundedToWindowAndLive(t *testing.T) {
 	upsert("toolu_old_backgrounded", core.ToolCallStatusBackgrounded, nil)
 	upsert("toolu_old_pending", core.ToolCallStatusPending, nil)
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	require.Equal(t, map[string]string{
@@ -110,7 +110,7 @@ func TestChatSnapshot_InWindowInheritedInFlightCallIsCancelledLikeItsBlock(t *te
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var blockStatus *reliantv1.ToolCallStatus
