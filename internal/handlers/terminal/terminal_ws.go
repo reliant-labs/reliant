@@ -103,6 +103,7 @@ const (
 type terminalCheckouts interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
@@ -289,6 +290,10 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		if err != nil {
 			if errors.Is(err, daemonplacement.ErrForeignChat) {
 				writeWSError(conn, "chat not found", logFields...)
+				return
+			}
+			if errors.Is(err, daemonplacement.ErrForeignWorkspace) {
+				writeWSError(conn, "worktree not found", logFields...)
 				return
 			}
 			writeWSError(conn, "resolve the workspace's machine", append([]any{"error", err}, logFields...)...)

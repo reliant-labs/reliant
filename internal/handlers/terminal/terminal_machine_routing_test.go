@@ -103,14 +103,17 @@ func openTerminal(t *testing.T, router *machineRecordingRouter, checkouts termin
 func routingCheckouts() fakeTerminalCheckouts {
 	ownerB := "daemon-b"
 	pinnedC := "daemon-c"
+	theirs := "their-machine"
 	active := int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	mainID := "wt-main"
 	branchID := "wt-branch"
 	return fakeTerminalCheckouts{
 		worktrees: map[string]*db.Worktree{
-			mainID:   {ID: mainID, ProjectID: "p1", IsMain: true, Status: active},
-			branchID: {ID: branchID, ProjectID: "p1", DaemonID: &ownerB, Status: active},
+			mainID:      {ID: mainID, ProjectID: "p1", IsMain: true, Status: active},
+			branchID:    {ID: branchID, ProjectID: "p1", DaemonID: &ownerB, Status: active},
+			"wt-theirs": {ID: "wt-theirs", ProjectID: "p-theirs", DaemonID: &theirs, Status: active},
 		},
+		projectOwners: map[string]string{"p-theirs": "someone-else"},
 		chats: map[string]*db.Chat{
 			"chat-on-c":   {ID: "chat-on-c", UserID: terminalTestUserID, ProjectID: "p1", ActiveDaemonID: &pinnedC, WorktreeID: &mainID},
 			"chat-other":  {ID: "chat-other", UserID: "someone-else", ProjectID: "p1", ActiveDaemonID: &pinnedC},
@@ -178,6 +181,24 @@ func TestTerminalWS_RefusesAnotherUsersChat(t *testing.T) {
 
 	require.Equal(t, "error", first["type"])
 	require.Empty(t, router.machinesFor("terminal.create"), "nothing may be sent for another user's chat")
+}
+
+// Another tenant's owned worktree is not found: nothing is sent and no reply
+// names their machine, whichever project the request claims.
+func TestTerminalWS_RefusesAnotherUsersWorktree(t *testing.T) {
+	for _, project := range []string{"p-theirs", "p1"} {
+		router := &machineRecordingRouter{}
+		first := openTerminal(t, router, routingCheckouts(), url.Values{"worktreeId": {"wt-theirs"}, "projectId": {project}})
+
+		require.Equal(t, "error", first["type"], project)
+		require.Empty(t, router.machinesFor("terminal.create"), "nothing may be sent for another user's worktree")
+		require.Nil(t, first["daemon_id"], "their machine is never named")
+		for _, v := range first {
+			if s, ok := v.(string); ok {
+				require.NotContains(t, s, "their-machine")
+			}
+		}
+	}
 }
 
 // A machine-state error names the machine the terminal was sent to, so the

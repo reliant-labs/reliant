@@ -55,6 +55,9 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID, chatID stri
 	if errors.Is(err, daemonplacement.ErrForeignChat) {
 		return "", "", svcerr.NotFound("chat")
 	}
+	if errors.Is(err, daemonplacement.ErrForeignWorkspace) {
+		return "", "", svcerr.NotFound("worktree")
+	}
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -17,11 +19,20 @@ import (
 type WorkspaceReader interface {
 	WorktreeReader
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetProject confirms a worktree is the caller's before its machine is
+	// read: its owner is a machine id of whoever owns the project.
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
 // ErrForeignChat is WorkspaceDaemon's answer for a chat another user owns.
 // Callers report it as the chat not being found, so ids are not an oracle.
 var ErrForeignChat = errors.New("chat belongs to another user")
+
+// ErrForeignWorkspace is WorkspaceDaemon's answer for a worktree whose project
+// another user owns, or that is not of the project the request names. Callers
+// report it as the worktree not being found: its machine is never read, so no
+// error or reply can name another tenant's machine.
+var ErrForeignWorkspace = errors.New("worktree belongs to another user or project")
 
 // Workspace is the machine a request about a project's files, shell or git
 // state goes to. DaemonID "" leaves it to default resolution. NoMachine marks
@@ -51,7 +62,9 @@ type Workspace struct {
 // A worktree or chat row that no longer exists is ignored, as it is for tool
 // routing: the UI can still name one it has just deleted. A chat from another
 // project is stale UI context and is ignored too. A chat another user owns is
-// ErrForeignChat; any other lookup failure is returned.
+// ErrForeignChat, and a worktree of another user's project, or of a project
+// other than projectID, is ErrForeignWorkspace; any other lookup failure is
+// returned.
 func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, owners *Resolver, userID, projectID, worktreeID, chatID string) (Workspace, error) {
 	owner := ""
 	if worktreeID != "" {
@@ -61,6 +74,16 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, owners *Resolver, u
 		case err != nil:
 			return Workspace{}, fmt.Errorf("load worktree %s: %w", worktreeID, err)
 		default:
+			if projectID != "" && wt.ProjectID != projectID {
+				return Workspace{}, ErrForeignWorkspace
+			}
+			project, err := r.GetProject(ctx, wt.ProjectID)
+			if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
+				return Workspace{}, fmt.Errorf("load project %s: %w", wt.ProjectID, err)
+			}
+			if project == nil || project.UserID != userID {
+				return Workspace{}, ErrForeignWorkspace
+			}
 			owner = owners.Owner(ctx, userID, wt)
 		}
 	}

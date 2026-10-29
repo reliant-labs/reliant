@@ -18,6 +18,16 @@ type fakeWorkspaces struct {
 	worktrees map[string]*db.Worktree
 	chats     map[string]*db.Chat
 	daemons   map[string]*db.Daemon
+	// projects maps a project to its owner; unlisted projects are u1's.
+	projects map[string]string
+}
+
+func (f fakeWorkspaces) GetProject(_ context.Context, id string) (*db.Project, error) {
+	owner := "u1"
+	if o, ok := f.projects[id]; ok {
+		owner = o
+	}
+	return &db.Project{ID: id, UserID: owner}, nil
 }
 
 func (f fakeWorkspaces) GetWorktree(_ context.Context, id string) (*db.Worktree, error) {
@@ -48,7 +58,9 @@ func workspaces() fakeWorkspaces {
 		worktrees: map[string]*db.Worktree{
 			"main":   {ID: "main", ProjectID: "p1", IsMain: true},
 			"branch": {ID: "branch", ProjectID: "p1", DaemonID: strp("daemon-b")},
+			"theirs": {ID: "theirs", ProjectID: "p-theirs", DaemonID: strp("their-machine")},
 		},
+		projects: map[string]string{"p-theirs": "u2"},
 		chats: map[string]*db.Chat{
 			"chat-c":       {ID: "chat-c", UserID: "u1", ProjectID: "p1", ActiveDaemonID: strp("daemon-c"), WorktreeID: strp("main")},
 			"chat-branch":  {ID: "chat-branch", UserID: "u1", ProjectID: "p1", ActiveDaemonID: strp("daemon-c"), WorktreeID: strp("branch")},
@@ -57,6 +69,20 @@ func workspaces() fakeWorkspaces {
 			"chat-foreign": {ID: "chat-foreign", UserID: "u2", ProjectID: "p1", ActiveDaemonID: strp("daemon-c")},
 		},
 	}
+}
+
+// Another user's worktree, or one of another project than the request
+// names, is ErrForeignWorkspace before its machine is read: no caller can be
+// handed another tenant's machine id.
+func TestWorkspaceDaemon_ForeignWorkspaceIsNotRead(t *testing.T) {
+	for _, projectID := range []string{"p-theirs", "p1", ""} {
+		ws, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", projectID, "theirs", "")
+		require.ErrorIs(t, err, ErrForeignWorkspace, projectID)
+		assert.Empty(t, ws.DaemonID)
+	}
+	// One of the caller's own worktrees named under another project is refused too.
+	_, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", "p2", "branch", "")
+	require.ErrorIs(t, err, ErrForeignWorkspace)
 }
 
 func TestWorkspaceDaemon(t *testing.T) {

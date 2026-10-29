@@ -181,6 +181,17 @@ type fakeTerminalCheckouts struct {
 	worktrees      map[string]*db.Worktree
 	chats          map[string]*db.Chat
 	projectDaemons map[string][]*db.ProjectDaemon
+	// projectOwners maps a project to its owner; unlisted projects are the
+	// test user's.
+	projectOwners map[string]string
+}
+
+func (f fakeTerminalCheckouts) GetProject(_ context.Context, id string) (*db.Project, error) {
+	owner := terminalTestUserID
+	if o, ok := f.projectOwners[id]; ok {
+		owner = o
+	}
+	return &db.Project{ID: id, UserID: owner}, nil
 }
 
 func (f fakeTerminalCheckouts) GetChat(_ context.Context, id string) (*db.Chat, error) {

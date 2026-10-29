@@ -116,6 +116,8 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 	switch {
 	case errors.Is(err, daemonplacement.ErrForeignChat):
 		return machinewake.Target{}, svcerr.NotFound("chat")
+	case errors.Is(err, daemonplacement.ErrForeignWorkspace):
+		return machinewake.Target{}, svcerr.NotFound("worktree")
 	case err != nil:
 		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
