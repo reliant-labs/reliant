@@ -70,11 +70,16 @@ import (
 // this remains, so a command never starts on one about to lapse.
 const exchangeTTL = time.Hour
 
-// exchangeableScopes shares the explicit CLI/daemon ceiling. A helper can act
-// with the user's org capabilities, never with session or specialized-resource
-// authority. Resource validation remains authoritative: user-org capabilities
-// may ride a daemon-bound credential, preserving its lifecycle. Never drop
-// that binding to get a mint.
+// exchangeableScopes is what a helper may hold: the user's control-plane
+// capabilities (cliauth.ForgeScopes, derived from forge's catalog at this
+// binary's build), never session or specialized-resource authority. The child
+// is an explicit list of what the command asked for, intersected with what the
+// parent holds NOW — and a daemon's parent holds every scope its person holds
+// (the control plane resolves that wildcard at each introspection), so a scope
+// added to the catalog is exchangeable the release it ships in. Resource
+// validation remains authoritative: user-org capabilities may ride a
+// daemon-bound credential, preserving its lifecycle. Never drop that binding
+// to get a mint.
 var exchangeableScopes = func() []fat.Scope {
 	var scopes []fat.Scope
 	for _, scope := range cliauth.ForgeScopes() {
@@ -91,10 +96,6 @@ type TokenControlPlane struct {
 	// the only audience ExchangeToken mints for. Empty on a self-hosted server,
 	// which then issues no control-plane credentials at all.
 	Issuer string
-	// ClipsGrants reports that MintForUser atomically clips requested scopes
-	// to the acting user's current org grants (control-plane does; self-hosted
-	// stores do not). Only a clipping authority receives the daemon ceiling.
-	ClipsGrants bool
 }
 
 // ExchangeToken trades the calling access token for a short-lived one carrying

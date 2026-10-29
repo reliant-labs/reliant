@@ -119,6 +119,36 @@ describe("DevicePairing", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ user_code: "BDFGHJKL", approved: true, org_id: "org-b" });
   });
 
+  it("asks to sign in the CLI, not to approve a machine, for a `reliant auth login` code", async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1" } } });
+    fetchMock
+      .mockResolvedValueOnce(
+        ok({ user_code: "BDFG-HJKL", kind: "cli_login", hostname: "cloud-box", platform: "linux/amd64", client_id: "reliant-cli", scopes: ["reliant:api"], expires_at: "" }),
+      )
+      .mockResolvedValueOnce(ok({ approved: true, kind: "cli_login", hostname: "cloud-box" }));
+
+    renderWithQuery(<DevicePairing />);
+    expect(await screen.findByText("Sign in the Reliant CLI on cloud-box?")).toBeInTheDocument();
+    expect(screen.queryByText(/Approve machine/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Not me" })).toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("CLI signed in")).toBeInTheDocument();
+    expect(screen.getByText(/The Reliant CLI on cloud-box is signed in/)).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ user_code: "BDFGHJKL", approved: true, org_id: "org-a" });
+  });
+
+  it("declines a CLI sign-in in its own words", async () => {
+    getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1" } } });
+    fetchMock
+      .mockResolvedValueOnce(ok({ user_code: "BDFG-HJKL", kind: "cli_login", hostname: "cloud-box", scopes: [] }))
+      .mockResolvedValueOnce(ok({}));
+    renderWithQuery(<DevicePairing />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Not me" }));
+    expect(await screen.findByText("Sign-in declined")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ user_code: "BDFGHJKL", approved: false });
+  });
+
   it("names no org when declining", async () => {
     listMyOrganizations.mockResolvedValue(TWO_ORGS);
     getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1" } } });
