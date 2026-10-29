@@ -12,12 +12,11 @@
 // been purged still records what it cost, and showing the raw id beats showing
 // an em dash.
 //
-// Uses the shared Table primitives from ../ui rather than a bare <table>, so
-// the border/spacing rhythm matches every other table in cloud settings.
+// forge-ui's DataTable, the list every table in the app is made of.
 
-import { Table, Tbody, Td, Th, Thead, Tr } from "../ui";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+
 import { formatCents, formatQuantity } from "./usageModel";
-
 import type { AttributionRow } from "./usageModel";
 
 export interface AttributionTableProps {
@@ -25,6 +24,8 @@ export interface AttributionTableProps {
   deploymentNames?: Map<string, string>;
   environmentNames?: Map<string, string>;
 }
+
+type Row = { key: string; row: AttributionRow };
 
 export function AttributionTable({
   rows,
@@ -41,66 +42,42 @@ export function AttributionTable({
     );
   }
 
+  const columns: DataTableColumn<Row>[] = [
+    {
+      key: "deployment",
+      header: "Deployment",
+      render: (_, { row }) =>
+        row.deploymentId ? (
+          (deploymentNames?.get(row.deploymentId) ?? row.deploymentId)
+        ) : (
+          <span className="text-ink-muted">Cluster floor (no deployment)</span>
+        ),
+    },
+    {
+      key: "environment",
+      header: "Environment",
+      className: "text-ink-muted",
+      render: (_, { row }) =>
+        row.environmentId ? (environmentNames?.get(row.environmentId) ?? row.environmentId) : "—",
+    },
+    { key: "cpu", header: "CPU (vCPU-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.cpuDisplay) },
+    { key: "memory", header: "Memory (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.memoryDisplay) },
+    { key: "storage", header: "Storage (GiB-hr)", numeric: true, className: "text-ink-muted", render: (_, { row }) => formatQuantity(row.storageDisplay) },
+    { key: "accrued", header: "Accrued", numeric: true, className: "font-medium", render: (_, { row }) => formatCents(row.accruedCents) },
+  ];
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="forge-ui flex flex-col gap-3">
       <p className="text-xs text-muted-foreground">
         Accrued cost by deployment, highest first. Estimated from metered usage —
         not an invoice.
       </p>
-      <Table>
-        <Thead>
-          <Tr>
-            <Th scope="col">Deployment</Th>
-            <Th scope="col">Environment</Th>
-            <Th scope="col" className="text-right">
-              CPU (vCPU-hr)
-            </Th>
-            <Th scope="col" className="text-right">
-              Memory (GiB-hr)
-            </Th>
-            <Th scope="col" className="text-right">
-              Storage (GiB-hr)
-            </Th>
-            <Th scope="col" className="text-right">
-              Accrued
-            </Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {rows.map((row) => (
-            <Tr key={`${row.environmentId}/${row.deploymentId}`}>
-              <Td className="text-foreground">
-                {row.deploymentId ? (
-                  (deploymentNames?.get(row.deploymentId) ?? row.deploymentId)
-                ) : (
-                  <span className="text-muted-foreground">
-                    Cluster floor (no deployment)
-                  </span>
-                )}
-              </Td>
-              <Td className="text-muted-foreground">
-                {row.environmentId ? (
-                  (environmentNames?.get(row.environmentId) ?? row.environmentId)
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </Td>
-              <Td className="text-right tabular-nums text-muted-foreground">
-                {formatQuantity(row.cpuDisplay)}
-              </Td>
-              <Td className="text-right tabular-nums text-muted-foreground">
-                {formatQuantity(row.memoryDisplay)}
-              </Td>
-              <Td className="text-right tabular-nums text-muted-foreground">
-                {formatQuantity(row.storageDisplay)}
-              </Td>
-              <Td className="text-right font-medium tabular-nums text-foreground">
-                {formatCents(row.accruedCents)}
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
+      <DataTable<Row>
+        ariaLabel="Accrued cost by deployment"
+        columns={columns}
+        data={rows.map((row) => ({ key: `${row.environmentId}/${row.deploymentId}`, row }))}
+        getRowKey={(r) => r.key}
+      />
     </div>
   );
 }

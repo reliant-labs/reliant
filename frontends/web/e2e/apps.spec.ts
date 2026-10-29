@@ -9,30 +9,28 @@ import { PHONE } from './mobileMocks';
 // app, connecting a repository and just chatting.
 
 test.describe('Apps', () => {
-  test('the Apps page lists every app with its live links per environment', async ({ page }) => {
+  test('the Apps page lists every app in one table with its live site', async ({ page }) => {
     await mockAppsBackend(page);
-    // The index is ready when its cards render; an unrelated Monaco CDN
+    // The index is ready when its rows render; an unrelated Monaco CDN
     // loader can leave the document load event pending (CI trace 40471064815).
     await page.goto('/apps', { waitUntil: 'domcontentloaded' });
 
-    const store = page.getByTestId('app-card-storefront');
+    const store = page.getByTestId('app-row-storefront');
     await expect(store).toBeVisible({ timeout: 15_000 });
-    await expect(store.getByTestId('app-open-live')).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
-    await expect(store.getByTestId('app-open-console')).toHaveAttribute('href', '/forge/p/storefront');
-    await expect(store.getByTestId('app-env-prod').getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toHaveAttribute(
-      'href',
-      'https://bright-otter.reliantapps.dev',
-    );
-    await expect(store.getByTestId('app-env-prod').getByRole('link', { name: /calm-heron\.reliantapps\.dev/ })).toBeVisible();
-    await expect(store.getByTestId('app-env-staging').getByRole('link', { name: /quiet-finch\.reliantapps\.dev/ })).toBeVisible();
-    await expect(store.getByTestId('app-env-prod')).toContainText('v1.4.0');
+    // The row opens the console; the site link opens the app itself.
+    await expect(store.getByRole('link', { name: 'storefront' })).toHaveAttribute('href', '/forge/p/storefront');
+    await expect(store.getByTestId('app-live-link')).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
+    // An API is not a destination: its URL is never linked here.
+    await expect(store.getByRole('link', { name: /calm-heron\.reliantapps\.dev/ })).toHaveCount(0);
+    await expect(store.getByTestId('app-env-prod')).toBeVisible();
+    await expect(store.getByTestId('app-env-staging')).toBeVisible();
 
     // An app nobody opened as a Reliant project is still listed: the org deployed it.
-    await expect(page.getByTestId('app-card-status-page').getByRole('link', { name: /status\.example\.com/ }).first()).toBeVisible();
+    await expect(page.getByTestId('app-row-status-page').getByRole('link', { name: /status\.example\.com/ })).toBeVisible();
     // Newest deploy first: staging went out 3 minutes ago.
-    await expect(page.getByTestId('apps-list').locator('[data-testid^="app-card-"]').first()).toHaveAttribute(
+    await expect(page.getByTestId('apps-list').locator('[data-testid^="app-row-"]').first()).toHaveAttribute(
       'data-testid',
-      'app-card-storefront',
+      'app-row-storefront',
     );
   });
 
@@ -47,7 +45,7 @@ test.describe('Apps', () => {
     await mockAppsBackend(page, { environments: [] });
     await page.goto('/apps');
     // The forge project exists but is not live: listed, with how to deploy it.
-    await expect(page.getByTestId('app-card-storefront')).toContainText('Not deployed yet', { timeout: 15_000 });
+    await expect(page.getByTestId('app-row-storefront')).toContainText('Not deployed yet', { timeout: 15_000 });
     await page.getByRole('button', { name: 'Build an app' }).first().click();
     await expect(page).toHaveURL(new RegExp(`/project/${PROJECT.id}`));
     await expect(page.getByTestId('home-build-heading')).toBeVisible({ timeout: 15_000 });
@@ -103,17 +101,15 @@ test.describe('Apps', () => {
     });
   });
 
-  test("the console's Overview leads with the live URLs", async ({ page }) => {
+  test("the console's Overview leads with the live sites, never an API", async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto('/forge/p/storefront');
-    const live = page.getByTestId('overview-live-links');
-    await expect(live).toBeVisible({ timeout: 15_000 });
-    // Overview separates hosted frontends from API endpoints, rather than
-    // mixing both into the API URL strip. Neither live link may disappear.
-    await expect(live.getByTestId('overview-live-prod').getByRole('link', { name: /calm-heron\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://calm-heron.reliantapps.dev');
-    await expect(live.getByTestId('overview-live-staging').getByRole('link', { name: /brisk-lynx\.reliantapps\.dev/ })).toBeVisible();
     const frontends = page.getByRole('list', { name: 'Frontends' });
-    await expect(frontends.getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev');
+    await expect(frontends.getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toHaveAttribute('href', 'https://bright-otter.reliantapps.dev', {
+      timeout: 15_000,
+    });
+    // An API is not a destination for a person: there is no APIs strip.
+    await expect(page.getByTestId('overview-live-links')).toHaveCount(0);
   });
 
   test('onboarding offers building an app as a peer of chatting', async ({ page }) => {

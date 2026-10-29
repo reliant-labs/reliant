@@ -221,7 +221,8 @@ describe("RunNowDialog", () => {
     await waitFor(() => expect(loadRunContext).toHaveBeenCalledWith("chat-new"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/project/proj-1"));
     expect(onClose).toHaveBeenCalled();
-  });
+    // Ten user-event steps: ~0.6s idle, past the 5s default on a saturated merge-gate runner.
+  }, 20_000);
 
   it("runs a workflow whose Chat trigger is off: the message is optional and nothing blocks the button", async () => {
     listWorkflows.mockResolvedValue(listing({ automationOnly: true }));

@@ -28,7 +28,7 @@ describe("process health scope", () => {
     }}><ProcessHealth scope={{ orgId: "org", projectId: "shop", envIds: ["prod-id"], filters: [] }} range="1h"
       workloads={[workload("dev-id", "dev", "crash_looping", 9), workload("prod-id", "prod", "healthy", 1)]}
       alerts={[alert]} envNameOf={id => ({ "dev-id": "dev", "prod-id": "prod", "other-project-prod": "prod" })[id]}
-      workloadHref={name => `/workloads/${name}`} logsHref={name => `/logs/${name}`} navigateTo={vi.fn()} />
+      workloadHref={name => `/workloads/${name}`} logsHref={name => `/logs/${name}`} />
     </ObservabilityApiProvider></QueryClientProvider>);
     const row = await screen.findByTestId("observability-service-api");
     expect(within(row).getByText("Healthy")).toBeInTheDocument();

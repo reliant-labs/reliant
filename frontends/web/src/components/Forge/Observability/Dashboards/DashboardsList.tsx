@@ -28,6 +28,7 @@ import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Boxes, ChevronDown, LayoutDashboard, Lock, Plus, Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import { GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
@@ -47,7 +48,6 @@ import { filterIndex, NAV_STARRED, ownerOf, ownersOf, recentOf, starredOf, type 
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, INK_LINK, Menu, SourceTag, StarButton } from "./parts";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface DashboardsSearch {
   q?: string;
@@ -222,6 +222,43 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     </div>
   );
 
+  // The three dashboard lists share a row: a whole-row link to the dashboard
+  // (none when its app has no console), its app in org mode, and the star.
+  const titleColumn = (readOnly: boolean): DataTableColumn<DashRow> => ({
+    key: "name",
+    header: "Name",
+    render: (_, { d }) => (
+      <span className="inline-flex items-center gap-2 font-medium">
+        {readOnly && <Lock className="h-3.5 w-3.5 text-ink-muted" aria-label="read-only" />}
+        {d.title}
+      </span>
+    ),
+  });
+  const appColumns: DataTableColumn<DashRow>[] = orgWide ? [{ key: "app", header: "App", render: (_, { d }) => <AppTag app={d.ref.projectId} /> }] : [];
+  const starColumn: DataTableColumn<DashRow> = {
+    key: "star",
+    header: "Star",
+    srHeader: true,
+    interactive: true,
+    width: "2.75rem",
+    className: "pl-0 pr-2 text-right",
+    render: (_, { d }) => <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />,
+  };
+  const dashTable = (testId: string, ariaLabel: string, rows: DashboardSummary[], columns: DataTableColumn<DashRow>[]) => (
+    <Card padding="none" className="overflow-hidden" data-testid={testId}>
+      <DataTable<DashRow>
+        flush
+        stacked
+        ariaLabel={ariaLabel}
+        columns={columns}
+        data={rows.map((d) => ({ d }))}
+        getRowKey={({ d }) => `${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`}
+        getRowHref={({ d }) => hrefs.dashboard(d.ref) || undefined}
+        getRowLabel={({ d }) => d.title}
+      />
+    </Card>
+  );
+
   let body: ReactNode;
   if (index.isLoading || org.isLoading) {
     body = <ListSkeleton />;
@@ -296,165 +333,82 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             )}
             {recent.length > 0 && (
               <Group title="Recently viewed">
-                <Card padding="none" className="overflow-hidden" data-testid="dashboards-recent">
-                  <table className="w-full text-sm">
-                    <caption className="sr-only">Dashboards you opened recently</caption>
-                    <tbody>
-                      {recent.map((d) => (
-                        <Row key={`${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
-                          <td className="h-10 px-4">
-                            <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
-                          </td>
-                          {orgWide && (
-                            <td className="h-10 px-4">
-                              <AppTag app={d.ref.projectId} />
-                            </td>
-                          )}
-                          <td className="h-10 px-4">
-                            <SourceTag source={d.source} />
-                          </td>
-                          <td className="h-10 px-4 text-ink-muted">viewed {d.lastViewedAtMs ? formatAgo(d.lastViewedAtMs) : ""}</td>
-                          <td className="hidden h-10 px-4 lg:table-cell">
-                            <PreviewRow summary={d} scope={scopeOf(d.ref.projectId)} />
-                          </td>
-                          <td className="h-10 w-11 pr-2 text-right">
-                            <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />
-                          </td>
-                        </Row>
-                      ))}
-                    </tbody>
-                  </table>
-                </Card>
+                {dashTable("dashboards-recent", "Dashboards you opened recently", recent, [
+                  titleColumn(false),
+                  ...appColumns,
+                  { key: "source", header: "Source", render: (_, { d }) => <SourceTag source={d.source} /> },
+                  {
+                    key: "viewed",
+                    header: "Viewed",
+                    render: (_, { d }) => <span className="text-ink-muted">{d.lastViewedAtMs ? formatAgo(d.lastViewedAtMs) : "—"}</span>,
+                  },
+                  {
+                    key: "preview",
+                    header: "Preview",
+                    className: "hidden lg:table-cell",
+                    headerClassName: "hidden lg:table-cell",
+                    render: (_, { d }) => <PreviewRow summary={d} scope={scopeOf(d.ref.projectId)} />,
+                  },
+                  starColumn,
+                ])}
               </Group>
             )}
             {releases.length > 0 && (
               <Group title="From your releases" meta={`${releases.length} · generated by forge or declared in the repo; read-only here`}>
-                <Card padding="none" className="overflow-hidden" data-testid="dashboards-release">
-                  <StackedTable className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs text-ink-muted">
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Name
-                        </th>
-                        {orgWide && (
-                          <th scope="col" className="h-9 px-4 font-medium">
-                            App
-                          </th>
-                        )}
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Source
-                        </th>
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Shipped in
-                        </th>
-                        <th scope="col" className="h-9 px-4 text-right font-medium">
-                          Panels
-                        </th>
-                        <th scope="col" className="h-9 w-11">
-                          <span className="sr-only">Star</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {releases.map((d) => (
-                        <Row key={`${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
-                          <td className="h-10 px-4">
-                            <span className="inline-flex items-center gap-2">
-                              <Lock className="h-3.5 w-3.5 text-ink-muted" aria-label="read-only" />
-                              <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
-                            </span>
-                          </td>
-                          {orgWide && (
-                            <td className="h-10 px-4">
-                              <AppTag app={d.ref.projectId} />
-                            </td>
-                          )}
-                          <td className="h-10 px-4">
-                            <span className="inline-flex items-center gap-2">
-                              <SourceTag source={d.source} />
-                              {d.release?.filePath && <Mono value={d.release.filePath} copy={false} className="max-w-[18rem] truncate text-xs text-ink-muted" />}
-                            </span>
-                          </td>
-                          <td className="h-10 px-4">
-                            {d.release?.releaseVersion ? (
-                              hrefs.release(d.release.releaseVersion, d.ref.projectId) ? (
-                                <Link href={hrefs.release(d.release.releaseVersion, d.ref.projectId)} className={INK_LINK}>
-                                  {d.release.releaseVersion}
-                                </Link>
-                              ) : (
-                                <span className="text-ink">{d.release.releaseVersion}</span>
-                              )
-                            ) : (
-                              <span className="text-ink-muted">—</span>
-                            )}
-                          </td>
-                          <td className="h-10 px-4 text-right tabular-nums text-ink-muted">{d.panelCount}</td>
-                          <td className="h-10 w-11 pr-2 text-right">
-                            <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />
-                          </td>
-                        </Row>
-                      ))}
-                    </tbody>
-                  </StackedTable>
-                </Card>
+                {dashTable("dashboards-release", "Dashboards from your releases", releases, [
+                  titleColumn(true),
+                  ...appColumns,
+                  {
+                    key: "source",
+                    header: "Source",
+                    render: (_, { d }) => (
+                      <span className="inline-flex items-center gap-2">
+                        <SourceTag source={d.source} />
+                        {d.release?.filePath && <Mono value={d.release.filePath} copy={false} className="max-w-[18rem] truncate text-xs text-ink-muted" />}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "release",
+                    header: "Shipped in",
+                    interactive: true,
+                    render: (_, { d }) =>
+                      d.release?.releaseVersion ? (
+                        hrefs.release(d.release.releaseVersion, d.ref.projectId) ? (
+                          <Link href={hrefs.release(d.release.releaseVersion, d.ref.projectId)} className={INK_LINK}>
+                            {d.release.releaseVersion}
+                          </Link>
+                        ) : (
+                          d.release.releaseVersion
+                        )
+                      ) : (
+                        <span className="text-ink-muted">—</span>
+                      ),
+                  },
+                  { key: "panels", header: "Panels", numeric: true, render: (_, { d }) => <span className="text-ink-muted">{d.panelCount}</span> },
+                  starColumn,
+                ])}
               </Group>
             )}
             {workspace.length > 0 && (
               <Group title="Workspace" meta={`${workspace.length} · saved in place, versioned, promotable to code`}>
-                <Card padding="none" className="overflow-hidden" data-testid="dashboards-workspace">
-                  <StackedTable className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs text-ink-muted">
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Name
-                        </th>
-                        {orgWide && (
-                          <th scope="col" className="h-9 px-4 font-medium">
-                            App
-                          </th>
-                        )}
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Author
-                        </th>
-                        <th scope="col" className="h-9 px-4 text-right font-medium">
-                          Version
-                        </th>
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Edited
-                        </th>
-                        <th scope="col" className="h-9 px-4 font-medium">
-                          Environments
-                        </th>
-                        <th scope="col" className="h-9 w-11">
-                          <span className="sr-only">Star</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workspace.map((d) => (
-                        <Row key={`${d.ref.projectId}/${d.ref.key}`} href={hrefs.dashboard(d.ref)} navigateTo={navigateTo}>
-                          <td className="h-10 px-4">
-                            <DashLink href={hrefs.dashboard(d.ref)}>{d.title}</DashLink>
-                          </td>
-                          {orgWide && (
-                            <td className="h-10 px-4">
-                              <AppTag app={d.ref.projectId} />
-                            </td>
-                          )}
-                          <td className="h-10 px-4 text-ink">{ownerOf(d)}</td>
-                          <td className="h-10 px-4 text-right tabular-nums text-ink">v{d.workspace?.version ?? 1}</td>
-                          <td className="h-10 px-4 text-ink-muted">{d.workspace?.updatedAtMs ? formatAgo(d.workspace.updatedAtMs) : "—"}</td>
-                          <td className="h-10 px-4">
-                            <EnvScopeTags ids={d.workspace?.envIds ?? []} environments={environments} />
-                          </td>
-                          <td className="h-10 w-11 pr-2 text-right">
-                            <StarButton starred={d.starred} title={d.title} onToggle={() => toggleStar(d)} />
-                          </td>
-                        </Row>
-                      ))}
-                    </tbody>
-                  </StackedTable>
-                </Card>
+                {dashTable("dashboards-workspace", "Workspace dashboards", workspace, [
+                  titleColumn(false),
+                  ...appColumns,
+                  { key: "author", header: "Author", render: (_, { d }) => ownerOf(d) },
+                  { key: "version", header: "Version", numeric: true, render: (_, { d }) => `v${d.workspace?.version ?? 1}` },
+                  {
+                    key: "edited",
+                    header: "Edited",
+                    render: (_, { d }) => <span className="text-ink-muted">{d.workspace?.updatedAtMs ? formatAgo(d.workspace.updatedAtMs) : "—"}</span>,
+                  },
+                  {
+                    key: "envs",
+                    header: "Environments",
+                    render: (_, { d }) => <EnvScopeTags ids={d.workspace?.envIds ?? []} environments={environments} />,
+                  },
+                  starColumn,
+                ])}
               </Group>
             )}
           </>
@@ -621,30 +575,8 @@ function Toolbar({
   );
 }
 
-/** A table row that is one link: a click anywhere but a control opens the dashboard. */
-function Row({ href, navigateTo, children }: { href: string; navigateTo: (href: string) => void; children: ReactNode }) {
-  return (
-    <tr
-      className={cn("border-b border-border/70 last:border-b-0 hover:bg-ink/5", href && "cursor-pointer")}
-      onClick={(event) => {
-        if (!href || (event.target as HTMLElement).closest("a, button, input")) return;
-        navigateTo(href);
-      }}
-    >
-      {children}
-    </tr>
-  );
-}
-
-/** A dashboard's title as a link, or plain text when its app has no console to open it in. */
-function DashLink({ href, children }: { href: string; children: ReactNode }) {
-  if (!href) return <span className="font-medium text-ink">{children}</span>;
-  return (
-    <Link href={href} className="no-color font-medium text-ink">
-      {children}
-    </Link>
-  );
-}
+/** A dashboards table's row: the whole row links to the dashboard. */
+type DashRow = { d: DashboardSummary };
 
 /** The app a dashboard belongs to (org mode). Unassigned is a dashboard with no app: it has no console. */
 function AppTag({ app }: { app: string }) {

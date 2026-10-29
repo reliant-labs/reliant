@@ -16,18 +16,13 @@ import {
 } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
+import DataTable from "@/components/forge-ui/data_table";
 import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
   Badge,
   Card,
   CardContent,
   EmptyState,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
 } from "./ui";
 import { ComputeOverageControl } from "./ComputeOverageControl";
 import { UsageView } from "@/components/Forge/Observability/UsageView";
@@ -1456,48 +1451,49 @@ function InvoicesPanel() {
           description="Invoices appear here once your first billing period closes."
         />
       ) : (
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Date</Th>
-              <Th>Amount</Th>
-              <Th>Status</Th>
-              <Th className="text-right">PDF</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {invoices.map((invoice) => {
-              const status = normalizeInvoiceStatus(invoice.status);
-              return (
-                <Tr key={invoice.id}>
-                  <Td>{formatTimestampDate(invoice.periodStart ?? invoice.createdAt)}</Td>
-                  <Td>{formatCentsAsDollars(invoice.amountDue)}</Td>
-                  <Td>
-                    <Badge
-                      variant={INVOICE_STATUS_VARIANT[status]}
-                      label={status}
-                    />
-                  </Td>
-                  <Td className="text-right">
-                    {invoice.pdfUrl ? (
-                      <a
-                        href={invoice.pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                      >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </a>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
+        <div className="forge-ui">
+          <DataTable<{ id: string; invoice: (typeof invoices)[number] }>
+            ariaLabel="Invoices"
+            columns={[
+              {
+                key: "date",
+                header: "Date",
+                render: (_, { invoice }) => formatTimestampDate(invoice.periodStart ?? invoice.createdAt),
+              },
+              { key: "amount", header: "Amount", numeric: true, render: (_, { invoice }) => formatCentsAsDollars(invoice.amountDue) },
+              {
+                key: "status",
+                header: "Status",
+                render: (_, { invoice }) => {
+                  const status = normalizeInvoiceStatus(invoice.status);
+                  return <Badge variant={INVOICE_STATUS_VARIANT[status]} label={status} />;
+                },
+              },
+              {
+                key: "pdf",
+                header: "PDF",
+                className: "text-right",
+                headerClassName: "text-right",
+                render: (_, { invoice }) =>
+                  invoice.pdfUrl ? (
+                    <a
+                      href={invoice.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </a>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  ),
+              },
+            ]}
+            data={invoices.map((invoice) => ({ id: invoice.id, invoice }))}
+            getRowKey={(row) => row.id}
+          />
+        </div>
       )}
     </div>
   );
@@ -1577,34 +1573,34 @@ function UsagePanel() {
                 description="No machine has run this period."
               />
             ) : (
-              <Table>
-                <Thead>
-                  <Tr>
-                    <Th>Size</Th>
-                    <Th className="text-right">Running h</Th>
-                    <Th className="text-right">Overage h</Th>
-                    <Th className="text-right">Overage cost</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {data.bySize.map((row) => (
-                    <Tr key={row.size}>
-                      <Td className="font-medium text-foreground">
-                        {sizeName(row.size)}
-                      </Td>
-                      <Td className="text-right">
-                        {(Number(row.runningSeconds) / 3600).toFixed(1)}
-                      </Td>
-                      <Td className="text-right">
-                        {(Number(row.overageSeconds) / 3600).toFixed(1)}
-                      </Td>
-                      <Td className="text-right">
-                        {formatCentsAsDollars(Number(row.overageCostCents))}
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+              <div className="forge-ui">
+                <DataTable<{ size: string; row: (typeof data.bySize)[number] }>
+                  ariaLabel="Usage by machine size"
+                  columns={[
+                    { key: "size", header: "Size", className: "font-medium", render: (_, { row }) => sizeName(row.size) },
+                    {
+                      key: "running",
+                      header: "Running h",
+                      numeric: true,
+                      render: (_, { row }) => (Number(row.runningSeconds) / 3600).toFixed(1),
+                    },
+                    {
+                      key: "overage",
+                      header: "Overage h",
+                      numeric: true,
+                      render: (_, { row }) => (Number(row.overageSeconds) / 3600).toFixed(1),
+                    },
+                    {
+                      key: "cost",
+                      header: "Overage cost",
+                      numeric: true,
+                      render: (_, { row }) => formatCentsAsDollars(Number(row.overageCostCents)),
+                    },
+                  ]}
+                  data={data.bySize.map((row) => ({ size: String(row.size), row }))}
+                  getRowKey={(r) => r.size}
+                />
+              </div>
             )}
           </div>
         </>
