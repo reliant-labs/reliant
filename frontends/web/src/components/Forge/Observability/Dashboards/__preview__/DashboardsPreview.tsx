@@ -58,6 +58,7 @@ const CASES: { id: string; label: string; options: FixtureOptions & { loading?: 
   { id: "loading", label: "loading", options: { loading: true } },
   { id: "not-set-up", label: "observability not set up", options: { failWith: Code.FailedPrecondition } },
   { id: "no-telemetry", label: "nothing sent in the window", options: { empty: true } },
+  { id: "day-grained", label: "product-usage: day buckets, 7d default (…&dash=release/product-usage)", options: { dashboardsDayGrained: true } },
   { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
 ];
 

@@ -376,6 +376,8 @@ function LineChart({
         label={panel.title}
         compact={compact}
         bands={bands}
+        window={data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }}
+        calendar={data.bucketTimezone === "UTC" ? { timezone: "UTC", bucketSeconds: data.bucketSeconds } : undefined}
         // The drill-down legend below names the series; uPlot's would repeat them.
         legend={!compact && !onDrill}
       />

@@ -405,6 +405,9 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
     kind: res.kind,
     unit: res.unit,
     stepSeconds: res.stepSeconds,
+    window: req.window,
+    bucketSeconds: res.bucketSeconds,
+    bucketTimezone: res.bucketTimezone || undefined,
     truncated: res.truncated,
     columns: [...res.columns],
     rows: res.rows.map((r) => {

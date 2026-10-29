@@ -262,6 +262,12 @@ export interface PanelResult {
   warnings: string[];
   /** With `explain`: the statements the panel compiles to. Empty otherwise. */
   compiledSql: CompiledStatement[];
+  /** The window this answers, so a chart's x axis is the window asked for, not the extent of what came back. */
+  window?: TimeWindow;
+  /** sql time series: the width of one bucket in seconds as the statement produced it; 0 or absent when unknown. */
+  bucketSeconds?: number;
+  /** sql time series: "UTC" when the points are calendar dates (labelled as that date, never converted); absent for instants. */
+  bucketTimezone?: string;
 }
 
 /** One statement a panel compiles to: SQL with {name:Type} placeholders and the parameter values. */
@@ -411,6 +417,8 @@ export interface Panel {
   limit?: number;
   /** sql panels only: one read-only SELECT, under the alert-rule guard and limits. */
   sql?: string;
+  /** sql panels only: the narrowest bucket the statement produces ("1d"); a window shorter than it is widened. */
+  minStep?: string;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;
@@ -445,6 +453,8 @@ export interface Dashboard {
   filters: DashboardFilter[];
   /** Declared marker series; empty when the dashboard declares none. */
   annotations?: DashboardAnnotation[];
+  /** The range the dashboard opens on when the URL names none ("7d"), rounded up to a preset. */
+  defaultRange?: string;
   panels: Panel[];
 }
 

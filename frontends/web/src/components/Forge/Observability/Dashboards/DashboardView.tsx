@@ -57,7 +57,7 @@ import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observability/types";
-import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../../Console/envScope";
@@ -131,7 +131,6 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const orgId = org.orgId;
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
   const exploreLink = useExploreHref();
@@ -146,6 +145,10 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
+  // The dashboard's own default when the URL names no range: a day-grained one
+  // declares "7d" and so never opens on a window that holds a single bucket.
+  const defaultRange = dashboardDefaultRange(spec?.defaultRange);
+  const range: RangePreset = search.range ?? defaultRange;
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -253,7 +256,10 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const refreshEvery = refreshMs(refresh);
   const processForPanel = (panel: Panel) => viewerQuery(spec, panel, search).services[0];
   const exploreHref = (panel: Panel): string | null =>
-    exploreLink?.(dashboardPivot(viewerQuery(spec, panel, search).panel, { service: processForPanel(panel), compare }), { range: search.range ? range : undefined }) ?? null;
+    // The range this dashboard is showing, explicit or its own default: the
+    // explorer link omits only the explorer's default, so a "7d" dashboard
+    // opens Explore on seven days, not one hour.
+    exploreLink?.(dashboardPivot(viewerQuery(spec, panel, search).panel, { service: processForPanel(panel), compare }), { range }) ?? null;
   const links = {
     traceHref: hrefs.trace,
     sessionHref: hrefs.session,
@@ -336,6 +342,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       env={env}
       environments={environments}
       range={range}
+      defaultRange={defaultRange}
       service={search.service}
       hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
       compare={compare}
@@ -793,6 +800,7 @@ function VariablesBar({
   env,
   environments,
   range,
+  defaultRange,
   service,
   hasProcessFilter,
   compare,
@@ -807,6 +815,7 @@ function VariablesBar({
   env: string;
   environments: readonly ObsEnvironment[];
   range: RangePreset;
+  defaultRange: RangePreset;
   service: string | undefined;
   hasProcessFilter: boolean;
   compare: CompareMode;
@@ -860,7 +869,7 @@ function VariablesBar({
         label="time"
         value={range}
         options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-        onChange={(value) => onSearch({ range: value === DEFAULT_RANGE ? undefined : (value as RangePreset) })}
+        onChange={(value) => onSearch({ range: value === defaultRange ? undefined : (value as RangePreset) })}
       />
       <Segmented
         label="Compare"
@@ -945,7 +954,7 @@ function DashboardPanelCard({
   panel,
   queryPanel,
   scope,
-  range,
+  range: rangeOfCard,
   services,
   refreshEvery,
   target,
@@ -967,6 +976,12 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
+  // A panel that buckets by a fixed span (minStep: "1d") cannot be drawn from a
+  // window shorter than that span: it would return one bucket. Widen it to the
+  // smallest range holding two, and say so under the title; the other panels
+  // stay on the dashboard's range.
+  const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
+  const range = widening?.range ?? rangeOfCard;
   const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
@@ -1014,6 +1029,11 @@ function DashboardPanelCard({
             <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
             {query.data && <ObsAsOf updatedAt={query.dataUpdatedAt} className="mt-0.5" />}
             {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
+            {widening?.widened && (
+              <p className="truncate text-xs text-warning-ink" data-testid={`dashboard-panel-widened-${panel.id}`} title={`This panel groups by a ${bucketLabel(queryPanel.minStep)} bucket, so it shows ${RANGE_LABELS[range].toLowerCase()} instead of ${RANGE_LABELS[rangeOfCard].toLowerCase()}.`}>
+                Window smaller than this panel&apos;s {bucketLabel(queryPanel.minStep)} bucket: showing {RANGE_LABELS[range].toLowerCase()}
+              </p>
+            )}
           </div>
         </div>
         {layout ? (

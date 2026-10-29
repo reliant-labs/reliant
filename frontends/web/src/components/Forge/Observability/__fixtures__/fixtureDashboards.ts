@@ -27,7 +27,7 @@ import type {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 
-import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureReleaseDashboards } from "./fixtureApi";
+import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureDayGrainedDashboard, fixtureReleaseDashboards } from "./fixtureApi";
 
 export interface DashboardFixtureOptions {
   /** The caller is not an org admin: reads work, every write is PermissionDenied. */
@@ -36,6 +36,8 @@ export interface DashboardFixtureOptions {
   dashboardsEmpty?: boolean;
   /** Every DashboardService call fails with this code. */
   dashboardsFailWith?: Code;
+  /** Ships control-plane's day-grained product-usage dashboard (a 7d defaultRange, sql panels bucketed by day). */
+  dashboardsDayGrained?: boolean;
 }
 
 type Call = <T>(rpc: string, request: unknown, answer: () => T) => Promise<T>;
@@ -231,6 +233,18 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
   if (options.dashboardsEmpty) {
     state.releases = [];
     state.workspace = [];
+  }
+  if (options.dashboardsDayGrained) {
+    const prod = FIXTURE_ENVS.find((e) => e.name === "prod")!.id;
+    state.releases.push({
+      spec: fixtureDayGrainedDashboard(),
+      source: "repo",
+      releaseVersion: "v1.8.2",
+      shippedAtMs: Date.now() - 16 * HOUR,
+      filePath: "deploy/observability/dashboards/product-usage.json",
+      envIds: [prod],
+      changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
+    });
   }
   const canWrite = !options.dashboardsReadOnly;
 

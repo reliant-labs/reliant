@@ -387,6 +387,77 @@ export function fixtureReleaseDashboards(): { generated: Dashboard[]; repo: Dash
   return { generated, repo: [checkout, frontend] };
 }
 
+/** control-plane's product-usage shape: day-grained sql panels on a dashboard that declares a 7d default. Opt-in (`dashboardsDayGrained`): the console's own panel checks do not know the sql kind. */
+export function fixtureDayGrainedDashboard(): Dashboard {
+  const usage: Dashboard = {
+    id: "product-usage",
+    title: "Product: usage",
+    description: "Day-grained product panels. Opens on 7 days: a day bucket in a 1 hour window is one point.",
+    filters: [],
+    annotations: [],
+    defaultRange: "7d",
+    panels: [
+      {
+        id: "workflows-by-outcome",
+        title: "Workflow runs per day by outcome",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toDate(Timestamp) AS day, if(Props['success'] = 'true', 'success', 'failed') AS outcome, count() AS runs FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day, outcome ORDER BY day",
+        minStep: "1d",
+        width: 12,
+        height: 8,
+      },
+      {
+        id: "events-by-step",
+        title: "Events per bucket",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, count() AS events FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY t ORDER BY t",
+        width: 12,
+        height: 8,
+      },
+      // A metrics panel, so the dashboard's own range reaches "Explore in Metrics".
+      { id: "goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
+    ],
+  };
+  return usage;
+}
+
+/**
+ * A sql panel answered the way control-plane answers it: a Date first column is
+ * one point per UTC calendar day whose start falls in the window (its time is
+ * that date's midnight UTC), tagged as UTC days; a {step} statement is one
+ * point per step. 834 successful runs today, as in the audit's screenshot.
+ */
+function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
+  const base = { kind: "sql", unit: panel.unit ?? "", truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS, window };
+  const DAY = 86_400_000;
+  if (/toDate\(/.test(panel.sql ?? "")) {
+    const first = Math.floor(window.startMs / DAY) * DAY;
+    const days: number[] = [];
+    for (let day = first; day < window.endMs; day += DAY) days.push(day);
+    const perDay = [5, 19, 68, 160, 35, 834, 62];
+    const failed = [0, 0, 1, 3439, 5479, 17, 2];
+    const at = (i: number, from: number[]) => from[from.length - days.length + i] ?? from[0]!;
+    const timestamps = days.map((d) => d / 1000);
+    return {
+      ...base,
+      stepSeconds: 3600,
+      bucketSeconds: 86_400,
+      bucketTimezone: "UTC",
+      series: [
+        { label: "runs", group: { outcome: "success" }, timestamps, values: days.map((_, i) => at(i, perDay)), value: null },
+        { label: "runs", group: { outcome: "failed" }, timestamps, values: days.map((_, i) => at(i, failed)), value: null },
+      ],
+    };
+  }
+  const step = Math.max(60, Math.round((window.endMs - window.startMs) / 1000 / 30));
+  const timestamps = Array.from({ length: 30 }, (_, i) => Math.round(window.startMs / 1000) + i * step);
+  return { ...base, stepSeconds: step, bucketSeconds: step, series: [{ label: "events", group: {}, timestamps, values: timestamps.map((_, i) => 40 + ((i * 7) % 23)), value: null }] };
+}
+
 /** A small speedscope "sampled" profile: an rpc handler, JSON encoding and a database call. */
 export function fixtureSpeedscope(): string {
   const frames = ["main", "net/http.(*conn).serve", "orders.(*Service).CreateOrder", "encoding/json.Marshal", "database/sql.(*DB).QueryContext", "runtime.mallocgc", "syscall.Syscall"].map((name) => ({ name }));
@@ -942,6 +1013,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
           throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
         }
         if (panel.signal === "metrics" && panel.series.some((series) => fixtureMetricEntry(series.field ?? ""))) return fixtureMetricPanel(panel, req.window, req.window.endMs);
+        if (panel.kind === "sql") return fixtureSqlPanel(panel, req.window);
         if (panel.id.startsWith("compare-")) return fixtureComparePanel(panel, req.window, req.envIds, delivery.ledger);
         return fixturePanel(panel, req.window, req.services, req.groupBy, req);
       }),
