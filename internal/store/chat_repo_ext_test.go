@@ -429,8 +429,30 @@ func TestChatMachineMarkers(t *testing.T) {
 	if changed, err := store.SetChatQueuedForMachine(ctx, env.ORM, "m-3", true); err != nil || !changed {
 		t.Fatalf("queue m-3 = %v, %v", changed, err)
 	}
+	for _, m := range markers {
+		if _, err := m.set("m-3", true); err != nil {
+			t.Fatalf("%s(m-3): %v", m.name, err)
+		}
+	}
 	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateArchived, "test"); err != nil {
 		t.Fatalf("archive m-3: %v", err)
+	}
+	// Archiving drops every machine marker, so unarchiving starts nothing:
+	// a queued message or breaker pause left set would be delivered, or
+	// resumed, the moment the chat left the archive.
+	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateIdle, "test"); err != nil {
+		t.Fatalf("unarchive m-3: %v", err)
+	}
+	var markersLeft int
+	if err := env.ORM.Bun().NewRaw(`SELECT num_nonnulls(queued_for_machine_at, paused_for_machine_at, daemon_blocked_at)
+FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft != 0 {
+		t.Fatalf("after archive+unarchive m-3 holds %d machine markers (%v); want none", markersLeft, err)
+	}
+	if err := env.Repo.UpdateChatState(ctx, "m-3", core.ChatStateArchived, "test"); err != nil {
+		t.Fatalf("re-archive m-3: %v", err)
+	}
+	if _, err := store.SetChatQueuedForMachine(ctx, env.ORM, "m-3", true); err != nil {
+		t.Fatalf("queue archived m-3: %v", err)
 	}
 	for _, user := range []string{"", storetest.SeedUserID, "someone-else"} {
 		got, err := store.ListChatsQueuedForMachine(ctx, env.ORM, user, 10)

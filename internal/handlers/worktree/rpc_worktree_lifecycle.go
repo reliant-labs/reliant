@@ -336,12 +336,16 @@ func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, workt
 
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
-			// Cancel workflow if running (best-effort)
-			if workflowID := chat.MainThreadID(); workflowID != "" && s.deps.Temporal != nil {
-				_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
-			}
+			// Archive first, then cancel (best-effort): a delivery of a
+			// message queued for the machine that reads the chat after the
+			// archive drops it, and one that started a run just before is
+			// stopped by the cancel. Cancelling first left a window in which
+			// a delivery restarted the run of a chat being archived.
 			if err := s.deps.Repo.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
 				logging.WarnContext(ctx, "Failed to archive chat", "error", err, "chatID", chat.ID)
+			}
+			if workflowID := chat.MainThreadID(); workflowID != "" && s.deps.Temporal != nil {
+				_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 			}
 		}
 	}
