@@ -26,8 +26,10 @@ import (
 // must be cheap: HEAD and its ref are read from the git directory as files
 // (no process), and are part of the snapshot's version, so a commit or a
 // checkout sends a new snapshot. Whether .reliant is dirty takes a git
-// process, so it is computed only when the version moved; a dirty state can
-// only change with the files or HEAD, both of which move the version.
+// process, so it is computed only when the version moved. What it depends
+// on is in the version too, as stats: the git index (staging or unstaging
+// moves it) and every file under .reliant, synced or not (an untracked
+// README there is still an uncommitted change).
 
 // repoHead is a repository's HEAD as read from its git directory.
 type repoHead struct {
@@ -37,6 +39,9 @@ type repoHead struct {
 	commit        string
 	defaultBranch string
 	err           string
+	// dirtyInputs fingerprints what `git status -- .reliant` reads: the
+	// index's and each .reliant file's size and mtime.
+	dirtyInputs string
 }
 
 // repoDirtyCache remembers each project's last computed dirty flags by the
@@ -89,9 +94,30 @@ func readRepoHeads(projectPath string, repos []string) []repoHead {
 func headsVersion(heads []repoHead) []byte {
 	var b strings.Builder
 	for _, h := range heads {
-		fmt.Fprintf(&b, "%s@%s:%s:%s;", h.repo, h.branch, h.commit, h.defaultBranch)
+		fmt.Fprintf(&b, "%s@%s:%s:%s:%s:%s;", h.repo, h.branch, h.commit, h.defaultBranch, h.err, h.dirtyInputs)
 	}
 	return []byte(b.String())
+}
+
+// dirtyInputs fingerprints the git index and the files under dir/.reliant by
+// size and mtime: stats only, no reads.
+func dirtyInputs(dir, gitDir string) string {
+	var b strings.Builder
+	if fi, err := os.Stat(filepath.Join(gitDir, "index")); err == nil {
+		fmt.Fprintf(&b, "index:%d:%d;", fi.Size(), fi.ModTime().UnixNano())
+	}
+	root := filepath.Join(dir, ".reliant")
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if fi, err := d.Info(); err == nil {
+			rel, _ := filepath.Rel(root, p)
+			fmt.Fprintf(&b, "%s:%d:%d;", rel, fi.Size(), fi.ModTime().UnixNano())
+		}
+		return nil
+	})
+	return b.String()
 }
 
 // repoStates completes heads with each repo's dirty flag, computing it only
@@ -160,7 +186,7 @@ func readRepoHead(dir, repo string) (repoHead, bool) {
 	if !ok {
 		return repoHead{}, false
 	}
-	h := repoHead{repo: repo, dir: dir}
+	h := repoHead{repo: repo, dir: dir, dirtyInputs: dirtyInputs(dir, gitDir)}
 	head, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
 	if err != nil {
 		h.err = fmt.Sprintf("read HEAD: %v", err)

@@ -40,17 +40,25 @@ func (s SyncedRepoState) ShortCommit() string {
 }
 
 // Describe is the state for display: "main 1a2b3c4, clean",
-// "feat/x 1a2b3c4, uncommitted changes", "detached 1a2b3c4, clean".
+// "feat/x 1a2b3c4, uncommitted changes", "detached 1a2b3c4, clean", and
+// "main 1a2b3c4, state unknown" when the daemon could not read it in full:
+// a failed read is never shown as clean.
 func (s SyncedRepoState) Describe() string {
 	branch := s.Branch
 	if branch == "" {
 		branch = "detached"
 	}
 	state := "clean"
-	if s.Dirty {
+	switch {
+	case s.Dirty:
 		state = "uncommitted changes"
+	case s.Error != "":
+		state = "state unknown"
 	}
 	if s.Commit == "" {
+		if s.Error != "" {
+			return "git state unknown"
+		}
 		return fmt.Sprintf("%s (no commits), %s", branch, state)
 	}
 	return fmt.Sprintf("%s %s, %s", branch, s.ShortCommit(), state)
@@ -135,6 +143,10 @@ func (p WorkflowProvenance) Warnings() []string {
 	if p.Repo.Dirty {
 		out = append(out, fmt.Sprintf("machine %s has uncommitted changes under %s/.reliant: this runs the edited files, not what is committed",
 			p.Machine, where))
+	}
+	if p.Repo.Error != "" {
+		out = append(out, fmt.Sprintf("machine %s could not read the git state of %s (%s): which commit this runs is not known",
+			p.Machine, where, p.Repo.Error))
 	}
 	return out
 }

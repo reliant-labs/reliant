@@ -75,22 +75,41 @@ func TestRepoStatesReportsDirtyReliantDir(t *testing.T) {
 	git("commit", "-q", "-m", "init")
 
 	ctx := context.Background()
-	states := func(version string) (bool, string) {
-		s := repoStates(ctx, dir, version, readRepoHeads(dir, nil))
+	// The version as the snapshot computes it: HEAD, the index and the
+	// .reliant files' stats.
+	states := func() (bool, string) {
+		t.Helper()
+		heads := readRepoHeads(dir, nil)
+		s := repoStates(ctx, dir, string(headsVersion(heads)), heads)
 		require.Len(t, s, 1)
+		require.Empty(t, s[0].GetError())
 		return s[0].GetDirty(), s[0].GetBranch()
 	}
-	dirty, branch := states("v1")
+	dirty, branch := states()
 	assert.False(t, dirty)
 	assert.Equal(t, "main", branch)
 
 	writeFile(t, filepath.Join(dir, "README.md"), "outside .reliant\n")
-	dirty, _ = states("v2")
+	dirty, _ = states()
 	assert.False(t, dirty, "a change outside .reliant is not what syncs")
 
-	writeFile(t, filepath.Join(dir, ".reliant", "workflows", "release.yaml"), "name: release\ndescription: edited\n")
-	dirty, _ = states("v3")
+	release := filepath.Join(dir, ".reliant", "workflows", "release.yaml")
+	writeFile(t, release, "name: release\ndescription: edited\n")
+	dirty, _ = states()
 	assert.True(t, dirty)
-	dirty, _ = states("v3")
-	assert.True(t, dirty, "an unchanged version reuses the computed state")
+
+	// Stage the edit, then put the file back as committed: the synced bytes
+	// and HEAD are the clean ones again, but the index is not.
+	git("add", release)
+	writeFile(t, release, "name: release\n")
+	dirty, _ = states()
+	assert.True(t, dirty, "a staged change is uncommitted, though the file matches HEAD")
+	git("reset", "-q", release)
+	dirty, _ = states()
+	assert.False(t, dirty)
+
+	// An untracked file under .reliant that is not synced is still dirty.
+	writeFile(t, filepath.Join(dir, ".reliant", "notes.txt"), "todo\n")
+	dirty, _ = states()
+	assert.True(t, dirty)
 }
