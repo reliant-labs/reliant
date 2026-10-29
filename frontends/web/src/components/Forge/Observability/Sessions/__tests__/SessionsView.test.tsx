@@ -167,8 +167,10 @@ describe("one session", () => {
     const api = createFixtureApi();
     const unrecorded = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 100 })).sessions.find((s) => !s.hasReplay)!;
     renderPanel(api, { view: "sessions", session: unrecorded.sessionId }, PROJECT_PLACE);
-    expect(await screen.findByTestId("session-no-replay")).toBeInTheDocument();
+    expect(await screen.findByTestId("session-no-replay")).toHaveTextContent("No replay was recorded for this session.");
     expect(await screen.findByTestId("session-timeline")).toBeInTheDocument();
+    // No empty replay panel beside it: the timeline takes the width.
+    expect(screen.queryByTestId("session-replay")).not.toBeInTheDocument();
   });
 
   it("says a session outside the scope isn't here", async () => {

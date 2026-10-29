@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
@@ -27,7 +28,6 @@ import type { RumScope, SessionSummary } from "@/services/controlPlane/observabi
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
@@ -249,58 +249,68 @@ function chip(active: boolean) {
   );
 }
 
+type SessionRow = { session: SessionSummary };
+
 function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: (id: string) => void }) {
   const now = Date.now();
   if (sessions.length === 0) {
     return <p className="px-4 py-6 text-sm text-ink-muted">No more sessions in this window.</p>;
   }
+  // Not a whole-row action: the session column carries its id's copy button,
+  // and a button cannot hold another. Its title is the opening button.
+  const columns: DataTableColumn<SessionRow>[] = [
+    {
+      key: "session",
+      header: "Session",
+      interactive: true,
+      render: (_, { session: s }) => (
+        <>
+          <button
+            type="button"
+            onClick={() => onOpen(s.sessionId)}
+            className="block max-w-full truncate text-left font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            title={s.startedMs ? `Started ${formatAgo(s.startedMs, now)}` : undefined}
+            data-testid={`obs-session-open-${s.sessionId}`}
+          >
+            {sessionTitle(s.service, s.startedMs, { now })}
+          </button>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-ink-muted">
+            {s.userId ? <span className="text-ink">{s.userId}</span> : <span>anonymous</span>}
+            {s.envName && <span>{s.envName}</span>}
+            {s.hasReplay && <Tag title="This session's replay was recorded">replay</Tag>}
+            <Mono value={s.sessionId} length={8} />
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "entry",
+      header: "Entry",
+      className: "max-w-[16rem] truncate",
+      render: (_, { session: s }) => (
+        <span className="font-mono text-xs" title={s.entryPath}>
+          {s.entryPath || "/"}
+        </span>
+      ),
+    },
+    { key: "duration", header: "Duration", numeric: true, render: (_, { session: s }) => formatDuration(Math.max(0, s.endedMs - s.startedMs)) },
+    { key: "pages", header: "Pages", numeric: true, render: (_, { session: s }) => formatCount(s.pageViews) },
+    { key: "interactions", header: "Interactions", numeric: true, render: (_, { session: s }) => formatCount(s.interactions) },
+    {
+      key: "errors",
+      header: "Errors",
+      render: (_, { session: s }) => (s.errors > 0 ? <Status tone="danger" label={formatCount(s.errors)} /> : <Status tone="neutral" label="none" />),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">Browser sessions in scope, newest first</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
-            <th scope="col" className="px-4 py-2 font-medium">Session</th>
-            <th scope="col" className="px-4 py-2 font-medium">Entry</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Duration</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Pages</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Interactions</th>
-            <th scope="col" className="px-4 py-2 font-medium">Errors</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sessions.map((s) => (
-            <tr key={`${s.service}-${s.sessionId}`} className="border-b border-border/50 align-top last:border-b-0 hover:bg-ink/5" data-testid={`obs-session-${s.sessionId}`}>
-              <th scope="row" className="px-4 py-2 text-left font-normal">
-                <button
-                  type="button"
-                  onClick={() => onOpen(s.sessionId)}
-                  className="block max-w-full truncate text-left font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  title={s.startedMs ? `Started ${formatAgo(s.startedMs, now)}` : undefined}
-                  data-testid={`obs-session-open-${s.sessionId}`}
-                >
-                  {sessionTitle(s.service, s.startedMs, { now })}
-                </button>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
-                  {s.userId ? <span className="text-ink">{s.userId}</span> : <span>anonymous</span>}
-                  {s.envName && <span>{s.envName}</span>}
-                  {s.hasReplay && <Tag title="This session's replay was recorded">replay</Tag>}
-                  <Mono value={s.sessionId} length={8} />
-                </p>
-              </th>
-              <td className="max-w-[16rem] truncate px-4 py-2 font-mono text-xs text-ink" title={s.entryPath}>
-                {s.entryPath || "/"}
-              </td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatDuration(Math.max(0, s.endedMs - s.startedMs))}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(s.pageViews)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(s.interactions)}</td>
-              <td className="px-4 py-2">
-                {s.errors > 0 ? <Status tone="danger" label={formatCount(s.errors)} /> : <Status tone="neutral" label="none" />}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
-    </div>
+    <DataTable<SessionRow>
+      flush
+      stacked
+      ariaLabel="Browser sessions in scope, newest first"
+      columns={columns}
+      data={sessions.map((session) => ({ session }))}
+      getRowKey={({ session }) => `${session.service}-${session.sessionId}`}
+      getRowProps={({ session }) => ({ className: "align-top hover:bg-ink/5", "data-testid": `obs-session-${session.sessionId}` })}
+    />
   );
 }

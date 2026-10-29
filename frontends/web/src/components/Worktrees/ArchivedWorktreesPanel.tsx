@@ -8,10 +8,13 @@ import EmptyState from "../forge-ui/empty_state";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { cleanupSummary, sortArchivedWorkspaces } from "./workspaceStatus";
+import DataTable, { type DataTableColumn } from "../forge-ui/data_table";
 import { workspaceColumn, workspaceTable } from "./workspaceStyles";
 import { BranchCell, IconAction, TimeCell, WorkspaceNameCell } from "./WorkspaceTableParts";
 import { deleteWorktree, unarchiveWorktree } from "../../hooks/worktree-actions";
 import { useArchivedWorktreeList, type Worktree } from "../../hooks/worktree-queries";
+
+type WorkspaceRow = { id: string; worktree: Worktree };
 
 interface ArchivedWorktreesPanelProps {
   /** Padding around the panel. The viewer tab relies on the default. */
@@ -61,6 +64,82 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
     ? chats.filter((chat) => chat.worktreeId === worktreeToDelete.id).length
     : 0;
 
+  const columns: DataTableColumn<WorkspaceRow>[] = [
+    {
+      key: "name",
+      header: "Workspace",
+      className: "max-w-0 w-full @xl:w-auto @xl:max-w-xs",
+      render: (_, { worktree }) => <WorkspaceNameCell worktree={worktree} />,
+    },
+    {
+      key: "branch",
+      header: "Branch",
+      className: cn(workspaceColumn.branch, "max-w-[14rem]"),
+      headerClassName: workspaceColumn.branch,
+      render: (_, { worktree }) => <BranchCell worktree={worktree} />,
+    },
+    {
+      key: "archived",
+      header: "Archived",
+      className: workspaceColumn.time,
+      headerClassName: workspaceColumn.time,
+      render: (_, { worktree }) => <TimeCell value={worktree.deleted_at} empty="Unknown" />,
+    },
+    {
+      key: "onDisk",
+      header: "On disk",
+      className: workspaceColumn.cleanup,
+      headerClassName: workspaceColumn.cleanup,
+      render: (_, { worktree }) => (
+        <span className="text-xs text-muted-foreground">{cleanupSummary(worktree)}</span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      className: "text-right",
+      render: (_, { worktree }) => {
+        const isRestoring = restoringId === worktree.id;
+        const isDeleting = deletingId === worktree.id;
+        return (
+          <div className="inline-flex items-center gap-0.5">
+            <IconAction
+              label={`Restore ${worktree.name}`}
+              hint="Restore workspace and its chats"
+              icon={
+                isRestoring ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3.5 w-3.5" />
+                )
+              }
+              onClick={() => void handleRestore(worktree.id)}
+              disabled={isRestoring || isDeleting}
+              testId={`restore-workspace-${worktree.id}`}
+            />
+            <IconAction
+              label={`Delete ${worktree.name} permanently`}
+              hint="Delete permanently"
+              icon={
+                isDeleting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )
+              }
+              onClick={() => setWorktreeToDelete(worktree)}
+              disabled={isRestoring || isDeleting}
+              danger
+              testId={`delete-workspace-${worktree.id}`}
+            />
+          </div>
+        );
+      },
+    },
+  ];
+
   if (!currentProject) {
     return (
       <div className={cn("forge-ui", paddingClass)}>
@@ -100,93 +179,20 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
           description="Archiving a workspace puts it and its chats away without losing them. Archived workspaces land here, where you can restore them or delete them for good."
         />
       ) : (
-        <div className={workspaceTable.wrapper}>
-          <table className={workspaceTable.table}>
-            <caption className="sr-only">
-              Archived workspaces in {currentProject.name}: branch, when each was archived, and what
-              cleanup removed.
-            </caption>
-            <thead>
-              <tr className={workspaceTable.headRow}>
-                <th scope="col" className={workspaceTable.headCell}>
-                  Workspace
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.branch)}>
-                  Branch
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.time)}>
-                  Archived
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.cleanup)}>
-                  On disk
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, "text-right")}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {archivedWorktrees.map((worktree) => {
-                const isRestoring = restoringId === worktree.id;
-                const isDeleting = deletingId === worktree.id;
-                return (
-                  <tr
-                    key={worktree.id}
-                    data-testid={`archived-row-${worktree.id}`}
-                    className={cn(workspaceTable.row, (isRestoring || isDeleting) && "opacity-60")}
-                  >
-                    <td className={cn(workspaceTable.cell, "max-w-0 w-full @xl:w-auto @xl:max-w-xs")}>
-                      <WorkspaceNameCell worktree={worktree} />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.branch, "max-w-[14rem]")}>
-                      <BranchCell worktree={worktree} />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.time)}>
-                      <TimeCell value={worktree.deleted_at} empty="Unknown" />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.cleanup)}>
-                      <span className="whitespace-nowrap text-xs text-muted-foreground">
-                        {cleanupSummary(worktree)}
-                      </span>
-                    </td>
-                    <td className={cn(workspaceTable.cell, "whitespace-nowrap text-right")}>
-                      <div className="inline-flex items-center gap-0.5">
-                        <IconAction
-                          label={`Restore ${worktree.name}`}
-                          hint="Restore workspace and its chats"
-                          icon={
-                            isRestoring ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            )
-                          }
-                          onClick={() => void handleRestore(worktree.id)}
-                          disabled={isRestoring || isDeleting}
-                          testId={`restore-workspace-${worktree.id}`}
-                        />
-                        <IconAction
-                          label={`Delete ${worktree.name} permanently`}
-                          hint="Delete permanently"
-                          icon={
-                            isDeleting ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )
-                          }
-                          onClick={() => setWorktreeToDelete(worktree)}
-                          disabled={isRestoring || isDeleting}
-                          danger
-                          testId={`delete-workspace-${worktree.id}`}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className={workspaceTable.frame}>
+          <DataTable<WorkspaceRow>
+            flush
+            ariaLabel={`Archived workspaces in ${currentProject.name}`}
+            columns={columns}
+            data={archivedWorktrees.map((worktree) => ({ id: worktree.id, worktree }))}
+            getRowKey={(row) => row.id}
+            getRowProps={({ worktree }) => ({
+              "data-testid": `archived-row-${worktree.id}`,
+              className: cn(
+                (restoringId === worktree.id || deletingId === worktree.id) && "opacity-60",
+              ),
+            })}
+          />
           {hasMore && (
             <div className="flex justify-center border-t border-border p-2">
               <button

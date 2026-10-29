@@ -192,9 +192,9 @@ test.describe('the whole new-human flow', () => {
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim']);
     expect(mock.calls[2].body).toEqual({ claimToken: CLAIM_TOKEN });
 
-    const card = page.getByTestId('app-card-storefront');
-    await expect(card).toBeVisible(LOADED);
-    await expect(card).toHaveAttribute('data-highlighted', 'true');
+    const row = page.getByTestId('app-row-storefront');
+    await expect(row).toBeVisible(LOADED);
+    await expect(row).toHaveAttribute('data-highlighted', 'true');
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
     // The highlight is shown once: the param is dropped from the URL.
     await expect(page).toHaveURL(/\/apps$/);

@@ -23,25 +23,28 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 const ready = async () => waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready"));
 
 describe("the Overview's Frontends panel", () => {
-  it("lists prod's sites with the platform address as the headline link", async () => {
+  it("headlines a site's live custom domain, with the generated address beside it", async () => {
     renderOverview();
     await ready();
     const panel = screen.getByTestId("overview-frontends");
     const web = within(panel).getByTestId("frontend-prod-web");
     const link = within(web).getByTestId("frontend-url");
-    expect(link).toHaveAttribute("href", "https://valiant-caribou.sites.reliantlabs.dev");
+    expect(link).toHaveAttribute("href", "https://app.reliantlabs.io");
     expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveTextContent("valiant-caribou.sites.reliantlabs.dev");
+    expect(link).toHaveTextContent("app.reliantlabs.io");
+    expect(within(web).getByTestId("frontend-platform-url")).toHaveTextContent("valiant-caribou.sites.reliantlabs.dev");
+    // The headline domain is not listed a second time among the domains.
+    expect(within(web).queryByTestId("frontend-domain-app.reliantlabs.io")).toBeNull();
     expect(within(web).getByText("Static site")).toBeInTheDocument();
     expect(within(web).getByTestId("frontend-release")).toBeInTheDocument();
   });
 
-  it("shows a live custom domain as a second address, and a pending one as plain text with its state", async () => {
+  it("headlines the platform address while the custom domain is not live, and shows that domain's state", async () => {
     renderOverview();
     await ready();
-    const web = screen.getByTestId("frontend-prod-web");
-    expect(within(web).getByTestId("frontend-domain-url")).toHaveAttribute("href", "https://app.reliantlabs.io");
     const docs = screen.getByTestId("frontend-prod-docs");
+    expect(within(docs).getByTestId("frontend-url")).toHaveAttribute("href", "https://bright-otter.sites.reliantlabs.dev");
+    expect(within(docs).queryByTestId("frontend-platform-url")).toBeNull();
     const pending = within(docs).getByTestId("frontend-domain-docs.reliantlabs.io");
     expect(within(pending).queryByRole("link", { name: /docs\.reliantlabs\.io/ })).toBeNull();
     expect(pending).toHaveTextContent("Waiting for DNS");
@@ -90,8 +93,8 @@ describe("the Overview's Frontends panel", () => {
     renderOverview();
     await ready();
     await user.click(within(screen.getByTestId("frontend-prod-web")).getAllByTestId("frontend-copy")[0]!);
-    expect(writeText).toHaveBeenCalledWith("https://valiant-caribou.sites.reliantlabs.dev");
-    await waitFor(() => expect(screen.getByRole("button", { name: /Copied https:\/\/valiant-caribou/ })).toBeInTheDocument());
+    expect(writeText).toHaveBeenCalledWith("https://app.reliantlabs.io");
+    await waitFor(() => expect(screen.getByRole("button", { name: /Copied https:\/\/app\.reliantlabs/ })).toBeInTheDocument());
   });
 
   it("leaves the domain column out when the org's domains could not be read, and still shows the address", async () => {
@@ -120,13 +123,12 @@ describe("the Overview's Frontends panel", () => {
     expect(screen.queryByTestId("frontends-empty")).toBeNull();
   });
 
-  it("no longer repeats frontends in the APIs row", async () => {
+  it("does not link to APIs: an API is not a destination for a person", async () => {
     renderOverview({ env: "all" });
     await ready();
-    const apis = screen.getByTestId("overview-live-links");
-    expect(within(apis).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual([
-      "https://admin.reliantlabs.io",
-      "https://api.reliantlabs.io",
-    ]);
+    expect(screen.queryByTestId("overview-live-links")).toBeNull();
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).not.toContain("https://api.reliantlabs.io");
+    expect(hrefs).not.toContain("https://admin.reliantlabs.io");
   });
 });

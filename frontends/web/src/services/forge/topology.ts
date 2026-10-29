@@ -259,6 +259,26 @@ export interface ForgeHostedWorkload {
    * state vocabulary then falls back to inferring it.
    */
   suspend_reason?: string;
+  /**
+   * The custom domains bound to this workload, from GetStatus's
+   * `observed.domains`. Control-plane rows only; absent where none is bound
+   * or the environment does not converge custom domains.
+   */
+  domains?: HostedDomain[];
+}
+
+/** One custom domain a hosted workload answers on, as GetStatus reports it. */
+export interface HostedDomain {
+  /** Lowercased: 'example.com', 'app.example.com'. */
+  hostname: string;
+  /** Acquisition state, in domains.ts's vocabulary (DomainState): only `live` serves over HTTPS. */
+  state: string;
+  /**
+   * Where the hostname's DNS points as the control plane resolved it while
+   * answering: edge | ingress | elsewhere | unknown. `elsewhere` means the
+   * tenant has since pointed it away from the platform.
+   */
+  serving_path?: string;
 }
 
 // ── Destination ─────────────────────────────────────────────────────────────
@@ -395,6 +415,40 @@ export function workloadLink(workload: ForgeHostedWorkload): string {
   if (url !== "") return url;
   const host = (workload.hostname ?? "").trim();
   return host !== "" ? `https://${host}` : "";
+}
+
+/**
+ * The custom domain a workload is best opened at, or "" when none qualifies.
+ *
+ * A domain qualifies once it is LIVE (verified, certificate issued, serving)
+ * AND its DNS still reaches the platform: a live domain the tenant has since
+ * pointed elsewhere would open somebody else's server. An unresolved serving
+ * path (no resolver here, or the lookup failed) does not disqualify a live
+ * domain — LIVE is the control plane's own verdict.
+ *
+ * Several live domains: the shortest (an apex over its subdomains), then by
+ * name, so every surface picks the same one.
+ */
+export function workloadCustomDomain(workload: Pick<ForgeHostedWorkload, "domains">): string {
+  const live = (workload.domains ?? [])
+    .filter((domain) => domain.state === "live" && domain.serving_path !== "elsewhere")
+    .map((domain) => domain.hostname.trim().toLowerCase())
+    .filter((hostname) => hostname !== "");
+  live.sort((a, b) => a.split(".").length - b.split(".").length || a.localeCompare(b));
+  return live[0] ?? "";
+}
+
+/**
+ * workloadOpenUrl is THE address a person opens a workload at — the one
+ * helper the Apps page, the sidebar, the home view, a chat's deploy card and
+ * the console's frontend and workload pages all link through, so they never
+ * disagree. The workload's own domain when one is live and healthy
+ * (workloadCustomDomain), otherwise the platform's generated URL
+ * (workloadLink); "" when it has neither.
+ */
+export function workloadOpenUrl(workload: ForgeHostedWorkload): string {
+  const domain = workloadCustomDomain(workload);
+  return domain !== "" ? `https://${domain}` : workloadLink(workload);
 }
 
 /**

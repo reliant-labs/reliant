@@ -27,7 +27,7 @@
  *
  * SURFACES. Each table is a forge `Card` (`bg-surface` = `--card`, `border-border`)
  * on the page's `bg-surface-sunken`; anything inset inside a card (the evidence
- * block in CheckRow) is `bg-surface-sunken` + `border-border/60`. Cards are never
+ * block in CheckTable) is `bg-surface-sunken` + `border-border/60`. Cards are never
  * nested, and `bg-surface-sunken` is never used for structure — `--muted` inverts
  * direction between light and dark across the ten schemes in
  * themes/professional-themes.css.
@@ -51,9 +51,9 @@ import {
   ForgeUnsupported,
   NotForgeProject,
 } from "../ForgeStates";
-import { CheckRow } from "./CheckRow";
+import { CheckTable } from "./CheckTable";
 import { DispositionLegend } from "./DispositionLegend";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 
 export interface DevStackPanelProps {
   outcome: ForgeOutcome<ForgeEnvStatusReport> | undefined;
@@ -96,9 +96,6 @@ const VERDICT_LABELS: Record<EnvStatusVerdict, string> = {
   incomplete: "Incomplete — not a clean bill of health",
   "no-checks": "Nothing measured",
 };
-
-/** Shared column-header treatment, so both tables on the screen read alike. */
-const TH = "px-4 py-2 text-left text-xs font-medium text-ink-muted";
 
 export function DevStackPanel({
   outcome,
@@ -193,31 +190,11 @@ export function DevStackPanel({
           <DispositionLegend report={report} />
 
           <Card padding="none" className="overflow-hidden">
-            <StackedTable className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-border">
-                  <th scope="col" className={TH}>
-                    Result
-                  </th>
-                  <th scope="col" className={TH}>
-                    Check
-                  </th>
-                  <th scope="col" className={TH}>
-                    Detail
-                  </th>
-                  <th scope="col" className={cn(TH, "text-right")}>
-                    Took
-                  </th>
-                </tr>
-              </thead>
-              {/* The testid stays on the row container, so the contract test's
-                  "every check is rendered" count still reads check rows. */}
-              <tbody data-testid="forge-status-checks">
-                {checks.map((check) => (
-                  <CheckRow key={check.name} check={check} />
-                ))}
-              </tbody>
-            </StackedTable>
+            {/* The testid stays on the checks' container, so the contract
+                test's "every check is rendered" count still reads check rows. */}
+            <div data-testid="forge-status-checks">
+              <CheckTable checks={checks} />
+            </div>
           </Card>
         </div>
       )}
@@ -243,6 +220,73 @@ export function DevStackPanel({
  * solid, `attribution undetermined` dashed and ringed — which is what carries
  * the distinction, not their position.
  */
+type ServiceTableRow = { name: string; service: NonNullable<ForgeEnvStatusReport["services"]>[number] };
+
+const NOTE = "rounded-md border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-xs text-warning-ink";
+
+const SERVICE_COLUMNS: DataTableColumn<ServiceTableRow>[] = [
+  {
+    key: "state",
+    header: "State",
+    render: (_, { service }) => (
+      <span
+        // Listening is a point-in-time port probe, so it is a measured fact
+        // and gets a solid treatment either way.
+        className={cn(
+          "inline-flex items-center rounded-md border border-solid px-2 py-0.5 text-xs",
+          service.listening
+            ? "border-success-border bg-success-surface text-success-ink"
+            : "border-danger-border bg-danger-surface text-danger-ink"
+        )}
+      >
+        {service.listening ? "Listening" : "Down"}
+      </span>
+    ),
+  },
+  // A service name is an identifier, so it stays mono.
+  { key: "service", header: "Service", className: "font-mono", render: (_, { name }) => name },
+  {
+    key: "kind",
+    header: "Kind",
+    className: "text-ink-muted",
+    render: (_, { service }) => service.kind || <span aria-hidden="true">—</span>,
+  },
+  {
+    key: "port",
+    header: "Port",
+    numeric: true,
+    className: "font-mono text-ink-muted",
+    render: (_, { service }) =>
+      typeof service.port === "number" && service.port > 0 ? service.port : <span aria-hidden="true">—</span>,
+  },
+  {
+    key: "notes",
+    header: "Notes",
+    numeric: true,
+    render: (_, { service }) => {
+      const stale = (service.serving ?? []).some((proc) => proc.stale === true);
+      if (!stale && !service.duplicate && !service.attribution_undetermined) {
+        return (
+          <span aria-hidden="true" className="text-xs text-ink-muted">
+            —
+          </span>
+        );
+      }
+      return (
+        <div className="flex flex-wrap justify-end gap-1">
+          {stale && <span className={NOTE}>Stale build</span>}
+          {service.duplicate && <span className={NOTE}>Duplicate process</span>}
+          {service.attribution_undetermined && (
+            <span className="rounded-md border border-dashed border-ink-muted/60 px-2 py-0.5 text-xs text-ink-muted ring-1 ring-inset ring-ink-muted/30">
+              Attribution undetermined
+            </span>
+          )}
+        </div>
+      );
+    },
+  },
+];
+
 function ServiceSummary({
   services,
 }: {
@@ -253,99 +297,15 @@ function ServiceSummary({
       <h3 className="text-sm font-semibold text-ink">Host services</h3>
 
       <Card padding="none" className="overflow-hidden">
-        <StackedTable className="w-full border-collapse text-left">
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={TH}>
-                State
-              </th>
-              <th scope="col" className={TH}>
-                Service
-              </th>
-              <th scope="col" className={TH}>
-                Kind
-              </th>
-              <th scope="col" className={cn(TH, "text-right")}>
-                Port
-              </th>
-              <th scope="col" className={cn(TH, "text-right")}>
-                Notes
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {services.map((service, index) => {
-              const name = service.name || `Service ${index + 1}`;
-              const stale = (service.serving ?? []).some((proc) => proc.stale === true);
-              const hasNote = stale || service.duplicate || service.attribution_undetermined;
-              return (
-                <tr
-                  key={name}
-                  data-testid={`forge-status-service-${name}`}
-                  className="border-b border-border/60 last:border-b-0"
-                >
-                  <td className="whitespace-nowrap px-4 py-2 align-middle">
-                    <span
-                      // Listening is a point-in-time port probe, so it is a
-                      // measured fact and gets a solid treatment either way.
-                      className={cn(
-                        "inline-flex items-center rounded-md border border-solid px-2 py-0.5 text-xs",
-                        service.listening
-                          ? "border-success-border bg-success-surface text-success-ink"
-                          : "border-danger-border bg-danger-surface text-danger-ink"
-                      )}
-                    >
-                      {service.listening ? "Listening" : "Down"}
-                    </span>
-                  </td>
-
-                  {/* A service name is an identifier, so it stays mono. */}
-                  <td className="px-4 py-2 align-middle font-mono text-sm text-ink">
-                    {name}
-                  </td>
-
-                  <td className="whitespace-nowrap px-4 py-2 align-middle text-sm text-ink-muted">
-                    {service.kind || <span aria-hidden="true">—</span>}
-                  </td>
-
-                  <td className="whitespace-nowrap px-4 py-2 text-right align-middle font-mono text-sm tabular-nums text-ink-muted">
-                    {typeof service.port === "number" && service.port > 0 ? (
-                      service.port
-                    ) : (
-                      <span aria-hidden="true">—</span>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-2 text-right align-middle">
-                    {hasNote ? (
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {stale && (
-                          <span className="rounded-md border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-xs text-warning-ink">
-                            Stale build
-                          </span>
-                        )}
-                        {service.duplicate && (
-                          <span className="rounded-md border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-xs text-warning-ink">
-                            Duplicate process
-                          </span>
-                        )}
-                        {service.attribution_undetermined && (
-                          <span className="rounded-md border border-dashed border-ink-muted/60 px-2 py-0.5 text-xs text-ink-muted ring-1 ring-inset ring-ink-muted/30">
-                            Attribution undetermined
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span aria-hidden="true" className="text-xs text-ink-muted">
-                        —
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </StackedTable>
+        <DataTable<ServiceTableRow>
+          flush
+          stacked
+          ariaLabel="Host services"
+          columns={SERVICE_COLUMNS}
+          data={services.map((service, index) => ({ name: service.name || `Service ${index + 1}`, service }))}
+          getRowKey={(r) => r.name}
+          getRowProps={({ name }) => ({ "data-testid": `forge-status-service-${name}` })}
+        />
       </Card>
     </section>
   );

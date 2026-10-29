@@ -41,8 +41,10 @@ import {
   DeploySuspendReason,
   DeployRunState,
   DeployPromotionKind,
+  DeployServingPath,
   DeployTier,
   DeployVerdict,
+  type DeployCustomDomainStatus,
   type DeployEnvironment,
   type DeployPromotion,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
@@ -54,7 +56,8 @@ import {
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
-import { hostedVerdictOf, type ForgeHostedWorkload, type HostedVerdict } from "./topology";
+import { domainStateOf } from "./domains";
+import { hostedVerdictOf, type ForgeHostedWorkload, type HostedDomain, type HostedVerdict } from "./topology";
 
 // ── Domain types ────────────────────────────────────────────────────────────
 
@@ -271,7 +274,19 @@ function toWorkload(msg: DeploymentStatus): ForgeHostedWorkload {
     suspend_reason: suspendReasonOf(observed?.suspendReason),
     deployment_id: deployment?.id ?? "",
     declared_run_state: runStateOf(deployment?.runState),
+    domains: (observed?.domains ?? []).map(toHostedDomain),
   };
+}
+
+function toHostedDomain(msg: DeployCustomDomainStatus): HostedDomain {
+  return { hostname: msg.domain, state: domainStateOf(msg.state), serving_path: servingPathOf(msg.servingPath) };
+}
+
+function servingPathOf(path: DeployServingPath): string {
+  if (path === DeployServingPath.EDGE) return "edge";
+  if (path === DeployServingPath.INGRESS) return "ingress";
+  if (path === DeployServingPath.ELSEWHERE) return "elsewhere";
+  return "unknown";
 }
 
 function runStateOf(state: DeployRunState | undefined): "running" | "suspended" | "unspecified" {
