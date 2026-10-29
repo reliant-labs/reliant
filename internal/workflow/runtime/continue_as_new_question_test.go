@@ -119,10 +119,23 @@ func runQuestionHandoff(t *testing.T, legacy bool) {
 
 	pressure := newPressureDial(historyPressureNone)
 	forcePressure(t, chatID, pressure.get)
+	// The root's turn that spawns B runs on its own activity goroutine,
+	// concurrently with A's first turn. Hold it until A is in its asking turn,
+	// so B is spawned after the threshold was crossed, as the scenario says;
+	// otherwise B could take a turn first (1 run in 5 did, on CI).
+	asking := make(chan struct{})
 	e1.onLLM = func(thread string, n int) {
-		// A's asking turn: the question is about to be created and waited on.
-		if thread == childA && n == 2 {
+		switch {
+		case thread == childA && n == 2:
+			// A's asking turn: the question is about to be created and waited on.
 			pressure.set(historyPressureSoft)
+			close(asking)
+		case thread == parent && n == 2:
+			select {
+			case <-asking:
+			case <-time.After(10 * time.Second):
+				t.Error("A never reached its asking turn")
+			}
 		}
 	}
 
