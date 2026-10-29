@@ -37,3 +37,6 @@ func (r *Repo) ListTriggerCapacityExecutionBatch(ctx context.Context, limit int)
 func (r *Repo) ReleaseTriggerCapacityExecution(ctx context.Context, e store.TriggerCapacityExecution) error {
 	return store.ReleaseTriggerCapacityExecution(ctx, r.ORM(), e)
 }
+func (r *Repo) ReleaseClosedTriggerCapacityExecution(ctx context.Context, e store.TriggerCapacityExecution) error {
+	return store.ReleaseClosedTriggerCapacityExecution(ctx, r.ORM(), e)
+}
