@@ -531,7 +531,9 @@ function ToolExecutionComponent({
       };
     }
 
-    if (toolBaseName === "spawn_status") {
+    // spawn_status and spawn_send both name an agent by thread id: resolve
+    // its title for the row and make the thread openable.
+    if (toolBaseName === "spawn_status" || toolBaseName === "spawn_send") {
       const agentId = stringField(input.agent_id);
       if (!agentId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
 
@@ -557,8 +559,9 @@ function ToolExecutionComponent({
   }, [toolCall.input, toolBaseName, allDisplayMessages, activeThreads, allWorkflows]);
 
   // The thread this tool can open, as recorded by the code that created it or
-  // directly named by spawn_status. For spawn calls, tool_calls.child_workflow_id
-  // is the child thread. For spawn_status, agent_id already IS that thread id.
+  // directly named by spawn_status/spawn_send. For spawn calls,
+  // tool_calls.child_workflow_id is the child thread. For spawn_status and
+  // spawn_send, agent_id already IS that thread id.
   const spawnThreadId = isSpawnToolFlag ? toolCall.childWorkflowId : resolvedWaitTarget.threadId;
 
   // Handlers
@@ -940,7 +943,7 @@ function ToolExecutionComponent({
               </button>
 </Tooltip>
             )}
-            {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
+            {(isSpawnToolFlag || toolBaseName === "spawn_status" || toolBaseName === "spawn_send") && spawnThreadId && onSelectThread && (
               <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}

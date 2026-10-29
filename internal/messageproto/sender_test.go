@@ -57,6 +57,7 @@ func TestFromDB_MapsSender(t *testing.T) {
 
 	kind := core.AgentMessageKindMessage
 	msg := userMessage("m1", ptr.Of("peer"), &kind)
+	msg.SenderSubject = ptr.Of("Tests pass; PR ready")
 
 	got := FromDB(msg, nil, nil, &Options{SenderTitlesByThreadID: map[string]string{"peer": "Reviewer"}})
 
@@ -64,6 +65,7 @@ func TestFromDB_MapsSender(t *testing.T) {
 	assert.Equal(t, "peer", got.Sender.ThreadId)
 	assert.Equal(t, "Reviewer", got.Sender.Title)
 	assert.Equal(t, reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_MESSAGE, got.Sender.Kind)
+	assert.Equal(t, "Tests pass; PR ready", got.Sender.Subject)
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, got.Role, "the role stays USER for the model")
 }
 
@@ -97,9 +99,7 @@ func TestAssembleForDisplay_BatchesSenderTitles(t *testing.T) {
 		userMessage("m4", nil, nil),
 	}
 	blocks := map[string][]*db.MessageContentBlock{}
-	ids := make([]string, 0, len(messages))
 	for _, m := range messages {
-		ids = append(ids, m.ID)
 		blocks[m.ID] = []*db.MessageContentBlock{textBlock(m.ID, "hi")}
 	}
 	reader := &fakeReader{threads: []*db.Thread{
@@ -107,7 +107,7 @@ func TestAssembleForDisplay_BatchesSenderTitles(t *testing.T) {
 		{ID: "peer-b"},
 	}}
 
-	got := AssembleForDisplay(context.Background(), reader, messages, ids, blocks, nil, "main", 0)
+	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
 
 	require.Len(t, got, 4)
 	assert.Equal(t, 1, reader.listCalls, "sender titles are loaded once per response, not per message")
@@ -126,7 +126,7 @@ func TestAssembleForDisplay_NoSendersNoThreadQuery(t *testing.T) {
 	blocks := map[string][]*db.MessageContentBlock{"m1": {textBlock("m1", "hi")}}
 	reader := &fakeReader{}
 
-	AssembleForDisplay(context.Background(), reader, messages, []string{"m1"}, blocks, nil, "main", 0)
+	AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
 
 	assert.Zero(t, reader.listCalls)
 }
@@ -139,7 +139,7 @@ func TestAssembleForDisplay_TitleLookupFailureKeepsAttribution(t *testing.T) {
 	blocks := map[string][]*db.MessageContentBlock{"m1": {textBlock("m1", "hi")}}
 	reader := &fakeReader{err: errors.New("db down")}
 
-	got := AssembleForDisplay(context.Background(), reader, messages, []string{"m1"}, blocks, nil, "main", 0)
+	got := AssembleForDisplay(context.Background(), reader, messages, blocks, nil, "main", 0)
 
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Sender, "a failed title lookup must not turn an agent's message into the human's")

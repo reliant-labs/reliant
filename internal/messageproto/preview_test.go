@@ -159,7 +159,7 @@ func TestAssembleForDisplay_ResultIsSentOnceAndPreviewed(t *testing.T) {
 		"m2": {result("big", ptr.Of("shell"), big), result("small", ptr.Of("shell"), small), result("plan", nil, planResult), result("write", ptr.Of("write"), small)},
 	}
 
-	msgs := AssembleForDisplay(context.Background(), staticToolCalls{}, []*db.Message{assistant, tool}, []string{"m1", "m2"}, blocks, nil, "", 0)
+	msgs := AssembleForDisplay(context.Background(), staticToolCalls{}, []*db.Message{assistant, tool}, blocks, nil, "", 0)
 	require.Len(t, msgs, 2)
 
 	for _, b := range msgs[0].ContentBlocks {

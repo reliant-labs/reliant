@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The app shell's home: the new-chat view, with the project's apps under its
- * controls and the app-building composer one click (or one onboarding choice)
- * away.
+ * The app shell's home: the new-chat view, with the app-building composer one
+ * click (or one onboarding choice) away on a project that is not a forge
+ * project yet. A forge project's apps live in the sidebar, not here.
  *
  * `?start=app` (appStart.ts) is what makes it the app-building composer: the
  * heading asks what to build and the starter text is in the composer. It is
@@ -13,27 +13,22 @@
  * it was for is created, so the next new chat is an ordinary one.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
-import type { ComposerPrefill } from "../Chat/ChatInput";
 import { MainNewChatView } from "../Chat/MainNewChatView";
-import { HomeApps } from "./HomeApps";
+import { HomeBuildApp } from "./HomeBuildApp";
 import { BUILD_APP_PROMPT, START_APP } from "./appStart";
 
-// Prefill ids, clear of the ones NewChatView's own prefills use (0…, and
-// 1_000_000… for text handed back after a failed start). The build prefill
-// has ONE id, so a remount applies the same text rather than a second copy.
+// The build prefill's id, clear of the ones NewChatView's own prefills use
+// (0…, and 1_000_000… for text handed back after a failed start). It is ONE
+// id, so a remount applies the same text rather than a second copy.
 const BUILD_PREFILL_ID = 2_000_000;
-const DEPLOY_PREFILL_BASE_ID = 3_000_000;
 
 export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?: () => void }) {
   const navigate = useNavigate();
   const { start } = useSearch({ strict: false }) as { start?: string };
   const building = start === START_APP;
-  const [deployPrefill, setDeployPrefill] = useState<ComposerPrefill | undefined>(undefined);
-  const nextDeployId = useRef(DEPLOY_PREFILL_BASE_ID);
-
   const setStart = useCallback(
     (value: typeof START_APP | undefined) =>
       void navigate({
@@ -47,26 +42,13 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
     [navigate]
   );
 
-  const onPrefill = useCallback(
-    (text: string) => {
-      if (text === BUILD_APP_PROMPT) {
-        setStart(START_APP);
-        return;
-      }
-      nextDeployId.current += 1;
-      setDeployPrefill({ text, id: nextDeployId.current });
-      if (building) setStart(undefined);
-    },
-    [building, setStart]
-  );
-
   return (
     <MainNewChatView
       tabId="new-chat"
       onNavigateToWorktrees={onNavigateToWorktrees}
       showProjectChip
       onChatCreated={building ? () => setStart(undefined) : undefined}
-      composerPrefill={building ? { text: BUILD_APP_PROMPT, id: BUILD_PREFILL_ID } : deployPrefill}
+      composerPrefill={building ? { text: BUILD_APP_PROMPT, id: BUILD_PREFILL_ID } : undefined}
       heading={
         building ? (
           <div className="space-y-1" data-testid="home-build-heading">
@@ -77,7 +59,7 @@ export function HomeNewChat({ onNavigateToWorktrees }: { onNavigateToWorktrees?:
           </div>
         ) : undefined
       }
-      welcomePanel={building ? undefined : <HomeApps onPrefill={onPrefill} />}
+      welcomePanel={building ? undefined : <HomeBuildApp onStart={() => setStart(START_APP)} />}
     />
   );
 }

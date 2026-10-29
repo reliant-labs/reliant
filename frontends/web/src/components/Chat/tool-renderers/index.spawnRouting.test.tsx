@@ -4,8 +4,9 @@ import type { ToolRenderContext } from "./types";
 import { WorkflowState, WorkflowStopReason } from "../../../types/chat";
 
 // Regression guard for the spawn substring bug: only the literal "spawn" tool
-// should route to SpawnToolRenderer. spawn_status and spawn_send are ordinary
-// tools on an existing spawn and must fall through to GenericToolRenderer.
+// should route to SpawnToolRenderer. spawn_status is an ordinary tool on an
+// existing spawn and falls through to GenericToolRenderer; spawn_send has its
+// own renderer (the message as markdown), and neither is SpawnToolRenderer.
 
 let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 
@@ -66,18 +67,21 @@ describe("ToolContentArea spawn routing", () => {
     expect(screen.getByText("Input")).toBeInTheDocument();
   });
 
-  it("routes spawn_send to GenericToolRenderer, not SpawnToolRenderer", () => {
+  it("routes spawn_send to SpawnSendToolRenderer: the message, not a JSON input dump", () => {
     render(
       <ToolContentArea
         ctx={createContext({
-          toolName: "spawn_send",
-          input: { agent_id: "wf-child-1", message: "keep going" },
+          toolName: "mcp__reliant__spawn_send",
+          input: { agent_id: "wf-child-1", subject: "Keep going", message: "keep going on the **auth** refactor" },
           result: { name: "spawn_send", content: "queued" },
           isCompleted: true,
           isExecuting: false,
         })}
       />,
     );
-    expect(screen.getByText("Input")).toBeInTheDocument();
+    expect(screen.getByTestId("spawn-send-body")).toBeInTheDocument();
+    expect(screen.getByText("auth")).toBeInTheDocument();
+    expect(screen.getByText("queued")).toBeInTheDocument();
+    expect(screen.queryByText("Input")).not.toBeInTheDocument();
   });
 });
