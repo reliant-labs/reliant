@@ -21,8 +21,3 @@ export const START_APP = "app" as const;
  */
 export const BUILD_APP_PROMPT =
   "Build me a web app with forge and deploy it to Reliant hosting so I get a live URL. It should ";
-
-/** The composer's text for a forge project that exists but is not live yet. */
-export function deployAppPrompt(app: string): string {
-  return `Deploy ${app} to Reliant hosting with \`reliant forge env deploy prod\` and give me its live URL.`;
-}

@@ -223,6 +223,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 			if m.Kind != core.AgentMessageKindHumanMessage {
 				opts.SenderThreadID = m.FromThreadID
 				opts.SenderKind = m.Kind
+				opts.SenderSubject = m.Subject
 			}
 			if _, err := a.threads.SaveMessage(txCtx, opts); err != nil {
 				return fmt.Errorf("failed to save drained agent message %s: %w", m.ID, err)
@@ -313,7 +314,11 @@ func (a *DrainAgentMessagesActivity) buildEnvelope(ctx context.Context, queued [
 			fmt.Fprintf(&b, "\n%d. <message from=\"user\" queued_at=%q>", i+1, queuedAt)
 		default:
 			from := a.senderLabel(ctx, m.FromThreadID)
-			fmt.Fprintf(&b, "\n%d. <message from=%q queued_at=%q>", i+1, from, queuedAt)
+			if m.Subject != "" {
+				fmt.Fprintf(&b, "\n%d. <message from=%q subject=%q queued_at=%q>", i+1, from, m.Subject, queuedAt)
+			} else {
+				fmt.Fprintf(&b, "\n%d. <message from=%q queued_at=%q>", i+1, from, queuedAt)
+			}
 		}
 	}
 

@@ -133,6 +133,11 @@ func (r *snapshotGateRepo) GetLatestContextWindow(context.Context, string) (*db.
 	return nil, sql.ErrNoRows
 }
 
+// The main thread's row is read alongside its context-window walk.
+func (r *snapshotGateRepo) GetThread(context.Context, string) (*db.Thread, error) {
+	return nil, sql.ErrNoRows
+}
+
 // startTestNATS runs an in-process JetStream-enabled NATS server. JetStream is
 // required by NewNATSHub (the ephemeral delta hub); the update hubs use plain
 // core NATS on the same connection.

@@ -659,6 +659,10 @@ message MessageSender {
   // when the thread is untitled or no longer exists.
   string title = 2;
   AgentMessageKind kind = 3;
+  // subject is the one-line summary the sending agent gave the message
+  // (spawn_send's `subject`); the transcript shows the message collapsed to
+  // it. Empty for kinds that carry none.
+  string subject = 4;
 }
 
 // ToolCallStatus is the durable lifecycle state of a tool call, mirroring

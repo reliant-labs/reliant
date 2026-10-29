@@ -476,7 +476,6 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	// rather than shipping an empty card. (Kept separate from assembly: it is
 	// a snapshot-specific concern, and it logs.)
 	displayable := make([]*db.Message, 0, len(messages))
-	displayableIDs := make([]string, 0, len(messages))
 	messagesSkipped := 0
 	for _, msg := range messages {
 		if len(messageBlocks[msg.ID]) == 0 {
@@ -486,7 +485,6 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 			continue
 		}
 		displayable = append(displayable, msg)
-		displayableIDs = append(displayableIDs, msg.ID)
 	}
 
 	// Assembled exactly like every other display read — including durable
@@ -494,7 +492,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chatID string) (*relian
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
 	assembledMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
+		ctx, s.deps.Repo, displayable, messageBlocks, attachmentMap, mainThread, latestSeq)
 
 	// Calculate pagination metadata.
 	//

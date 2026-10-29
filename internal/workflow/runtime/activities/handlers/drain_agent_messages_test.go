@@ -31,9 +31,12 @@ func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, 
 		FromThreadID: fromThreadID,
 		ToThreadID:   toThreadID,
 		Kind:         core.AgentMessageKindMessage,
-		Body:         body,
-		Status:       core.AgentMessageStatusQueued,
-		CreatedAt:    createdAt,
+		// Derived from the body but never containing it, so a test can tell
+		// the subject's appearance from the body's.
+		Subject:   "about " + strings.ReplaceAll(body, " ", "_"),
+		Body:      body,
+		Status:    core.AgentMessageStatusQueued,
+		CreatedAt: createdAt,
 	}))
 }
 
@@ -137,6 +140,10 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 	// twice.
 	assert.NotContains(t, envelopeContent, "first message")
 	assert.NotContains(t, envelopeContent, "second message")
+	// It does name each message's subject, so the model reads what each one
+	// is about alongside who sent it.
+	assert.Contains(t, envelopeContent, `subject="about first_message"`)
+	assert.Contains(t, envelopeContent, `subject="about second_message"`)
 
 	// The bodies follow in send order, visible, and carry only what the
 	// sender wrote — no <system> preamble, no <message> wrapper.
@@ -154,7 +161,10 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 		assert.Equal(t, fromThreadID, *body.SenderThreadID)
 		require.NotNil(t, body.SenderKind)
 		assert.Equal(t, core.AgentMessageKindMessage, *body.SenderKind)
+		require.NotNil(t, body.SenderSubject, "a spawn_send message carries its subject into history")
 	}
+	assert.Equal(t, "about first_message", *firstBody.SenderSubject)
+	assert.Equal(t, "about second_message", *secondBody.SenderSubject)
 	assert.Nil(t, envelope.SenderThreadID, "the envelope is framing, not a message from the sender")
 	assert.Less(t, firstBody.Ordinal, secondBody.Ordinal,
 		"messages must be delivered in send order, oldest first")

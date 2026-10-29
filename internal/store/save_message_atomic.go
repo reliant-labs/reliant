@@ -48,6 +48,9 @@ type AtomicMessageWrite struct {
 	// model's own output.
 	SenderThreadID *string
 	SenderKind     *reliantv1.AgentMessageKind
+	// SenderSubject (messages.sender_subject) is the sending agent's one-line
+	// subject; nil when it gave none.
+	SenderSubject *string
 
 	Blocks []core.MessageContentBlock
 
@@ -133,14 +136,14 @@ msg AS (
         node_id, node_path, role, display_style, model, agent,
         token_count, cost, workflow_id, run_id, activity_id,
         created_at, updated_at, provider_account_id,
-        sender_thread_id, sender_kind
+        sender_thread_id, sender_kind, sender_subject
     )
     SELECT
         $3, $2, ord.last_assigned, sq.last_assigned, $1, $4,
         $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15,
         $16, $16, $31,
-        $32, $33
+        $32, $33, $34
     FROM ord, sq
 ),
 blocks AS (
@@ -230,6 +233,7 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 			emptyNilPtr(w.ProviderAccountID),
 			emptyNilPtr(w.SenderThreadID),
 			senderKindValue(w.SenderKind),
+			emptyNilPtr(w.SenderSubject),
 		).Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq)
 		if err != nil {
 			return fmt.Errorf("failed to write message: %w", err)

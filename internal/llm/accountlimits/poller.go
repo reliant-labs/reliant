@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -51,7 +52,11 @@ func (p *Poller) Run(ctx context.Context) error {
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
-		p.Tick(ctx)
+		// One trace per tick, so its lease query and provider calls nest under it.
+		_ = observe.RunRoot(ctx, "accountlimits.poll", func(ctx context.Context) error {
+			p.Tick(ctx)
+			return nil
+		})
 		select {
 		case <-ctx.Done():
 			return nil

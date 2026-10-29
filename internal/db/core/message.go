@@ -44,6 +44,9 @@ type Message struct {
 	// outlives its sender's thread.
 	SenderThreadID *string
 	SenderKind     *reliantv1.AgentMessageKind
+	// SenderSubject is the one-line subject the sending agent gave the
+	// message (spawn_send's `subject`); nil when it gave none.
+	SenderSubject *string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

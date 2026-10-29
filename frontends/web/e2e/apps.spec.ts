@@ -64,13 +64,12 @@ test.describe('Apps', () => {
     await expect(page).toHaveURL(/\/forge\/p\/storefront/);
   });
 
-  test("the home view shows the project's live app", async ({ page }) => {
+  test("the home view leaves a forge project's apps to the sidebar", async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto(`/project/${PROJECT.id}`);
-    const home = page.getByTestId('home-apps');
-    await expect(home).toHaveAttribute('data-state', 'live', { timeout: 15_000 });
-    await expect(home.getByRole('link', { name: /bright-otter\.reliantapps\.dev/ })).toBeVisible();
-    await expect(home.getByRole('link', { name: /quiet-finch\.reliantapps\.dev/ })).toBeVisible();
+    await expect(page.getByTestId('sidebar-apps')).toBeVisible({ timeout: 15_000 });
+    // A forge project: no app block and no "Build an app" prompt mid-screen.
+    await expect(page.getByTestId('home-build-app')).toHaveCount(0);
   });
 
   test('?start=app opens the app-building composer', async ({ page }) => {

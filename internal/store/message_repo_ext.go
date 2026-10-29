@@ -383,6 +383,7 @@ func messageRow(msg *core.Message) *Message {
 		ProviderAccountID: msg.ProviderAccountID,
 		SenderThreadID:    msg.SenderThreadID,
 		SenderKind:        msg.SenderKind,
+		SenderSubject:     msg.SenderSubject,
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -410,6 +411,7 @@ func messageFromRow(row *Message) *core.Message {
 		ProviderAccountID: row.ProviderAccountID,
 		SenderThreadID:    row.SenderThreadID,
 		SenderKind:        row.SenderKind,
+		SenderSubject:     row.SenderSubject,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}
