@@ -130,6 +130,10 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// machines resolves the turn's selector to the machine whose synced
+	// config it reads (configMachine); nil reads the project's union for any
+	// selector that names no id. Set by WithDaemonRouter.
+	machines toolexec.DaemonRouter
 	// allowPrivateEgress is the dial policy for user-supplied model endpoint
 	// URLs; see WithPrivateEgress.
 	allowPrivateEgress bool
@@ -154,9 +158,12 @@ func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
 	return a
 }
 
-// WithLocalModels wires the daemon relay local models are reached through.
-func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallLLMActivity {
-	a.localRelay = relay
+// WithDaemonRouter wires the daemon router: the relay local models are
+// reached through, and the resolution that picks the machine whose synced
+// config (skills, memory, MCP servers) a turn reads.
+func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLLMActivity {
+	a.machines = router
+	a.localRelay = router
 	return a
 }
 
@@ -1119,7 +1126,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// The project config (skills, memory, MCP servers) is the one the machine
 	// this turn's tools run on synced: routed as ExecuteTools routes them.
 	projectCfg, err := a.getProjectConfig(ctx, project,
-		configMachine(toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
+		configMachine(ctx, a.machines, chat.UserID, toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}

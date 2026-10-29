@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"context"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -21,14 +24,25 @@ func chatDaemonSelector(chat *db.Chat, explicit *types.DaemonSelector) *types.Da
 }
 
 // configMachine is the machine whose synced project config (skills, memory,
-// MCP servers) a call routed by selector reads: the selector's machine id,
-// as tool dispatch resolves it (toolDaemonSelector: an explicit node or
-// workflow selector, the chat pin, the worktree's owner). A selector that
-// names no id (by name, type or labels) or none at all reads the project's
-// record, the union.
-func configMachine(selector *toolexec.DaemonSelector) string {
-	if selector == nil {
+// MCP servers) a call routed by selector reads: the daemon tool dispatch sends
+// that call to (toolDaemonSelector: an explicit node or workflow selector, the
+// chat pin, the worktree's owner). An id selector names it outright; a selector
+// by name, type or labels, or none at all, is resolved through router the way
+// dispatch resolves it, so a workflow that picks machine B by name reads B's
+// skills rather than the project's union. A run that resolves no machine (no
+// router, no machine connected, a no-machine run) reads the project's record,
+// the union: its commands reach no machine either.
+func configMachine(ctx context.Context, router toolexec.DaemonRouter, userID string, selector *toolexec.DaemonSelector) string {
+	if selector != nil && selector.ID != "" {
+		return selector.ID
+	}
+	if router == nil || userID == "" {
 		return ""
 	}
-	return selector.ID
+	id, err := toolexec.ResolveDaemonIDForSelector(ctx, router, userID, selector)
+	if err != nil {
+		logging.DebugContext(ctx, "[config] no machine resolved for the call's selector; reading the project's config", "error", err)
+		return ""
+	}
+	return id
 }

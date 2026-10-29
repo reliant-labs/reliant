@@ -241,6 +241,10 @@ type ExecuteToolsActivity struct {
 	// configProvider resolves the project's skills for the skill tool. Set by
 	// WithConfigProvider; nil means the skill tool sees none.
 	configProvider cfgpkg.ConfigProvider
+	// machines resolves a call's selector to the machine whose synced config
+	// it reads (configMachine). Set by WithDaemonRouter; nil reads the
+	// project's union for any selector that names no id.
+	machines toolexec.DaemonRouter
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
@@ -731,7 +735,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// carried from call_llm: the executor's factory has none of its own, and
 	// a worker-local copy is what a restart used to lose.
 	if toolName == tools.ToolSkill && tec.project != nil {
-		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(tec.daemonSelector)))
+		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(ctx, a.machines, tec.project.UserID, tec.daemonSelector)))
 	}
 
 	// The call is about to enter real execution -- record it durably as

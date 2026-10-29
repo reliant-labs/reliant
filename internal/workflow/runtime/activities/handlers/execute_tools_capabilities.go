@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // capabilityRefusal is why a call may not run under its turn's capability set,
@@ -117,6 +118,14 @@ func grantedByResult(toolName, metadata string, isError bool) []string {
 // reads its skills through it.
 func (a *ExecuteToolsActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) *ExecuteToolsActivity {
 	a.configProvider = provider
+	return a
+}
+
+// WithDaemonRouter gives the activity the router tool dispatch resolves
+// selectors through, so a call routed by name, type or labels reads the
+// config of the machine it runs on (configMachine).
+func (a *ExecuteToolsActivity) WithDaemonRouter(router toolexec.DaemonRouter) *ExecuteToolsActivity {
+	a.machines = router
 	return a
 }
 
