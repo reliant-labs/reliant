@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -138,10 +139,17 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		inputs[k] = v.AsInterface()
 	}
 	snap.EffectiveInputs = runtime.ApplyDefaults(inputs, wf.GetInputs())
+	// Inputs the declared trigger fills from each event are resolved once per
+	// value the trigger's match allows (activation_event_inputs.go).
+	rootContexts, eventLines, err := eventInputContexts(triggers.FindDeclaredTrigger(wf, def.GetWorkflowTrigger()), wf, snap.EffectiveInputs)
+	if err != nil {
+		return nil, err
+	}
+	snap.Summary = append(snap.Summary, eventLines...)
 	// Explicitly traverse every captured definition to collect preset INPUT
 	// defaults and spawn preset declarations too: the validator only loads
 	// presets needed to validate child argument contracts, not every choice.
-	contexts := map[string][]map[string]any{key: {snap.EffectiveInputs}}
+	contexts := map[string][]map[string]any{key: rootContexts}
 	contextSeen := map[string]bool{}
 	addContext := func(ref string, params map[string]any) error {
 		w, err := load(ref)
@@ -285,6 +293,12 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					var childRef string
 					var childPresets map[string]string
 					if a := node.GetWorkflow(); a != nil && a.GetInline() == nil {
+						// The thread config (mode, injected message) grants nothing
+						// and routinely reads node outputs, which do not exist before
+						// a run; only the fields that pick the child and its inputs
+						// must resolve. The whole node is still fingerprinted.
+						a = proto.Clone(a).(*pb.SubWorkflowArgs)
+						a.Thread = nil
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
@@ -397,34 +411,42 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						tc = resolved.(*pb.ToolsConfig)
 						declarations := model.CelStringListValue(tc.GetPreloadedTools())
-						for _, declaration := range append(append([]string{}, declarations...), model.CelStringListValue(tc.GetLoadableTools())...) {
-							if strings.HasPrefix(strings.TrimPrefix(declaration, "!"), "mcp__") {
-								return svcerr.FailedPrecondition("MCP privilege dependencies require explicit review in the app")
-							}
-						}
 						declarations = append(declarations, model.CelStringListValue(tc.GetLoadableTools())...)
 						if tc.GetLoadableTools() == nil {
 							declarations = append(declarations, "*")
 						}
 						snap.Summary = append(snap.Summary, "Agent tier: "+tools.NormalizePermission(model.CelStringValue(tc.GetPermission())))
-						if tools.FilterReachesMCP(declarations) {
-							return svcerr.FailedPrecondition("MCP or wildcard privilege dependencies require explicit fixed catalog choices or review in the app")
-						}
-						allowed := tools.ExpandToolFilter(declarations, nil)
-						sort.Strings(allowed)
 						known := map[string]bool{}
 						for _, entry := range tools.GetToolRegistry() {
 							known[entry.Name] = true
 						}
+						allowed := tools.ExpandToolFilter(declarations, nil)
+						sort.Strings(allowed)
+						nonCatalog := false
 						for _, name := range allowed {
 							if !known[name] {
-								return svcerr.FailedPrecondition("Non-catalog tool privileges require explicit review in the app")
+								nonCatalog = true
 							}
 						}
-						if len(allowed) > 256 {
-							return svcerr.FailedPrecondition("Tool privilege display limit exceeded")
+						// A wildcard or MCP declaration cannot be enumerated: its set
+						// is whatever MCP servers and runtime-loaded tools exist when
+						// the run starts. Say so plainly instead of refusing, so the
+						// person approving decides with the widest reading in front
+						// of them.
+						if tools.FilterReachesMCP(declarations) || nonCatalog || len(allowed) > 256 {
+							shown := make([]string, 0, len(declarations))
+							for _, d := range declarations {
+								if d == "*" {
+									shown = append(shown, "* (every tool)")
+								} else {
+									shown = append(shown, discloseScope(d))
+								}
+							}
+							sort.Strings(shown)
+							snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: UNRESTRICTED — this workflow's agent has unrestricted tools: every built-in tool, every MCP server tool and any tool loaded at runtime, including tools added after this approval (declared: %s); agent-chosen action targets: dynamic/unbounded (runtime policy still applies)", strings.Join(shown, ", ")))
+						} else {
+							snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: %s; agent-chosen action target repositories/channels/environments: dynamic/unbounded unless a fixed binding below narrows them (runtime policy still applies)", strings.Join(allowed, ", ")))
 						}
-						snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: %s; agent-chosen action target repositories/channels/environments: dynamic/unbounded unless a fixed binding below narrows them (runtime policy still applies)", strings.Join(allowed, ", ")))
 						boundTools := make([]string, 0, len(tc.GetTools()))
 						for name := range tc.GetTools() {
 							boundTools = append(boundTools, name)
@@ -468,7 +490,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 			if err := walk(w, 0); err != nil {
 				return nil, err
 			}
-			snap.Summary = append(snap.Summary, fmt.Sprintf("Workflow dependency %d: %d nodes; complete definition and its literal privileges fingerprinted (literals withheld)", len(snap.Summary)+1, len(w.Nodes)))
+			snap.Summary = append(snap.Summary, fmt.Sprintf("Workflow dependency: %d nodes; complete definition and its literal privileges fingerprinted (literals withheld)", len(w.Nodes)))
 		}
 		if !progress {
 			break
@@ -484,6 +506,17 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	if err = account(raw); err != nil {
 		return nil, err
 	}
+	// One line per distinct privilege: resolving per event value repeats
+	// every line that does not depend on it.
+	seen := map[string]bool{}
+	unique := snap.Summary[:0]
+	for _, line := range snap.Summary {
+		if !seen[line] {
+			seen[line] = true
+			unique = append(unique, line)
+		}
+	}
+	snap.Summary = unique
 	snap.Summary = append(snap.Summary, fmt.Sprintf("%d workflow definitions; %d resolved presets; %d effective inputs. Input/preset values and graph literals withheld. Later workflow edits remain live (not a permanently frozen execution).", len(snap.Workflows), len(snap.Presets), len(snap.EffectiveInputs)))
 	return snap, nil
 }

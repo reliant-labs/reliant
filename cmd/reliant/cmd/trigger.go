@@ -19,9 +19,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 )
 
-// errAgentCannotEnable is what create, update and enable say when an agent's
-// shell runs them. Enabling an automation is the user's act, done in the app.
-var errAgentCannotEnable = fmt.Errorf("an agent cannot create or enable automations: ask the user to turn it on in the app (Workflows, open the workflow, Enable)")
+// errAgentCannotEnable is what create, update, enable and activate say when an
+// agent's shell runs them. Enabling an automation is the user's act: in the
+// app, or by approving an agent's create_trigger_activation request in chat.
+var errAgentCannotEnable = fmt.Errorf("an agent cannot create or enable automations from its shell: request it with the create_trigger_activation tool (the user approves it in chat), or ask the user to turn it on in the app (Workflows, open the workflow, Enable)")
 
 // refuseFromAgentShell is the PreRunE of the commands that start something
 // running on its own. See daemonpolicy.AgentShellEnv for why this is a
@@ -49,7 +50,7 @@ func newTriggerServiceClient(conn *connection) reliantv1connect.TriggerServiceCl
 func newTriggerCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "trigger",
-		Short: "Manage schedule triggers",
+		Short: "Manage triggers and workflow activations",
 		Long: `Manage triggers — standing instructions that start runs without a human typing.
 
 A schedule trigger runs a workflow in a project on a cron or interval
@@ -67,6 +68,8 @@ proceed.`,
 		newTriggerDeleteCmd(),
 		newTriggerFireCmd(),
 		newTriggerEventsCmd(),
+		newTriggerActivateCmd(),
+		newTriggerDeactivateCmd(),
 	)
 	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 	return cmd
@@ -617,11 +620,12 @@ func printTriggerTable(out io.Writer, list []*reliantv1.Trigger) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATE\tSCHEDULE\tDAEMON\tWORKFLOW\tNEXT FIRE\tLAST")
+	fmt.Fprintln(w, "NAME\tSTATE\tHEALTH\tSCHEDULE\tDAEMON\tWORKFLOW\tNEXT FIRE\tLAST")
 	for _, t := range list {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			t.GetName(),
 			triggerStateLabel(t),
+			triggerHealthLabel(t),
 			scheduleSummary(t.GetSchedule()),
 			orDash(t.GetDaemonId()),
 			orDash(t.GetWorkflow()),
@@ -640,6 +644,10 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	fmt.Fprintf(w, "Name:\t%s\n", t.GetName())
 	fmt.Fprintf(w, "ID:\t%s\n", t.GetId())
 	fmt.Fprintf(w, "State:\t%s\n", triggerStateLabel(t))
+	fmt.Fprintf(w, "Health:\t%s\n", triggerHealthLabel(t))
+	if detail := t.GetHealth().GetLastFailureDetail(); detail != "" {
+		fmt.Fprintf(w, "Health detail:\t%s\n", detail)
+	}
 	fmt.Fprintf(w, "Project:\t%s\n", t.GetProjectId())
 	if wt := t.GetWorktreeId(); wt != "" {
 		fmt.Fprintf(w, "Worktree:\t%s\n", wt)
@@ -703,6 +711,17 @@ func triggerStateLabel(t *reliantv1.Trigger) string {
 		return "enabled"
 	}
 	return "paused"
+}
+
+// triggerHealthLabel is TriggerHealth.status in the words the app uses
+// (healthy, broken, needs setup, …); "-" when the server sent none.
+func triggerHealthLabel(t *reliantv1.Trigger) string {
+	status := t.GetHealth().GetStatus()
+	if status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_UNSPECIFIED {
+		return "-"
+	}
+	label := strings.TrimPrefix(status.String(), "TRIGGER_HEALTH_STATUS_")
+	return strings.ToLower(strings.ReplaceAll(label, "_", " "))
 }
 
 // scheduleSummary renders cron and interval together, because they are a union
