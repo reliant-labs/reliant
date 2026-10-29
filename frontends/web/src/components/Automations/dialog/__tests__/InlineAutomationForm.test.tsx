@@ -159,15 +159,16 @@ describe("InlineAutomationForm: new", () => {
   it.each([
     ["github", false, ActingIdentity.APP],
     ["github", true, ActingIdentity.OWNER],
-    ["slack", false, ActingIdentity.OWNER],
-  ] as const)("defaults only new %s sources and preserves explicit owner (%s)", async (integration, chooseOwner, expected) => {
+    ["slack", false, ActingIdentity.APP],
+    ["slack", true, ActingIdentity.OWNER],
+  ] as const)("defaults a new %s source to the bot and preserves explicit owner (%s)", async (integration, chooseOwner, expected) => {
     createTrigger.mockResolvedValue(created());
     renderAtRoute(<InlineAutomationForm onClose={vi.fn()} prefill={{ message: "Triage", source: {
       kind: "passthrough", arm: { case: "integration", value: create(IntegrationSourceSchema, { integration, events: ["issues.opened"] }) },
     } }} />);
     await machineReady();
-    expect(screen.getByRole("radio", { name: integration === "github" ? /Reliant bot/ : /You/ })).toBeChecked();
-    if (integration !== "github") expect(screen.queryByRole("radio", { name: /Reliant bot/ })).not.toBeInTheDocument();
+    // GitHub writes of a Slack-triggered automation are the bot's too.
+    expect(screen.getByRole("radio", { name: /Reliant bot/ })).toBeChecked();
     if (chooseOwner) await userEvent.click(screen.getByRole("radio", { name: /You/ }));
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
