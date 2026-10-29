@@ -151,6 +151,7 @@ export function wireScope(s: ObsScope, window: TimeWindow, services: string[] = 
     orgId: s.orgId,
     projectId: s.projectId || undefined,
     envIds: s.envIds,
+    ...(s.platformScope ? { platformScope: true } : {}),
     services,
     filters: wireFilters(s.filters),
     timeRange: { start: timestamp(window.startMs), end: timestamp(window.endMs) },

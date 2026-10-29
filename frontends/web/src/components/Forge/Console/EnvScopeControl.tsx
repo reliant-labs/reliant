@@ -19,7 +19,7 @@ import { ChevronDown } from "lucide-react";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { cn } from "@/lib/utils";
 
-import { ENV_ALL, type ScopeOption } from "./envScope";
+import { ENV_ALL, PLATFORM_SCOPE_LABEL, type ScopeOption } from "./envScope";
 
 export interface EnvScopeControlProps {
   value: string;
@@ -28,6 +28,8 @@ export interface EnvScopeControlProps {
   onChange: (env: string) => void;
   /** The environment this page's path names, when it names one. */
   pinnedEnv?: string | null;
+  /** The page reads platform telemetry, which no environment scope applies to. */
+  platformWide?: boolean;
 }
 
 /** More long-lived environments than this and the rest join the menu. */
@@ -36,7 +38,7 @@ const MAX_SEGMENTS = 5;
 const segment =
   "inline-flex h-6 items-center gap-1 whitespace-nowrap rounded px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
-export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv }: EnvScopeControlProps) {
+export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, platformWide }: EnvScopeControlProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const escapeLayer = useEscapeLayer(menuOpen, () => setMenuOpen(false));
@@ -64,6 +66,19 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv }: 
     setMenuOpen(false);
     onChange(env);
   };
+
+  if (platformWide) {
+    return (
+      <span
+        role="status"
+        title={`This dashboard reads platform telemetry, which belongs to no environment. The scope ${value === ENV_ALL ? "(All)" : `(${value})`} still applies to other pages.`}
+        data-testid="env-scope-platform"
+        className="inline-flex h-7 items-center whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs text-ink-muted"
+      >
+        {PLATFORM_SCOPE_LABEL}
+      </span>
+    );
+  }
 
   const narrow = (
     <select

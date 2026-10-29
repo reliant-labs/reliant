@@ -40,6 +40,11 @@ export interface ObsScope {
   projectId?: string;
   /** control-plane environment ids (stamped on telemetry as `reliant.env.id`). Empty: every environment. */
   envIds: string[];
+  /**
+   * Read platform telemetry, which belongs to no environment (a platform
+   * dashboard's signals). Names no environment or project; tenant zero only.
+   */
+  platformScope?: boolean;
   /** ANDed attribute predicates over allowlisted keys (attributes.ts). */
   filters: AttributeFilter[];
 }
@@ -438,6 +443,12 @@ export interface DashboardAnnotation {
 }
 
 export interface Dashboard {
+  /**
+   * Which telemetry the panels read. `project` (absent): the selected
+   * environments of the route's project. `org`: every project's environments.
+   * `platform`: the signals belong to no environment, so none is filtered on.
+   */
+  scope?: "project" | "org" | "platform";
   sections?: { id: string; title: string }[];
   id: string;
   title: string;

@@ -71,7 +71,7 @@ function panelRequestKey(panel: Panel) {
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
-    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? []] as const,
+    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
   overview: (scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) =>
     [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,

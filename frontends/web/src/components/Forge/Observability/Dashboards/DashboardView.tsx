@@ -60,7 +60,7 @@ import type { Dashboard, ObsScope, Panel } from "@/services/controlPlane/observa
 import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { ENV_ALL } from "../../Console/envScope";
+import { ENV_ALL, PLATFORM_SCOPE_LABEL } from "../../Console/envScope";
 import { ObsChartMarkersProvider, type ChartBand, type ChartMarker } from "../charts/UPlotChart";
 import { deliveryScopeOf } from "../deliveryScope";
 import { formatAgo } from "../format";
@@ -137,16 +137,21 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const refresh: RefreshInterval = search.refresh ?? "off";
   const exploreLink = useExploreHref();
 
-  const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
-  const unrecorded = env !== ENV_ALL && !envId;
-  const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded && dashRef.kind !== "builtin" ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, project, envId, unrecorded, dashRef.kind]
-  );
-
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
+
+  // A platform dashboard's signals belong to no environment: it reads them
+  // platform-wide whatever environment the top bar names.
+  const platform = spec?.scope === "platform";
+  const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
+  const unrecorded = !platform && env !== ENV_ALL && !envId;
+  const scope = useMemo<ObsScope | null>(() => {
+    if (!orgId || unrecorded || dashRef.kind === "builtin") return null;
+    return platform
+      ? { orgId, envIds: [], filters: [], platformScope: true }
+      : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
+  }, [orgId, project, envId, unrecorded, platform, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -166,7 +171,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const starred = starredHere ?? !!summary?.starred;
 
   // ── Markers, bands, comparison ──
-  const marks = !!spec && marksReleases(spec) && search.releases !== false;
+  const marks = !!spec && !platform && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
   const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
@@ -362,7 +367,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold tracking-tight text-ink">{summary.title}</h1>
             <p className="text-sm text-ink-muted">
-              {env === ENV_ALL ? "All environments" : env} · {RANGE_LABELS[range].toLowerCase()}
+              {platform ? PLATFORM_SCOPE_LABEL : env === ENV_ALL ? "All environments" : env} · {RANGE_LABELS[range].toLowerCase()}
               {refreshEvery ? ` · refreshes every ${refresh}` : ""}
             </p>
           </div>
@@ -585,7 +590,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           services={services}
           environments={environments}
           env={env}
-          scopeLabel={`${env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
+          scopeLabel={`${platform ? PLATFORM_SCOPE_LABEL : env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
           version={currentVersion}
           envScope={workspaceScope}
           saving={save.isPending}
