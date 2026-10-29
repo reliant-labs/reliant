@@ -45,7 +45,12 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 						t.Fatal(err)
 					}
 					if mutation == "refs-content" {
-						recoveryTestWrite(t, filepath.Join(admin, "refs"), "bisect", []byte("not ours"), 0644)
+						// A directory, not a ref file: git 2.48+ reads per-worktree
+						// refs, and a bogus one would break the shared source repo's
+						// object closure for every later case.
+						if err := os.Mkdir(filepath.Join(admin, "refs", "stray"), 0o755); err != nil {
+							t.Fatal(err)
+						}
 					}
 				case "own-partial":
 					if err := os.Remove(filepath.Join(dest, "second")); err != nil {
