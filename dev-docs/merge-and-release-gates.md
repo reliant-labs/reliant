@@ -189,6 +189,16 @@ generator running beside the others a quarter each. A generator that runs
 first and alone (a dirty tree) gets all of it. `MG_CPUS=<n>` overrides the
 budget.
 
+Memory is budgeted too. `forge generate` peaks at ~7.5 GB RSS on its own, and
+beside `tsc -b` (~2.3 GB) and the test links (~2.7 GB each) the gate reached
+13 GB in its first five minutes on reliant#1772. The merge queue's hosted
+`ubuntu-latest` runner has 16 GiB: it ran out, its agent died ("The runner has
+received a shutdown signal") and the job sat until its timeout, three times.
+So on a host under `MG_GEN_ALONE_GIB` (32) GiB, the smaller of physical memory
+and the cgroup's `memory.max`, `forge generate` runs first and alone with the
+whole CPU budget, and the other phases start when it is done. `MG_MEM_GIB=<n>`
+overrides the detected size.
+
 ### Direct importers only
 
 A change to a hub package (`internal/logging`, `internal/observability`) reaches
