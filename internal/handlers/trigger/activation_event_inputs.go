@@ -11,6 +11,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // A declared trigger's `inputs:` mapping fills workflow inputs from each event
@@ -35,15 +36,59 @@ import (
 // maxEventContexts bounds the product of the bounded inputs' value sets.
 const maxEventContexts = maxApprovalDependencies
 
-// eventSupplied is an unbounded event input's value during approval. It is
-// not a scope identifier (discloseScope withholds it as dynamic) and no real
-// value contains it, so a privilege resolved from it is recognisable.
+// eventSupplied is an unbounded event input's value during approval. A target
+// field resolved from it is not a scope identifier, so discloseScope withholds
+// it as dynamic. It also marks the input as event-tainted: see taintedInputs.
 const eventSupplied = "\u27e8event-supplied\u27e9"
 
-// dependsOnEvent reports whether a resolved privilege-bearing message took
-// any part of its value from an unbounded event input.
-func dependsOnEvent(m proto.Message) bool {
-	return strings.Contains(canonicalProto(m), eventSupplied)
+// An unbounded event input must not choose a privilege: a child workflow or
+// preset, a tool, a spawn or a permission. The check is by REFERENCE, not by
+// value: an expression can compare or transform an input away
+// ("{{ inputs.mode == 'admin' ? ['shell'] : ['view'] }}"), so whether its
+// resolved value still carries the sentinel proves nothing. Taint follows
+// arguments into child workflows the same way: a child input whose argument
+// expression references a tainted input is itself tainted.
+
+var inputsReference = regexp.MustCompile(`\binputs\b\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([^'"]+)['"]\s*\])?`)
+
+// taintedInputs is the set of a context's inputs an event supplies unbounded.
+func taintedInputs(values map[string]any) map[string]bool {
+	out := map[string]bool{}
+	for name, v := range values {
+		raw, err := json.Marshal(v)
+		if err == nil && strings.Contains(string(raw), eventSupplied) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// referencesTainted reports whether text — an expression, or a message holding
+// expressions — reads a tainted input, or carries the sentinel itself (an
+// expression already resolved from one). A reference that names no input
+// (bare `inputs`, or a computed `inputs[k]`) could read any of them.
+func referencesTainted(text string, tainted map[string]bool) bool {
+	if strings.Contains(text, eventSupplied) {
+		return true
+	}
+	if len(tainted) == 0 {
+		return false
+	}
+	for _, m := range inputsReference.FindAllStringSubmatch(text, -1) {
+		name := m[1]
+		if name == "" {
+			name = m[2]
+		}
+		if name == "" || tainted[name] {
+			return true
+		}
+	}
+	return false
+}
+
+// referencesTaintedIn is referencesTainted over a proto message's expressions.
+func referencesTaintedIn(m proto.Message, tainted map[string]bool) bool {
+	return referencesTainted(canonicalProto(m), tainted)
 }
 
 var eventAttributeTemplate = regexp.MustCompile(`^\{\{\s*trigger\.payload\.attributes\.([A-Za-z0-9_]+)\s*\}\}$`)
@@ -159,4 +204,35 @@ func listValues(v any) []any {
 		}
 		return []any{value}
 	}
+}
+
+// taintedArgNames is the child inputs whose argument expressions read a
+// tainted input: they are tainted in the child.
+func taintedArgNames(args map[string]*structpb.Value, tainted map[string]bool) map[string]bool {
+	out := map[string]bool{}
+	for name, v := range args {
+		raw, err := json.Marshal(v.AsInterface())
+		if err != nil || referencesTainted(string(raw), tainted) {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// childTaint is the child's tainted inputs: tainted arguments, plus tainted
+// inputs passed through under their own names.
+func childTaint(args map[string]bool, passthrough []string, tainted map[string]bool) map[string]bool {
+	out := map[string]bool{}
+	for name := range args {
+		out[name] = true
+	}
+	for _, name := range passthrough {
+		if tainted[name] {
+			out[name] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

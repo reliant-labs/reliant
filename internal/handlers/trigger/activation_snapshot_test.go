@@ -203,3 +203,30 @@ nodes:
 	_, err = snapshotFor(t, tools, "hook", nil)
 	require.ErrorContains(t, err, "fixed privilege choices")
 }
+
+func TestActivationSnapshotRefusesAPrivilegeAnEventInputSelectsByComparison(t *testing.T) {
+	// The resolved value carries no trace of the event ("view"), so only the
+	// reference to the event input can show that an event decides the tools.
+	conditional := `name: event-mode
+inputs:
+  mode: {type: string, default: safe}
+triggers:
+  - name: hook
+    integration: {integration: github, events: [issues.opened]}
+    inputs: {mode: '{{ trigger.payload.data.issue.title }}'}
+    prompt: go
+entry: [agent]
+nodes:
+  - id: agent
+    type: call_llm
+    args:
+      model: {tags: [fast]}
+      tools_config:
+        preloaded_tools: "{{ inputs.mode == 'admin' ? ['shell'] : ['view'] }}"
+        loadable_tools: []
+        permission: "{{ inputs.mode == 'admin' ? 'mutating' : 'readonly' }}"
+`
+	_, err := snapshotFor(t, conditional, "hook", nil)
+	require.ErrorContains(t, err, "fixed privilege choices")
+
+}
