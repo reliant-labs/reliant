@@ -71,6 +71,8 @@ func (r *placementRecordingRouter) deliver(daemonID, commandType string) ([]byte
 		return json.Marshal(map[string]any{"success": true, "worktree_path": "/home/u/.reliant/worktrees/p/feature"})
 	case "worktree.delete_directory":
 		return json.Marshal(map[string]any{"deleted": true})
+	case "repo.discover":
+		return json.Marshal(map[string]any{"discovered": []map[string]any{{"relative_path": "", "name": "p"}}})
 	}
 	return json.Marshal(map[string]any{})
 }
@@ -90,6 +92,19 @@ type activityPlacementFixture struct {
 
 func newActivityPlacementFixture(t *testing.T) *activityPlacementFixture {
 	t.Helper()
+	f := newUnregisteredActivityPlacementFixture(t)
+	now := time.Now().UTC()
+	require.NoError(t, f.repo.CreateRepo(context.Background(), &core.Repo{
+		ID: uuid.NewString(), ProjectID: f.projectID, Name: "root", RelativePath: "",
+		CreatedAt: now, UpdatedAt: now,
+	}))
+	return f
+}
+
+// newUnregisteredActivityPlacementFixture is a project with no repo rows: one
+// cloned onto a cloud machine, whose checkout the registry never recorded.
+func newUnregisteredActivityPlacementFixture(t *testing.T) *activityPlacementFixture {
+	t.Helper()
 	f := &activityPlacementFixture{
 		repo:      setupTestRepo(t),
 		router:    &placementRecordingRouter{},
@@ -101,10 +116,6 @@ func newActivityPlacementFixture(t *testing.T) *activityPlacementFixture {
 	require.NoError(t, f.repo.CreateProject(ctx, &db.Project{
 		ID: f.projectID, Name: "P", Path: "/home/u/projects/p", UserID: f.userID,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
-	}))
-	require.NoError(t, f.repo.CreateRepo(ctx, &core.Repo{
-		ID: uuid.NewString(), ProjectID: f.projectID, Name: "root", RelativePath: "",
-		CreatedAt: now, UpdatedAt: now,
 	}))
 	return f
 }
@@ -195,6 +206,25 @@ func TestCreateWorktreeActivity_PlacesOnChatWorktreeOwner(t *testing.T) {
 	wt := f.createWorktree(t, chatID, nil)
 
 	assertActivityPlacedOn(t, f.router, wt, "daemon-b")
+}
+
+// TestCreateWorktreeActivity_AdoptsReposFromThePlacedMachine: a project whose
+// repos were never registered is adopted from the machine the worktree goes
+// on. Asking the user's default machine instead found no checkout there and
+// failed the node with "project has no git repos" for a real repo.
+func TestCreateWorktreeActivity_AdoptsReposFromThePlacedMachine(t *testing.T) {
+	t.Parallel()
+
+	f := newUnregisteredActivityPlacementFixture(t)
+	chatID := f.chat(t, "")
+
+	wt := f.createWorktree(t, chatID, &types.DaemonSelector{ID: "daemon-b"})
+
+	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("repo.discover"))
+	assertActivityPlacedOn(t, f.router, wt, "daemon-b")
+	repos, err := f.repo.ListReposByProject(context.Background(), f.projectID)
+	require.NoError(t, err)
+	assert.Len(t, repos, 1)
 }
 
 // TestCreateWorktreeActivity_NoDaemonContextRecordsDefault: with nothing to
