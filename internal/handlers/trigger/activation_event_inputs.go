@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"google.golang.org/protobuf/proto"
@@ -168,7 +167,7 @@ func eventInputContexts(wt *pb.WorkflowTrigger, wf *pb.Workflow, effective map[s
 			}
 		}
 		if len(next) > maxEventContexts {
-			return nil, nil, svcerr.FailedPrecondition("Event-supplied input combinations exceed the activation approval limit")
+			return nil, nil, refusedPrecondition("Event-supplied input combinations exceed the activation approval limit")
 		}
 		contexts = next
 	}

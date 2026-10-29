@@ -35,6 +35,15 @@ func canonicalProto(message proto.Message) string {
 	return string(stable)
 }
 
+// refused is an InvalidArgument whose fixed message is also its safe
+// classification (tools.ActivationRefusal).
+func refused(msg string) error { return tools.RefuseActivation(msg, svcerr.InvalidArgument(msg)) }
+
+// refusedPrecondition is refused for a FailedPrecondition.
+func refusedPrecondition(msg string) error {
+	return tools.RefuseActivation(msg, svcerr.FailedPrecondition(msg))
+}
+
 // PrepareActivation uses the same definition, setup, access and match-scope
 // validation as the app. It writes no activation and grants no authority.
 func (s *Service) PrepareActivation(ctx context.Context, user, operation string, p tools.ActivationParams) (tools.ActivationPreview, error) {
@@ -48,14 +57,14 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	def := &pb.TriggerDefinition{ActingIdentity: pb.ActingIdentity_ACTING_IDENTITY_OWNER}
 	if operation != tools.ToolCreateTriggerActivation {
 		if p.TriggerID == "" {
-			return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("trigger_id is required")
+			return nil, tools.ActivationPreview{}, refused("trigger_id is required")
 		}
 		existing, err = s.ownedTrigger(ctx, p.TriggerID)
 		if err != nil {
-			return nil, tools.ActivationPreview{}, err
+			return nil, tools.ActivationPreview{}, tools.RefuseActivation("activation not found", err)
 		}
 		if existing.WorkflowTrigger == nil {
-			return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("only declared workflow activations can be managed by these tools")
+			return nil, tools.ActivationPreview{}, refused("only declared workflow activations can be managed by these tools")
 		}
 		rendered, renderErr := triggers.ToProto(existing, nil, nil, nil)
 		if renderErr != nil {
@@ -76,10 +85,10 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		def.Source = &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: p.WorkflowTrigger}
 	}
 	if def.GetWorkflowTrigger() == "" || def.Workflow == "" {
-		return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("workflow and workflow_trigger are required")
+		return nil, tools.ActivationPreview{}, refused("workflow and workflow_trigger are required")
 	}
 	if p.MachineID != nil && *p.MachineID != "" && p.NoMachine != nil && *p.NoMachine {
-		return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("machine_id and no_machine are mutually exclusive")
+		return nil, tools.ActivationPreview{}, refused("machine_id and no_machine are mutually exclusive")
 	}
 	if p.MachineID != nil {
 		def.DaemonId = *p.MachineID
@@ -104,7 +113,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		for k, v := range p.Params {
 			value, e := structpb.NewValue(v)
 			if e != nil {
-				return nil, tools.ActivationPreview{}, svcerr.InvalidArgument(e.Error())
+				return nil, tools.ActivationPreview{}, tools.RefuseActivation("params."+k+" is not a JSON value", svcerr.InvalidArgument(e.Error()))
 			}
 			def.Params[k] = value
 		}
@@ -119,7 +128,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		case "app":
 			def.ActingIdentity = pb.ActingIdentity_ACTING_IDENTITY_APP
 		default:
-			return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("acting_identity must be owner or app")
+			return nil, tools.ActivationPreview{}, refused("acting_identity must be owner or app")
 		}
 	}
 	switch operation {
@@ -134,7 +143,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	// setup broke. Like the app's pause RPC, it needs ownership, not setup.
 	if operation == tools.ToolPauseTrigger {
 		if p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil {
-			return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("pause_trigger only accepts trigger_id")
+			return nil, tools.ActivationPreview{}, refused("pause_trigger only accepts trigger_id")
 		}
 		copy := *existing
 		copy.ProjectName = ""
@@ -154,38 +163,38 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 			revision = existing.UpdatedAt
 		}
 		if len(title) > automationpolicy.MaxDisplayBytes {
-			return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval display size limit exceeded")
+			return nil, tools.ActivationPreview{}, refusedPrecondition("Activation approval display size limit exceeded")
 		}
 		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: revision}, nil
 	}
 	if operation == tools.ToolEnableTrigger && (p.Name != "" || p.Workflow != "" || p.WorkflowTrigger != "" || p.ProjectID != "" || p.MachineID != nil || p.NoMachine != nil || p.ConnectionID != nil || p.Params != nil || p.Presets != nil || p.Message != nil || p.ActingIdentity != nil) {
-		return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("enable_trigger only accepts trigger_id; use update_trigger_activation to edit")
+		return nil, tools.ActivationPreview{}, refused("enable_trigger only accepts trigger_id; use update_trigger_activation to edit")
 	}
 	if operation != tools.ToolCreateTriggerActivation && operation != tools.ToolUpdateTriggerActivation && operation != tools.ToolEnableTrigger {
-		return nil, tools.ActivationPreview{}, svcerr.InvalidArgument("unknown activation operation")
+		return nil, tools.ActivationPreview{}, refused("unknown activation operation")
 	}
 	row, err := s.triggerFromDefinition(ctx, user, def, existing)
 	if err != nil {
-		return nil, tools.ActivationPreview{}, err
+		return nil, tools.ActivationPreview{}, tools.RefuseActivation("activation settings rejected ("+svcerr.Code(err).String()+")", err)
 	}
 	row.Enabled = def.Enabled == nil || *def.Enabled
 	if operation != tools.ToolPauseTrigger {
 		if err = s.refreshTriggerAccess(ctx, row); err != nil {
-			return nil, tools.ActivationPreview{}, err
+			return nil, tools.ActivationPreview{}, tools.RefuseActivation("integration access could not be refreshed ("+svcerr.Code(err).String()+")", err)
 		}
 	}
 	wf, err := launch.ResolveValidatedRunWorkflow(ctx, s.deps.Repo, user, def.Workflow, def.ProjectId)
 	if err != nil {
-		return nil, tools.ActivationPreview{}, err
+		return nil, tools.ActivationPreview{}, tools.RefuseActivation("workflow not found in this project, or it does not validate", err)
 	}
 	wt := triggers.FindDeclaredTrigger(wf, def.GetWorkflowTrigger())
 	if wt == nil {
-		return nil, tools.ActivationPreview{}, svcerr.NotFound("declared trigger")
+		return nil, tools.ActivationPreview{}, tools.RefuseActivation("workflow does not declare that trigger", svcerr.NotFound("declared trigger"))
 	}
 	if operation != tools.ToolPauseTrigger {
 		_, err = s.checkReachability(ctx, user, wf, wt, &pb.EnableWorkflowRequest{ConnectionIds: map[string]string{wt.GetIntegration().GetIntegration(): def.GetConnectionId()}, ActingIdentity: def.ActingIdentity}, row)
 		if err != nil {
-			return nil, tools.ActivationPreview{}, err
+			return nil, tools.ActivationPreview{}, tools.RefuseActivation("an integration input's values are not reachable with the connected account", err)
 		}
 	}
 	// Include the full resolved graph: tools, permissions, sources and inputs.
@@ -194,7 +203,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	if !row.NoMachine {
 		machine, e := s.deps.Repo.GetDaemon(ctx, row.DaemonID)
 		if e != nil {
-			return nil, tools.ActivationPreview{}, e
+			return nil, tools.ActivationPreview{}, tools.RefuseActivation("machine not found", e)
 		}
 		machineName = machine.Name
 		if machineName == "" && machine.Hostname != nil {
@@ -206,7 +215,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	def.ConnectionId = row.ConnectionID
 	closure, err := s.activationSnapshot(ctx, user, def, wf)
 	if err != nil {
-		return nil, tools.ActivationPreview{}, err
+		return nil, tools.ActivationPreview{}, tools.RefuseActivation("workflow dependencies could not be resolved for approval ("+svcerr.Code(err).String()+")", err)
 	}
 	definition := canonicalProto(def)
 	// Volatile names/health are not authorization inputs; configuration and its
@@ -230,7 +239,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		Closure    *activationSnapshot
 	}{definition, string(before), closure})
 	if err != nil || len(raw) > maxApprovalSnapshotBytes {
-		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval snapshot size limit exceeded")
+		return nil, tools.ActivationPreview{}, refusedPrecondition("Activation approval snapshot size limit exceeded")
 	}
 	safe, _ := automationpolicy.SafeJSON(row)
 	connectionIdentity := "default/delegated at runtime (dynamic identity)"
@@ -244,7 +253,7 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	}
 	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", machineName, row.DaemonID, operation, user, def.ActingIdentity, connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
 	if len(title) > automationpolicy.MaxDisplayBytes {
-		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval display size limit exceeded")
+		return nil, tools.ActivationPreview{}, refusedPrecondition("Activation approval display size limit exceeded")
 	}
 	hash := sha256.Sum256(append(raw, []byte(title)...))
 	revision := time.Time{}

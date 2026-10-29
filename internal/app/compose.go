@@ -492,6 +492,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Pollers:      g.TriggerPollers(),
 		Integrations: g.IntegrationSettings(),
 		DB:           g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
