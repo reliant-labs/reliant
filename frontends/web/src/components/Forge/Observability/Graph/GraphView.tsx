@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import Badge from "@/components/forge-ui/badge";
 import Combobox, { type ComboboxOption } from "@/components/forge-ui/combobox";
+import Input from "@/components/forge-ui/input";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
 import { obsKeys, useObsReadApi } from "@/hooks/observability-queries";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
@@ -18,9 +19,16 @@ import { GraphQualityInfo, GraphQualityNotice } from "./GraphQuality";
 import { fmtCount, shortService } from "./graphStats";
 import { catalogNotes, methodRows, RPCExplorer } from "./RPCExplorer";
 
-/** Service and method choices: every service/method seen in traffic or declared in a catalog. */
-function filterOptions(catalog: RPCCatalog | undefined, service: string, rpcId: string) {
+/**
+ * Service and method choices: every service/method seen in traffic or declared
+ * in a catalog. Services come from the all-services catalog; once a service is
+ * chosen its methods come from that service's own catalog, because the
+ * all-services enumeration is bounded and can omit a method the scoped
+ * response lists.
+ */
+function filterOptions(catalog: RPCCatalog | undefined, scopedCatalog: RPCCatalog | undefined, service: string, rpcId: string) {
   const rows = catalog ? methodRows(catalog) : [];
+  const methodSource = service && scopedCatalog ? methodRows(scopedCatalog) : rows;
   const byService = new Map<string, { methods: number; requests: bigint }>();
   for (const r of rows) {
     const s = byService.get(r.service) ?? { methods: 0, requests: 0n };
@@ -30,7 +38,7 @@ function filterOptions(catalog: RPCCatalog | undefined, service: string, rpcId: 
   const services: ComboboxOption[] = [...byService].sort(([a], [b]) => shortService(a).localeCompare(shortService(b)) || a.localeCompare(b))
     .map(([name, s]) => ({ value: name, label: shortService(name), keywords: [name],
       description: `${name} · ${s.methods} method${s.methods === 1 ? "" : "s"}${s.requests > 0n ? ` · ${fmtCount(s.requests)} req` : ""}` }));
-  const methods: ComboboxOption[] = rows.filter((r) => !service || r.service === service)
+  const methods: ComboboxOption[] = methodSource.filter((r) => !service || r.service === service)
     .sort((a, b) => shortService(a.service).localeCompare(shortService(b.service)) || a.method.localeCompare(b.method))
     .map((r) => ({ value: r.id, label: r.method, keywords: [r.id], group: service ? undefined : shortService(r.service),
       description: r.requests > 0n ? `${fmtCount(r.requests)} req` : "no traffic" }));
@@ -48,6 +56,7 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   // this boundary on explicit Refresh, advancing relative time to now.
   const [window] = useState(() => resolveWindow(range));
   const [showUnresolved, setShowUnresolved] = useState(false);
+  const [exactDraft, setExactDraft] = useState("");
   const explorer = search.view === "rpc";
   const rpcId = search.rpcId ?? "";
   const service = search.rpcService ?? "";
@@ -70,6 +79,7 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   const catalogError = everything.error || catalog.error || exactCatalog.error;
   const catalogData = !processService && !catalogError ? catalog.data : undefined;
   const optionsData = !processService && !catalogError ? everything.data : undefined;
+  const scopedOptionsData = !processService && !catalogError && service ? scoped.data : undefined;
   const selectedData = !processService && !catalogError ? exactCatalog.data : undefined;
   const displayedCatalog = catalogData ? { ...catalogData,
     methods: [...catalogData.methods.filter((m) => m.id !== rpcId), ...(selectedData?.methods ?? [])],
@@ -78,7 +88,7 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   const graph = useQuery({ queryKey: [...obsKeys.all(scope), "graph", window, rpcId, service, processService, !!search.internal, !!search.declared],
     queryFn: () => api.getServiceGraph({ ...scope, window, rpcIds: rpcId ? [rpcId] : [], rpcService: service, services: processService ? [processService] : [], includeInternal: !!search.internal, includeDeclared: !!search.declared && !processService }),
     enabled: !explorer, staleTime: Infinity, retry: obsRetry });
-  const { services, methods } = useMemo(() => filterOptions(optionsData, service, rpcId), [optionsData, service, rpcId]);
+  const { services, methods } = useMemo(() => filterOptions(optionsData, scopedOptionsData, service, rpcId), [optionsData, scopedOptionsData, service, rpcId]);
   const notes = useMemo(() => catalogNotes(displayedCatalog, envNames), [displayedCatalog, envNames]);
   const filters = useMemo(() => ({ rpcId, errorsOnly: search.errors, declared: !!search.declared && !processService, internal: search.internal, showUnresolved }),
     [rpcId, search.errors, search.declared, search.internal, processService, showUnresolved]);
@@ -97,6 +107,11 @@ export function GraphView({ scope, range, search, navigate, subject }: {
         placeholder="All methods" searchPlaceholder="Search methods" loading={optionsLoading} disabled={!!processService}
         emptyMessage="No methods with traffic in this window" panelClassName="w-96"
         onChange={(v) => onRPC(v ?? "")} />
+      {/* Catalog enumeration is bounded: a method it omits is still reachable by its exact identity. */}
+      <form className="contents" onSubmit={(e) => { e.preventDefault(); const id = exactDraft.trim(); if (id.includes("/")) { onRPC(id); setExactDraft(""); } }}>
+        <Input aria-label="Exact method" inputSize="sm" className="w-64" value={exactDraft} onChange={(e) => setExactDraft(e.target.value)}
+          placeholder="Exact: pkg.v1.Service/Method" maxLength={1024} disabled={!!processService} />
+      </form>
       {processService && <Badge label={`Process: ${processService}`} removable onRemove={() => navigate({ service: undefined })} />}
       {!explorer && <div className="flex flex-wrap items-center gap-4 pl-2">
         <ToggleSwitch size="sm" label="Errors only" checked={!!search.errors} onChange={(on) => navigate({ errors: on || undefined })} />

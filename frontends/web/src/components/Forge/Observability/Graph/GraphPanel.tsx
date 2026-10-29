@@ -8,7 +8,7 @@ import { traceEnvName } from "../AskReliant/askReliantPrompt";
 import type { GraphEdge, GraphNode, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { ObsNavigate } from "../obsSearch";
-import { graphModel, unitLabel, type GraphFilters, type GraphLink, type NodeStats } from "./graphModel";
+import { authoritativeCohort, graphModel, unitLabel, type GraphFilters, type GraphLink, type NodeStats } from "./graphModel";
 import { fmtCount, fmtErrorRate, fmtLatency, histogramQuantile, shortService, sumHistograms } from "./graphStats";
 import { ProcessGraph } from "./ProcessGraph";
 
@@ -72,8 +72,11 @@ interface MethodRow { rpcId: string; count: bigint; faults: bigint; p95?: number
 function byMethod(edges: GraphEdge[]): MethodRow[] {
   const rows = new Map<string, GraphEdge[]>();
   for (const e of edges) if (e.rpcId && e.evidence === "observed") rows.set(e.rpcId, [...(rows.get(e.rpcId) ?? []), e]);
-  return [...rows].map(([rpcId, es]) => ({ rpcId, count: es.reduce((s, e) => s + e.count, 0n), faults: es.reduce((s, e) => s + e.faults, 0n),
-    p95: histogramQuantile(sumHistograms(es.map((e) => e.duration)), 0.95) }))
+  // One viewpoint per method, as for a link: a client attempt and the server
+  // request it became are the same call.
+  return [...rows].map(([rpcId, all]) => { const es = authoritativeCohort(all).counted; return { rpcId,
+    count: es.reduce((s, e) => s + e.count, 0n), faults: es.reduce((s, e) => s + e.faults, 0n),
+    p95: histogramQuantile(sumHistograms(es.map((e) => e.duration)), 0.95) }; })
     .sort((a, b) => (b.count > a.count ? 1 : b.count < a.count ? -1 : a.rpcId.localeCompare(b.rpcId)));
 }
 

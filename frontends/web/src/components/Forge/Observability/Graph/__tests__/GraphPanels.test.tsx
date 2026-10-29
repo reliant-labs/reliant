@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { fixtureCatalog, fixtureGraph, GRAPH_RPC } from "../../__fixtures__/fixtureGraph";
+import { fixtureCatalog, fixtureGraph, graphEdge, GRAPH_RPC } from "../../__fixtures__/fixtureGraph";
 import { GraphPanel } from "../GraphPanel";
 import { catalogNotes, RPCExplorer } from "../RPCExplorer";
 vi.mock("../ProcessGraph", () => ({ ProcessGraph: () => <div data-testid="process-graph" /> }));
@@ -43,6 +43,16 @@ describe("service graph panel", () => {
     expect(screen.queryByTestId("graph-empty")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show" }));
     expect(onShow).toHaveBeenCalled();
+  });
+  it("counts a connection's methods from one viewpoint, like its summary", () => {
+    const graph = fixtureGraph();
+    graph.edges.push(graphEdge("api-orders-client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 104n, faults: 5n }));
+    render(<GraphPanel graph={graph} filters={{}} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} />);
+    fireEvent.click(screen.getByText(/api → orders/));
+    const detail = screen.getByRole("region", { name: "Graph detail" });
+    const row = within(detail).getByRole("button", { name: /GetOrder/ }).closest("tr")!;
+    expect(row).toHaveTextContent("100");
+    expect(row).not.toHaveTextContent("204");
   });
   it("never prints environment ids or internal reason codes", () => {
     const { container } = render(<GraphPanel graph={fixtureGraph()} filters={{ showUnresolved: true }} scope={scope} navigate={vi.fn()} onRPC={vi.fn()} envNames={envNames} />);

@@ -55,6 +55,29 @@ describe("scoped graph boundary", () => {
     await waitFor(() => expect(api.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ services: ["api"], includeDeclared: false })));
     expect(screen.getByRole("switch", { name: "Declared" })).toBeDisabled();
   });
+  it("offers a chosen service's methods from its own catalog, not the bounded global one", async () => {
+    const base = fixtureCatalog();
+    const scopedOnly = { ...base.methods[0], id: "shop.v1.OrdersService/ZZMethod501", method: "ZZMethod501" };
+    api.getServiceGraph.mockResolvedValue(fixtureGraph());
+    api.getServiceGraphCatalog.mockImplementation((req) => Promise.resolve(req.rpcService ? { ...base, methods: [...base.methods, scopedOnly] } : base));
+    const navigate = show({ rpcService: "shop.v1.OrdersService" });
+    await waitFor(() => expect(api.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcService: "shop.v1.OrdersService" })));
+    await waitFor(() => expect(screen.getByLabelText("Method")).not.toHaveTextContent(/loading/i));
+    fireEvent.click(screen.getByLabelText("Method"));
+    fireEvent.click(await screen.findByRole("option", { name: /ZZMethod501/ }));
+    expect(navigate).toHaveBeenCalledWith({ rpcId: scopedOnly.id, rpcService: "shop.v1.OrdersService" });
+  });
+  it("selects a method by its exact identity when no catalog lists it", async () => {
+    api.getServiceGraph.mockResolvedValue(fixtureGraph()); api.getServiceGraphCatalog.mockResolvedValue(fixtureCatalog());
+    const navigate = show();
+    const exact = screen.getByLabelText("Exact method");
+    fireEvent.change(exact, { target: { value: "  shop.v1.OrdersService/Hidden  " } });
+    fireEvent.submit(exact);
+    expect(navigate).toHaveBeenCalledWith({ rpcId: "shop.v1.OrdersService/Hidden", rpcService: "shop.v1.OrdersService" });
+    fireEvent.change(exact, { target: { value: "NotAnIdentity" } });
+    fireEvent.submit(exact);
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
   it("looks up selected RPC 201 independently of the method enumeration", async () => {
     const base = fixtureCatalog();
     const selectedId = "shop.v1.OrdersService/ZZMethod201";

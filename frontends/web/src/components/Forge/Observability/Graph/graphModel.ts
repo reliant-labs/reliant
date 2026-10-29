@@ -154,6 +154,20 @@ export function layoutGraph(nodes: GraphNode[], links: Pick<GraphLink, "source" 
   return positioned.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * The edges a statistic over `edges` may sum: the observed edges of their most
+ * authoritative viewpoint and that edge's unit. `first` names the cohort (the
+ * first edge in that order, observed or not, so a declared-only group still
+ * has a kind and unit). Every place that sums traffic goes through here.
+ */
+export function authoritativeCohort(edges: GraphEdge[]): { first: GraphEdge; counted: GraphEdge[] } {
+  const observed = edges.filter((e) => e.evidence === "observed");
+  const rank = (e: GraphEdge) => VIEWPOINT_RANK[e.viewpoint] ?? Object.keys(VIEWPOINT_RANK).length;
+  const first = [...(observed.length ? observed : edges)]
+    .sort((a, b) => rank(a) - rank(b) || a.viewpoint.localeCompare(b.viewpoint) || a.unit.localeCompare(b.unit) || a.id.localeCompare(b.id))[0];
+  return { first, counted: observed.filter((e) => e.viewpoint === first.viewpoint && e.unit === first.unit) };
+}
+
 function linksOf(edges: GraphEdge[]): GraphLink[] {
   const byPair = new Map<string, GraphEdge[]>();
   for (const e of edges) {
@@ -162,10 +176,7 @@ function linksOf(edges: GraphEdge[]): GraphLink[] {
   }
   return [...byPair.values()].map((group) => {
     const observed = group.filter((e) => e.evidence === "observed");
-    const rank = (e: GraphEdge) => VIEWPOINT_RANK[e.viewpoint] ?? Object.keys(VIEWPOINT_RANK).length;
-    const first = [...(observed.length ? observed : group)]
-      .sort((a, b) => rank(a) - rank(b) || a.viewpoint.localeCompare(b.viewpoint) || a.unit.localeCompare(b.unit) || a.id.localeCompare(b.id))[0];
-    const counted = observed.filter((e) => e.viewpoint === first.viewpoint && e.unit === first.unit);
+    const { first, counted } = authoritativeCohort(group);
     return {
       id: `${first.source}->${first.target}`, source: first.source, target: first.target, edges: group,
       count: counted.reduce((s, e) => s + e.count, 0n), faults: counted.reduce((s, e) => s + e.faults, 0n),
