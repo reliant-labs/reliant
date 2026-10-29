@@ -758,6 +758,7 @@ func TestRepoGetContentOfAMissingPathIsNotAnError(t *testing.T) {
 	assert.Equal(t, "abc123", out["ref"])
 	assert.Contains(t, out["note"], "No file or directory at internal/AGENTS.md at abc123")
 	assert.NotContains(t, out["note"], "installed", "the repository answered: the App hint would mislead")
+	assert.Contains(t, out["note"], "read the root (omit path) to tell", "a non-root 404 is ambiguous and says how to resolve it")
 
 	f = newFake(t)
 	f.on("GET", "/repos/acme/app/contents/", notFound)

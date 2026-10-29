@@ -92,7 +92,9 @@ output:
            " (is the Reliant GitHub App installed on it?)." :
          "No file or directory at " + params.path +
            (params.?ref.hasValue() ? " at " + params.ref : " on the default branch") +
-           ". A file a pull request deletes exists only at its base, one it adds only at its head."} :
+           ". A file a pull request deletes exists only at its base, one it adds only at its head." +
+           " GitHub answers the same for a repository this connection cannot see: if other paths" +
+           " in it have been read, the path is absent; if not, read the root (omit path) to tell."} :
     type(response) == list ?
       {"type": "dir",
        "path": params.?path.orValue(""),
