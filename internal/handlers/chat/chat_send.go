@@ -589,7 +589,7 @@ func (s *Service) SendMessage(
 				// above, after the send-time model policy (#685) has moved any
 				// model no connected provider can serve.
 				if len(stateUpdate) > 0 {
-					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
+					modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{input: stateUpdate[input]})
 					})
 					s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, stateUpdate)
@@ -712,7 +712,7 @@ func (s *Service) SendMessage(
 					// answer — rtemporal.QueryOpenRun). What it was running on
 					// is rebuilt from the chat's presets and stored selection.
 					recorded := s.inputsAfterClosedRun(ctx, chat, activeWorkflowNameForResume(chat, existingWorkflow))
-					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
+					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
 					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
@@ -886,7 +886,7 @@ func (s *Service) SendMessage(
 	// saved below. This catches missing required inputs, unknown models and a
 	// user with no provider early (400), and a refused send must leave nothing
 	// behind; see liveRunStateUpdate.
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
 	if presetsChanged {
@@ -952,7 +952,7 @@ func (s *Service) SendMessage(
 
 	// A move is announced once: the chat's selection records the moved model,
 	// so a composer still sending the original pin does not repeat the notice.
-	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
+	modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
 	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)

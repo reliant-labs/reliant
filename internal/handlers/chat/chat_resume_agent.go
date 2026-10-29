@@ -238,7 +238,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 			}
 		}
 		inputs = s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, nil)
-		if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, inputs); len(validationErrors) > 0 {
+		if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, inputs); len(validationErrors) > 0 {
 			msgs := make([]string, len(validationErrors))
 			for i, e := range validationErrors {
 				msgs[i] = e.Error()
@@ -247,7 +247,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 				"This chat's settings need attention before it can run again: "+strings.Join(msgs, "; ")+". Fix them, then send again.")
 		}
 	}
-	s.fallBackFromUnservableModels(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID, workflowID, inputs, nil)
+	s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, workflowID, inputs, nil)
 	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
 	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(inputs, chat)

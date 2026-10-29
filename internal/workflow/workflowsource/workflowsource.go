@@ -78,6 +78,11 @@ type Options struct {
 	// just saved. Every other ref, including the root's children, needs a
 	// complete workflow.
 	DraftRoot string
+	// DraftRootOptional lets DraftRoot fall through to the project's workflow
+	// of that name when the user has no workflow of it at all: a read of a
+	// workflow's input schema for whatever is about to start, as opposed to
+	// a builder test run, which must run the draft or nothing.
+	DraftRootOptional bool
 }
 
 // ProjectIndex indexes the workflows synced for a project: nil when there is
@@ -195,6 +200,9 @@ func userWorkflows(ctx context.Context, store Store, opts Options) func(slug str
 				return nil, &StoreError{Err: fmt.Errorf("look up workflow %q: %w", slug, err)}
 			}
 			if draft == nil || draft.IsHidden {
+				if opts.DraftRootOptional {
+					return nil, nil
+				}
 				return nil, fmt.Errorf("%w: you have no workflow named %q to test", workflowref.ErrNotFound, slug)
 			}
 			return []byte(draft.Definition), nil

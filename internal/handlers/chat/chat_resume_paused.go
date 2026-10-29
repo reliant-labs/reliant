@@ -51,7 +51,7 @@ func (s *Service) resumePausedRun(
 	workflowID := chat.MainThreadID()
 
 	runInputs := s.runInputsForSend(ctx, workflowID)
-	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
+	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
 	inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, workflowName, inputUpdate)

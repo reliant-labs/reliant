@@ -64,4 +64,23 @@ func TestLaunchOnAMachineReadsThatMachinesCatalog(t *testing.T) {
 		Params: mockModelParams(t), Messages: userSeed("go"),
 	})
 	require.NoError(t, err, "on the laptop it runs")
+
+	// Two definitions of one workflow with conflicting input schemas: cicd's
+	// defaults env, the laptop's (newer, so the union's) requires it. A
+	// launch on cicd is admitted, defaulted and validated against cicd's.
+	deploy := func(inputs string) config.StoredWorkflow {
+		return config.StoredWorkflow{Slug: "deploy", Name: "deploy", RelativePath: ".reliant/workflows/deploy.yaml",
+			YAMLContent: "name: deploy\napiVersion: v2\ninputs:\n" + inputs + "entry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"}
+	}
+	push(cicd, now.Add(time.Minute), "plan", []config.StoredWorkflow{deploy("  env: {type: string, default: prod}\n")})
+	push(laptop, now.Add(2*time.Minute), "build", []config.StoredWorkflow{deploy("  env: {type: string, required: true}\n  region: {type: string, default: eu}\n")})
+
+	_, err = launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "deploy", DaemonID: cicd,
+		Messages: userSeed("go"),
+	})
+	require.NoError(t, err, "the laptop's required env must not reject a launch on cicd")
+	inputs := starter.lastRootInput(t).Inputs
+	assert.Equal(t, "prod", inputs["env"], "cicd's default")
+	assert.NotContains(t, inputs, "region", "the laptop's default is not cicd's")
 }

@@ -151,7 +151,7 @@ func (s *Service) UpdateWorkflowParams(
 				recoverable[key] = value
 			}
 		}
-		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, recoverable)
+		moves = s.moveUnservableModels(ctx, userID, chat, workflowName, workflowID, recoverable)
 		for key, value := range recoverable {
 			stateUpdate[key] = value
 		}

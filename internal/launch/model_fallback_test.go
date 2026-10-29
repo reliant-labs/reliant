@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -47,13 +48,13 @@ func TestValidateWorkflowInputs_UnservableModelIsNotAValidationError(t *testing.
 	launcher := NewLauncher(nil, nil, nil, nil, "")
 	ctx := context.Background()
 
-	errs := launcher.ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", map[string]interface{}{
+	errs := launcher.ValidateChatWorkflowInputs(ctx, "user-1", &db.Chat{ProjectID: "project-1"}, "builtin://agent", map[string]interface{}{
 		"mode":  "auto",
 		"model": map[string]interface{}{"id": "gpt-5.6-sol@codex"},
 	})
 	assert.Empty(t, errs, "an unservable model must reach the run, which explains it, not refuse the send")
 
-	errs = launcher.ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", map[string]interface{}{
+	errs = launcher.ValidateChatWorkflowInputs(ctx, "user-1", &db.Chat{ProjectID: "project-1"}, "builtin://agent", map[string]interface{}{
 		"mode":  "auto",
 		"model": map[string]interface{}{"id": "no-such-model"},
 	})

@@ -214,7 +214,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Validate workflow inputs before starting, and before anything of the
 	// send is written — a refused send leaves nothing behind (see
 	// liveRunStateUpdate).
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := s.launcher().ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
 		return nil, inputValidationError(validationErrors)
 	}
 	if presetsChanged {
@@ -228,7 +228,7 @@ func (s *Service) resurrectGhostWorkflow(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
-	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
+	modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
 	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)

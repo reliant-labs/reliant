@@ -44,7 +44,7 @@ func TestOrdinaryBoundSendCannotMoveModelsOrClearBinding(t *testing.T) {
 	require.NoError(t, err)
 	for _, id := range []string{sonnetOnClaude, "qwen@local"} {
 		inputs := map[string]interface{}{"model": map[string]any{"id": id}, v2.InputKeyProviderSwitch: "codex"}
-		require.Empty(t, svc.moveUnservableModels(ctx, "test-user", fx.chatID, chat.ProjectID, "builtin://agent", fx.rootThreadID, inputs))
+		require.Empty(t, svc.moveUnservableModels(ctx, "test-user", chat, "builtin://agent", fx.rootThreadID, inputs))
 		svc.refreshChatProvider(ctx, "test-user", chat, "builtin://agent", inputs)
 		require.Equal(t, "codex", inputs[v2.InputKeyProviderSwitch])
 		require.Equal(t, "codex", svc.chatProvider(ctx, fx.chatID))

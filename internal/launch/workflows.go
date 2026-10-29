@@ -115,7 +115,7 @@ func (l *Launcher) BuildWorkflowInputs(
 	selectedPresets map[string]string,
 	userParams map[string]*structpb.Value,
 ) map[string]interface{} {
-	return l.buildWorkflowInputs(ctx, userID, checkout, projectID, "", workflowName, selectedPresets, nil, paramValues(userParams))
+	return l.buildWorkflowInputs(ctx, Scope{UserID: userID, ProjectID: projectID}, checkout, workflowName, selectedPresets, nil, paramValues(userParams))
 }
 
 // BuildChatWorkflowInputs is BuildWorkflowInputs for a chat's run, with the
@@ -144,7 +144,7 @@ func (l *Launcher) buildChatWorkflowInputs(
 	selectedPresets map[string]string,
 	send map[string]interface{},
 ) map[string]interface{} {
-	inputs := l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, RunMachine(chat), workflowName,
+	inputs := l.buildWorkflowInputs(ctx, chatScope(userID, chat, workflowName), l.GetEffectiveCheckout(ctx, chat), workflowName,
 		selectedPresets, l.ChatSelectionParams(ctx, chat.ID, workflowName), send)
 	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
 	return inputs
@@ -202,20 +202,20 @@ func paramValues(params map[string]*structpb.Value) map[string]interface{} {
 // selection, then the send, then schema defaults. The selection and the send
 // combine first, the send replacing the selection key by key and whole (a model
 // selector is a value, not a bag of fields to merge), and only then go over the
-// presets, which is where a group's params merge with the preset's. A
-// project preset is read from daemonID's synced catalog (the run's machine),
-// or the union of every machine's when it is empty.
+// presets, which is where a group's params merge with the preset's. scope
+// says where the presets and the workflow's input schema are read from: the
+// run's machine's synced catalog (scope.DaemonID), or the union of every
+// machine's when it is empty (see chatScope).
 func (l *Launcher) buildWorkflowInputs(
 	ctx context.Context,
-	userID string,
+	scope Scope,
 	checkout Checkout,
-	projectID string,
-	daemonID string,
 	workflowName string,
 	selectedPresets map[string]string,
 	selection map[string]interface{},
 	send map[string]interface{},
 ) map[string]interface{} {
+	userID, projectID := scope.UserID, scope.ProjectID
 	initialData := make(map[string]interface{})
 
 	userParamKeys := make([]string, 0, len(send))
@@ -224,7 +224,7 @@ func (l *Launcher) buildWorkflowInputs(
 	}
 	logging.DebugContext(ctx, "[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
 	if len(selectedPresets) > 0 {
-		initialData = l.applyPresets(ctx, userID, projectID, daemonID, initialData, selectedPresets)
+		initialData = l.applyPresets(ctx, userID, projectID, scope.DaemonID, initialData, selectedPresets)
 	} else {
 		logging.DebugContext(ctx, "[buildWorkflowInputs] No presets selected")
 	}
@@ -265,8 +265,8 @@ func (l *Launcher) buildWorkflowInputs(
 
 	// Apply workflow schema defaults (e.g. model: { id: gpt-4o }) so validation and execution
 	// see the same inputs the workflow defines. Required inputs without defaults remain absent
-	// so ValidateWorkflowInputs can reject missing required params before a chat starts.
-	protoInputs := l.LoadWorkflowInputsForBuild(ctx, userID, workflowName, projectID)
+	// so ValidateChatWorkflowInputs can reject missing required params before a chat starts.
+	protoInputs := l.loadWorkflowInputs(ctx, scope, workflowName)
 	if len(protoInputs) > 0 {
 		initialData = v2.ApplyDefaults(initialData, protoInputs)
 	}
@@ -360,7 +360,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 		}
 		update[key] = value
 	}
-	if protoInputs := l.LoadWorkflowInputsForBuild(ctx, userID, workflowName, chat.ProjectID); len(protoInputs) > 0 {
+	if protoInputs := l.loadWorkflowInputs(ctx, chatScope(userID, chat, workflowName), workflowName); len(protoInputs) > 0 {
 		NormalizeModelInputs(update, protoInputs)
 	}
 	return update
@@ -372,7 +372,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 // is not in it — so the signal carries the delta and the check the whole.
 func (l *Launcher) ValidateStateUpdate(ctx context.Context, userID string, chat *db.Chat, workflowName string, presets map[string]string, update map[string]interface{}) []error {
 	effective := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, update)
-	return l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, effective)
+	return l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, effective)
 }
 
 // LoadWorkflowInputsForBuild loads workflow input schemas as proto types for ApplyDefaults.
@@ -380,9 +380,25 @@ func (l *Launcher) ValidateStateUpdate(ctx context.Context, userID string, chat 
 // user's own workflow of that name counts complete or not: defaults are read
 // for whatever they are about to start.
 func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workflowName, projectID string) map[string]*reliantv1.Input {
-	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
-		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
-	}, workflowName)
+	return l.loadWorkflowInputs(ctx, Scope{UserID: userID, ProjectID: projectID, draftRoot: workflowName, draftOptional: true}, workflowName)
+}
+
+// chatScope is the scope chat's runs resolve workflowName in: the machine
+// the chat is pinned to (RunMachine), whose catalog its admission and its
+// runtime loads read, so its input schema, defaults and validation come from
+// the same definition that runs. The optional draft root lets an input schema
+// be read for a workflow of the user's they are about to start, complete or
+// not, and still finds the project's when they have none of that name.
+func chatScope(userID string, chat *db.Chat, workflowName string) Scope {
+	scope := Scope{UserID: userID, DaemonID: RunMachine(chat), draftRoot: workflowName, draftOptional: true}
+	if chat != nil {
+		scope.ProjectID = chat.ProjectID
+	}
+	return scope
+}
+
+func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflowName string) map[string]*reliantv1.Input {
+	resolved, err := workflowsource.Resolve(ctx, l.repo, scope.sourceOptions(), workflowName)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not load workflow inputs for build", "workflow", workflowName, "error", err)
 		return nil
@@ -390,18 +406,20 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 	return resolved.Workflow.GetInputs()
 }
 
-// ValidateWorkflowInputs loads a workflow and validates the provided inputs against its schema.
+// ValidateChatWorkflowInputs loads a workflow and validates the provided inputs against its schema.
 // Returns validation errors if inputs are missing or invalid, nil if valid.
 // This enables early validation (400 error) before starting the workflow.
 //
 // userID is the OWNER of the run, passed explicitly. It used to be read from
 // the request context, which a scheduled fire on the worker does not have.
-func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowName, projectID string, inputs map[string]interface{}) []error {
+//
+// chat decides where the definition is read from (chatScope): its machine's
+// catalog, as its runs read it.
+func (l *Launcher) ValidateChatWorkflowInputs(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []error {
 	// Validate against the definition that will run: the one workflowsource
-	// resolves (the user's own of that name, else the project's).
-	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
-		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
-	}, workflowName)
+	// resolves (the user's own of that name, else the project's) in the
+	// chat's scope.
+	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not load workflow for input validation", "workflow", workflowName, "error", err)
 		return nil
@@ -493,13 +511,11 @@ type ModelSubstitution struct {
 // Only sends call this. A run that meets an unservable pin on its own (a
 // trigger, a sub-agent, a resumed step) is not rerouted; it fails with the
 // explained error, because no user is there to be told.
-func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID, workflowName, projectID string, inputs map[string]interface{}) []ModelSubstitution {
+func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []ModelSubstitution {
 	if len(inputs) == 0 {
 		return nil
 	}
-	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
-		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
-	}, workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
 		return nil
 	}
@@ -610,6 +626,8 @@ var (
 type Scope struct {
 	UserID, ProjectID, DaemonID string
 	draftRoot                   string
+	// draftOptional: see workflowsource.Options.DraftRootOptional.
+	draftOptional bool
 }
 
 // ResolveValidatedRunWorkflowOn is ResolveValidatedRunWorkflow for a run that
@@ -639,10 +657,12 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scop
 	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
 }
 
+func (s Scope) sourceOptions() workflowsource.Options {
+	return workflowsource.Options{UserID: s.UserID, ProjectID: s.ProjectID, DaemonID: s.DaemonID, DraftRoot: s.draftRoot, DraftRootOptional: s.draftOptional}
+}
+
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
-	resolved, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{
-		UserID: scope.UserID, ProjectID: scope.ProjectID, DaemonID: scope.DaemonID, DraftRoot: scope.draftRoot,
-	}, workflowName)
+	resolved, err := workflowsource.Resolve(ctx, repo, scope.sourceOptions(), workflowName)
 	if err != nil {
 		var notRunnable *db.WorkflowDraftNotRunnableError
 		if errors.As(err, &notRunnable) {

@@ -284,9 +284,12 @@ type GitPublishStore interface {
 	WorktreeOwnerReader
 }
 
-// LoadPresetParamsStore is what LoadPresetParamsActivity reads.
+// LoadPresetParamsStore is what LoadPresetParamsActivity reads: the run's
+// chat, and the presets its machine synced (or the union of every machine's).
 type LoadPresetParamsStore interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	workflowsource.MachineStore
 }
 
 // LoadWorkflowStore is what LoadWorkflowActivity reads: the chat's project or

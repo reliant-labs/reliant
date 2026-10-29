@@ -187,7 +187,7 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 		},
 	}
 
-	require.Empty(t, service.launcher().ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", validInputs))
+	require.Empty(t, service.launcher().ValidateChatWorkflowInputs(ctx, "user-1", &db.Chat{ProjectID: "project-1"}, "builtin://agent", validInputs))
 
 	invalidInputs := map[string]interface{}{
 		"mode":           "auto",
@@ -197,7 +197,7 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 		},
 	}
 
-	validationErrors := service.launcher().ValidateWorkflowInputs(ctx, "user-1", "builtin://agent", "project-1", invalidInputs)
+	validationErrors := service.launcher().ValidateChatWorkflowInputs(ctx, "user-1", &db.Chat{ProjectID: "project-1"}, "builtin://agent", invalidInputs)
 	require.NotEmpty(t, validationErrors)
 	require.Contains(t, validationErrors[0].Error(), "unknown input(s): thinking_level")
 }
@@ -351,7 +351,7 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 	require.True(t, ok)
 	require.Equal(t, "mock", modelMap["id"])
 	require.Equal(t, "high", modelMap["thinking_level"])
-	require.Empty(t, service.launcher().ValidateWorkflowInputs(ctx, "user-3", "builtin://agent", "project-3", stateUpdate))
+	require.Empty(t, service.launcher().ValidateChatWorkflowInputs(ctx, "user-3", &db.Chat{ProjectID: "project-3"}, "builtin://agent", stateUpdate))
 }
 
 func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {

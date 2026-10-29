@@ -1068,7 +1068,7 @@ func (l *Launcher) buildInputs(
 	initialData := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+	if validationErrors := l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			if errors.Is(e, drivers.ErrDriverLookupFailed) {
