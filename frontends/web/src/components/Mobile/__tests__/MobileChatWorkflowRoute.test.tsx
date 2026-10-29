@@ -22,6 +22,12 @@ import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 const CHAT_ID = "chat-1";
 const RUN_ID = "wf-root";
 
+// Where a run's nodes stood when the view opened (GetWorkflowNodeExecutions):
+// none here, so node status comes from the stream events and the tree.
+vi.mock("../../../hooks/chat-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/chat-service-hooks_gen")>()),
+  useGetWorkflowNodeExecutions: () => ({ data: undefined }),
+}));
 vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({ chatId: CHAT_ID }),
   Link: ({ children, ...props }: { children?: React.ReactNode }) => <a {...props}>{children}</a>,
@@ -78,7 +84,6 @@ const useWorkflowExecutions = vi.fn((chatId: string | null, view?: WorkflowExecu
   return {
     data: latest,
     allWorkflows: latest ? [latest] : [],
-    hasRunningWorkflow: !!latest,
     isLoading: false,
     error: null,
     refetch: async () => undefined,

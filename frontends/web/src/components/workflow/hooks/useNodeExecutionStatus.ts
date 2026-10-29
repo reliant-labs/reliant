@@ -3,9 +3,11 @@
  *
  * The server mints a stable identity for every workflow node execution and
  * streams `node_execution` events (started / progress / completed / failed).
- * These are folded into chatStore.nodeExecutions by the store reducer and, for
- * historical chats, replayed on the chat snapshot (they are persisted to
- * chat_updates with entity_id = `${workflow_id}:${node_id}`). This hook reduces
+ * Live events are folded into chatStore.nodeExecutions by the store reducer.
+ * They are persisted to chat_updates with entity_id =
+ * `${workflow_id}:${node_id}`, but the chat snapshot does not replay them: a
+ * view of one run reads where that run's nodes stand from
+ * ChatService.GetWorkflowNodeExecutions (useNodeExecutionStatus' workflowId). This hook reduces
  * those events into an authoritative status map so the workflow diagram no
  * longer has to GUESS node status by matching step-id prefixes and inferring
  * position.
@@ -28,6 +30,8 @@
 
 import { useMemo } from 'react'
 import { useChatStore } from '../../../store/chatStore'
+import { useGetWorkflowNodeExecutions } from '../../../hooks/chat-service-hooks_gen'
+import type { GetWorkflowNodeExecutionsResponse } from '../../../gen/reliant/v1/chat_pb'
 import type { NodeExecutionUpdate } from '../../../types/streaming'
 import {
   NodeExecutionEventType,
@@ -315,14 +319,52 @@ export function reduceNodeExecutions(
 }
 
 /**
- * Read the node_execution stream for a chat and reduce it to an authoritative
- * status map. Returns stable empty maps when chatId is null or no events exist.
+ * The node_execution updates a GetWorkflowNodeExecutions answer carries, in
+ * the shape the chat stream delivers them: the event JSON spread, with the
+ * update's sequence number.
+ */
+export function nodeExecutionUpdatesFrom(
+  response: GetWorkflowNodeExecutionsResponse,
+): NodeExecutionUpdate[] {
+  const out: NodeExecutionUpdate[] = []
+  for (const update of response.updates) {
+    try {
+      const data = JSON.parse(update.data) as Omit<NodeExecutionUpdate, 'update_type' | 'sequence_number'>
+      out.push({ ...data, update_type: 'node_execution', sequence_number: Number(update.sequenceNumber) })
+    } catch {
+      // An unreadable event is one node without a status, not a failed view.
+    }
+  }
+  return out
+}
+
+/**
+ * One run's node status: where it stood when the view opened, then the chat
+ * stream's live node events on top.
+ *
+ * The chat snapshot does not carry node state — a chat accumulates one entity
+ * per node of every run it ever made, and reading them all made every chat
+ * open pay for its whole history — so `workflowId` names the run whose nodes
+ * are read (ChatService.GetWorkflowNodeExecutions). The live events in
+ * chatStore.nodeExecutions are folded in after; the reducer is
+ * order-insensitive and keeps the newest, so an event both carry counts once.
+ * Without a workflowId only the live events count. Returns stable empty maps
+ * when chatId is null or no events exist.
  */
 export function useNodeExecutionStatus(
   chatId: string | null,
+  workflowId?: string | null,
 ): NodeExecutionStatusResult {
-  const updates = useChatStore((state) =>
+  const live = useChatStore((state) =>
     chatId ? state.nodeExecutions[chatId] ?? EMPTY_UPDATES : EMPTY_UPDATES,
+  )
+  const { data: started } = useGetWorkflowNodeExecutions(
+    { chatId: chatId ?? '', workflowId: workflowId ?? '' },
+    { enabled: !!chatId && !!workflowId, select: nodeExecutionUpdatesFrom },
+  )
+  const updates = useMemo(
+    () => (started && started.length > 0 ? [...started, ...live] : live),
+    [started, live],
   )
   return useMemo(() => reduceNodeExecutions(updates), [updates])
 }

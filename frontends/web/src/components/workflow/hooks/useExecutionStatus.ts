@@ -7,8 +7,9 @@
  * - STATUS (running / completed / failed) is authoritative from the
  *   node_execution STREAM (chatStore.nodeExecutions, reduced by
  *   useNodeExecutionStatus). The server mints a stable identity per node
- *   execution and both streams live events and persists them (so historical
- *   chats replay them on snapshot). This replaces the old GUESSWORK that
+ *   execution and both streams live events and persists them; a view reads
+ *   where its run's nodes stand from GetWorkflowNodeExecutions, then follows
+ *   the stream. This replaces the old GUESSWORK that
  *   inferred status by matching step-id prefixes and by position ("the node
  *   after the last completed one is probably running").
  * - STRUCTURE stays tree-derived: node existence, loop iteration steps/counts,
@@ -328,7 +329,7 @@ export function useExecutionStatus(
   nodeIds?: string[],
   chatId?: string | null,
 ): Record<string, NodeExecutionStatus> {
-  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null)
+  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null, execution?.id)
   return useMemo(
     () =>
       buildExecutionStatusResult(execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow)
@@ -347,7 +348,7 @@ export function useExtendedExecutionStatus(
   nodeIds?: string[],
   chatId?: string | null,
 ): ExecutionStatusResult {
-  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null)
+  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null, execution?.id)
   return useMemo(
     () => buildExecutionStatusResult(execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow),
     [execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow]

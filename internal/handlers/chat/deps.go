@@ -28,6 +28,11 @@ type Repository interface {
 	// Chat rows: listing and search, delete, and the state, unread,
 	// adoption and machine flags the handlers flip.
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
+	// Ownership and the chat's own columns, from the chats row alone.
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
+	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
+	// The chat with its activity-derived fields, for a handler that reads one.
+	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
 	ListArchivedChats(ctx context.Context, userID string) ([]*db.ArchivedChatInfo, error)
 	DeleteChat(ctx context.Context, id string) error
@@ -85,6 +90,7 @@ type Repository interface {
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
+	GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 
 	// Worktrees a chat list resolves and a branch un-archives.

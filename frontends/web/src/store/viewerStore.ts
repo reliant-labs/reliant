@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { getCachedWorkflowDisplayName } from "../lib/workflowDisplayName";
 import type { FileChange } from "../components/Chat/RecentChanges";
 import type { FileNode } from "../components/FileBrowser";
 import { useBrowserStore } from "./browserStore";
@@ -17,7 +16,7 @@ function getCurrentProjectId(): string | null {
   return useProjectStore.getState().currentProject?.id ?? null;
 }
 
-export type ViewerType = "diff" | "file" | "worktrees" | "projects" | "agents" | "commands" | "browser" | "workflow";
+export type ViewerType = "diff" | "file" | "worktrees" | "projects" | "agents" | "commands" | "browser";
 
 export interface DiffViewer {
   id: string;
@@ -68,16 +67,7 @@ export interface BrowserViewer {
   browserTabId: string; // ID of the browser tab from browserStore
 }
 
-export interface WorkflowViewer {
-  id: string;
-  type: "workflow";
-  title: string;
-  projectId: string;
-  chatId: string; // The chat whose workflow execution to display
-  workflowName: string; // The workflow name
-}
-
-export type Viewer = DiffViewer | FileViewer | WorktreesViewer | ProjectsViewer | CommandsViewer | BrowserViewer | WorkflowViewer;
+export type Viewer = DiffViewer | FileViewer | WorktreesViewer | ProjectsViewer | CommandsViewer | BrowserViewer;
 
 interface ViewerState {
   viewers: Viewer[];
@@ -102,7 +92,6 @@ interface ViewerState {
   openProjectsViewer: (projectId: string) => void;
   openCommandsViewer: (projectId: string, worktreeId?: string, processId?: string) => void;
   openBrowserViewer: (projectId: string, worktreeId: string, browserTabId?: string) => Promise<void>;
-  openWorkflowViewer: (projectId: string, chatId: string, workflowName: string) => void;
   closeViewer: (viewerId: string, options?: { skipBrowserTabClose?: boolean }) => void;
   closeActiveViewer: () => boolean; // Returns true if a viewer was closed
   closeAllViewers: () => void;
@@ -395,45 +384,6 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
         get().saveToWorkspaceState();
       },
 
-      openWorkflowViewer: (projectId: string, chatId: string, workflowName: string) => {
-        // Check if viewer for this chat's workflow already exists
-        const existing = get().viewers.find(
-          (v) => v.type === "workflow" && (v as WorkflowViewer).chatId === chatId
-        ) as WorkflowViewer | undefined;
-        
-        if (existing) {
-          // Update the workflow name and activate it
-          set((state) => ({
-            viewers: state.viewers.map((v) =>
-              v.id === existing.id && v.type === "workflow"
-                ? { ...v, workflowName }
-                : v
-            ),
-            activeViewerId: existing.id,
-          }));
-          return;
-        }
-        
-        const viewerId = generateViewerId();
-        // Extract friendly name from workflow name (e.g., "builtin://agent" -> "agent")
-        const friendlyName = getCachedWorkflowDisplayName(workflowName);
-        const newViewer: WorkflowViewer = {
-          id: viewerId,
-          type: "workflow",
-          title: friendlyName,
-          projectId,
-          chatId,
-          workflowName,
-        };
-        set((state) => ({
-          viewers: [...state.viewers, newViewer],
-          activeViewerId: viewerId,
-        }));
-        
-        // Immediately persist viewer state
-        get().saveToWorkspaceState();
-      },
-
       closeViewer: (viewerId: string, options?: { skipBrowserTabClose?: boolean }) => {
         // Find the viewer being closed to check if it's a browser viewer
         const viewerToClose = get().viewers.find((v) => v.id === viewerId);
@@ -638,12 +588,6 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
                 worktreeId: viewer.worktreeId,
                 processId: viewer.processId,
               };
-            case "workflow":
-              return {
-                ...base,
-                chatId: viewer.chatId,
-                workflowName: viewer.workflowName,
-              };
             default:
               return base;
           }
@@ -799,21 +743,6 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
                     browserTabId: serialized.browserTabId,
                   });
                 }
-              }
-              break;
-              
-            case "workflow":
-              if (serialized.chatId && serialized.workflowName) {
-                // Extract friendly name from workflow name
-                const friendlyName = getCachedWorkflowDisplayName(serialized.workflowName);
-                restoredViewers.push({
-                  id: viewerId,
-                  type: "workflow",
-                  title: friendlyName,
-                  projectId,
-                  chatId: serialized.chatId,
-                  workflowName: serialized.workflowName,
-                });
               }
               break;
               

@@ -5662,6 +5662,22 @@
           }
         },
         {
+          "Name": "GetWorkflowNodeExecutions",
+          "InputType": "GetWorkflowNodeExecutionsRequest",
+          "OutputType": "GetWorkflowNodeExecutionsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsRequest",
+          "OutputTypeFQ": "reliant.v1.GetWorkflowNodeExecutionsResponse",
+          "InputProtoFile": "reliant/v1/chat.proto",
+          "OutputProtoFile": "reliant/v1/chat.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
           "Name": "GetThreadWorkflowInputs",
           "InputType": "GetThreadWorkflowInputsRequest",
           "OutputType": "GetThreadWorkflowInputsResponse",
@@ -6005,6 +6021,26 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.WorkflowExecution"
+          }
+        ],
+        "GetWorkflowNodeExecutionsRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetWorkflowNodeExecutionsResponse": [
+          {
+            "Name": "updates",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.ChatUpdate"
           }
         ],
         "InterruptThreadRequest": [
@@ -7460,6 +7496,30 @@
             "repeated": true
           }
         ],
+        "reliant.v1.GetWorkflowNodeExecutionsRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          },
+          {
+            "name": "workflow_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          }
+        ],
+        "reliant.v1.GetWorkflowNodeExecutionsResponse": [
+          {
+            "name": "updates",
+            "kind": "message",
+            "type_name": "reliant.v1.ChatUpdate",
+            "repeated": true
+          }
+        ],
         "reliant.v1.InputMessage": [
           {
             "name": "role",
@@ -8669,6 +8729,8 @@
         "reliant.v1.GetToolResultResponse": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsRequest": "reliant/v1/chat.proto",
         "reliant.v1.GetWorkflowExecutionsResponse": "reliant/v1/chat.proto",
+        "reliant.v1.GetWorkflowNodeExecutionsRequest": "reliant/v1/chat.proto",
+        "reliant.v1.GetWorkflowNodeExecutionsResponse": "reliant/v1/chat.proto",
         "reliant.v1.InputMessage": "reliant/v1/chat.proto",
         "reliant.v1.InterruptThreadRequest": "reliant/v1/chat.proto",
         "reliant.v1.InterruptThreadResponse": "reliant/v1/chat.proto",
@@ -41786,7 +41848,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "3b451df2216c2caaa9edb7ac02b705447e74a808593e73bf20a71f134a33778b",
+    "reliant/v1/chat.proto": "fc5924c181017a0a1ceffe34f6c678c532c24bc8c655f05f3f54d73f013c2be6",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",

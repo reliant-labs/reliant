@@ -39,13 +39,18 @@ type largeChatShape struct {
 	nodeThreads    int
 	nodeMessages   int // per node thread
 	nodeExecutions int // NODE_EXECUTION chat_updates
+	// nodeEntities is how many distinct entities those updates are about. A
+	// node's entity is "<workflow>:<node>", so every workflow run (each spawn
+	// included) adds its own; a chat's count grows with its history, and so
+	// does the update-heads read, which probes once per entity.
+	nodeEntities int
 }
 
 var bigChat = largeChatShape{
 	mainMessages: 2000, mainWindows: 4,
 	spawnThreads: 15, spawnMessages: 300,
 	nodeThreads: 4, nodeMessages: 50,
-	nodeExecutions: 20000,
+	nodeExecutions: 20000, nodeEntities: 6000,
 }
 
 // seedLargeChat writes one chat of the given shape straight into Postgres with
@@ -152,7 +157,7 @@ func seedLargeChat(tb testing.TB, raw *sql.DB, chatID string, s largeChatShape) 
 			     unnest(ARRAY['pending','executing','completed']) WITH ORDINALITY AS s(st, i)
 			WHERE tc.chat_id = $1
 			UNION ALL
-			SELECT 9, 'node-' || (g % 200), '{"node_id":"node-' || (g % 200) || '","status":"completed","output":"' || repeat('y', 200) || '"}', g * 3
+			SELECT 9, 'node-' || (g % $3::int), '{"node_id":"node-' || (g % $3::int) || '","status":"completed","output":"' || repeat('y', 200) || '"}', g * 3
 			FROM generate_series(1, $2::int) g
 			UNION ALL
 			SELECT 3, t.workflow_id_or_id, '{"thread":"' || t.id || '","status":"running"}', 7 + r
@@ -165,7 +170,7 @@ func seedLargeChat(tb testing.TB, raw *sql.DB, chatID string, s largeChatShape) 
 		INSERT INTO chat_updates (id, chat_id, sequence_number, update_type, entity_id, data, created_at)
 		SELECT $1 || '-u' || row_number() OVER (ORDER BY k, update_type, entity_id), $1,
 		       row_number() OVER (ORDER BY k, update_type, entity_id), update_type, entity_id, data, now()
-		FROM u`, chatID, s.nodeExecutions)
+		FROM u`, chatID, s.nodeExecutions, max(s.nodeEntities, 1))
 }
 
 // rttProxy forwards TCP connections to target, holding every chunk for
@@ -284,7 +289,7 @@ func TestChatOpenLargeChatPerf(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		seedLargeChat(t, raw, "bg-"+strconv.Itoa(i), largeChatShape{
 			mainMessages: 800, mainWindows: 2, spawnThreads: 6, spawnMessages: 300,
-			nodeThreads: 2, nodeMessages: 50, nodeExecutions: 10000,
+			nodeThreads: 2, nodeMessages: 50, nodeExecutions: 10000, nodeEntities: 3000,
 		})
 	}
 	const chatID = "large-chat"
@@ -361,7 +366,7 @@ func explainSnapshotReads(t *testing.T, raw *sql.DB, chatID string) {
 	t.Helper()
 	for name, q := range map[string]string{
 		"update heads":     store.SnapshotHeadsSQL,
-		"chat (authorize)": `SELECT * FROM chats_with_activity WHERE id = $1`,
+		"chat (authorize)": `SELECT * FROM chats WHERE id = $1`,
 		"message count":    `SELECT count(*) FROM messages WHERE chat_id = $1`,
 		"live tool calls":  `SELECT id FROM tool_calls WHERE chat_id = $1 AND status IN (1, 2, 6) ORDER BY requested_at`,
 		"spawn tool calls": `SELECT w.thread, tc.id FROM tool_calls tc JOIN workflows w ON w.id = tc.child_workflow_id WHERE tc.chat_id = $1 AND tc.child_workflow_id IS NOT NULL ORDER BY tc.requested_at`,

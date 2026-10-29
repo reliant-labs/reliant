@@ -15,7 +15,7 @@ import (
 type Repository interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType pb.ChatUpdateType, entityID string, data string) error
 
 	GetApproval(ctx context.Context, id string) (*db.Approval, error)

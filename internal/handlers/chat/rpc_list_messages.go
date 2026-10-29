@@ -30,7 +30,7 @@ func (s *Service) ListMessages(
 	}
 
 	// Verify user owns the chat
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

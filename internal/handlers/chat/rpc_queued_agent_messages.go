@@ -32,12 +32,8 @@ func (s *Service) ListQueuedAgentMessages(
 	// Ownership check: mirrors SendAgentMessage exactly -- the chat must
 	// belong to the caller, and the thread must belong to that chat, both
 	// returning the same NotFound so thread IDs can't be enumerated.
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil {
+	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
-	}
-	if chat == nil {
-		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
@@ -98,12 +94,8 @@ func (s *Service) CancelQueuedAgentMessage(
 	// itself is additionally scoped to chat_id, so even if a caller guessed
 	// a message ID from another chat, this ownership check is what stops
 	// them from cancelling it.
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil {
+	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
-	}
-	if chat == nil {
-		return nil, svcerr.NotFound("chat")
 	}
 
 	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)

@@ -20,8 +20,9 @@ import (
 
 // Repository is everything the streaming handlers read.
 type Repository interface {
-	// The chat a subscription is for, and the trigger that started it.
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// Who the chat a subscription is for belongs to, and the trigger that
+	// started it.
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
 
 	// The chat and user update logs a stream replays and tails.
