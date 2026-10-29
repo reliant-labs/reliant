@@ -47,22 +47,16 @@ cannot be read, gets a tracker that emits nothing (fail closed).
 Duplicate suppression: an identical event for the same user within 5 seconds
 is dropped (React StrictMode double effects, retried RPCs).
 
-## Web: `trackEvent` → ClickStack span (and Sentry while it is on)
+## Web: `trackEvent` → ClickStack span
 
-`frontends/web/src/lib/analytics.ts` `trackEvent(name, props)` sends to the sinks
-`telemetrySinks.ts` selects:
+`frontends/web/src/lib/analytics.ts` `trackEvent(name, props)` sends the event
+through the forge web runtime: `track("product.<name>", props)` — one span from
+the browser SDK's `custom-action` tracer, on the same session as the page's
+errors and replay. Props are snake_cased and bounded by the runtime. The user is
+the `userId` attribute set by `setTelemetryUserId`.
 
-- **ClickStack**: forge web runtime `track("product.<name>", props)` — one span
-  from the browser SDK's `custom-action` tracer, on the same session as the
-  page's errors and replay. Props are snake_cased and bounded by the runtime.
-  The user is the `userId` attribute set by `setTelemetryUserId`.
-- **Sentry**, while web Sentry is still enabled (until
-  `research/frontend-observability/DESIGN.md` §6.6): a breadcrumb per event
-  and a message for the funnel-marker events the alert rules match on.
-
-The user's in-app analytics toggle gates both. The ClickStack sink is live only
-in a build that sets `VITE_OTEL_ENDPOINT`; until a deploy sets it, web events
-reach Sentry alone.
+The user's in-app analytics toggle gates it, and it is live only in a deployment
+whose runtime config sets `OTEL_ENDPOINT` (`telemetryEndpoint.ts`).
 
 ## Who emits what
 

@@ -17,7 +17,7 @@
  *
  * The interceptor chain every route runs is `buildInterceptors` in
  * `api/transport.ts`: forge's runtime interceptors (error normalization, auth)
- * composed with reliant's own (deadline, daemon-last-seen, tracing, Sentry
+ * composed with reliant's own (deadline, daemon-last-seen, tracing, error
  * reporting, upgrade modal, machine wake, 401 recovery). Routes differ only
  * in base URL, wire format and the two chain options — never in which
  * interceptors they get, which is how the transports used to drift apart.
@@ -239,7 +239,7 @@ export function transportFor(route: TransportRoute): Transport {
       isElectron: typeof window !== "undefined" && window.RELIANT_CONFIG?.isElectron,
     });
     // Mirrored into transport.ts so errorInterceptor can put it in the
-    // Sentry/log context of a failure.
+    // reported/log context of a failure.
     setCurrentBaseURL(baseUrl);
   }
 

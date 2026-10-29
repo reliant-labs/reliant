@@ -95,7 +95,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   delete (window as { electronAPI?: unknown }).electronAPI;
-  setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
+  setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
 });
 
 afterEach(() => {
@@ -114,20 +114,14 @@ describe("initTelemetry: when it starts", () => {
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
-  it("does not initialise when the clickstack sink is off", async () => {
-    stubConfig({ TELEMETRY_SINKS: "sentry" });
+  it("does not initialise when the endpoint is `off`", async () => {
+    stubConfig({ OTEL_ENDPOINT: "off" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
   it("does not initialise without an endpoint, so merging changes nothing by itself", async () => {
     stubConfig({ OTEL_ENDPOINT: "" });
-    expect(await initTelemetry()).toBe(false);
-    expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
-  });
-
-  it("does not initialise with the flag unset and no endpoint (the default build)", async () => {
-    stubConfig({ OTEL_ENDPOINT: "", TELEMETRY_SINKS: "" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
@@ -347,10 +341,18 @@ describe("user and error reporting", () => {
     expect(runtime.setTelemetryUser).toHaveBeenCalledWith(null);
   });
 
-  it("leaves the user alone when the clickstack sink is off", () => {
-    stubConfig({ TELEMETRY_SINKS: "sentry" });
+  it("leaves the user alone when no endpoint is configured", () => {
+    stubConfig({ OTEL_ENDPOINT: "" });
     setTelemetryUserId({ id: "u-1" });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
+  });
+
+  it("tells the Electron main process the user, whose own telemetry cannot see it", () => {
+    const setTelemetryUser = vi.fn(async () => {});
+    (window as { electronAPI?: unknown }).electronAPI = { setTelemetryUser };
+    setTelemetryUserId({ id: "u-1" });
+    setTelemetryUserId(null);
+    expect(setTelemetryUser.mock.calls).toEqual([["u-1"], [null]]);
   });
 
   it("reports a boundary-caught error with its component stack", () => {
@@ -369,11 +371,11 @@ describe("user and error reporting", () => {
     expect(attrs.componentStack.length).toBe(4000);
   });
 
-  it("does not report without consent or with the sink off", () => {
+  it("does not report without consent or without an endpoint", () => {
     privacy.state.crashReportingEnabled = false;
     reportErrorToTelemetry(new Error("boom"));
     privacy.state.crashReportingEnabled = true;
-    stubConfig({ TELEMETRY_SINKS: "sentry" });
+    stubConfig({ OTEL_ENDPOINT: "" });
     reportErrorToTelemetry(new Error("boom"));
     expect(runtime.reportException).not.toHaveBeenCalled();
   });

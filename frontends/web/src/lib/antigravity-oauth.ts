@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/react'
+import { reportError, reportFailure } from '@/lib/errorReporting'
 import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
 import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
@@ -102,9 +102,7 @@ export async function runAntigravityOAuthFlow(
       error instanceof InsecureContextError
         ? error.message
         : 'Could not generate the PKCE challenge required to sign in.'
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'antigravity', stage: 'pkce' },
-    })
+    reportError(error, { component: 'oauth', provider: 'antigravity', stage: 'pkce' })
     return errorResult('pkce_generation_failed', message)
   }
 
@@ -159,10 +157,7 @@ export async function runAntigravityOAuthFlow(
 
     // Validate state
     if (oauthResp.state !== state) {
-      Sentry.captureMessage('Antigravity OAuth state mismatch', {
-        tags: { component: 'oauth', provider: 'antigravity' },
-        level: 'warning',
-      })
+      reportFailure('Antigravity OAuth state mismatch', { component: 'oauth', provider: 'antigravity' })
       return errorResult('state_mismatch', 'OAuth state mismatch')
     }
 
@@ -185,10 +180,7 @@ export async function runAntigravityOAuthFlow(
     if (result.success) {
       return { ok: true, message: result.message || 'Antigravity connected successfully', outcome: result }
     }
-    Sentry.captureMessage('Antigravity OAuth token exchange failed', {
-      tags: { component: 'oauth', provider: 'antigravity' },
-      level: 'warning',
-    })
+    reportFailure('Antigravity OAuth token exchange failed', { component: 'oauth', provider: 'antigravity' })
     return errorResult('token_exchange_failed', result.message || 'Token exchange failed')
   } catch (error: any) {
     // A cancelled flow is not a failure, and must never be reported as one.
@@ -200,10 +192,7 @@ export async function runAntigravityOAuthFlow(
     if (isAbort(error, options.signal)) {
       return errorResult('cancelled', 'Sign-in cancelled.')
     }
-    Sentry.captureException(error, {
-      tags: { component: 'oauth', provider: 'antigravity' },
-      level: 'warning',
-    })
+    reportError(error, { component: 'oauth', provider: 'antigravity' })
     return errorResult('daemon_error', error.message || 'OAuth flow failed')
   }
 }

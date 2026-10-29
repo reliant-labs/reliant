@@ -1,6 +1,6 @@
 /**
  * Privacy consent on the generated GetPrivacySettings entry (P9 R4 D6; the
- * privacyStore mirror is gone). Telemetry, Sentry and analytics read it
+ * privacyStore mirror is gone). Telemetry, error reporting and analytics read it
  * imperatively, so the rules that keep an opt-out honoured are pinned here:
  *
  *  - the initial load waits for a transport that is not ready, then retries;

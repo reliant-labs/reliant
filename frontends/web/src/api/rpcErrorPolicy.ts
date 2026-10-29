@@ -1,8 +1,8 @@
 /**
  * What a failed RPC means — and so whether it is a bug report.
  *
- * The transport's error interceptor used to send every ConnectError outside a
- * short list of codes to Sentry as an exception. Three classes of failure
+ * The transport's error interceptor used to report every ConnectError outside
+ * a short list of codes as an exception (to Sentry, then). Three classes of failure
  * reached Sentry that are not defects in the request that failed:
  *
  *  - ABORTED (ELECTRON-74, "missing request message", and every client
@@ -63,7 +63,7 @@ export type RpcFailureKind =
   | "report";
 
 // Connect error codes that are client-side / expected and should NOT be
-// reported to Sentry.
+// reported as errors.
 const EXPECTED_CODES: ReadonlySet<Code> = new Set([
   Code.Canceled,
   Code.InvalidArgument,

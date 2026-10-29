@@ -10,8 +10,6 @@
     "SUPABASE_ANON_KEY": "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod",
     "DISABLE_TLS": "false",
     "STRIPE_PUBLISHABLE_KEY": "pk_live_51SHoUnPVGOBSO8GiRqnmbDusPSpL70lw1ac5cN1qmrzbNIScnqZdpRekg4CdsGEhmtyKtvyxX6D6qO7gmwpOmaRI00uAf2gIXT",
-    "SENTRY_DSN": "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
-    "SENTRY_ENABLED": "true",
     "CLI_DEFAULTS_BAKED": "true",
     "OTEL_ENDPOINT": "https://ingest.reliantlabs.dev/k/rbk_gqcggno67ruyviiwjt3v6s6pe4",
     "OTEL_REPLAY": "true",

@@ -77,18 +77,11 @@ type ReliantWebConfig struct {
 	SupabaseAnonKey string `protobuf:"bytes,8,opt,name=supabase_anon_key,json=supabaseAnonKey,proto3" json:"supabase_anon_key,omitempty"`
 	AutoAnonSignIn  string `protobuf:"bytes,9,opt,name=auto_anon_sign_in,json=autoAnonSignIn,proto3" json:"auto_anon_sign_in,omitempty"`
 	// ── Billing ───────────────────────────────────────────────────────────
-	StripePublishableKey string `protobuf:"bytes,10,opt,name=stripe_publishable_key,json=stripePublishableKey,proto3" json:"stripe_publishable_key,omitempty"`
-	// ── Telemetry ─────────────────────────────────────────────────────────
-	SentryDsn                      string `protobuf:"bytes,11,opt,name=sentry_dsn,json=sentryDsn,proto3" json:"sentry_dsn,omitempty"`
-	SentryEnabled                  string `protobuf:"bytes,12,opt,name=sentry_enabled,json=sentryEnabled,proto3" json:"sentry_enabled,omitempty"`
-	SentryTracesSampleRate         string `protobuf:"bytes,13,opt,name=sentry_traces_sample_rate,json=sentryTracesSampleRate,proto3" json:"sentry_traces_sample_rate,omitempty"`
-	SentryReplaysSessionSampleRate string `protobuf:"bytes,14,opt,name=sentry_replays_session_sample_rate,json=sentryReplaysSessionSampleRate,proto3" json:"sentry_replays_session_sample_rate,omitempty"`
-	SentryReplaysErrorSampleRate   string `protobuf:"bytes,15,opt,name=sentry_replays_error_sample_rate,json=sentryReplaysErrorSampleRate,proto3" json:"sentry_replays_error_sample_rate,omitempty"`
-	OtelEndpoint                   string `protobuf:"bytes,16,opt,name=otel_endpoint,json=otelEndpoint,proto3" json:"otel_endpoint,omitempty"`
-	TelemetrySinks                 string `protobuf:"bytes,17,opt,name=telemetry_sinks,json=telemetrySinks,proto3" json:"telemetry_sinks,omitempty"`
-	OtelReplay                     string `protobuf:"bytes,18,opt,name=otel_replay,json=otelReplay,proto3" json:"otel_replay,omitempty"`
-	OtelReplaySamplePolicy         string `protobuf:"bytes,19,opt,name=otel_replay_sample_policy,json=otelReplaySamplePolicy,proto3" json:"otel_replay_sample_policy,omitempty"`
-	OtelReplaySampleRate           string `protobuf:"bytes,20,opt,name=otel_replay_sample_rate,json=otelReplaySampleRate,proto3" json:"otel_replay_sample_rate,omitempty"`
+	StripePublishableKey   string `protobuf:"bytes,10,opt,name=stripe_publishable_key,json=stripePublishableKey,proto3" json:"stripe_publishable_key,omitempty"`
+	OtelEndpoint           string `protobuf:"bytes,16,opt,name=otel_endpoint,json=otelEndpoint,proto3" json:"otel_endpoint,omitempty"`
+	OtelReplay             string `protobuf:"bytes,18,opt,name=otel_replay,json=otelReplay,proto3" json:"otel_replay,omitempty"`
+	OtelReplaySamplePolicy string `protobuf:"bytes,19,opt,name=otel_replay_sample_policy,json=otelReplaySamplePolicy,proto3" json:"otel_replay_sample_policy,omitempty"`
+	OtelReplaySampleRate   string `protobuf:"bytes,20,opt,name=otel_replay_sample_rate,json=otelReplaySampleRate,proto3" json:"otel_replay_sample_rate,omitempty"`
 	// ── Product ───────────────────────────────────────────────────────────
 	DownloadBaseUrl  string `protobuf:"bytes,21,opt,name=download_base_url,json=downloadBaseUrl,proto3" json:"download_base_url,omitempty"`
 	CliDefaultsBaked string `protobuf:"bytes,22,opt,name=cli_defaults_baked,json=cliDefaultsBaked,proto3" json:"cli_defaults_baked,omitempty"`
@@ -196,51 +189,9 @@ func (x *ReliantWebConfig) GetStripePublishableKey() string {
 	return ""
 }
 
-func (x *ReliantWebConfig) GetSentryDsn() string {
-	if x != nil {
-		return x.SentryDsn
-	}
-	return ""
-}
-
-func (x *ReliantWebConfig) GetSentryEnabled() string {
-	if x != nil {
-		return x.SentryEnabled
-	}
-	return ""
-}
-
-func (x *ReliantWebConfig) GetSentryTracesSampleRate() string {
-	if x != nil {
-		return x.SentryTracesSampleRate
-	}
-	return ""
-}
-
-func (x *ReliantWebConfig) GetSentryReplaysSessionSampleRate() string {
-	if x != nil {
-		return x.SentryReplaysSessionSampleRate
-	}
-	return ""
-}
-
-func (x *ReliantWebConfig) GetSentryReplaysErrorSampleRate() string {
-	if x != nil {
-		return x.SentryReplaysErrorSampleRate
-	}
-	return ""
-}
-
 func (x *ReliantWebConfig) GetOtelEndpoint() string {
 	if x != nil {
 		return x.OtelEndpoint
-	}
-	return ""
-}
-
-func (x *ReliantWebConfig) GetTelemetrySinks() string {
-	if x != nil {
-		return x.TelemetrySinks
 	}
 	return ""
 }
@@ -284,7 +235,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xbf)\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xa3!\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -312,23 +263,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\x11AUTO_ANON_SIGN_IN*\x83\x01\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment.R\x0eautoAnonSignIn\x12\xbb\x02\n" +
 	"\x16stripe_publishable_key\x18\n" +
 	" \x01(\tB\x84\x02\x82\xce\x18\xff\x01\n" +
-	"\x16STRIPE_PUBLISHABLE_KEY*\xe4\x01The Stripe account's PUBLISHABLE key (pk_live_/pk_test_), paired with the control plane's secret key of the same account and mode. Unset: embedded checkout reports itself unavailable rather than mounting a form that cannot work.R\x14stripePublishableKey\x12\xbe\x01\n" +
-	"\n" +
-	"sentry_dsn\x18\v \x01(\tB\x9e\x01\x82\xce\x18\x99\x01\n" +
-	"\n" +
-	"SENTRY_DSN*\x8a\x01Sentry DSN for this surface (the hosted SPA and the desktop app report to different projects). Browser-public by design. Unset: no Sentry.R\tsentryDsn\x12\xc0\x01\n" +
-	"\x0esentry_enabled\x18\f \x01(\tB\x98\x01\x82\xce\x18\x93\x01\n" +
-	"\x0eSENTRY_ENABLED*\x80\x01\"false\" turns Sentry off even with a DSN. Anything else leaves it to SENTRY_DSN, TELEMETRY_SINKS and the user's privacy setting.R\rsentryEnabled\x12\xb4\x01\n" +
-	"\x19sentry_traces_sample_rate\x18\r \x01(\tBy\x82\xce\x18u\n" +
-	"\x19SENTRY_TRACES_SAMPLE_RATE*XSentry trace sample rate, 0-1. Unset or 0: 1.0 for a prerelease desktop build, else 0.1.R\x16sentryTracesSampleRate\x12\x8a\x02\n" +
-	"\"sentry_replays_session_sample_rate\x18\x0e \x01(\tB\xbd\x01\x82\xce\x18\xb8\x01\n" +
-	"\"SENTRY_REPLAYS_SESSION_SAMPLE_RATE*\x91\x01Sentry session-replay sample rate, 0-1, overriding the new-user funnel policy. Unset: the policy (1.0 for a new user's first sessions, then 0.1).R\x1esentryReplaysSessionSampleRate\x12\xa9\x01\n" +
-	" sentry_replays_error_sample_rate\x18\x0f \x01(\tBa\x82\xce\x18]\n" +
-	" SENTRY_REPLAYS_ERROR_SAMPLE_RATE*9Sentry on-error replay sample rate, 0-1. Unset or 0: 1.0.R\x1csentryReplaysErrorSampleRate\x12\xd3\x01\n" +
+	"\x16STRIPE_PUBLISHABLE_KEY*\xe4\x01The Stripe account's PUBLISHABLE key (pk_live_/pk_test_), paired with the control plane's secret key of the same account and mode. Unset: embedded checkout reports itself unavailable rather than mounting a form that cannot work.R\x14stripePublishableKey\x12\xd3\x01\n" +
 	"\rotel_endpoint\x18\x10 \x01(\tB\xad\x01\x82\xce\x18\xa8\x01\n" +
-	"\rOTEL_ENDPOINT*\x96\x01Browser telemetry (ClickStack) ingest base, normally the same-origin `/_otel`. Empty or `off`: none. forge's generated otel_gen.ts reads the same key.R\fotelEndpoint\x12\xd7\x01\n" +
-	"\x0ftelemetry_sinks\x18\x11 \x01(\tB\xad\x01\x82\xce\x18\xa8\x01\n" +
-	"\x0fTELEMETRY_SINKS*\x94\x01Comma-separated sinks: `sentry`, `clickstack`. Unset or unrecognised: Sentry, plus ClickStack when OTEL_ENDPOINT is set (src/lib/telemetrySinks.ts).R\x0etelemetrySinks\x12s\n" +
+	"\rOTEL_ENDPOINT*\x96\x01Browser telemetry (ClickStack) ingest base, normally the same-origin `/_otel`. Empty or `off`: none. forge's generated otel_gen.ts reads the same key.R\fotelEndpoint\x12s\n" +
 	"\votel_replay\x18\x12 \x01(\tBR\x82\xce\x18N\n" +
 	"\vOTEL_REPLAY*?\"true\": record masked session replay to ClickStack. Unset: off.R\n" +
 	"otelReplay\x12\xd8\x01\n" +
@@ -340,7 +277,8 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\x11DOWNLOAD_BASE_URL\x1a https://downloads.reliantlabs.io*BWhere the desktop and CLI downloads the UI links to are published.R\x0fdownloadBaseUrl\x12\xe3\x02\n" +
 	"\x12cli_defaults_baked\x18\x16 \x01(\tB\xb4\x02\x82\xce\x18\xaf\x02\n" +
 	"\x12CLI_DEFAULTS_BAKED*\x98\x02\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download.R\x10cliDefaultsBaked:\t\xd2\xc1\x18\x05\n" +
-	"\x03webB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x03webJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12R\n" +
+	"sentry_dsnR\x0esentry_enabledR\x19sentry_traces_sample_rateR\"sentry_replays_session_sample_rateR sentry_replays_error_sample_rateR\x0ftelemetry_sinksB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_web_config_proto_rawDescOnce sync.Once

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -296,10 +296,7 @@ export function MCPSettings() {
       toast.success(`${server.displayName} installed successfully`);
     } catch (error) {
       console.error("Failed to install server:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'install' },
-        extra: { serverName: server.displayName },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'install', server_name: server.displayName });
       toast.error(
         `Failed to install ${server.displayName}: ${getErrorMessage(error)}`,
       );
@@ -322,10 +319,7 @@ export function MCPSettings() {
       toast.success("Server restarted successfully");
     } catch (error) {
       console.error("Failed to restart server:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'restart' },
-        extra: { serverName },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'restart', server_name: serverName });
       toast.error(`Failed to restart server: ${getErrorMessage(error)}`);
     } finally {
       setServerActions((prev) => {
@@ -345,10 +339,7 @@ export function MCPSettings() {
       toast.success("Server removed successfully");
     } catch (error) {
       console.error("Failed to uninstall server:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'uninstall' },
-        extra: { serverName },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'uninstall', server_name: serverName });
       toast.error(`Failed to uninstall server: ${getErrorMessage(error)}`);
     } finally {
       setServerActions((prev) => {
@@ -379,10 +370,7 @@ export function MCPSettings() {
       toast.success(enabled ? "Server enabled" : "Server disabled");
     } catch (error) {
       console.error("Failed to toggle server enabled state:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'toggle_enabled' },
-        extra: { serverName },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'toggle_enabled', server_name: serverName });
       toast.error(
         `Failed to ${enabled ? "enable" : "disable"} server: ${getErrorMessage(error)}`,
       );
@@ -422,10 +410,7 @@ export function MCPSettings() {
       toast.success("Install location updated");
     } catch (error) {
       console.error("Failed to move server scope:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'move_scope' },
-        extra: { serverName },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'move_scope', server_name: serverName });
       toast.error(
         `Failed to change install location: ${getErrorMessage(error)}`,
       );
@@ -519,10 +504,7 @@ export function MCPSettings() {
       setWizardServer(null);
     } catch (error) {
       console.error("Failed to update configuration:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'mcp_settings', operation: 'wizard_update' },
-        extra: { serverName: wizardServer.name },
-      });
+      reportError(error, { component: 'mcp_settings', operation: 'wizard_update', server_name: wizardServer.name });
       toast.error(`Failed to update configuration: ${getErrorMessage(error)}`);
       throw error;
     }

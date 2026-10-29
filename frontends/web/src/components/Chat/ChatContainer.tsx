@@ -31,7 +31,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { transformWorkflowExecution } from "./ExecutionSidebar";
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
@@ -247,10 +247,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
         logger.info("✅ pauseChat API call completed");
       } catch (error) {
         logger.error("pauseChat API call failed:", error);
-        Sentry.captureException(error, {
-          tags: { component: 'chat', operation: 'stop_streaming' },
-          level: 'warning',
-        });
+        reportError(error, { component: 'chat', operation: 'stop_streaming' });
       }
     }
   }, [chatId, currentChat?.id]);
@@ -292,10 +289,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       logger.info("✅ Restart conversation message sent");
     } catch (error) {
       logger.error("Failed to restart conversation:", error);
-      Sentry.captureException(error, {
-        tags: { component: 'chat', operation: 'restart_conversation' },
-        level: 'warning',
-      });
+      reportError(error, { component: 'chat', operation: 'restart_conversation' });
     }
   }, [chatId]);
 
