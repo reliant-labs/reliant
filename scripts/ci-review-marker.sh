@@ -10,12 +10,14 @@
 #   ci-review-marker.sh pr <number>                 one pull request
 #   ci-review-marker.sh group <head_ref> <head_sha> every pull request in a merge group
 #
-# The reviewer is a GitHub user id, not a login: reliant-labs[bot], the Reliant
-# GitHub App (186876276), and only it — the same account pr-disarm and cp-merge
-# trust. A marker any other account posts, the owner's included, does not count.
+# Reviewers are GitHub user ids, not logins: reliant-labs[bot], the Reliant
+# GitHub App (186876276), and, for now, the owner account reliant-01
+# (225976313), which the pipeline acts as until the bot's issue writes work
+# (reliant #1803, v1.8.9).
+# TODO: drop 225976313 once the bot path is proven, matching pr-disarm/cp-merge.
 set -euo pipefail
 repo=${GITHUB_REPOSITORY:?}
-reviewers=${REVIEW_MARKER_REVIEWERS:-186876276}
+reviewers=${REVIEW_MARKER_REVIEWERS:-186876276,225976313}
 
 verdict() { # <pr> <sha>: the latest marker a reviewer posted for that sha, or none
   gh api --paginate "repos/$repo/pulls/$1/reviews?per_page=100" | jq -rs --arg sha "$2" --arg ids "$reviewers" '
