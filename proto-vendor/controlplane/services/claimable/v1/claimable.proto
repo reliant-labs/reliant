@@ -48,8 +48,13 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/claimabl
 //	                       anonymous sign-up limit; carries a ClaimableThrottle
 //	                       error detail with the retry-after. Nothing was
 //	                       created. Clients must NOT retry on their own.
-//	claimable_unavailable  Unavailable        a switch is off, or GoTrue
-//	                       demands a CAPTCHA. The remedy is `forge login`.
+//	claimable_unavailable  Unavailable        a switch is off, or a dependency
+//	                       is missing (GoTrue's anonymous sign-up, the claim
+//	                       secret, the content scan). The message names every
+//	                       cause; metadata x-forge-error-unavailable-cause
+//	                       (disabled | dependency_unavailable | not_supported)
+//	                       and x-forge-error-unavailable-component carry the
+//	                       first. GetClaimableAvailability lists them all.
 //	claimable_claimed      FailedPrecondition the deploy was already claimed
 //	claimable_expired      FailedPrecondition expired and purged (or past
 //	                       purge_after and no longer revivable)
@@ -93,6 +98,17 @@ service ClaimableService {
   // StartClaimableDeploy. Stateless on the server (the challenge is signed and
   // time-boxed), so it creates nothing and is cheap to call.
   rpc GetClaimableChallenge(GetClaimableChallengeRequest) returns (GetClaimableChallengeResponse) {
+    option (forge.v1.method) = {auth_required: false};
+  }
+
+  // GetClaimableAvailability says whether a claimable deploy can start right
+  // now, and if not, every reason why: an operator's switch, or a dependency
+  // this deployment lacks. Separately, whether an unclaimed SERVICE or
+  // DATABASE could run, which a static site does not need. It reads only
+  // configuration and the kill switches, creates nothing and solves no proof
+  // of work, so forge calls it before any build (`forge env deploy
+  // --claimable`) and in the local preview (`--claimable --plan-only`).
+  rpc GetClaimableAvailability(GetClaimableAvailabilityRequest) returns (GetClaimableAvailabilityResponse) {
     option (forge.v1.method) = {auth_required: false};
   }
 
@@ -193,6 +209,36 @@ message ClaimableThrottle {
 }
 
 message GetClaimableChallengeRequest {}
+
+message GetClaimableAvailabilityRequest {}
+
+message GetClaimableAvailabilityResponse {
+  // A start would be admitted as far as switches and configuration go (the
+  // rate limits and the proof of work are judged per request). Enough for an
+  // anonymous static site.
+  bool available = 1;
+  // Why not, when available is false. Empty otherwise.
+  repeated ClaimableUnavailableCause causes = 2;
+  // An unclaimed service and database could run too (needs available).
+  bool compute_available = 3;
+  // Why not, when compute_available is false, beyond causes.
+  repeated ClaimableUnavailableCause compute_causes = 4;
+}
+
+// ClaimableUnavailableCause is one reason claimable deploys, or their compute,
+// are unavailable.
+message ClaimableUnavailableCause {
+  // "disabled" (an operator's switch, its configured default or a runtime
+  // override), "dependency_unavailable" (component names what is missing), or
+  // "not_supported" (this build of the platform cannot do it yet).
+  string code = 1;
+  // The switch (claimable_deploys.enabled, claimable_deploys.compute) or the
+  // dependency: admission, claim_secret, anonymous_signup, account_store,
+  // claim_page, content_scan_web_risk, content_scan_clamav, network_policing.
+  string component = 2;
+  // A sentence a person can read. Names components, never values or secrets.
+  string message = 3;
+}
 
 // GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
 // the server verifies and forge's solver implements:

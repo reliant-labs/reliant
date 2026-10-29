@@ -492,6 +492,13 @@ message GraphRPCMethod {
   optional bool auth_required = 12;
   repeated string serves_process_ids = 13;
   repeated string can_call_process_ids = 14;
+  // Server-viewpoint outcomes of the same server_request observations that
+  // observed_count counts; client and server views are never added together.
+  uint64 server_fault_count = 15;
+  uint64 user_outcome_count = 16;
+  // Summed server_request durations. Unset when no observation carried one,
+  // or when observations disagreed on histogram version/bounds.
+  GraphHistogram duration = 17;
 }
 // Exact frozen release-bundle artifact; no current-runtime/version assignment implied.
 // Catalog JSON has schema forge.dev/service-catalog/v1, preserving the existing

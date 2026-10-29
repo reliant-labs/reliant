@@ -99,6 +99,58 @@ func TestGeneratorNeverReusesUnprovenRuntime(t *testing.T) {
 	}
 }
 
+// A hosted runner (16 GiB) ran out of memory with forge generate beside the
+// other phases (reliant#1772 in the merge queue, three times): under the
+// threshold it must run alone; on the 64 GiB dev host it stays concurrent.
+func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
+	root := scriptFixture(t, "merge-gate.sh")
+	b, err := os.ReadFile(filepath.Join(root, "scripts/merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, end := "mem_kib=$(awk", "\n[ -n \"$base\" ]"
+	_, rest, ok := strings.Cut(string(b), start)
+	if !ok {
+		t.Fatalf("merge-gate missing the memory budget %q", start)
+	}
+	block, _, ok := strings.Cut(rest, end)
+	if !ok {
+		t.Fatalf("merge-gate memory budget does not end at %q", end)
+	}
+	if !strings.Contains(string(b), `elif [ "$gen_alone" = 1 ]; then`) {
+		t.Fatal("merge-gate computes gen_alone but never sequences generate on it")
+	}
+	// A generate that failed alone must not start docs, and whatever did start
+	// is waited for even on failure: cleanup removes the scratch checkouts.
+	for _, want := range []string{
+		`if [ "$dgen" = true ] && [ "$fail" = 0 ]; then`,
+		"\nfor p in \"${pids[@]}\"; do wait \"$p\" || fail=1; done\n",
+	} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("merge-gate must contain %q", want)
+		}
+	}
+	for _, tc := range []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"MG_MEM_GIB=16"}, "1"},
+		{[]string{"MG_MEM_GIB=64"}, "0"},
+		{[]string{"MG_MEM_GIB=64", "MG_GEN_ALONE_GIB=128"}, "1"},
+		{[]string{"MG_MEM_GIB=0"}, "0"}, // unknown size: the concurrent default
+	} {
+		cmd := exec.Command("bash", "-c", start+block+"\necho \"$gen_alone\"")
+		cmd.Env = append(os.Environ(), tc.env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %v\n%s", tc.env, err, out)
+		}
+		if got := strings.TrimSpace(string(out)); got != tc.want {
+			t.Errorf("%v: gen_alone=%q, want %q", tc.env, got, tc.want)
+		}
+	}
+}
+
 func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 	root := scriptFixture(t, "merge-gate.sh")
 	b, err := os.ReadFile(filepath.Join(root, "scripts/merge-gate.sh"))
