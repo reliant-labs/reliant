@@ -741,6 +741,39 @@ func TestRepoGetContentListsADirectory(t *testing.T) {
 	}, out)
 }
 
+// A path that does not exist is an answer that names the path and ref, not an
+// error: a reviewer reading a pull request asks for files the PR deletes and
+// for rules files that may be absent, and three such errors in a row ended the
+// run through the repeated-tool-error breaker. Only a missing repository root
+// says the repository itself is out of reach, so only it carries the
+// GitHub App hint.
+func TestRepoGetContentOfAMissingPathIsNotAnError(t *testing.T) {
+	notFound := jsonReply(404, `{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}`)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/internal/AGENTS.md", notFound)
+	res := f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "internal/AGENTS.md", "ref": "abc123"})
+	out := data(t, res)
+	assert.Equal(t, "missing", out["type"])
+	assert.Equal(t, "internal/AGENTS.md", out["path"])
+	assert.Equal(t, "abc123", out["ref"])
+	assert.Contains(t, out["note"], "No file or directory at internal/AGENTS.md at abc123")
+	assert.NotContains(t, out["note"], "installed", "the repository answered: the App hint would mislead")
+
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/contents/", notFound)
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app"}))
+	assert.Equal(t, "missing", out["type"])
+	assert.Contains(t, out["note"], "cannot see acme/app (is the Reliant GitHub App installed on it?)")
+
+	// Any other 404 (an empty repository) is still an error.
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/contents/", jsonReply(404, `{"message":"This repository is empty.","status":"404"}`))
+	res, err := f.try("repo.get_content", map[string]any{"owner": "acme", "repo": "app"})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, res.Content, "This repository is empty.")
+}
+
 // A symlink whose target is outside the repository is described, not read.
 func TestRepoGetContentDescribesASymlink(t *testing.T) {
 	f := newFake(t)
@@ -1059,6 +1092,9 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 	testkit.Slow(t, "runs every action against every error case over an HTTP test server")
 	for id, params := range minimal {
 		for _, tc := range errorCases {
+			if id == "repo.get_content" && tc.status == 404 {
+				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError
+			}
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				f := newFake(t)
 				f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

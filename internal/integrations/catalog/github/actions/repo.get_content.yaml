@@ -7,9 +7,11 @@ description: >-
   file, content is its text. A binary file has binary true and no
   content; a file over 1 MB has too_large true and no content. For a
   directory, entries lists what it holds, one level deep (repo.get_tree
-  lists everything). Omit path for the repository root and ref for the
-  default branch. Results longer than about 30,000 characters are cut
-  short.
+  lists everything). A path that does not exist at ref answers type
+  missing, not an error: a file a pull request deletes exists only at its
+  base, one it adds only at its head. Omit path for the repository root
+  and ref for the default branch. Results longer than about 30,000
+  characters are cut short.
 keywords: [file, read, contents, source, code, directory, list, browse, open, cat]
 placement: server
 mutates: false
@@ -39,12 +41,58 @@ request:
   query_expr: '{?"ref": params.?ref}'
   # A 1 MB file arrives base64-encoded inside JSON.
   max_response_bytes: 5242880
-  errors: { $ref: ../schemas/github_errors.yaml }
+  errors:
+    # A path that is not there is an answer, not a failure: an agent reading
+    # a pull request asks for files it deletes, files at the other side's ref
+    # and rules files that may not exist. As an error, three such reads in a
+    # row tripped the repeated-tool-error breaker and ended the run. GitHub
+    # answers the same 404 for a repository this connection cannot see, so
+    # the result says which case it can be (see output.select).
+    - status: 404
+      accept: true
+      when: >-
+        type(response) == map && response.?message.orValue('') == 'Not Found'
+    - status: 401
+      retryable: false
+      message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+    - status: 403
+      when: >-
+        headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+        headers[?'retry-after'].hasValue() ||
+        (type(response) == map && type(response.?message.orValue(null)) == string &&
+         response.message.matches('(?i)rate limit'))
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 429
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 403
+      retryable: false
+      message: >-
+        GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+        The connection lacks permission for this action (the GitHub App's
+        permissions, its installation, or your role on the repository).
+    - status: 404
+      retryable: false
+      message: "GitHub returned not found: {{ response.?message.orValue('the resource does not exist') }}."
 output:
   # A directory answers with a list; anything else with one object whose
   # `encoding` is base64 (a file's bytes), none (a file over 1 MB) or
-  # absent (a symlink or submodule).
+  # absent (a symlink or submodule). An accepted 404 is a missing path; the
+  # installation hint is given only when the repository root itself is
+  # missing, the one read that says the repository is out of reach.
   select: >-
+    status == 404 ?
+      {"type": "missing",
+       "path": params.?path.orValue(""),
+       "ref": params.?ref.orValue(null),
+       "note": params.?path.orValue("") == "" ?
+         "The repository root was not found: this connection cannot see " +
+           params.owner + "/" + params.repo +
+           " (is the Reliant GitHub App installed on it?)." :
+         "No file or directory at " + params.path +
+           (params.?ref.hasValue() ? " at " + params.ref : " on the default branch") +
+           ". A file a pull request deletes exists only at its base, one it adds only at its head."} :
     type(response) == list ?
       {"type": "dir",
        "path": params.?path.orValue(""),
@@ -68,8 +116,10 @@ output:
   schema:
     type: object
     properties:
-      type: { type: string, enum: [file, dir, symlink, submodule] }
+      type: { type: string, enum: [file, dir, symlink, submodule, missing], description: "missing: nothing exists at path at ref (see note)." }
       path: { type: string }
+      ref: { type: [string, "null"], description: "For missing: the ref that was read; null for the default branch." }
+      note: { type: string, description: "For missing: what the absence means." }
       name: { type: string, description: Absent for a directory. }
       sha: { type: [string, "null"] }
       size: { type: [integer, "null"], description: In bytes. }
