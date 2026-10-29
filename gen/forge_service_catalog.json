@@ -1863,6 +1863,11 @@
               "Name": "new_only",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ]
         },
@@ -2078,6 +2083,11 @@
             {
               "name": "new_only",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ]
         },
@@ -17277,6 +17287,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetPackageProcessLogsResponse": [
@@ -17302,6 +17317,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "GetPackageProcessResponse": [
@@ -17317,6 +17337,11 @@
               "Name": "process_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "KillPackageProcessResponse": [
@@ -17341,6 +17366,11 @@
               "Name": "custom_directories",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListPackageCommandsResponse": [
@@ -17358,6 +17388,11 @@
           "ListPackageProcessesRequest": [
             {
               "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
               "ProtoType": "string",
               "IsOptional": true
             }
@@ -17400,6 +17435,11 @@
               "Name": "working_dir",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "RunPackageCommandResponse": [
@@ -17415,6 +17455,11 @@
             },
             {
               "Name": "start_time",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
               "ProtoType": "string",
               "IsOptional": false
             }
@@ -17471,6 +17516,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetPackageProcessLogsResponse": [
@@ -17493,6 +17543,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GetPackageProcessResponse": [
@@ -17506,6 +17561,11 @@
             {
               "name": "process_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.KillPackageProcessResponse": [
@@ -17529,6 +17589,11 @@
               "name": "custom_directories",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListPackageCommandsResponse": [
@@ -17548,6 +17613,11 @@
           "reliant.v1.ListPackageProcessesRequest": [
             {
               "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
               "kind": "string",
               "optional": true
             }
@@ -17647,6 +17717,10 @@
               "name": "exit_code",
               "kind": "int32",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
             }
           ],
           "reliant.v1.RunPackageCommandRequest": [
@@ -17679,6 +17753,11 @@
               "name": "working_dir",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.RunPackageCommandResponse": [
@@ -17692,6 +17771,10 @@
             },
             {
               "name": "start_time",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
               "kind": "string"
             }
           ],
@@ -31216,16 +31299,6 @@
           "server_streaming": false,
           "idempotency": "IDEMPOTENCY_UNKNOWN",
           "auth_required": true
-        },
-        {
-          "id": "reliant.v1.TerminalService/StreamTerminal",
-          "name": "StreamTerminal",
-          "input": "reliant.v1.TerminalStreamInput",
-          "output": "reliant.v1.TerminalStreamOutput",
-          "client_streaming": true,
-          "server_streaming": true,
-          "idempotency": "IDEMPOTENCY_UNKNOWN",
-          "auth_required": true
         }
       ],
       "descriptor": {
@@ -31269,25 +31342,6 @@
               "Declared": true,
               "None": "closes a terminal session on the daemon: interactive transport, not project history"
             }
-          },
-          {
-            "Name": "StreamTerminal",
-            "InputType": "TerminalStreamInput",
-            "OutputType": "TerminalStreamOutput",
-            "ClientStreaming": true,
-            "ServerStreaming": true,
-            "AuthRequired": true,
-            "Errors": null,
-            "Idempotency": "IDEMPOTENCY_UNKNOWN",
-            "InputTypeFQ": "reliant.v1.TerminalStreamInput",
-            "OutputTypeFQ": "reliant.v1.TerminalStreamOutput",
-            "InputProtoFile": "reliant/v1/terminal.proto",
-            "OutputProtoFile": "reliant/v1/terminal.proto",
-            "Activity": {
-              "Mutating": true,
-              "Declared": true,
-              "None": "terminal I/O to and from the daemon: interactive transport, not project history"
-            }
           }
         ],
         "ProtoFile": "reliant/v1/terminal.proto",
@@ -31298,6 +31352,11 @@
               "Name": "session_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CloseTerminalSessionResponse": [
@@ -31325,58 +31384,6 @@
               "ProtoType": "int32",
               "IsOptional": false
             }
-          ],
-          "TerminalStreamInput": [
-            {
-              "Name": "create",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCreateRequest"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataInput"
-            },
-            {
-              "Name": "resize",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalResizeInput"
-            },
-            {
-              "Name": "close_session",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalCloseRequest"
-            }
-          ],
-          "TerminalStreamOutput": [
-            {
-              "Name": "created",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionCreated"
-            },
-            {
-              "Name": "data",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalDataOutput"
-            },
-            {
-              "Name": "closed",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalSessionClosed"
-            },
-            {
-              "Name": "error",
-              "ProtoType": "message",
-              "IsOptional": false,
-              "MessageType": "reliant.v1.TerminalError"
-            }
           ]
         },
         "Audience": "user",
@@ -31385,6 +31392,11 @@
             {
               "name": "session_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CloseTerminalSessionResponse": [
@@ -31410,62 +31422,6 @@
               "kind": "int32"
             }
           ],
-          "reliant.v1.TerminalCloseRequest": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalCreateRequest": [
-            {
-              "name": "working_dir",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalDataInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalDataOutput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "data",
-              "kind": "bytes"
-            }
-          ],
-          "reliant.v1.TerminalError": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "message",
-              "kind": "string"
-            }
-          ],
-          "reliant.v1.TerminalResizeInput": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "cols",
-              "kind": "uint32"
-            },
-            {
-              "name": "rows",
-              "kind": "uint32"
-            }
-          ],
           "reliant.v1.TerminalSession": [
             {
               "name": "id",
@@ -31488,78 +31444,6 @@
               "kind": "int32",
               "optional": true
             }
-          ],
-          "reliant.v1.TerminalSessionClosed": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "exit_code",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalSessionCreated": [
-            {
-              "name": "session_id",
-              "kind": "string"
-            },
-            {
-              "name": "pid",
-              "kind": "int32"
-            }
-          ],
-          "reliant.v1.TerminalStreamInput": [
-            {
-              "name": "create",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCreateRequest",
-              "oneof": "input"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataInput",
-              "oneof": "input"
-            },
-            {
-              "name": "resize",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalResizeInput",
-              "oneof": "input"
-            },
-            {
-              "name": "close_session",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalCloseRequest",
-              "oneof": "input"
-            }
-          ],
-          "reliant.v1.TerminalStreamOutput": [
-            {
-              "name": "created",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionCreated",
-              "oneof": "output"
-            },
-            {
-              "name": "data",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalDataOutput",
-              "oneof": "output"
-            },
-            {
-              "name": "closed",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalSessionClosed",
-              "oneof": "output"
-            },
-            {
-              "name": "error",
-              "kind": "message",
-              "type_name": "reliant.v1.TerminalError",
-              "oneof": "output"
-            }
           ]
         },
         "SchemaFiles": {
@@ -31567,17 +31451,7 @@
           "reliant.v1.CloseTerminalSessionResponse": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsRequest": "reliant/v1/terminal.proto",
           "reliant.v1.ListTerminalSessionsResponse": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCloseRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalCreateRequest": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalDataOutput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalError": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalResizeInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionClosed": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalSessionCreated": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamInput": "reliant/v1/terminal.proto",
-          "reliant.v1.TerminalStreamOutput": "reliant/v1/terminal.proto"
+          "reliant.v1.TerminalSession": "reliant/v1/terminal.proto"
         }
       }
     },
@@ -41181,6 +41055,11 @@
               "Name": "idempotency_key",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateWorktreeResponse": [
@@ -41250,6 +41129,11 @@
               "Name": "background",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "DiscoverWorktreesResponse": [
@@ -41519,6 +41403,11 @@
               "Name": "confirm_move",
               "ProtoType": "bool",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorktreeResponse": [
@@ -41649,6 +41538,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "PruneWorktreesResponse": [
@@ -42073,6 +41967,11 @@
               "name": "idempotency_key",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateWorktreeResponse": [
@@ -42137,6 +42036,11 @@
             {
               "name": "background",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.DiscoverWorktreesResponse": [
@@ -42431,6 +42335,11 @@
             {
               "name": "confirm_move",
               "kind": "bool"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ImportWorktreeResponse": [
@@ -42558,6 +42467,11 @@
             {
               "name": "project_id",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.PruneWorktreesResponse": [
@@ -42873,6 +42787,11 @@
             {
               "name": "failure_reason",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorktreeFileChange": [
@@ -45852,7 +45771,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/handlers/chat.Service",
       "source": {
         "path": "internal/handlers/chat/service.go",
-        "line": 122
+        "line": 127
       },
       "methods": [
         {
@@ -45863,7 +45782,7 @@
           "legacy_name": "chat.AdoptChat",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 96
+            "line": 104
           }
         },
         {
@@ -45918,7 +45837,7 @@
           "legacy_name": "chat.DeleteChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 504
+            "line": 520
           }
         },
         {
@@ -45940,7 +45859,7 @@
           "legacy_name": "chat.GetChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 284
+            "line": 293
           }
         },
         {
@@ -45951,7 +45870,7 @@
           "legacy_name": "chat.GetChatUpdates",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 657
+            "line": 673
           }
         },
         {
@@ -46017,7 +45936,7 @@
           "legacy_name": "chat.ListArchivedChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 624
+            "line": 640
           }
         },
         {
@@ -46039,7 +45958,7 @@
           "legacy_name": "chat.ListChatPlans",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 710
+            "line": 726
           }
         },
         {
@@ -46050,7 +45969,7 @@
           "legacy_name": "chat.ListChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 232
+            "line": 241
           }
         },
         {
@@ -46105,7 +46024,7 @@
           "legacy_name": "chat.Name",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 166
+            "line": 183
           }
         },
         {
@@ -46127,7 +46046,7 @@
           "legacy_name": "chat.Register",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 171
+            "line": 188
           }
         },
         {
@@ -46138,7 +46057,7 @@
           "legacy_name": "chat.RegisterHTTP",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 181
+            "line": 198
           }
         },
         {
@@ -46193,7 +46112,7 @@
           "legacy_name": "chat.SearchChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 581
+            "line": 597
           }
         },
         {
@@ -46259,7 +46178,7 @@
           "legacy_name": "chat.UnadoptChat",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 108
+            "line": 116
           }
         },
         {
@@ -46270,7 +46189,7 @@
           "legacy_name": "chat.UpdateChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 360
+            "line": 369
           }
         },
         {
@@ -46402,7 +46321,7 @@
           "legacy_name": "chat.cancelArchivedChatWorkflow",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 560
+            "line": 576
           }
         },
         {
@@ -46413,7 +46332,7 @@
           "legacy_name": "chat.chatNeedsRecovery",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 335
+            "line": 344
           }
         },
         {
@@ -46424,7 +46343,7 @@
           "legacy_name": "chat.chatPinner",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 157
+            "line": 162
           }
         },
         {
@@ -46480,6 +46399,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
             "line": 88
+          }
+        },
+        {
+          "id": "method1:9f02eca1a5afcf7129df6443d8bdcf425f6e7d43dc05992f0314d477bc37bd86",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "line": 32
           }
         },
         {
@@ -46611,7 +46541,7 @@
           "legacy_name": "chat.launcher",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 144
+            "line": 149
           }
         },
         {
@@ -47062,7 +46992,7 @@
           "legacy_name": "chat.setChatAdopted",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 119
+            "line": 127
           }
         },
         {
@@ -47194,7 +47124,7 @@
           "legacy_name": "chat.validateBuilderTest",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 212
+            "line": 221
           }
         },
         {
@@ -47272,6 +47202,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_resume_agent.go",
             "line": 161
+          }
+        },
+        {
+          "id": "method1:3abc0ea30182eb63e352c1d64f2d1729e2e1e0b53c6fddfd9e8ebe7f754b4d53",
+          "name": "workspaceOwners",
+          "signature": "func() *github.com/reliant-labs/reliant/internal/daemonplacement.Resolver",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.workspaceOwners",
+          "source": {
+            "path": "internal/handlers/chat/service.go",
+            "line": 174
           }
         }
       ],
@@ -48695,7 +48636,7 @@
         {
           "id": "method1:6d37c38e1b74436055f1bd23af744864c3b6017225df0952da24acfbf4fa7e1d",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.AdoptWorktreeDaemon",
           "source": {
@@ -53005,6 +52946,17 @@
           }
         },
         {
+          "id": "method1:163030c629544a4676ebf51bf1e64f5243930a847410112c5cb766f880791204",
+          "name": "ReleaseClosedTriggerCapacityExecution",
+          "signature": "func(ctx context.Context, e github.com/reliant-labs/reliant/internal/store.TriggerCapacityExecution) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ReleaseClosedTriggerCapacityExecution",
+          "source": {
+            "path": "internal/db/trigger_capacity.go",
+            "line": 40
+          }
+        },
+        {
           "id": "method1:09e17d5c884bb67658b1d69645819ee7c3ae9c9caaba5def4ec4d686a2bc281b",
           "name": "ReleaseDaemonAttachment",
           "signature": "func(ctx context.Context, daemonID string, attachedAt time.Time) error",
@@ -54666,7 +54618,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/handlers/file_system.Service",
       "source": {
         "path": "internal/handlers/file_system/service.go",
-        "line": 57
+        "line": 60
       },
       "methods": [
         {
@@ -54677,7 +54629,7 @@
           "legacy_name": "file_system.CopyFile",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 822
+            "line": 784
           }
         },
         {
@@ -54688,7 +54640,7 @@
           "legacy_name": "file_system.CreateDirectory",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 1100
+            "line": 1062
           }
         },
         {
@@ -54699,7 +54651,7 @@
           "legacy_name": "file_system.CreateFileOrFolder",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 735
+            "line": 697
           }
         },
         {
@@ -54710,7 +54662,7 @@
           "legacy_name": "file_system.DeleteFileOrFolder",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 789
+            "line": 751
           }
         },
         {
@@ -54721,7 +54673,7 @@
           "legacy_name": "file_system.GetFileContent",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 445
+            "line": 407
           }
         },
         {
@@ -54732,7 +54684,7 @@
           "legacy_name": "file_system.GetFileMetadata",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 521
+            "line": 483
           }
         },
         {
@@ -54743,7 +54695,7 @@
           "legacy_name": "file_system.GetFilePreview",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 667
+            "line": 629
           }
         },
         {
@@ -54754,7 +54706,7 @@
           "legacy_name": "file_system.GetFilePreviewInfo",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 576
+            "line": 538
           }
         },
         {
@@ -54765,7 +54717,7 @@
           "legacy_name": "file_system.GetFileTree",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 334
+            "line": 296
           }
         },
         {
@@ -54776,7 +54728,7 @@
           "legacy_name": "file_system.ListDirectory",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 1046
+            "line": 1008
           }
         },
         {
@@ -54787,7 +54739,7 @@
           "legacy_name": "file_system.Name",
           "source": {
             "path": "internal/handlers/file_system/service.go",
-            "line": 65
+            "line": 69
           }
         },
         {
@@ -54798,7 +54750,7 @@
           "legacy_name": "file_system.Register",
           "source": {
             "path": "internal/handlers/file_system/service.go",
-            "line": 70
+            "line": 74
           }
         },
         {
@@ -54809,7 +54761,7 @@
           "legacy_name": "file_system.RegisterHTTP",
           "source": {
             "path": "internal/handlers/file_system/service.go",
-            "line": 80
+            "line": 84
           }
         },
         {
@@ -54820,7 +54772,7 @@
           "legacy_name": "file_system.ReplaceInFiles",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 963
+            "line": 925
           }
         },
         {
@@ -54831,7 +54783,7 @@
           "legacy_name": "file_system.SaveFileContent",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 483
+            "line": 445
           }
         },
         {
@@ -54842,7 +54794,7 @@
           "legacy_name": "file_system.SearchFiles",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 867
+            "line": 829
           }
         },
         {
@@ -54864,7 +54816,7 @@
           "legacy_name": "file_system.getUserID",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 43
+            "line": 41
           }
         },
         {
@@ -54875,7 +54827,7 @@
           "legacy_name": "file_system.previewInfo",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 629
+            "line": 591
           }
         },
         {
@@ -54886,7 +54838,7 @@
           "legacy_name": "file_system.requireProjectBase",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 66
+            "line": 64
           }
         },
         {
@@ -54897,7 +54849,7 @@
           "legacy_name": "file_system.resolveScope",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 94
+            "line": 92
           }
         },
         {
@@ -54908,7 +54860,7 @@
           "legacy_name": "file_system.sendCommand",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 257
+            "line": 219
           }
         },
         {
@@ -54919,7 +54871,7 @@
           "legacy_name": "file_system.wake",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 38
+            "line": 36
           }
         },
         {
@@ -54930,7 +54882,7 @@
           "legacy_name": "file_system.workspaceDaemonID",
           "source": {
             "path": "internal/handlers/file_system/fs_proxy.go",
-            "line": 123
+            "line": 114
           }
         }
       ],
@@ -55302,7 +55254,7 @@
           "legacy_name": "grpc.Register",
           "source": {
             "path": "internal/grpc/server.go",
-            "line": 170
+            "line": 171
           }
         }
       ],
@@ -56608,7 +56560,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/handlers/package_commands.Service",
       "source": {
         "path": "internal/handlers/package_commands/service.go",
-        "line": 62
+        "line": 60
       },
       "methods": [
         {
@@ -56619,7 +56571,7 @@
           "legacy_name": "package_commands.GetCommandFavorites",
           "source": {
             "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 247
+            "line": 39
           }
         },
         {
@@ -56629,8 +56581,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.GetProcess",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 163
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 329
           }
         },
         {
@@ -56640,8 +56592,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.GetProcessLogs",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 183
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 358
           }
         },
         {
@@ -56651,8 +56603,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.KillProcess",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 221
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 408
           }
         },
         {
@@ -56663,7 +56615,7 @@
           "legacy_name": "package_commands.ListCommands",
           "source": {
             "path": "internal/handlers/package_commands/package_commands_proxy.go",
-            "line": 38
+            "line": 41
           }
         },
         {
@@ -56673,8 +56625,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.ListProcesses",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 138
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 187
           }
         },
         {
@@ -56685,7 +56637,7 @@
           "legacy_name": "package_commands.Name",
           "source": {
             "path": "internal/handlers/package_commands/service.go",
-            "line": 70
+            "line": 69
           }
         },
         {
@@ -56696,7 +56648,7 @@
           "legacy_name": "package_commands.Register",
           "source": {
             "path": "internal/handlers/package_commands/service.go",
-            "line": 75
+            "line": 74
           }
         },
         {
@@ -56707,7 +56659,7 @@
           "legacy_name": "package_commands.RegisterHTTP",
           "source": {
             "path": "internal/handlers/package_commands/service.go",
-            "line": 85
+            "line": 84
           }
         },
         {
@@ -56717,8 +56669,8 @@
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.RunCommand",
           "source": {
-            "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 74
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 106
           }
         },
         {
@@ -56729,29 +56681,84 @@
           "legacy_name": "package_commands.SetCommandFavorite",
           "source": {
             "path": "internal/handlers/package_commands/package_commands.go",
-            "line": 279
+            "line": 71
           }
         },
         {
           "id": "method1:e2e31c95bb9600ec6c48fff0cccf92be8ee643269a1960887c8e3cfb8e8c4235",
           "name": "daemon",
-          "signature": "func() github.com/reliant-labs/reliant/internal/daemoncmd.Service",
+          "signature": "func(daemonID string) github.com/reliant-labs/reliant/internal/daemoncmd.Service",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.daemon",
           "source": {
             "path": "internal/handlers/package_commands/package_commands_proxy.go",
-            "line": 25
+            "line": 28
+          }
+        },
+        {
+          "id": "method1:2e069a640aaeb9db6257ed9e58ff4fe4f2efff00328a2315956a27fb2e5e7fb6",
+          "name": "listEverywhere",
+          "signature": "func(ctx context.Context, userID string) []*github.com/reliant-labs/reliant/gen/reliant/v1.PackageProcess",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.listEverywhere",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 263
+          }
+        },
+        {
+          "id": "method1:0b2b92d553f2a9032fa6fa36c192d7191582f2d6ef0daa2e697a79357d479183",
+          "name": "listOn",
+          "signature": "func(ctx context.Context, userID string, daemonID string) ([]*github.com/reliant-labs/reliant/gen/reliant/v1.PackageProcess, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.listOn",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 241
+          }
+        },
+        {
+          "id": "method1:2fac8e5ca0eba9fb01eb44883c0679a55be7b18ca6eb8aa04a4ff84803fbc843",
+          "name": "online",
+          "signature": "func(ctx context.Context, userID string, daemonID string) bool",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.online",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 230
+          }
+        },
+        {
+          "id": "method1:f74c699c5efe2ed6398d5204507a5c8a43717742bcf24f7ab5cc9b95777d2e6c",
+          "name": "requestedMachine",
+          "signature": "func(ctx context.Context, userID string, daemonID *string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.requestedMachine",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 89
           }
         },
         {
           "id": "method1:9621756e906566854f8a8e39048300172cf34edb8ae2a4cc98613e4bd6db3fa8",
           "name": "resolveWorkingDir",
-          "signature": "func(ctx context.Context, msg *github.com/reliant-labs/reliant/gen/reliant/v1.ListPackageCommandsRequest) (string, error)",
+          "signature": "func(ctx context.Context, userID string, msg *github.com/reliant-labs/reliant/gen/reliant/v1.ListPackageCommandsRequest) (string, string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
           "legacy_name": "package_commands.resolveWorkingDir",
           "source": {
             "path": "internal/handlers/package_commands/package_commands_proxy.go",
-            "line": 67
+            "line": 71
+          }
+        },
+        {
+          "id": "method1:b04c6a55cedaeb64a8130e6ca9162917d529dec5dcec003e47afdbb3c24d2d75",
+          "name": "workspace",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, chatID string) (path string, daemonID string, err error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.workspace",
+          "source": {
+            "path": "internal/handlers/package_commands/package_commands_processes.go",
+            "line": 45
           }
         }
       ],
@@ -58944,7 +58951,7 @@
           "legacy_name": "launch.Launch",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 128
+            "line": 129
           }
         },
         {
@@ -59175,7 +59182,7 @@
           "legacy_name": "launch.buildInputs",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1050
+            "line": 1063
           }
         },
         {
@@ -59219,7 +59226,7 @@
           "legacy_name": "launch.finishExisting",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 888
+            "line": 901
           }
         },
         {
@@ -59241,7 +59248,7 @@
           "legacy_name": "launch.launch",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 174
+            "line": 175
           }
         },
         {
@@ -59252,7 +59259,7 @@
           "legacy_name": "launch.launchNew",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 222
+            "line": 223
           }
         },
         {
@@ -59263,7 +59270,7 @@
           "legacy_name": "launch.launchPending",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 581
+            "line": 594
           }
         },
         {
@@ -59296,7 +59303,7 @@
           "legacy_name": "launch.recordFailedStart",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1306
+            "line": 1319
           }
         },
         {
@@ -59307,7 +59314,7 @@
           "legacy_name": "launch.recordStartSelection",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1412
+            "line": 1425
           }
         },
         {
@@ -59329,7 +59336,7 @@
           "legacy_name": "launch.replayOfNamedStart",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 149
+            "line": 150
           }
         },
         {
@@ -59340,7 +59347,7 @@
           "legacy_name": "launch.saveSeedMessages",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1080
+            "line": 1093
           }
         },
         {
@@ -59351,7 +59358,7 @@
           "legacy_name": "launch.start",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1131
+            "line": 1144
           }
         },
         {
@@ -59362,7 +59369,7 @@
           "legacy_name": "launch.startRecorded",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 827
+            "line": 840
           }
         },
         {
@@ -59373,7 +59380,7 @@
           "legacy_name": "launch.startTitleGeneration",
           "source": {
             "path": "internal/launch/launcher.go",
-            "line": 1318
+            "line": 1331
           }
         },
         {
@@ -61006,7 +61013,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/handlers/terminal.Service",
       "source": {
         "path": "internal/handlers/terminal/service.go",
-        "line": 63
+        "line": 62
       },
       "methods": [
         {
@@ -61017,7 +61024,7 @@
           "legacy_name": "terminal.CloseSession",
           "source": {
             "path": "internal/handlers/terminal/terminal_proxy.go",
-            "line": 169
+            "line": 174
           }
         },
         {
@@ -61028,7 +61035,7 @@
           "legacy_name": "terminal.ListSessions",
           "source": {
             "path": "internal/handlers/terminal/terminal_proxy.go",
-            "line": 115
+            "line": 120
           }
         },
         {
@@ -61039,7 +61046,7 @@
           "legacy_name": "terminal.Name",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "line": 71
+            "line": 70
           }
         },
         {
@@ -61050,7 +61057,7 @@
           "legacy_name": "terminal.Register",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "line": 76
+            "line": 75
           }
         },
         {
@@ -61061,18 +61068,7 @@
           "legacy_name": "terminal.RegisterHTTP",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "line": 86
-          }
-        },
-        {
-          "id": "method1:9bb04040844ae6ec4d857ef3c362329d5a5c33c946159e60073aa1719a46321a",
-          "name": "StreamTerminal",
-          "signature": "func(ctx context.Context, stream *connectrpc.com/connect.BidiStream[github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamInput, github.com/reliant-labs/reliant/gen/reliant/v1.TerminalStreamOutput]) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.StreamTerminal",
-          "source": {
-            "path": "internal/handlers/terminal/terminal_proxy.go",
-            "line": 226
+            "line": 85
           }
         },
         {
@@ -61083,7 +61079,7 @@
           "legacy_name": "terminal.getUserID",
           "source": {
             "path": "internal/handlers/terminal/terminal_proxy.go",
-            "line": 30
+            "line": 24
           }
         }
       ],
@@ -63787,7 +63783,7 @@
           "legacy_name": "app.AdoptChat",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 96
+            "line": 104
           }
         },
         {
@@ -63842,7 +63838,7 @@
           "legacy_name": "app.DeleteChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 504
+            "line": 520
           }
         },
         {
@@ -63864,7 +63860,7 @@
           "legacy_name": "app.GetChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 284
+            "line": 293
           }
         },
         {
@@ -63875,7 +63871,7 @@
           "legacy_name": "app.GetChatUpdates",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 657
+            "line": 673
           }
         },
         {
@@ -63941,7 +63937,7 @@
           "legacy_name": "app.ListArchivedChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 624
+            "line": 640
           }
         },
         {
@@ -63963,7 +63959,7 @@
           "legacy_name": "app.ListChatPlans",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 710
+            "line": 726
           }
         },
         {
@@ -63974,7 +63970,7 @@
           "legacy_name": "app.ListChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 232
+            "line": 241
           }
         },
         {
@@ -64029,7 +64025,7 @@
           "legacy_name": "app.Name",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 166
+            "line": 183
           }
         },
         {
@@ -64051,7 +64047,7 @@
           "legacy_name": "app.Register",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 171
+            "line": 188
           }
         },
         {
@@ -64062,7 +64058,7 @@
           "legacy_name": "app.RegisterHTTP",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 181
+            "line": 198
           }
         },
         {
@@ -64117,7 +64113,7 @@
           "legacy_name": "app.SearchChats",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 581
+            "line": 597
           }
         },
         {
@@ -64183,7 +64179,7 @@
           "legacy_name": "app.UnadoptChat",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 108
+            "line": 116
           }
         },
         {
@@ -64194,7 +64190,7 @@
           "legacy_name": "app.UpdateChat",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 360
+            "line": 369
           }
         },
         {
@@ -64326,7 +64322,7 @@
           "legacy_name": "app.cancelArchivedChatWorkflow",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 560
+            "line": 576
           }
         },
         {
@@ -64337,7 +64333,7 @@
           "legacy_name": "app.chatNeedsRecovery",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 335
+            "line": 344
           }
         },
         {
@@ -64348,7 +64344,7 @@
           "legacy_name": "app.chatPinner",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 157
+            "line": 162
           }
         },
         {
@@ -64404,6 +64400,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_helpers.go",
             "line": 88
+          }
+        },
+        {
+          "id": "method1:00b78386984d8a248e2750ee7f88f2c6c45c983947cb53bc0bf1fedd7d0ebe5a",
+          "name": "checkWorkspaceMachine",
+          "signature": "func(ctx context.Context, userID string, worktreeID string, daemonID string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.checkWorkspaceMachine",
+          "source": {
+            "path": "internal/handlers/chat/chat_workspace_machine.go",
+            "line": 32
           }
         },
         {
@@ -64535,7 +64542,7 @@
           "legacy_name": "app.launcher",
           "source": {
             "path": "internal/handlers/chat/service.go",
-            "line": 144
+            "line": 149
           }
         },
         {
@@ -64986,7 +64993,7 @@
           "legacy_name": "app.setChatAdopted",
           "source": {
             "path": "internal/handlers/chat/rpc_chat_adopt.go",
-            "line": 119
+            "line": 127
           }
         },
         {
@@ -65118,7 +65125,7 @@
           "legacy_name": "app.validateBuilderTest",
           "source": {
             "path": "internal/handlers/chat/chat_crud.go",
-            "line": 212
+            "line": 221
           }
         },
         {
@@ -65196,6 +65203,17 @@
           "source": {
             "path": "internal/handlers/chat/chat_resume_agent.go",
             "line": 161
+          }
+        },
+        {
+          "id": "method1:8fd646b060693f8ef584ff216e5c67a3a6f255cf3c7c723a5e8f5bf417fb6e6b",
+          "name": "workspaceOwners",
+          "signature": "func() *github.com/reliant-labs/reliant/internal/daemonplacement.Resolver",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.workspaceOwners",
+          "source": {
+            "path": "internal/handlers/chat/service.go",
+            "line": 174
           }
         }
       ],
@@ -68083,7 +68101,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/handlers/worktree.Service",
       "source": {
         "path": "internal/handlers/worktree/service.go",
-        "line": 97
+        "line": 101
       },
       "methods": [
         {
@@ -68094,7 +68112,7 @@
           "legacy_name": "worktree.ArchiveWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 165
+            "line": 164
           }
         },
         {
@@ -68105,7 +68123,7 @@
           "legacy_name": "worktree.CommitWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 131
+            "line": 130
           }
         },
         {
@@ -68127,7 +68145,7 @@
           "legacy_name": "worktree.CreateWorktreePR",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 333
+            "line": 332
           }
         },
         {
@@ -68138,7 +68156,7 @@
           "legacy_name": "worktree.DeleteWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 71
+            "line": 70
           }
         },
         {
@@ -68171,7 +68189,7 @@
           "legacy_name": "worktree.GetWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_list_worktrees.go",
-            "line": 200
+            "line": 201
           }
         },
         {
@@ -68182,7 +68200,7 @@
           "legacy_name": "worktree.GetWorktreeChanges",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git_status.go",
-            "line": 22
+            "line": 21
           }
         },
         {
@@ -68193,7 +68211,7 @@
           "legacy_name": "worktree.GetWorktreeCommits",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git_status.go",
-            "line": 176
+            "line": 175
           }
         },
         {
@@ -68204,7 +68222,7 @@
           "legacy_name": "worktree.GetWorktreeGitStatus",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git_status.go",
-            "line": 114
+            "line": 113
           }
         },
         {
@@ -68215,7 +68233,7 @@
           "legacy_name": "worktree.GetWorktreePR",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 265
+            "line": 264
           }
         },
         {
@@ -68237,7 +68255,7 @@
           "legacy_name": "worktree.ListArchivedWorktrees",
           "source": {
             "path": "internal/handlers/worktree/rpc_list_worktrees.go",
-            "line": 125
+            "line": 126
           }
         },
         {
@@ -68259,7 +68277,7 @@
           "legacy_name": "worktree.ListWorktreeRepoStatuses",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git_status.go",
-            "line": 284
+            "line": 283
           }
         },
         {
@@ -68281,7 +68299,7 @@
           "legacy_name": "worktree.Name",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 105
+            "line": 110
           }
         },
         {
@@ -68303,7 +68321,7 @@
           "legacy_name": "worktree.PullWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 224
+            "line": 223
           }
         },
         {
@@ -68314,7 +68332,7 @@
           "legacy_name": "worktree.PushWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 181
+            "line": 180
           }
         },
         {
@@ -68325,7 +68343,7 @@
           "legacy_name": "worktree.RecreateWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 376
+            "line": 375
           }
         },
         {
@@ -68336,7 +68354,7 @@
           "legacy_name": "worktree.Register",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 110
+            "line": 115
           }
         },
         {
@@ -68347,7 +68365,7 @@
           "legacy_name": "worktree.RegisterHTTP",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 120
+            "line": 125
           }
         },
         {
@@ -68369,7 +68387,7 @@
           "legacy_name": "worktree.RevertFiles",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 424
+            "line": 423
           }
         },
         {
@@ -68380,7 +68398,7 @@
           "legacy_name": "worktree.StageFiles",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 23
+            "line": 22
           }
         },
         {
@@ -68391,7 +68409,7 @@
           "legacy_name": "worktree.UnarchiveWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 219
+            "line": 218
           }
         },
         {
@@ -68402,7 +68420,7 @@
           "legacy_name": "worktree.UnstageFiles",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_git.go",
-            "line": 77
+            "line": 76
           }
         },
         {
@@ -68413,7 +68431,7 @@
           "legacy_name": "worktree.UpdateWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 29
+            "line": 28
           }
         },
         {
@@ -68424,7 +68442,7 @@
           "legacy_name": "worktree.archiveWorktreeChats",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 325
+            "line": 324
           }
         },
         {
@@ -68435,7 +68453,7 @@
           "legacy_name": "worktree.cleanupWorktreeBranch",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 294
+            "line": 293
           }
         },
         {
@@ -68457,7 +68475,7 @@
           "legacy_name": "worktree.defaultMachine",
           "source": {
             "path": "internal/handlers/worktree/worktree_placement.go",
-            "line": 86
+            "line": 134
           }
         },
         {
@@ -68468,7 +68486,7 @@
           "legacy_name": "worktree.emitWorktreeChanged",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 439
+            "line": 445
           }
         },
         {
@@ -68490,18 +68508,40 @@
           "legacy_name": "worktree.listProjectRepos",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 269
+            "line": 275
+          }
+        },
+        {
+          "id": "method1:fb73ce914d36a4eb039b550fada16c641966fcb7e401e0ca91835e55409a1a85",
+          "name": "owner",
+          "signature": "func(ctx context.Context, userID string, worktree *github.com/reliant-labs/reliant/internal/db.Worktree) string",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.owner",
+          "source": {
+            "path": "internal/handlers/worktree/worktree_placement.go",
+            "line": 151
           }
         },
         {
           "id": "method1:95457a721a8174749faf9fec150974319ca39c2102889f107514b62156131798",
           "name": "placeNewWorktree",
-          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested *string, verb string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.placeNewWorktree",
           "source": {
             "path": "internal/handlers/worktree/worktree_placement.go",
-            "line": 33
+            "line": 39
+          }
+        },
+        {
+          "id": "method1:a620e7edea6c0a979af28545d2c56214398b40a2b3c2e6c6b44e0172e761fbc7",
+          "name": "placeOnRequestedMachine",
+          "signature": "func(ctx context.Context, userID string, projectID string, chatID *string, source *github.com/reliant-labs/reliant/internal/db.Worktree, requested string) (github.com/reliant-labs/reliant/internal/machinewake.Target, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.placeOnRequestedMachine",
+          "source": {
+            "path": "internal/handlers/worktree/worktree_placement.go",
+            "line": 93
           }
         },
         {
@@ -68567,7 +68607,7 @@
           "legacy_name": "worktree.repairActiveWorktree",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 530
+            "line": 529
           }
         },
         {
@@ -68578,7 +68618,7 @@
           "legacy_name": "worktree.repoDiscoveryError",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 298
+            "line": 304
           }
         },
         {
@@ -68589,7 +68629,7 @@
           "legacy_name": "worktree.resolveRepoBaseBranch",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 370
+            "line": 376
           }
         },
         {
@@ -68600,7 +68640,7 @@
           "legacy_name": "worktree.resolveRepoPath",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 328
+            "line": 334
           }
         },
         {
@@ -68659,6 +68699,17 @@
           }
         },
         {
+          "id": "method1:9e4927ab6bdf58dc9950f3778014a64096c5838a2103456958d3736b063897af",
+          "name": "settleOwnersInBackground",
+          "signature": "func(ctx context.Context, userID string, worktrees []*github.com/reliant-labs/reliant/internal/db.Worktree)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.settleOwnersInBackground",
+          "source": {
+            "path": "internal/handlers/worktree/rpc_list_worktrees.go",
+            "line": 234
+          }
+        },
+        {
           "id": "method1:c5f144dc8e0dbbd7a00379de39381f9548d0c14d1a77f25dc9028efd16d5ddda",
           "name": "storeCleanupMetadata",
           "signature": "func(ctx context.Context, worktreeID string, deleteBranch bool)",
@@ -68666,7 +68717,7 @@
           "legacy_name": "worktree.storeCleanupMetadata",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 312
+            "line": 311
           }
         },
         {
@@ -68688,7 +68739,7 @@
           "legacy_name": "worktree.unarchiveWorktreeChats",
           "source": {
             "path": "internal/handlers/worktree/rpc_worktree_lifecycle.go",
-            "line": 350
+            "line": 349
           }
         },
         {
@@ -68699,7 +68750,7 @@
           "legacy_name": "worktree.validateWorktreeForGitOps",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 380
+            "line": 386
           }
         },
         {
@@ -68721,7 +68772,7 @@
           "legacy_name": "worktree.wakeIfAsleep",
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
-            "line": 410
+            "line": 416
           }
         },
         {
@@ -68888,7 +68939,7 @@
           "legacy_name": "worktreesweep.archiveFinished",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 923
+            "line": 924
           }
         },
         {
@@ -68910,7 +68961,7 @@
           "legacy_name": "worktreesweep.deleteBranchIfAsked",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 993
+            "line": 994
           }
         },
         {
@@ -68965,7 +69016,7 @@
           "legacy_name": "worktreesweep.mergeMeta",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 1015
+            "line": 1016
           }
         },
         {
@@ -68976,7 +69027,7 @@
           "legacy_name": "worktreesweep.mergeMetaIf",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 1019
+            "line": 1020
           }
         },
         {
@@ -69020,7 +69071,7 @@
           "legacy_name": "worktreesweep.recordHold",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 897
+            "line": 898
           }
         },
         {
@@ -69031,7 +69082,7 @@
           "legacy_name": "worktreesweep.recordStripped",
           "source": {
             "path": "internal/worktreesweep/sweep.go",
-            "line": 973
+            "line": 974
           }
         },
         {
@@ -69788,6 +69839,17 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Repository",
       "methods": [
+        {
+          "id": "method1:f681b225ed2fd98c134f288bd62696381bb5c0c21c0c3dc4065e2d83a9f5ae20",
+          "name": "AdoptWorktreeDaemon",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.AdoptWorktreeDaemon",
+          "source": {
+            "path": "internal/daemonplacement/owner.go",
+            "line": 26
+          }
+        },
         {
           "id": "method1:5ddceecb825d82ae36f442a969c1b23f9ae93fff5c29edf3b94f0358a2548a7f",
           "name": "AllocateContextWindowSequence",
@@ -70798,6 +70860,17 @@
           "source": {
             "path": "internal/handlers/chat/deps.go",
             "line": 64
+          }
+        },
+        {
+          "id": "method1:e2b8f0ae4db906edb63c5a5611277755ba349f9601b22568b8c8ed8a76211e0a",
+          "name": "ListDaemonsByUserID",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.ListDaemonsByUserID",
+          "source": {
+            "path": "internal/daemonplacement/owner.go",
+            "line": 22
           }
         },
         {
@@ -72548,6 +72621,17 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Repository",
       "methods": [
         {
+          "id": "method1:bfa868481f895bc40aac7a1005424a815a68e3f9afceff842f03a7a725141678",
+          "name": "AdoptWorktreeDaemon",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/file_system",
+          "legacy_name": "file_system.AdoptWorktreeDaemon",
+          "source": {
+            "path": "internal/handlers/file_system/deps.go",
+            "line": 28
+          }
+        },
+        {
           "id": "method1:27b34b4b81215688ad28c49cbf7182b8c1bb4955af7506f2336442d99557083b",
           "name": "GetChat",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
@@ -72592,6 +72676,17 @@
           }
         },
         {
+          "id": "method1:e2280c09327b5e17c40ba53959364adc645bae5f146f911d33e5c8ac081ff9f4",
+          "name": "ListDaemonsByUserID",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/file_system",
+          "legacy_name": "file_system.ListDaemonsByUserID",
+          "source": {
+            "path": "internal/handlers/file_system/deps.go",
+            "line": 27
+          }
+        },
+        {
           "id": "method1:1be22b90ce3c57a11f48a6670ec4a2b9538651f408b06bfbe84fc402e5fb532b",
           "name": "ListProjectDaemonsForProject",
           "signature": "func(ctx context.Context, projectID string) ([]*github.com/reliant-labs/reliant/internal/db/core.ProjectDaemon, error)",
@@ -72624,7 +72719,7 @@
           "legacy_name": "file_system.ResolveDaemonID",
           "source": {
             "path": "internal/handlers/file_system/deps.go",
-            "line": 33
+            "line": 37
           }
         },
         {
@@ -72635,7 +72730,7 @@
           "legacy_name": "file_system.SendDaemonCommand",
           "source": {
             "path": "internal/handlers/file_system/deps.go",
-            "line": 31
+            "line": 35
           }
         },
         {
@@ -72646,7 +72741,7 @@
           "legacy_name": "file_system.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/handlers/file_system/deps.go",
-            "line": 32
+            "line": 36
           }
         }
       ],
@@ -73046,7 +73141,7 @@
         {
           "id": "method1:d2f8f4893928808811030d4798274fb34e4a258dfd6ef7076925590f415be635",
           "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) error",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/inbox",
           "legacy_name": "inbox.AdoptWorktreeDaemon",
           "source": {
@@ -74362,93 +74457,6 @@
     },
     {
       "consumer": "PackageCommands",
-      "field": "Processes",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Processes",
-      "methods": [
-        {
-          "id": "method1:ed86539c1e665ebc73f88ffe1ae78b58fb3054abd41c6920e3d4b7f82f755fd4",
-          "name": "GetAllProcesses",
-          "signature": "func() []*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetAllProcesses",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 33
-          }
-        },
-        {
-          "id": "method1:bb1e091c14108ee0e726c085e0f691ee82f4a1dae90f06c402724606c3dc2170",
-          "name": "GetCombinedOutput",
-          "signature": "func(processID string) ([]github.com/reliant-labs/reliant/internal/llm/tools/shell.OutputLine, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetCombinedOutput",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 36
-          }
-        },
-        {
-          "id": "method1:40613f169626a493c315d7f32270b3eb39aaf601d00204f28ab5c518e9d31c4f",
-          "name": "GetProcess",
-          "signature": "func(processID string) (*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcess",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 34
-          }
-        },
-        {
-          "id": "method1:9958d7cc231c3af9f255ebf42678e611eaee8054d1642f81b4e6541ca1954440",
-          "name": "GetProcessOutput",
-          "signature": "func(processID string) (stdout string, stderr string, err error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcessOutput",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 35
-          }
-        },
-        {
-          "id": "method1:9aab92a5105ff8f4cc536915ac00632cad4bcf6b9f847c13eda91e4097fac238",
-          "name": "GetProcessesByWorktree",
-          "signature": "func(worktreeID string) []*github.com/reliant-labs/reliant/internal/llm/tools/shell.BackgroundProcess",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.GetProcessesByWorktree",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 32
-          }
-        },
-        {
-          "id": "method1:84e9168fd49100744008cbf64def6f2c987a07911124d94ddfe7e9b38113e43a",
-          "name": "KillProcess",
-          "signature": "func(processID string) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.KillProcess",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 37
-          }
-        },
-        {
-          "id": "method1:f3f744aedd70517dfafd3106b4a095accaaebca29c306417791c729bdb02c6e4",
-          "name": "RunCommand",
-          "signature": "func(ctx context.Context, req github.com/reliant-labs/reliant/internal/pkgmgr.RunRequest) (*github.com/reliant-labs/reliant/internal/pkgmgr.RunResponse, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
-          "legacy_name": "package_commands.RunCommand",
-          "source": {
-            "path": "internal/handlers/package_commands/deps.go",
-            "line": 31
-          }
-        }
-      ],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
-    },
-    {
-      "consumer": "PackageCommands",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Repository",
       "methods": [
@@ -74460,7 +74468,51 @@
           "legacy_name": "package_commands.AddCommandFavorite",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 25
+            "line": 34
+          }
+        },
+        {
+          "id": "method1:1bc8d3d0cee8eb30f596b1fdc85c70ad7f19c974bd658c165d066331a390ba01",
+          "name": "AdoptWorktreeDaemon",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.AdoptWorktreeDaemon",
+          "source": {
+            "path": "internal/daemonplacement/owner.go",
+            "line": 26
+          }
+        },
+        {
+          "id": "method1:94a33915db436f7f504b39f60e9037ef4bcb85fd765b8b1b29cb877b6768731e",
+          "name": "GetChat",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetChat",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "line": 30
+          }
+        },
+        {
+          "id": "method1:40527fee01c6b54fd7fb1fd7af8c37007a228e8164f583c5770f04153e8f9cef",
+          "name": "GetDaemon",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetDaemon",
+          "source": {
+            "path": "internal/daemonplacement/default.go",
+            "line": 29
+          }
+        },
+        {
+          "id": "method1:fca58c033fd8478ec1b88ddc6de84d4e4c9e297a02df1f32afdc8d8263c92980",
+          "name": "GetProject",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Project, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.GetProject",
+          "source": {
+            "path": "internal/daemonplacement/owner.go",
+            "line": 21
           }
         },
         {
@@ -74471,7 +74523,7 @@
           "legacy_name": "package_commands.GetProjectWithUserCheck",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 23
+            "line": 32
           }
         },
         {
@@ -74482,7 +74534,7 @@
           "legacy_name": "package_commands.GetWorktree",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 22
+            "line": 26
           }
         },
         {
@@ -74493,7 +74545,29 @@
           "legacy_name": "package_commands.ListCommandFavorites",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 24
+            "line": 33
+          }
+        },
+        {
+          "id": "method1:62e09dc1ff38061a9c74f403f8bae2dcb1d8b27377f615d0d1909c93815c2218",
+          "name": "ListDaemonsByUserID",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.ListDaemonsByUserID",
+          "source": {
+            "path": "internal/daemonplacement/owner.go",
+            "line": 22
+          }
+        },
+        {
+          "id": "method1:50c2e1dd46cfc6b362e05a537ce681e8f6826cf122eb84cf9bea9b5e168e683b",
+          "name": "ListProjectDaemonsForProject",
+          "signature": "func(ctx context.Context, projectID string) ([]*github.com/reliant-labs/reliant/internal/db/core.ProjectDaemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.ListProjectDaemonsForProject",
+          "source": {
+            "path": "internal/daemonplacement/default.go",
+            "line": 30
           }
         },
         {
@@ -74504,7 +74578,7 @@
           "legacy_name": "package_commands.RemoveCommandFavorite",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 26
+            "line": 35
           }
         }
       ],
@@ -74529,7 +74603,18 @@
           "legacy_name": "package_commands.SendDaemonCommand",
           "source": {
             "path": "internal/handlers/package_commands/deps.go",
-            "line": 17
+            "line": 18
+          }
+        },
+        {
+          "id": "method1:113b0da00c8fd699b1aa7b05518537959803c741d7fc7eb4f0d28c94c0b1c204",
+          "name": "SendDaemonCommandToDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/package_commands",
+          "legacy_name": "package_commands.SendDaemonCommandToDaemon",
+          "source": {
+            "path": "internal/handlers/package_commands/deps.go",
+            "line": 21
           }
         }
       ],
@@ -77452,40 +77537,18 @@
           "legacy_name": "terminal.SendDaemonCommand",
           "source": {
             "path": "internal/handlers/terminal/service.go",
-            "line": 34
+            "line": 33
           }
         },
         {
-          "id": "method1:a87a7fe45999eab37325759479892febd2425a3873a4a90cf607f158bca9dc32",
-          "name": "SendTerminalInput",
-          "signature": "func(ctx context.Context, userID string, sessionID string, data []byte) error",
+          "id": "method1:566092835e7e4597590720eea7a0dce468e17d7eccc5cf04326c09a5ff88a6b3",
+          "name": "SendDaemonCommandToDaemon",
+          "signature": "func(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalInput",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "line": 35
-          }
-        },
-        {
-          "id": "method1:2331f70f01f4ed4ee04b860988a2cd1013c312f9ed26327e4c366a85b56c5f4b",
-          "name": "SendTerminalResize",
-          "signature": "func(ctx context.Context, userID string, sessionID string, cols uint32, rows uint32) error",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SendTerminalResize",
+          "legacy_name": "terminal.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/handlers/terminal/service.go",
             "line": 36
-          }
-        },
-        {
-          "id": "method1:71528251b1d5cd09394b61db7d0558b78cb8691d62a695ffa97b36898f63a5e1",
-          "name": "SubscribeTerminalOutput",
-          "signature": "func(ctx context.Context, userID string, sessionID string) (\u003c-chan *github.com/reliant-labs/reliant/internal/toolexec.TerminalOutputEvent, func(), error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/terminal",
-          "legacy_name": "terminal.SubscribeTerminalOutput",
-          "source": {
-            "path": "internal/handlers/terminal/service.go",
-            "line": 37
           }
         }
       ],
@@ -80713,6 +80776,17 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [
         {
+          "id": "method1:6ab74dfd4788e2d3b4427d826402f7e6cc5d234267c61c26946451534e3b393f",
+          "name": "AdoptWorktreeDaemon",
+          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.AdoptWorktreeDaemon",
+          "source": {
+            "path": "internal/handlers/worktree/deps.go",
+            "line": 53
+          }
+        },
+        {
           "id": "method1:6ceeb20bccc889a7a7165d1262c235d767a10e1e0b80f31a1ead7e01821b2467",
           "name": "ArchiveWorktree",
           "signature": "func(ctx context.Context, id string) error",
@@ -80911,6 +80985,17 @@
           }
         },
         {
+          "id": "method1:7fdff8da8de7362c15a20a97979db9abc9642fd91e556e5b6142dd3648dfbc13",
+          "name": "ListDaemonsByUserID",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
+          "legacy_name": "worktree.ListDaemonsByUserID",
+          "source": {
+            "path": "internal/handlers/worktree/deps.go",
+            "line": 52
+          }
+        },
+        {
           "id": "method1:dda74338a36c89f34fbcf28dd69243af8b3878cd3c1017c3d9bba456598e7ed7",
           "name": "ListProjectDaemonsForProject",
           "signature": "func(ctx context.Context, projectID string) ([]*github.com/reliant-labs/reliant/internal/db.ProjectDaemon, error)",
@@ -81053,7 +81138,7 @@
           "legacy_name": "worktree.ResolveDaemonID",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 54
+            "line": 55
           }
         },
         {
@@ -81064,7 +81149,7 @@
           "legacy_name": "worktree.SendDaemonCommand",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 52
+            "line": 53
           }
         },
         {
@@ -81075,7 +81160,7 @@
           "legacy_name": "worktree.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 53
+            "line": 54
           }
         }
       ],
@@ -81101,7 +81186,7 @@
           "legacy_name": "worktree.Settle",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 67
+            "line": 68
           }
         },
         {
@@ -81112,7 +81197,7 @@
           "legacy_name": "worktree.SettleBlocking",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 68
+            "line": 69
           }
         }
       ],
@@ -81137,7 +81222,7 @@
           "legacy_name": "worktree.CancelWorkflow",
           "source": {
             "path": "internal/handlers/worktree/service.go",
-            "line": 60
+            "line": 61
           }
         }
       ],
@@ -81242,14 +81327,6 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "PackageCommands.Processes",
-      "source": {
-        "path": "internal/handlers/package_commands/service.go",
-        "line": 62
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "Project.ControlPlane",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -81341,7 +81418,7 @@
       "component": "Worktree.GitCredentials",
       "source": {
         "path": "internal/handlers/worktree/service.go",
-        "line": 97
+        "line": 101
       }
     },
     {
