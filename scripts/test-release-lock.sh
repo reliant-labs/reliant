@@ -27,7 +27,8 @@ check no-remote-refuses 1 "$(git init -q "$T/c" && lock c 'release_lock_acquire 
 export GIT_AUTHOR_DATE=2001-01-01T00:00:00Z GIT_COMMITTER_DATE=2001-01-01T00:00:00Z
 check frozen-a-takes 0 "$(lock a 'release_lock_acquire v7.7.7 2>/dev/null; echo $?')"
 frozen="$(git -C "$T/a" ls-remote origin refs/release-lock/v7.7.7 | cut -f1)"
-check frozen-b-refused 1 "$(lock b 'release_lock_acquire v7.7.7 2>/dev/null; echo $?')"
+# A frozen 2001 date reads as stale; only the nonce may make this differ, so stale is off.
+check frozen-b-refused 1 "$(RELEASE_LOCK_STALE_HOURS=10000000 lock b 'release_lock_acquire v7.7.7 2>/dev/null; echo $?')"
 check frozen-stale-replaces 0 "$(RELEASE_LOCK_STALE_HOURS=0 lock b 'release_lock_acquire v7.7.7 2>/dev/null; echo $?')"
 [ "$(git -C "$T/a" ls-remote origin refs/release-lock/v7.7.7 | cut -f1)" != "$frozen" ] && check frozen-stale-distinct-sha yes yes || check frozen-stale-distinct-sha yes no
 unset GIT_AUTHOR_DATE GIT_COMMITTER_DATE
