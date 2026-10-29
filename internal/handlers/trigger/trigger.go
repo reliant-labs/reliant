@@ -767,13 +767,16 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	if strings.TrimSpace(def.Filter) != "" {
 		return nil, svcerr.InvalidArgument("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it")
 	}
-	wf, err := launch.ResolveValidatedRunWorkflow(ctx, s.deps.Repo, userID, def.Workflow, def.ProjectId)
+	// On the machine the activation targets: its runs execute there, so a
+	// workflow only another machine provides is refused here, naming both.
+	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo,
+		launch.Scope{UserID: userID, ProjectID: def.ProjectId, DaemonID: def.DaemonId}, def.Workflow)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
 			return nil, triggerDBError("resolve workflow", err)
 		}
-		return nil, tools.RefuseActivation("workflow not found in this project, or it does not validate", unresolvedWorkflow(def.Workflow, err))
+		return nil, tools.RefuseActivation("workflow not found on the trigger's machine, or it does not validate", unresolvedWorkflow(def.Workflow, err))
 	}
 	declared := triggers.FindDeclaredTrigger(wf, name)
 	if declared == nil {

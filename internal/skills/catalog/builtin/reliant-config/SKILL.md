@@ -493,7 +493,7 @@ Presets are YAML files that bundle spawn parameters for reusable agent configura
 | Priority | Location | Source |
 |----------|----------|--------|
 | 1 (lowest) | Builtin (embedded) | `builtin` |
-| 2 | `<project>/.reliant/presets/*.yaml` | `project` |
+| 2 | `<project>/.reliant/presets/*.yaml` and each nested repo's `<repo>/.reliant/presets/*.yaml` (a root preset wins its bare name; `<repo>/<name>` names one repo's) | `project` |
 | 3 (highest) | User presets (database) | `user` |
 
 Project presets with the same name as a builtin will override the builtin.

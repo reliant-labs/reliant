@@ -247,7 +247,7 @@ A project sees three kinds of preset:
 
 A project preset with a built-in's name replaces that built-in. Your own presets cannot reuse a built-in or project preset's name: saving one with a taken name is refused, so a name always means one preset.
 
-The machine the project is on syncs `.reliant/presets/` to Reliant every couple of seconds, so a preset file you save is available without a restart. Workflows follow a different rule: a workflow of your own shadows a project workflow of the same `name:` (see [Workflow file location](/workflows/custom-workflows#workflow-file-location)).
+The machine the project is on syncs `.reliant/presets/` to Reliant every couple of seconds, so a preset file you save is available without a restart. Presets are discovered like workflows: in the project root's `.reliant/presets/` and in each nested repository's. A root preset wins its bare name; otherwise a bare name is the nested repository's preset (the first by path when several declare it), and `<repo>/<name>`, such as `control-plane/implementer`, names one repository's preset exactly. Each machine's presets are kept separately, as [workflows are](/workflows/custom-workflows#workflows-on-more-than-one-machine). Workflows follow a different rule: a workflow of your own shadows a project workflow of the same `name:` (see [Workflow file location](/workflows/custom-workflows#workflow-file-location)).
 
 ## Examples
 

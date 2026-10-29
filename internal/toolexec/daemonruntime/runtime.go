@@ -2332,7 +2332,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		return nil, err
 	}
 	workflows, workflowBytes := indexWorkflows(workflowSources)
-	presets, presetBytes := indexPresets(projectPath)
+	presets, presetBytes := indexPresets(projectPath, workflowSources)
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
@@ -2722,35 +2722,47 @@ func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []b
 	return results, []byte(acc.String())
 }
 
-func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
-	baseDir := filepath.Join(projectPath, ".reliant", "presets")
-	files := listYAMLFiles(baseDir)
-	results := make([]*reliantv1.IndexedPreset, 0, len(files))
+// indexPresets syncs the presets of the project root's .reliant/presets and of
+// every nested repository's, as workflows are (readWorkflowSources), each with
+// its project-relative path. A name two repos share is not resolved here: the
+// server addresses a nested preset as "<repo>/<name>" and lets the root shadow
+// the repos (config.FindStoredPresetByName).
+func indexPresets(projectPath string, sources []workflowSource) ([]*reliantv1.IndexedPreset, []byte) {
+	var results []*reliantv1.IndexedPreset
 	acc := strings.Builder{}
 
-	for _, path := range files {
-		rel, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
+	repos := []string{""}
+	for _, src := range sources {
+		if src.repo != "" {
+			repos = append(repos, src.repo)
 		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
+	}
+	for _, repo := range repos {
+		baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), ".reliant", "presets")
+		for _, path := range listYAMLFiles(baseDir) {
+			rel, err := filepath.Rel(projectPath, path)
+			if err != nil {
+				continue
+			}
+			st, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			blob, _ := os.ReadFile(path)
+			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			h := hashBytes(blob)
+			results = append(results, &reliantv1.IndexedPreset{
+				Name:         name,
+				RelativePath: filepath.ToSlash(rel),
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  blob,
+			})
+			acc.WriteString(filepath.ToSlash(rel))
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
 		}
-		blob, _ := os.ReadFile(path)
-		name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		h := hashBytes(blob)
-		results = append(results, &reliantv1.IndexedPreset{
-			Name:         name,
-			RelativePath: filepath.ToSlash(rel),
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
-		})
-		acc.WriteString(filepath.ToSlash(rel))
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
 	}
 
 	return results, []byte(acc.String())
