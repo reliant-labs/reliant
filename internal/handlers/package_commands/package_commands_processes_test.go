@@ -69,8 +69,23 @@ func (r *machineRouter) SendDaemonCommandToDaemon(_ context.Context, _, machine,
 			},
 		}})
 	case "exec.bg_start":
+		// The daemon keeps what it was asked to tag the process with, and
+		// exec.bg_list reports it (cmd_exec.handleExecBGList).
+		var req daemon.RunCommandRequest
+		_ = json.Unmarshal(payload, &req)
+		r.mu.Lock()
+		if r.listed == nil {
+			r.listed = map[string][]*daemon.ProcessInfo{}
+		}
+		r.listed[machine] = append(r.listed[machine], &daemon.ProcessInfo{
+			ID: "proc-1", Command: req.Command, Status: "running", StartTime: time.Now(),
+			WorkingDir: req.WorkingDir, WorktreeID: req.WorktreeID, PackageCommand: req.PackageCommand,
+		})
+		r.mu.Unlock()
 		return json.Marshal(map[string]string{"process_id": "proc-1"})
 	case "exec.bg_list":
+		r.mu.Lock()
+		defer r.mu.Unlock()
 		return json.Marshal(r.listed[machine])
 	case "exec.bg_output":
 		return json.Marshal(daemon.ProcessOutput{Lines: r.lines})
@@ -348,6 +363,36 @@ func TestListProcesses_ForAWorkspaceReadsItsMachine(t *testing.T) {
 	assert.Equal(t, "mine", resp.Msg.Processes[0].Id)
 	assert.Equal(t, "daemon-b", resp.Msg.Processes[0].DaemonId, "the process says which machine to ask about it")
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_list"))
+}
+
+// A command run by path (no workspace) is still a package command: listed by
+// the panel and found by GetProcess right after it starts, while an agent's
+// own background command on the same machine stays out.
+func TestRunCommand_PathOnlyProcessIsListedAndFound(t *testing.T) {
+	router := &machineRouter{listed: map[string][]*daemon.ProcessInfo{
+		routedDefault: {{ID: "agent", Command: "sleep 5", Status: "running", StartTime: time.Now()}},
+	}}
+	repo := newProcessesRepo()
+	repo.machine(routedDefault, "test-user")
+	svc := newProcessesService(t, router, repo)
+
+	started, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+		Path: ptr.Of("/home/u/project"), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
+	}))
+	require.NoError(t, err)
+	var req daemon.RunCommandRequest
+	require.NoError(t, json.Unmarshal(router.payloadOf("exec.bg_start"), &req))
+	assert.True(t, req.PackageCommand, "the process is tagged as a package command")
+	assert.Empty(t, req.WorktreeID)
+
+	listed, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, listed.Msg.Processes, 1, "the package command is listed, the agent's command is not")
+	assert.Equal(t, started.Msg.ProcessId, listed.Msg.Processes[0].Id)
+
+	got, err := svc.GetProcess(authedCtx(), connect.NewRequest(&reliantv1.GetPackageProcessRequest{ProcessId: started.Msg.ProcessId}))
+	require.NoError(t, err, "a process just started by path is found")
+	assert.Equal(t, "npm run build", got.Msg.Process.Command)
 }
 
 // A list never wakes a machine.

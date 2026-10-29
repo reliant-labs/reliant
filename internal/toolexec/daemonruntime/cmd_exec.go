@@ -264,10 +264,11 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.
-		GrantID:    daemonpolicy.GrantIDFromContext(ctx),
-		HeavyGate:  heavyGateRef.Load(),
-		Heavy:      req.Heavy,
-		WorktreeID: req.WorktreeID,
+		GrantID:        daemonpolicy.GrantIDFromContext(ctx),
+		HeavyGate:      heavyGateRef.Load(),
+		Heavy:          req.Heavy,
+		WorktreeID:     req.WorktreeID,
+		PackageCommand: req.PackageCommand,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)
@@ -496,16 +497,17 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
 		info := &daemon.ProcessInfo{
-			ID:         p.ID,
-			Command:    p.Command,
-			Status:     p.Status,
-			ExitCode:   p.ExitCode,
-			StartTime:  p.StartTime,
-			EndTime:    p.EndTime,
-			Ports:      shellPortsToDaemon(p.Ports),
-			DaemonID:   daemonID,
-			WorkingDir: p.WorkingDir,
-			WorktreeID: p.WorktreeID,
+			ID:             p.ID,
+			Command:        p.Command,
+			Status:         p.Status,
+			ExitCode:       p.ExitCode,
+			StartTime:      p.StartTime,
+			EndTime:        p.EndTime,
+			Ports:          shellPortsToDaemon(p.Ports),
+			DaemonID:       daemonID,
+			WorkingDir:     p.WorkingDir,
+			WorktreeID:     p.WorktreeID,
+			PackageCommand: p.PackageCommand,
 		}
 		result = append(result, info)
 	}

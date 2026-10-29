@@ -85,8 +85,12 @@ type BackgroundProcess struct {
 	ExitCode   *int       `json:"exit_code,omitempty"`
 	WorkingDir string     `json:"working_dir"`
 	WorktreeID string     `json:"worktree_id,omitempty"` // Worktree this process belongs to
-	SessionID  string     `json:"session_id"`
-	ChatID     string     `json:"chat_id,omitempty"`
+	// PackageCommand marks a process the Commands panel started (a package
+	// command), as opposed to an agent's own background command, whether or
+	// not it was started for a workspace.
+	PackageCommand bool   `json:"package_command,omitempty"`
+	SessionID      string `json:"session_id"`
+	ChatID         string `json:"chat_id,omitempty"`
 	// GrantID records the connector grant that started this process, empty for
 	// first-party ones. The registry is process-global and keyed by id alone,
 	// so without this a connector holding a guessed id could read the output
@@ -364,6 +368,9 @@ type StartProcessOptions struct {
 	// Heavy declares the command heavy whatever its words are (see
 	// daemon.RunCommandRequest.Heavy).
 	Heavy bool
+	// PackageCommand marks a Commands-panel process (see
+	// BackgroundProcess.PackageCommand).
+	PackageCommand bool
 }
 
 // StartProcessWithEnv starts a new background process with custom environment variables
@@ -446,6 +453,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		StartTime:      time.Now(),
 		WorkingDir:     opts.WorkingDir,
 		WorktreeID:     opts.WorktreeID,
+		PackageCommand: opts.PackageCommand,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
 		GrantID:        opts.GrantID,

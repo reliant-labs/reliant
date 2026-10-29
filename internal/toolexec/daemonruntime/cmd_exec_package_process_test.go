@@ -20,9 +20,10 @@ import (
 func TestExecBG_PackageProcessCarriesItsWorkspaceAndStreams(t *testing.T) {
 	dir := t.TempDir()
 	payload, err := json.Marshal(daemon.RunCommandRequest{
-		Command:    "echo out; echo err >&2",
-		WorkingDir: dir,
-		WorktreeID: "wt-1",
+		Command:        "echo out; echo err >&2",
+		WorkingDir:     dir,
+		WorktreeID:     "wt-1",
+		PackageCommand: true,
 	})
 	require.NoError(t, err)
 	raw, err := handleExecBGStart(context.Background(), payload)
@@ -44,6 +45,7 @@ func TestExecBG_PackageProcessCarriesItsWorkspaceAndStreams(t *testing.T) {
 	}
 	require.NotNil(t, found, "the process is listed")
 	assert.Equal(t, "wt-1", found.WorktreeID)
+	assert.True(t, found.PackageCommand, "the package-command mark survives the round trip")
 	assert.Equal(t, dir, found.WorkingDir)
 
 	var output daemon.ProcessOutput

@@ -139,10 +139,11 @@ func (s *Service) RunCommand(
 		ProcessID string `json:"process_id"`
 	}
 	if err := s.daemon(daemonID).Dispatch(ctx, userID, "exec.bg_start", daemon.RunCommandRequest{
-		Command:    command.Command,
-		WorkingDir: workingDir,
-		Env:        req.Msg.Env,
-		WorktreeID: worktreeID,
+		Command:        command.Command,
+		WorkingDir:     workingDir,
+		Env:            req.Msg.Env,
+		WorktreeID:     worktreeID,
+		PackageCommand: true,
 	}, &started, pkgProcessTimeoutMs); err != nil {
 		return nil, err
 	}
@@ -228,9 +229,10 @@ func (s *Service) listOn(ctx context.Context, userID, daemonID string) ([]*relia
 	}
 	var out []*reliantv1.PackageProcess
 	for _, info := range infos {
-		// An agent's own background commands carry no workspace; they are
-		// the Background panel's, not this one's.
-		if info == nil || info.WorktreeID == "" {
+		// An agent's own background commands are the Background panel's,
+		// not this one's. A package command is marked as one, with or
+		// without a workspace (a path-only RunCommand has none).
+		if info == nil || (!info.PackageCommand && info.WorktreeID == "") {
 			continue
 		}
 		out = append(out, packageProcessFromDaemon(info, daemonID))

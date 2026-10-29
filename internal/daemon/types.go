@@ -239,6 +239,10 @@ type RunCommandRequest struct {
 	// report it and the workspace's process list can find it. Empty for an
 	// agent's own background commands.
 	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand marks a process the Commands panel starts, so exec.bg_list
+	// reports it as a package command whether or not it names a workspace
+	// (a path-only RunCommand has none). An agent's commands never set it.
+	PackageCommand bool `json:"package_command,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.
@@ -358,6 +362,9 @@ type ProcessInfo struct {
 	// WorktreeID is the workspace the process was started for
 	// (RunCommandRequest.WorktreeID); empty for an agent's own commands.
 	WorktreeID string `json:"worktree_id,omitempty"`
+	// PackageCommand is RunCommandRequest.PackageCommand: a Commands-panel
+	// process, listed by the panel even with no workspace.
+	PackageCommand bool `json:"package_command,omitempty"`
 }
 
 // ProcessStatusRequest is the payload of exec.bg_status: which background
