@@ -922,7 +922,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// instead of completing (see late_wake.go). Assigning the named
 		// return is what turns this completion into that continue-as-new.
 		lateWake := func() error { return continueAsNewForLateWake(ctx, input, thread, childTracker) }
-		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, launchRun, childTracker, lateWake); handoff != nil {
+		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, runOutcomeNode, launchRun, childTracker, lateWake); handoff != nil {
 			result, retErr = nil, handoff
 		}
 	}()
@@ -5091,6 +5091,8 @@ type workflowStatusOpts struct {
 	// Empty means the workflow declared no outcome and the stored value is left
 	// alone — absence is not failure.
 	Outcome string
+	// OutcomeNode is the top-level node that declared a failure Outcome.
+	OutcomeNode string
 	// Error is why the run failed, on a "failed" notification. It is what a
 	// workflow-event trigger reports as the source run's error.
 	Error string
@@ -5241,6 +5243,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.Outcome != "" {
 			input["outcome"] = opts.Outcome
+		}
+		if opts.OutcomeNode != "" {
+			input["outcome_node"] = opts.OutcomeNode
 		}
 		if opts.Error != "" {
 			input["error"] = opts.Error
@@ -5499,7 +5504,7 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 //
 // Whatever non-nil error this returns is what the workflow returns: the
 // late-wake continue-as-new, or the failure of a run a panic ended.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome, runOutcomeNode string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -5602,8 +5607,15 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Notify UI that the workflow finished and update the workflow record. The
 	// lifecycle status is "completed" — the Temporal execution really did finish
 	// — and the verdict travels beside it so no surface has to guess.
+	// A failure verdict names the node that declared it, so the status
+	// activity can mark that node failed: its own activity succeeded, and
+	// without the mark no diagnostic surface can say where the run ended.
+	outcomeNode := ""
+	if runOutcome == model.OutcomeFailure {
+		outcomeNode = runOutcomeNode
+	}
 	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
-		&workflowStatusOpts{Outcome: runOutcome, LaunchRun: launchRun})
+		&workflowStatusOpts{Outcome: runOutcome, OutcomeNode: outcomeNode, LaunchRun: launchRun})
 
 	// Last, so a wake that landed during the bookkeeping above counts too.
 	// Child runs are never signalled — every wake addresses the chat's root

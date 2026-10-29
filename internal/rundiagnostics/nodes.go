@@ -56,6 +56,9 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 			Skipped bool   `json:"skipped"`
 			Stdout  string `json:"stdout"`
 			Stderr  string `json:"stderr"`
+			// Message is the text a save_message node wrote. Shown only on a
+			// failed node: a failure-outcome node's text is why the run failed.
+			Message string `json:"message"`
 			Omitted bool   `json:"_diagnostic_omitted"`
 		}
 		if len(row.OutputJSON.String) > ScanLimit || len(row.OutputJSON.String) > scanBudget {
@@ -86,6 +89,13 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 			errorText = "[error omitted: safe diagnostic limit]"
 		} else {
 			scanBudget -= len(errorText)
+		}
+		if n.Status == "failed" && row.ActivityName == "SaveMessage" && strings.TrimSpace(output.Message) != "" &&
+			!strings.HasPrefix(errorText, "[error omitted") {
+			if errorText != "" {
+				errorText += ": "
+			}
+			errorText += output.Message
 		}
 		if errorText == "" && n.Status == "failed" {
 			if n.ExitCode != nil {
