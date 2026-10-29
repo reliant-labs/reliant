@@ -1,0 +1,11 @@
+version: "v1.8.9"
+date: "2026-10-29"
+title: "Workflows stay with their machine"
+summary: "Synced workflows and presets are kept separately for each machine, and event-driven runs resolve their workflow on the target machine. Recovery and GitHub automation fixes make existing conversations and triggers more reliable."
+items:
+  - title: "Keep each machine's workflows and presets"
+    description: "Syncing one machine no longer replaces another machine's workflow and preset catalog. Triggers resolve their workflow on the machine they target."
+  - title: "Recover workflows in the configured namespace"
+    description: "Reset-and-replay recovery uses the configured Temporal namespace rather than assuming the default."
+  - title: "Let issue-write GitHub automations update pull requests"
+    description: "A bot with issue-write permission can label or comment on a pull request, matching GitHub's issue API permissions."
