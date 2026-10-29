@@ -3,8 +3,8 @@
  *
  * A phone has no devtools. What already exists does not reach the person
  * holding it: the browser-log mirror (lib/browser-log-forward.ts) is DEV ONLY
- * and writes to a file on the dev machine, and Sentry / ClickStack browser
- * telemetry (lib/telemetry.ts) are consent-gated and land in dashboards the
+ * and writes to a file on the dev machine, and ClickStack browser
+ * telemetry (lib/telemetry.ts) is consent-gated and land in dashboards the
  * user cannot see. So when a phone shows "something went wrong" there was
  * nothing to look at and nothing to paste into a bug report.
  *

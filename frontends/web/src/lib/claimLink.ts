@@ -7,8 +7,8 @@
  * `https://<app host>/claim#rcl_<token>`. The token is in the URL FRAGMENT so
  * that it is never sent to a server, a proxy log or a Referer. That guarantee
  * only holds while the fragment stays out of everything the BROWSER sends on:
- * the telemetry SDK stamps `location.href` on its spans, Sentry puts it on
- * breadcrumbs, and the router keeps it in its own location state.
+ * the telemetry SDK stamps `location.href` on its spans and the router keeps
+ * it in its own location state.
  *
  * So the fragment is taken at BOOT (claimLinkBoot, imported by main.tsx ahead
  * of the router and the SDKs), moved into storage, and removed from the

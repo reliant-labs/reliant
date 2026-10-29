@@ -3,7 +3,6 @@ import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase, setAuthStorageUnreadableHandler } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
-import { setSentryUser } from '@/lib/sentry'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
@@ -944,8 +943,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           session: session,
         })
 
-        // Update Sentry user context for error correlation
-        setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
+        // Attach the user to telemetry for error correlation
         setTelemetryUserId(session?.user ? { id: session.user.id } : null)
 
         // provider_token is deliberately not persisted here: this listener

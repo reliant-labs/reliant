@@ -36,7 +36,7 @@ import {
   toolStatusSurvivesStreamAbort,
 } from "../lib/chatStreamReducers";
 
-import * as Sentry from "@sentry/react";
+import { reportError } from "@/lib/errorReporting";
 
 // Chat streaming is handled by the per-chat stream globalUpdatesStore owns
 import type {
@@ -2060,11 +2060,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
     } catch (error) {
       logger.error("[ChatStore] Failed to load messages:", error);
-      Sentry.captureMessage('Failed to load chat messages', {
-        level: 'warning',
-        tags: { component: 'chat', operation: 'load_messages' },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: 'chat', operation: 'load_messages', chat_id: chatId });
     }
   },
 
@@ -2192,11 +2188,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return !reachedStart;
     } catch (error) {
       logger.error("[ChatStore] Failed to load older messages:", error);
-      Sentry.captureMessage("Failed to load older chat messages", {
-        level: "warning",
-        tags: { component: "chat", operation: "load_older_messages" },
-        extra: { error: String(error), chatId },
-      });
+      reportError(error, { component: "chat", operation: "load_older_messages", chat_id: chatId });
       // Leave hasMore alone: this is a transient failure, not end-of-history.
       // The next startReached retries.
       return true;

@@ -13,6 +13,16 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.10" description="October 29, 2026">
+### Device login and richer observability
+
+- **Sign in with a device code** The CLI supports device-code login, and daemon credentials inherit the signed-in user's scopes.
+- **Inspect traces and RPC traffic** New tracing, RPC explorer, service graph, errors, and alerts views help explain what the system is doing.
+- **Browse consistent tables and custom-domain links** Shared tables bring consistent navigation across the web interface, including custom-domain links.
+- **Recover tool commands without duplicate execution** Shell commands are resent only when there is proof they never ran, and pending daemon commands are delivered when their consumer is created.
+- **Keep conversations responsive** Streaming snapshot and replay work is reduced, and agent messaging supports a subject.
+</Update>
+
 <Update label="v1.8.9" description="October 29, 2026">
 ### Workflows stay with their machine
 

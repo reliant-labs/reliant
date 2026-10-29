@@ -235,7 +235,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
             <div className="text-xs text-muted-foreground mb-1 font-medium">
               Error:
             </div>
-            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50" data-sentry-mask>
+            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
               {cleanedMessage}
             </pre>
           </div>
@@ -249,7 +249,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
                 {showRaw ? 'Hide raw error' : 'Show raw error'}
               </button>
               {showRaw && (
-                <pre className="mt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50" data-sentry-mask>
+                <pre className="mt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
                   {error.error_message}
                 </pre>
               )}
