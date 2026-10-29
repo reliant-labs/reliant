@@ -12,6 +12,7 @@ import type { RPCCatalog } from "@/services/controlPlane/observability/graphType
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 import { useObsAskContext } from "../AskReliant/askReliantContext";
+import { filterParam, filterTokensOf } from "../obsFilters";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
 import { ObsError, ObsLoadingRows } from "../ObsStates";
 import { GraphPanel } from "./GraphPanel";
@@ -93,7 +94,14 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   const filters = useMemo(() => ({ rpcId, errorsOnly: search.errors, declared: !!search.declared && !processService, internal: search.internal, showUnresolved }),
     [rpcId, search.errors, search.declared, search.internal, processService, showUnresolved]);
   const onRPC = (id: string) => navigate({ rpcId: id || undefined, rpcService: id ? id.split("/")[0] : service || undefined });
-  const onTraces = (id: string) => navigate({ view: "traces", q: id, rpcId: undefined, rpcService: undefined });
+  // A method's traces are the traces with ANY span of it (span-level scope
+  // filters), not traces rooted at it: an RPC is usually a child span of a
+  // browser or upstream request whose root operation has another name.
+  const onTraces = (id: string) => {
+    const [rpcService, rpcMethod] = id.split("/");
+    const tokens = rpcMethod ? [`rpc.service:${rpcService}`, `rpc.method:${rpcMethod}`] : [];
+    navigate({ view: "traces", q: undefined, f: filterParam(filterTokensOf([...(search.f ?? []), ...tokens])), rpcId: undefined, rpcService: undefined });
+  };
   const quality = explorer ? displayedCatalog?.quality ?? null : graph.data?.quality ?? null;
   const optionsLoading = !processService && everything.isPending;
 

@@ -4,7 +4,7 @@ import { ReactFlow, Background, Controls, Handle, Position, MarkerType, type Nod
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
 import type { GraphNode } from "@/services/controlPlane/observability/graphTypes";
-import { unitLabel, type GraphLink, type NodeStats, type PositionedNode } from "./graphModel";
+import { methodTotals, unitLabel, type GraphLink, type NodeStats, type PositionedNode } from "./graphModel";
 import { errorFraction, fmtCount, fmtErrorRate, fmtLatency, histogramQuantile, shortService } from "./graphStats";
 
 const KIND_LABEL: Record<GraphNode["kind"], string> = {
@@ -100,7 +100,8 @@ export function ProcessGraph({ nodes, links, stats, envLabel, selectedId, onNode
 
 function LinkTooltip({ hover: { link, x, y }, from, to }: { hover: Hover; from?: GraphNode; to?: GraphNode }) {
   const p95 = histogramQuantile(link.duration, 0.95);
-  const top = [...link.edges].filter((e) => e.rpcId).sort((a, b) => (b.count > a.count ? 1 : b.count < a.count ? -1 : 0)).slice(0, 3);
+  const methods = methodTotals(link.edges);
+  const top = methods.slice(0, 3);
   return <div role="tooltip" data-testid="graph-link-tooltip" style={{ left: x + 14, top: y + 14 }}
     className="pointer-events-none absolute z-10 w-72 rounded-md border border-border bg-surface p-3 text-xs text-ink shadow-lg">
     <p className="truncate font-medium">{from?.label ?? "?"} → {to?.label ?? "?"}</p>
@@ -109,10 +110,10 @@ function LinkTooltip({ hover: { link, x, y }, from, to }: { hover: Hover; from?:
       {link.faults > 0n && <> · <span className="text-danger-ink">{fmtErrorRate(link.faults, link.count)} errors</span></>}
       {p95 !== undefined && <> · p95 {fmtLatency(p95)}</>}
     </p> : <p className="mt-1 text-ink-muted">Declared dependency, no traffic observed</p>}
-    {top.length > 0 && <ul className="mt-2 space-y-0.5">{top.map((e) => {
-      const [svc, method] = e.rpcId.split("/");
-      return <li key={e.id} className="flex justify-between gap-2 tabular-nums"><span className="truncate">{shortService(svc)}/{method}</span><span className="text-ink-muted">{fmtCount(e.count)}</span></li>;
+    {top.length > 0 && <ul className="mt-2 space-y-0.5">{top.map((m) => {
+      const [svc, method] = m.rpcId.split("/");
+      return <li key={m.rpcId} className="flex justify-between gap-2 tabular-nums"><span className="truncate">{shortService(svc)}/{method}</span><span className="text-ink-muted">{fmtCount(m.count)}</span></li>;
     })}</ul>}
-    {link.edges.filter((e) => e.rpcId).length > 3 && <p className="mt-1 text-ink-muted">+{link.edges.filter((e) => e.rpcId).length - 3} more methods · click for details</p>}
+    {methods.length > 3 && <p className="mt-1 text-ink-muted">+{methods.length - 3} more methods · click for details</p>}
   </div>;
 }

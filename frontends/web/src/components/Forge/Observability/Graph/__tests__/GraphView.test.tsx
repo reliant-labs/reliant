@@ -78,6 +78,16 @@ describe("scoped graph boundary", () => {
     fireEvent.submit(exact);
     expect(navigate).toHaveBeenCalledTimes(1);
   });
+  it("opens a method's traces by span, not by root operation, keeping the reader's filters", async () => {
+    api.getServiceGraphCatalog.mockResolvedValue(fixtureCatalog());
+    const navigate = show({ view: "rpc", f: ["service.version:v1"] });
+    fireEvent.click(await screen.findByRole("button", { name: "Traces for shop.v1.OrdersService/GetOrder" }));
+    // An RPC is usually a child span of a browser or upstream request whose
+    // root operation has another name: span-level filters keep any trace
+    // with a span of it, where q (a root-operation substring) would not.
+    expect(navigate).toHaveBeenCalledWith({ view: "traces", q: undefined, rpcId: undefined, rpcService: undefined,
+      f: ["service.version:v1", "rpc.service:shop.v1.OrdersService", "rpc.method:GetOrder"] });
+  });
   it("looks up selected RPC 201 independently of the method enumeration", async () => {
     const base = fixtureCatalog();
     const selectedId = "shop.v1.OrdersService/ZZMethod201";

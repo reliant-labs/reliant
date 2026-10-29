@@ -7,8 +7,8 @@ export const MAX_GRAPH_EDGES = 500;
 export interface GraphFilters { rpcId?: string; errorsOnly?: boolean; declared?: boolean; internal?: boolean; showUnresolved?: boolean }
 export interface PositionedNode extends GraphNode { position: { x: number; y: number }; layer: number }
 
-/** Traffic into a node, from its server viewpoint, and everything it sends. */
-export interface NodeStats { requests: bigint; faults: bigint; duration?: Histogram; outbound: bigint }
+/** Traffic into a node, from its server viewpoint. */
+export interface NodeStats { requests: bigint; faults: bigint; duration?: Histogram }
 
 /**
  * One drawn connection: every observed edge between the same two nodes
@@ -154,18 +154,41 @@ export function layoutGraph(nodes: GraphNode[], links: Pick<GraphLink, "source" 
   return positioned.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+const viewpointRank = (e: GraphEdge) => VIEWPOINT_RANK[e.viewpoint] ?? Object.keys(VIEWPOINT_RANK).length;
+const byAuthority = (a: GraphEdge, b: GraphEdge) =>
+  viewpointRank(a) - viewpointRank(b) || a.viewpoint.localeCompare(b.viewpoint) || a.unit.localeCompare(b.unit) || a.id.localeCompare(b.id);
+
+/** One RPC's edges: the observed edges of its most authoritative viewpoint and that edge's unit. */
+function rpcCohort(edges: GraphEdge[]): { first: GraphEdge; counted: GraphEdge[] } {
+  const observed = edges.filter((e) => e.evidence === "observed");
+  const first = [...(observed.length ? observed : edges)].sort(byAuthority)[0];
+  return { first, counted: observed.filter((e) => e.viewpoint === first.viewpoint && e.unit === first.unit) };
+}
+
 /**
- * The edges a statistic over `edges` may sum: the observed edges of their most
- * authoritative viewpoint and that edge's unit. `first` names the cohort (the
- * first edge in that order, observed or not, so a declared-only group still
- * has a kind and unit). Every place that sums traffic goes through here.
+ * The edges a statistic over `edges` may sum. Viewpoints duplicate one call
+ * only within one RPC, so the authoritative viewpoint is chosen per RPC: a
+ * method seen only by its caller still counts beside one its server saw.
+ * Across RPCs only units that count the same thing are summed (a client
+ * attempt and a server request are both requests; a publish is not), keyed to
+ * the most authoritative RPC's unit. `first` names that cohort (observed or
+ * not, so a declared-only group still has a kind and unit). Every place that
+ * sums traffic goes through here.
  */
 export function authoritativeCohort(edges: GraphEdge[]): { first: GraphEdge; counted: GraphEdge[] } {
-  const observed = edges.filter((e) => e.evidence === "observed");
-  const rank = (e: GraphEdge) => VIEWPOINT_RANK[e.viewpoint] ?? Object.keys(VIEWPOINT_RANK).length;
-  const first = [...(observed.length ? observed : edges)]
-    .sort((a, b) => rank(a) - rank(b) || a.viewpoint.localeCompare(b.viewpoint) || a.unit.localeCompare(b.unit) || a.id.localeCompare(b.id))[0];
-  return { first, counted: observed.filter((e) => e.viewpoint === first.viewpoint && e.unit === first.unit) };
+  const byRpc = new Map<string, GraphEdge[]>();
+  for (const e of edges) byRpc.set(e.rpcId, [...(byRpc.get(e.rpcId) ?? []), e]);
+  const picks = [...byRpc.values()].map(rpcCohort);
+  const observedFirst = picks.filter((p) => p.counted.length).map((p) => p.first).sort(byAuthority)[0];
+  const first = observedFirst ?? picks.map((p) => p.first).sort(byAuthority)[0];
+  const family = unitFamily(first.unit);
+  return { first, counted: picks.flatMap((p) => p.counted.filter((e) => unitFamily(e.unit) === family)) };
+}
+
+/** Units that count the same thing share a family; an unrecognized unit is its own. */
+function unitFamily(unit: string): string {
+  const label = unitLabel(unit);
+  return label === "observations" ? `unit:${unit}` : label;
 }
 
 function linksOf(edges: GraphEdge[]): GraphLink[] {
@@ -186,16 +209,34 @@ function linksOf(edges: GraphEdge[]): GraphLink[] {
   }).sort((a, b) => a.id.localeCompare(b.id));
 }
 
+export interface MethodTotals { rpcId: string; count: bigint; faults: bigint; duration?: Histogram }
+
+/** Each method's traffic among `edges`, counted from its own authoritative viewpoint, busiest first. */
+export function methodTotals(edges: GraphEdge[]): MethodTotals[] {
+  const byRpc = new Map<string, GraphEdge[]>();
+  for (const e of edges) if (e.rpcId && e.evidence === "observed") byRpc.set(e.rpcId, [...(byRpc.get(e.rpcId) ?? []), e]);
+  return [...byRpc].map(([rpcId, all]) => {
+    const es = authoritativeCohort(all).counted;
+    return { rpcId, count: es.reduce((s, e) => s + e.count, 0n), faults: es.reduce((s, e) => s + e.faults, 0n), duration: sumHistograms(es.map((e) => e.duration)) };
+  }).sort((a, b) => (b.count > a.count ? 1 : b.count < a.count ? -1 : a.rpcId.localeCompare(b.rpcId)));
+}
+
+/** What `nodeId` sends to each node it calls, one authoritative cohort per connection. */
+export function callTotals(edges: GraphEdge[], nodeId: string): Map<string, bigint> {
+  const byTarget = new Map<string, GraphEdge[]>();
+  for (const e of edges) if (e.source === nodeId && e.evidence === "observed") byTarget.set(e.target, [...(byTarget.get(e.target) ?? []), e]);
+  return new Map([...byTarget].map(([target, es]) => [target, authoritativeCohort(es).counted.reduce((s, e) => s + e.count, 0n)]));
+}
+
 function statsOf(edges: GraphEdge[]): Map<string, NodeStats> {
   const stats = new Map<string, NodeStats & { hs: GraphEdge["duration"][] }>();
   const get = (id: string) => {
     let s = stats.get(id);
-    if (!s) { s = { requests: 0n, faults: 0n, outbound: 0n, hs: [] }; stats.set(id, s); }
+    if (!s) { s = { requests: 0n, faults: 0n, hs: [] }; stats.set(id, s); }
     return s;
   };
   for (const e of edges) {
     if (e.evidence !== "observed") continue;
-    get(e.source).outbound += e.count;
     if (e.unit === "server_request") {
       const t = get(e.target);
       t.requests += e.count;

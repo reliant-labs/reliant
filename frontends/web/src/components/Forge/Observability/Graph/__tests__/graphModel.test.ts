@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
 import { describe, expect, it } from "vitest";
 import { fixtureGraph, graphEdge, graphNode, GRAPH_RPC } from "../../__fixtures__/fixtureGraph";
-import { edgeLabel, graphModel, MAX_GRAPH_NODES, MAX_GRAPH_EDGES } from "../graphModel";
+import { callTotals, edgeLabel, graphModel, MAX_GRAPH_NODES, MAX_GRAPH_EDGES, methodTotals } from "../graphModel";
 import { histogramQuantile } from "../graphStats";
 
 describe("bounded graph model", () => {
@@ -79,6 +79,25 @@ describe("bounded graph model", () => {
     expect(link.edges).toHaveLength(2);
     expect(link).toMatchObject({ count: 100n, faults: 3n, unit: "server_request", viewpoint: "server" });
     expect(link.duration?.count).toBe(100n);
+  });
+  it("chooses the viewpoint per method: a method only its caller saw still counts", () => {
+    const g = fixtureGraph();
+    // GetOrder: server 100 (fixture) and client 104 for the same calls; ListOrders: client view only.
+    g.edges.push(graphEdge("api-orders-client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 104n, faults: 5n }));
+    g.edges.push(graphEdge("api-orders-list", "api", "orders", { rpcId: "shop.v1.OrdersService/ListOrders", unit: "client_attempt", viewpoint: "client", count: 20n, faults: 4n }));
+    // A publish counts messages, not requests: never part of this sum.
+    g.edges.push(graphEdge("api-orders-publish", "api", "orders", { kind: "async-send", rpcId: "", unit: "publish", viewpoint: "producer", count: 9n, faults: 0n }));
+    const link = graphModel(g).links.find((l) => l.source === "api" && l.target === "orders")!;
+    expect(link).toMatchObject({ count: 120n, faults: 7n, unit: "server_request", viewpoint: "server" });
+    expect(link.duration?.count).toBe(200n);
+  });
+  it("lists each method once and counts a node's calls from one viewpoint per method", () => {
+    const g = fixtureGraph();
+    g.edges.push(graphEdge("api-orders-client", "api", "orders", { unit: "client_attempt", viewpoint: "client", count: 104n, faults: 5n }));
+    g.edges.push(graphEdge("api-orders-list", "api", "orders", { rpcId: "shop.v1.OrdersService/ListOrders", unit: "client_attempt", viewpoint: "client", count: 20n, faults: 4n }));
+    expect(methodTotals(g.edges.filter((e) => e.source === "api" && e.target === "orders")).map(({ rpcId, count, faults }) => ({ rpcId, count, faults })))
+      .toEqual([{ rpcId: GRAPH_RPC, count: 100n, faults: 3n }, { rpcId: "shop.v1.OrdersService/ListOrders", count: 20n, faults: 4n }]);
+    expect(callTotals(g.edges, "api").get("orders")).toBe(120n);
   });
   it("never sums different units between the same endpoints into one count", () => {
     const g = fixtureGraph();
