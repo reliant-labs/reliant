@@ -1224,11 +1224,15 @@ type QueryLane struct {
 	// When the current hour's allowance resets; unset when unknown.
 	ResetsAt  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=resets_at,json=resetsAt,proto3" json:"resets_at,omitempty"`
 	Exhausted bool                   `protobuf:"varint,9,opt,name=exhausted,proto3" json:"exhausted,omitempty"`
-	// False when only the limits are known and every *_used is 0 because it was
-	// not measured (billing reads never spend the org's query quota).
-	UsageKnown    bool `protobuf:"varint,10,opt,name=usage_known,json=usageKnown,proto3" json:"usage_known,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// False when the PG sample is absent, stale or from an expired interval.
+	// In that case *_used is unset (zero is not an observed counter).
+	UsageKnown bool `protobuf:"varint,10,opt,name=usage_known,json=usageKnown,proto3" json:"usage_known,omitempty"`
+	// Last successful metadata observation, even when stale. Billing is PG-only.
+	UsageAsOf *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=usage_as_of,json=usageAsOf,proto3" json:"usage_as_of,omitempty"`
+	// Sample freshness deadline: min(as_of + 20 minutes, resets_at).
+	UsageExpiresAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=usage_expires_at,json=usageExpiresAt,proto3" json:"usage_expires_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *QueryLane) Reset() {
@@ -1329,6 +1333,20 @@ func (x *QueryLane) GetUsageKnown() bool {
 		return x.UsageKnown
 	}
 	return false
+}
+
+func (x *QueryLane) GetUsageAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UsageAsOf
+	}
+	return nil
+}
+
+func (x *QueryLane) GetUsageExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UsageExpiresAt
+	}
+	return nil
 }
 
 type RetentionTier struct {
@@ -1874,7 +1892,7 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\tmin_cents\x18\x01 \x01(\x03R\bminCents\x12\x1b\n" +
 	"\tmax_cents\x18\x02 \x01(\x03R\bmaxCents\x12#\n" +
 	"\rdefault_cents\x18\x03 \x01(\x03R\fdefaultCents\x129\n" +
-	"\x19charged_this_period_cents\x18\x04 \x01(\x03R\x16chargedThisPeriodCents\"\xae\x03\n" +
+	"\x19charged_this_period_cents\x18\x04 \x01(\x03R\x16chargedThisPeriodCents\"\xb0\x04\n" +
 	"\tQueryLane\x12\x12\n" +
 	"\x04lane\x18\x01 \x01(\tR\x04lane\x12(\n" +
 	"\x10queries_per_hour\x18\x02 \x01(\x03R\x0equeriesPerHour\x12!\n" +
@@ -1887,7 +1905,9 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\texhausted\x18\t \x01(\bR\texhausted\x12\x1f\n" +
 	"\vusage_known\x18\n" +
 	" \x01(\bR\n" +
-	"usageKnown\"T\n" +
+	"usageKnown\x12:\n" +
+	"\vusage_as_of\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tusageAsOf\x12D\n" +
+	"\x10usage_expires_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0eusageExpiresAt\"T\n" +
 	"\rRetentionTier\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12-\n" +
 	"\x04keep\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x04keep\"h\n" +
@@ -2001,29 +2021,31 @@ var file_services_observability_billing_v1_observability_billing_proto_depIdxs =
 	22, // 16: observability_billing.v1.GetObservabilityStorageResponse.as_of:type_name -> google.protobuf.Timestamp
 	12, // 17: observability_billing.v1.GetObservabilityStorageResponse.signals:type_name -> observability_billing.v1.SignalStorage
 	22, // 18: observability_billing.v1.QueryLane.resets_at:type_name -> google.protobuf.Timestamp
-	23, // 19: observability_billing.v1.RetentionTier.keep:type_name -> google.protobuf.Duration
-	16, // 20: observability_billing.v1.SignalRetention.tiers:type_name -> observability_billing.v1.RetentionTier
-	14, // 21: observability_billing.v1.GetObservabilityLimitsResponse.bounds:type_name -> observability_billing.v1.SpendCapBounds
-	15, // 22: observability_billing.v1.GetObservabilityLimitsResponse.query_lanes:type_name -> observability_billing.v1.QueryLane
-	23, // 23: observability_billing.v1.GetObservabilityLimitsResponse.max_query_range:type_name -> google.protobuf.Duration
-	17, // 24: observability_billing.v1.GetObservabilityLimitsResponse.retention:type_name -> observability_billing.v1.SignalRetention
-	22, // 25: observability_billing.v1.GetObservabilityLimitsResponse.updated_at:type_name -> google.protobuf.Timestamp
-	19, // 26: observability_billing.v1.UpdateObservabilityLimitsResponse.limits:type_name -> observability_billing.v1.GetObservabilityLimitsResponse
-	3,  // 27: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:input_type -> observability_billing.v1.GetObservabilityUsageRequest
-	7,  // 28: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:input_type -> observability_billing.v1.ListObservabilityUsageRequest
-	10, // 29: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:input_type -> observability_billing.v1.GetObservabilityStorageRequest
-	18, // 30: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:input_type -> observability_billing.v1.GetObservabilityLimitsRequest
-	20, // 31: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:input_type -> observability_billing.v1.UpdateObservabilityLimitsRequest
-	4,  // 32: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:output_type -> observability_billing.v1.GetObservabilityUsageResponse
-	9,  // 33: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:output_type -> observability_billing.v1.ListObservabilityUsageResponse
-	13, // 34: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:output_type -> observability_billing.v1.GetObservabilityStorageResponse
-	19, // 35: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:output_type -> observability_billing.v1.GetObservabilityLimitsResponse
-	21, // 36: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:output_type -> observability_billing.v1.UpdateObservabilityLimitsResponse
-	32, // [32:37] is the sub-list for method output_type
-	27, // [27:32] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	22, // 19: observability_billing.v1.QueryLane.usage_as_of:type_name -> google.protobuf.Timestamp
+	22, // 20: observability_billing.v1.QueryLane.usage_expires_at:type_name -> google.protobuf.Timestamp
+	23, // 21: observability_billing.v1.RetentionTier.keep:type_name -> google.protobuf.Duration
+	16, // 22: observability_billing.v1.SignalRetention.tiers:type_name -> observability_billing.v1.RetentionTier
+	14, // 23: observability_billing.v1.GetObservabilityLimitsResponse.bounds:type_name -> observability_billing.v1.SpendCapBounds
+	15, // 24: observability_billing.v1.GetObservabilityLimitsResponse.query_lanes:type_name -> observability_billing.v1.QueryLane
+	23, // 25: observability_billing.v1.GetObservabilityLimitsResponse.max_query_range:type_name -> google.protobuf.Duration
+	17, // 26: observability_billing.v1.GetObservabilityLimitsResponse.retention:type_name -> observability_billing.v1.SignalRetention
+	22, // 27: observability_billing.v1.GetObservabilityLimitsResponse.updated_at:type_name -> google.protobuf.Timestamp
+	19, // 28: observability_billing.v1.UpdateObservabilityLimitsResponse.limits:type_name -> observability_billing.v1.GetObservabilityLimitsResponse
+	3,  // 29: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:input_type -> observability_billing.v1.GetObservabilityUsageRequest
+	7,  // 30: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:input_type -> observability_billing.v1.ListObservabilityUsageRequest
+	10, // 31: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:input_type -> observability_billing.v1.GetObservabilityStorageRequest
+	18, // 32: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:input_type -> observability_billing.v1.GetObservabilityLimitsRequest
+	20, // 33: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:input_type -> observability_billing.v1.UpdateObservabilityLimitsRequest
+	4,  // 34: observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage:output_type -> observability_billing.v1.GetObservabilityUsageResponse
+	9,  // 35: observability_billing.v1.ObservabilityBillingService.ListObservabilityUsage:output_type -> observability_billing.v1.ListObservabilityUsageResponse
+	13, // 36: observability_billing.v1.ObservabilityBillingService.GetObservabilityStorage:output_type -> observability_billing.v1.GetObservabilityStorageResponse
+	19, // 37: observability_billing.v1.ObservabilityBillingService.GetObservabilityLimits:output_type -> observability_billing.v1.GetObservabilityLimitsResponse
+	21, // 38: observability_billing.v1.ObservabilityBillingService.UpdateObservabilityLimits:output_type -> observability_billing.v1.UpdateObservabilityLimitsResponse
+	34, // [34:39] is the sub-list for method output_type
+	29, // [29:34] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_billing_v1_observability_billing_proto_init() }
