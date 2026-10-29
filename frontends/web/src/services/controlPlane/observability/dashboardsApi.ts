@@ -86,9 +86,19 @@ function mapRef(ref: WireRef | undefined, source: DashboardSource): DashboardRef
   return { kind, projectId: ref?.projectId ?? "", key: ref?.key ?? "" };
 }
 
+/**
+ * `group = 14` and `tags = 15` of DashboardSummary. Read through this view
+ * until proto-vendor/controlplane carries them; a client generated before
+ * that never sets them, which reads exactly as an older server would.
+ */
+type WireGrouping = { group?: string; tags?: readonly string[] };
+
 function mapSummary(s: WireSummary): DashboardSummary {
   const source = SOURCE_OF_WIRE[s.source] ?? SOURCE_OF_WIRE[s.ref?.source ?? WireSource.UNSPECIFIED] ?? "workspace";
+  const grouping = s as WireSummary & WireGrouping;
   return {
+    group: grouping.group || undefined,
+    tags: grouping.tags?.length ? [...grouping.tags] : undefined,
     ref: mapRef(s.ref, source),
     source,
     viewKind: s.viewKind === WireViewKind.ORGANIZATION_COSTS ? "organization-costs" : undefined,

@@ -90,6 +90,14 @@ export interface DashboardSummary {
   workspace: DashboardWorkspaceInfo | null;
   /** Templates: "generated" or "platform". */
   category: string;
+  /**
+   * The page group the spec declares (overview, services, jobs, product,
+   * platform, releases, custom), defaulted by the server. Absent from a
+   * control plane that predates it: the page infers one (dashboardGroups.ts).
+   */
+  group?: string;
+  /** The spec's tags (lowercase, at most eight); search matches them. */
+  tags?: string[];
 }
 
 export interface DashboardIndex {

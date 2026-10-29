@@ -50,3 +50,20 @@ describe("builtin dashboard wire mapping", () => {
     expect(client.getDashboard).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org", ref: { source: DashboardSource.BUILTIN, projectId: "", key: "org-costs" } }));
   });
 });
+
+describe("group and tags", () => {
+  it("reads DashboardSummary.group and .tags when the server sends them", async () => {
+    const wire = create(ListDashboardsResponseSchema, { dashboards: [summary] });
+    Object.assign(wire.dashboards[0]!, { group: "platform", tags: ["billing", "org"] });
+    client.listDashboards.mockResolvedValue(wire);
+    const index = await listDashboards({ orgId: "org" });
+    expect(index.dashboards[0]).toMatchObject({ group: "platform", tags: ["billing", "org"] });
+  });
+
+  it("leaves both absent from a server that predates them, so the page infers the group", async () => {
+    client.listDashboards.mockResolvedValue(create(ListDashboardsResponseSchema, { dashboards: [summary] }));
+    const index = await listDashboards({ orgId: "org" });
+    expect(index.dashboards[0]!.group).toBeUndefined();
+    expect(index.dashboards[0]!.tags).toBeUndefined();
+  });
+});
