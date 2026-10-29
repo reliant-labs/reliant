@@ -288,7 +288,9 @@ func ValidateInterruptedRecovery(ctx context.Context, parent, destination, branc
 		if err != nil {
 			return err
 		}
-		if rel == "." || rel == "logs" {
+		// git 2.48+ creates an empty per-worktree refs/ directory at
+		// `worktree add` (2.43 does not); anything inside it is still unknown.
+		if rel == "." || rel == "logs" || rel == "refs" {
 			if d.IsDir() {
 				return nil
 			}

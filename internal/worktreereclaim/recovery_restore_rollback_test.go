@@ -18,7 +18,7 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"own-partial", "no-index-yet", "untracked", "modified", "staged", "empty-directory", "unregistered"} {
+	for _, mutation := range []string{"own-partial", "no-index-yet", "refs-dir", "refs-content", "untracked", "modified", "staged", "empty-directory", "unregistered"} {
 		t.Run(mutation, func(t *testing.T) {
 			branch := "recovered-" + mutation
 			dest := filepath.Join(t.TempDir(), "stage")
@@ -36,6 +36,16 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 					index := strings.TrimSpace(string(recoveryTestGit(t, dest, "rev-parse", "--path-format=absolute", "--git-path", "index")))
 					if err := os.Remove(index); err != nil {
 						t.Fatal(err)
+					}
+				case "refs-dir", "refs-content":
+					// git 2.48+ creates an empty per-worktree refs/ at `worktree
+					// add`; older git does not. Make it exist on every host.
+					admin := strings.TrimSpace(string(recoveryTestGit(t, dest, "rev-parse", "--absolute-git-dir")))
+					if err := os.MkdirAll(filepath.Join(admin, "refs"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if mutation == "refs-content" {
+						recoveryTestWrite(t, filepath.Join(admin, "refs"), "bisect", []byte("not ours"), 0644)
 					}
 				case "own-partial":
 					if err := os.Remove(filepath.Join(dest, "second")); err != nil {
@@ -67,7 +77,7 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 			if !result[0].IsNil() {
 				err = result[0].Interface().(error)
 			}
-			if mutation == "own-partial" || mutation == "no-index-yet" {
+			if mutation == "own-partial" || mutation == "no-index-yet" || mutation == "refs-dir" {
 				if err != nil {
 					t.Fatal(err)
 				}
