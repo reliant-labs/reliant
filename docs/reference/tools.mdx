@@ -2522,7 +2522,7 @@ Return one pull request: title, body, state, draft and merged flags, the head an
 
 **Tags:** `integration`
 
-List the files a pull request changes: filename, status (added, modified, removed, renamed, ...), line counts and the unified diff hunk (patch). patch is null for binary files and very large diffs. Follows GitHub's pagination up to 1000 files; GitHub itself caps the list at 3000.
+List the files a pull request changes: filename, status (added, modified, removed, renamed, ...), line counts and the unified diff hunk (patch). patch is null for binary files and very large diffs. Follows GitHub's pagination up to 1000 files; GitHub itself caps the list at 3000. For a large pull request, list it with include_patch false (names and line counts only), then fetch diffs a directory at a time with path_prefix.
 
 ---
 
