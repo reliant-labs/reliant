@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -88,7 +89,12 @@ func (s *PostgresStore) RunGC(ctx context.Context, horizon time.Duration) {
 	ticker := time.NewTicker(gcInterval)
 	defer ticker.Stop()
 	for {
-		deleted, err := s.DeleteExpired(ctx, horizon)
+		var deleted int64
+		err := observe.RunRoot(ctx, "claimcheck.gc", func(ctx context.Context) error {
+			var err error
+			deleted, err = s.DeleteExpired(ctx, horizon)
+			return err
+		})
 		switch {
 		case err != nil && ctx.Err() == nil:
 			logging.WarnContext(ctx, "Payload blob GC failed", "error", err, "deleted_before_error", deleted)

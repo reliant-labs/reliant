@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -42,10 +46,22 @@ func (s *Service) StreamChatUpdates(
 	}
 	sinceSeq := req.Msg.GetSinceSeq()
 
+	// The RPC span lasts as long as the chat stays open; the moment the
+	// client had its initial sync is the chat_stream.caught_up event on it.
+	opened := time.Now()
+	rpcSpan := trace.SpanFromContext(ctx)
+	rpcSpan.SetAttributes(attribute.String("chat.id", chatID), attribute.Int64("chat.since_seq", sinceSeq))
+
 	// Verify user owns the chat before subscribing. A missing chat and
 	// another user's chat are deliberately the same NotFound: the client drops
-	// a refused chat instead of retrying it.
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	// a refused chat instead of retrying it. The row read here is also the one
+	// a snapshot is built from.
+	var chat *db.Chat
+	err := traced(ctx, "chat_stream.authorize", func(ctx context.Context) error {
+		var err error
+		chat, err = s.deps.Repo.GetChat(ctx, chatID)
+		return err
+	})
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -92,7 +108,7 @@ func (s *Service) StreamChatUpdates(
 		userUpdateCh = userUpdateSub.Events()
 	}
 
-	lastChatSeq, err := s.sendInitialChatSync(ctx, chatID, sinceSeq, stream)
+	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, stream)
 	if err != nil {
 		return err
 	}
@@ -108,6 +124,9 @@ func (s *Service) StreamChatUpdates(
 	}); err != nil {
 		return err
 	}
+	rpcSpan.AddEvent("chat_stream.caught_up", trace.WithAttributes(
+		attribute.Int64("chat.latest_sequence", lastChatSeq),
+		attribute.Int64("chat_stream.initial_sync_ms", time.Since(opened).Milliseconds())))
 
 	// --- Event-driven main loop ---
 	// The chat hub is subscribed above, before the initial sync, so live
@@ -194,7 +213,14 @@ func (s *Service) StreamChatUpdates(
 // otherwise a replay of (sinceSeq, latest] — unless that replay should not be
 // attempted (see chatCursorNeedsSnapshot), which also gets a snapshot. It
 // returns the chat sequence the sync delivered up to.
-func (s *Service) sendInitialChatSync(ctx context.Context, chatID string, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
+func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.Chat, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
+	chatID := chat.ID
+	ctx, span := startSpan(ctx, "chat_stream.initial_sync", attribute.Int64("chat.since_seq", sinceSeq))
+	defer func() {
+		observe.RecordSpanError(span, err)
+		span.End()
+	}()
+
 	useSnapshot := sinceSeq == 0
 	var chatLatestSeq int64
 	if !useSnapshot {
@@ -211,16 +237,18 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chatID string, sinceS
 	}
 
 	if useSnapshot {
+		span.SetAttributes(attribute.String("chat_stream.sync", "snapshot"))
 		// The cursor comes from the snapshot's own high-water mark, not
 		// chatLatestSeq above: the snapshot reads it again, later, and
 		// anything committed in between is in the snapshot.
-		snapshotSeq, err := s.sendChatSnapshot(ctx, chatID, stream)
+		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, stream)
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 		}
 		return snapshotSeq, nil
 	}
 
+	span.SetAttributes(attribute.String("chat_stream.sync", "replay"), attribute.Int64("chat.latest_sequence", chatLatestSeq))
 	if chatLatestSeq > sinceSeq {
 		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, stream); err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
@@ -306,8 +334,8 @@ func (s *Service) sendStreamingDelta(chatID string, delta streaming.StreamingDel
 
 // sendChatSnapshot builds and sends the chat's snapshot, returning the chat
 // sequence it is current as of.
-func (s *Service) sendChatSnapshot(ctx context.Context, chatID string, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
-	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chatID)
+func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.Chat, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
+	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat)
 	if err != nil {
 		return 0, err
 	}
@@ -317,7 +345,13 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chatID string, stream *c
 			Snapshot: snapshot,
 		},
 	}
-	if err := stream.Send(event); err != nil {
+	// Marshalling and writing a snapshot of a long chat is megabytes, and
+	// the write waits on the client's flow-control window.
+	err = traced(ctx, "chat_stream.send_snapshot", func(ctx context.Context) error {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.Int("chat_snapshot.bytes", proto.Size(event)))
+		return stream.Send(event)
+	})
+	if err != nil {
 		return 0, err
 	}
 
@@ -325,11 +359,16 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chatID string, stream *c
 }
 
 // sendChatUpdateBatches replays the chat updates in (startSeq, latestSeq].
-func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
+	ctx, span := startSpan(ctx, "chat_stream.replay", attribute.Int64("chat_stream.replay_from", startSeq), attribute.Int64("chat_stream.replay_to", latestSeq))
+	defer func() {
+		observe.RecordSpanError(span, err)
+		span.End()
+	}()
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
-		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, batchSize)
+		updates, err := s.deps.Repo.GetUpdatesSince(ctx, chatID, currentSeq, chatReplayBatchSize)
 		if err != nil {
 			return err
 		}

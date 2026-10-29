@@ -107,7 +107,7 @@ func TestChatSnapshot_DoesNotReplayAnsweredQuestion(t *testing.T) {
 		QuestionID: questionID, ChatID: chatID, Status: "resolved",
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -144,7 +144,7 @@ func TestChatSnapshot_StillDeliversUnansweredQuestion(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -190,7 +190,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 	require.Equal(t, db.QuestionStatusResolved, q.Status,
 		"terminate must void the pending question")
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshot(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo})).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
