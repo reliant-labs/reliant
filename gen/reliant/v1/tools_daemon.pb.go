@@ -4239,7 +4239,12 @@ type DaemonCommandRequest struct {
 	// The daemon enforces this at command dispatch rather than trusting the
 	// sender to have filtered, so any caller that speaks this protocol is
 	// covered.
-	Policy        *ConnectorPolicy `protobuf:"bytes,5,opt,name=policy,proto3,oneof" json:"policy,omitempty"`
+	Policy *ConnectorPolicy `protobuf:"bytes,5,opt,name=policy,proto3,oneof" json:"policy,omitempty"`
+	// trace_context is the W3C trace context (traceparent/tracestate/baggage)
+	// of the gateway span that forwarded this command, as ToolRequest's is. The
+	// daemon continues it, so every log line it writes for the command carries
+	// the dispatching request's trace_id.
+	TraceContext  map[string]string `protobuf:"bytes,6,rep,name=trace_context,json=traceContext,proto3" json:"trace_context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4305,6 +4310,13 @@ func (x *DaemonCommandRequest) GetTimeoutMs() int32 {
 func (x *DaemonCommandRequest) GetPolicy() *ConnectorPolicy {
 	if x != nil {
 		return x.Policy
+	}
+	return nil
+}
+
+func (x *DaemonCommandRequest) GetTraceContext() map[string]string {
+	if x != nil {
+		return x.TraceContext
 	}
 	return nil
 }
@@ -4411,14 +4423,20 @@ func (x *ConnectorPolicy) GetExpiresAt() string {
 
 // DaemonCommandResponse is the generic response from daemon back to server.
 type DaemonCommandResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	CommandType   string                 `protobuf:"bytes,2,opt,name=command_type,json=commandType,proto3" json:"command_type,omitempty"`
-	Success       bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
-	Payload       []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"` // JSON-encoded response
-	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RequestId    string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	CommandType  string                 `protobuf:"bytes,2,opt,name=command_type,json=commandType,proto3" json:"command_type,omitempty"`
+	Success      bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
+	Payload      []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"` // JSON-encoded response
+	ErrorMessage string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	// handler_elapsed_ms is how long the daemon spent running the command, from
+	// receipt to the response being built. The daemon exports no spans, so this
+	// is the gateway span's only view of the daemon side: the rest of the round
+	// trip is the stream in both directions and the daemon's send backlog.
+	// 0 when the daemon refused the command before running it.
+	HandlerElapsedMs int64 `protobuf:"varint,7,opt,name=handler_elapsed_ms,json=handlerElapsedMs,proto3" json:"handler_elapsed_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DaemonCommandResponse) Reset() {
@@ -4484,6 +4502,13 @@ func (x *DaemonCommandResponse) GetErrorMessage() string {
 		return x.ErrorMessage
 	}
 	return ""
+}
+
+func (x *DaemonCommandResponse) GetHandlerElapsedMs() int64 {
+	if x != nil {
+		return x.HandlerElapsedMs
+	}
+	return 0
 }
 
 // TerminalInputMessage sends raw PTY input bytes (server -> daemon)
@@ -5301,7 +5326,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xd6\x01\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xf0\x02\n" +
 	"\x14DaemonCommandRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12!\n" +
@@ -5309,7 +5334,11 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1d\n" +
 	"\n" +
 	"timeout_ms\x18\x04 \x01(\x05R\ttimeoutMs\x128\n" +
-	"\x06policy\x18\x05 \x01(\v2\x1b.reliant.v1.ConnectorPolicyH\x00R\x06policy\x88\x01\x01B\t\n" +
+	"\x06policy\x18\x05 \x01(\v2\x1b.reliant.v1.ConnectorPolicyH\x00R\x06policy\x88\x01\x01\x12W\n" +
+	"\rtrace_context\x18\x06 \x03(\v22.reliant.v1.DaemonCommandRequest.TraceContextEntryR\ftraceContext\x1a?\n" +
+	"\x11TraceContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
 	"\a_policy\"\xd1\x01\n" +
 	"\x0fConnectorPolicy\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\tR\agrantId\x12#\n" +
@@ -5318,14 +5347,15 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\texec_mode\x18\x04 \x01(\tR\bexecMode\x12%\n" +
 	"\x0eexec_allowlist\x18\x05 \x03(\tR\rexecAllowlist\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\tR\texpiresAt\"\xb2\x01\n" +
+	"expires_at\x18\x06 \x01(\tR\texpiresAt\"\xe0\x01\n" +
 	"\x15DaemonCommandResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12!\n" +
 	"\fcommand_type\x18\x02 \x01(\tR\vcommandType\x12\x18\n" +
 	"\asuccess\x18\x03 \x01(\bR\asuccess\x12\x18\n" +
 	"\apayload\x18\x04 \x01(\fR\apayload\x12#\n" +
-	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\"I\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x12,\n" +
+	"\x12handler_elapsed_ms\x18\a \x01(\x03R\x10handlerElapsedMs\"I\n" +
 	"\x14TerminalInputMessage\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x12\n" +
@@ -5398,7 +5428,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 63)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(DiskGuardState)(0),                     // 1: reliant.v1.DiskGuardState
@@ -5465,6 +5495,7 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	nil,                                     // 62: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
 	nil,                                     // 63: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
 	nil,                                     // 64: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 65: reliant.v1.DaemonCommandRequest.TraceContextEntry
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	13, // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
@@ -5526,20 +5557,21 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	64, // 56: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
 	40, // 57: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
 	48, // 58: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
-	2,  // 59: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	5,  // 60: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	19, // 61: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	43, // 62: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	3,  // 63: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
-	19, // 64: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	5,  // 65: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	44, // 66: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	4,  // 67: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
-	64, // [64:68] is the sub-list for method output_type
-	60, // [60:64] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	65, // 59: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
+	2,  // 60: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	5,  // 61: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	19, // 62: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	43, // 63: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	3,  // 64: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
+	19, // 65: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	5,  // 66: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	44, // 67: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	4,  // 68: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
+	65, // [65:69] is the sub-list for method output_type
+	61, // [61:65] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	61, // [61:61] is the sub-list for extension extendee
+	0,  // [0:61] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -5594,7 +5626,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   62,
+			NumMessages:   63,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
