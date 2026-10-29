@@ -91,9 +91,10 @@ func Resolve(raw string, src Sources) (*Resolved, error) {
 		if err == nil {
 			resolved, err := parsed(ref, SourceProject, entry.Location(), entry.Content)
 			if err == nil && user != nil {
-				// Only to say so: an unreadable account workflow is no
-				// reason to fail a run of the project's.
-				if data, userErr := user(slug); userErr == nil && data != nil {
+				// Only to say so: an account workflow that cannot be read or
+				// run (an unfinished draft is an error here) is no reason to
+				// fail a run of the project's, and is still a same-named one.
+				if data, userErr := user(slug); userErr != nil || data != nil {
 					resolved.Shadowed = fmt.Sprintf("your account workflow %q", slug)
 				}
 			}

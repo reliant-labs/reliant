@@ -663,10 +663,17 @@ func draftRootFor(ev Event, workflowName string) string {
 // It is what a trigger reads its declaration from, so an activation fires
 // against the same definition the run it starts will execute.
 //
-// It resolves with an automation's precedence (Scope.ProjectFirst): the
-// project's workflow of that name before the owner's own.
+// It resolves with an interactive run's precedence (the owner's own workflow
+// first): a manual run and its replay preview. An automation's resolution
+// says so with ResolveRunWorkflowOn and Scope.ProjectFirst.
 func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID, ProjectFirst: true}, workflowName)
+	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+}
+
+// ResolveRunWorkflowOn is ResolveRunWorkflow in an explicit scope: a machine,
+// and the precedence (an automation's is Scope.ProjectFirst).
+func ResolveRunWorkflowOn(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, repo, scope, workflowName)
 }
 
 // A trigger's resolution on its target machine reads that machine's catalog
@@ -714,7 +721,13 @@ func ResolveValidatedRunWorkflowOn(ctx context.Context, repo WorkflowResolver, s
 // the same whole-tree gate as launch. It is not a cross-worker version check:
 // parsing and validation use this process's compiled runtime contract.
 func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID, ProjectFirst: true}, workflowName)
+	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+}
+
+// AutomationScope is where an activation's runs resolve their workflow: on
+// its machine (daemonID; "" for none), with the automation precedence.
+func AutomationScope(userID, projectID, daemonID string) Scope {
+	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: true}
 }
 
 // DescribeRunWorkflow says where a run in scope reads workflowName from: the

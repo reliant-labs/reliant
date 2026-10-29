@@ -261,3 +261,18 @@ func TestResolve_ProjectFirstABrokenProjectWorkflowIsFinal(t *testing.T) {
 	_, err := Resolve(context.Background(), store, auto, "flow")
 	require.ErrorContains(t, err, "also declared")
 }
+
+// An unfinished account draft of the same name is the collision that
+// motivated the automation precedence: it is reported too, never run.
+func TestResolve_ProjectFirstReportsAnUnfinishedAccountDraft(t *testing.T) {
+	store := fakeStore{
+		notRunErr: map[string]bool{"flow": true},
+		project:   []config.StoredWorkflow{{RelativePath: ".reliant/workflows/flow.yaml", YAMLContent: def("flow")}},
+	}
+	auto := opts
+	auto.ProjectFirst = true
+	r, err := Resolve(context.Background(), store, auto, "flow")
+	require.NoError(t, err)
+	assert.Equal(t, workflowref.SourceProject, r.Source)
+	assert.Equal(t, `your account workflow "flow"`, r.Shadowed)
+}
