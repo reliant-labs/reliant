@@ -13985,9 +13985,14 @@ reliant workflow resume <execution-id>
 Run a workflow
 
 Triggers a workflow execution by creating a chat bound to the workflow,
-via the Reliant ChatService.StartChat Connect RPC — the exact path the web
-app takes. A run IS a chat: sending the first user message kicks the root
-workflow.
+via the Reliant ChatService.StartChat Connect RPC. A run IS a chat: sending
+the first user message kicks the root workflow.
+
+The run is recorded as a command-line run (launch kind cli.run): it is listed
+under Runs, not among your conversations in the sidebar, the same as a run an
+agent starts with start_run. Open it from Runs, or by the chat id printed
+below; adopting it moves it into the sidebar. Its title is --title, else
+"<workflow> · <first line of the message>", else "<workflow> · <start time>".
 
 The target server is --server (else RELIANT_SERVER_URL, else the default);
 the bearer is RELIANT_TOKEN, else the login 'reliant auth login' stored for
@@ -14027,6 +14032,7 @@ reliant workflow run <workflow-name> [flags]
 | `--project-path` | `string` | - | Project directory path; resolves (find-or-create) to a project ID when --project-id is absent |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+| `--title` | `string` | - | Title for the run (default: "<workflow> · <first line of the message>") |
 
 ---
 

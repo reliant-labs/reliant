@@ -776,9 +776,18 @@ message StartChatRequest {
   // the run stays out of the sidebar and the default Runs list. It is still an
   // attended run. `workflow` must name a workflow draft the caller owns; the
   // draft runs as saved even if it is not marked complete. The client does not
-  // choose the launch kind: this flag is the only way to ask for builder.test,
-  // and no other kind can be claimed through StartChat.
+  // choose the launch kind: this flag and cli_run are the only ways to ask for
+  // a non-default kind, and no other kind can be claimed through StartChat.
   optional bool builder_test = 19;
+
+  // cli_run marks this start as a run launched from the command line
+  // (`reliant workflow run`), by a script or by an agent shelling out. The
+  // launch event is recorded as kind "cli.run" instead of "chat.start", so the
+  // run lists under Runs and stays out of the sidebar until the user adopts
+  // it, like an agent's start_run. With no title it is titled
+  // "<workflow> · <first line of the message>". Not allowed with chat_id (a
+  // branch's first send is a chat turn) or builder_test.
+  optional bool cli_run = 22;
 
   // Client-chosen UUID for the first user message, which makes the start
   // idempotent: a repeat with the same id (a retry after a lost response, a

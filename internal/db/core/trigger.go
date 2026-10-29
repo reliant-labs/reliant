@@ -82,6 +82,12 @@ const (
 	// automation-only workflow by hand. Its dedupe key is the chat id. A replay
 	// of a past event records the event it replayed in its payload.
 	TriggerEventKindManualRun TriggerEventKind = "manual.run"
+	// TriggerEventKindCLIRun is a run started from the command line
+	// (`reliant workflow run`) — by a script, or by an agent shelling out. It
+	// is attended (a person owns it and may answer it) but nobody is in it as
+	// a conversation, so like agent.start_run it lists under Runs, not in the
+	// sidebar, until adopted. Its dedupe key is the chat id, like chat.start.
+	TriggerEventKindCLIRun TriggerEventKind = "cli.run"
 )
 
 // IsInbound reports whether events of this kind are recorded by a receiver as
@@ -134,6 +140,7 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindAgentStartRun: false,
 	TriggerEventKindBuilderTest:   false,
 	TriggerEventKindManualRun:     false,
+	TriggerEventKindCLIRun:        false,
 }
 
 // TriggerEventOutcome records what a firing did.

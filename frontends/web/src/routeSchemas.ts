@@ -824,6 +824,7 @@ export const RUN_KIND_FILTER_KEYS = [
   "integration",
   "workflow_event",
   "agent.start_run",
+  "cli.run",
   "builder.test",
 ] as const;
 

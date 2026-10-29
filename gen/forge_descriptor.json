@@ -6645,6 +6645,11 @@
             "IsOptional": true
           },
           {
+            "Name": "cli_run",
+            "ProtoType": "bool",
+            "IsOptional": true
+          },
+          {
             "Name": "client_message_id",
             "ProtoType": "string",
             "IsOptional": true
@@ -8244,6 +8249,11 @@
           },
           {
             "name": "builder_test",
+            "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "cli_run",
             "kind": "bool",
             "optional": true
           },
@@ -12046,7 +12056,8 @@
           "TRIGGER_EVENT_KIND_WEBHOOK",
           "TRIGGER_EVENT_KIND_INTEGRATION",
           "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
-          "TRIGGER_EVENT_KIND_MANUAL_RUN"
+          "TRIGGER_EVENT_KIND_MANUAL_RUN",
+          "TRIGGER_EVENT_KIND_CLI_RUN"
         ],
         "reliant.v1.TriggerEventOutcome": [
           "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -12119,7 +12130,8 @@
           5,
           6,
           7,
-          8
+          8,
+          9
         ],
         "reliant.v1.TriggerEventOutcome": [
           0,
@@ -41848,7 +41860,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "e1bd53bbf69d1bd64ac6123a7f43464efb5e62541130baa6d66af3579b0c4c82",
+    "reliant/v1/chat.proto": "fb5f58c18703e545bbb0fa642291b00aa5cdcefcbb9207c99a6d6bca9f9e25a5",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
@@ -41878,7 +41890,7 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
-    "reliant/v1/trigger.proto": "70a0e0d2c0dd52a775ab4e2007b58a099bbea6c22a7cecebb2e1a61940ea4ffa",
+    "reliant/v1/trigger.proto": "6e1ff0fc9ad62b388f5371f0bbfb33303e33dd18e04241943a45e6f037fd106a",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"

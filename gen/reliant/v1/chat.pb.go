@@ -1938,9 +1938,17 @@ type StartChatRequest struct {
 	// the run stays out of the sidebar and the default Runs list. It is still an
 	// attended run. `workflow` must name a workflow draft the caller owns; the
 	// draft runs as saved even if it is not marked complete. The client does not
-	// choose the launch kind: this flag is the only way to ask for builder.test,
-	// and no other kind can be claimed through StartChat.
+	// choose the launch kind: this flag and cli_run are the only ways to ask for
+	// a non-default kind, and no other kind can be claimed through StartChat.
 	BuilderTest *bool `protobuf:"varint,19,opt,name=builder_test,json=builderTest,proto3,oneof" json:"builder_test,omitempty"`
+	// cli_run marks this start as a run launched from the command line
+	// (`reliant workflow run`), by a script or by an agent shelling out. The
+	// launch event is recorded as kind "cli.run" instead of "chat.start", so the
+	// run lists under Runs and stays out of the sidebar until the user adopts
+	// it, like an agent's start_run. With no title it is titled
+	// "<workflow> · <first line of the message>". Not allowed with chat_id (a
+	// branch's first send is a chat turn) or builder_test.
+	CliRun *bool `protobuf:"varint,22,opt,name=cli_run,json=cliRun,proto3,oneof" json:"cli_run,omitempty"`
 	// Client-chosen UUID for the first user message, which makes the start
 	// idempotent: a repeat with the same id (a retry after a lost response, a
 	// timed-out call that had in fact committed) returns the chat the first
@@ -2071,6 +2079,13 @@ func (x *StartChatRequest) GetNoMachine() bool {
 func (x *StartChatRequest) GetBuilderTest() bool {
 	if x != nil && x.BuilderTest != nil {
 		return *x.BuilderTest
+	}
+	return false
+}
+
+func (x *StartChatRequest) GetCliRun() bool {
+	if x != nil && x.CliRun != nil {
+		return *x.CliRun
 	}
 	return false
 }
@@ -7197,7 +7212,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\x87\a\n" +
+	"\x0e_display_style\"\xb1\a\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -7214,8 +7229,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"no_machine\x18\x14 \x01(\bH\x05R\tnoMachine\x88\x01\x01\x12&\n" +
-	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12/\n" +
-	"\x11client_message_id\x18\x15 \x01(\tH\aR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
+	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12\x1c\n" +
+	"\acli_run\x18\x16 \x01(\bH\aR\x06cliRun\x88\x01\x01\x12/\n" +
+	"\x11client_message_id\x18\x15 \x01(\tH\bR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -7230,7 +7246,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"_daemon_idB\r\n" +
 	"\v_no_machineB\x0f\n" +
-	"\r_builder_testB\x14\n" +
+	"\r_builder_testB\n" +
+	"\n" +
+	"\b_cli_runB\x14\n" +
 	"\x12_client_message_id\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +

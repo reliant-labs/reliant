@@ -123,6 +123,11 @@ const (
 	// (RunService.RunNow). Attended, with the chat id as its dedupe key. When it
 	// replays a past event, its payload names that event.
 	TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN TriggerEventKind = 8
+	// CLI_RUN is a run started from the command line (`reliant workflow run`):
+	// by a script, or by an agent shelling out. Attended, with the chat id as
+	// its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
+	// the sidebar until adopted.
+	TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN TriggerEventKind = 9
 )
 
 // Enum value maps for TriggerEventKind.
@@ -137,6 +142,7 @@ var (
 		6: "TRIGGER_EVENT_KIND_INTEGRATION",
 		7: "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
 		8: "TRIGGER_EVENT_KIND_MANUAL_RUN",
+		9: "TRIGGER_EVENT_KIND_CLI_RUN",
 	}
 	TriggerEventKind_value = map[string]int32{
 		"TRIGGER_EVENT_KIND_UNSPECIFIED":     0,
@@ -148,6 +154,7 @@ var (
 		"TRIGGER_EVENT_KIND_INTEGRATION":     6,
 		"TRIGGER_EVENT_KIND_WORKFLOW_EVENT":  7,
 		"TRIGGER_EVENT_KIND_MANUAL_RUN":      8,
+		"TRIGGER_EVENT_KIND_CLI_RUN":         9,
 	}
 )
 
@@ -5107,7 +5114,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x15TRIGGER_KIND_SCHEDULE\x10\x01\x12\x18\n" +
 	"\x14TRIGGER_KIND_WEBHOOK\x10\x02\x12\x1c\n" +
 	"\x18TRIGGER_KIND_INTEGRATION\x10\x03\x12\x1f\n" +
-	"\x1bTRIGGER_KIND_WORKFLOW_EVENT\x10\x04*\xd5\x02\n" +
+	"\x1bTRIGGER_KIND_WORKFLOW_EVENT\x10\x04*\xf5\x02\n" +
 	"\x10TriggerEventKind\x12\"\n" +
 	"\x1eTRIGGER_EVENT_KIND_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTRIGGER_EVENT_KIND_CHAT_START\x10\x01\x12\x1f\n" +
@@ -5117,7 +5124,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1aTRIGGER_EVENT_KIND_WEBHOOK\x10\x05\x12\"\n" +
 	"\x1eTRIGGER_EVENT_KIND_INTEGRATION\x10\x06\x12%\n" +
 	"!TRIGGER_EVENT_KIND_WORKFLOW_EVENT\x10\a\x12!\n" +
-	"\x1dTRIGGER_EVENT_KIND_MANUAL_RUN\x10\b*\xc8\x01\n" +
+	"\x1dTRIGGER_EVENT_KIND_MANUAL_RUN\x10\b\x12\x1e\n" +
+	"\x1aTRIGGER_EVENT_KIND_CLI_RUN\x10\t*\xc8\x01\n" +
 	"\x13TriggerEventOutcome\x12%\n" +
 	"!TRIGGER_EVENT_OUTCOME_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eTRIGGER_EVENT_OUTCOME_LAUNCHED\x10\x01\x12!\n" +
