@@ -40,6 +40,16 @@ func (s *Service) checkWorkspaceMachine(ctx context.Context, userID, worktreeID,
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to load the workspace"))
 	}
+	// Another user's workspace is not found, before its machine is looked up:
+	// the conflict message names that machine, so checking ownership after
+	// would hand its hostname to whoever guessed the worktree id.
+	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
+	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to load the workspace"))
+	}
+	if project == nil || project.UserID != userID {
+		return svcerr.NotFound("worktree")
+	}
 	owner := s.workspaceOwners().Owner(ctx, userID, worktree)
 	if daemonID == "" || owner == "" || owner == daemonID {
 		return nil

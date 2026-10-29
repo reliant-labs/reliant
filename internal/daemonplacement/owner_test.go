@@ -83,11 +83,16 @@ func (f *ownerFixture) ListDaemonsByUserID(_ context.Context, userID string) ([]
 	return out, nil
 }
 
-func (f *ownerFixture) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) error {
+// AdoptWorktreeDaemon is a conditional write, as the store's is: the first
+// owner recorded for a row wins, and every call returns the recorded one.
+func (f *ownerFixture) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if recorded, ok := f.adopted[id]; ok {
+		return recorded, nil
+	}
 	f.adopted[id] = daemonID
-	return nil
+	return daemonID, nil
 }
 
 func (f *ownerFixture) IsDaemonOnline(_ context.Context, _ string, selector *toolexec.DaemonSelector) (bool, error) {
@@ -141,6 +146,21 @@ func TestResolver_RecordsTheOneConnectedMachineThatHasIt(t *testing.T) {
 
 	assert.Equal(t, "gpu-box", owner)
 	assert.Equal(t, map[string]string{"wt-1": "gpu-box"}, f.adopted, "the owner is recorded on the row")
+}
+
+// Another resolver (a second service or API replica, whose probes saw other
+// machines) recorded the row first: route only to the recorded owner, never
+// to this resolver's own nominee, or file and git mutations land on a machine
+// other than the one the row names.
+func TestResolver_RoutesToTheOwnerAnotherResolverRecordedFirst(t *testing.T) {
+	f := newOwnerFixture()
+	f.machine("gpu-box", true, wtPath)
+	f.adopted["wt-1"] = "laptop" // the other resolver's write, committed first
+
+	owner := NewResolver(f, f).Owner(context.Background(), "u1", unattributed())
+
+	assert.Equal(t, "laptop", owner, "the persisted owner wins over this resolver's probe")
+	assert.Equal(t, map[string]string{"wt-1": "laptop"}, f.adopted, "the recorded owner is not overwritten")
 }
 
 // An asleep machine is not woken or waited for: it is skipped.

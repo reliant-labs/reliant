@@ -21,8 +21,9 @@ type OwnerStore interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	// AdoptWorktreeDaemon records daemonID as the owner of a row that names
-	// none; a row that already names one is left alone.
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
+	// none; a row that already names one is left alone. It returns the owner
+	// the row records afterwards: daemonID only when this call won.
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
 }
 
 // OwnerProbe is what the Resolver asks the machines: whether one is
@@ -187,10 +188,19 @@ func (r *Resolver) resolve(ctx context.Context, userID string, worktree *db.Work
 	if owner == "" {
 		return ""
 	}
-	if err := r.store.AdoptWorktreeDaemon(ctx, worktree.ID, owner); err != nil {
+	// Route only to the owner the row records: another resolver (a replica,
+	// another service) may have settled it first, possibly on a machine this
+	// one's probes did not see.
+	recorded, err := r.store.AdoptWorktreeDaemon(ctx, worktree.ID, owner)
+	if err != nil {
 		logging.WarnContext(ctx, "[daemonplacement] could not record the machine holding a workspace",
 			"worktreeID", worktree.ID, "daemonID", owner, "error", err)
 		return ""
+	}
+	if recorded != owner {
+		logging.InfoContext(ctx, "[daemonplacement] another resolver recorded a workspace's machine first",
+			"worktreeID", worktree.ID, "probed", owner, "recorded", recorded)
+		return recorded
 	}
 	logging.InfoContext(ctx, "[daemonplacement] recorded the machine holding an unattributed workspace",
 		"worktreeID", worktree.ID, "daemonID", owner)

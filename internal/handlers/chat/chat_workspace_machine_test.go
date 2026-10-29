@@ -81,6 +81,38 @@ func TestStartChatInAWorkspaceOnItsOwnMachine(t *testing.T) {
 	assert.Equal(t, machineB, *chat.ActiveDaemonID)
 }
 
+// Another user's workspace id is not found, and the refusal never names the
+// machine it lives on: ownership is checked before its machine is looked up.
+func TestStartChatWithAnotherUsersWorkspaceNamesNoMachine(t *testing.T) {
+	e := newStartDaemonEnv(t)
+	machineA := e.namedDaemon(t, "laptop")
+
+	now := time.Now().UTC()
+	otherUser := "other-" + uuid.NewString()[:8]
+	foreignProject := &db.Project{ID: uuid.NewString(), Name: "theirs", Path: t.TempDir(), UserID: otherUser, CreatedAt: now, UpdatedAt: now, LastActive: now}
+	require.NoError(t, e.repo.CreateProject(context.Background(), foreignProject))
+	foreignHost := "their-secret-host"
+	selfHosted := "self_hosted"
+	foreignDaemon := uuid.NewString()
+	require.NoError(t, e.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: foreignDaemon, UserID: otherUser, Hostname: &foreignHost, DaemonType: &selfHosted}))
+	foreign := &db.Worktree{
+		ID: uuid.NewString(), Name: "wt-" + uuid.NewString()[:8], Path: t.TempDir(),
+		Branch: "feature", ProjectID: foreignProject.ID, DaemonID: &foreignDaemon,
+		Status:    int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}
+	require.NoError(t, e.repo.CreateWorktree(context.Background(), foreign))
+
+	_, err := e.start(t, func(r *reliantv1.StartChatRequest) {
+		r.WorktreeId = &foreign.ID
+		r.DaemonId = ptr.Of(machineA)
+	})
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.NotContains(t, err.Error(), foreignHost, "another tenant's machine name must never be disclosed")
+	assert.Empty(t, e.temporal.inputs, "a refused start launches nothing")
+}
+
 // The main checkout is on every machine with the project: any machine may run it.
 func TestStartChatOnTheMainCheckoutTakesAnyMachine(t *testing.T) {
 	e := newStartDaemonEnv(t)

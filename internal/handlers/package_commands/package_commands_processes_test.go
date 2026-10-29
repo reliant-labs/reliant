@@ -196,14 +196,17 @@ func (r *processesRepo) ListProjectDaemonsForProject(context.Context, string) ([
 	return nil, nil
 }
 
-func (r *processesRepo) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) error {
+func (r *processesRepo) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.adopted[id] = daemonID
 	if wt, ok := r.worktrees[id]; ok && wt.DaemonID == nil {
 		wt.DaemonID = &daemonID
 	}
-	return nil
+	if wt, ok := r.worktrees[id]; ok && wt.DaemonID != nil {
+		return *wt.DaemonID, nil
+	}
+	return daemonID, nil
 }
 
 func newProcessesService(t *testing.T, router *machineRouter, repo *processesRepo) *Service {

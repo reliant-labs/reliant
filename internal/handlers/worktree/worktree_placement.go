@@ -112,6 +112,9 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		if chatDaemon != "" && chatDaemon != requested {
 			return machinewake.Target{}, svcerr.InvalidArgument("daemon_id conflicts with the chat's machine: a chat's workspace is made where the chat runs")
 		}
+		// A no-machine chat never wakes a machine, whichever one is named:
+		// the flag rides with the target exactly as on the placement path.
+		return machinewake.Target{DaemonID: requested, NoMachine: chat.NoMachine}, nil
 	}
 	return machinewake.Target{DaemonID: requested}, nil
 }

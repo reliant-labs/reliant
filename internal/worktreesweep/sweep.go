@@ -93,7 +93,7 @@ type Store interface {
 	GetWorktree(ctx context.Context, id string) (*core.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
 	// ListDaemonStorageState is each of a user's daemons' stored disk
@@ -838,10 +838,11 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 	// The daemon found this directory on its own disk, which is the proof of
 	// ownership an unattributed row never had. "gone" proves nothing.
 	if wt.DaemonID == nil && r.Outcome != worktreereclaim.OutcomeGone {
-		if err := s.store.AdoptWorktreeDaemon(ctx, wt.ID, daemonID); err != nil {
+		if recorded, err := s.store.AdoptWorktreeDaemon(ctx, wt.ID, daemonID); err != nil {
 			logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree owner", "worktreeID", wt.ID, "error", err)
-		} else {
-			wt.DaemonID = &daemonID
+		} else if recorded != "" {
+			// The persisted owner, which another resolver may have set first.
+			wt.DaemonID = &recorded
 		}
 	}
 	if wt.DeletedAt == nil {
