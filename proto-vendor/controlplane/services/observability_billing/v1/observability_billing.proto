@@ -311,9 +311,13 @@ message QueryLane {
   // When the current hour's allowance resets; unset when unknown.
   google.protobuf.Timestamp resets_at = 8;
   bool exhausted = 9;
-  // False when only the limits are known and every *_used is 0 because it was
-  // not measured (billing reads never spend the org's query quota).
+  // False when the PG sample is absent, stale or from an expired interval.
+  // In that case *_used is unset (zero is not an observed counter).
   bool usage_known = 10;
+  // Last successful metadata observation, even when stale. Billing is PG-only.
+  google.protobuf.Timestamp usage_as_of = 11;
+  // Sample freshness deadline: min(as_of + 20 minutes, resets_at).
+  google.protobuf.Timestamp usage_expires_at = 12;
 }
 
 message RetentionTier {
