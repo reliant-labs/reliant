@@ -880,6 +880,11 @@ tasks:
     cmds:
       - ./scripts/release-tag.sh --dry-run
 
+  release:lock:test:
+    desc: Self-test of scripts/release-lock.sh (one cut of a version at a time) against a bare remote
+    cmds:
+      - ./scripts/test-release-lock.sh
+
   release:check-tags:
     desc: Verify every release tag is an ancestor of main
     cmds:
