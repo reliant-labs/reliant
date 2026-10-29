@@ -528,10 +528,12 @@ var generatedToolParams = map[string]ToolParams{
 	"github__repo_get_content": {
 		Bindable: map[string]struct{}{
 			"connection": {},
+			"line_count": {},
 			"owner":      {},
 			"path":       {},
 			"ref":        {},
 			"repo":       {},
+			"start_line": {},
 		},
 		Unbindable: map[string]string{},
 	},

@@ -2555,7 +2555,7 @@ Return one repository: full name, description, visibility, default branch, prima
 
 **Tags:** `integration`
 
-Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). A path that does not exist at ref answers type missing, not an error: a file a pull request deletes exists only at its base, one it adds only at its head. Omit path for the repository root and ref for the default branch. Results longer than about 30,000 characters are cut short.
+Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). A path that does not exist at ref answers type missing, not an error: a file a pull request deletes exists only at its base, one it adds only at its head. Omit path for the repository root and ref for the default branch. A text file is served one window of lines at a time: the result gives start_line, end_line and total_lines, and when more follows, next names the exact call that continues. A file that fits arrives whole; a larger one arrives as its first ~24,000 characters of whole lines. To read around a diff hunk "@@ -a,b +c,d @@", pass start_line c-40 and line_count d+80.
 
 ---
 

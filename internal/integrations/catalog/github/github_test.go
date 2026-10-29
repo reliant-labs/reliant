@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -686,8 +687,51 @@ func TestRepoGetContentReadsAFileAsText(t *testing.T) {
 		"sha": "3d21ec53a331a6f037a91c368710b99387d012c1", "size": float64(len(source)),
 		"html_url": "https://github.com/acme/app/blob/dev/src/main.go",
 		"content":  source, "binary": false, "too_large": false,
+		"start_line": float64(1), "end_line": float64(12), "total_lines": float64(12),
+		"truncated": false, "next": nil,
 		"target": nil, "submodule_git_url": nil,
 	}, out)
+}
+
+// A file larger than one result is served as whole lines plus the exact call
+// that continues, never as JSON cut mid-string by the action layer's
+// character limit (pr-review gave up on control-plane #1485 when a 30,000
+// character cut hid the changed hunk's surroundings).
+func TestRepoGetContentPagesALargeFileByLine(t *testing.T) {
+	var b strings.Builder
+	for i := 1; i <= 3000; i++ {
+		fmt.Fprintf(&b, "line %04d: if a < b && c > d { return \"x\" }\n", i)
+	}
+	source := b.String()
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/big.go", jsonReply(200, contentJSON(t, "big.go", "base64", []byte(source))))
+
+	res := f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev"})
+	out := data(t, res)
+	assert.Equal(t, float64(1), out["start_line"])
+	assert.Equal(t, float64(3000), out["total_lines"])
+	assert.Equal(t, true, out["truncated"], "the default window stops at the size ceiling")
+	end := int(out["end_line"].(float64))
+	require.Greater(t, end, 100)
+	require.Less(t, end, 3000)
+	content := out["content"].(string)
+	assert.True(t, strings.HasPrefix(content, "line 0001:"))
+	assert.True(t, strings.HasSuffix(content, fmt.Sprintf("line %04d: if a < b && c > d { return \"x\" }\n", end)), "the window ends on a whole line")
+	assert.Equal(t, fmt.Sprintf("Lines 1-%d of 3000 shown. To continue, call again with the same path and ref and start_line=%d.", end, end+1), out["next"])
+	assert.NotContains(t, res.Content, "…(truncated)", "the window fits under the action result's character cut")
+	assert.True(t, json.Valid([]byte(res.Content)), "the agent sees whole JSON")
+
+	// A window around a hunk, and the last window, which has no next.
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev", "start_line": 2501, "line_count": 10}))
+	assert.Equal(t, float64(2501), out["start_line"])
+	assert.Equal(t, float64(2510), out["end_line"])
+	assert.Equal(t, false, out["truncated"])
+	assert.True(t, strings.HasPrefix(out["content"].(string), "line 2501:"))
+	assert.Equal(t, 10, strings.Count(out["content"].(string), "\n"))
+
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev", "start_line": 2995}))
+	assert.Equal(t, float64(3000), out["end_line"])
+	assert.Nil(t, out["next"])
 }
 
 // A binary file is reported as such, with no content, rather than failing.

@@ -10,8 +10,12 @@ description: >-
   lists everything). A path that does not exist at ref answers type
   missing, not an error: a file a pull request deletes exists only at its
   base, one it adds only at its head. Omit path for the repository root
-  and ref for the default branch. Results longer than about 30,000
-  characters are cut short.
+  and ref for the default branch. A text file is served one window of
+  lines at a time: the result gives start_line, end_line and total_lines,
+  and when more follows, next names the exact call that continues. A file
+  that fits arrives whole; a larger one arrives as its first ~24,000
+  characters of whole lines. To read around a diff hunk "@@ -a,b +c,d @@",
+  pass start_line c-40 and line_count d+80.
 keywords: [file, read, contents, source, code, directory, list, browse, open, cat]
 placement: server
 mutates: false
@@ -34,6 +38,23 @@ params:
         slash. Omit for the root.
       examples: ["src/main.go"]
     ref: { $ref: ../schemas/git_ref.yaml }
+    start_line:
+      type: integer
+      minimum: 1
+      default: 1
+      title: First line
+      description: >-
+        The 1-based line a file's window starts at. Follow next to page
+        through a large file.
+    line_count:
+      type: integer
+      minimum: 1
+      maximum: 100000
+      title: Line count
+      description: >-
+        How many lines to return from start_line. Omit for as many as fit
+        (~24,000 characters); a window that reaches that ceiling stops at
+        a whole line and sets truncated.
     connection: { $ref: ../schemas/connection.yaml }
 request:
   method: GET
@@ -80,7 +101,11 @@ output:
   # `encoding` is base64 (a file's bytes), none (a file over 1 MB) or
   # absent (a symlink or submodule). An accepted 404 is a missing path; the
   # installation hint is given only when the repository root itself is
-  # missing, the one read that says the repository is out of reach.
+  # missing, the one read that says the repository is out of reach. A text
+  # file is cut into a window of whole lines (tmpl's lineWindow) whose JSON
+  # fits 24,000 bytes, under the 30,000-character cut every action result
+  # takes, so a large file arrives as whole lines plus the exact next call,
+  # never as JSON chopped mid-string.
   select: >-
     status == 404 ?
       {"type": "missing",
@@ -102,19 +127,31 @@ output:
                                    "path": e.path,
                                    "type": e.type,
                                    "size": e.?size.orValue(null)})} :
+      cel.bind(text,
+        response.?encoding.orValue('') == 'base64' ?
+          base64.decode(response.?content.orValue('')).text().orValue(null) : null,
+      cel.bind(win,
+        text == null ? null :
+          text.lineWindow(params.?start_line.orValue(1), params.?line_count.orValue(0), 24000),
       {"type": response.type,
        "path": response.path,
        "name": response.name,
        "sha": response.?sha.orValue(null),
        "size": response.?size.orValue(null),
        "html_url": response.?html_url.orValue(null),
-       "content": response.?encoding.orValue('') == 'base64' ?
-         base64.decode(response.?content.orValue('')).text().orValue(null) : null,
-       "binary": response.?encoding.orValue('') == 'base64' &&
-         !base64.decode(response.?content.orValue('')).text().hasValue(),
+       "content": win == null ? null : win.content,
+       "start_line": win == null ? null : win.start_line,
+       "end_line": win == null ? null : win.end_line,
+       "total_lines": win == null ? null : win.total_lines,
+       "truncated": win == null ? false : win.truncated,
+       "next": win == null || win.end_line >= win.total_lines ? null : dyn(
+         "Lines " + string(win.start_line) + "-" + string(win.end_line) + " of " +
+         string(win.total_lines) + " shown. To continue, call again with the same path and ref and start_line=" +
+         string(win.end_line + 1) + "."),
+       "binary": response.?encoding.orValue('') == 'base64' && text == null,
        "too_large": response.?encoding.orValue('') == 'none',
        "target": response.?target.orValue(null),
-       "submodule_git_url": response.?submodule_git_url.orValue(null)}
+       "submodule_git_url": response.?submodule_git_url.orValue(null)}))
   schema:
     type: object
     properties:
@@ -126,7 +163,12 @@ output:
       sha: { type: [string, "null"] }
       size: { type: [integer, "null"], description: In bytes. }
       html_url: { type: [string, "null"] }
-      content: { type: [string, "null"], description: "The file's text; null for a directory, a binary file, or a file over 1 MB." }
+      content: { type: [string, "null"], description: "The window's text (lines start_line..end_line); null for a directory, a binary file, or a file over 1 MB." }
+      start_line: { type: [integer, "null"], description: The first line of content (1-based). }
+      end_line: { type: [integer, "null"], description: The last line of content; start_line - 1 when start_line is past the end. }
+      total_lines: { type: [integer, "null"], description: How many lines the whole file has. }
+      truncated: { type: boolean, description: The window stopped short of line_count (or of the file's end) at the size ceiling. }
+      next: { type: [string, "null"], description: "Set when lines follow end_line: the exact call that reads the next window." }
       binary: { type: boolean, description: The file is not text, so content is null. }
       too_large: { type: boolean, description: "The file is over 1 MB, which the contents API does not serve, so content is null." }
       target: { type: [string, "null"], description: A symlink's target path. }
