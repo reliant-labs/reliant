@@ -481,10 +481,12 @@ func TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin(t *testing.T) {
 	}
 }
 
-// TestDaemonRegister_AsksForForgeCeiling: an interactive registration asks for
-// daemon:connect plus forge's authority, so the new daemon's credential has
-// something to exchange.
-func TestDaemonRegister_AsksForForgeCeiling(t *testing.T) {
+// TestDaemonRegister_AsksForDaemonConnectAlone: a daemon credential holds
+// every scope its person holds — the control plane keys that wildcard on
+// daemon:connect and resolves it at each use — so registration names
+// daemon:connect and nothing else. A list here is a snapshot the next scope
+// forge adds would be missing from.
+func TestDaemonRegister_AsksForDaemonConnectAlone(t *testing.T) {
 	isolateForgeCredHome(t)
 	withFakeLoginBrowser(t)
 	cp := newFakeCP(t, "rlat_NEWDAEMON000000000")
@@ -494,13 +496,8 @@ func TestDaemonRegister_AsksForForgeCeiling(t *testing.T) {
 		t.Fatalf("registerDaemon: %v", err)
 	}
 	scope := strings.Fields(cp.lastRequest().Get("scope"))
-	for _, want := range append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...) {
-		if !containsString(scope, want) {
-			t.Errorf("registration asked for %v, missing %s", scope, want)
-		}
-	}
-	if containsString(scope, cliauth.ScopeAPI) {
-		t.Error("a daemon credential must not become an API credential")
+	if len(scope) != 1 || scope[0] != cliauth.ScopeDaemon {
+		t.Errorf("registration asked for %v, want [%s]", scope, cliauth.ScopeDaemon)
 	}
 }
 

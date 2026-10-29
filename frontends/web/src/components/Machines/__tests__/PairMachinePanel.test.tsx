@@ -71,6 +71,7 @@ beforeEach(() => {
   (window as { electronAPI?: unknown }).electronAPI = undefined;
   mockLookup.mockResolvedValue({
     userCode: "BDFG-HJKL",
+    kind: "machine",
     hostname: "build-box.local",
     platform: "linux/amd64",
     clientId: "reliant-cli",
@@ -124,6 +125,25 @@ describe("pairing by code", () => {
     await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText(/No machine is waiting with that code/)).toBeInTheDocument();
+  });
+
+  it("does not approve a CLI sign-in's code as a machine", async () => {
+    mockLookup.mockResolvedValue({
+      userCode: "BDFG-HJKL",
+      kind: "cli_login",
+      hostname: "build-box.local",
+      platform: "linux/amd64",
+      clientId: "reliant-cli",
+      scopes: ["reliant:api"],
+      expiresAt: "",
+    });
+    const user = userEvent.setup();
+    render(<PairMachinePanel />);
+    await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText(/That code signs in the Reliant CLI, not a machine/)).toBeInTheDocument();
+    expect(screen.queryByText(/Approve machine/)).not.toBeInTheDocument();
+    expect(mockDecide).not.toHaveBeenCalled();
   });
 
   it("starts from a code the CLI's link carried", () => {

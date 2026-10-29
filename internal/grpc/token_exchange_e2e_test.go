@@ -55,7 +55,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 
 	signer := newSessionSigner(t)
 	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{
-		Issuer: controlPlane, ClipsGrants: mode == tokenauthority.ModeControlPlane,
+		Issuer: controlPlane,
 	})
 	gatewayURL := serveGateway(t, authority)
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
@@ -64,8 +64,9 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	session := signer.sign(t, userID)
 	ctx := context.Background()
 
-	// 1. The app mints its daemon credential with a session. Its ceiling is
-	//    clipped to the member's grants: deploy + secret, not domain.
+	// 1. The app mints its daemon credential with a session. It holds every
+	//    scope its person holds ("*"), clipped to the member's grants:
+	//    deploy + secret, not domain.
 	created, err := tokens(session).CreateToken(ctx, connect.NewRequest(&reliantv1.CreateTokenRequest{
 		Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
 	}))
@@ -76,7 +77,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	require.True(t, parent.Scopes.Has(fat.ScopeDaemonConnect))
 	require.True(t, parent.Scopes.Has(fat.ScopeDeployWrite), "the daemon credential carries its user's deploy authority: %s", parent.Scopes)
 	require.False(t, parent.Scopes.Has(fat.ScopeDomainWrite), "a grant the member lacks must be clipped: %s", parent.Scopes)
-	require.False(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential stays a daemon's, not an API credential")
+	require.True(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential holds every scope its person holds, reliant:api included")
 	require.Equal(t, reliantv1.TokenKind_TOKEN_KIND_DAEMON, created.Msg.GetInfo().GetKind())
 	msg, err := connectDaemon(t, gatewayURL, daemonToken)
 	require.NoError(t, err)

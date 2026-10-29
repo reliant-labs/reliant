@@ -28,13 +28,15 @@ import (
 // 403'd and users ran `forge login` anyway — and it sat in a second file.
 // RemoveLegacyForgeDeposits cleans up what those releases wrote.
 
-// ForgeScopes is the control-plane capability ceiling requested by Reliant
-// sign-ins and daemon registration, and exchangeable by the credential helper:
-// by default a daemon's credential carries EVERY control-plane scope its user
-// holds (owner decision), so agents on the machine can deploy, read telemetry,
-// and manage secrets and domains. Restrictions are opt-in. The control plane
-// clips every mint to current org grants, and exchange also intersects the
-// parent's scopes, so the ceiling never exceeds the person.
+// ForgeScopes is the control-plane capability ceiling requested by an
+// explicit-list Reliant sign-in (`reliant auth login`), and exchangeable by the
+// credential helper. A DAEMON registration does not use it: a daemon's
+// credential holds every scope its user holds (owner decision), keyed on
+// daemon:connect and resolved by the control plane at each use, so agents on
+// the machine can deploy, read telemetry, and manage secrets and domains with
+// no list to go stale. The control plane clips every mint and every use to
+// current org grants, and exchange also intersects the parent's scopes, so
+// neither ever exceeds the person.
 //
 // DERIVED FROM FORGE'S CATALOG, not listed here, so a scope forge adds is
 // requested the release it ships in. A scope is a control-plane capability
@@ -44,10 +46,12 @@ import (
 // daemon:connect, llm:invoke, mcp:connector, daemon:resume). That excludes the
 // port share (proxy:port) too: forge refuses it on a daemon binding.
 //
-// token:read and token:write are deliberately absent. They administer member
-// permissions and tokens, which the control plane reserves to a signed-in
-// person (every token RPC refuses a machine caller), so on a long-lived daemon
-// or CLI credential they are dead authority and a latent escalation path.
+// token:read and token:write are absent from this explicit list. They
+// administer member permissions and tokens, which the control plane reserves
+// to a signed-in person (every token RPC refuses a machine caller), so on a
+// CLI credential or an exchanged helper they are dead authority. A daemon's
+// wildcard does resolve to them — nothing is special-cased there — and they
+// are just as dead on it.
 func ForgeScopes() []string {
 	out := make([]string, 0, len(fat.AllScopes))
 	for _, scope := range fat.AllScopes {

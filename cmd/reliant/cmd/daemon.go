@@ -149,13 +149,15 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	}
 	logging.InfoContext(ctx, "Registering daemon via control-plane pairing", "api_url", apiURL, "instance_id", instanceid.ID())
 
-	// daemon:connect, plus forge's control-plane authority as a CEILING
-	// the control plane clips to this user's grants — the same set
-	// control-plane provisions for a managed daemon. forge on this daemon
-	// exchanges it for an hour-long deploy token; without it there would be
-	// nothing to exchange, because a token may never grant authority it
-	// does not hold.
-	scopes := append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...)
+	// daemon:connect ALONE. A daemon credential holds every scope its
+	// person holds — the control plane keys that on daemon:connect and
+	// resolves it at each use, clipped to their current grants
+	// (control-plane accesstoken/wildcard.go), exactly as it does for a
+	// managed daemon. forge on this daemon exchanges it for an hour-long
+	// deploy token, and a scope forge adds later is exchangeable with no
+	// re-registration. Listing scopes here is how every daemon used to end
+	// up without the newest one.
+	scopes := []string{cliauth.ScopeDaemon}
 	hostname, _ := os.Hostname()
 	cred, err := cliauth.DeviceLogin{
 		Server:   apiURL,

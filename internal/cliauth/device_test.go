@@ -108,6 +108,32 @@ func TestDeviceLogin_PrintsTheCodeAndPollsUntilApproved(t *testing.T) {
 	}
 }
 
+// The terminal names the same request the approval page does: daemon:connect
+// pairs a machine, anything else signs the CLI in on this host.
+func TestDeviceLogin_WordingFollowsTheRequestedAuthority(t *testing.T) {
+	for _, tc := range []struct {
+		scopes      []string
+		want, never string
+	}{
+		{[]string{ScopeDaemon, "deploy:read"}, "Pair this machine", "Sign in the Reliant CLI"},
+		{[]string{ScopeAPI, "deploy:read"}, "Sign in the Reliant CLI on build-box.", "Pair this machine"},
+	} {
+		srv, _, _ := fakeDeviceServer(t, true, []map[string]any{{"access_token": "rlat_0123456789abcdef", "scope": "x"}})
+		var out bytes.Buffer
+		if _, err := (DeviceLogin{Server: srv.URL, Scopes: tc.scopes, Hostname: "build-box", Out: &out, Sleep: noSleep}).Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), tc.want) || strings.Contains(out.String(), tc.never) {
+			t.Errorf("scopes %v: output\n%s\nwant %q and never %q", tc.scopes, out.String(), tc.want, tc.never)
+		}
+	}
+	srv, _, _ := fakeDeviceServer(t, true, []map[string]any{{"error": "access_denied"}})
+	_, err := DeviceLogin{Server: srv.URL, Scopes: []string{ScopeAPI}, Sleep: noSleep}.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "sign-in was declined") {
+		t.Fatalf("a declined CLI sign-in: err = %v", err)
+	}
+}
+
 func TestDeviceLogin_DeclinedAndExpiredAreErrors(t *testing.T) {
 	for reply, want := range map[string]string{"access_denied": "declined", "expired_token": "expired"} {
 		srv, _, _ := fakeDeviceServer(t, true, []map[string]any{{"error": reply}})
