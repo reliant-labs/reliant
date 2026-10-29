@@ -15,6 +15,12 @@
  * persisted, synced and sent to a model, so none of it goes in by copy-paste.
  * What a subject carries is therefore a closed list of reference fields, and
  * the type below is that list: there is nowhere to hand this module a message.
+ * Release versions, timestamps and an alert's state are references too; an
+ * issue's title, culprit and frames and an alert's labels and annotations are
+ * not (they are read off telemetry), so `obs issue` and `obs status` fetch them.
+ *
+ * An intent ("investigate" or "fix", the console's two actions) appends one
+ * instruction saying what the chat is for.
  *
  * Every command quoted here was checked against `reliant forge obs <verb>
  * --help`. A change to a verb's syntax belongs in this file and its test.
@@ -27,17 +33,42 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 export type AskEnv = string | null;
 
 export type AskSubject =
-  | { kind: "issue"; issueId: string; env: AskEnv }
+  | {
+      kind: "issue";
+      issueId: string;
+      env: AskEnv;
+      /** The trace of its latest event: an id, like the issue's. */
+      latestTraceId?: string;
+      /** The release (or build version) it was first and last seen in. */
+      firstVersion?: string;
+      lastVersion?: string;
+    }
   | { kind: "trace"; traceId: string; env: AskEnv }
   | { kind: "graph"; env: AskEnv; orgId: string; projectId?: string; envIds: string[]; startMs?: number; endMs?: number; nodeId?: string; edgeId?: string; rpcId?: string; traceIds: string[]; origin: string; truncated: boolean; provisional: boolean }
-  | { kind: "alert"; rule: string; fingerprint: string; env: AskEnv }
+  | {
+      kind: "alert";
+      rule: string;
+      fingerprint: string;
+      env: AskEnv;
+      state?: "firing" | "pending";
+      /** When it entered that state. */
+      sinceMs?: number | null;
+    }
   | { kind: "panel"; panel: Panel; dashboard?: string; window: RangePreset; env: AskEnv };
+
+/**
+ * What the chat is for. "investigate": find the cause and explain it, change
+ * nothing. "fix": find it and fix it on the chat's own branch. Absent: the
+ * prompt states the subject and how to read it, and the reader says what they want.
+ */
+export type AskIntent = "investigate" | "fix";
 
 export interface AskContext {
   /** The forge project's name (forge.yaml), when the console knows it. */
   forgeProject?: string;
   /** Every environment of the project, offered when a subject's own is unknown. */
   envChoices?: readonly string[];
+  intent?: AskIntent;
 }
 
 /** The placeholder a command carries when the environment is unknown. */
@@ -73,9 +104,20 @@ const envArg = (subject: AskSubject) => (subject.env ? shellWord(subject.env) : 
 
 const FETCH = "Fetch the details yourself with the forge CLI";
 
+/** The releases an issue was seen in, as one prose line; "" when the console knows neither. */
+function versionsLine(first: string | undefined, last: string | undefined): string {
+  const from = first ? oneLine(first, 80) : "";
+  const to = last ? oneLine(last, 80) : "";
+  if (from && to && from !== to) return `\nFirst seen in ${from}, last seen in ${to}.`;
+  if (from || to) return `\nSeen in ${from || to}.`;
+  return "";
+}
+
 function issuePrompt(subject: Extract<AskSubject, { kind: "issue" }>, ctx: AskContext): string {
   const id = shellWord(subject.issueId);
-  return `Issue ${id}${where(subject, ctx)}.\n\n${FETCH}, starting with ${cmd("issue", id, envArg(subject))}.`;
+  const env = envArg(subject);
+  const trace = subject.latestTraceId ? ` (its latest event's trace: ${cmd("trace", shellWord(subject.latestTraceId), env)})` : "";
+  return `Issue ${id}${where(subject, ctx)}.${versionsLine(subject.firstVersion, subject.lastVersion)}\n\n${FETCH}, starting with ${cmd("issue", id, env)}${trace}.`;
 }
 
 function tracePrompt(subject: Extract<AskSubject, { kind: "trace" }>, ctx: AskContext): string {
@@ -87,8 +129,9 @@ function tracePrompt(subject: Extract<AskSubject, { kind: "trace" }>, ctx: AskCo
 function alertPrompt(subject: Extract<AskSubject, { kind: "alert" }>, ctx: AskContext): string {
   const rule = shellWord(subject.rule);
   const env = envArg(subject);
+  const state = subject.state ? `\n${subject.state === "firing" ? "Firing" : "Pending"}${subject.sinceMs ? ` since ${new Date(subject.sinceMs).toISOString()}` : ""}.` : "";
   return (
-    `Alert rule ${rule} (fingerprint ${shellWord(subject.fingerprint)})${where(subject, ctx)}.\n\n` +
+    `Alert rule ${rule} (fingerprint ${shellWord(subject.fingerprint)})${where(subject, ctx)}.${state}\n\n` +
     `${FETCH}: ${cmd("status", env, "--json", "--fields", "alerts")} lists what is firing, and ` +
     `${cmd("alerts", "check", "--env", env, "--rule", rule, "--sql")} prints the rule's expression.`
   );
@@ -165,7 +208,27 @@ function panelPrompt(subject: Extract<AskSubject, { kind: "panel" }>, ctx: AskCo
 /** The structured verb that reads a signal as it is, without the panel's shaping. */
 const RAW_VERB: Record<string, string> = { traces: "traces", logs: "logs", metrics: "metrics list" };
 
+const INVESTIGATE = "Find the root cause and explain it, with the evidence for it. Don't change any code yet: say what you would change, and why.";
+
+const FIX =
+  "Then fix it. This chat has a workspace of its own on its own git branch, so the main checkout is untouched. " +
+  "Find the root cause, make the smallest correct change, add a test that fails without it, and run the tests that cover it. " +
+  "Finish with the root cause, the change, and how you verified it.";
+
+const FIX_ALERT = " If the rule is what is wrong (a threshold or expression that doesn't match how the service really behaves), fix the rule where the project declares it, in its KCL, rather than the service.";
+
+/** The instruction an intent adds, after the subject and how to read it. */
+function intentLine(subject: AskSubject, intent: AskIntent | undefined): string {
+  if (intent === "investigate") return `\n\n${INVESTIGATE}`;
+  if (intent === "fix") return `\n\n${FIX}${subject.kind === "alert" ? FIX_ALERT : ""}`;
+  return "";
+}
+
 export function buildAskReliantPrompt(subject: AskSubject, ctx: AskContext = {}): string {
+  return subjectPrompt(subject, ctx) + intentLine(subject, ctx.intent);
+}
+
+function subjectPrompt(subject: AskSubject, ctx: AskContext): string {
   switch (subject.kind) {
     case "graph":
       return `Investigate this service graph${where(subject, ctx)}. References only: ${JSON.stringify({
@@ -201,8 +264,8 @@ export function traceEnvName(
   return environments.find((env) => env.id === id)?.name ?? null;
 }
 
-/** A workspace name for the investigation: ask-<kind>-<what>-<nonce>, a legal git branch. */
-export function askWorkspaceName(subject: AskSubject, nonce: string): string {
+/** A workspace name for the chat: ask-<kind>-<what>-<nonce> (fix-… for a fix), a legal git branch. */
+export function askWorkspaceName(subject: AskSubject, nonce: string, intent?: AskIntent): string {
   const what =
     subject.kind === "graph" ? subject.rpcId || subject.nodeId || subject.edgeId || "graph" :
     subject.kind === "issue"
@@ -218,5 +281,5 @@ export function askWorkspaceName(subject: AskSubject, nonce: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 40)
     .replace(/-+$/g, "");
-  return ["ask", subject.kind, slug, nonce].filter(Boolean).join("-");
+  return [intent === "fix" ? "fix" : "ask", subject.kind, slug, nonce].filter(Boolean).join("-");
 }

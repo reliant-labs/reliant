@@ -70,7 +70,12 @@ import (
 // user — an unattended trigger fire has no user JWT — so it alone falls back
 // to the trigger's delegated token, and resumes a held run's machine as the
 // worker.
-type WorkerDaemonRouter struct{ *toolexec.NATSDaemonRouter }
+type WorkerDaemonRouter struct {
+	*toolexec.NATSDaemonRouter
+	// ControlPlane is the adapter the router resumes machines through, nil
+	// when self-hosted. manage_machine stops and resizes through it too.
+	ControlPlane controlplane.Service
+}
 
 // WorkerDaemonRouterDeps is the bus the router routes over, the database the
 // daemon records come from, and the control plane that wakes machines.
@@ -88,12 +93,14 @@ type WorkerDaemonRouterDeps struct {
 func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error) {
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
+	var cpService controlplane.Service
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
 		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
 		}
 		cpAdapter := controlplane.NewInstrumented(cpDeps)
+		cpService = cpAdapter
 		opts = append(opts,
 			toolexec.WithDaemonResumer(cpAdapter),
 			// The worker alone may fall back to a trigger's delegated
@@ -109,7 +116,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	}
 	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, opts...)
 	logging.Info("Tool execution routing via NATS")
-	return &WorkerDaemonRouter{router}, nil
+	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService}, nil
 }
 
 // WorkerIntegrationCredentials is the credential source the worker's
@@ -483,6 +490,9 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		TriggerFirer:       triggertools.New(d.Triggers.Service),
 		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		ActivationManager:  d.Triggers.Service,
+		// list_machines / manage_machine act on the user's machines as the
+		// user, through the router's control-plane adapter.
+		MachineController: newMachineController(repo, d.Router),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens

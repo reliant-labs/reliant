@@ -48,7 +48,7 @@ import { useSearch } from "@tanstack/react-router";
 import { ChevronRight, Database, Layers, Plus, Settings as SettingsIcon, X } from "lucide-react";
 
 import { ConfigScope } from "../../hooks/mcp-queries";
-import { CheckRow } from "../Forge/Status/CheckRow";
+import { CheckTable } from "../Forge/Status/CheckTable";
 import { DispositionLegend } from "../Forge/Status/DispositionLegend";
 import { MCPServerListItem } from "../Settings/MCPServerListItem";
 import { ErrorSummary } from "../Automations/ErrorSummary";
@@ -367,13 +367,7 @@ function S1Sites() {
         <SectionTitle>Badge — forge status legend and check rows</SectionTitle>
         <DispositionLegend report={REPORT} />
         <Card padding="none" className="mt-3 overflow-hidden">
-          <table className="w-full border-collapse text-left">
-            <tbody>
-              {checksOf(REPORT).map((check) => (
-                <CheckRow key={check.name} check={check} />
-              ))}
-            </tbody>
-          </table>
+          <CheckTable checks={checksOf(REPORT)} />
         </Card>
       </div>
 

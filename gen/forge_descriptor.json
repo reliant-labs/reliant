@@ -7816,6 +7816,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ],
         "reliant.v1.PauseChatRequest": [
@@ -15021,6 +15025,12 @@
             "kind": "message",
             "type_name": "reliant.v1.ConnectorPolicy",
             "optional": true
+          },
+          {
+            "name": "trace_context",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
           }
         ],
         "reliant.v1.DaemonCommandResponse": [
@@ -15043,6 +15053,10 @@
           {
             "name": "error_message",
             "kind": "string"
+          },
+          {
+            "name": "handler_elapsed_ms",
+            "kind": "int64"
           }
         ],
         "reliant.v1.DaemonHeartbeat": [
@@ -21912,6 +21926,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ]
       },
@@ -33038,6 +33056,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ],
         "reliant.v1.NodeExecutionState": [
@@ -41848,7 +41870,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "e1bd53bbf69d1bd64ac6123a7f43464efb5e62541130baa6d66af3579b0c4c82",
+    "reliant/v1/chat.proto": "3b451df2216c2caaa9edb7ac02b705447e74a808593e73bf20a71f134a33778b",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
@@ -41877,7 +41899,7 @@
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
+    "reliant/v1/tools_daemon.proto": "8cac8a9dba8b6c7cfb371ff520d0b0b71fe917ffc2785a97d3bd66b4a442a7eb",
     "reliant/v1/trigger.proto": "70a0e0d2c0dd52a775ab4e2007b58a099bbea6c22a7cecebb2e1a61940ea4ffa",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",

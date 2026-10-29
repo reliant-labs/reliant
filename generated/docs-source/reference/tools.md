@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (27 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (69 tools)
+- [Other Tools](#other-tools) (71 tools)
 
 ---
 
@@ -2162,9 +2162,11 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
+| [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
@@ -2553,7 +2555,7 @@ Return one repository: full name, description, visibility, default branch, prima
 
 **Tags:** `integration`
 
-Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). A path that does not exist at ref answers type missing, not an error: a file a pull request deletes exists only at its base, one it adds only at its head. Omit path for the repository root and ref for the default branch. Results longer than about 30,000 characters are cut short.
+Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). A path that does not exist at ref answers type missing, not an error: a file a pull request deletes exists only at its base, one it adds only at its head. Omit path for the repository root and ref for the default branch. A text file is served one window of lines at a time: the result gives start_line, end_line and total_lines, and when more follows, next names the exact call that continues. A file that fits arrives whole; a larger one arrives as its first ~24,000 characters of whole lines. To read around a diff hunk "@@ -a,b +c,d @@", pass start_line c-40 and line_count d+80.
 
 ---
 
@@ -2629,6 +2631,14 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_machines
+
+**Tags:** `readonly`
+
+List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state and size. The machine this run executes on is marked. Use the id with manage_machine to start, stop or resize one.
+
+---
+
 ### list_pending_questions
 
 **Tags:** `readonly`
@@ -2670,6 +2680,18 @@ Use this when you need a tool that isn't currently loaded. You can:
 - Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.
+
+---
+
+### manage_machine
+
+Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
+
+- start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
+- stop: suspend a running machine. No card. Never the machine this run executes on.
+- resize: change a SUSPENDED machine's size (small, medium, large, xl, 2xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+
+Unattended runs may only start the machine their trigger activation targets.
 
 ---
 
@@ -2875,6 +2897,13 @@ resumes it where it stopped, and it reads the message at its first turn.
 If the target has finished (completed, or stopped by the user), this FAILS
 rather than silently doing nothing — use spawn(agent_id=...) to resume it
 instead.
+
+SUBJECT AND MESSAGE:
+Every message needs a short one-line subject (at most 100 characters) as well
+as the message itself. The chat shows agent-to-agent messages collapsed to
+their subject, so make it say what the message is about ("Tests pass; PR
+ready for review", "Blocked: need the staging DB URL"); put the detail in
+message.
 
 ---
 

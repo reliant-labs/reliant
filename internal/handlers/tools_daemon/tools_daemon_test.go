@@ -485,12 +485,13 @@ func TestHandleProjectConfigDeltaStaleGuardAndReloadRequest(t *testing.T) {
 	}))
 
 	existingPushedAt := time.UnixMilli(2000).UTC()
-	require.NoError(t, repo.UpsertProjectConfigRecord(context.Background(), &db.ProjectConfigRecord{
+	_, err := repo.SyncProjectConfigSnapshot(context.Background(), &db.ProjectConfigRecord{
 		ProjectID:      projectID,
 		DaemonID:       daemonID,
 		UserConfigYAML: testStringPtr("user: existing"),
 		PushedAt:       existingPushedAt,
-	}))
+	}, false)
+	require.NoError(t, err)
 
 	conn := &daemonConnection{
 		userID:   "test-user",

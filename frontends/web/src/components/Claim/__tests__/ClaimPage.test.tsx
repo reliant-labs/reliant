@@ -33,6 +33,11 @@ vi.mock('@/lib/analytics', () => ({ trackEvent: (...a: unknown[]) => track(...a)
 const refreshSession = vi.fn(async () => ({ data: {}, error: null }))
 vi.mock('@/lib/supabase', () => ({ supabase: { auth: { refreshSession: () => refreshSession() } } }))
 
+const goToBilling = vi.fn()
+vi.mock('@/hooks/useGoToBilling', () => ({ useGoToBilling: (from: string) => () => goToBilling(from) }))
+
+const completes_ = vi.fn()
+
 const hardNavigate = vi.fn()
 vi.mock('@/lib/hardNavigate', () => ({ hardNavigate: (p: string) => hardNavigate(p) }))
 
@@ -60,7 +65,13 @@ vi.mock('@/store/authStore', () => {
   return { useAuthStore }
 })
 
-import { ClaimableState } from '@/gen/controlplane/services/claimable/v1/claimable_pb'
+import {
+  ClaimableState,
+  FreeSiteChoice,
+  FreeSiteChoiceRequiredSchema,
+  FreeSiteOutcome,
+} from '@/gen/controlplane/services/claimable/v1/claimable_pb'
+import { create } from '@bufbuild/protobuf'
 import { captureClaimLinkFromUrl, readPendingClaim, resetClaimLinkMemoryForTests, updatePendingClaim } from '@/lib/claimLink'
 import { setTransport } from '@/lib/connect'
 import { mockTransport, type MockHandlers } from '@/lib/test-utils'
@@ -288,7 +299,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     auth.user = { id: 'real-user', email: 'me@example.com', is_anonymous: false }
   })
 
-  const MEMBERSHIP = { orgId: 'org_claimed', claimPath: 'membership', hostnames: [], holds: [], exceedsFreeSiteAllowance: false }
+  const MEMBERSHIP = { orgId: 'org_claimed', claimPath: 'membership', hostnames: [], holds: [], freeSiteOutcome: FreeSiteOutcome.NO_CONFLICT }
 
   it('is offered to claim into their account, says what that means, and is not sent to /upgrade', async () => {
     arrive({ 'ClaimableService.GetClaim': { response: LIVE } })
@@ -297,7 +308,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     expect(screen.getByTestId('claim-signed-in-as')).toHaveTextContent('me@example.com')
     expect(block).toHaveTextContent(/you'll own it/i)
     expect(block).toHaveTextContent(/beside your other organizations/i)
-    expect(block).toHaveTextContent(/one static site/i)
+    expect(block).toHaveTextContent(/choose which stays live/i)
     expect(screen.getByTestId('claim-into-account-button')).toBeEnabled()
     expect(screen.queryByTestId('claim-submit')).toBeNull()
     expect(screen.getByTestId('claim-site')).toBeInTheDocument()
@@ -322,7 +333,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['forge'] })
     expect(readPendingClaim()).toBeNull()
     expect(track).toHaveBeenCalledWith('claim_started', { situation: 'existing-account' })
-    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'membership', holds: 0, exceedsFreeSiteAllowance: false })
+    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'membership', holds: 0, freeSite: 'no-conflict' })
   })
 
   it('a failure to switch org does not undo or hide the claim', async () => {
@@ -341,16 +352,6 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     fireEvent.click(await screen.findByTestId('claim-into-account-button'))
     await waitFor(() => expect(navigate).toHaveBeenCalled())
     expect(switchToJoinedOrg).not.toHaveBeenCalled()
-  })
-
-  it('reports it when the claimer is over the free site allowance, and still lands on /apps', async () => {
-    arrive({
-      'ClaimableService.GetClaim': { response: LIVE },
-      'ClaimableService.CompleteClaim': { response: { ...MEMBERSHIP, exceedsFreeSiteAllowance: true } },
-    })
-    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', overAllowance: true }, replace: true }))
-    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'membership', holds: 0, exceedsFreeSiteAllowance: true })
   })
 
   it('a lost race shows the claimed card and keeps nothing half done', async () => {
@@ -386,6 +387,213 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     await waitFor(() => expect(hardNavigate).toHaveBeenCalledWith('/auth?redirect=%2Fclaim'))
     expect(auth.signOut).toHaveBeenCalled()
     expect(readPendingClaim()?.token).toBe(TOKEN)
+  })
+})
+
+// ── the free static site: a choice, made before anything is claimed ─────────
+const MINE = { deploymentId: 'dep_mine', project: 'blog', env: 'prod', name: 'web', url: 'https://mine.sites.test' }
+const NEW = { deploymentId: 'dep_new', project: 'storefront', env: 'prod', name: 'web', url: 'https://amber-quokka.reliantpreview.dev' }
+
+function choiceRequired() {
+  return new ConnectError(
+    'choose',
+    Code.FailedPrecondition,
+    new Headers({ 'x-forge-error-reason': 'claimable_free_site_choice_required' }),
+    [{ desc: FreeSiteChoiceRequiredSchema, value: create(FreeSiteChoiceRequiredSchema, { existingSite: MINE, claimedSite: NEW }) }],
+  )
+}
+
+describe('an existing user who already has their free static site', () => {
+  beforeEach(() => {
+    auth.user = { id: 'real-user', email: 'me@example.com', is_anonymous: false }
+  })
+
+  const CHOICE = { choiceRequired: true, existingSite: MINE, claimedSite: NEW }
+  const DONE = { orgId: 'org_claimed', claimPath: 'membership', hostnames: [], holds: [] }
+
+  async function openDialog(extra: MockHandlers = {}) {
+    const completes = vi.fn()
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.GetClaimFreeSite': { response: CHOICE },
+      'ClaimableService.CompleteClaim': (input: unknown) => (completes((input as { freeSite: number }).freeSite), DONE),
+      ...extra,
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await screen.findByTestId('free-site-dialog')
+    return completes
+  }
+
+  it('asks BEFORE claiming, naming both sites, with nothing preselected', async () => {
+    const completes = await openDialog()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByTestId('free-site-existing')).toHaveTextContent('mine.sites.test')
+    expect(screen.getByTestId('free-site-claimed')).toHaveTextContent('amber-quokka.reliantpreview.dev')
+    for (const v of ['claimed', 'existing', 'subscribe']) {
+      expect(screen.getByTestId(`free-site-option-${v}`)).not.toBeChecked()
+    }
+    expect(screen.getByTestId('free-site-continue')).toBeDisabled()
+    expect(completes).not.toHaveBeenCalled()
+    expect(track).toHaveBeenCalledWith('claim_free_site_prompted', { source: 'preview' })
+  })
+
+  it('1. keep the new site live: claims with the claimed choice, then lands on /apps naming what was paused', async () => {
+    const completes = await openDialog({
+      'ClaimableService.CompleteClaim': (input: unknown) => (
+        completes_((input as { freeSite: number }).freeSite),
+        { ...DONE, freeSiteOutcome: FreeSiteOutcome.CLAIMED_SITE_LIVE, pausedSite: MINE }
+      ),
+    })
+    void completes
+    fireEvent.click(screen.getByTestId('free-site-option-claimed'))
+    fireEvent.click(screen.getByTestId('free-site-continue'))
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', pausedSite: 'web', kept: 'claimed' }, replace: true }),
+    )
+    expect(completes_).toHaveBeenCalledWith(FreeSiteChoice.CLAIMED)
+    expect(switchToJoinedOrg).toHaveBeenCalledWith('org_claimed')
+    expect(track).toHaveBeenCalledWith('claim_free_site_answered', { answer: 'claimed' })
+  })
+
+  it('2. keep my existing site live: claims with the existing choice; the claimed site is the paused one', async () => {
+    await openDialog({
+      'ClaimableService.CompleteClaim': (input: unknown) => (
+        completes_((input as { freeSite: number }).freeSite),
+        { ...DONE, freeSiteOutcome: FreeSiteOutcome.EXISTING_SITE_LIVE, pausedSite: NEW }
+      ),
+    })
+    fireEvent.click(screen.getByTestId('free-site-option-existing'))
+    fireEvent.click(screen.getByTestId('free-site-continue'))
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', pausedSite: 'web', kept: 'existing' }, replace: true }),
+    )
+    expect(completes_).toHaveBeenCalledWith(FreeSiteChoice.EXISTING)
+  })
+
+  it('3. subscribe to keep both: goes to billing with the claim page as the way back, and claims nothing', async () => {
+    const completes = await openDialog()
+    fireEvent.click(screen.getByTestId('free-site-option-subscribe'))
+    // The claim waits, and says until when.
+    expect(screen.getByTestId('free-site-waits')).toHaveTextContent(/claim link works until/i)
+    expect(screen.getByTestId('free-site-continue')).toHaveTextContent('Go to billing')
+    fireEvent.click(screen.getByTestId('free-site-continue'))
+
+    expect(goToBilling).toHaveBeenCalledWith('claim')
+    expect(completes).not.toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+    expect(track).toHaveBeenCalledWith('claim_free_site_answered', { answer: 'subscribe' })
+  })
+
+  it('cancel leaves everything unchanged: no claim, the link kept, the page as it was', async () => {
+    const completes = await openDialog()
+    fireEvent.click(screen.getByTestId('free-site-option-claimed'))
+    fireEvent.click(screen.getByTestId('free-site-cancel'))
+
+    await waitFor(() => expect(screen.queryByTestId('free-site-dialog')).toBeNull())
+    expect(completes).not.toHaveBeenCalled()
+    expect(goToBilling).not.toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+    expect(screen.getByTestId('claim-into-account-button')).toBeEnabled()
+    // Asking again asks again, with nothing remembered from the cancelled attempt.
+    fireEvent.click(screen.getByTestId('claim-into-account-button'))
+    expect(await screen.findByTestId('free-site-dialog')).toBeInTheDocument()
+    expect(screen.getByTestId('free-site-option-claimed')).not.toBeChecked()
+  })
+
+  it('Escape cancels the same way', async () => {
+    const completes = await openDialog()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('free-site-dialog')).toBeNull())
+    expect(completes).not.toHaveBeenCalled()
+  })
+
+  it('is a labelled modal dialog, focus moves into it, and returns to the button that opened it', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.GetClaimFreeSite': { response: CHOICE },
+    })
+    const opener = await screen.findByTestId('claim-into-account-button')
+    opener.focus()
+    fireEvent.click(opener)
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toHaveAccessibleName(/already have a free site/i)
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    // Never the close button first: Enter on a fresh dialog must not dismiss it.
+    expect(document.activeElement).toBe(screen.getByTestId('free-site-option-claimed'))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(opener)
+  })
+
+  it('the three options are one radio group a keyboard can drive', async () => {
+    await openDialog()
+    const radios = ['claimed', 'existing', 'subscribe'].map((v) => screen.getByTestId(`free-site-option-${v}`) as HTMLInputElement)
+    expect(new Set(radios.map((r) => r.name)).size).toBe(1)
+    expect(screen.getByRole('group', { name: /which site stays live/i })).toBeInTheDocument()
+  })
+
+  it('a site deleted or a plan bought since the preview: the server asks again, and the page asks, nothing was claimed', async () => {
+    // The preview said no choice was needed; the claim disagrees.
+    const completes = vi.fn()
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.GetClaimFreeSite': { response: { choiceRequired: false } },
+      'ClaimableService.CompleteClaim': (input: unknown) => {
+        const { freeSite } = input as { freeSite: number }
+        completes(freeSite)
+        if (freeSite === FreeSiteChoice.UNSPECIFIED) throw choiceRequired()
+        return DONE
+      },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    expect(await screen.findByTestId('free-site-dialog')).toBeInTheDocument()
+    expect(navigate).not.toHaveBeenCalled()
+    expect(track).toHaveBeenCalledWith('claim_free_site_prompted', { source: 'claim_refusal' })
+
+    fireEvent.click(screen.getByTestId('free-site-option-existing'))
+    fireEvent.click(screen.getByTestId('free-site-continue'))
+    await waitFor(() => expect(navigate).toHaveBeenCalled())
+    expect(completes).toHaveBeenLastCalledWith(FreeSiteChoice.EXISTING)
+  })
+
+  it('no dialog when there is nothing to choose: claims straight through, as before', async () => {
+    const completes = vi.fn()
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.GetClaimFreeSite': { response: { choiceRequired: false } },
+      'ClaimableService.CompleteClaim': (input: unknown) => (completes((input as { freeSite: number }).freeSite), DONE),
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    expect(screen.queryByTestId('free-site-dialog')).toBeNull()
+    expect(completes).toHaveBeenCalledWith(FreeSiteChoice.UNSPECIFIED)
+  })
+
+  it('a failed preview read does not block the claim: the claim itself asks if it must', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: LIVE },
+      'ClaimableService.GetClaimFreeSite': { error: new ConnectError('down', Code.Unavailable) },
+      'ClaimableService.CompleteClaim': () => {
+        throw choiceRequired()
+      },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    expect(await screen.findByTestId('free-site-dialog')).toBeInTheDocument()
+  })
+
+  it('an offline (suspended) claim says when it is deleted, not when the link works', async () => {
+    arrive({
+      'ClaimableService.GetClaim': { response: { ...LIVE, state: ClaimableState.SUSPENDED } },
+      'ClaimableService.GetClaimFreeSite': { response: CHOICE },
+    })
+    fireEvent.click(await screen.findByTestId('claim-into-account-button'))
+    await screen.findByTestId('free-site-dialog')
+    fireEvent.click(screen.getByTestId('free-site-option-subscribe'))
+    expect(screen.getByTestId('free-site-waits')).toHaveTextContent(/or it is deleted/i)
   })
 })
 
@@ -433,7 +641,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(preview).not.toHaveBeenCalled()
     expect(readPendingClaim()).toBeNull()
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['forge'] })
-    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'upgrade', holds: 0, exceedsFreeSiteAllowance: false })
+    expect(track).toHaveBeenCalledWith('claim_completed', { claimPath: 'upgrade', holds: 0, freeSite: 'none' })
   })
 
   it('refreshes the session first, so a JWT that still says anonymous is re-issued', async () => {

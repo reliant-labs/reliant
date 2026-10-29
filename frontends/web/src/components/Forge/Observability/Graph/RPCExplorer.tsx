@@ -1,61 +1,132 @@
 // Copyright (c) 2026 Reliant Labs
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Network, ScrollText } from "lucide-react";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import type { RPCCatalog, RPCMethod } from "@/services/controlPlane/observability/graphTypes";
-import { catalogMethods, parseDeclaredCatalog, schemaText, sourceLabel } from "./catalogModel";
-import { GraphQuality } from "./GraphQuality";
+import { catalogMethods, parseDeclaredCatalog, schemaText, type DeclaredCatalog } from "./catalogModel";
+import { errorFraction, fmtCount, fmtErrorRate, fmtLatency, histogramQuantile, shortService } from "./graphStats";
 
-export function RPCExplorer({ catalog, service, rpcId, onSelect, onGraph }: {
-  catalog: RPCCatalog; service: string; rpcId: string; onSelect: (rpc: string) => void; onGraph: (rpc: string) => void;
+/** One row per full RPC identity: observed traffic joined to declared metadata. */
+export type MethodRow = {
+  id: string; service: string; method: string;
+  requests: bigint; faults: bigint; userOutcomes: bigint;
+  p50?: number; p95?: number; observed: boolean;
+  /** Declared metadata (types, streaming, auth), when a catalog supplied it. */
+  meta?: RPCMethod;
+};
+
+export function methodRows(catalog: RPCCatalog, service = ""): MethodRow[] {
+  const rows = new Map<string, MethodRow>();
+  for (const m of catalogMethods(catalog, service)) {
+    const row = rows.get(m.id) ?? { id: m.id, service: m.service, method: m.method, requests: 0n, faults: 0n, userOutcomes: 0n, observed: false };
+    if (m.evidence === "observed") {
+      row.observed = true;
+      row.requests += m.observedCount;
+      row.faults += m.faults;
+      row.userOutcomes += m.userOutcomes;
+      row.p50 = histogramQuantile(m.duration, 0.5);
+      row.p95 = histogramQuantile(m.duration, 0.95);
+    }
+    // The server merges declared fields into the observed entry when both exist.
+    if (m.evidence === "declared" || m.inputType || m.authRequired !== undefined) row.meta = m;
+    rows.set(m.id, row);
+  }
+  return [...rows.values()];
+}
+
+type SortKey = "method" | "requests" | "errors" | "p50" | "p95";
+const compareBig = (a: bigint, b: bigint) => (a > b ? 1 : a < b ? -1 : 0);
+function sortRows(rows: MethodRow[], key: SortKey, dir: "asc" | "desc"): MethodRow[] {
+  const sign = dir === "asc" ? 1 : -1;
+  const value: Record<SortKey, (a: MethodRow, b: MethodRow) => number> = {
+    method: (a, b) => a.id.localeCompare(b.id),
+    requests: (a, b) => compareBig(a.requests, b.requests),
+    errors: (a, b) => errorFraction(a.faults, a.requests) - errorFraction(b.faults, b.requests),
+    p50: (a, b) => (a.p50 ?? -1) - (b.p50 ?? -1),
+    p95: (a, b) => (a.p95 ?? -1) - (b.p95 ?? -1),
+  };
+  return [...rows].sort((a, b) => sign * value[key](a, b) || a.id.localeCompare(b.id));
+}
+
+export function RPCExplorer({ catalog, service, rpcId, envNames, onSelect, onGraph, onTraces }: {
+  catalog: RPCCatalog; service: string; rpcId: string; envNames: ReadonlyMap<string, string>;
+  onSelect: (rpc: string) => void; onGraph: (rpc: string) => void; onTraces: (rpc: string) => void;
 }) {
-  const rows = useMemo(() => catalogMethods(catalog, service), [catalog, service]);
-  const selected = rows.filter((m) => m.id === rpcId);
-  const artifacts = useMemo(() => catalog.declaredCatalogs.map((a) => ({ ...a, ...parseDeclaredCatalog(a.json) })), [catalog.declaredCatalogs]);
-  return <div className="space-y-3" data-testid="rpc-explorer">
-    <div className="rounded-lg border border-border bg-surface-sunken p-3 text-sm"><strong>Browse only.</strong> No requests can be prepared or executed here. Registered methods are capabilities, not proof of use.</div>
-    <GraphQuality quality={catalog.quality} />
-    {(catalog.declaredStatus !== "available" || artifacts.length === 0) && <div role="status" className="rounded-lg border border-border bg-surface p-4"><h3 className="font-medium">{catalog.declaredStatus === "partial" ? "Declared metadata partially available" : "Declared metadata unavailable"}</h3><p className="mt-1 text-sm text-ink-muted">{catalog.unavailableReason || "No verified artifact catalog supplied. Observed methods below may lack schemas, validation and process capability metadata."}</p></div>}
-    {artifacts.filter((a) => a.reason).map((a) => <p role="status" key={`${a.envId}/${a.bundleDigest}`} className="text-sm">{a.reason} · environment {a.envId}</p>)}
-    {!rows.length ? <div className="rounded-lg border border-border bg-surface p-8 text-center"><h3 className="font-medium">No RPC methods match</h3><p className="mt-2 text-sm text-ink-muted">An empty observed catalog does not establish that no methods are registered.</p></div> : <div className="overflow-auto rounded-lg border border-border bg-surface"><table className="w-full text-left text-sm"><thead className="border-b border-border text-xs text-ink-muted"><tr><th className="p-3">Full service / method</th><th className="p-3">Evidence</th><th className="p-3">Observations</th><th className="p-3">Streaming</th></tr></thead><tbody>{rows.map((m) => <tr key={`${m.id}/${m.evidence}`} className="border-b border-border/60 last:border-0"><td className="p-3"><button className="break-all text-left text-primary underline" onClick={() => onSelect(m.id)}>{m.id}</button></td><td className="p-3">{m.evidence}</td><td className="p-3">{m.evidence === "observed" ? m.observedCount.toString() : "Not evidence of use"}</td><td className="p-3">{m.streaming || "Unknown"}</td></tr>)}</tbody></table></div>}
-    {rpcId && selected.length === 0 && <p role="status" className="text-sm">Selected RPC is not present in this scoped catalog.</p>}
-    {selected.length > 0 && <section aria-label="RPC method detail" className="space-y-4 rounded-lg border border-border bg-surface p-4">
-      <h3 className="break-all font-medium">{rpcId}</h3>
-      {selected.map((m) => <MethodFacts key={m.evidence} method={m} />)}
-      <Button variant="outline" size="sm" onClick={() => onGraph(rpcId)}>Show graph for this full RPC</Button>
-      {artifacts.map((artifact) => {
-        const c = artifact.catalog;
-        const svc = c?.services.find((s) => s.name === selected[0].service);
-        const method = svc?.methods.find((m) => m.id === rpcId);
-        if (!c || !svc || !method) return null;
-        const inputs = schemaText(svc.descriptor, method.input);
-        const outputs = schemaText(svc.descriptor, method.output);
-        const serves = c.processes.filter((p) => p.serves.some((s) => s.service === svc.name));
-        const callers = c.processes.filter((p) => c.clients.some((client) => p.clients.includes(client.id) && client.service === svc.name));
-        const componentIds = new Set(serves.flatMap((p) => p.serves.filter((s) => s.service === svc.name && s.component).map((s) => s.component!)));
-        const processComponentIds = new Set(serves.flatMap((p) => p.components));
-        return <div key={`${artifact.envId}/${artifact.bundleDigest}`} className="space-y-3 border-t border-border pt-3">
-          <h4 className="text-sm font-medium">Verified declared artifact · {artifact.envId}</h4>
-          <p className="break-all text-xs text-ink-muted">Bundle {artifact.bundleDigest} · repository {artifact.repository || "unavailable"} · commit {artifact.commit || "unavailable"}</p>
-          <p className="text-sm">Declared serves: {serves.map((p) => p.root).join(", ") || "Unavailable"}</p>
-          <p className="text-sm">Declared can-call: {callers.map((p) => p.root).join(", ") || "Unavailable"}. Not a per-method execution claim.</p>
-          <p className="text-sm">Proto: {svc.proto_file} · idempotency {method.idempotency} · auth {method.auth_required ? "required" : "not required"}</p>
-          <div className="grid gap-3 lg:grid-cols-2">{[["Input schema / validation", method.input, inputs], ["Output schema / validation", method.output, outputs]].map(([label, type, body]) => <div key={label} className="rounded-md border border-border/60 bg-surface-sunken p-3"><h5 className="text-sm font-medium">{label}</h5><p className="break-all text-xs text-ink-muted">{type}</p><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{body ?? "Schema unavailable in this artifact"}</pre></div>)}</div>
-          <p className="text-xs text-ink-muted">Validation is descriptor metadata (including validate / validate_options), not a guarantee of client-side validation. Streaming lifetime is not unary request latency.</p>
-          <details><summary className="cursor-pointer text-sm font-medium">Related message / enum descriptor metadata</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/60 bg-surface-sunken p-3 text-xs">{JSON.stringify(svc.descriptor, null, 2).slice(0, 48000)}{JSON.stringify(svc.descriptor).length > 48000 ? "\n… descriptor display truncated" : ""}</pre></details>
-          <details><summary className="cursor-pointer text-sm font-medium">Process contract / code metadata</summary><p className="mt-2 text-xs text-ink-muted">Composition metadata for serving processes, not an observed per-RPC call path. Locations are supplied text, not invented source links.</p>
-            {c.components.filter((component) => processComponentIds.has(component.id) || processComponentIds.has(component.name)).slice(0, 100).map((component) => <div key={component.id} className="mt-3 text-xs"><p className="font-medium">{component.name} · {component.kind} · {component.type} · {componentIds.has(component.id) || componentIds.has(component.name) ? "Declared handler for this service" : "Serving-process component; RPC mapping unavailable"}</p><p>{sourceLabel(component.source)}</p>{component.methods.slice(0, 100).map((m) => <p className="break-all font-mono" key={m.id}>{m.id} · {m.signature} · {sourceLabel(m.source)}</p>)}</div>)}
-            {c.bindings.filter((binding) => processComponentIds.has(binding.consumer)).slice(0, 100).map((binding, i) => <p key={i} className="mt-2 break-all text-xs">{binding.consumer}.{binding.field}: {binding.interface} · {binding.resolution} · providers {binding.providers.join(", ") || "unresolved"} · implementation candidates (not selected): {binding.candidates.join(", ") || "unavailable"}</p>)}
-            {!c.components.length && !c.bindings.length && <p className="text-sm text-ink-muted">No contract/code metadata supplied.</p>}
-          </details>
-        </div>;
-      })}
-    </section>}
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "requests", dir: "desc" });
+  const all = useMemo(() => methodRows(catalog, service), [catalog, service]);
+  const rows = useMemo(() => sortRows(all, sort.key, sort.dir), [all, sort]);
+  const selected = all.find((m) => m.id === rpcId);
+  const columns: DataTableColumn<MethodRow>[] = [
+    { key: "method", header: "Method", sortable: true, render: (_, r) => <button type="button" title={r.id} onClick={() => onSelect(r.id)}
+      className="max-w-full truncate text-left hover:underline"><span className="text-ink-muted">{shortService(r.service)} / </span><span className="font-medium text-ink">{r.method}</span></button> },
+    { key: "requests", header: "Requests", numeric: true, sortable: true, render: (_, r) => r.observed ? fmtCount(r.requests) : <span className="text-ink-muted">—</span> },
+    { key: "errors", header: "Error rate", numeric: true, sortable: true, render: (_, r) => <span className={r.faults > 0n ? "text-danger-ink" : undefined}>{fmtErrorRate(r.faults, r.requests)}</span> },
+    { key: "p50", header: "p50", numeric: true, sortable: true, render: (_, r) => fmtLatency(r.p50) },
+    { key: "p95", header: "p95", numeric: true, sortable: true, render: (_, r) => fmtLatency(r.p95) },
+    { key: "traces", header: "Traces", srHeader: true, interactive: true, width: "6rem", render: (_, r) => r.observed &&
+      <Button variant="ghost" size="sm" onClick={() => onTraces(r.id)} aria-label={`Traces for ${r.id}`}>Traces</Button> },
+  ];
+  return <div className="space-y-4" data-testid="rpc-explorer">
+    {selected && <MethodDetail row={selected} catalog={catalog} envNames={envNames} onGraph={onGraph} onTraces={onTraces} onClose={() => onSelect("")} />}
+    <DataTable<MethodRow> ariaLabel="RPC methods" columns={columns} data={rows} compact getRowKey={(r) => r.id}
+      getRowProps={(r) => ({ className: r.id === rpcId ? "bg-accent-surface" : undefined, "data-testid": `rpc-row-${r.id}` })}
+      onSort={(key, dir) => setSort({ key: key as SortKey, dir })}
+      emptyMessage={<div className="py-6 text-center"><p className="font-medium text-ink">No RPC traffic in this window</p>
+        <p className="mt-1 text-sm text-ink-muted">{service ? "This service received no requests. Pick another service or widen the time range." : "Widen the time range, or check that your services export traces."}</p></div>} />
   </div>;
 }
-function MethodFacts({ method: m }: { method: RPCMethod }) {
-  return <div className="space-y-1 text-sm"><p>{m.evidence} · {m.streaming || "Streaming unknown"} · idempotency {m.idempotency || "unknown"} · auth {m.authRequired === undefined ? "unknown" : m.authRequired ? "required" : "not required"}</p>
-    <p>Input {m.inputType || "unavailable"} → output {m.outputType || "unavailable"}</p>
-    <p>Observed process IDs: {m.processIds.join(", ") || "unavailable"}</p>
-    <p>Declared serves: {m.servesProcessIds.join(", ") || "unavailable"} · declared can-call: {m.canCallProcessIds.join(", ") || "unavailable"}</p>
-    <p className="text-xs text-ink-muted">{m.sourceUnavailableReason || "Exact source mapping unavailable; no source URL inferred."}</p></div>;
+
+function MethodDetail({ row, catalog, envNames, onGraph, onTraces, onClose }: {
+  row: MethodRow; catalog: RPCCatalog; envNames: ReadonlyMap<string, string>;
+  onGraph: (rpc: string) => void; onTraces: (rpc: string) => void; onClose: () => void;
+}) {
+  const artifacts = useMemo(() => catalog.declaredCatalogs.map((a) => ({ ...a, ...parseDeclaredCatalog(a.json) })), [catalog.declaredCatalogs]);
+  const d = row.meta;
+  return <section aria-label="RPC method detail" className="space-y-4 rounded-lg border border-border bg-surface p-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-xs text-ink-muted">{row.service}</p>
+        <h3 className="break-words text-base font-medium text-ink">{row.method}</h3>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" leftIcon={<Network />} onClick={() => onGraph(row.id)}>Show in graph</Button>
+        {row.observed && <Button variant="outline" size="sm" leftIcon={<ScrollText />} onClick={() => onTraces(row.id)}>View traces</Button>}
+        <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+      </div>
+    </div>
+    <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+      {[["Requests", row.observed ? fmtCount(row.requests) : "—"], ["Error rate", fmtErrorRate(row.faults, row.requests)],
+        ["Client errors", row.observed ? fmtCount(row.userOutcomes) : "—"], ["p50", fmtLatency(row.p50)], ["p95", fmtLatency(row.p95)],
+        ...(d ? [["Type", d.streaming || "unary"], ["Auth", d.authRequired === undefined ? "—" : d.authRequired ? "required" : "public"]] : [])]
+        .map(([label, value]) => <div key={label}><dt className="text-xs text-ink-muted">{label}</dt><dd className="tabular-nums text-ink">{value}</dd></div>)}
+    </dl>
+    {artifacts.map((artifact) => artifact.catalog && <DeclaredSchemas key={`${artifact.envId}/${artifact.bundleDigest}`} catalog={artifact.catalog}
+      envName={artifacts.length > 1 ? envNames.get(artifact.envId) : undefined} service={row.service} rpcId={row.id} />)}
+  </section>;
+}
+
+function DeclaredSchemas({ catalog, envName, service, rpcId }: { catalog: DeclaredCatalog; envName?: string; service: string; rpcId: string }) {
+  const svc = catalog.services.find((s) => s.name === service);
+  const method = svc?.methods.find((m) => m.id === rpcId);
+  if (!svc || !method) return null;
+  const blocks: [string, string, string | null][] = [["Request", method.input, schemaText(svc.descriptor, method.input)], ["Response", method.output, schemaText(svc.descriptor, method.output)]];
+  return <div className="space-y-2 border-t border-border pt-3">
+    <p className="text-xs text-ink-muted">{envName ? `${envName} · ` : ""}{svc.proto_file}{method.idempotency ? ` · ${method.idempotency.toLowerCase().replace(/_/g, " ")}` : ""}</p>
+    <div className="grid gap-3 lg:grid-cols-2">{blocks.map(([label, type, body]) => <div key={label} className="rounded-md border border-border/60 bg-surface-sunken p-3">
+      <p className="text-sm font-medium text-ink">{label} <span className="font-mono text-xs font-normal text-ink-muted">{type}</span></p>
+      {body ? <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all text-xs">{body}</pre> : <p className="mt-1 text-xs text-ink-muted">Schema not included in the catalog.</p>}
+    </div>)}</div>
+  </div>;
+}
+
+/** Notes for the info popover: declared catalogs that failed to parse, by environment name. */
+export function catalogNotes(catalog: RPCCatalog | undefined, envNames: ReadonlyMap<string, string>): string[] {
+  if (!catalog) return [];
+  const notes = catalog.declaredCatalogs.flatMap((a) => {
+    const { reason } = parseDeclaredCatalog(a.json);
+    return reason ? [`The service catalog for ${envNames.get(a.envId) ?? "one environment"} could not be read (${reason.toLowerCase()}).`] : [];
+  });
+  if (catalog.declaredStatus !== "available") notes.push(catalog.unavailableReason ? `Request and response schemas: ${catalog.unavailableReason}` : "Request and response schemas are unavailable.");
+  return notes;
 }

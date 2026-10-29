@@ -151,8 +151,20 @@ function renderList(accounts: ProviderAccount[], variant: "desktop" | "mobile" =
   return renderWithQuery(<AccountList accounts={accounts} variant={variant} />);
 }
 
+/** The account's row in its provider's table. */
 function rowFor(label: string): HTMLElement {
-  return screen.getByRole("listitem", { name: label });
+  const row = screen.getAllByTestId("account-row").find((r) => within(r).queryByText(label) !== null);
+  if (!row) throw new Error(`no account row for ${label}`);
+  return row;
+}
+
+/** The row's expanded detail: the full usage bars and identity line. */
+function detailFor(label: string): HTMLElement {
+  const detail = rowFor(label).nextElementSibling;
+  if (!(detail instanceof HTMLElement) || detail.getAttribute("data-row-detail") !== "true") {
+    throw new Error(`${label} is not expanded`);
+  }
+  return detail;
 }
 
 async function expand(label: string) {
@@ -199,7 +211,7 @@ describe("account rows", () => {
     expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "true");
     expect(b.getByTestId("account-status")).toHaveTextContent(/^Limited: 5-hour cap · back /);
     expect(b.getByTestId("account-plan")).toHaveTextContent("Pro");
-    expect(b.getByRole("progressbar")).toBeInTheDocument();
+    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toBeInTheDocument();
 
     expect(within(rowFor("carol@example.com")).getByTestId("account-status")).toHaveTextContent("Paused");
     expect(rowFor("carol@example.com")).toHaveAttribute("data-expanded", "false");
@@ -208,13 +220,13 @@ describe("account rows", () => {
     expect(rowFor("dave@example.com")).toHaveAttribute("data-expanded", "true");
     expect(d.getByTestId("account-status")).toHaveTextContent("Needs sign-in");
     expect(d.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
-    expect(d.getByText("The sign-in expired.")).toBeInTheDocument();
+    expect(within(detailFor("dave@example.com")).getByText("The sign-in expired.")).toBeInTheDocument();
   });
 
   it("opens any row on request for its bars", async () => {
     renderList([alice]);
     await expand("alice@example.com");
-    const a = within(rowFor("alice@example.com"));
+    const a = within(detailFor("alice@example.com"));
     expect(a.getAllByRole("progressbar")).toHaveLength(2);
     expect(a.getByText(/42% used · resets in 2h 13m/)).toBeInTheDocument();
     expect(a.getByText(/60% used · resets in 2d 2h/)).toBeInTheDocument();
@@ -226,15 +238,16 @@ describe("account rows", () => {
     expect(row.getByText("sk-ant-…a1b2")).toBeInTheDocument();
     expect(row.queryByTestId("usage-meters")).not.toBeInTheDocument();
     await expand("sk-ant-…a1b2");
-    expect(row.getByText("Per-minute limits only")).toBeInTheDocument();
-    expect(row.queryByRole("progressbar")).not.toBeInTheDocument();
+    const detail = within(detailFor("sk-ant-…a1b2"));
+    expect(detail.getByText("Per-minute limits only")).toBeInTheDocument();
+    expect(detail.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
   it("captions usage 'as of N min ago' once it is stale, and not while fresh", async () => {
     renderList([alice, bob]);
-    expect(within(rowFor("bob@work.example")).getByText("as of 30 min ago")).toBeInTheDocument();
+    expect(within(detailFor("bob@work.example")).getByText("as of 30 min ago")).toBeInTheDocument();
     await expand("alice@example.com");
-    expect(within(rowFor("alice@example.com")).queryByText(/^as of /)).not.toBeInTheDocument();
+    expect(within(detailFor("alice@example.com")).queryByText(/^as of /)).not.toBeInTheDocument();
   });
 
   it("degrades to 'Usage unknown' for a window with no reported fraction", async () => {
@@ -259,10 +272,10 @@ describe("account rows", () => {
     renderList([hot, bob]);
     // At 80% the account is near its limit, so it opens by itself.
     expect(rowFor("h@x.example")).toHaveAttribute("data-expanded", "true");
-    const h = within(rowFor("h@x.example")).getAllByRole("progressbar");
+    const h = within(detailFor("h@x.example")).getAllByRole("progressbar");
     expect(h[0]).toHaveAttribute("data-tone", "ok");
     expect(h[1]).toHaveAttribute("data-tone", "warn");
-    expect(within(rowFor("bob@work.example")).getByRole("progressbar")).toHaveAttribute("data-tone", "danger");
+    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toHaveAttribute("data-tone", "danger");
   });
 });
 
@@ -324,10 +337,10 @@ describe("account actions", () => {
     const user = userEvent.setup();
     renderList([alice, bob]);
     await user.click(screen.getByRole("button", { name: "Actions for alice@example.com" }));
-    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Actions for bob@work.example" }));
-    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("reorders from the keyboard on the drag handle (arrow keys)", async () => {
@@ -476,9 +489,9 @@ describe("mobile variant", () => {
     const menuButton = screen.getByRole("button", { name: "Actions for bob@work.example" });
     expect(menuButton.className).toContain("min-h-[44px]");
     await user.click(menuButton);
-    const moveUp = screen.getByRole("menuitem", { name: "Move up" });
-    expect(moveUp.className).toContain("min-h-[44px]");
-    await user.click(moveUp);
+    // Touch-sized items: the menu sizes every item it holds.
+    expect(screen.getByRole("menu").className).toContain("[&_[role=menuitem]]:min-h-[44px]");
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
     await waitFor(() => expect(mocks.reorderAccounts).toHaveBeenCalledWith("claude", ["a2", "a1"]));
   });
 });

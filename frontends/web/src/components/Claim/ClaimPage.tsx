@@ -22,13 +22,14 @@ import type { ClaimSite } from "@/services/controlPlane/claim";
 
 import { FINISH_DECLINED_COPY, REFUSAL_COPY, REPLACE_ANONYMOUS_COPY } from "./claimCopy";
 import { ClaimIntoAccount } from "./ClaimIntoAccount";
+import { FreeSiteDialog } from "./FreeSiteDialog";
 import { ExistingAccount } from "./ExistingAccount";
 import type { ClaimSituation } from "./claimSituation";
 import { useClaimFlow } from "./useClaimFlow";
 import { useAuthStore } from "@/store/authStore";
 
 export function ClaimPage() {
-  const { view, claim, claimIntoAccount, retryFinish, retryPreview } = useClaimFlow();
+  const { view, claim, claimIntoAccount, freeSiteDialog, answerFreeSite, cancelFreeSite, retryFinish, retryPreview } = useClaimFlow();
 
   return (
     <AuthLayout>
@@ -93,6 +94,9 @@ export function ClaimPage() {
             onClaim={claim}
             onClaimIntoAccount={claimIntoAccount}
           />
+        )}
+        {view.kind === "ready" && freeSiteDialog && (
+          <FreeSiteDialog conflict={freeSiteDialog} site={view.site} onAnswer={answerFreeSite} onCancel={cancelFreeSite} />
         )}
       </div>
     </AuthLayout>

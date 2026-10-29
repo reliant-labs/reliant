@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { appLinksOf, buildApps, deployedEnvOf, isLive, primaryLink, type AppEnvStatus } from "../apps";
+import { appLinksOf, buildApps, deployedEnvOf, isDeployed, isLive, primaryLink, type AppEnvStatus } from "../apps";
 import type { CloudEnv, CloudEnvStatus } from "../cloudEnvs";
 import type { ForgeHostedWorkload } from "../topology";
 
@@ -19,16 +19,32 @@ const status = (workloads: ForgeHostedWorkload[], release = "", createdAt?: stri
 });
 
 describe("appLinksOf — what a person can open", () => {
-  it("lists frontends before APIs and drops what serves nobody", () => {
+  it("lists only sites: an API is not a destination, and what has no URL serves nobody", () => {
     const links = appLinksOf([
       workload("api", "backend", "https://calm-heron.reliantapps.dev"),
       workload("db", "database", ""),
       workload("web", "static", "https://bright-otter.reliantapps.dev/"),
+      workload("pending", "static", ""),
       workload("worker", "backend", ""),
     ]);
-    expect(links.map((link) => [link.kind, link.workload, link.host])).toEqual([
-      ["frontend", "web", "bright-otter.reliantapps.dev"],
-      ["api", "api", "calm-heron.reliantapps.dev"],
+    expect(links.map((link) => [link.workload, link.host, link.custom])).toEqual([["web", "bright-otter.reliantapps.dev", false]]);
+  });
+
+  it("links a site at its custom domain once that is live and healthy", () => {
+    const web: ForgeHostedWorkload = {
+      ...workload("web", "static", "https://bright-otter.reliantapps.dev"),
+      domains: [{ hostname: "shop.example.com", state: "live", serving_path: "edge" }],
+    };
+    expect(appLinksOf([web])).toEqual([{ workload: "web", url: "https://shop.example.com", host: "shop.example.com", custom: true }]);
+  });
+
+  it("keeps the generated address while the custom domain is not ready", () => {
+    const web: ForgeHostedWorkload = {
+      ...workload("web", "static", "https://bright-otter.reliantapps.dev"),
+      domains: [{ hostname: "shop.example.com", state: "issuing", serving_path: "edge" }],
+    };
+    expect(appLinksOf([web])).toEqual([
+      { workload: "web", url: "https://bright-otter.reliantapps.dev", host: "bright-otter.reliantapps.dev", custom: false },
     ]);
   });
 });
@@ -96,6 +112,19 @@ describe("buildApps — one entry per forge project", () => {
     const blog = buildApps(envs, statuses, []).find((a) => a.name === "blog")!;
     expect(primaryLink(blog)).toBeUndefined();
     expect(isLive(blog)).toBe(false);
+  });
+
+  it("does not call an app with only an API live, but does call it deployed", () => {
+    const [api] = buildApps(
+      [env("x-prod", "api-only", "prod")],
+      new Map([["x-prod", status([workload("api", "backend", "https://calm-heron.reliantapps.dev")], "v1", "2026-10-01T00:00:00Z")]]),
+      []
+    );
+    expect(isLive(api)).toBe(false);
+    expect(primaryLink(api)).toBeUndefined();
+    expect(isDeployed(api)).toBe(true);
+    const [never] = buildApps([], new Map(), [{ id: "p", is_forge: true, forge_project_name: "fresh" }]);
+    expect(isDeployed(never)).toBe(false);
   });
 });
 

@@ -34,6 +34,14 @@ type ProjectStore interface {
 	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 }
 
+// MachineStore reads one machine's synced catalog of a project: what a run on
+// that machine executes against. synced is false when the machine has never
+// synced the project, which is not the same as having synced nothing.
+type MachineStore interface {
+	GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (workflows *string, synced bool, err error)
+	GetProjectMachinePresetsJSON(ctx context.Context, projectID, daemonID string) (presets *string, synced bool, err error)
+}
+
 // Store is every repository read resolution makes.
 type Store interface {
 	ProjectStore
@@ -56,6 +64,14 @@ type Options struct {
 	// ProjectID is the project whose synced workflows are consulted. Empty
 	// means none.
 	ProjectID string
+	// DaemonID is the machine the run executes on. When set, the project's
+	// workflows are that machine's own catalog rather than the union of every
+	// machine's (see config.MachineCatalog): a run executes on its machine,
+	// so a workflow only another machine provides is a miss that says so. A
+	// machine that has never synced the project falls back to the union, so
+	// a suspended machine that predates per-machine catalogs still wakes for
+	// its run and syncs.
+	DaemonID string
 	// DraftRoot names the one workflow that may resolve to an unfinished
 	// draft: the root of a builder test run, which runs what the builder
 	// just saved. Every other ref, including the root's children, needs a
@@ -83,9 +99,67 @@ func ProjectIndex(ctx context.Context, store ProjectStore, projectID string) (*w
 	return config.ProjectWorkflowIndex(workflows), nil
 }
 
+// MachineProjectIndex is ProjectIndex for the catalog one machine synced, or
+// the project's union when daemonID is empty or that machine has never synced
+// the project. A store that cannot read a machine's catalog is refused, not
+// silently answered with the union: the caller asked what will run THERE.
+func MachineProjectIndex(ctx context.Context, store ProjectStore, projectID, daemonID string) (*workflowref.Index, error) {
+	if daemonID == "" || projectID == "" || store == nil {
+		return ProjectIndex(ctx, store, projectID)
+	}
+	machines, ok := store.(MachineStore)
+	if !ok {
+		return nil, &StoreError{Err: fmt.Errorf("this store cannot read machine %s's workflows", daemonID)}
+	}
+	workflowsJSON, synced, err := machines.GetProjectMachineWorkflowsJSON(ctx, projectID, daemonID)
+	if err != nil {
+		return nil, &StoreError{Err: fmt.Errorf("read machine %s's project workflows: %w", daemonID, err)}
+	}
+	if !synced {
+		return ProjectIndex(ctx, store, projectID)
+	}
+	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
+	if err != nil {
+		return nil, err
+	}
+	return config.ProjectWorkflowIndex(workflows), nil
+}
+
+// ProjectPresets reads a project's synced presets: one machine's when
+// daemonID is set and that machine has synced the project (MachineProjectIndex's
+// rule), otherwise the union of every machine's.
+func ProjectPresets(ctx context.Context, store interface {
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+}, projectID, daemonID string) ([]config.StoredPreset, error) {
+	if projectID == "" || store == nil {
+		return nil, nil
+	}
+	if daemonID != "" {
+		machines, ok := store.(MachineStore)
+		if !ok {
+			return nil, &StoreError{Err: fmt.Errorf("this store cannot read machine %s's presets", daemonID)}
+		}
+		presetsJSON, synced, err := machines.GetProjectMachinePresetsJSON(ctx, projectID, daemonID)
+		if err != nil {
+			return nil, &StoreError{Err: fmt.Errorf("read machine %s's project presets: %w", daemonID, err)}
+		}
+		if synced {
+			return config.ParseStoredPresets(presetsJSON)
+		}
+	}
+	presetsJSON, err := store.GetProjectPresetsJSON(ctx, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, &StoreError{Err: fmt.Errorf("read project presets: %w", err)}
+	}
+	return config.ParseStoredPresets(presetsJSON)
+}
+
 // Sources assembles what a ref resolves against.
 func Sources(ctx context.Context, store Store, opts Options) (workflowref.Sources, error) {
-	project, err := ProjectIndex(ctx, store, opts.ProjectID)
+	project, err := MachineProjectIndex(ctx, store, opts.ProjectID, opts.DaemonID)
 	if err != nil {
 		return workflowref.Sources{}, err
 	}
@@ -145,16 +219,33 @@ func Resolve(ctx context.Context, store Store, opts Options, ref string) (*workf
 	if errors.Is(resolveErr, workflowref.ErrNotFound) {
 		// Optional diagnostic read only on a miss: no full config payload or
 		// liveness lookup on the successful run-start path.
-		if diagnostics, ok := store.(interface {
-			WorkflowSourceDiagnostic(context.Context, string, string) (string, error)
-		}); ok {
-			if hint, err := diagnostics.WorkflowSourceDiagnostic(ctx, opts.ProjectID, ref); err == nil && hint != "" {
-				resolveErr = fmt.Errorf("%w; %s", resolveErr, hint)
+		if diagnostics, ok := store.(SourceDiagnostics); ok {
+			if hint, err := diagnostics.WorkflowSourceDiagnostic(ctx, opts.ProjectID, opts.DaemonID, ref); err == nil && hint != "" {
+				resolveErr = &diagnosedMiss{hint: hint, err: resolveErr}
 			}
 		}
 	}
 	return resolved, resolveErr
 }
+
+// SourceDiagnostics says where a project workflow that missed is provided:
+// on which other machine, at which path, or where it was last synced from.
+// It is read only on a miss, never on the run-start path.
+type SourceDiagnostics interface {
+	WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID, ref string) (string, error)
+}
+
+// diagnosedMiss is a miss with the diagnostic that explains it: the index's
+// reason first (it may name a near miss), then where the workflow is
+// provided ("machine "cicd" has no workflow "release"; it is defined on
+// machine "default" at control-plane/.reliant/workflows/release.yaml").
+type diagnosedMiss struct {
+	hint string
+	err  error
+}
+
+func (e *diagnosedMiss) Error() string { return e.err.Error() + "; " + e.hint }
+func (e *diagnosedMiss) Unwrap() error { return e.err }
 
 // DraftLoader resolves refs while validating one of the user's own workflows
 // outside any project (the workflow builder, the workflow agent tools). The

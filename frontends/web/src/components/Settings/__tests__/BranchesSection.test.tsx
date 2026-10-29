@@ -194,7 +194,7 @@ describe("Settings → Branches", () => {
     await renderLoaded();
     expect(screen.getByRole("heading", { level: 1, name: "Branches" })).toBeInTheDocument();
     expect(screen.getByText(/each branched chat works in its own git worktree/i)).toBeInTheDocument();
-    expect(screen.getByText("reliant", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByTitle("Branches are listed for the open project")).toHaveTextContent("reliant");
     expect(screen.getByText("studio.local")).toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("Settings → Branches", () => {
     const user = userEvent.setup();
     await renderLoaded();
 
-    await user.click(screen.getByRole("button", { name: "View details for flaky-test-fix" }));
+    await user.click(screen.getByRole("button", { name: /^flaky-test-fix\b/ }));
 
     const detail = screen.getByTestId("workspace-detail");
     expect(within(detail).getByRole("heading", { name: "flaky-test-fix" })).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe("Settings → Branches", () => {
     const user = userEvent.setup();
     await renderLoaded();
     expect(server.requests("ListWorktrees").at(-1)?.limit).toBe(WORKTREE_PAGE_SIZE);
-    expect(screen.queryByRole("button", { name: "View details for agent" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^agent\b/ })).not.toBeInTheDocument();
 
     expect(screen.queryByTestId("workspace-row-wt-agent")).not.toBeInTheDocument();
     expect(server.requests("ListWorktrees")[0]).toMatchObject({ limit: WORKTREE_PAGE_SIZE });
@@ -368,7 +368,7 @@ describe("Settings → Branches", () => {
     await waitFor(() => expect(server.requests("ListWorktrees").at(-1)?.pageToken).toBe(String(SMALL_PAGE)));
     expect(await screen.findByTestId("workspace-row-wt-agent")).toBeInTheDocument();
     expect(screen.getByTestId("workspace-row-wt-feature")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "View details for agent" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^agent\b/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId("load-more-workspaces")).not.toBeInTheDocument());
   });
 

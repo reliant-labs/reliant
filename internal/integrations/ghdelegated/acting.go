@@ -92,18 +92,23 @@ func targetRepo(params map[string]any) (owner, repo string, err error) {
 }
 
 // actionPermissions is the least a bot token needs per action: the area it
-// changes, at write, and nothing else. A comment, a label or a review changes
-// issues or pull requests; pr.create needs contents too, because opening a pull
-// request from a branch reads it. An action outside the table gets
-// control-plane's default (issues, pull_requests and contents at write), which
-// is the cap either way.
+// changes, at write, and nothing else. A review changes pull requests;
+// pr.create needs contents too, because opening a pull request from a branch
+// reads it. An action outside the table gets control-plane's default (issues,
+// pull_requests and contents at write), which is the cap either way.
+//
+// The issue.* writes that take an issue_number also need pull_requests: the
+// number may name a pull request (GitHub's issues API serves both), and an App
+// token with issues alone is refused ("Resource not accessible by integration")
+// when it labels or comments on a pull request. issue.create opens an issue,
+// never a pull request, so issues alone is its least.
 var actionPermissions = map[string]map[string]string{
 	"issue.create":            {"issues": "write"},
-	"issue.update":            {"issues": "write"},
-	"issue.comment":           {"issues": "write"},
-	"issue.comment.update":    {"issues": "write"},
-	"issue.labels.add":        {"issues": "write"},
-	"issue.labels.remove":     {"issues": "write"},
+	"issue.update":            issueOrPull,
+	"issue.comment":           issueOrPull,
+	"issue.comment.update":    issueOrPull,
+	"issue.labels.add":        issueOrPull,
+	"issue.labels.remove":     issueOrPull,
 	"pr.review.create":        {"pull_requests": "write"},
 	"pr.review_comment.reply": {"pull_requests": "write"},
 	"pr.update":               {"pull_requests": "write"},
@@ -111,6 +116,9 @@ var actionPermissions = map[string]map[string]string{
 	// git_publish's push (writeledger.GitPushAction): a branch is contents.
 	"git.push": {"contents": "write"},
 }
+
+// issueOrPull is the least for a write to an issue that may be a pull request.
+var issueOrPull = map[string]string{"issues": "write", "pull_requests": "write"}
 
 // permissionsFor looks an action up in actionPermissions.
 func permissionsFor(actionID string) map[string]string { return actionPermissions[actionID] }

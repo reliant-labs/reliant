@@ -3,7 +3,8 @@
 // params, connection (the resolved connection's non-secret params, as
 // connection.params.<name>), response (parsed JSON body), raw (body text),
 // status, headers and parent (a fan-out request's item). Beyond standard CEL they have optional types,
-// base64.decode / base64.encode, and <bytes>.text().
+// base64.decode / base64.encode, <bytes>.text(), cel.bind and
+// <string>.lineWindow(start, count, budget).
 package tmpl
 
 import (
@@ -55,6 +56,12 @@ func envOptions() []cel.EnvOption {
 		// content (GitHub's contents API) send it base64-encoded.
 		ext.Encoders(),
 		bytesText,
+		// cel.bind: name a value once (a decoded file) and use it in
+		// several fields of the output.
+		ext.Bindings(),
+		// <string>.lineWindow(start, count, budget): serve a large file
+		// one window of lines at a time (lines.go).
+		lineWindowFn,
 	}
 }
 

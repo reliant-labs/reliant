@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
   Badge,
@@ -58,12 +59,6 @@ import {
   CardTitle,
   EmptyState,
   StatusDot,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
   type BadgeVariant,
   type StatusDotVariant,
 } from "./ui";
@@ -682,111 +677,120 @@ function ManagedMachinesTable({
       if (presentMachineStatus(daemonStatus(d), d.lastStatusMessage, started).wakeFinished) clearWaking(d.daemonId);
     }
   }, [daemons, waking]);
+  const columns: DataTableColumn<MachineRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      className: "whitespace-normal py-2",
+      render: (_, { d }) => {
+        const status = daemonStatus(d);
+        const presentation = presentMachineStatus(status, d.lastStatusMessage, waking.get(d.daemonId));
+        const failureReason = presentation.label ? null : daemonFailureReason(d);
+        return (
+          <>
+            <StatusDot
+              variant={presentation.label ? "pending" : statusDotVariant[status]}
+              label={presentation.label ?? statusBadge[status].label}
+            />
+            {presentation.progress && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>}
+            {failureReason && (
+              // Destructive red for a machine that BROKE; muted for one that
+              // is merely stopped. A stopped machine is a normal state whose
+              // reason is informational, and colouring it as an error would
+              // make the whole list look on fire whenever the reconciler
+              // parks something for lack of funding.
+              <p className={cn("mt-1 max-w-xs text-xs", status === "suspended" ? "text-muted-foreground" : "text-destructive-ink")}>
+                {failureReason}
+              </p>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      // Specs come from the size tier rather than from per-machine resource
+      // requests. Those requests are part of the provisioning SPEC, which
+      // lives only in control-plane and is deliberately absent from the one
+      // list; the size determines them, and SIZE_TIERS already states the
+      // mapping this page renders everywhere else. A machine with no reported
+      // size (every self-hosted one) shows "—".
+      key: "resources",
+      header: "Resources",
+      className: "text-muted-foreground",
+      render: (_, { d }) => SIZE_TIERS.find((t) => t.name === d.size)?.specs || "—",
+    },
+    { key: "created", header: "Created", className: "text-muted-foreground", render: (_, { d }) => fmtTimestamp(d.createdAt) },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      className: "text-right",
+      render: (_, { d }) => {
+        if (!cloud) return null;
+        const isSuspended = d.status === DaemonStatus.SUSPENDED;
+        return (
+          <div className="inline-flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="md"
+              disabled={busy}
+              onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
+            >
+              {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+              {isSuspended ? "Resume" : "Suspend"}
+            </Button>
+            {/* A suspended machine still holds its disk, and the disk is
+                billed (design §5.1). Shown beside Delete because Delete is the
+                only thing that stops it. */}
+            <MachineCost daemonId={d.daemonId} size={d.size} suspended={isSuspended} />
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => onDelete(d)}
+              aria-label={`Delete ${daemonDisplayName(d)}`}
+              title="Delete machine"
+              icon={<Trash2 className="text-destructive-ink" aria-hidden="true" />}
+            />
+          </div>
+        );
+      },
+    },
+  ];
   return (
-    <Table>
-      <Thead>
-        <Tr>
-          <Th>Name</Th>
-          <Th>Status</Th>
-          <Th>Resources</Th>
-          <Th>Created</Th>
-          <Th className="text-right">Actions</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {daemons.map((d) => {
-          const status = daemonStatus(d);
-          const badge = statusBadge[status];
-          const presentation = presentMachineStatus(status, d.lastStatusMessage, waking.get(d.daemonId));
-          const failureReason = presentation.label ? null : daemonFailureReason(d);
-          const isSuspended = d.status === DaemonStatus.SUSPENDED;
-          // Specs come from the size tier rather than from per-machine
-          // resource requests. Those requests are part of the provisioning
-          // SPEC, which lives only in control-plane and is deliberately absent
-          // from the one list; the size determines them, and SIZE_TIERS already
-          // states the mapping this page renders everywhere else. A machine
-          // with no reported size (every self-hosted one) shows "—".
-          const resources =
-            SIZE_TIERS.find((t) => t.name === d.size)?.specs || "—";
-          return (
-            <Tr key={d.daemonId}>
-              <Td>
-                <button
-                  type="button"
-                  onClick={() => onOpenDetail(d.daemonId)}
-                  className="font-medium text-foreground hover:text-primary hover:underline"
-                >
-                  {daemonDisplayName(d)}
-                </button>
-                <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
-                <MachineBuild daemon={d} />
-              </Td>
-              <Td>
-                <StatusDot
-                  variant={presentation.label ? "pending" : statusDotVariant[status]}
-                  label={presentation.label ?? badge.label}
-                />
-                {presentation.progress && (
-                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>
-                )}
-                {failureReason && (
-                  // Destructive red for a machine that BROKE; muted for one
-                  // that is merely stopped. A stopped machine is a normal
-                  // state whose reason is informational, and colouring it as
-                  // an error would make the whole list look on fire whenever
-                  // the reconciler parks something for lack of funding.
-                  <p
-                    className={cn(
-                      "mt-1 max-w-xs text-xs",
-                      status === "suspended" ? "text-muted-foreground" : "text-destructive-ink",
-                    )}
-                  >
-                    {failureReason}
-                  </p>
-                )}
-              </Td>
-              <Td className="text-muted-foreground">{resources}</Td>
-              <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
-              <Td className="text-right">
-                {cloud && (
-                  <div className="inline-flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      disabled={busy}
-                      onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
-                    >
-                      {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                      {isSuspended ? "Resume" : "Suspend"}
-                    </Button>
-                    {/* A suspended machine still holds its disk, and the disk is
-                        billed (design §5.1). Shown beside Delete because Delete
-                        is the only thing that stops it. */}
-                    {cloud && <MachineCost daemonId={d.daemonId} size={d.size} suspended={isSuspended} />}
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      onClick={() => onDelete(d)}
-                      aria-label={`Delete ${daemonDisplayName(d)}`}
-                      title="Delete machine"
-                      icon={<Trash2 className="text-destructive-ink" aria-hidden="true" />}
-                    />
-                  </div>
-                )}
-              </Td>
-            </Tr>
-          );
-        })}
-      </Tbody>
-    </Table>
+    <div className="forge-ui">
+      <DataTable<MachineRow>
+        ariaLabel="Cloud machines"
+        columns={columns}
+        data={daemons.map((d) => ({ id: d.daemonId, d }))}
+        getRowKey={(r) => r.id}
+        getRowAction={(r) => () => onOpenDetail(r.id)}
+        getRowLabel={(r) => daemonDisplayName(r.d)}
+      />
+    </div>
   );
 }
 
-/** The daemon's reported build, small and secondary under the machine's name. */
-function MachineBuild({ daemon }: { daemon: Daemon }) {
-  const label = machineBuildLabel(daemon);
-  if (!label) return null;
-  return <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>;
+type MachineRow = { id: string; d: Daemon };
+
+/**
+ * The machine's name, its app-access badge and its reported build: the row's
+ * button content (the whole row opens the machine), so spans throughout.
+ */
+function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number }) {
+  const build = machineBuildLabel(daemon);
+  return (
+    <span className="block">
+      <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+      <AppAccessIndicator count={appCount} />
+      {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
+    </span>
+  );
 }
 
 function SelfHostedMachinesTable({
@@ -801,71 +805,68 @@ function SelfHostedMachinesTable({
   /** Absent without a control plane, which owns the machine record. */
   onRemove?: (d: Daemon) => void;
 }) {
+  const columns: DataTableColumn<MachineRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { d }) => <MachineName daemon={d} appCount={appCounts.get(d.daemonId) ?? 0} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (_, { d }) => {
+        const status = daemonStatus(d);
+        return <StatusDot variant={statusDotVariant[status]} label={statusBadge[status].label} />;
+      },
+    },
+    { key: "platform", header: "Platform", className: "text-muted-foreground", render: (_, { d }) => d.platform || "—" },
+    {
+      key: "lastSeen",
+      header: "Last seen",
+      className: "text-muted-foreground",
+      render: (_, { d }) => (d.status === DaemonStatus.ACTIVE ? "Connected now" : fmtTimestamp(d.connectedAt)),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      className: "text-right",
+      render: (_, { d }) => {
+        if (!onRemove) return null;
+        const removal = canRemoveDaemon(d);
+        const button = (
+          <Button
+            variant="ghost"
+            size="md"
+            disabled={!removal.allowed}
+            onClick={() => onRemove(d)}
+            leftIcon={<Trash2 className="text-destructive-ink" />}
+          >
+            Remove
+          </Button>
+        );
+        return removal.allowed ? (
+          button
+        ) : (
+          <Tooltip content={removal.reason ?? ""} side="left">
+            {button}
+          </Tooltip>
+        );
+      },
+    },
+  ];
   return (
-    <Table>
-      <Thead>
-        <Tr>
-          <Th>Name</Th>
-          <Th>Status</Th>
-          <Th>Platform</Th>
-          <Th>Last seen</Th>
-          <Th className="text-right">Actions</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {daemons.map((d) => {
-          const status = daemonStatus(d);
-          const badge = statusBadge[status];
-          const connected = d.status === DaemonStatus.ACTIVE;
-          const lastSeen = connected
-            ? "Connected now"
-            : fmtTimestamp(d.connectedAt);
-          return (
-            <Tr key={d.daemonId}>
-              <Td>
-                <button
-                  type="button"
-                  onClick={() => onOpenDetail(d.daemonId)}
-                  className="font-medium text-foreground hover:text-primary hover:underline"
-                >
-                  {daemonDisplayName(d)}
-                </button>
-                <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
-                <MachineBuild daemon={d} />
-              </Td>
-              <Td>
-                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
-              </Td>
-              <Td className="text-muted-foreground">{d.platform || "—"}</Td>
-              <Td className="text-muted-foreground">{lastSeen}</Td>
-              <Td className="text-right">
-                {onRemove && (() => {
-                  const removal = canRemoveDaemon(d);
-                  const button = (
-                    <Button
-                      variant="ghost"
-                      size="md"
-                      disabled={!removal.allowed}
-                      onClick={() => onRemove(d)}
-                      leftIcon={<Trash2 className="text-destructive-ink" />}
-                    >
-                      Remove
-                    </Button>
-                  );
-                  return removal.allowed ? (
-                    button
-                  ) : (
-                    <Tooltip content={removal.reason ?? ""} side="left">
-                      {button}
-                    </Tooltip>
-                  );
-                })()}
-              </Td>
-            </Tr>
-          );
-        })}
-      </Tbody>
-    </Table>
+    <div className="forge-ui">
+      <DataTable<MachineRow>
+        ariaLabel="Self-hosted machines"
+        columns={columns}
+        data={daemons.map((d) => ({ id: d.daemonId, d }))}
+        getRowKey={(r) => r.id}
+        getRowAction={(r) => () => onOpenDetail(r.id)}
+        getRowLabel={(r) => daemonDisplayName(r.d)}
+      />
+    </div>
   );
 }
 
@@ -1841,40 +1842,49 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
           <p className="mt-4 text-center text-sm text-muted-foreground">No port access rules. Add one above to expose a port.</p>
         ) : (
           <div className="mt-4">
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Port</Th>
-                  <Th>Access</Th>
-                  <Th>URL</Th>
-                  <Th className="text-right">Actions</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {rules.map((r) => {
-                  const url = workspaceBaseDomain ? workspaceBaseDomain.replace("{port}", String(r.port)) : "";
-                  const removing = removeMut.isPending && removeMut.variables === r.port;
-                  return (
-                    <Tr key={r.id}>
-                      <Td className="font-mono">{r.port}</Td>
-                      <Td><Badge label={accessModeLabel[r.accessMode] ?? "Unknown"} variant="neutral" /></Td>
-                      <Td>
-                        {url ? (
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
-                            {url} <ExternalLink className="h-3 w-3" />
-                          </a>
-                        ) : "—"}
-                      </Td>
-                      <Td className="text-right">
+            <div className="forge-ui">
+              <DataTable<{ id: string; r: (typeof rules)[number] }>
+                ariaLabel="Port access rules"
+                columns={[
+                  { key: "port", header: "Port", className: "font-mono", render: (_, { r }) => r.port },
+                  {
+                    key: "access",
+                    header: "Access",
+                    render: (_, { r }) => <Badge label={accessModeLabel[r.accessMode] ?? "Unknown"} variant="neutral" />,
+                  },
+                  {
+                    key: "url",
+                    header: "URL",
+                    render: (_, { r }) => {
+                      const url = workspaceBaseDomain ? workspaceBaseDomain.replace("{port}", String(r.port)) : "";
+                      return url ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                          {url} <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        "—"
+                      );
+                    },
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    srHeader: true,
+                    className: "text-right",
+                    render: (_, { r }) => {
+                      const removing = removeMut.isPending && removeMut.variables === r.port;
+                      return (
                         <Button variant="ghost" size="md" disabled={removing} onClick={() => removeMut.mutate(r.port)} leftIcon={<Trash2 className="text-destructive-ink" />}>
                           {removing ? "Removing…" : "Remove"}
                         </Button>
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </Tbody>
-            </Table>
+                      );
+                    },
+                  },
+                ]}
+                data={rules.map((r) => ({ id: r.id, r }))}
+                getRowKey={(row) => row.id}
+              />
+            </div>
           </div>
         )}
 

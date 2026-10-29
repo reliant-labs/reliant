@@ -46,7 +46,7 @@ test.describe('org switcher (desktop)', () => {
     await page.goto('/apps');
 
     // Starts in the default org: its apps, and its id on the wire.
-    await expect(page.getByTestId('app-card-storefront')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Acme');
     await expect.poll(() => seen.filter(([rpc]) => rpc === 'ListEnvironments').map(([, org]) => org)).toContain('org_acme');
 
@@ -61,11 +61,11 @@ test.describe('org switcher (desktop)', () => {
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
 
     // The other org's apps replace this org's, and the request names the new org.
-    await expect(page.getByTestId('app-card-weekend-blog')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
     // The user's checkout remains as an undeployed draft; only the old org's
     // deployed environments disappear (projects themselves are user-scoped).
-    await expect(page.getByTestId('app-card-storefront')).toContainText('Not deployed yet');
-    await expect(page.getByTestId('app-card-status-page')).toHaveCount(0);
+    await expect(page.getByTestId('app-row-storefront')).toContainText('Not deployed yet');
+    await expect(page.getByTestId('app-row-status-page')).toHaveCount(0);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
     expect(seen.filter(([rpc]) => rpc === 'ListEnvironments').every(([, org]) => org === 'org_side')).toBe(true);
     await page.screenshot({ path: `${SHOTS}/desktop-after-switch.png` });
@@ -76,17 +76,17 @@ test.describe('org switcher (desktop)', () => {
     await page.goto('/apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
-    await expect(page.getByTestId('app-card-weekend-blog')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
 
     await page.reload();
-    await expect(page.getByTestId('app-card-weekend-blog')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher-name')).toHaveText('Side Project');
   });
 
   test('a person in one org sees no switcher chrome', async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto('/apps');
-    await expect(page.getByTestId('app-card-storefront')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher')).toHaveCount(0);
     await page.screenshot({ path: `${SHOTS}/desktop-single-org-no-chrome.png` });
   });
@@ -104,11 +104,11 @@ test.describe('org switcher (desktop)', () => {
     await page.goto('/apps');
     await page.getByTestId('org-switcher').click();
     await page.getByRole('menuitemradio', { name: /Side Project/ }).click();
-    await expect(page.getByTestId('app-card-weekend-blog')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-weekend-blog')).toBeVisible(LOADED);
 
     membership = [ACME];
     await page.reload();
-    await expect(page.getByTestId('app-card-storefront')).toBeVisible(LOADED);
+    await expect(page.getByTestId('app-row-storefront')).toBeVisible(LOADED);
     await expect(page.getByTestId('org-switcher')).toHaveCount(0);
   });
 });

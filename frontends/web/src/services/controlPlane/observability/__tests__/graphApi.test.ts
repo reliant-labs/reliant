@@ -12,7 +12,7 @@ describe("actual CP graph contract", () => {
   it("sends exact scoped service AND method filters through existing authenticated client", async () => {
     client.getServiceGraph.mockResolvedValue(create(GetServiceGraphResponseSchema));
     await getServiceGraph({ ...scope, rpcIds: ["shop.v1.Orders/Get"], rpcService: "shop.v1.Orders", includeInternal: true });
-    expect(client.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ scope: expect.objectContaining({ orgId: "org", projectId: "shop", envIds: ["env"] }), rpcIds: ["shop.v1.Orders/Get"], rpcService: "shop.v1.Orders", maxEdges: 160, includeInternal: true }));
+    expect(client.getServiceGraph).toHaveBeenCalledWith(expect.objectContaining({ scope: expect.objectContaining({ orgId: "org", projectId: "shop", envIds: ["env"] }), rpcIds: ["shop.v1.Orders/Get"], rpcService: "shop.v1.Orders", maxEdges: 500, includeInternal: true }));
   });
   it("preserves exact counters and unknown enum/coverage states", async () => {
     client.getServiceGraph.mockResolvedValue(create(GetServiceGraphResponseSchema, {
@@ -40,7 +40,7 @@ describe("actual CP graph contract", () => {
     const c = await getServiceGraphCatalog({ ...scope, rpcIds: ["shop.v1.Orders/Get201"] });
     expect(c.declaredCatalogs).toHaveLength(21);
     expect(c.declaredCatalogs[20].json).toBe("catalog-20");
-    expect(client.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcIds: ["shop.v1.Orders/Get201"], maxMethods: 200 }));
+    expect(client.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcIds: ["shop.v1.Orders/Get201"], maxMethods: 500 }));
   });
   it("does not convert authorization/backend failure into empty success", async () => {
     const error = new ConnectError("denied", Code.PermissionDenied);

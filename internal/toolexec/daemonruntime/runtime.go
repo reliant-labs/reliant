@@ -1417,9 +1417,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	// After the response is queued (the deferred sends below run first):
 	// a draining stream is held open until then.
 	defer d.requestDone(s)
-	ctx, cancel := context.WithCancel(context.Background())
+	// Continue the gateway span that forwarded the command, so every log line
+	// written for it carries the dispatching request's trace_id.
+	root := commandDispatchContext(req)
+	ctx, cancel := context.WithCancel(root)
 	if req.TimeoutMs > 0 {
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
+		cancel()
+		ctx, cancel = context.WithTimeout(root, time.Duration(req.TimeoutMs)*time.Millisecond)
 	}
 	defer cancel()
 	if strings.TrimSpace(req.RequestId) != "" {
@@ -1508,7 +1512,7 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	}
 
 	watchdog.Stop()
-	logDaemonCommandHandled(req, time.Since(start), err, d.sendBacklog())
+	logDaemonCommandHandled(ctx, req, time.Since(start), err, d.sendBacklog())
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
@@ -1517,6 +1521,9 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 				CommandType: req.CommandType,
 				Success:     err == nil,
 				Payload:     resultPayload,
+				// The gateway's span splits the round trip with it: the
+				// daemon exports no spans of its own.
+				HandlerElapsedMs: time.Since(start).Milliseconds(),
 			},
 		},
 	}
@@ -1552,7 +1559,7 @@ const slowDaemonCommandThreshold = 10 * time.Second
 // with a large backlog means the reply waited on the wire, not on the work.
 //
 // Payloads are never logged — they carry file contents and credentials.
-func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
+func logDaemonCommandHandled(ctx context.Context, req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
 	outcome := "ok"
 	if err != nil {
 		outcome = "error"
@@ -1567,7 +1574,7 @@ func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.D
 	if err != nil {
 		args = append(args, "error", err)
 	}
-	logging.Log(daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
+	logging.LogContext(ctx, daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
 }
 
 // filesystemMutatingCommands are daemon commands that create or remove a
@@ -1776,6 +1783,12 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 // execution carries that trace's trace_id. A request with none is a bare
 // background context.
 func dispatchContext(req *reliantv1.ToolRequest) context.Context {
+	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
+}
+
+// commandDispatchContext is dispatchContext for a daemon command: it continues
+// the gateway's `gateway.daemon.command` span (DaemonCommandRequest.trace_context).
+func commandDispatchContext(req *reliantv1.DaemonCommandRequest) context.Context {
 	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
 }
 
@@ -2332,7 +2345,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		return nil, err
 	}
 	workflows, workflowBytes := indexWorkflows(workflowSources)
-	presets, presetBytes := indexPresets(projectPath)
+	presets, presetBytes := indexPresets(projectPath, workflowSources)
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
@@ -2722,35 +2735,47 @@ func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []b
 	return results, []byte(acc.String())
 }
 
-func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
-	baseDir := filepath.Join(projectPath, ".reliant", "presets")
-	files := listYAMLFiles(baseDir)
-	results := make([]*reliantv1.IndexedPreset, 0, len(files))
+// indexPresets syncs the presets of the project root's .reliant/presets and of
+// every nested repository's, as workflows are (readWorkflowSources), each with
+// its project-relative path. A name two repos share is not resolved here: the
+// server addresses a nested preset as "<repo>/<name>" and lets the root shadow
+// the repos (config.FindStoredPresetByName).
+func indexPresets(projectPath string, sources []workflowSource) ([]*reliantv1.IndexedPreset, []byte) {
+	var results []*reliantv1.IndexedPreset
 	acc := strings.Builder{}
 
-	for _, path := range files {
-		rel, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
+	repos := []string{""}
+	for _, src := range sources {
+		if src.repo != "" {
+			repos = append(repos, src.repo)
 		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
+	}
+	for _, repo := range repos {
+		baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), ".reliant", "presets")
+		for _, path := range listYAMLFiles(baseDir) {
+			rel, err := filepath.Rel(projectPath, path)
+			if err != nil {
+				continue
+			}
+			st, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			blob, _ := os.ReadFile(path)
+			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			h := hashBytes(blob)
+			results = append(results, &reliantv1.IndexedPreset{
+				Name:         name,
+				RelativePath: filepath.ToSlash(rel),
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  blob,
+			})
+			acc.WriteString(filepath.ToSlash(rel))
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
 		}
-		blob, _ := os.ReadFile(path)
-		name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		h := hashBytes(blob)
-		results = append(results, &reliantv1.IndexedPreset{
-			Name:         name,
-			RelativePath: filepath.ToSlash(rel),
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
-		})
-		acc.WriteString(filepath.ToSlash(rel))
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
 	}
 
 	return results, []byte(acc.String())

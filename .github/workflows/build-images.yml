@@ -24,8 +24,8 @@ on:
         type: string
 
 concurrency:
-  group: build-images-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-images-${{ github.sha }}-${{ inputs.image_tag || github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read

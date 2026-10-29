@@ -23,6 +23,10 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ClaimableService,
   ClaimableState,
+  FreeSiteChoice,
+  FreeSiteChoiceRequiredSchema,
+  FreeSiteOutcome,
+  type FreeSite as FreeSiteMsg,
 } from "@/gen/controlplane/services/claimable/v1/claimable_pb";
 import { errorReason, hasErrorReason, type ErrorReason } from "@/lib/errorReasons";
 
@@ -73,12 +77,48 @@ export interface CompletedClaim {
   /** Deploys held by billing: the claimed org is ordinary from here on. */
   holds: number;
   /**
-   * Membership claims only: the claimer now owns more static sites than the
-   * one free site per person allows, so Reliant serves their oldest free and
-   * pauses the rest until they subscribe or delete one.
+   * Membership claims: what the claim actually did about the person's one free
+   * static site. Can differ from what they asked for when things changed
+   * between choosing and claiming (the other site was deleted, or they
+   * subscribed), so the page reports THIS, not its own request.
    */
-  exceedsFreeSiteAllowance: boolean;
+  freeSite: FreeSiteOutcomeName;
+  /** The site paused because of it; reversible by subscribing. */
+  pausedSite: StaticSite | null;
 }
+
+/** A static site, named for a person deciding which to keep. */
+export interface StaticSite {
+  deploymentId: string;
+  project: string;
+  env: string;
+  name: string;
+  /** With scheme; empty until a hostname is allocated. */
+  url: string;
+}
+
+export type FreeSiteOutcomeName = "none" | "no-conflict" | "claimed-live" | "existing-live";
+
+/** Which site keeps the free slot. */
+export type FreeSiteKeep = "claimed" | "existing";
+
+/** The two sites a person must choose between. */
+export interface FreeSiteConflict {
+  existing: StaticSite;
+  claimed: StaticSite;
+}
+
+function staticSite(s: FreeSiteMsg | undefined): StaticSite | null {
+  if (!s) return null;
+  return { deploymentId: s.deploymentId, project: s.project, env: s.env, name: s.name, url: s.url };
+}
+
+const OUTCOME_NAME: Record<FreeSiteOutcome, FreeSiteOutcomeName> = {
+  [FreeSiteOutcome.UNSPECIFIED]: "none",
+  [FreeSiteOutcome.NO_CONFLICT]: "no-conflict",
+  [FreeSiteOutcome.CLAIMED_SITE_LIVE]: "claimed-live",
+  [FreeSiteOutcome.EXISTING_SITE_LIVE]: "existing-live",
+};
 
 function date(ts: Timestamp | undefined): Date | undefined {
   return ts ? timestampDate(ts) : undefined;
@@ -108,7 +148,12 @@ export function claimRefusalOf(err: unknown): ClaimRefusal | null {
  * What CompleteClaim can ask the page to DO rather than just report: it is
  * PermissionDenied, and it does not end the claim.
  */
-export const COMPLETE_ACTIONS = ["claimable_upgrade_required"] as const satisfies readonly ErrorReason[];
+export const COMPLETE_ACTIONS = [
+  "claimable_upgrade_required",
+  // The person already has their one free static site: the page asks which
+  // site keeps it. The error's detail names both sites (freeSiteConflictOf).
+  "claimable_free_site_choice_required",
+] as const satisfies readonly ErrorReason[];
 
 export type CompleteAction = (typeof COMPLETE_ACTIONS)[number];
 
@@ -117,6 +162,18 @@ export function completeActionOf(err: unknown): CompleteAction | null {
     if (hasErrorReason(err, reason)) return reason;
   }
   return null;
+}
+
+/**
+ * The two sites a claimable_free_site_choice_required refusal names, or null
+ * when the error is not that refusal or carries no detail (an older server).
+ */
+export function freeSiteConflictOf(err: unknown): FreeSiteConflict | null {
+  if (!(err instanceof ConnectError) || !hasErrorReason(err, "claimable_free_site_choice_required")) return null;
+  const [detail] = err.findDetails(FreeSiteChoiceRequiredSchema);
+  const existing = staticSite(detail?.existingSite);
+  const claimed = staticSite(detail?.claimedSite);
+  return existing && claimed ? { existing, claimed } : null;
 }
 
 /** The server answered and said no, in a way this page has no name for (not an outage). */
@@ -173,13 +230,28 @@ export async function openClaimSession(claimToken: string): Promise<ReleasedSess
   };
 }
 
-export async function completeClaim(claimToken: string): Promise<CompletedClaim> {
-  const res = await getControlPlaneClient(ClaimableService).completeClaim({ claimToken });
+/**
+ * GetClaimFreeSite: whether claiming into the signed-in account needs a choice
+ * of which static site keeps the free slot, and which two. Advice only: the
+ * claim re-checks, so a stale answer cannot claim the wrong thing.
+ */
+export async function getClaimFreeSite(claimToken: string): Promise<FreeSiteConflict | null> {
+  const res = await getControlPlaneClient(ClaimableService).getClaimFreeSite({ claimToken });
+  const existing = staticSite(res.existingSite);
+  const claimed = staticSite(res.claimedSite);
+  return res.choiceRequired && existing && claimed ? { existing, claimed } : null;
+}
+
+export async function completeClaim(claimToken: string, keep?: FreeSiteKeep): Promise<CompletedClaim> {
+  const freeSite =
+    keep === "claimed" ? FreeSiteChoice.CLAIMED : keep === "existing" ? FreeSiteChoice.EXISTING : FreeSiteChoice.UNSPECIFIED;
+  const res = await getControlPlaneClient(ClaimableService).completeClaim({ claimToken, freeSite });
   return {
     orgId: res.orgId,
     claimPath: res.claimPath,
     hostnames: res.hostnames,
     holds: res.holds.length,
-    exceedsFreeSiteAllowance: res.exceedsFreeSiteAllowance,
+    freeSite: OUTCOME_NAME[res.freeSiteOutcome] ?? "none",
+    pausedSite: staticSite(res.pausedSite),
   };
 }

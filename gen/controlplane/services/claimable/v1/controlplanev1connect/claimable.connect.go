@@ -57,6 +57,9 @@ const (
 	// ClaimableServiceCompleteClaimProcedure is the fully-qualified name of the ClaimableService's
 	// CompleteClaim RPC.
 	ClaimableServiceCompleteClaimProcedure = "/controlplane.v1.ClaimableService/CompleteClaim"
+	// ClaimableServiceGetClaimFreeSiteProcedure is the fully-qualified name of the ClaimableService's
+	// GetClaimFreeSite RPC.
+	ClaimableServiceGetClaimFreeSiteProcedure = "/controlplane.v1.ClaimableService/GetClaimFreeSite"
 )
 
 // ClaimableServiceClient is a client for the controlplane.v1.ClaimableService service.
@@ -110,9 +113,26 @@ type ClaimableServiceClient interface {
 	// The org is one more org the caller belongs to; it is not made their
 	// default.
 	//
+	// FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
+	// (docs/orgs.md). If the caller already has one and the claimed deploy brings
+	// another, the claim needs to know which keeps the slot: set free_site to
+	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
+	// is refused (FailedPrecondition, claimable_free_site_choice_required, with a
+	// FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
+	// is no default. The choice is re-checked inside the claim's transaction: if
+	// the other site is gone or the caller subscribed meanwhile, the real state is
+	// applied and the response's free_site_outcome says what happened. To keep
+	// both sites, subscribe first (the claim link stays valid); no choice is
+	// needed afterwards.
+	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
 	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
+	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
+	// claiming would put a second site on their one free slot, and names both
+	// sites. GetClaim cannot say: it is public and does not know who is asking.
+	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
 }
 
 // NewClaimableServiceClient constructs a client for the controlplane.v1.ClaimableService service.
@@ -162,6 +182,12 @@ func NewClaimableServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(claimableServiceMethods.ByName("CompleteClaim")),
 			connect.WithClientOptions(opts...),
 		),
+		getClaimFreeSite: connect.NewClient[v1.GetClaimFreeSiteRequest, v1.GetClaimFreeSiteResponse](
+			httpClient,
+			baseURL+ClaimableServiceGetClaimFreeSiteProcedure,
+			connect.WithSchema(claimableServiceMethods.ByName("GetClaimFreeSite")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -173,6 +199,7 @@ type claimableServiceClient struct {
 	getClaim                 *connect.Client[v1.GetClaimRequest, v1.GetClaimResponse]
 	openClaimSession         *connect.Client[v1.OpenClaimSessionRequest, v1.OpenClaimSessionResponse]
 	completeClaim            *connect.Client[v1.CompleteClaimRequest, v1.CompleteClaimResponse]
+	getClaimFreeSite         *connect.Client[v1.GetClaimFreeSiteRequest, v1.GetClaimFreeSiteResponse]
 }
 
 // StartClaimableDeploy calls controlplane.v1.ClaimableService.StartClaimableDeploy.
@@ -203,6 +230,11 @@ func (c *claimableServiceClient) OpenClaimSession(ctx context.Context, req *conn
 // CompleteClaim calls controlplane.v1.ClaimableService.CompleteClaim.
 func (c *claimableServiceClient) CompleteClaim(ctx context.Context, req *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error) {
 	return c.completeClaim.CallUnary(ctx, req)
+}
+
+// GetClaimFreeSite calls controlplane.v1.ClaimableService.GetClaimFreeSite.
+func (c *claimableServiceClient) GetClaimFreeSite(ctx context.Context, req *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error) {
+	return c.getClaimFreeSite.CallUnary(ctx, req)
 }
 
 // ClaimableServiceHandler is an implementation of the controlplane.v1.ClaimableService service.
@@ -256,9 +288,26 @@ type ClaimableServiceHandler interface {
 	// The org is one more org the caller belongs to; it is not made their
 	// default.
 	//
+	// FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
+	// (docs/orgs.md). If the caller already has one and the claimed deploy brings
+	// another, the claim needs to know which keeps the slot: set free_site to
+	// FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
+	// is refused (FailedPrecondition, claimable_free_site_choice_required, with a
+	// FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
+	// is no default. The choice is re-checked inside the claim's transaction: if
+	// the other site is gone or the caller subscribed meanwhile, the real state is
+	// applied and the response's free_site_outcome says what happened. To keep
+	// both sites, subscribe first (the claim link stays valid); no choice is
+	// needed afterwards.
+	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
 	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
+	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
+	// claiming would put a second site on their one free slot, and names both
+	// sites. GetClaim cannot say: it is public and does not know who is asking.
+	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
 }
 
 // NewClaimableServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -304,6 +353,12 @@ func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.Han
 		connect.WithSchema(claimableServiceMethods.ByName("CompleteClaim")),
 		connect.WithHandlerOptions(opts...),
 	)
+	claimableServiceGetClaimFreeSiteHandler := connect.NewUnaryHandler(
+		ClaimableServiceGetClaimFreeSiteProcedure,
+		svc.GetClaimFreeSite,
+		connect.WithSchema(claimableServiceMethods.ByName("GetClaimFreeSite")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ClaimableService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ClaimableServiceStartClaimableDeployProcedure:
@@ -318,6 +373,8 @@ func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.Han
 			claimableServiceOpenClaimSessionHandler.ServeHTTP(w, r)
 		case ClaimableServiceCompleteClaimProcedure:
 			claimableServiceCompleteClaimHandler.ServeHTTP(w, r)
+		case ClaimableServiceGetClaimFreeSiteProcedure:
+			claimableServiceGetClaimFreeSiteHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -349,4 +406,8 @@ func (UnimplementedClaimableServiceHandler) OpenClaimSession(context.Context, *c
 
 func (UnimplementedClaimableServiceHandler) CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.CompleteClaim is not implemented"))
+}
+
+func (UnimplementedClaimableServiceHandler) GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimFreeSite is not implemented"))
 }

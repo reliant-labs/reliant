@@ -64,6 +64,10 @@ export interface RPCMethod {
   processIds: string[];
   evidence: GraphEdge["evidence"];
   observedCount: bigint;
+  /** Server-viewpoint outcomes of the observedCount requests. */
+  faults: bigint;
+  userOutcomes: bigint;
+  duration?: GraphEdge["duration"];
   inputType: string;
   outputType: string;
   streaming: string;

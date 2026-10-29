@@ -527,11 +527,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"github__repo_get_content": {
 		Bindable: map[string]struct{}{
-			"connection": {},
-			"owner":      {},
-			"path":       {},
-			"ref":        {},
-			"repo":       {},
+			"connection":   {},
+			"line_count":   {},
+			"owner":        {},
+			"path":         {},
+			"ref":          {},
+			"repo":         {},
+			"start_column": {},
+			"start_line":   {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -627,6 +630,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_machines": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_pending_questions": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -680,6 +687,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_machine": {
+		Bindable: map[string]struct{}{
+			"action":     {},
+			"machine_id": {},
+			"size":       {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -994,6 +1009,7 @@ var generatedToolParams = map[string]ToolParams{
 	"spawn_send": {
 		Bindable: map[string]struct{}{
 			"message": {},
+			"subject": {},
 		},
 		Unbindable: map[string]string{
 			"agent_id": "identifies one running sub-agent, which is chosen per call",

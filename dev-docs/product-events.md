@@ -139,7 +139,9 @@ from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
 | --- | --- | --- |
 | `claim_link_opened` | the preview loaded, once per link | `result` (`live`, `suspended`, a refusal reason, or `error`), `situation` |
 | `claim_started` | "Claim it" pressed (or the upgrade resumed) | `situation` |
-| `claim_completed` | `CompleteClaim` succeeded | `claim_path`, `holds` |
+| `claim_completed` | `CompleteClaim` succeeded | `claim_path`, `holds`, `free_site` (`none`, `no-conflict`, `claimed-live`, `existing-live`) |
+| `claim_free_site_prompted` | the free-site dialog opened (the claimer already has their one free static site) | `source` (`preview`: known up front; `claim_refusal`: the claim asked) |
+| `claim_free_site_answered` | the dialog was answered | `answer` (`claimed`, `existing`, `subscribe`, `cancel`) |
 | `claim_failed` | any step failed | `stage` (`preview`, `open_session`, `adopt_session`, `complete`), `reason` (the server reason, else the Connect code) |
 
 `situation` is `signed-out`, `resume-upgrade`, `replace-anonymous` or

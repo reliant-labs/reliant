@@ -101,6 +101,8 @@ export const ERROR_REASONS = [
   "claimable_session_released",
   /** CompleteClaim (PermissionDenied): the caller is still anonymous or has no verified email. Back to /upgrade. */
   "claimable_upgrade_required",
+  /** CompleteClaim (FailedPrecondition): the caller already has their one free static site; choose which stays live. */
+  "claimable_free_site_choice_required",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

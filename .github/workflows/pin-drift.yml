@@ -109,8 +109,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: pin-drift-${{ github.ref }}
-  cancel-in-progress: true
+  group: pin-drift-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   drift:

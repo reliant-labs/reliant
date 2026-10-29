@@ -17,6 +17,7 @@ import { initBrowserTelemetry } from "@reliantlabs/forge-web-runtime/telemetry";
 import { TRACEPARENT_RE } from "@reliantlabs/forge-web-runtime/interceptors";
 import { buildTelemetryConfig } from "@/lib/telemetry";
 import { ChatService } from "@/gen/reliant/v1/chat_pb";
+import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -26,6 +27,7 @@ vi.mock("@/services/controlPlane/config", () => ({
 }));
 
 const API = "http://api.example.test";
+const CONTROL_PLANE = "http://admin.example.test";
 const INGEST = "http://localhost:3000/_otel";
 
 interface Sent {
@@ -94,6 +96,25 @@ async function flushedSpans(): Promise<OtlpSpan[]> {
   return exported.flatMap((e) => e.spans);
 }
 
+// The exported span for one request, waiting for the batch processor.
+async function exportedSpanFor(match: (url: string) => boolean): Promise<OtlpSpan[]> {
+  const provider = trace.getTracerProvider() as unknown as {
+    getDelegate(): { forceFlush(): Promise<void> };
+  };
+  let found: OtlpSpan[] = [];
+  await vi.waitFor(
+    async () => {
+      await provider.getDelegate().forceFlush();
+      found = exported
+        .flatMap((e) => e.spans)
+        .filter((s) => match(String(attr(s, "http.url"))));
+      expect(found.length).toBeGreaterThan(0);
+    },
+    { timeout: 5000, interval: 100 },
+  );
+  return found;
+}
+
 describe("an RPC through the full interceptor chain", () => {
   beforeAll(async () => {
     vi.stubGlobal("localStorage", {
@@ -120,7 +141,11 @@ describe("an RPC through the full interceptor chain", () => {
       });
     }) as typeof fetch;
     const config = buildTelemetryConfig({
-      config: { OTEL_ENDPOINT: INGEST, API_URL: API },
+      config: {
+        OTEL_ENDPOINT: INGEST,
+        API_URL: API,
+        CONTROL_PLANE_API_URL: CONTROL_PLANE,
+      },
       prerelease: false,
       buildVersion: "1.8.1",
       desktop: false,
@@ -177,5 +202,61 @@ describe("an RPC through the full interceptor chain", () => {
     expect(resource["service.version"]).toBe("1.8.1");
     expect(resource["deployment.environment.name"]).toBe("prod");
     expect(resource["rum.sessionId"]).toBeTruthy();
+  });
+
+  // A server stream (StreamChatUpdates, the chat page's long-lived feed) is a
+  // fetch like any unary call, and must carry the same header: the server's
+  // stream span is otherwise a root no browser span leads to.
+  it("sends the SDK span's traceparent on a server-streaming RPC", async () => {
+    const { buildInterceptors } = await import("../transport");
+    const client = createClient(
+      StreamingService,
+      createConnectTransport({
+        baseUrl: API,
+        interceptors: buildInterceptors({ withAuth: false }),
+      }),
+    );
+
+    const before = sent.length;
+    try {
+      for await (const _ of client.streamChatUpdates({})) {
+        break;
+      }
+    } catch {
+      // The stub's body is not a stream envelope; only the request matters.
+    }
+
+    const rpc = sent
+      .slice(before)
+      .filter((s) => s.url.endsWith(`${StreamingService.typeName}/StreamChatUpdates`));
+    expect(rpc).toHaveLength(1);
+    expect(rpc[0].traceparent).toMatch(TRACEPARENT_RE);
+    const [, traceId, spanId] = (rpc[0].traceparent as string).split("-");
+    const spans = await exportedSpanFor((url) => url.endsWith("/StreamChatUpdates"));
+    expect(spans.map((s) => [s.traceId, s.spanId])).toContainEqual([traceId, spanId]);
+  });
+
+  // The control-plane API (admin.*) is a different origin from the page and
+  // the reliant API: its calls must be propagation targets too, or the SDK
+  // drops the header and the server roots a trace no browser span joins.
+  it("propagates the SDK span to the control-plane API origin", async () => {
+    const { buildInterceptors } = await import("../transport");
+    const client = createClient(
+      ChatService,
+      createConnectTransport({
+        baseUrl: CONTROL_PLANE,
+        interceptors: buildInterceptors({ withAuth: false, backend: "control-plane" }),
+      }),
+    );
+
+    const before = sent.length;
+    await client.listChats({}).catch(() => undefined);
+
+    const rpc = sent.slice(before).filter((s) => s.url.startsWith(CONTROL_PLANE));
+    expect(rpc).toHaveLength(1);
+    expect(rpc[0].traceparent).toMatch(TRACEPARENT_RE);
+    const [, traceId, spanId] = (rpc[0].traceparent as string).split("-");
+    const spans = await exportedSpanFor((url) => url.startsWith(CONTROL_PLANE));
+    expect(spans.map((s) => [s.traceId, s.spanId])).toContainEqual([traceId, spanId]);
   });
 });

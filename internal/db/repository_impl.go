@@ -2444,7 +2444,28 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
 
-	// Get token count using unified function (handles fork inheritance)
+	// The common case: the thread's current window has a message carrying
+	// token data. That one row is both the count (its token_count) and the
+	// denominator (the threshold of the model that produced it), so read it
+	// once. The general path below reads it twice, behind a thread lookup it
+	// only needs for fork inheritance — four serial round trips on the chat
+	// open path where this is two.
+	if msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), nil); err == nil &&
+		msg != nil && msg.TokenCount != nil && *msg.TokenCount > 0 {
+		threshold := models.UnknownModelCompactionFloor
+		if msg.Model != nil {
+			threshold = models.CompactionThresholdForModel(*msg.Model)
+		}
+		return &ContextUsage{
+			ThreadTokenCount:    int64(*msg.TokenCount),
+			CompactionThreshold: int64(threshold),
+			CurrentContextSeq:   int64(contextSeq),
+		}, nil
+	}
+
+	// No local token data: the count and the threshold are inherited from a
+	// fork's parent, or are zero. Get token count using unified function
+	// (handles fork inheritance)
 	tokens, err := r.threadTokenCount(ctx, thread, nil, &contextSeq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get thread token count: %w", err)
@@ -2766,13 +2787,26 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
 
+// mapTriggerNameConflict turns a unique violation on the trigger's
+// (user, project, name) key into core.ErrTriggerNameTaken: AlreadyExists to the
+// caller instead of an opaque Internal "database error". Like
+// mapWorkflowSlugConflict, the PgError is not wrapped (%w), so the retry ladder
+// does not re-run a permanent conflict.
+func mapTriggerNameConflict(err error, name string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == store.TriggerConstraintUserIDProjectIDNameKey {
+		return fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, name)
+	}
+	return err
+}
+
 func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
 	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
@@ -2827,7 +2861,7 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
 		}
 		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
-			return err
+			return mapTriggerNameConflict(err, t.Name)
 		}
 		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
 		if err != nil {
@@ -3214,6 +3248,12 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 // ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
 func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
+}
+
+// MarkDeclaredFailureNode records that a run's top-level node declared the
+// run's outcome: failure (store.MarkDeclaredFailureNode).
+func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
+	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
 }
 
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,

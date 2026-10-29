@@ -21,6 +21,9 @@
  *     └ signed in already ...... "Claim into my account" → CompleteClaim as
  *     │                          themselves: they join the site's org as its
  *     │                          owner → switch to that org → /apps
+ *     │                          If they already hold their one free static site
+ *     │                          a dialog asks which site stays live (or sends
+ *     │                          them to subscribe and back); the claim waits.
  *     └ not signed in .......... "Sign in to claim" → /auth, which returns here
  *                                (the token stays in storage) → the line above
  *                                No session is released, so the link stays good.
@@ -59,14 +62,20 @@ import {
   completeActionOf,
   completeClaim,
   failureReasonOf,
+  freeSiteConflictOf,
   getClaim,
+  getClaimFreeSite,
   isDeclined,
   openClaimSession,
   type ClaimRefusal,
   type ClaimSite,
+  type FreeSiteConflict,
+  type FreeSiteKeep,
   type ReleasedSession,
 } from "@/services/controlPlane/claim";
 import { useAuthStore } from "@/store/authStore";
+
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
@@ -78,7 +87,15 @@ export type ClaimView =
   | { kind: "refused"; refusal: ClaimRefusal }
   /** The control plane could not be asked: nothing is known about the claim. */
   | { kind: "unavailable"; message: string }
-  | { kind: "ready"; site: ClaimSite; situation: ClaimSituation; working: boolean; error: string | null }
+  | {
+      kind: "ready";
+      site: ClaimSite;
+      situation: ClaimSituation;
+      working: boolean;
+      error: string | null;
+      /** Claiming into this account would put a second site on their one free slot. */
+      freeSite: FreeSiteConflict | null;
+    }
   | { kind: "finishing" }
   | { kind: "finish-failed"; message: string }
   /** CompleteClaim refused for a reason this page has no name for. */
@@ -88,8 +105,18 @@ export interface ClaimFlow {
   view: ClaimView;
   /** "Claim it, it's free": release the session and start the upgrade. */
   claim: () => void;
-  /** "Claim into my account": CompleteClaim as the signed-in person, who joins the org as owner. */
+  /**
+   * "Claim into my account": CompleteClaim as the signed-in person, who joins
+   * the org as owner. When they already hold their free static site this opens
+   * the dialog instead, so the claim never decides which site stays live.
+   */
   claimIntoAccount: () => void;
+  /** The free-site dialog, or null when none is open. */
+  freeSiteDialog: FreeSiteConflict | null;
+  /** The person's answer: keep one site live, or leave to subscribe and keep both. */
+  answerFreeSite: (answer: FreeSiteKeep | "subscribe") => void;
+  /** Close the dialog. Nothing was changed. */
+  cancelFreeSite: () => void;
   /** CompleteClaim again, after it failed for a reason a retry can fix. */
   retryFinish: () => void;
   /** Load the preview again, after the control plane could not be reached. */
@@ -121,11 +148,20 @@ export function useClaimFlow(): ClaimFlow {
     if (!initialized) void initialize();
   }, [initialized, initialize]);
 
+  const loadPreviewRef = useRef<(pending: PendingClaim, situation: ClaimSituation, known?: FreeSiteConflict) => Promise<void>>(async () => undefined);
+  const [freeSiteDialog, setFreeSiteDialog] = useState<FreeSiteConflict | null>(null);
+  // The answer the last CompleteClaim carried, so "Try again" after a failed
+  // network call sends the same one instead of asking the server to guess.
+  const keepRef = useRef<FreeSiteKeep | undefined>(undefined);
+  const goToBilling = useGoToBilling("claim");
+
   const toApps = useCallback(
-    (project: string | undefined, overAllowance = false) => {
+    (project: string | undefined, paused?: { name: string; kept: "claimed" | "existing" }) => {
       const search = {
         ...(project ? { claimed: project } : {}),
-        ...(overAllowance ? { overAllowance: true } : {}),
+        // Said where the result is: which site was paused, and why it is not
+        // a surprise. Reversible by subscribing (the /apps banner says so).
+        ...(paused ? { pausedSite: paused.name, kept: paused.kept } : {}),
       };
       void navigate({ to: "/apps", search, replace: true });
     },
@@ -133,7 +169,8 @@ export function useClaimFlow(): ClaimFlow {
   );
 
   const finish = useCallback(
-    async (pending: PendingClaim) => {
+    async (pending: PendingClaim, keep?: FreeSiteKeep) => {
+      keepRef.current = keep;
       setView({ kind: "finishing" });
       try {
         // The server decides "upgraded" from a verified email on the bearer
@@ -147,12 +184,8 @@ export function useClaimFlow(): ClaimFlow {
         } catch (refreshErr) {
           logger.warn("[Claim] refreshSession threw", { message: messageOf(refreshErr, "unknown") });
         }
-        const done = await completeClaim(pending.token);
-        trackEvent("claim_completed", {
-          claimPath: done.claimPath,
-          holds: done.holds,
-          exceedsFreeSiteAllowance: done.exceedsFreeSiteAllowance,
-        });
+        const done = await completeClaim(pending.token, keep);
+        trackEvent("claim_completed", { claimPath: done.claimPath, holds: done.holds, freeSite: done.freeSite });
         clearPendingClaim();
         // A membership claim added an org the person did not have: act in it,
         // so /apps lists the site they just claimed. A failure here must not
@@ -166,7 +199,15 @@ export function useClaimFlow(): ClaimFlow {
         }
         // The org's environments are now the user's own: read them afresh.
         await queryClient.invalidateQueries({ queryKey: ["forge"] });
-        toApps(pending.project, done.exceedsFreeSiteAllowance);
+        // Report what HAPPENED, not what was asked: the server re-checks inside
+        // the claim, so a site deleted or a plan bought since the choice shows
+        // as no pause at all.
+        toApps(
+          pending.project,
+          done.pausedSite
+            ? { name: done.pausedSite.name || done.pausedSite.project, kept: done.freeSite === "claimed-live" ? "claimed" : "existing" }
+            : undefined,
+        );
       } catch (err) {
         trackEvent("claim_failed", { stage: "complete", reason: failureReasonOf(err) });
         const refusal = claimRefusalOf(err);
@@ -175,6 +216,20 @@ export function useClaimFlow(): ClaimFlow {
           return;
         }
         const action = completeActionOf(err);
+        if (action === "claimable_free_site_choice_required") {
+          // The preview said no choice was needed (or could not be asked) and
+          // the server disagrees. Ask now: the claim changed nothing.
+          const conflict = freeSiteConflictOf(err);
+          if (conflict) {
+            // Put the page back to "ready" first (finish() left it on
+            // "finishing"), carrying the conflict so Cancel leaves a page that
+            // asks again. The dialog opens only once the page under it is there.
+            await loadPreviewRef.current(pending, "existing-account", conflict);
+            trackEvent("claim_free_site_prompted", { source: "claim_refusal" });
+            setFreeSiteDialog(conflict);
+            return;
+          }
+        }
         if (action === "claimable_upgrade_required") {
           // Still anonymous, or the email is not verified: back through the
           // upgrade flow, once. If it bounces straight back here with the same
@@ -200,7 +255,7 @@ export function useClaimFlow(): ClaimFlow {
   );
 
   const loadPreview = useCallback(
-    async (pending: PendingClaim, situation: ClaimSituation) => {
+    async (pending: PendingClaim, situation: ClaimSituation, known?: FreeSiteConflict) => {
       setView({ kind: "loading" });
       if (!hasControlPlane) {
         setView({ kind: "unavailable", message: "Claiming a site needs Reliant's hosted service, which this app is not connected to." });
@@ -217,7 +272,18 @@ export function useClaimFlow(): ClaimFlow {
           return;
         }
         if (preview.site.project) updatePendingClaim({ project: preview.site.project });
-        setView({ kind: "ready", site: preview.site, situation, working: false, error: null });
+        // Whether claiming into THIS account needs a choice, known before the
+        // person presses anything. A failed read is not fatal: the claim
+        // itself refuses with the same two sites if one is needed.
+        let freeSite: FreeSiteConflict | null = known ?? null;
+        if (situation === "existing-account" && !known) {
+          try {
+            freeSite = await getClaimFreeSite(pending.token);
+          } catch (readErr) {
+            logger.warn("[Claim] GetClaimFreeSite failed", { reason: failureReasonOf(readErr) });
+          }
+        }
+        setView({ kind: "ready", site: preview.site, situation, working: false, error: null, freeSite });
       } catch (err) {
         if (!pending.opened) {
           trackEvent("claim_link_opened", { result: "error", situation });
@@ -230,6 +296,7 @@ export function useClaimFlow(): ClaimFlow {
     },
     [],
   );
+  loadPreviewRef.current = loadPreview;
 
   // Decide once, when auth has settled, where in the flow this load is.
   useEffect(() => {
@@ -264,10 +331,10 @@ export function useClaimFlow(): ClaimFlow {
       trackEvent("claim_failed", { stage, reason: failureReasonOf(err) });
       const refusal = claimRefusalOf(err);
       if (refusal) setView({ kind: "refused", refusal });
-      else setView({ kind: "ready", site, situation, working: false, error: message });
+      else setView({ kind: "ready", site, situation, working: false, error: message, freeSite: null });
     };
 
-    setView({ kind: "ready", site, situation, working: true, error: null });
+    setView({ kind: "ready", site, situation, working: true, error: null, freeSite: null });
     trackEvent("claim_started", { situation });
 
     void (async () => {
@@ -303,13 +370,48 @@ export function useClaimFlow(): ClaimFlow {
       setView({ kind: "no-link" });
       return;
     }
+    // Two free sites cannot both stay live. The person decides which, before
+    // anything is claimed; there is no default.
+    if (view.kind === "ready" && view.freeSite) {
+      trackEvent("claim_free_site_prompted", { source: "preview" });
+      setFreeSiteDialog(view.freeSite);
+      return;
+    }
     trackEvent("claim_started", { situation: "existing-account" });
     void finish(pending);
-  }, [finish]);
+  }, [finish, view]);
+
+  const cancelFreeSite = useCallback(() => {
+    trackEvent("claim_free_site_answered", { answer: "cancel" });
+    setFreeSiteDialog(null);
+  }, []);
+
+  const answerFreeSite = useCallback(
+    (answer: FreeSiteKeep | "subscribe") => {
+      trackEvent("claim_free_site_answered", { answer });
+      setFreeSiteDialog(null);
+      if (answer === "subscribe") {
+        // The claim waits: the token is in storage, the link keeps its own
+        // expiry, and /claim picks it up again when billing sends them back
+        // (this page's address is the return path). Once they have a plan
+        // there is no conflict and no question.
+        goToBilling();
+        return;
+      }
+      const pending = readPendingClaim();
+      if (!pending) {
+        setView({ kind: "no-link" });
+        return;
+      }
+      trackEvent("claim_started", { situation: "existing-account", freeSite: answer });
+      void finish(pending, answer);
+    },
+    [finish, goToBilling],
+  );
 
   const retryFinish = useCallback(() => {
     const pending = readPendingClaim();
-    if (pending) void finish(pending);
+    if (pending) void finish(pending, keepRef.current);
     else setView({ kind: "no-link" });
   }, [finish]);
 
@@ -322,5 +424,5 @@ export function useClaimFlow(): ClaimFlow {
     void loadPreview(pending, claimSituation(useAuthStore.getState().user, pending));
   }, [loadPreview]);
 
-  return { view, claim, claimIntoAccount, retryFinish, retryPreview };
+  return { view, claim, claimIntoAccount, freeSiteDialog, answerFreeSite, cancelFreeSite, retryFinish, retryPreview };
 }

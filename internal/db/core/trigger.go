@@ -151,6 +151,10 @@ const (
 // ErrTriggerNotFound is returned when a trigger id does not resolve.
 var ErrTriggerNotFound = svcerr.NotFound("trigger")
 
+// ErrTriggerNameTaken is returned when a create or update would give a trigger
+// the name another trigger of the same user already has in the project.
+var ErrTriggerNameTaken = svcerr.AlreadyExists("a trigger with this name already exists in this project; choose another name or update the existing trigger")
+
 // ErrTriggerEventNotFound is returned when a trigger event lookup misses.
 var ErrTriggerEventNotFound = svcerr.NotFound("trigger event")
 

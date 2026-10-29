@@ -1,7 +1,7 @@
 /**
  * What /apps says right after a claim: the app is highlighted, and a claimer
- * who already had a free static site is told what happens to this one and what
- * to do about it (a membership claim, W11).
+ * who chose between their two free static sites is told which one is paused and
+ * that subscribing undoes it (a membership claim, W11).
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,9 +27,6 @@ vi.mock('@/hooks/useGoToBilling', () => ({ useGoToBilling: (from: string) => () 
 
 vi.mock('../startBuilding', () => ({ useStartBuildingApp: () => vi.fn() }))
 vi.mock('../../Layout/AreaShell', () => ({ AreaShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }))
-vi.mock('../appParts', () => ({ AppEnvRow: () => null }))
-vi.mock('@/services/forge/apps', () => ({ isLive: () => false, primaryLink: () => null }))
-vi.mock('../../Forge/Console/paths', () => ({ consolePath: () => '/apps/storefront' }))
 
 import { AppsPage } from '../AppsPage'
 
@@ -46,19 +43,22 @@ describe('/apps after a claim', () => {
     search = { claimed: 'storefront' }
     render(<AppsPage />)
     expect(await screen.findByTestId('apps-claimed')).toHaveTextContent('storefront is yours now')
-    expect(screen.getByTestId('app-card-storefront')).toHaveAttribute('data-highlighted', 'true')
-    expect(scrollIntoView).toHaveBeenCalled()
-    expect(screen.queryByTestId('apps-claimed-over-allowance')).toBeNull()
+    expect(screen.getByTestId('app-row-storefront')).toHaveAttribute('data-highlighted', 'true')
+    expect(screen.queryByTestId('apps-claimed-paused')).toBeNull()
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: {}, replace: true }))
   })
 
-  it('explains the pause and offers the remedy when the claimer was already at the free-site limit', async () => {
-    search = { claimed: 'storefront', overAllowance: true }
+  it.each([
+    ['claimed', /you kept this site live/i],
+    ['existing', /you kept your existing site live/i],
+  ] as const)('says which site is paused and that subscribing undoes it (kept %s)', async (kept, said) => {
+    search = { claimed: 'storefront', pausedSite: 'blog', kept }
     render(<AppsPage />)
-    const note = await screen.findByTestId('apps-claimed-over-allowance')
-    expect(note).toHaveTextContent(/already have a free static site/i)
-    expect(note).toHaveTextContent(/oldest live/i)
-    fireEvent.click(screen.getByRole('button', { name: 'subscribe' }))
+    const note = await screen.findByTestId('apps-claimed-paused')
+    expect(note).toHaveTextContent(said)
+    expect(note).toHaveTextContent(/blog/)
+    expect(note).toHaveTextContent(/is paused/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe' }))
     expect(goToBilling).toHaveBeenCalledWith('upgrade')
   })
 })

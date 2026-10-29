@@ -62,6 +62,10 @@ type WorkflowStatusInput struct {
 	// workflow declared no outcome, and the stored value is left untouched —
 	// absence is not failure.
 	Outcome string `json:"outcome,omitempty"`
+	// OutcomeNode is the top-level node that declared a failure Outcome. Its
+	// newest attempt is marked failed (MarkDeclaredFailureNode), so the run's
+	// diagnostics name where it ended instead of finding no failed node.
+	OutcomeNode string `json:"outcome_node,omitempty"`
 	// Error is why the run failed, on a "failed" status. It becomes the
 	// source run's error in a workflow-event trigger's payload.
 	Error string `json:"error,omitempty"`
@@ -140,6 +144,13 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	//   nobody watching. This covers preflight failures such as an unavailable
 	//   daemon, which also end the root as "failed".
 	// A completed run that declared a failure outcome is also a failure.
+	// Mark the declaring node first: everything below that explains the
+	// failure reads it back from the node attempts.
+	if input.Status == "completed" && input.Outcome == model.OutcomeFailure && input.OutcomeNode != "" {
+		if _, err := a.repo.MarkDeclaredFailureNode(ctx, input.WorkflowID, input.OutcomeNode); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Could not mark the failure-outcome node", "workflow_id", input.WorkflowID, "node", input.OutcomeNode, "error", err)
+		}
+	}
 	if isRootWorkflow {
 		if input.LaunchRun && (input.Status == "failed" || input.Status == "completed" && input.Outcome == model.OutcomeFailure) {
 			a.ensureAutomationFailureMessage(ctx, input)

@@ -589,30 +589,55 @@ func draftRootFor(ev Event, workflowName string) string {
 // It is what a trigger reads its declaration from, so an activation fires
 // against the same definition the run it starts will execute.
 func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, repo, userID, workflowName, projectID, "")
+	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+}
+
+// A trigger's resolution on its target machine reads that machine's catalog
+// and, on a miss, the diagnostic naming where the workflow is provided.
+var (
+	_ workflowsource.MachineStore      = WorkflowResolver(nil)
+	_ workflowsource.SourceDiagnostics = WorkflowResolver(nil)
+)
+
+// Scope is where a ref resolves: whose workflows, in which project, and on
+// which machine. DaemonID set resolves against that machine's own synced
+// catalog (workflowsource.Options.DaemonID); empty, against the union of
+// every machine's.
+type Scope struct {
+	UserID, ProjectID, DaemonID string
+	draftRoot                   string
+}
+
+// ResolveValidatedRunWorkflowOn is ResolveValidatedRunWorkflow for a run that
+// executes on one machine: the workflow, its children and its presets are
+// read from what that machine synced. A trigger targets a machine, so its
+// activation resolves here: a workflow only another machine provides is a
+// verdict naming that machine and the file's path.
+func ResolveValidatedRunWorkflowOn(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
+	wf, err := resolveRunWorkflow(ctx, repo, scope, workflowName)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateResolvedWorkflowTree(ctx, repo, scope, workflowName, wf); err != nil {
+		return nil, err
+	}
+	return wf, nil
 }
 
 // ResolveValidatedRunWorkflow admits an automation's current definition using
 // the same whole-tree gate as launch. It is not a cross-worker version check:
 // parsing and validation use this process's compiled runtime contract.
 func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	wf, err := ResolveRunWorkflow(ctx, repo, userID, workflowName, projectID)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateResolvedWorkflowTree(ctx, repo, userID, workflowName, projectID, "", wf); err != nil {
-		return nil, err
-	}
-	return wf, nil
+	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
 }
 
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, l.repo, userID, workflowName, projectID, draftRoot)
+	return resolveRunWorkflow(ctx, l.repo, Scope{UserID: userID, ProjectID: projectID, draftRoot: draftRoot}, workflowName)
 }
 
-func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
+func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
 	resolved, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{
-		UserID: userID, ProjectID: projectID, DraftRoot: draftRoot,
+		UserID: scope.UserID, ProjectID: scope.ProjectID, DaemonID: scope.DaemonID, DraftRoot: scope.draftRoot,
 	}, workflowName)
 	if err != nil {
 		var notRunnable *db.WorkflowDraftNotRunnableError
@@ -664,14 +689,14 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 		return err
 	}
 
-	return validateResolvedWorkflowTree(ctx, l.repo, userID, workflowName, projectID, draftRoot, wf)
+	return validateResolvedWorkflowTree(ctx, l.repo, Scope{UserID: userID, ProjectID: projectID, draftRoot: draftRoot}, workflowName, wf)
 }
 
-func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID, draftRoot string, wf *reliantv1.Workflow) error {
+func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string, wf *reliantv1.Workflow) error {
 	var lookupErr *WorkflowLookupError
 	validationOpts := &validation.ValidationOptions{
 		WorkflowLoader: func(ref string) (*reliantv1.Workflow, error) {
-			child, err := resolveRunWorkflow(ctx, repo, userID, ref, projectID, draftRoot)
+			child, err := resolveRunWorkflow(ctx, repo, scope, ref)
 			var lookup *WorkflowLookupError
 			if errors.As(err, &lookup) {
 				lookupErr = lookup
@@ -680,11 +705,11 @@ func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, us
 		},
 		CanonicalWorkflowRef: workflowName,
 	}
-	if projectID != "" {
+	if scope.ProjectID != "" {
 		// Reuse launch's preset resolution, without constructing its unrelated
 		// runtime collaborators or changing the validation source precedence.
 		validationOpts.PresetLoader = func(name string) (map[string]interface{}, error) {
-			p, err := loadPresetFromDB(ctx, repo, "", projectID, name)
+			p, err := loadPresetFromDB(ctx, repo, "", scope.ProjectID, scope.DaemonID, name)
 			if err != nil {
 				return nil, err
 			}
@@ -764,15 +789,18 @@ func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, project
 
 // LoadPresetFromDB loads a preset by name. Priority: user presets > stored project presets > builtins.
 func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name string) (*preset.Preset, error) {
-	return loadPresetFromDB(ctx, l.repo, userID, projectID, name)
+	return loadPresetFromDB(ctx, l.repo, userID, projectID, "", name)
 }
 
 // ResolveRunPreset uses the launcher's exact user/project/builtin precedence.
 func ResolveRunPreset(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
-	return loadPresetFromDB(ctx, repo, userID, projectID, name)
+	return loadPresetFromDB(ctx, repo, userID, projectID, "", name)
 }
 
-func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
+// loadPresetFromDB resolves a preset: the user's project-scoped one, then the
+// user's own, then the project's synced presets (daemonID's catalog when set,
+// see workflowsource.ProjectPresets), then the builtins.
+func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projectID, daemonID, name string) (*preset.Preset, error) {
 	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 
 	if repo != nil {
@@ -792,17 +820,13 @@ func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projec
 
 		// Try stored project presets from daemon config sync.
 		if projectID != "" {
-			presetsJSON, err := repo.GetProjectPresetsJSON(ctx, projectID)
+			presets, err := workflowsource.ProjectPresets(ctx, repo, projectID, daemonID)
 			if err == nil {
-				presets, err := cfg.ParseStoredPresets(presetsJSON)
-				if err == nil {
-					sp := cfg.FindStoredPresetByName(presets, name)
-					if sp != nil {
-						p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
-						if err == nil {
-							p.Source = "project"
-							return p, nil
-						}
+				if sp := cfg.FindStoredPresetByName(presets, name); sp != nil {
+					p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
+					if err == nil {
+						p.Source = "project"
+						return p, nil
 					}
 				}
 			}

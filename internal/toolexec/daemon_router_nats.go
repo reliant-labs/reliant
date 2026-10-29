@@ -1344,6 +1344,9 @@ func (r *NATSDaemonRouter) sendToolRequestSync(ctx context.Context, userID strin
 	}
 
 	var resp *ToolExecutionResponse
+	// reached turns true once any round trip may have put the request in
+	// front of a daemon; until then a failure proves it never ran.
+	reached := false
 	waited, err := r.rideOutDisconnect(ctx, userID, reissue, func() (string, dispatchOutcome, error) {
 		resp = nil
 		daemonID, err := r.resolveDaemonID(ctx, userID, selector)
@@ -1352,10 +1355,17 @@ func (r *NATSDaemonRouter) sendToolRequestSync(ctx context.Context, userID strin
 		}
 		var outcome dispatchOutcome
 		resp, outcome, err = r.toolRequestRoundTrip(ctx, userID, daemonID, attempt, metric)
+		if outcome != dispatchUndelivered {
+			reached = true
+		}
 		return daemonID, outcome, err
 	})
 	if err != nil {
-		return nil, withWaitNote(err, waited)
+		err = withWaitNote(err, waited)
+		if !reached {
+			err = notDispatched(err)
+		}
+		return nil, err
 	}
 	if waited > 0 && resp.ErrorMessage != "" {
 		resp.ErrorMessage = withWaitNote(errors.New(resp.ErrorMessage), waited).Error()

@@ -19,6 +19,7 @@ import (
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 )
 
 // ============================================================================
@@ -68,6 +69,9 @@ type ExecuteRunStepActivity struct {
 	repo         ExecuteRunStepStore
 	toolExecutor toolexec.ToolExecutor
 	runExecutor  RunExecutor // optional override for testing
+	// undeliveredRetryDelays overrides defaultUndeliveredRetryDelays; tests
+	// shrink it.
+	undeliveredRetryDelays []time.Duration
 }
 
 // NewExecuteRunStepActivity creates a new ExecuteRunStepActivity.
@@ -110,23 +114,27 @@ func (a *ExecuteRunStepActivity) Category() schema.ActivityCategory {
 func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
 	startTime := time.Now()
 
-	// IDEMPOTENCY: Check if this is a retry (attempt > 1)
-	// DO NOT re-execute shell commands on retry - return error result instead
+	// IDEMPOTENCY: a shell command runs at most once per step dispatch.
+	//
+	// A command is sent again only on proof it never ran, and that proof is
+	// acted on inside the attempt that has it (executeUntilDelivered); a
+	// failure that proves nothing — a timeout, a dropped connection — fails the
+	// step without a retry (runStepTransportFailure). So a Temporal retry
+	// reaches this point only after an attempt that ended with no verdict at
+	// all (a worker that died, a heartbeat timeout) and may have started the
+	// command: it is refused, once, and not retried again. The workflow
+	// pauses the step (RetryExhausted) and a resume dispatches it afresh.
 	attemptNumber := activity.GetInfo(ctx).Attempt
 	if attemptNumber > 1 {
-		// This is a retry - the command was already attempted
-		// Return an error result instead of re-executing
+		msg := "Error: the previous attempt at this command ended without a result and may have started it; it was not run again"
 		return ExecuteRunStepOutput{
-			Stdout:       "",
-			Stderr:       "Error: Activity retry detected - shell command was not re-executed for safety",
-			Output:       "Error: Activity retry detected - shell command was not re-executed for safety",
-			ExitCode:     -1,
-			Interrupted:  false,
-			Duration:     time.Since(startTime).Milliseconds(),
-			WorkingDir:   "",
-			WorktreeID:   "",
-			WorktreePath: "",
-		}, fmt.Errorf("activity retry detected (attempt %d) - refusing to re-execute shell command for idempotency", attemptNumber)
+			Stderr:   msg,
+			Output:   msg,
+			ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds(),
+		}, temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("activity retry detected (attempt %d): the previous attempt may have started the shell command, refusing to re-execute it", attemptNumber),
+			runStepRetryRefusedErrType, nil)
 	}
 
 	// Set default timeout if not provided (5 minutes)
@@ -186,25 +194,25 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	}
 
 	// Execute the command
-	stdout, stderr, exitCode, interrupted, err := executor.ExecuteCommand(
-		ctx,
-		input.Command,
-		workingDir,
-		timeout,
-		nil, // no custom env vars for now
-	)
+	retryDelays := a.undeliveredRetryDelays
+	if retryDelays == nil {
+		retryDelays = defaultUndeliveredRetryDelays
+	}
+	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, retryDelays, input.Command, workingDir, timeout)
 	if err != nil {
-		// A transport failure means the command never ran. Fail the activity so
-		// the activity retry policy owns it, instead of returning a synthetic
-		// exit code that the workflow would read as a real command verdict.
+		// A transport failure is not a command verdict: fail the activity
+		// rather than return a synthetic exit code the workflow would read
+		// as one. Not retryable either way — see runStepTransportFailure.
 		var transportErr *toolexec.TransportError
 		if errors.As(err, &transportErr) {
-			activity.GetLogger(ctx).Error("[RunStep] command never reached a daemon",
+			activity.GetLogger(ctx).Warn("[RunStep] no result came back from the machine",
 				"chat_id", input.ChatID,
 				"step_id", input.StepID,
 				"code", transportErr.Code,
+				"never_ran", transportErr.NotDispatched,
 				"detail", transportErr.Detail,
 			)
+			return ExecuteRunStepOutput{}, runStepTransportFailure(transportErr)
 		}
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to execute command: %w", err)
 	}
@@ -347,6 +355,66 @@ func (a *ExecuteRunStepActivity) writeRunOutput(ctx context.Context, input Execu
 			"exit_code", output.ExitCode,
 			"duration_ms", output.Duration)
 	}
+}
+
+// Temporal error types of the run step's non-retryable failures.
+const (
+	// runStepRetryRefusedErrType: a retry after an attempt that may have
+	// started the command.
+	runStepRetryRefusedErrType = "RunStepRetryRefused"
+	// runStepNotDispatchedErrType: the machine could not be reached; the
+	// command never ran.
+	runStepNotDispatchedErrType = "RunStepNotDispatched"
+	// runStepOutcomeUnknownErrType: the command was sent and no result came
+	// back; it may have run.
+	runStepOutcomeUnknownErrType = "RunStepOutcomeUnknown"
+)
+
+// defaultUndeliveredRetryDelays are the waits before each re-send of a command that
+// provably never reached a machine, within one attempt. The same ladder as a
+// step's Temporal retries (1s doubling, five sends in all), held here because
+// only this attempt knows the command never ran: a Temporal retry starts with
+// no record of how the attempt before it ended, so it could not tell this
+// failure from one where the command started. The router has already ridden
+// out a short disconnect inside each send (DaemonReconnectGrace).
+var defaultUndeliveredRetryDelays = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
+
+// executeUntilDelivered runs command through executor, sending it again after
+// each of delays while a failure proves it never reached a machine
+// (TransportError.NotDispatched).
+// Every other outcome — a verdict, a failure that may have followed a start —
+// is returned as it came: it is sent once.
+func executeUntilDelivered(ctx context.Context, executor RunExecutor, delays []time.Duration, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+	for i := 0; ; i++ {
+		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
+		var transportErr *toolexec.TransportError
+		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched || i >= len(delays) {
+			return stdout, stderr, exitCode, interrupted, err
+		}
+		activity.GetLogger(ctx).Info("[RunStep] command never reached a machine; sending it again",
+			"code", transportErr.Code, "retry_in", delays[i], "detail", transportErr.Detail)
+		timer := time.NewTimer(delays[i])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return stdout, stderr, exitCode, interrupted, err
+		case <-timer.C:
+		}
+	}
+}
+
+// runStepTransportFailure is the activity error for a command whose result
+// never came back. Neither kind is retryable: one that never ran was already
+// sent again by executeUntilDelivered, and one that may have run must not be.
+// The workflow handles it as it handled the old refused retries, only without
+// four of them first: it pauses the step (RetryExhausted), and a resume
+// dispatches it afresh.
+func runStepTransportFailure(transportErr *toolexec.TransportError) error {
+	errType := runStepOutcomeUnknownErrType
+	if transportErr.NotDispatched {
+		errType = runStepNotDispatchedErrType
+	}
+	return temporal.NewNonRetryableApplicationError("failed to execute command: "+transportErr.Error(), errType, transportErr)
 }
 
 // shellQuote wraps a string in single quotes, escaping any embedded single quotes.

@@ -33,6 +33,7 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Boxes, RotateCcw, Search } from "lucide-react";
 
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
@@ -87,9 +88,7 @@ import {
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
-import { LiveLinks } from "./LiveLinks";
 import { ProcessHealth } from "./ProcessHealth";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface OverviewSearch {
   q?: string;
@@ -283,8 +282,6 @@ export function OverviewHome({
         <div className="pt-1">{rangeControl}</div>
       </div>
 
-      <LiveLinks envs={envs} hosted={hosted} />
-
       {!unrecorded && (
         <FrontendsPanel
           scope={env}
@@ -377,7 +374,6 @@ export function OverviewHome({
               rows={visible}
               loading={loading}
               showEnv={all}
-              windowWords={windowWords}
               windowShort={range}
               hosted={hosted}
               hrefs={hrefs}
@@ -414,7 +410,6 @@ export function OverviewHome({
             envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
             workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
             logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
-            navigateTo={navigateTo}
           />}
 
           <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
@@ -786,18 +781,16 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
 
 // ── Tables ──────────────────────────────────────────────────────────────────
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
-const ROW = "relative border-t border-border/70 first:border-t-0 hover:bg-ink/5";
-/** The name cell's link covers the whole row: the row is the link. */
-const ROW_LINK =
-  "no-color font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent";
+type ServiceTableRow = { key: string; w: ServiceRow };
+type JobTableRow = { key: string; row: JobRow };
+
+/** An unobserved workload has no figures: its cells say so with a dash. */
+const NONE = <span className="text-ink-muted">—</span>;
 
 function ServicesTable({
   rows,
   loading,
   showEnv,
-  windowWords,
   windowShort,
   hosted,
   hrefs,
@@ -806,233 +799,205 @@ function ServicesTable({
   rows: ServiceRow[];
   loading: boolean;
   showEnv: boolean;
-  windowWords: string;
   windowShort: string;
   hosted: HostedByEnv;
   hrefs: OverviewHrefs;
   empty: ReactNode;
 }) {
-  const columns = showEnv ? 8 : 7;
-  return (
-    <div className="overflow-x-auto">
-      <StackedTable className="min-w-full border-collapse" aria-label="Services" data-testid="overview-services-table">
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={TH}>
-              Name
-            </th>
-            {showEnv && (
-              <th scope="col" className={TH}>
-                Environment
-              </th>
+  const columns: DataTableColumn<ServiceTableRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { w }) => (
+        <>
+          <span className="font-medium">{w.workload}</span>
+          {!w.unobserved && KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
+        </>
+      ),
+    },
+    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { w }: ServiceTableRow) => <Tag>{w.envName}</Tag> }] : []),
+    {
+      key: "status",
+      header: "Status",
+      render: (_, { w }) =>
+        w.unobserved ? (
+          <span title={w.healthReason}>
+            <Status tone="neutral" label="Unobserved" />
+          </span>
+        ) : (
+          <HealthStatus workload={w} />
+        ),
+    },
+    {
+      key: "ready",
+      header: "Ready",
+      numeric: true,
+      render: (_, { w }) => (w.unobserved ? NONE : <span className={cn(replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</span>),
+    },
+    {
+      key: "version",
+      header: "Version",
+      interactive: true,
+      render: (_, { w }) =>
+        w.unobserved ? NONE : <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />,
+    },
+    {
+      key: "restarts",
+      header: `Restarts ${windowShort}`,
+      numeric: true,
+      render: (_, { w }) => {
+        if (w.unobserved) return NONE;
+        if (!w.restartsInWindow) return <span className="text-ink-muted">0</span>;
+        const exit = lastExitOf(w);
+        const status = HEALTH_STATUS[w.health];
+        return (
+          <>
+            {w.restartsInWindow}
+            {exit && (
+              <span
+                className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
+                title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
+              >
+                · {exitPhrase(exit.reason)}
+              </span>
             )}
-            <th scope="col" className={TH}>
-              Status
-            </th>
-            <th scope="col" className={cn(TH, "text-right")}>
-              Ready
-            </th>
-            <th scope="col" className={TH}>
-              Version
-            </th>
-            <th scope="col" className={cn(TH, "text-right")} title={`Container restarts in the ${windowWords}, and the last exit reason`}>
-              Restarts {windowShort}
-            </th>
-            <th scope="col" className={TH}>
-              CPU
-            </th>
-            <th scope="col" className={TH}>
-              Memory
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <SkeletonRows columns={columns} />
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns} className="px-4 py-10 text-center text-sm text-ink-muted" data-testid="overview-services-empty">
-                {empty}
-              </td>
-            </tr>
-          ) : (
-            rows.map((w) => {
-              if (w.unobserved) return <UnobservedRow key={`${w.envName}/${w.workload}`} row={w} showEnv={showEnv} />;
-              const exit = lastExitOf(w);
-              const status = HEALTH_STATUS[w.health];
-              return (
-                <tr key={`${w.envName}/${w.workload}`} className={ROW} data-testid={`overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`} data-health={w.health}>
-                  <td className={TD}>
-                    <Link href={hrefs.workload(w.workload, w.envName)} className={ROW_LINK}>
-                      {w.workload}
-                    </Link>
-                    {KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
-                  </td>
-                  {showEnv && (
-                    <td className={TD}>
-                      <Tag>{w.envName}</Tag>
-                    </td>
-                  )}
-                  <td className={TD}>
-                    <HealthStatus workload={w} />
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</td>
-                  <td className={TD}>
-                    <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums")}>
-                    {w.restartsInWindow ? (
-                      <>
-                        {w.restartsInWindow}
-                        {exit && (
-                          <span
-                            className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
-                            title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
-                          >
-                            · {exitPhrase(exit.reason)}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-ink-muted">0</span>
-                    )}
-                  </td>
-                  <td className={TD}>
-                    <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />
-                  </td>
-                  <td className={TD}>
-                    <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </StackedTable>
+          </>
+        );
+      },
+    },
+    {
+      key: "cpu",
+      header: "CPU",
+      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />),
+    },
+    {
+      key: "memory",
+      header: "Memory",
+      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />),
+    },
+  ];
+  return (
+    <div data-testid="overview-services-table">
+      <DataTable<ServiceTableRow>
+        flush
+        stacked
+        ariaLabel="Services"
+        columns={columns}
+        data={rows.map((w) => ({ key: `${w.envName}/${w.workload}`, w }))}
+        loading={loading}
+        pageSize={4}
+        emptyMessage={<span data-testid="overview-services-empty">{empty}</span>}
+        getRowKey={(r) => r.key}
+        // A workload a self-managed environment's render declares and nothing
+        // has observed has no page to open: there is nothing observed to show.
+        getRowHref={({ w }) => (w.unobserved ? undefined : hrefs.workload(w.workload, w.envName))}
+        getRowDetail={({ w }) =>
+          w.unobserved ? (
+            <span className="text-xs text-ink-muted">Declared by {w.envName}&apos;s last recorded render; nothing reports from it.</span>
+          ) : undefined
+        }
+        getRowProps={({ w }) => ({
+          "data-testid": `overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`,
+          "data-health": w.unobserved ? "unobserved" : w.health,
+        })}
+      />
     </div>
   );
 }
 
-/**
- * A workload a self-managed environment's render declares and nothing has
- * observed: named, with no verdict and no figures, and no page to open (there
- * is nothing observed to show on one).
- */
-function UnobservedRow({ row, showEnv }: { row: ServiceRow; showEnv: boolean }) {
-  return (
-    <tr className="border-t border-border/70 first:border-t-0" data-testid={`overview-service-${row.workload}${showEnv ? `-${row.envName}` : ""}`} data-health="unobserved">
-      <td className={TD}>
-        <span className="font-medium text-ink">{row.workload}</span>
-      </td>
-      {showEnv && (
-        <td className={TD}>
-          <Tag>{row.envName}</Tag>
-        </td>
-      )}
-      <td className={TD} title={row.healthReason}>
-        <Status tone="neutral" label="Unobserved" />
-      </td>
-      <td colSpan={5} className={cn(TD, "text-xs text-ink-muted")}>
-        Declared by {row.envName}&apos;s last recorded render; nothing reports from it.
-      </td>
-    </tr>
-  );
-}
-
 function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; loading: boolean; showEnv: boolean; hrefs: OverviewHrefs; empty: ReactNode }) {
-  const columns = showEnv ? 6 : 5;
-  return (
-    <div className="overflow-x-auto">
-      <StackedTable className="min-w-full border-collapse" aria-label="Jobs" data-testid="overview-jobs-table">
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={TH}>
-              Name
-            </th>
-            {showEnv && (
-              <th scope="col" className={TH}>
-                Environment
-              </th>
-            )}
-            <th scope="col" className={TH}>
-              Result
-            </th>
-            <th scope="col" className={TH}>
-              Ran in release
-            </th>
-            <th scope="col" className={cn(TH, "text-right")}>
-              Duration
-            </th>
-            <th scope="col" className={TH}>
-              Finished
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <SkeletonRows columns={columns} rows={2} />
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns} className="px-4 py-10 text-center text-sm text-ink-muted" data-testid="overview-jobs-empty">
-                {empty}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => {
-              const job = row.latest;
-              const status = JOB_STATUS[job.result];
-              return (
-                <tr key={row.key} className={ROW} data-testid={`overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`} data-result={job.result}>
-                  <td className={TD}>
-                    <Link href={hrefs.workload(row.workload, row.envName)} className={ROW_LINK} title={job.name}>
-                      {row.workload}
-                    </Link>
-                    {row.runs > 1 && (
-                      <span className="ml-2 text-xs text-ink-muted">
-                        {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
-                      </span>
-                    )}
-                  </td>
-                  {showEnv && (
-                    <td className={TD}>
-                      <Tag>{row.envName}</Tag>
-                    </td>
-                  )}
-                  <td className={TD}>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Status tone={status.tone} label={status.label} />
-                      {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
-                    </span>
-                  </td>
-                  <td className={TD}>
-                    {job.releaseVersion ? (
-                      <Link href={hrefs.release(job.releaseVersion)} className={cn(INK_LINK, "relative z-10")} title={job.releaseVersion}>
-                        {shortVersion(job.releaseVersion)}
-                      </Link>
-                    ) : (
-                      <span className="text-ink-muted">unknown</span>
-                    )}
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums")}>
-                    {job.durationSeconds ? formatSeconds(job.durationSeconds) : <span className="text-ink-muted">{job.result === "running" ? "running" : "—"}</span>}
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>
-                    {job.finishedAtMs ? (
-                      <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
-                        {formatAgo(job.finishedAtMs)}
-                      </time>
-                    ) : job.result === "running" ? (
-                      "not yet"
-                    ) : (
-                      "not observed"
-                    )}
-                  </td>
-                </tr>
-              );
-            })
+  const columns: DataTableColumn<JobTableRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { row }) => (
+        <>
+          <span className="font-medium" title={row.latest.name}>
+            {row.workload}
+          </span>
+          {row.runs > 1 && (
+            <span className="ml-2 text-xs text-ink-muted">
+              {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
+            </span>
           )}
-        </tbody>
-      </StackedTable>
+        </>
+      ),
+    },
+    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { row }: JobTableRow) => <Tag>{row.envName}</Tag> }] : []),
+    {
+      key: "result",
+      header: "Result",
+      render: (_, { row }) => {
+        const job = row.latest;
+        const status = JOB_STATUS[job.result];
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <Status tone={status.tone} label={status.label} />
+            {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: "release",
+      header: "Ran in release",
+      interactive: true,
+      render: (_, { row }) =>
+        row.latest.releaseVersion ? (
+          <Link href={hrefs.release(row.latest.releaseVersion)} className={INK_LINK} title={row.latest.releaseVersion}>
+            {shortVersion(row.latest.releaseVersion)}
+          </Link>
+        ) : (
+          <span className="text-ink-muted">unknown</span>
+        ),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      numeric: true,
+      render: (_, { row }) =>
+        row.latest.durationSeconds ? (
+          formatSeconds(row.latest.durationSeconds)
+        ) : (
+          <span className="text-ink-muted">{row.latest.result === "running" ? "running" : "—"}</span>
+        ),
+    },
+    {
+      key: "finished",
+      header: "Finished",
+      className: "text-ink-muted",
+      render: (_, { row }) => {
+        const job = row.latest;
+        return job.finishedAtMs ? (
+          <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
+            {formatAgo(job.finishedAtMs)}
+          </time>
+        ) : job.result === "running" ? (
+          "not yet"
+        ) : (
+          "not observed"
+        );
+      },
+    },
+  ];
+  return (
+    <div data-testid="overview-jobs-table">
+      <DataTable<JobTableRow>
+        flush
+        stacked
+        ariaLabel="Jobs"
+        columns={columns}
+        data={rows.map((row) => ({ key: row.key, row }))}
+        loading={loading}
+        pageSize={2}
+        emptyMessage={<span data-testid="overview-jobs-empty">{empty}</span>}
+        getRowKey={(r) => r.key}
+        getRowHref={({ row }) => hrefs.workload(row.workload, row.envName)}
+        getRowProps={({ row }) => ({
+          "data-testid": `overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`,
+          "data-result": row.latest.result,
+        })}
+      />
     </div>
   );
 }
