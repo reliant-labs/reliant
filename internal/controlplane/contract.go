@@ -89,6 +89,17 @@ type Service interface {
 	// machine).
 	ResumeDaemon(ctx context.Context, token, daemonID string) error
 
+	// SuspendDaemon stops one of the caller's managed daemons, as Settings ->
+	// Machines does. jwt is the owner's session token: the control plane
+	// refuses a machine credential ("missing owner in context").
+	SuspendDaemon(ctx context.Context, jwt, daemonID string) error
+
+	// ResizeDaemon changes a SUSPENDED managed daemon's size (small, medium,
+	// large, xl, 2xl); it takes effect when the daemon next starts. A running
+	// daemon is FailedPrecondition. jwt is the owner's session token, as for
+	// SuspendDaemon.
+	ResizeDaemon(ctx context.Context, jwt, daemonID, size string) error
+
 	// ResumeDaemonForRun wakes a run owner's suspended machine for a run that
 	// resumes after a hold, with this process's internal-service identity
 	// (Deps.Sign) rather than the owner's session token, which may have

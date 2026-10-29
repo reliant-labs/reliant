@@ -665,6 +665,11 @@ func GetToolRegistry() []ToolDefinition {
 		// demand: it is needed exactly when a machine tool has just failed, and
 		// a model that must first discover it ends its turn instead.
 		{ToolWaitForMachine, (*ToolsFactory).WaitForMachine, []ToolTag{TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer, true},
+		// The user's own machines, through the control plane as the user
+		// (machine_tools.go). Loaded on demand; manage_machine's start and
+		// resize need an approval card.
+		{ToolListMachines, (*ToolsFactory).ListMachines, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolManageMachine, (*ToolsFactory).ManageMachine, nil, PlacementServer, false},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon, false},
 
 		// prove_test reverts the fix, runs a test expecting failure, restores,

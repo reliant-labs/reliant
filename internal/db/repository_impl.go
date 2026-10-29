@@ -3216,6 +3216,12 @@ func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, lim
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
 }
 
+// MarkDeclaredFailureNode records that a run's top-level node declared the
+// run's outcome: failure (store.MarkDeclaredFailureNode).
+func (r *Repo) MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error) {
+	return store.MarkDeclaredFailureNode(ctx, r.ORM(), workflowID, nodeID)
+}
+
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
