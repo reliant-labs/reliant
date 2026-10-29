@@ -73,6 +73,10 @@ func (s *Service) EnableWorkflow(
 	if len(declared) == 0 {
 		return nil, svcerr.FailedPrecondition(fmt.Sprintf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow))
 	}
+	declared, err = selectDeclaredTriggers(wf, msg.Triggers)
+	if err != nil {
+		return nil, err
+	}
 
 	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
 	if err != nil {
@@ -95,6 +99,10 @@ func (s *Service) EnableWorkflow(
 		if triggers.FindDeclaredTrigger(wf, name) == nil {
 			return nil, svcerr.InvalidArgument(fmt.Sprintf("override names %q, which workflow %q does not declare (it declares: %s)",
 				name, msg.Workflow, strings.Join(triggers.DeclaredTriggerNames(wf), ", ")))
+		}
+		if !declaresSelected(declared, name) {
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("override names %q, which this request does not enable (it enables: %s)",
+				name, strings.Join(msg.Triggers, ", ")))
 		}
 	}
 
@@ -561,6 +569,39 @@ func (s *Service) DisableWorkflow(
 
 // sameWorkflowRef reports whether two refs name one workflow: a builtin by its
 // ref, anything else by the slug every surface resolves refs by.
+// selectDeclaredTriggers narrows wf's declared triggers to names, in
+// declaration order; no names selects them all. A name wf does not declare
+// is refused, so a typo never enables nothing and reports success.
+func selectDeclaredTriggers(wf *reliantv1.Workflow, names []string) ([]*reliantv1.WorkflowTrigger, error) {
+	if len(names) == 0 {
+		return wf.GetTriggers(), nil
+	}
+	want := make(map[string]bool, len(names))
+	for _, name := range names {
+		if triggers.FindDeclaredTrigger(wf, name) == nil {
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("workflow declares no trigger %q (it declares: %s)",
+				name, strings.Join(triggers.DeclaredTriggerNames(wf), ", ")))
+		}
+		want[name] = true
+	}
+	var out []*reliantv1.WorkflowTrigger
+	for _, wt := range wf.GetTriggers() {
+		if want[wt.GetName()] {
+			out = append(out, wt)
+		}
+	}
+	return out, nil
+}
+
+func declaresSelected(selected []*reliantv1.WorkflowTrigger, name string) bool {
+	for _, wt := range selected {
+		if wt.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
 func sameWorkflowRef(a, b string) bool {
 	key := func(ref string) string {
 		ref = strings.TrimSpace(ref)

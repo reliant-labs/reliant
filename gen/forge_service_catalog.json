@@ -34911,6 +34911,11 @@
               "Name": "acting_identity",
               "ProtoType": "enum",
               "IsOptional": false
+            },
+            {
+              "Name": "triggers",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "EnableWorkflowResponse": [
@@ -35338,6 +35343,11 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            },
+            {
+              "name": "triggers",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.EnableWorkflowResponse": [
@@ -43765,6 +43775,17 @@
           "source": {
             "path": "internal/toolexec/tool_result_redelivery.go",
             "symbol": "NATSDaemonRouter.nextToolReply"
+          }
+        },
+        {
+          "id": "method1:eb6a75ecd4a8bab175475121594ca17885fdb00267911aa31a2b9b067bdc73c7",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
           }
         },
         {
@@ -65876,6 +65897,17 @@
           "source": {
             "path": "internal/toolexec/tool_result_redelivery.go",
             "symbol": "NATSDaemonRouter.nextToolReply"
+          }
+        },
+        {
+          "id": "method1:7daa1314a0d84255eb73ca0eb1ad91f58d9d5d942419f4928f44c0522530805f",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
           }
         },
         {
