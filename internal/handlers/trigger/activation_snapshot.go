@@ -60,7 +60,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	account := func(data []byte) error {
 		snap.bytes += len(data)
 		if snap.bytes > maxApprovalSnapshotBytes || len(snap.Workflows)+len(snap.Presets) > maxApprovalDependencies {
-			return svcerr.FailedPrecondition("Activation approval dependency/size limit exceeded")
+			return refusedPrecondition("Activation approval dependency/size limit exceeded")
 		}
 		return nil
 	}
@@ -70,7 +70,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		}
 		p, err := launch.ResolveRunPreset(ctx, s.deps.Repo, user, def.ProjectId, name)
 		if err != nil {
-			return nil, svcerr.FailedPrecondition("Could not resolve an activation preset for approval")
+			return nil, refusedPrecondition("Could not resolve an activation preset for approval")
 		}
 		snap.Presets[name] = p
 		raw, err := json.Marshal(p)
@@ -90,7 +90,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		} // cycle detection: fingerprint once, no recursive expansion
 		w, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, user, ref, def.ProjectId)
 		if err != nil {
-			return nil, svcerr.FailedPrecondition("Could not resolve a referenced workflow for approval")
+			return nil, refusedPrecondition("Could not resolve a referenced workflow for approval")
 		}
 		loaded[key] = w
 		snap.Workflows[key] = canonicalProto(w)
@@ -119,7 +119,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		return nil, limitErr
 	}
 	if result.HasErrors() {
-		return nil, svcerr.FailedPrecondition("Workflow dependency validation failed during approval")
+		return nil, refusedPrecondition("Workflow dependency validation failed during approval")
 	}
 	inputs := map[string]any{}
 	groups := make([]string, 0, len(def.Presets))
@@ -159,7 +159,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		}
 		contextSeen[ctxKey] = true
 		if len(contextSeen) > maxApprovalDependencies {
-			return svcerr.FailedPrecondition("Activation effective privilege context limit exceeded")
+			return refusedPrecondition("Activation effective privilege context limit exceeded")
 		}
 		if err := account(raw); err != nil {
 			return err
@@ -197,12 +197,12 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				return nil, limitErr
 			}
 			if checked.HasErrors() {
-				return nil, svcerr.FailedPrecondition("Referenced workflow dependency validation failed during approval")
+				return nil, refusedPrecondition("Referenced workflow dependency validation failed during approval")
 			}
 			var walk func(*pb.Workflow, int) error
 			walk = func(w *pb.Workflow, depth int) error {
 				if depth > 32 {
-					return svcerr.FailedPrecondition("Activation inline workflow depth limit exceeded")
+					return refusedPrecondition("Activation inline workflow depth limit exceeded")
 				}
 				// Capture preset-input defaults (including groups) as effective choices.
 				var walkInputs func(map[string]*pb.Input, map[string]any) error
@@ -225,7 +225,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							for _, value := range choices {
 								if value != "" {
 									if strings.Contains(value, "{{") {
-										return svcerr.FailedPrecondition("Preset dependencies must resolve before activation approval")
+										return refusedPrecondition("Preset dependencies must resolve before activation approval")
 									}
 									if _, err := loadPreset(value); err != nil {
 										return err
@@ -266,7 +266,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {
-								return svcerr.FailedPrecondition("Router workflow candidates must enumerate preset choices for activation approval")
+								return refusedPrecondition("Router workflow candidates must enumerate preset choices for activation approval")
 							}
 							for _, name := range candidate.GetPresets() {
 								p, err := loadPreset(name)
@@ -287,7 +287,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					if a := node.GetWorkflow(); a != nil && a.GetInline() == nil {
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
-							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
+							return refusedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
 						}
 						a = resolved.(*pb.SubWorkflowArgs)
 						childRef = model.CelStringValue(a.GetRef())
@@ -340,7 +340,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					if a := node.GetLoop(); a != nil && a.GetInline() == nil {
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
-							return svcerr.FailedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
+							return refusedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
 						}
 						a = resolved.(*pb.LoopArgs)
 						if ref := model.CelStringValue(a.GetRef()); ref != "" {
@@ -393,13 +393,13 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						// are refused rather than silently omitted from the approval.
 						resolved, err := wfcel.ResolveCELFields(tc, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
-							return svcerr.FailedPrecondition("Tool privileges depend on runtime/event values; activation approval requires fixed privilege choices")
+							return refusedPrecondition("Tool privileges depend on runtime/event values; activation approval requires fixed privilege choices")
 						}
 						tc = resolved.(*pb.ToolsConfig)
 						declarations := model.CelStringListValue(tc.GetPreloadedTools())
 						for _, declaration := range append(append([]string{}, declarations...), model.CelStringListValue(tc.GetLoadableTools())...) {
 							if strings.HasPrefix(strings.TrimPrefix(declaration, "!"), "mcp__") {
-								return svcerr.FailedPrecondition("MCP privilege dependencies require explicit review in the app")
+								return refusedPrecondition("MCP privilege dependencies require explicit review in the app")
 							}
 						}
 						declarations = append(declarations, model.CelStringListValue(tc.GetLoadableTools())...)
@@ -408,7 +408,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						snap.Summary = append(snap.Summary, "Agent tier: "+tools.NormalizePermission(model.CelStringValue(tc.GetPermission())))
 						if tools.FilterReachesMCP(declarations) {
-							return svcerr.FailedPrecondition("MCP or wildcard privilege dependencies require explicit fixed catalog choices or review in the app")
+							return refusedPrecondition("MCP or wildcard privilege dependencies require explicit fixed catalog choices or review in the app")
 						}
 						allowed := tools.ExpandToolFilter(declarations, nil)
 						sort.Strings(allowed)
@@ -418,11 +418,11 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						for _, name := range allowed {
 							if !known[name] {
-								return svcerr.FailedPrecondition("Non-catalog tool privileges require explicit review in the app")
+								return refusedPrecondition("Non-catalog tool privileges require explicit review in the app")
 							}
 						}
 						if len(allowed) > 256 {
-							return svcerr.FailedPrecondition("Tool privilege display limit exceeded")
+							return refusedPrecondition("Tool privilege display limit exceeded")
 						}
 						snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: %s; agent-chosen action target repositories/channels/environments: dynamic/unbounded unless a fixed binding below narrows them (runtime policy still applies)", strings.Join(allowed, ", ")))
 						boundTools := make([]string, 0, len(tc.GetTools()))
@@ -437,14 +437,14 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						entries := model.CelStringListValue(tc.GetSpawn())
 						if model.CelStringListIsExpr(tc.GetSpawn()) {
-							return svcerr.FailedPrecondition("Dynamic spawn declarations require explicit fixed choices before activation approval")
+							return refusedPrecondition("Dynamic spawn declarations require explicit fixed choices before activation approval")
 						}
 						for _, entry := range entries {
 							if strings.Contains(entry, "{{") {
-								return svcerr.FailedPrecondition("Dynamic spawn declarations require explicit fixed choices before activation approval")
+								return refusedPrecondition("Dynamic spawn declarations require explicit fixed choices before activation approval")
 							}
 							if strings.HasPrefix(entry, "spawn:") && tools.ParseSpawnEntry(entry) == nil {
-								return svcerr.FailedPrecondition("Spawn dependencies must enumerate fixed preset choices for activation approval")
+								return refusedPrecondition("Spawn dependencies must enumerate fixed preset choices for activation approval")
 							}
 							if spawn := tools.ParseSpawnEntry(entry); spawn != nil {
 								if _, err := load(spawn.Workflow); err != nil {

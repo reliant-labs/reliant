@@ -617,7 +617,7 @@ func (s *Service) triggerFromDefinition(
 	}
 
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
-		return nil, svcerr.NotFound("project")
+		return nil, tools.RefuseActivation("project not found", svcerr.NotFound("project"))
 	} else if err != nil {
 		return nil, triggerDBError("get project", err)
 	}
@@ -627,7 +627,7 @@ func (s *Service) triggerFromDefinition(
 			return nil, err
 		}
 	} else if err := s.validateTriggerDaemon(ctx, userID, def.ProjectId, def.DaemonId); err != nil {
-		return nil, err
+		return nil, tools.RefuseActivation("machine is not usable for this project (not found, not yours, or the project is not on it)", err)
 	}
 
 	if def.WorktreeId != nil && *def.WorktreeId != "" {
@@ -750,8 +750,9 @@ func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *
 		}
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
-		return "", svcerr.FailedPrecondition("acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; " +
-			"configure the App, or explicitly choose owner to write under your own name")
+		return "", tools.RefuseActivation("acting_identity app needs this server's control plane (the GitHub App); choose owner to write under your own name",
+			svcerr.FailedPrecondition("acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; "+
+				"configure the App, or explicitly choose owner to write under your own name"))
 	}
 	return identity, nil
 }
@@ -772,7 +773,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 		if errors.As(err, &lookup) {
 			return nil, triggerDBError("resolve workflow", err)
 		}
-		return nil, unresolvedWorkflow(def.Workflow, err)
+		return nil, tools.RefuseActivation("workflow not found in this project, or it does not validate", unresolvedWorkflow(def.Workflow, err))
 	}
 	declared := triggers.FindDeclaredTrigger(wf, name)
 	if declared == nil {
@@ -781,7 +782,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 		if len(declared) > 0 {
 			msg += " (it declares: " + strings.Join(declared, ", ") + ")"
 		}
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, msg)
+		return nil, tools.RefuseActivation(msg, svcerr.WithMessage(svcerr.ErrNotFound, msg))
 	}
 	// The activation's message overrides the declaration's prompt template;
 	// with neither, a run would start with nothing to do.
@@ -803,8 +804,8 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// setting that does nothing.
 	for input := range decl.Inputs {
 		if _, ok := def.Params[input]; ok {
-			return nil, svcerr.InvalidArgument(fmt.Sprintf(
-				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name))
+			return nil, tools.RefuseActivation("params."+input+" is set by the declared trigger from each event; remove it", svcerr.InvalidArgument(fmt.Sprintf(
+				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name)))
 		}
 	}
 	// Params are what filters, inputs and prompts read as activation.params,
@@ -812,8 +813,12 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// required input nobody supplied would fail every run it launched. Every
 	// write of an activation passes through here, so none can store either.
 	if issues := validation.ValidateActivationParams(wf.GetInputs(), decl.Inputs, triggers.ParamsFromProto(def.Params)); len(issues) > 0 {
-		return nil, svcerr.InvalidArgument(fmt.Sprintf(
-			"params: %s", joinIssues(issues)))
+		names := make([]string, len(issues))
+		for i, issue := range issues {
+			names[i] = issue.Input
+		}
+		return nil, tools.RefuseActivation("params invalid: "+strings.Join(names, ", "), svcerr.InvalidArgument(fmt.Sprintf(
+			"params: %s", joinIssues(issues))))
 	}
 	return decl, nil
 }

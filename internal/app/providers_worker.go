@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
+	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -369,7 +370,9 @@ func NewAgentRuns(d AgentRunsDeps) (*agentruns.Runs, error) {
 type WorkerTrigger struct{ *trigger.Service }
 
 // WorkerTriggerDeps is the trigger service's wiring on the worker: its
-// inbound half needs the provider registry and the vault (signed webhooks).
+// inbound half needs the provider registry and the vault (signed webhooks),
+// and the control plane, which hosts the GitHub App and mints the tokens an
+// unattended fire wakes its machine with.
 type WorkerTriggerDeps struct {
 	Logger       *slog.Logger
 	Config       *config.Config
@@ -378,9 +381,16 @@ type WorkerTriggerDeps struct {
 	Vault        vault.Service
 	Pollers      *webhook.Registry
 	Integrations *IntegrationSettings
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
-// NewWorkerTrigger builds the trigger service list_triggers reads through.
+// NewWorkerTrigger builds the trigger service list_triggers reads through and
+// the activation tools (create_trigger_activation, …) write through. Those
+// writes must validate as the api-server's TriggerService does, so the
+// control plane and GitHub's access gate are wired here as there: without
+// them every GitHub activation was refused ("connect github first" — hosted
+// GitHub has no saved connection) or could not act as the App. The access
+// refresh loop and the input-option reachability check stay api-only.
 // PUBLIC_URL is used when the worker has it; without it a webhook's URL is
 // reported as a bare path.
 //
@@ -388,12 +398,22 @@ type WorkerTriggerDeps struct {
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
+	githubAccess, err := wireGitHubAccess(repo, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
+	if err != nil {
+		return nil, fmt.Errorf("trigger service: %w", err)
+	}
+	var access map[string]trigger.IntegrationAccess
+	if githubAccess != nil {
+		access = map[string]trigger.IntegrationAccess{ghaccess.IntegrationID: gitHubAccess{githubAccess}}
+	}
 	svc, err := trigger.New(trigger.Deps{
 		Logger:       d.Logger,
 		Config:       d.Config,
 		Repo:         repo,
 		Syncer:       syncer,
 		Fires:        fires,
+		ControlPlane: hostedControlPlane(d.ControlPlane),
+		Access:       access,
 		Integrations: d.Integrations.Config,
 		Sealer:       d.Vault,
 		Catalog:      d.Pollers,
