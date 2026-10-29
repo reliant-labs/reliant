@@ -172,7 +172,8 @@ describe("InlineAutomationForm: new", () => {
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
     expect((createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!.actingIdentity).toBe(expected);
-  });
+    // ~0.4s idle; a saturated merge-gate runner pushed it past the 5s default.
+  }, 20_000);
 
   it.each([ActingIdentity.OWNER, ActingIdentity.APP])("preserves stored GitHub actor %s when editing", async (identity) => {
     const stored = triggerFromProto(create(TriggerSchema, {
