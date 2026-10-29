@@ -80,6 +80,10 @@ type WorkflowStatusInput struct {
 	// machine connects. A pause without it is someone else's and clears the
 	// mark.
 	PausedForMachine bool `json:"paused_for_machine,omitempty"`
+	// DurationMs is how long this execution ran, on a root run's terminal
+	// status; it becomes workflow_ended.duration_ms. Zero means unknown (a
+	// status from a run that predates the field).
+	DurationMs int64 `json:"duration_ms,omitempty"`
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -925,6 +929,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 		Presets:      presets,
 		PresetTypes:  classifyPresetTypes(presets),
 		IsChild:      false, // Always false now since we skip children
+		Duration:     time.Duration(input.DurationMs) * time.Millisecond,
 	}
 
 	analyticsClient := analytics.ForUser(ctx, userID)

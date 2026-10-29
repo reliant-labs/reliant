@@ -313,7 +313,10 @@ type PreflightDaemonCheckStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
-	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// QueueChatForMachine marks the chat's message queued for the machine
+	// target the run waited on; SettleQueuedDelivery ends that.
+	QueueChatForMachine(ctx context.Context, chatID string, target db.QueuedMachineTarget, failure string) (bool, error)
+	SettleQueuedDelivery(ctx context.Context, chatID string) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 }
 

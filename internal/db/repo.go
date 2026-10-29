@@ -1407,11 +1407,103 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	return changed, err
 }
 
+// QueueChatForMachine marks the chat as holding a message queued for the
+// machine target a run waited on, and records why that run gave up on it —
+// together, so delivery never sees a queued message without its machine. It
+// reports whether the queued marker changed, and emits chat_activity_changed
+// only then.
+func (r *Repo) QueueChatForMachine(ctx context.Context, chatID string, target QueuedMachineTarget, failure string) (bool, error) {
+	var changed bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		if err := store.RecordChatQueuedDelivery(txCtx, r.ORM(), chatID, target, failure); err != nil {
+			return err
+		}
+		var err error
+		changed, err = store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, true)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return changed, err
+}
+
+// SettleQueuedDelivery ends a chat's queued-message bookkeeping: the message
+// reached its machine (a run got past preflight), was answered, or was
+// replaced by the user's own send. It clears the queued marker and forgets the
+// delivery record — and with it the attempt count — and reports whether the
+// marker changed.
+func (r *Repo) SettleQueuedDelivery(ctx context.Context, chatID string) (bool, error) {
+	var changed bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		if err := store.ClearChatQueuedDelivery(txCtx, r.ORM(), chatID); err != nil {
+			return err
+		}
+		var err error
+		changed, err = store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, false)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return changed, err
+}
+
 // ListChatsQueuedForMachine lists non-archived chats holding a message
-// queued for their machine, oldest first, at most limit; userID "" lists
-// every user's.
-func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
-	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
+// queued for a machine, oldest first, at most limit, with what each waits for
+// and how often delivering it has been tried; userID "" lists every user's.
+// includeGivenUp adds the chats delivery stopped retrying.
+func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int, includeGivenUp bool) ([]QueuedForMachineChat, error) {
+	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit, includeGivenUp)
+}
+
+// RecordQueuedDeliveryAttempt counts a run delivery started for the chat's
+// queued message, and holds the sweep off the next one until nextAttemptAt.
+func (r *Repo) RecordQueuedDeliveryAttempt(ctx context.Context, chatID string, nextAttemptAt time.Time) error {
+	return store.RecordQueuedDeliveryAttempt(ctx, r.ORM(), chatID, nextAttemptAt)
+}
+
+// GiveUpQueuedDelivery stops delivery retrying the chat's queued message on its
+// own: the record is parked and the queued marker cleared, so the chat reads as
+// what it is — a run that failed — instead of as waiting. It applies only to a
+// record that has spent its attempts on a chat that is still queued, and
+// reports whether it did (false: already stopped, or the owner settled the
+// message first — so the caller that sees true is the one to tell the user).
+func (r *Repo) GiveUpQueuedDelivery(ctx context.Context, chatID string) (bool, error) {
+	var stopped bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var err error
+		stopped, err = store.GiveUpQueuedDelivery(txCtx, r.ORM(), chatID, MaxQueuedDeliveryAttempts)
+		if err != nil || !stopped {
+			return err
+		}
+		cleared, err := store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, false)
+		if err != nil || !cleared {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return stopped, err
+}
+
+// ReviveQueuedDelivery lets delivery try the chat's queued message once more
+// after it stopped retrying — the record is un-parked and the message is
+// queued again — and reports whether it had stopped.
+func (r *Repo) ReviveQueuedDelivery(ctx context.Context, chatID string) (bool, error) {
+	var revived bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var err error
+		revived, err = store.ReviveQueuedDelivery(txCtx, r.ORM(), chatID)
+		if err != nil || !revived {
+			return err
+		}
+		queued, err := store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, true)
+		if err != nil || !queued {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return revived, err
 }
 
 // SetChatRunID records runID as the run currently executing the chat's root

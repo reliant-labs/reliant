@@ -24,6 +24,9 @@ const (
 // connects; never a credential. See core.ProviderOAuthMarker.
 const ProviderOAuthMarker = core.ProviderOAuthMarker
 
+// MaxQueuedDeliveryAttempts: see core.
+const MaxQueuedDeliveryAttempts = core.MaxQueuedDeliveryAttempts
+
 // Run-list types.
 type (
 	RunListFilters = core.RunListFilters
@@ -56,9 +59,11 @@ type ChatActivityState = core.ChatActivityState
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo
 
-// QueuedForMachineChat, PausedForMachineChat and WaitingForMachineRun: see core.
+// QueuedForMachineChat, QueuedMachineTarget, PausedForMachineChat and
+// WaitingForMachineRun: see core.
 type (
 	QueuedForMachineChat = core.QueuedForMachineChat
+	QueuedMachineTarget  = core.QueuedMachineTarget
 	PausedForMachineChat = core.PausedForMachineChat
 	WaitingForMachineRun = core.WaitingForMachineRun
 )

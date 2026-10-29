@@ -43149,7 +43149,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.APICatalogSearch",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 430
+        "line": 431
       },
       "methods": [
         {
@@ -43217,7 +43217,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.APIConnections",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 394
+        "line": 395
       },
       "methods": [],
       "implementation_candidates": []
@@ -43229,9 +43229,20 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.APIDaemonRouter",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 294
+        "line": 295
       },
       "methods": [
+        {
+          "id": "method1:8cac69b93af522598a27ebd014200839d9ee125bcd193204b5da2f44d323e036",
+          "name": "AttachedSince",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (since time.Time, ok bool, err error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.AttachedSince",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "line": 820
+          }
+        },
         {
           "id": "method1:3f253777156fc64c886626da06d88ceb4e80a9138af26f15ae899f572647109c",
           "name": "Close",
@@ -43240,7 +43251,7 @@
           "legacy_name": "app.Close",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 301
+            "line": 302
           }
         },
         {
@@ -43251,7 +43262,7 @@
           "legacy_name": "app.EnqueueDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1673
+            "line": 1719
           }
         },
         {
@@ -43262,7 +43273,7 @@
           "legacy_name": "app.EnsureAwake",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 621
+            "line": 635
           }
         },
         {
@@ -43273,7 +43284,7 @@
           "legacy_name": "app.IsDaemonOnline",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 739
+            "line": 753
           }
         },
         {
@@ -43284,7 +43295,7 @@
           "legacy_name": "app.MachineState",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 570
+            "line": 584
           }
         },
         {
@@ -43350,7 +43361,7 @@
           "legacy_name": "app.SendDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 980
+            "line": 1026
           }
         },
         {
@@ -43361,7 +43372,7 @@
           "legacy_name": "app.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 999
+            "line": 1045
           }
         },
         {
@@ -43383,7 +43394,7 @@
           "legacy_name": "app.SendKillProcess",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 948
+            "line": 994
           }
         },
         {
@@ -43394,7 +43405,7 @@
           "legacy_name": "app.SendLoadProjectConfigs",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1471
+            "line": 1517
           }
         },
         {
@@ -43405,7 +43416,7 @@
           "legacy_name": "app.SendTerminalInput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1515
+            "line": 1561
           }
         },
         {
@@ -43416,7 +43427,7 @@
           "legacy_name": "app.SendTerminalResize",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1537
+            "line": 1583
           }
         },
         {
@@ -43427,7 +43438,7 @@
           "legacy_name": "app.SendToolExecutionBackground",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 901
+            "line": 947
           }
         },
         {
@@ -43438,7 +43449,7 @@
           "legacy_name": "app.SendToolExecutionCancel",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 870
+            "line": 916
           }
         },
         {
@@ -43449,7 +43460,7 @@
           "legacy_name": "app.SendToolRequest",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 850
+            "line": 896
           }
         },
         {
@@ -43460,7 +43471,7 @@
           "legacy_name": "app.SendToolRequestSync",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1315
+            "line": 1361
           }
         },
         {
@@ -43471,7 +43482,7 @@
           "legacy_name": "app.SendToolRequestSyncWithSelector",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1464
+            "line": 1510
           }
         },
         {
@@ -43482,7 +43493,7 @@
           "legacy_name": "app.SendWatchProjectConfigs",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1493
+            "line": 1539
           }
         },
         {
@@ -43493,7 +43504,7 @@
           "legacy_name": "app.SubscribeProcessOutput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1611
+            "line": 1657
           }
         },
         {
@@ -43504,7 +43515,7 @@
           "legacy_name": "app.SubscribeTerminalOutput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1560
+            "line": 1606
           }
         },
         {
@@ -43515,7 +43526,7 @@
           "legacy_name": "app.Wake",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 638
+            "line": 652
           }
         },
         {
@@ -43570,7 +43581,7 @@
           "legacy_name": "app.buildDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1059
+            "line": 1105
           }
         },
         {
@@ -43581,7 +43592,7 @@
           "legacy_name": "app.commandResolver",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1011
+            "line": 1057
           }
         },
         {
@@ -43614,7 +43625,7 @@
           "legacy_name": "app.dispatchDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1030
+            "line": 1076
           }
         },
         {
@@ -43625,7 +43636,7 @@
           "legacy_name": "app.isDaemonOnlineViaNATS",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 826
+            "line": 872
           }
         },
         {
@@ -43636,7 +43647,7 @@
           "legacy_name": "app.isSelectedDaemonOnline",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 755
+            "line": 769
           }
         },
         {
@@ -43647,7 +43658,7 @@
           "legacy_name": "app.jetstream",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1740
+            "line": 1786
           }
         },
         {
@@ -43713,7 +43724,7 @@
           "legacy_name": "app.resume",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 677
+            "line": 691
           }
         },
         {
@@ -43735,7 +43746,7 @@
           "legacy_name": "app.resumeToken",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 701
+            "line": 715
           }
         },
         {
@@ -43757,7 +43768,7 @@
           "legacy_name": "app.sendCancelToDaemon",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 879
+            "line": 925
           }
         },
         {
@@ -43768,7 +43779,7 @@
           "legacy_name": "app.sendDaemonCommandData",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1134
+            "line": 1180
           }
         },
         {
@@ -43779,7 +43790,7 @@
           "legacy_name": "app.sendToolRequestSync",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1327
+            "line": 1373
           }
         },
         {
@@ -43801,7 +43812,7 @@
           "legacy_name": "app.toolRequestRoundTrip",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1400
+            "line": 1446
           }
         },
         {
@@ -43825,7 +43836,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.APIDebugServer",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 269
+        "line": 270
       },
       "methods": [
         {
@@ -43860,7 +43871,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/grpc.APIListener",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 239
+        "line": 240
       },
       "methods": [
         {
@@ -43983,7 +43994,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.APISettings",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 109
+        "line": 110
       },
       "methods": [],
       "implementation_candidates": []
@@ -43995,7 +44006,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/llm/tools.ToolsFactory",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 335
+        "line": 336
       },
       "methods": [
         {
@@ -45907,7 +45918,7 @@
           "legacy_name": "chat.ContinueQueued",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 47
+            "line": 49
           }
         },
         {
@@ -46109,6 +46120,17 @@
           }
         },
         {
+          "id": "method1:e4920c621d4ed8bd576fc85f09670dbcde2f2fa7bddf879f7790cb19e65bfdb4",
+          "name": "NotifyQueuedDeliveryStopped",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.NotifyQueuedDeliveryStopped",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 395
+          }
+        },
+        {
           "id": "method1:49888bc10bd472c29f8ff19b4a650ac5236a7c67387236eb435bf87ea2bcd614",
           "name": "PauseChat",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.PauseChatRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.PauseChatResponse], error)",
@@ -46160,7 +46182,7 @@
           "legacy_name": "chat.ResumePausedForMachine",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 165
+            "line": 167
           }
         },
         {
@@ -46325,7 +46347,7 @@
           "legacy_name": "chat.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 364
+            "line": 366
           }
         },
         {
@@ -46380,7 +46402,7 @@
           "legacy_name": "chat.awaitsDelivery",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 235
+            "line": 237
           }
         },
         {
@@ -46523,7 +46545,7 @@
           "legacy_name": "chat.dropQueuedMessage",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 248
+            "line": 250
           }
         },
         {
@@ -46600,7 +46622,7 @@
           "legacy_name": "chat.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 331
+            "line": 333
           }
         },
         {
@@ -46710,7 +46732,7 @@
           "legacy_name": "chat.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 344
+            "line": 346
           }
         },
         {
@@ -46791,6 +46813,28 @@
           }
         },
         {
+          "id": "method1:62b755e2d24a545c39806e15a4a992f9464691534393f4745b0c50ada0db545a",
+          "name": "queuedDeliveryStoppedMessage",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) string",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.queuedDeliveryStoppedMessage",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 416
+          }
+        },
+        {
+          "id": "method1:2086b0898ccef93d158869c84e3549e471e5a3db21947cb0baa68d1528e5225f",
+          "name": "queuedMachineLabel",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) string",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.queuedMachineLabel",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 438
+          }
+        },
+        {
           "id": "method1:a1a9d0f0d882ecf209545d7c2569c591f4e9508c27da94ba79c10f69cc603ca4",
           "name": "reachableContextWindows",
           "signature": "func(ctx context.Context, chatID string) (map[string]bool, error)",
@@ -46864,7 +46908,7 @@
           "legacy_name": "chat.restartAtCheckpoint",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 268
+            "line": 270
           }
         },
         {
@@ -47720,7 +47764,7 @@
       "type": "github.com/reliant-labs/reliant/internal/connectorgrant.Store",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 540
+        "line": 541
       },
       "methods": [
         {
@@ -48284,7 +48328,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.DaemonEventsConsumer",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 870
+        "line": 871
       },
       "methods": [
         {
@@ -48295,7 +48339,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 875
+            "line": 876
           }
         }
       ],
@@ -49844,7 +49888,7 @@
           "legacy_name": "db.EmitNodeExecutionEvent",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1500
+            "line": 1592
           }
         },
         {
@@ -51333,6 +51377,17 @@
           }
         },
         {
+          "id": "method1:e77067e22aa2f23eccb93fac143793a2d632863921c7c99a55a5c8a5f6c66a40",
+          "name": "GiveUpQueuedDelivery",
+          "signature": "func(ctx context.Context, chatID string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GiveUpQueuedDelivery",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 1472
+          }
+        },
+        {
           "id": "method1:ebcff922e96266aa37c227123a549eee763d7a95b438c6715c5c8cabf66de611",
           "name": "HasEnabledTriggerOfKind",
           "signature": "func(ctx context.Context, userID string, kind github.com/reliant-labs/reliant/internal/db/core.TriggerKind) (bool, error)",
@@ -51615,18 +51670,18 @@
           "legacy_name": "db.ListChatsPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1435
+            "line": 1527
           }
         },
         {
           "id": "method1:41b0f8771d87390b24062e0d5ea880bbaff793779cc3ebe27f51174efab957f1",
           "name": "ListChatsQueuedForMachine",
-          "signature": "func(ctx context.Context, userID string, limit int) ([]github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat, error)",
+          "signature": "func(ctx context.Context, userID string, limit int, includeGivenUp bool) ([]github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat, error)",
           "scope": "github.com/reliant-labs/reliant/internal/db",
           "legacy_name": "db.ListChatsQueuedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1413
+            "line": 1456
           }
         },
         {
@@ -51637,7 +51692,7 @@
           "legacy_name": "db.ListChatsWaitingForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1441
+            "line": 1533
           }
         },
         {
@@ -52895,6 +52950,17 @@
           }
         },
         {
+          "id": "method1:d2d3a374d30c7ea55f80d72428a222290e1f9d8333e5953ad2360378eecee770",
+          "name": "QueueChatForMachine",
+          "signature": "func(ctx context.Context, chatID string, target github.com/reliant-labs/reliant/internal/db.QueuedMachineTarget, failure string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.QueueChatForMachine",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 1415
+          }
+        },
+        {
           "id": "method1:d630ed10b3b3668f8f7b8fc22be949dcd1d8803be245f419a56a17cfb1a0587f",
           "name": "ReapOrphanedThreads",
           "signature": "func(ctx context.Context) ([]github.com/reliant-labs/reliant/internal/db.ReapedThread, error)",
@@ -52958,6 +53024,17 @@
           "source": {
             "path": "internal/db/provider_backoff.go",
             "line": 34
+          }
+        },
+        {
+          "id": "method1:1aa44b0daf956702dc02cee9ead9a25be058f727df99dcb29e0b76a877f14dce",
+          "name": "RecordQueuedDeliveryAttempt",
+          "signature": "func(ctx context.Context, chatID string, nextAttemptAt time.Time) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.RecordQueuedDeliveryAttempt",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 1462
           }
         },
         {
@@ -53148,6 +53225,17 @@
           }
         },
         {
+          "id": "method1:d1b327b6fea2f591ae761de7976515538a45a430078d6fbddf57dcb14b83418f",
+          "name": "ReviveQueuedDelivery",
+          "signature": "func(ctx context.Context, chatID string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ReviveQueuedDelivery",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 1492
+          }
+        },
+        {
           "id": "method1:8585f8a2b43582cd35a9ad7d4bee380fca1b01d415fa9ed2a60bad8bbc1cab39",
           "name": "ReviveSubtreeLiveAt",
           "signature": "func(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived int64, threadsRevived int64, err error)",
@@ -53331,7 +53419,7 @@
           "legacy_name": "db.SetChatPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1428
+            "line": 1520
           }
         },
         {
@@ -53353,7 +53441,7 @@
           "legacy_name": "db.SetChatRunID",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1421
+            "line": 1513
           }
         },
         {
@@ -53577,6 +53665,17 @@
           }
         },
         {
+          "id": "method1:dd53f991953389dfbb5ac4a057ac8a33fda6145ec6fad1f3d0c3cfb77480b26b",
+          "name": "SettleQueuedDelivery",
+          "signature": "func(ctx context.Context, chatID string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SettleQueuedDelivery",
+          "source": {
+            "path": "internal/db/repo.go",
+            "line": 1436
+          }
+        },
+        {
           "id": "method1:106e0fdfc25dcb8894a3e31ec49f8a1b0e4d0161d44b9b67c4fd9ee3637268d4",
           "name": "SpawnToolCallIDsByChildThread",
           "signature": "func(ctx context.Context, chatID string) (map[string]string, error)",
@@ -53716,7 +53815,7 @@
           "legacy_name": "db.UpdateChatUnread",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1446
+            "line": 1538
           }
         },
         {
@@ -55188,7 +55287,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/integrations/ghaccess.Refresher",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 566
+        "line": 567
       },
       "methods": [
         {
@@ -55278,7 +55377,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.GitHubAccessLoop",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 686
+        "line": 687
       },
       "methods": [
         {
@@ -55289,7 +55388,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 694
+            "line": 695
           }
         }
       ],
@@ -55302,7 +55401,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/grpc.APIHTTPRoutes",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 204
+        "line": 205
       },
       "methods": [
         {
@@ -55504,7 +55603,7 @@
       "type": "github.com/reliant-labs/reliant/internal/integrations/inputoptions.Service",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 474
+        "line": 475
       },
       "methods": [
         {
@@ -56920,7 +57019,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.PayloadGC",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 1167
+        "line": 1171
       },
       "methods": [
         {
@@ -56931,7 +57030,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1172
+            "line": 1176
           }
         }
       ],
@@ -58170,7 +58269,7 @@
       "type": "github.com/reliant-labs/reliant/internal/queueddelivery.Service",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 814
+        "line": 815
       },
       "methods": [
         {
@@ -58181,7 +58280,7 @@
           "legacy_name": "queueddelivery.ContinueQueued",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 30
+            "line": 33
           }
         },
         {
@@ -58192,7 +58291,7 @@
           "legacy_name": "queueddelivery.MachineConnected",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 21
+            "line": 24
           }
         },
         {
@@ -58203,7 +58302,7 @@
           "legacy_name": "queueddelivery.Run",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 34
+            "line": 37
           }
         },
         {
@@ -58214,7 +58313,7 @@
           "legacy_name": "queueddelivery.Sweep",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 27
+            "line": 30
           }
         }
       ],
@@ -58227,7 +58326,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.QueuedDelivery",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 838
+        "line": 839
       },
       "methods": [
         {
@@ -58238,7 +58337,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 844
+            "line": 845
           }
         }
       ],
@@ -58251,7 +58350,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.ReliantKeySweep",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 1138
+        "line": 1142
       },
       "methods": [
         {
@@ -58262,7 +58361,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1146
+            "line": 1150
           }
         }
       ],
@@ -58599,7 +58698,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/workflow.ResetAttemptGuard",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 793
+        "line": 794
       },
       "methods": [
         {
@@ -59764,7 +59863,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/triggers.Syncer",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 961
+        "line": 962
       },
       "methods": [
         {
@@ -63147,7 +63246,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/triggers.Alerting",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 716
+        "line": 717
       },
       "methods": [
         {
@@ -63215,7 +63314,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/integrations/webhook.Inbound",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 766
+        "line": 767
       },
       "methods": [
         {
@@ -63351,7 +63450,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.TriggerReconciler",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 1012
+        "line": 1013
       },
       "methods": [
         {
@@ -63362,7 +63461,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1018
+            "line": 1019
           }
         }
       ],
@@ -63375,7 +63474,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.TriggerRedriver",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 1038
+        "line": 1039
       },
       "methods": [
         {
@@ -63386,7 +63485,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1043
+            "line": 1044
           }
         }
       ],
@@ -63399,7 +63498,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.TriggerScheduleSync",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 983
+        "line": 984
       },
       "methods": [
         {
@@ -63410,7 +63509,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 988
+            "line": 989
           }
         }
       ],
@@ -63423,7 +63522,7 @@
       "type": "github.com/reliant-labs/reliant/internal/app.TriggerSenders",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 593
+        "line": 594
       },
       "methods": [],
       "implementation_candidates": []
@@ -63435,7 +63534,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/grpc.UserAuth",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 157
+        "line": 158
       },
       "methods": [
         {
@@ -63536,7 +63635,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/grpc.UserChain",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 172
+        "line": 173
       },
       "methods": [
         {
@@ -63842,7 +63941,7 @@
           "legacy_name": "app.ContinueQueued",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 47
+            "line": 49
           }
         },
         {
@@ -64044,6 +64143,17 @@
           }
         },
         {
+          "id": "method1:393e87f8d252b87ffb827e6a9830dcd632adee1d9f039f9f21057c742b5c13b0",
+          "name": "NotifyQueuedDeliveryStopped",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.NotifyQueuedDeliveryStopped",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 395
+          }
+        },
+        {
           "id": "method1:e6cbd149e8e670451cc2c6c44bc09938abbdd7e32adcc9397cb74b592cb450bc",
           "name": "PauseChat",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.PauseChatRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.PauseChatResponse], error)",
@@ -64095,7 +64205,7 @@
           "legacy_name": "app.ResumePausedForMachine",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 165
+            "line": 167
           }
         },
         {
@@ -64260,7 +64370,7 @@
           "legacy_name": "app.abandonMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 364
+            "line": 366
           }
         },
         {
@@ -64315,7 +64425,7 @@
           "legacy_name": "app.awaitsDelivery",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 235
+            "line": 237
           }
         },
         {
@@ -64458,7 +64568,7 @@
           "legacy_name": "app.dropQueuedMessage",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 248
+            "line": 250
           }
         },
         {
@@ -64535,7 +64645,7 @@
           "legacy_name": "app.inputsAfterClosedRun",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 331
+            "line": 333
           }
         },
         {
@@ -64645,7 +64755,7 @@
           "legacy_name": "app.nudgeMachineWait",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 344
+            "line": 346
           }
         },
         {
@@ -64726,6 +64836,28 @@
           }
         },
         {
+          "id": "method1:aa2ca2ac043404c2cee986160dc019464eb87c9619c807d8eb0e60e3792b596e",
+          "name": "queuedDeliveryStoppedMessage",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) string",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.queuedDeliveryStoppedMessage",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 416
+          }
+        },
+        {
+          "id": "method1:e5c3ff573f646bd24b4220f4d75d7280252181dd6a57a33b9dbcf89e0615e872",
+          "name": "queuedMachineLabel",
+          "signature": "func(ctx context.Context, queued github.com/reliant-labs/reliant/internal/db.QueuedForMachineChat) string",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.queuedMachineLabel",
+          "source": {
+            "path": "internal/handlers/chat/chat_continue.go",
+            "line": 438
+          }
+        },
+        {
           "id": "method1:028684dc1e6f33cc21f71b6d8d807ece018c9ebdcd0c30c0201d87bf49875f1f",
           "name": "reachableContextWindows",
           "signature": "func(ctx context.Context, chatID string) (map[string]bool, error)",
@@ -64799,7 +64931,7 @@
           "legacy_name": "app.restartAtCheckpoint",
           "source": {
             "path": "internal/handlers/chat/chat_continue.go",
-            "line": 268
+            "line": 270
           }
         },
         {
@@ -65223,6 +65355,17 @@
       },
       "methods": [
         {
+          "id": "method1:6f4cddec6d41031d2fda6c8f52846c4da11ccbcb9594e832bb710f0387e18285",
+          "name": "AttachedSince",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (since time.Time, ok bool, err error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.AttachedSince",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "line": 820
+          }
+        },
+        {
           "id": "method1:00113f4206bd68b55fb816e1d17094b8fe78d09bad83cb3ae4ae0cb1858d88c5",
           "name": "Close",
           "signature": "func() error",
@@ -65230,7 +65373,7 @@
           "legacy_name": "app.Close",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1655
+            "line": 1701
           }
         },
         {
@@ -65241,7 +65384,7 @@
           "legacy_name": "app.EnqueueDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1673
+            "line": 1719
           }
         },
         {
@@ -65252,7 +65395,7 @@
           "legacy_name": "app.EnsureAwake",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 621
+            "line": 635
           }
         },
         {
@@ -65263,7 +65406,7 @@
           "legacy_name": "app.IsDaemonOnline",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 739
+            "line": 753
           }
         },
         {
@@ -65274,7 +65417,7 @@
           "legacy_name": "app.MachineState",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 570
+            "line": 584
           }
         },
         {
@@ -65340,7 +65483,7 @@
           "legacy_name": "app.SendDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 980
+            "line": 1026
           }
         },
         {
@@ -65351,7 +65494,7 @@
           "legacy_name": "app.SendDaemonCommandToDaemon",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 999
+            "line": 1045
           }
         },
         {
@@ -65373,7 +65516,7 @@
           "legacy_name": "app.SendKillProcess",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 948
+            "line": 994
           }
         },
         {
@@ -65384,7 +65527,7 @@
           "legacy_name": "app.SendLoadProjectConfigs",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1471
+            "line": 1517
           }
         },
         {
@@ -65395,7 +65538,7 @@
           "legacy_name": "app.SendTerminalInput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1515
+            "line": 1561
           }
         },
         {
@@ -65406,7 +65549,7 @@
           "legacy_name": "app.SendTerminalResize",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1537
+            "line": 1583
           }
         },
         {
@@ -65417,7 +65560,7 @@
           "legacy_name": "app.SendToolExecutionBackground",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 901
+            "line": 947
           }
         },
         {
@@ -65428,7 +65571,7 @@
           "legacy_name": "app.SendToolExecutionCancel",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 870
+            "line": 916
           }
         },
         {
@@ -65439,7 +65582,7 @@
           "legacy_name": "app.SendToolRequest",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 850
+            "line": 896
           }
         },
         {
@@ -65450,7 +65593,7 @@
           "legacy_name": "app.SendToolRequestSync",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1315
+            "line": 1361
           }
         },
         {
@@ -65461,7 +65604,7 @@
           "legacy_name": "app.SendToolRequestSyncWithSelector",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1464
+            "line": 1510
           }
         },
         {
@@ -65472,7 +65615,7 @@
           "legacy_name": "app.SendWatchProjectConfigs",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1493
+            "line": 1539
           }
         },
         {
@@ -65483,7 +65626,7 @@
           "legacy_name": "app.SubscribeProcessOutput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1611
+            "line": 1657
           }
         },
         {
@@ -65494,7 +65637,7 @@
           "legacy_name": "app.SubscribeTerminalOutput",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1560
+            "line": 1606
           }
         },
         {
@@ -65505,7 +65648,7 @@
           "legacy_name": "app.Wake",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 638
+            "line": 652
           }
         },
         {
@@ -65560,7 +65703,7 @@
           "legacy_name": "app.buildDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1059
+            "line": 1105
           }
         },
         {
@@ -65571,7 +65714,7 @@
           "legacy_name": "app.commandResolver",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1011
+            "line": 1057
           }
         },
         {
@@ -65604,7 +65747,7 @@
           "legacy_name": "app.dispatchDaemonCommand",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1030
+            "line": 1076
           }
         },
         {
@@ -65615,7 +65758,7 @@
           "legacy_name": "app.isDaemonOnlineViaNATS",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 826
+            "line": 872
           }
         },
         {
@@ -65626,7 +65769,7 @@
           "legacy_name": "app.isSelectedDaemonOnline",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 755
+            "line": 769
           }
         },
         {
@@ -65637,7 +65780,7 @@
           "legacy_name": "app.jetstream",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1740
+            "line": 1786
           }
         },
         {
@@ -65703,7 +65846,7 @@
           "legacy_name": "app.resume",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 677
+            "line": 691
           }
         },
         {
@@ -65725,7 +65868,7 @@
           "legacy_name": "app.resumeToken",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 701
+            "line": 715
           }
         },
         {
@@ -65747,7 +65890,7 @@
           "legacy_name": "app.sendCancelToDaemon",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 879
+            "line": 925
           }
         },
         {
@@ -65758,7 +65901,7 @@
           "legacy_name": "app.sendDaemonCommandData",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1134
+            "line": 1180
           }
         },
         {
@@ -65769,7 +65912,7 @@
           "legacy_name": "app.sendToolRequestSync",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1327
+            "line": 1373
           }
         },
         {
@@ -65791,7 +65934,7 @@
           "legacy_name": "app.toolRequestRoundTrip",
           "source": {
             "path": "internal/toolexec/daemon_router_nats.go",
-            "line": 1400
+            "line": 1446
           }
         },
         {
@@ -68059,7 +68202,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.WorkflowReconciler",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 1099
+        "line": 1100
       },
       "methods": [
         {
@@ -68070,7 +68213,7 @@
           "legacy_name": "app.Close",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1120
+            "line": 1124
           }
         },
         {
@@ -68081,7 +68224,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 1113
+            "line": 1117
           }
         }
       ],
@@ -68756,7 +68899,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/worktreesweep.Sweeper",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 902
+        "line": 903
       },
       "methods": [
         {
@@ -69143,7 +69286,7 @@
       "type": "*github.com/reliant-labs/reliant/internal/app.WorktreeSweeper",
       "source": {
         "path": "internal/app/providers_api.go",
-        "line": 940
+        "line": 941
       },
       "methods": [
         {
@@ -69154,7 +69297,7 @@
           "legacy_name": "app.Run",
           "source": {
             "path": "internal/app/providers_api.go",
-            "line": 945
+            "line": 946
           }
         }
       ],
@@ -69829,7 +69972,7 @@
           "legacy_name": "chat.CancelQueuedAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 74
+            "line": 77
           }
         },
         {
@@ -69950,7 +70093,7 @@
           "legacy_name": "chat.CountMessagesInChatOutsideThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 57
+            "line": 60
           }
         },
         {
@@ -69961,7 +70104,7 @@
           "legacy_name": "chat.CountMessagesInThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 56
+            "line": 59
           }
         },
         {
@@ -69972,7 +70115,7 @@
           "legacy_name": "chat.CountQueuedAgentMessagesForThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 76
+            "line": 79
           }
         },
         {
@@ -70038,7 +70181,7 @@
           "legacy_name": "chat.CreateNumberedMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 112
+            "line": 115
           }
         },
         {
@@ -70049,7 +70192,7 @@
           "legacy_name": "chat.CreatePlan",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 80
+            "line": 83
           }
         },
         {
@@ -70060,7 +70203,7 @@
           "legacy_name": "chat.CreateTask",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 81
+            "line": 84
           }
         },
         {
@@ -70137,7 +70280,7 @@
           "legacy_name": "chat.DeleteUndeliveredAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 75
+            "line": 78
           }
         },
         {
@@ -70170,7 +70313,7 @@
           "legacy_name": "chat.EnqueueAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 71
+            "line": 74
           }
         },
         {
@@ -70181,7 +70324,7 @@
           "legacy_name": "chat.EnqueueAgentMessageOnce",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 72
+            "line": 75
           }
         },
         {
@@ -70203,7 +70346,7 @@
           "legacy_name": "chat.GetAgentMessage",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 73
+            "line": 76
           }
         },
         {
@@ -70236,7 +70379,7 @@
           "legacy_name": "chat.GetBasicStepExecutionsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 87
+            "line": 90
           }
         },
         {
@@ -70390,7 +70533,7 @@
           "legacy_name": "chat.GetLatestUpdateSequence",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 91
+            "line": 94
           }
         },
         {
@@ -70401,7 +70544,7 @@
           "legacy_name": "chat.GetLatestUserUpdateSequence",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 94
+            "line": 97
           }
         },
         {
@@ -70412,7 +70555,7 @@
           "legacy_name": "chat.GetLatestWorkflowNodeUpdates",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 93
+            "line": 96
           }
         },
         {
@@ -70588,7 +70731,7 @@
           "legacy_name": "chat.GetStepExecutionsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 86
+            "line": 89
           }
         },
         {
@@ -70599,7 +70742,7 @@
           "legacy_name": "chat.GetStoppedSpawnAgent",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 108
+            "line": 111
           }
         },
         {
@@ -70632,7 +70775,7 @@
           "legacy_name": "chat.GetToolCall",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 65
+            "line": 68
           }
         },
         {
@@ -70643,7 +70786,7 @@
           "legacy_name": "chat.GetToolResultBlock",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 66
+            "line": 69
           }
         },
         {
@@ -70654,7 +70797,7 @@
           "legacy_name": "chat.GetTriggerEventByChatID",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 109
+            "line": 112
           }
         },
         {
@@ -70676,7 +70819,7 @@
           "legacy_name": "chat.GetUpdatesSince",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 92
+            "line": 95
           }
         },
         {
@@ -70709,7 +70852,7 @@
           "legacy_name": "chat.GetWorkflowByThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 59
+            "line": 62
           }
         },
         {
@@ -70720,7 +70863,7 @@
           "legacy_name": "chat.GetWorkflowCheckpoint",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 105
+            "line": 108
           }
         },
         {
@@ -70753,7 +70896,7 @@
           "legacy_name": "chat.IsLatestTurnInThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 55
+            "line": 58
           }
         },
         {
@@ -70775,7 +70918,7 @@
           "legacy_name": "chat.ListCapacityWakeTargets",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 47
+            "line": 50
           }
         },
         {
@@ -70808,7 +70951,7 @@
           "legacy_name": "chat.ListContentBlocksForMessages",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 64
+            "line": 67
           }
         },
         {
@@ -70819,7 +70962,7 @@
           "legacy_name": "chat.ListForkedThreadIDs",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 52
+            "line": 55
           }
         },
         {
@@ -70830,7 +70973,7 @@
           "legacy_name": "chat.ListInheritedSpawnChildren",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 53
+            "line": 56
           }
         },
         {
@@ -70841,7 +70984,7 @@
           "legacy_name": "chat.ListLiveBackgroundSpawns",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 106
+            "line": 109
           }
         },
         {
@@ -70852,7 +70995,7 @@
           "legacy_name": "chat.ListMainWorktreesForUser",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 98
+            "line": 101
           }
         },
         {
@@ -70863,7 +71006,7 @@
           "legacy_name": "chat.ListMessages",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 63
+            "line": 66
           }
         },
         {
@@ -70885,7 +71028,7 @@
           "legacy_name": "chat.ListPlansByChatID",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 82
+            "line": 85
           }
         },
         {
@@ -70907,7 +71050,7 @@
           "legacy_name": "chat.ListQueuedAgentMessagesForThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 77
+            "line": 80
           }
         },
         {
@@ -70929,7 +71072,7 @@
           "legacy_name": "chat.ListStepExecutionRecordsForChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 88
+            "line": 91
           }
         },
         {
@@ -70940,7 +71083,7 @@
           "legacy_name": "chat.ListTasksByPlan",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 83
+            "line": 86
           }
         },
         {
@@ -70951,7 +71094,7 @@
           "legacy_name": "chat.ListThreadsByConversation",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 50
+            "line": 53
           }
         },
         {
@@ -71006,7 +71149,7 @@
           "legacy_name": "chat.ListToolGrants",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 107
+            "line": 110
           }
         },
         {
@@ -71017,7 +71160,7 @@
           "legacy_name": "chat.ListToolResultBlocks",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 67
+            "line": 70
           }
         },
         {
@@ -71028,7 +71171,7 @@
           "legacy_name": "chat.ListTranscriptSiblingMessagesInRange",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 58
+            "line": 61
           }
         },
         {
@@ -71039,7 +71182,7 @@
           "legacy_name": "chat.ListWorkflowsByChat",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 60
+            "line": 63
           }
         },
         {
@@ -71061,7 +71204,7 @@
           "legacy_name": "chat.ListWorktreesByIDs",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 97
+            "line": 100
           }
         },
         {
@@ -71105,7 +71248,7 @@
           "legacy_name": "chat.PendingQuestionsByThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 68
+            "line": 71
           }
         },
         {
@@ -71138,7 +71281,7 @@
           "legacy_name": "chat.ReviveThread",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 51
+            "line": 54
           }
         },
         {
@@ -71263,6 +71406,17 @@
           }
         },
         {
+          "id": "method1:e3e6a32bab38d7d3449bbe0c43621dbc1c668ed302304ee381bb58bf063bca46",
+          "name": "SettleQueuedDelivery",
+          "signature": "func(ctx context.Context, chatID string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.SettleQueuedDelivery",
+          "source": {
+            "path": "internal/handlers/chat/deps.go",
+            "line": 47
+          }
+        },
+        {
           "id": "method1:036f8507a90b84fdf3592156787ff10394f1ff30384404b8f846689678f1d417",
           "name": "ThreadAwaitsReply",
           "signature": "func(ctx context.Context, threadID string) (bool, error)",
@@ -71270,7 +71424,7 @@
           "legacy_name": "chat.ThreadAwaitsReply",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 54
+            "line": 57
           }
         },
         {
@@ -71281,7 +71435,7 @@
           "legacy_name": "chat.UnarchiveWorktree",
           "source": {
             "path": "internal/handlers/chat/deps.go",
-            "line": 99
+            "line": 102
           }
         },
         {
@@ -75675,7 +75829,7 @@
           "legacy_name": "queueddelivery.ContinueQueued",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 30
+            "line": 33
           }
         },
         {
@@ -75686,7 +75840,7 @@
           "legacy_name": "queueddelivery.MachineConnected",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 21
+            "line": 24
           }
         },
         {
@@ -75697,7 +75851,7 @@
           "legacy_name": "queueddelivery.Run",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 34
+            "line": 37
           }
         },
         {
@@ -75708,7 +75862,7 @@
           "legacy_name": "queueddelivery.Sweep",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 27
+            "line": 30
           }
         }
       ],
@@ -80652,7 +80806,7 @@
           "legacy_name": "queueddelivery.ContinueQueued",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 30
+            "line": 33
           }
         },
         {
@@ -80663,7 +80817,7 @@
           "legacy_name": "queueddelivery.MachineConnected",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 21
+            "line": 24
           }
         },
         {
@@ -80674,7 +80828,7 @@
           "legacy_name": "queueddelivery.Run",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 34
+            "line": 37
           }
         },
         {
@@ -80685,7 +80839,7 @@
           "legacy_name": "queueddelivery.Sweep",
           "source": {
             "path": "internal/queueddelivery/contract.go",
-            "line": 27
+            "line": 30
           }
         }
       ],

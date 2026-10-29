@@ -19,4 +19,5 @@ type DaemonRecords interface {
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	IsDaemonIDAttached(ctx context.Context, daemonID string, staleThreshold time.Duration) (bool, error)
 	DaemonLastSeenAt(ctx context.Context, userID, daemonID string) (time.Time, error)
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }

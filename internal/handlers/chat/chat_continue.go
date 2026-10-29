@@ -4,6 +4,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -16,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	v2handlers "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
 // ContinueQueued starts a run to deliver a message the chat holds that no run
@@ -246,7 +248,7 @@ func (s *Service) awaitsDelivery(ctx context.Context, threadID string) (bool, er
 // dropQueuedMessage clears a queued-for-machine marker nothing will deliver
 // (see ContinueQueued). Best-effort.
 func (s *Service) dropQueuedMessage(ctx context.Context, chatID, why string) {
-	cleared, err := s.deps.Repo.SetChatQueuedForMachine(ctx, chatID, false)
+	cleared, err := s.deps.Repo.SettleQueuedDelivery(ctx, chatID)
 	if err != nil {
 		logging.WarnContext(ctx, "[ContinueQueued] Could not clear the queued-for-machine marker", "chatID", chatID, "error", err)
 		return
@@ -379,4 +381,77 @@ func (s *Service) abandonMachineWait(ctx context.Context, chat *db.Chat) {
 		logging.WarnContext(ctx, "[BranchChat] Could not tell the source chat's run to stop waiting for its machine",
 			"chatID", chat.ID, "workflowID", workflowID, "error", err)
 	}
+}
+
+// queuedDeliveryStoppedErrorType is the activity type of the chat error that
+// tells the owner delivery stopped retrying their queued message.
+const queuedDeliveryStoppedErrorType = "queued_delivery_stopped"
+
+// NotifyQueuedDeliveryStopped tells the chat's owner that delivery gave up on
+// the message queued for its machine: which machine it waits for, since when,
+// and how to carry on. It is written to the chat as an error (the same card a
+// failed run shows) so it is seen where the message was sent, and is keyed by
+// the stretch of failures so a repeat replaces rather than stacks.
+func (s *Service) NotifyQueuedDeliveryStopped(ctx context.Context, queued db.QueuedForMachineChat) error {
+	chat, err := s.deps.Repo.GetChat(ctx, queued.ChatID)
+	if err != nil || chat == nil {
+		return fmt.Errorf("load chat %s: %w", queued.ChatID, err)
+	}
+	message := s.queuedDeliveryStoppedMessage(ctx, queued)
+	_, err = v2handlers.WriteWorkflowError(ctx, s.deps.Repo, v2handlers.WorkflowErrorInput{
+		ChatID:       queued.ChatID,
+		WorkflowID:   chat.MainThreadID(),
+		ErrorType:    queuedDeliveryStoppedErrorType,
+		ErrorMessage: message,
+		ErrorSummary: message,
+		Thread:       chat.MainThreadID(),
+		ErrorID:      fmt.Sprintf("queued-delivery-stopped-%s-%d", queued.ChatID, queued.Since.Unix()),
+	})
+	return err
+}
+
+// queuedDeliveryStoppedMessage is the text of NotifyQueuedDeliveryStopped.
+// Delivery only gives up on a machine it saw connected, so the text does not
+// claim the machine is offline: it says the runs did not get through.
+func (s *Service) queuedDeliveryStoppedMessage(ctx context.Context, queued db.QueuedForMachineChat) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s didn't accept the run after %d tries since %s, so Reliant stopped retrying instead of restarting it over and over.",
+		capitalize(s.queuedMachineLabel(ctx, queued)), queued.Attempts, queued.Since.UTC().Format("2006-01-02 15:04 MST"))
+	b.WriteString(" Send a message to retry, or check that the machine is healthy (the message is tried once more after it reconnects).")
+	if reason := strings.TrimSpace(queued.LastFailure); reason != "" {
+		fmt.Fprintf(&b, " Last error: %s", reason)
+	}
+	return b.String()
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// queuedMachineLabel names the machine a queued message waits for the way the
+// user knows it: "machine `cicd`". Only a machine the run recorded is named:
+// a message queued before targets were recorded has none, and the chat's own
+// machine may not be the one that failed, so it is not blamed.
+func (s *Service) queuedMachineLabel(ctx context.Context, queued db.QueuedForMachineChat) string {
+	target := queued.Target
+	switch {
+	case target.DaemonName != "":
+		return fmt.Sprintf("machine `%s`", target.DaemonName)
+	case target.DaemonID != "":
+		if d, err := s.deps.Repo.GetDaemon(ctx, target.DaemonID); err == nil && d != nil {
+			if d.Name != "" {
+				return fmt.Sprintf("machine `%s`", d.Name)
+			}
+			if d.Hostname != nil && *d.Hostname != "" {
+				return fmt.Sprintf("machine `%s`", *d.Hostname)
+			}
+		}
+		return fmt.Sprintf("machine `%s`", target.DaemonID)
+	case !target.IsZero():
+		return "the machine this workflow requires"
+	}
+	return "the machine"
 }

@@ -42,6 +42,9 @@ type Repository interface {
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// SettleQueuedDelivery clears the queued marker AND forgets the delivery
+	// record (what the message waited for, and the attempts spent on it).
+	SettleQueuedDelivery(ctx context.Context, chatID string) (bool, error)
 	// ListCapacityWakeTargets lists the root runs of a user's chats that may
 	// have a thread blocked on a provider (WakeUserChats).
 	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)

@@ -22,6 +22,16 @@ type fakeDaemonRecords struct {
 	DaemonRecords
 	daemons  []*db.Daemon
 	attached []string
+	// attachedAt is when each attached daemon's current session began.
+	attachedAt map[string]time.Time
+}
+
+func (f *fakeDaemonRecords) ListFreshDaemonAttachmentsForUser(_ context.Context, userID string, _ time.Duration) ([]*db.DaemonAttachment, error) {
+	var out []*db.DaemonAttachment
+	for _, id := range f.attached {
+		out = append(out, &db.DaemonAttachment{DaemonID: id, UserID: userID, AttachedAt: f.attachedAt[id]})
+	}
+	return out, nil
 }
 
 func (f *fakeDaemonRecords) ListDaemonsByUserID(_ context.Context, userID string) ([]*db.Daemon, error) {
@@ -197,4 +207,100 @@ func TestDaemonRecords_SelectorMatchesTypeAndName(t *testing.T) {
 
 	_, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Type: "cloud", Name: "mbp"})
 	require.Error(t, err, "a selector no record satisfies must not fall back to some other daemon")
+}
+
+// A name selector is the name the owner gave the machine (daemons.name), not
+// its hostname. A machine `cicd` runs on host `ws-ws-e164d47d`: before this was
+// matched on the hostname, so `daemon: {name: cicd}` found no record while the
+// machine was disconnected, preflight failed in 3s instead of waking it, and
+// the machine stayed down while runs kept asking for it.
+func TestDaemonRecords_NameSelectorMatchesTheMachineNameNotItsHostname(t *testing.T) {
+	records := &fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "e164d47d", UserID: "u", Name: "cicd", Hostname: strPtr("ws-ws-e164d47d"), DaemonType: strPtr("managed"), LifecyclePhase: strPtr("suspended")},
+		{ID: "2aab1465", UserID: "u", Name: "default", Hostname: strPtr("ws-ws-2aab1465"), DaemonType: strPtr("managed")},
+	}}
+	router := recordsRouter(records)
+
+	rec, found, _, err := router.lookupDaemonRecord(context.Background(), "u", &DaemonSelector{Name: "cicd"})
+	require.NoError(t, err)
+	require.True(t, found, "the disconnected machine is found by its name")
+	assert.Equal(t, "e164d47d", rec.id)
+	assert.True(t, rec.wakeable(), "and, being suspended, can be woken")
+
+	_, found, _, err = router.lookupDaemonRecord(context.Background(), "u", &DaemonSelector{Name: "ws-ws-e164d47d"})
+	require.NoError(t, err)
+	assert.False(t, found, "a named machine is not matched by its hostname")
+
+	state, err := router.MachineState(context.Background(), "u", &DaemonSelector{Name: "cicd"})
+	require.NoError(t, err)
+	assert.True(t, state.Exists)
+	assert.True(t, state.Suspended)
+	assert.Equal(t, "e164d47d", state.DaemonID)
+}
+
+// A suspended machine named by a workflow is woken by the wake the run's
+// preflight makes, for that machine's id.
+func TestDaemonRecords_NameSelectorWakesTheSuspendedMachine(t *testing.T) {
+	resumer := &fakeResumer{}
+	router := NewNATSDaemonRouter(nil, WithDatabase(&fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "e164d47d", UserID: "u", Name: "cicd", Hostname: strPtr("ws-ws-e164d47d"), DaemonType: strPtr("managed"), LifecyclePhase: strPtr("suspended")},
+	}}), WithDaemonResumer(resumer), WithControlPlaneCredentials(credFunc(
+		func(context.Context, string, string) (string, error) { return "jwt", nil })))
+
+	id, err := router.EnsureAwake(context.Background(), "u", &DaemonSelector{Name: "cicd"})
+	require.NoError(t, err)
+	assert.Equal(t, "e164d47d", id)
+	assert.Equal(t, []resumeCall{{token: "jwt", daemonID: "e164d47d"}}, resumer.calls)
+}
+
+// A daemon the control plane has not named yet (a self-hosted one that
+// registered first) is known by its hostname, which is the documented
+// fallback; once it has a name, only the name answers.
+func TestDaemonRecords_UnnamedDaemonFallsBackToItsHostname(t *testing.T) {
+	router := recordsRouter(&fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", Hostname: strPtr("mbp")},
+	}, attached: []string{"laptop"}})
+
+	id, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Name: "mbp"})
+	require.NoError(t, err)
+	assert.Equal(t, "laptop", id)
+
+	router = recordsRouter(&fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", Name: "work laptop", Hostname: strPtr("mbp")},
+	}, attached: []string{"laptop"}})
+	_, err = router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Name: "mbp"})
+	require.Error(t, err, "named: the hostname no longer answers")
+	id, err = router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Name: "work laptop"})
+	require.NoError(t, err)
+	assert.Equal(t, "laptop", id)
+}
+
+// AttachedSince is when the session of the machine a selector names began:
+// what lets delivery tell a machine that connected after it gave up from one
+// that has simply stayed up.
+func TestAttachedSince_IsTheStartOfTheMatchingMachinesSession(t *testing.T) {
+	t0 := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
+	router := recordsRouter(&fakeDaemonRecords{
+		daemons: []*db.Daemon{
+			{ID: "cicd-id", UserID: "u", Name: "cicd", Hostname: strPtr("ws-ws-e164d47d")},
+			{ID: "default-id", UserID: "u", Name: "default", Hostname: strPtr("ws-ws-2aab1465")},
+			{ID: "gone-id", UserID: "u", Name: "gone"},
+		},
+		attached:   []string{"cicd-id", "default-id"},
+		attachedAt: map[string]time.Time{"cicd-id": t0, "default-id": t0.Add(time.Hour)},
+	})
+
+	since, ok, err := router.AttachedSince(context.Background(), "u", &DaemonSelector{Name: "cicd"})
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, t0, since, "the session of cicd, not of the user's other machine")
+
+	_, ok, err = router.AttachedSince(context.Background(), "u", &DaemonSelector{Name: "gone"})
+	require.NoError(t, err)
+	assert.False(t, ok, "a machine with no live session has no attach time")
+
+	since, ok, err = router.AttachedSince(context.Background(), "u", &DaemonSelector{ID: "default-id"})
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, t0.Add(time.Hour), since)
 }

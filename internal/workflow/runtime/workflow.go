@@ -5218,6 +5218,18 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		"thread":             thread,
 	}
 
+	// A root run's terminal status carries how long this execution ran, for
+	// the workflow_ended product event. Taken here because the activity cannot
+	// see the run's start; workflow.Now keeps it deterministic on replay. A
+	// child's status is not tracked as an event, so it carries none.
+	if parentWorkflowID == "" && isTerminalWorkflowStatus(status) {
+		if started := workflow.GetInfo(ctx).WorkflowStartTime; !started.IsZero() {
+			if elapsed := workflow.Now(baseCtx).Sub(started); elapsed > 0 {
+				input["duration_ms"] = elapsed.Milliseconds()
+			}
+		}
+	}
+
 	// Add optional fields if provided
 	if opts != nil {
 		if opts.Title != "" {

@@ -19,10 +19,24 @@
 //     never touched.
 //   - Outlive it. A run whose machine failed to start, was removed, or was
 //     still down after hours ends, and its preflight marks the chat as holding
-//     a message queued for the machine (chats.queued_for_machine_at). When the
-//     machine connects, MachineConnected starts the run that delivers it
-//     (ChatService.ContinueQueued); Sweep does the same for any connect whose
-//     event was missed.
+//     a message queued for the machine (chats.queued_for_machine_at), and
+//     records WHICH machine it waited on (chat_queued_deliveries): the
+//     workflow's pinned machine, which is not always the chat's own. When
+//     that machine connects, MachineConnected starts the run that delivers
+//     the message (ChatService.ContinueQueued); Sweep does the same for any
+//     connect whose event was missed.
+//
+// Delivery is bounded. A run it starts can fail at the same step again (the
+// machine was reported back, but the run's preflight still cannot reach it),
+// which queues the message again; unbounded, that is a loop, and one ran
+// every 30s for 27 hours (research/pr-review-failure-storm-2026-10-29.md).
+// So each run delivery starts is counted, successive ones are spaced by a
+// doubling backoff, and after core.MaxQueuedDeliveryAttempts the message stops
+// being retried on its own: the chat tells its owner, and the message is
+// tried once more only when the machine it waits for has connected afresh
+// since (checked on a connect, and by the sweep once the hold after the
+// give-up has passed) or the owner sends a message. A run that gets past
+// preflight ends the count.
 //
 // Connects arrive on the DAEMON_EVENTS JetStream stream through one durable
 // consumer, so each is handled by one api-server replica. Delivery itself is
@@ -53,6 +67,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/machinewait"
@@ -64,11 +79,12 @@ type service struct {
 	machines  Machines
 	deliverer Deliverer
 	signaler  Signaler
+	now       func() time.Time
 }
 
 // New builds the service.
 func New(deps Deps) Service {
-	return &service{store: deps.Store, machines: deps.Machines, deliverer: deps.Deliverer, signaler: deps.Signaler}
+	return &service{store: deps.Store, machines: deps.Machines, deliverer: deps.Deliverer, signaler: deps.Signaler, now: time.Now}
 }
 
 const (
@@ -96,12 +112,12 @@ func (s *service) MachineConnected(ctx context.Context, userID string) int {
 	} else {
 		n += s.resumePaused(ctx, paused)
 	}
-	queued, err := s.store.ListChatsQueuedForMachine(ctx, userID, perUserLimit)
+	queued, err := s.store.ListChatsQueuedForMachine(ctx, userID, perUserLimit, true)
 	if err != nil {
 		logging.WarnContext(ctx, "[QueuedDelivery] Could not list the user's queued messages", "userID", userID, "error", err)
 		return n
 	}
-	return n + s.deliver(ctx, queued)
+	return n + s.deliver(ctx, queued, true)
 }
 
 // Sweep implements Service.
@@ -111,11 +127,11 @@ func (s *service) Sweep(ctx context.Context) (int, error) {
 	if pausedErr == nil {
 		n += s.resumePaused(ctx, paused)
 	}
-	queued, err := s.store.ListChatsQueuedForMachine(ctx, "", sweepBatch)
+	queued, err := s.store.ListChatsQueuedForMachine(ctx, "", sweepBatch, true)
 	if err != nil {
 		return n, fmt.Errorf("list chats queued for their machine: %w", err)
 	}
-	n += s.deliver(ctx, queued)
+	n += s.deliver(ctx, queued, false)
 	if pausedErr != nil {
 		return n, fmt.Errorf("list chats paused for their machine: %w", pausedErr)
 	}
@@ -146,16 +162,25 @@ func (s *service) wakeWaitingRuns(ctx context.Context, userID string) {
 	}
 }
 
+// selectorFor is the machine a chat's queued or paused work waits for: the one
+// the run waited on when it recorded it, else the chat's own machine, else the
+// user's default (nil).
+func selectorFor(target db.QueuedMachineTarget, activeDaemonID *string) *toolexec.DaemonSelector {
+	if !target.IsZero() {
+		return &toolexec.DaemonSelector{ID: target.DaemonID, Name: target.DaemonName, Type: target.DaemonType, Labels: target.Labels}
+	}
+	if activeDaemonID != nil && *activeDaemonID != "" {
+		return &toolexec.DaemonSelector{ID: *activeDaemonID}
+	}
+	return nil
+}
+
 // resumePaused resumes each chat the offline breaker paused whose machine is
 // connected. One whose machine is still down stays paused for its own connect.
 func (s *service) resumePaused(ctx context.Context, paused []db.PausedForMachineChat) int {
 	resumed := 0
 	for _, chat := range paused {
-		var selector *toolexec.DaemonSelector
-		if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-			selector = &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
-		}
-		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selector)
+		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selectorFor(db.QueuedMachineTarget{}, chat.ActiveDaemonID))
 		if err != nil || !online {
 			continue
 		}
@@ -176,15 +201,59 @@ func (s *service) resumePaused(ctx context.Context, paused []db.PausedForMachine
 
 // deliver starts the run for each queued chat whose machine is connected.
 // One whose machine is still down stays queued for its own connect.
-func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat) int {
+//
+// "Its machine" is the one the run that queued the message waited on, not the
+// chat's own: a run restarted because the chat's machine was up, but waiting on
+// a workflow-pinned machine that is down, would only fail at the same step and
+// queue the message again.
+//
+// connect is true when a machine of the user's just connected rather than the
+// sweep running: that event skips the backoff of a message still being retried
+// (the machine being back is what the backoff was waiting for). The attempt
+// limit still bounds a machine that connects but cannot be reached. A message
+// delivery stopped on is not touched by either until its hold has passed and
+// its machine has connected since (see the GaveUpAt branch).
+func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat, connect bool) int {
 	started := 0
 	for _, chat := range queued {
-		var selector *toolexec.DaemonSelector
-		if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-			selector = &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
-		}
-		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selector)
+		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selectorFor(chat.Target, chat.ActiveDaemonID))
 		if err != nil || !online {
+			continue
+		}
+		now := s.now()
+		backedOff := chat.NextAttemptAt != nil && now.Before(*chat.NextAttemptAt)
+		if chat.GaveUpAt != nil {
+			// Delivery stopped retrying this message. It tries once more when
+			// the machine it waits for has connected AFTER it gave up (a new
+			// session, which is news) and the hold has passed — whether that
+			// connect came inside the hold (the sweep notices once the hold
+			// expires) or later. Without a connect since, the machine is the
+			// same one that already failed us, so it stays stopped. Either
+			// way a machine that connects and drops again buys one try per
+			// hold, not one per reconnect.
+			if backedOff || !s.connectedSince(ctx, chat, *chat.GaveUpAt) {
+				continue
+			}
+			revived, err := s.store.ReviveQueuedDelivery(ctx, chat.ChatID)
+			if err != nil || !revived {
+				continue
+			}
+			chat.Attempts, chat.NextAttemptAt = core.MaxQueuedDeliveryAttempts-1, nil
+		} else if backedOff && !connect {
+			// A connect is news the backoff did not know; the sweep is not.
+			continue
+		}
+		if chat.Attempts >= core.MaxQueuedDeliveryAttempts {
+			s.giveUp(ctx, chat)
+			continue
+		}
+		// Counted before the run starts: the count is what bounds the loop, so
+		// it must survive a crash between the start and the write, and a start
+		// that fails below is simply retried after its backoff.
+		next := now.Add(core.QueuedDeliveryBackoff(chat.Attempts + 1))
+		if err := s.store.RecordQueuedDeliveryAttempt(ctx, chat.ChatID, next); err != nil {
+			logging.WarnContext(ctx, "[QueuedDelivery] Could not count a delivery attempt; not delivering, so the count cannot be lost",
+				"chatID", chat.ChatID, "error", err)
 			continue
 		}
 		ok, err := s.deliverer.ContinueQueued(ctx, chat.ChatID)
@@ -196,10 +265,39 @@ func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat)
 		if ok {
 			started++
 			logging.InfoContext(ctx, "[QueuedDelivery] The chat's machine is back; delivering the message queued for it",
-				"chatID", chat.ChatID, "userID", chat.UserID, "queuedFor", time.Since(chat.QueuedAt).Round(time.Second))
+				"chatID", chat.ChatID, "userID", chat.UserID, "queuedFor", time.Since(chat.QueuedAt).Round(time.Second),
+				"attempt", chat.Attempts+1, "of", core.MaxQueuedDeliveryAttempts)
 		}
 	}
 	return started
+}
+
+// connectedSince reports whether the machine the chat's message waits for began
+// a stream session after t.
+func (s *service) connectedSince(ctx context.Context, chat db.QueuedForMachineChat, t time.Time) bool {
+	since, ok, err := s.machines.AttachedSince(ctx, chat.UserID, selectorFor(chat.Target, chat.ActiveDaemonID))
+	return err == nil && ok && since.After(t)
+}
+
+// giveUp stops retrying a message whose delivery runs keep ending the same way,
+// and tells the chat's owner. The queued marker is cleared (the chat reads as a
+// failed run, not as waiting) and the record is parked; the machine it waits
+// for connecting afresh — or the owner sending a message — starts delivery
+// again.
+func (s *service) giveUp(ctx context.Context, chat db.QueuedForMachineChat) {
+	stopped, err := s.store.GiveUpQueuedDelivery(ctx, chat.ChatID)
+	if err != nil {
+		logging.WarnContext(ctx, "[QueuedDelivery] Could not stop retrying a queued message", "chatID", chat.ChatID, "error", err)
+		return
+	}
+	if !stopped {
+		return
+	}
+	logging.WarnContext(ctx, "[QueuedDelivery] Delivery of a queued message kept failing; no longer retrying it",
+		"chatID", chat.ChatID, "userID", chat.UserID, "attempts", chat.Attempts, "since", chat.Since, "lastFailure", chat.LastFailure)
+	if err := s.deliverer.NotifyQueuedDeliveryStopped(ctx, chat); err != nil {
+		logging.WarnContext(ctx, "[QueuedDelivery] Could not tell the chat its queued message is no longer retried", "chatID", chat.ChatID, "error", err)
+	}
 }
 
 // Run implements Service.

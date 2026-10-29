@@ -282,7 +282,9 @@ func (s *Service) SendMessage(
 	// starts, resumes or wakes — the run reads the thread, where it already
 	// is — so it is no longer waiting on the machine to be delivered. If that
 	// run's machine is still down, its preflight queues both again.
-	if _, err := s.deps.Repo.SetChatQueuedForMachine(ctx, chat.ID, false); err != nil {
+	// The user acting also ends delivery's attempt count and any stop: what
+	// failed before says nothing about this send.
+	if _, err := s.deps.Repo.SettleQueuedDelivery(ctx, chat.ID); err != nil {
 		logging.WarnContext(ctx, "Failed to clear queued-for-machine marker on send", "error", err, "chatID", chat.ID)
 	}
 

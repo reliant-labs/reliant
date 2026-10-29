@@ -171,3 +171,16 @@ func TestWorkflowEndedRetryIsOneEvent(t *testing.T) {
 
 	assert.Len(t, records(t, buf), 1)
 }
+
+// A workflow_ended event reports how long the run ran: the duration was
+// dropped on the floor and every event read 0.
+func TestWorkflowEndedCarriesDurationMs(t *testing.T) {
+	c, buf := jsonClient(t, consent{"u": true})
+	tr := c.ForUser(context.Background(), "u")
+
+	tr.TrackWorkflowEnded(WorkflowMetrics{WorkflowID: "wf", WorkflowName: "project://pr-review", ChatID: "c", Duration: 3200 * time.Millisecond})
+
+	recs := records(t, buf)
+	require.Len(t, recs, 1)
+	assert.EqualValues(t, 3200, recs[0]["product.duration_ms"])
+}

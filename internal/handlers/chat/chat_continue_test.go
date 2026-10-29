@@ -394,6 +394,10 @@ func (onlineMachines) IsDaemonOnline(context.Context, string, *toolexec.DaemonSe
 	return true, nil
 }
 
+func (onlineMachines) AttachedSince(context.Context, string, *toolexec.DaemonSelector) (time.Time, bool, error) {
+	return time.Now(), true, nil
+}
+
 // End to end through delivery: the run ended because the machine failed to
 // start (its preflight queued the message), the user hit Try again, and the
 // machine connected. The connect starts the run that delivers the message —

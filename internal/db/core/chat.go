@@ -335,7 +335,72 @@ type QueuedForMachineChat struct {
 	// user's default machine.
 	ActiveDaemonID *string
 	QueuedAt       time.Time
+	// Since is when this stretch of failed deliveries began: the first
+	// queueing after a delivery last worked (QueuedAt when none is recorded).
+	Since time.Time
+	// Target is the machine the run that queued the message waited on, which
+	// is not always the chat's own (a workflow can pin another). Zero when
+	// none was recorded: the chat's machine is the one to wait for.
+	Target QueuedMachineTarget
+	// Attempts is how many runs delivery has started for this message since
+	// one last reached its machine; NextAttemptAt is the earliest the next
+	// may start (nil: now).
+	Attempts      int
+	NextAttemptAt *time.Time
+	// LastFailure is why the latest run could not reach the machine.
+	LastFailure string
+	// GaveUpAt is set once delivery stopped retrying on its own: the message
+	// stays queued, and its machine connecting starts delivery again.
+	GaveUpAt *time.Time
 }
+
+// QueuedMachineTarget is the machine selector a queued message waits for: the
+// one the run waited on in preflight. Its fields mirror toolexec.DaemonSelector
+// (which this package cannot import).
+type QueuedMachineTarget struct {
+	DaemonID   string
+	DaemonName string
+	DaemonType string
+	Labels     map[string]string
+}
+
+// IsZero reports whether no machine was recorded.
+func (t QueuedMachineTarget) IsZero() bool {
+	return t.DaemonID == "" && t.DaemonName == "" && t.DaemonType == "" && len(t.Labels) == 0
+}
+
+const (
+	// MaxQueuedDeliveryAttempts is how many runs delivery starts for one
+	// queued message before it stops retrying on its own. A run that gets
+	// past preflight ends the count; so does the user's own message.
+	MaxQueuedDeliveryAttempts = 5
+	// QueuedDeliveryBackoffBase is the wait after the first attempt; each
+	// further attempt doubles it, up to QueuedDeliveryBackoffCap.
+	QueuedDeliveryBackoffBase = 30 * time.Second
+	QueuedDeliveryBackoffCap  = time.Hour
+	// QueuedDeliveryGiveUpHold is how long after delivery stops retrying a
+	// message the machine's connect cannot revive it: a machine that connects
+	// and drops again must not bring the loop back at the rate of its
+	// reconnects.
+	QueuedDeliveryGiveUpHold = 10 * time.Minute
+)
+
+// QueuedDeliveryBackoff is how long delivery waits before starting the next
+// run for a message it has already started attempts runs for: 30s, 1m, 2m, ...
+// capped at an hour.
+func QueuedDeliveryBackoff(attempts int) time.Duration {
+	d := QueuedDeliveryBackoffBase
+	for i := 1; i < attempts && d < QueuedDeliveryBackoffCap; i++ {
+		d *= 2
+	}
+	return min(d, QueuedDeliveryBackoffCap)
+}
+
+// QueuedDeliveryStreakWindow is how long a delivery streak may go quiet before
+// the next queueing starts a new one: longer than the longest backoff between
+// attempts, so a loop keeps its count while a stale record of a delivery that
+// worked long ago does not carry into an unrelated outage.
+const QueuedDeliveryStreakWindow = 2 * time.Hour
 
 // PausedForMachineChat is a chat whose root run the daemon-offline circuit
 // breaker paused (chats.paused_for_machine_at) and nothing has resumed.

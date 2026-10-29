@@ -433,11 +433,11 @@ func TestChatMachineMarkers(t *testing.T) {
 		t.Fatalf("archive m-3: %v", err)
 	}
 	for _, user := range []string{"", storetest.SeedUserID, "someone-else"} {
-		got, err := store.ListChatsQueuedForMachine(ctx, env.ORM, user, 10)
+		got, err := store.ListChatsQueuedForMachine(ctx, env.ORM, user, 10, false)
 		if err != nil {
 			t.Fatalf("ListChatsQueuedForMachine(%q): %v", user, err)
 		}
-		twin, err := env.Repo.ListChatsQueuedForMachine(ctx, user, 10)
+		twin, err := env.Repo.ListChatsQueuedForMachine(ctx, user, 10, false)
 		if err != nil {
 			t.Fatalf("Repo.ListChatsQueuedForMachine(%q): %v", user, err)
 		}

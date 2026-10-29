@@ -416,7 +416,7 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 	if selector.ID != "" && selector.ID != d.ID {
 		return false
 	}
-	if selector.Name != "" && (d.Hostname == nil || *d.Hostname != selector.Name) {
+	if selector.Name != "" && !daemonRecordNamed(d, selector.Name) {
 		return false
 	}
 	if want := canonicalDaemonType(selector.Type); want != "" {
@@ -425,6 +425,20 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 		}
 	}
 	return true
+}
+
+// daemonRecordNamed reports whether a registry record answers to name. The
+// name is the one the owner gave the machine (daemons.name, mirrored from the
+// control plane), which is what the connected resolver matches and what a
+// workflow's `daemon: {name: ...}` means. Only a record that has no name yet
+// — a self-hosted daemon that registered before any control-plane event
+// named it, shown under its hostname — is matched by hostname; a named
+// machine never is, or another machine's hostname could shadow its name.
+func daemonRecordNamed(d *db.Daemon, name string) bool {
+	if d.Name != "" {
+		return d.Name == name
+	}
+	return d.Hostname != nil && *d.Hostname == name
 }
 
 // canonicalDaemonType folds the two spellings of daemon type onto the
@@ -795,6 +809,38 @@ func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID st
 		return false, fmt.Errorf("checking daemon liveness: %w", lastErr)
 	}
 	return false, nil
+}
+
+// AttachedSince reports when the newest stream session of a daemon the selector
+// names began, among those attached right now; ok is false when none is. It is
+// the start of the session (daemon_attachment.attached_at), which only a new
+// stream moves — heartbeats renew the lease without advancing it — so "attached
+// since T" means "connected after T" and a daemon that stays up keeps its
+// answer.
+func (r *NATSDaemonRouter) AttachedSince(ctx context.Context, userID string, selector *DaemonSelector) (since time.Time, ok bool, err error) {
+	if r.db == nil {
+		return time.Time{}, false, nil
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("listing daemons for attach time: %w", err)
+	}
+	matching := make(map[string]bool, len(daemons))
+	for _, d := range daemons {
+		if daemonRecordMatches(d, selector) {
+			matching[d.ID] = true
+		}
+	}
+	attachments, err := r.db.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonStaleThreshold)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("listing attachments for attach time: %w", err)
+	}
+	for _, a := range attachments {
+		if matching[a.DaemonID] && a.AttachedAt.After(since) {
+			since, ok = a.AttachedAt, true
+		}
+	}
+	return since, ok, nil
 }
 
 // dbAdapter implements daemonliveness.Repository by delegating to

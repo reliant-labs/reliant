@@ -349,3 +349,76 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
 }
+
+// queuedDelivery reads the delivery record preflight left for the chat.
+func queuedDelivery(t *testing.T, repo *markerRepo, chatID string) db.QueuedForMachineChat {
+	t.Helper()
+	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "", 10, true)
+	require.NoError(t, err)
+	for _, c := range queued {
+		if c.ChatID == chatID {
+			return c
+		}
+	}
+	t.Fatalf("chat %s is not queued", chatID)
+	return db.QueuedForMachineChat{}
+}
+
+// The loop of 2026-10-27 started here: preflight queued the message without
+// saying for which machine, so delivery watched the chat's own. The message is
+// now queued for the machine THIS run waited on — the workflow's pinned
+// machine, selected by name — with the reason it gave up.
+func TestPreflightWait_QueuesTheMessageForTheMachineTheRunWaitedOn(t *testing.T) {
+	t.Parallel()
+
+	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{}}
+	router.set(toolexec.MachineState{DaemonID: "e164d47d", Exists: true, Failed: true, StatusMessage: "tools-daemon exited with code 1."})
+	a, repo, chatID := newWaitFixture(t, false, router)
+
+	_, err := runPreflight(t, a, PreflightDaemonCheckInput{
+		ChatID:         chatID,
+		DaemonSelector: &toolexec.DaemonSelector{Name: "cicd", Type: "cloud"},
+		WaitSeconds:    5,
+	})
+
+	require.Error(t, err)
+	queued := queuedDelivery(t, repo, chatID)
+	assert.Equal(t, db.QueuedMachineTarget{DaemonName: "cicd", DaemonType: "cloud"}, queued.Target)
+	assert.Contains(t, queued.LastFailure, "Your machine failed to start: tools-daemon exited with code 1")
+}
+
+// A run with no selector of its own waits for the chat's machine, which the
+// zero target says.
+func TestPreflightWait_QueuesForTheChatsOwnMachineWhenTheRunNamedNone(t *testing.T) {
+	t.Parallel()
+
+	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{}}
+	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true})
+	a, repo, chatID := newWaitFixture(t, false, router)
+
+	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
+
+	require.Error(t, err)
+	assert.True(t, queuedDelivery(t, repo, chatID).Target.IsZero())
+}
+
+// A run that gets its machine ends the count: the attempts delivery spent on
+// the message are forgotten along with the marker.
+func TestPreflightWait_ReadyMachineForgetsTheDeliveryAttempts(t *testing.T) {
+	t.Parallel()
+
+	router := &waitFakeRouter{}
+	router.online.Store(true)
+	a, repo, chatID := newWaitFixture(t, false, router)
+	_, err := repo.QueueChatForMachine(context.Background(), chatID, db.QueuedMachineTarget{DaemonName: "cicd"}, "down")
+	require.NoError(t, err)
+	require.NoError(t, repo.RecordQueuedDeliveryAttempt(context.Background(), chatID, time.Now()))
+
+	out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
+
+	require.NoError(t, err)
+	assert.True(t, out.DaemonAvailable)
+	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "", 10, true)
+	require.NoError(t, err)
+	assert.Empty(t, queued, "nothing is queued, and no attempt count is left to carry into the next outage")
+}

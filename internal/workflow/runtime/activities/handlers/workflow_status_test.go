@@ -2,12 +2,17 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
@@ -750,4 +755,45 @@ func TestWorkflowStatus_TerminalStatusDoesNotReviveThread(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusCompleted, thread.Status,
 		"a terminal notification must never revive the thread it is closing")
+}
+
+type allowAnalytics struct{}
+
+func (allowAnalytics) GetAnalyticsEnabled(context.Context, string) (bool, error) { return true, nil }
+
+// workflow_ended.duration_ms was always 0 (the 2026-10-28 storm of 3-second
+// runs read as thousands of instant ones). The duration the run reports on its
+// terminal status reaches the product event. Not parallel: it installs the
+// process's analytics client and log sink.
+func TestWorkflowStatus_TerminalStatusRecordsTheRunsDurationInTheProductEvent(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	userID, projectID, chatID := uuid.New().String(), uuid.New().String(), uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	analytics.Start(analytics.Settings{}, allowAnalytics{})
+	t.Cleanup(func() {
+		analytics.Start(analytics.Settings{Disabled: true}, nil)
+		slog.SetDefault(previous)
+	})
+
+	a := NewWorkflowStatusActivity(h.Repo())
+	a.trackAnalytics(ctx, WorkflowStatusInput{ChatID: chatID, WorkflowID: "wf-1", WorkflowName: "project://pr-review", Status: "failed", DurationMs: 3200})
+
+	var ended map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		if rec["msg"] == "product.workflow_ended" {
+			ended = rec
+		}
+	}
+	require.NotNil(t, ended, "workflow_ended was emitted; logs: %s", logs.String())
+	assert.EqualValues(t, 3200, ended["product.duration_ms"])
+	assert.Equal(t, false, ended["product.success"])
 }

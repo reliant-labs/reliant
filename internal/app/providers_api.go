@@ -3,6 +3,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -1098,7 +1099,10 @@ type WorkflowReconcilerDeps struct {
 //forge:root-only api
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
-	cfg.Namespace = d.Namespace
+	// The namespace the client was dialed for, never DefaultConfig's constant:
+	// a reset naming a namespace the runs do not live in failed 9,510 times in
+	// prod ("Namespace reliant is not found").
+	cfg.Namespace = cmp.Or(d.Namespace, d.Temporal.Namespace)
 	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)

@@ -351,43 +351,6 @@ func SetChatPausedForMachine(ctx context.Context, db orm.Context, chatID string,
 	return n > 0, err
 }
 
-// listChatsQueuedForMachineSQL lists chats holding a message queued for their
-// machine, oldest first. An empty user id lists every user's (the delivery
-// sweep); otherwise one user's (a machine of theirs just connected).
-// Archived chats are left alone.
-const listChatsQueuedForMachineSQL = `
-SELECT id, user_id, active_daemon_id, queued_for_machine_at
-FROM chats
-WHERE queued_for_machine_at IS NOT NULL
-  AND state IS DISTINCT FROM 3
-  AND (?0::text = '' OR user_id = ?0::text)
-ORDER BY queued_for_machine_at ASC, id ASC
-LIMIT ?1`
-
-// ListChatsQueuedForMachine lists up to limit chats holding a message queued
-// for their machine.
-func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID string, limit int) ([]core.QueuedForMachineChat, error) {
-	var rows []struct {
-		ID                 string    `bun:"id"`
-		UserID             string    `bun:"user_id"`
-		ActiveDaemonID     *string   `bun:"active_daemon_id"`
-		QueuedForMachineAt time.Time `bun:"queued_for_machine_at"`
-	}
-	if err := db.Bun().NewRaw(listChatsQueuedForMachineSQL, userID, limit).Scan(ctx, &rows); err != nil {
-		return nil, fmt.Errorf("failed to list chats queued for their machine: %w", err)
-	}
-	chats := make([]core.QueuedForMachineChat, len(rows))
-	for i, row := range rows {
-		chats[i] = core.QueuedForMachineChat{
-			ChatID:         row.ID,
-			UserID:         row.UserID,
-			ActiveDaemonID: row.ActiveDaemonID,
-			QueuedAt:       row.QueuedForMachineAt,
-		}
-	}
-	return chats, nil
-}
-
 // listChatsPausedForMachineSQL lists chats whose root run the daemon-offline
 // breaker paused and nothing has resumed, oldest first. The root run must
 // still read paused (STOPPED/PAUSED): a marker left behind by a run that

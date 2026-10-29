@@ -457,6 +457,10 @@ func DefaultConfig() *ReconcilerConfig {
 	}
 }
 
+// Namespace is the Temporal namespace the reconciler's reset and history
+// requests name.
+func (r *Reconciler) Namespace() string { return r.namespace }
+
 // NewReconciler creates a new workflow reconciler. Zero-valued config fields
 // fall back to DefaultConfig values.
 func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
