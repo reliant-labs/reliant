@@ -889,8 +889,9 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 		update := &updates[i]
 		// Enrich message updates with content blocks
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
-			// Check if this is a minimal message update (not already enriched)
-			var dataMap map[string]interface{}
+			// Check if this is a minimal message update (not already enriched).
+			// Only the top-level keys are needed, so the blocks stay undecoded.
+			var dataMap map[string]json.RawMessage
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
