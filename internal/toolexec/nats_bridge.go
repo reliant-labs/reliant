@@ -1009,6 +1009,53 @@ const (
 // so tests can shrink it instead of running real-time against a 5s budget.
 var pendingDrainFetchBudget = 5 * time.Second
 
+// pendingFetchUnreachableFirstWait and pendingFetchUnreachableMaxWait bound
+// the backoff between fetches that found no consumer leader to answer them
+// (see fetchFoundNoConsumerLeader). Short: the gap they wait out is one
+// subscription propagating across a route, milliseconds on a healthy cluster.
+const (
+	pendingFetchUnreachableFirstWait = 25 * time.Millisecond
+	pendingFetchUnreachableMaxWait   = 500 * time.Millisecond
+)
+
+// fetchFoundNoConsumerLeader reports whether a pull came back "no responders":
+// no member the client reaches yet knows where the consumer's leader takes
+// pull requests. On a replicated stream that is the normal state of a consumer
+// for a moment after it is created, and after its leader moves.
+//
+// The create response is not proof the consumer can be pulled from. Its
+// leader sends that response in the system account, over the route reserved
+// for it, while its subscription to $JS.API.CONSUMER.MSG.NEXT.<stream>.<name>
+// is announced in the user's account, over another route. Nothing orders the
+// two, so the client can hear "created" and pull before the member it is
+// connected to has heard of the subscription; that member answers 503. A
+// pending command was then left queued until the next poll, 10s later — and
+// with InactiveThreshold reaping an idle consumer after a minute, the first
+// command after any quiet minute takes this path. On a 3-node cluster under
+// -race, eight runs at a time on four cores, about 1 first drain in 70 met it
+// (TestDrainPendingCommands_Cluster_ExactlyOnceInOrderWithExistingConsumer,
+// which failed the release gate on 95415470b this way).
+//
+// It is retried like nats.go retries a publish that meets the same 503 right
+// after a stream leader change (jetstream.WithRetryWait).
+func fetchFoundNoConsumerLeader(err error) bool {
+	return errors.Is(err, nats.ErrNoResponders)
+}
+
+// waitBeforeRefetch waits out one backoff step before the next fetch, and
+// reports false when ctx (the drain's fetch budget) ends first.
+func waitBeforeRefetch(ctx context.Context, wait *time.Duration) bool {
+	timer := time.NewTimer(*wait)
+	defer timer.Stop()
+	*wait = min(*wait*2, pendingFetchUnreachableMaxWait)
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 // pendingCommandPollInterval controls how often pollPendingCommands re-runs
 // drainPendingCommands for a daemon that stays connected. A genuinely
 // fire-and-forget enqueue (control-plane's Clone, which never sends a live
@@ -1153,6 +1200,10 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	defer fetchCancel()
 
 	var dispatched int
+	// unreachable is set while the last fetch found no consumer leader, and
+	// refetchWait is the backoff before the next try (see
+	// fetchFoundNoConsumerLeader).
+	unreachable, refetchWait := false, pendingFetchUnreachableFirstWait
 	for fetchCtx.Err() == nil {
 		// Bound total time spent looping over fetch batches to the drain
 		// budget, independent of how long any individual dispatch below
@@ -1164,6 +1215,13 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(2*time.Second))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				break
+			}
+			if fetchFoundNoConsumerLeader(err) {
+				unreachable = true
+				if waitBeforeRefetch(fetchCtx, &refetchWait) {
+					continue
+				}
 				break
 			}
 			logging.WarnContext(ctx, "[NATSToolBridge] Error fetching pending commands",
@@ -1265,15 +1323,30 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			dispatched++
 		}
 
-		if msgs.Error() != nil {
+		if err := msgs.Error(); err != nil {
+			if fetchFoundNoConsumerLeader(err) {
+				unreachable = true
+				if waitBeforeRefetch(fetchCtx, &refetchWait) {
+					continue
+				}
+				break
+			}
 			// ErrMsgIteratorClosed or timeout — we're done draining.
 			break
 		}
+		unreachable, refetchWait = false, pendingFetchUnreachableFirstWait
 		if !gotMessages {
 			break
 		}
 	}
 
+	if unreachable {
+		// Nothing is lost: the commands stay on the WorkQueue stream and the
+		// next poll drains them. But a consumer leader nobody can reach for a
+		// whole fetch budget is an unhealthy cluster, not a propagation gap.
+		logging.WarnContext(ctx, "[NATSToolBridge] Pending commands consumer unreachable for the whole drain budget; leaving its commands queued for the next poll",
+			"daemonID", daemonID, "consumer", consumerName, "budget", pendingDrainFetchBudget)
+	}
 	if dispatched > 0 {
 		logging.InfoContext(ctx, "[NATSToolBridge] Drained pending commands",
 			"daemonID", daemonID, "count", dispatched)
