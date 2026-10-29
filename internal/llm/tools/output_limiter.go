@@ -181,6 +181,10 @@ func (e *OutputLimitError) Error() string {
 	return msg.String()
 }
 
+// githubGetContentToolName is the integration tool that reads one file of a
+// repository through GitHub.
+const githubGetContentToolName = "github__repo_get_content"
+
 // outputCeilingFor returns the delivered-size ceiling for one tool's result.
 //
 // Most tools share MaxOutputSize. The read tools are the deliberate exception:
@@ -203,10 +207,6 @@ func (e *OutputLimitError) Error() string {
 // (renderSkillDelivery). For that tool this ceiling is only a backstop, so it
 // admits the largest budget; otherwise it would cut the start-here allowance
 // back down.
-// githubGetContentToolName is the integration tool that reads one file of a
-// repository through GitHub.
-const githubGetContentToolName = "github__repo_get_content"
-
 func outputCeilingFor(toolName string) int {
 	switch toolName {
 	case ViewToolName, githubGetContentToolName:
