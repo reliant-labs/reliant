@@ -997,9 +997,9 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	}
 }
 
-// getProjectConfig reads the project's config as daemonID (the run's
-// machine) synced it: its skills, memories and MCP servers, not the last
-// pusher's.
+// getProjectConfig reads the project's config as daemonID (the machine the
+// turn's tools run on) synced it: its skills, memories and MCP servers, not
+// the last pusher's.
 func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project, daemonID string) (*cfgpkg.Config, error) {
 	if project == nil {
 		return nil, fmt.Errorf("project is nil")
@@ -1087,11 +1087,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 	projectPath := project.Path
 
-	projectCfg, err := a.getProjectConfig(ctx, project, runMachine(chat))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load project config: %w", err)
-	}
-
 	// Load worktree path if applicable
 	var worktreePath string
 	// worktreeDaemonID is the daemon that physically owns this worktree's
@@ -1119,6 +1114,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	workingDir := projectPath
 	if worktreePath != "" {
 		workingDir = worktreePath
+	}
+
+	// The project config (skills, memory, MCP servers) is the one the machine
+	// this turn's tools run on synced: routed as ExecuteTools routes them.
+	projectCfg, err := a.getProjectConfig(ctx, project,
+		configMachine(toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use

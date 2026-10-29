@@ -713,14 +713,6 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	}
 	tec.dispatchInput = dispatchInput
 
-	// The skill tool reads the project's skills, which live on the project's
-	// config row. Read here, per call, rather than carried from call_llm: the
-	// executor's factory has none of its own, and a worker-local copy is what
-	// a restart used to lose.
-	if toolName == tools.ToolSkill && tec.project != nil {
-		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, runMachine(tec.chat)))
-	}
-
 	// Daemon routing priority: explicit node/workflow selector > durable chat
 	// pin > the worktree's owner > default resolution. Read the pin even when
 	// this live run's input snapshot predates launch-time pinning.
@@ -733,6 +725,14 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		worktreeDaemon = tec.worktree.DaemonID
 	}
 	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
+
+	// The skill tool reads the project's skills as the machine this call runs
+	// on synced them (tec.daemonSelector). Read here, per call, rather than
+	// carried from call_llm: the executor's factory has none of its own, and
+	// a worker-local copy is what a restart used to lose.
+	if toolName == tools.ToolSkill && tec.project != nil {
+		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(tec.daemonSelector)))
+	}
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this

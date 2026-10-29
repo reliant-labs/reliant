@@ -45,7 +45,7 @@ func (a *ExecuteToolsActivity) worktreeAddSuggestion(ctx context.Context, caps *
 	if len(targets) == 0 {
 		return ""
 	}
-	return tools.WorktreeAddSuggestion(targets, a.memoryWorktreeRoots(ctx, tec.project.ID, runMachine(tec.chat)))
+	return tools.WorktreeAddSuggestion(targets, a.memoryWorktreeRoots(ctx, tec.project.ID, configMachine(tec.daemonSelector)))
 }
 
 // memoryWorktreeRoots are the worktree directories the user's and project's

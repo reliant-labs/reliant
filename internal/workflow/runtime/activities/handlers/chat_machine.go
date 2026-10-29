@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -19,12 +20,15 @@ func chatDaemonSelector(chat *db.Chat, explicit *types.DaemonSelector) *types.Da
 	return &types.DaemonSelector{ID: *chat.ActiveDaemonID}
 }
 
-// runMachine is the machine chat's runs execute on, whose synced project
-// config (skills, memories, MCP servers) they read: its pin, or "" (the
-// project's record) for a chat with no machine or none pinned yet.
-func runMachine(chat *db.Chat) string {
-	if chat == nil || chat.NoMachine || chat.ActiveDaemonID == nil {
+// configMachine is the machine whose synced project config (skills, memory,
+// MCP servers) a call routed by selector reads: the selector's machine id,
+// as tool dispatch resolves it (toolDaemonSelector: an explicit node or
+// workflow selector, the chat pin, the worktree's owner). A selector that
+// names no id (by name, type or labels) or none at all reads the project's
+// record, the union.
+func configMachine(selector *toolexec.DaemonSelector) string {
+	if selector == nil {
 		return ""
 	}
-	return *chat.ActiveDaemonID
+	return selector.ID
 }
