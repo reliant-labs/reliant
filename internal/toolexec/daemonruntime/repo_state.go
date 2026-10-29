@@ -26,12 +26,19 @@ import (
 // must be cheap: HEAD and its ref are read from the git directory as files
 // (no process), and are part of the snapshot's version, so a commit or a
 // checkout sends a new snapshot. Whether .reliant is dirty takes a git
-// process, so it is computed only when what it depends on moved: HEAD, and,
-// as stats, the git index (staging or unstaging moves it) and every file
-// under .reliant, synced or not (an untracked README there is still an
-// uncommitted change). A read that failed (a timeout, a transient git error)
-// is retried with backoff rather than kept. The computed states are part of
-// the snapshot's version, so a retry that recovers sends the corrected one.
+// process, so it is computed only when what it depends on moved (dirtyKey):
+// HEAD, and, as stats, the git index (staging or unstaging moves it), every
+// file under .reliant, synced or not (an untracked README there is still an
+// uncommitted change), and the ignore rules that decide whether an untracked
+// file counts (.gitignore, info/exclude, the git config naming an excludes
+// file). Rules outside those (an excludes file at a configured path) are
+// caught by revalidating every repoDirtyRevalidate. A read that failed (a
+// timeout, a transient git error) is retried with backoff rather than kept.
+//
+// Those stats key only the local cache. The snapshot's version takes the
+// heads and the computed states (statesVersion), so an index refresh or a
+// log written under .reliant that changes no dirty flag sends nothing, and a
+// retry that recovers sends the corrected state.
 
 // repoHead is a repository's HEAD as read from its git directory.
 type repoHead struct {
@@ -41,13 +48,14 @@ type repoHead struct {
 	commit        string
 	defaultBranch string
 	err           string
-	// dirtyInputs fingerprints what `git status -- .reliant` reads: the
-	// index's and each .reliant file's size and mtime.
+	// dirtyInputs fingerprints what `git status -- .reliant` reads in this
+	// repo: the index's, its ignore rules' and each .reliant file's size and
+	// mtime.
 	dirtyInputs string
 }
 
 // repoDirtyCache remembers each project's last computed dirty flags by the
-// inputs they were computed from (headsVersion).
+// inputs they were computed from (dirtyKey).
 var repoDirtyCache = struct {
 	sync.Mutex
 	byProject map[string]repoDirtyEntry
@@ -56,6 +64,9 @@ var repoDirtyCache = struct {
 type repoDirtyEntry struct {
 	inputs string
 	dirty  map[string]repoDirty
+	// computedAt is when the flags were read; they are read again
+	// repoDirtyRevalidate later even when no input moved.
+	computedAt time.Time
 	// retryAt is when a failed read is tried again; zero when none failed.
 	retryAt time.Time
 	backoff time.Duration
@@ -63,9 +74,12 @@ type repoDirtyEntry struct {
 
 // The retry backoff after a failed dirty read: first after
 // repoDirtyRetryMin, doubling to repoDirtyRetryMax while it keeps failing.
+// A good read is revalidated after repoDirtyRevalidate, for an input the
+// fingerprint cannot see.
 var (
-	repoDirtyRetryMin = 10 * time.Second
-	repoDirtyRetryMax = 5 * time.Minute
+	repoDirtyRetryMin   = 10 * time.Second
+	repoDirtyRetryMax   = 5 * time.Minute
+	repoDirtyRevalidate = 2 * time.Minute
 )
 
 // reliantDirDirtyFn is reliantDirDirty, replaceable by a test.
@@ -105,22 +119,62 @@ func readRepoHeads(projectPath string, repos []string) []repoHead {
 	return heads
 }
 
-// headsVersion is the part of a snapshot's version the repo heads contribute.
+// headsVersion is the part of a snapshot's version the repo heads
+// contribute: what they report, not the stats the dirty cache is keyed by.
 func headsVersion(heads []repoHead) []byte {
 	var b strings.Builder
 	for _, h := range heads {
-		fmt.Fprintf(&b, "%s@%s:%s:%s:%s:%s;", h.repo, h.branch, h.commit, h.defaultBranch, h.err, h.dirtyInputs)
+		fmt.Fprintf(&b, "%s@%s:%s:%s:%s;", h.repo, h.branch, h.commit, h.defaultBranch, h.err)
 	}
 	return []byte(b.String())
 }
 
-// dirtyInputs fingerprints the git index and the files under dir/.reliant by
-// size and mtime: stats only, no reads.
-func dirtyInputs(dir, gitDir string) string {
+// dirtyKey is what the dirty flags of heads were computed from: the heads,
+// each repo's dirtyInputs, and the user's global git ignore rules.
+func dirtyKey(heads []repoHead) string {
 	var b strings.Builder
-	if fi, err := os.Stat(filepath.Join(gitDir, "index")); err == nil {
-		fmt.Fprintf(&b, "index:%d:%d;", fi.Size(), fi.ModTime().UnixNano())
+	b.Write(headsVersion(heads))
+	for _, h := range heads {
+		fmt.Fprintf(&b, "%s{%s}", h.repo, h.dirtyInputs)
 	}
+	b.WriteString(globalIgnoreInputs())
+	return b.String()
+}
+
+// globalIgnoreInputs fingerprints the user-level git files that can change
+// which untracked files git status reports: the global config (core.excludesFile)
+// and the default global excludes file.
+func globalIgnoreInputs() string {
+	var paths []string
+	if home, err := os.UserHomeDir(); err == nil {
+		paths = append(paths, filepath.Join(home, ".gitconfig"))
+	}
+	if xdg, err := os.UserConfigDir(); err == nil {
+		paths = append(paths, filepath.Join(xdg, "git", "config"), filepath.Join(xdg, "git", "ignore"))
+	}
+	var b strings.Builder
+	for _, p := range paths {
+		statInput(&b, p, p)
+	}
+	return b.String()
+}
+
+// statInput writes name's size and mtime to b, or nothing when p is absent.
+func statInput(b *strings.Builder, name, p string) {
+	if fi, err := os.Stat(p); err == nil {
+		fmt.Fprintf(b, "%s:%d:%d;", name, fi.Size(), fi.ModTime().UnixNano())
+	}
+}
+
+// dirtyInputs fingerprints the git index, the repo's ignore rules and the
+// files under dir/.reliant (its own .gitignore files among them) by size and
+// mtime: stats only, no reads.
+func dirtyInputs(dir, gitDir, commonDir string) string {
+	var b strings.Builder
+	statInput(&b, "index", filepath.Join(gitDir, "index"))
+	statInput(&b, "gitignore", filepath.Join(dir, ".gitignore"))
+	statInput(&b, "exclude", filepath.Join(commonDir, "info", "exclude"))
+	statInput(&b, "config", filepath.Join(commonDir, "config"))
 	root := filepath.Join(dir, ".reliant")
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -136,20 +190,22 @@ func dirtyInputs(dir, gitDir string) string {
 }
 
 // repoStates completes heads with each repo's dirty flag, computing it only
-// when its inputs (headsVersion) moved since the last computation for
-// projectPath, or a failed read is due for a retry.
+// when its inputs (dirtyKey) moved since the last computation for
+// projectPath, a failed read is due for a retry, or a good one for
+// revalidation.
 func repoStates(ctx context.Context, projectPath string, heads []repoHead) []*reliantv1.SyncedRepoState {
 	if len(heads) == 0 {
 		return nil
 	}
-	inputs := string(headsVersion(heads))
+	inputs := dirtyKey(heads)
 	now := time.Now()
 	repoDirtyCache.Lock()
 	cached, ok := repoDirtyCache.byProject[projectPath]
 	repoDirtyCache.Unlock()
 	retry := ok && cached.inputs == inputs && !cached.retryAt.IsZero() && !now.Before(cached.retryAt)
-	if !ok || cached.inputs != inputs || retry {
-		next := repoDirtyEntry{inputs: inputs, dirty: map[string]repoDirty{}}
+	stale := ok && cached.retryAt.IsZero() && now.Sub(cached.computedAt) >= repoDirtyRevalidate
+	if !ok || cached.inputs != inputs || retry || stale {
+		next := repoDirtyEntry{inputs: inputs, dirty: map[string]repoDirty{}, computedAt: now}
 		failed := false
 		for _, h := range heads {
 			dirty, err := reliantDirDirtyFn(ctx, h.dir)
@@ -215,7 +271,7 @@ func readRepoHead(dir, repo string) (repoHead, bool) {
 	if !ok {
 		return repoHead{}, false
 	}
-	h := repoHead{repo: repo, dir: dir, dirtyInputs: dirtyInputs(dir, gitDir)}
+	h := repoHead{repo: repo, dir: dir, dirtyInputs: dirtyInputs(dir, gitDir, commonDir)}
 	head, err := os.ReadFile(filepath.Join(gitDir, "HEAD"))
 	if err != nil {
 		h.err = fmt.Sprintf("read HEAD: %v", err)

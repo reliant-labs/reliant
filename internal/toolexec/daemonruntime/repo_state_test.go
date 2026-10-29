@@ -110,9 +110,71 @@ func TestRepoStatesReportsDirtyReliantDir(t *testing.T) {
 	assert.False(t, dirty)
 
 	// An untracked file under .reliant that is not synced is still dirty.
-	writeFile(t, filepath.Join(dir, ".reliant", "notes.txt"), "todo\n")
+	notes := filepath.Join(dir, ".reliant", "notes.txt")
+	writeFile(t, notes, "todo\n")
 	dirty, _ = states()
 	assert.True(t, dirty)
+
+	// Ignore rules decide whether an untracked file counts: dropping the rule
+	// that hid one makes .reliant dirty, though nothing under it changed.
+	writeFile(t, filepath.Join(dir, ".gitignore"), "/.reliant/notes.txt\n")
+	dirty, _ = states()
+	assert.False(t, dirty, "an ignored file is not an uncommitted change")
+	writeFile(t, filepath.Join(dir, ".gitignore"), "\n")
+	dirty, _ = states()
+	assert.True(t, dirty, "removing the ignore rule re-checks dirty")
+	require.NoError(t, os.Remove(notes))
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "/.reliant/notes.txt\n")
+	writeFile(t, notes, "todo\n")
+	dirty, _ = states()
+	assert.False(t, dirty)
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "\n")
+	dirty, _ = states()
+	assert.True(t, dirty, "removing an info/exclude rule re-checks dirty")
+}
+
+// The stats the dirty cache is keyed by are not the snapshot's version: a
+// write under .reliant (a log) or an index refresh that leaves every dirty
+// flag as it was re-checks, but sends nothing. A good read is revalidated
+// after repoDirtyRevalidate even when no input moved.
+func TestRepoStatesVersionMovesOnlyWithTheReportedState(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(root, ".git", "refs", "heads", "main"), shaA+"\n")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".reliant"), 0o755))
+
+	calls, dirty := 0, false
+	origFn := reliantDirDirtyFn
+	reliantDirDirtyFn = func(context.Context, string) (bool, error) {
+		calls++
+		return dirty, nil
+	}
+	t.Cleanup(func() { reliantDirDirtyFn = origFn })
+
+	ctx := context.Background()
+	version := func() string {
+		t.Helper()
+		heads := readRepoHeads(root, nil)
+		return string(headsVersion(heads)) + string(statesVersion(repoStates(ctx, root, heads)))
+	}
+	before := version()
+	require.Equal(t, 1, calls)
+
+	writeFile(t, filepath.Join(root, ".reliant", "logs", "run.log"), "line\n")
+	writeFile(t, filepath.Join(root, ".git", "index"), "refreshed")
+	assert.Equal(t, before, version(), "unchanged state, unchanged version")
+	assert.Equal(t, 2, calls, "the moved inputs were re-checked")
+
+	dirty = true
+	repoDirtyCache.Lock()
+	e := repoDirtyCache.byProject[root]
+	e.computedAt = time.Now().Add(-repoDirtyRevalidate)
+	repoDirtyCache.byProject[root] = e
+	repoDirtyCache.Unlock()
+	assert.NotEqual(t, before, version(), "a revalidation that finds a change sends it")
+	assert.Equal(t, 3, calls)
+	version()
+	assert.Equal(t, 3, calls, "a fresh good read is kept")
 }
 
 // A failed dirty read is retried, with backoff, and not kept: once git
