@@ -53023,6 +53023,17 @@
           }
         },
         {
+          "id": "method1:d2d3a374d30c7ea55f80d72428a222290e1f9d8333e5953ad2360378eecee770",
+          "name": "QueueChatForMachine",
+          "signature": "func(ctx context.Context, chatID string, machine *github.com/reliant-labs/reliant/internal/db.QueuedMachine) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.QueueChatForMachine",
+          "source": {
+            "path": "internal/db/repo.go",
+            "symbol": "Repo.QueueChatForMachine"
+          }
+        },
+        {
           "id": "method1:d630ed10b3b3668f8f7b8fc22be949dcd1d8803be245f419a56a17cfb1a0587f",
           "name": "ReapOrphanedThreads",
           "signature": "func(ctx context.Context) ([]github.com/reliant-labs/reliant/internal/db.ReapedThread, error)",
