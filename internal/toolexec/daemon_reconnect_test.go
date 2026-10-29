@@ -356,6 +356,7 @@ func TestToolRequest_GivesUpWhenTheDaemonOutstaysTheGrace(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, daemonoffline.IsError(err), "the offline marker survives: %v", err)
+	assert.ErrorIs(t, err, ErrNotDispatched, "nothing reached a daemon: a run step may send it again")
 	assert.Contains(t, err.Error(), "waited", "the failure says the call already waited")
 	assert.GreaterOrEqual(t, elapsed, remaining-100*time.Millisecond, "the call waits out what is left of the grace")
 	assert.Less(t, elapsed, remaining+1500*time.Millisecond, "and not a moment more")
@@ -400,6 +401,7 @@ func TestToolRequest_DaemonGoneLongFailsFast(t *testing.T) {
 			_, err := router.SendToolRequestSync(ctx, reconnectUser, shellRequest(tools.ShellToolName, `{"command":"ls"}`))
 			require.Error(t, err)
 			assert.True(t, daemonoffline.IsError(err))
+			assert.ErrorIs(t, err, ErrNotDispatched)
 			assert.NotContains(t, err.Error(), "waited")
 			assert.Less(t, time.Since(start), 500*time.Millisecond)
 			started, _ := waits.snapshot()

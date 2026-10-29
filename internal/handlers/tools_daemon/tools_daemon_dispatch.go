@@ -17,6 +17,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
+// toolVerdictGrace is how long past a tool request's own timeout the gateway
+// keeps waiting for the daemon's answer.
+//
+// The daemon enforces that timeout itself and answers with the verdict — a
+// shell command it killed reports exit 124, timed out — after up to
+// ExecGraceDelay (3s) for the process group to exit and ExecWaitDelay (10s)
+// for its pipes to drain. A gateway that gave up at exactly the timeout won
+// that race every time and reported a transport failure instead: every one of
+// the 65 "refusing to re-execute shell command" retries in prod over 14 days
+// (2026-10-29) began as a 5m run step that ran, hit its timeout, and had its
+// verdict dropped here. It stays under the requester's own +30s
+// (toolRequestRoundTrip), so the requester hears this answer, not its own
+// timeout.
+const toolVerdictGrace = 20 * time.Second
+
 // defaultDaemonForUser returns the "best" connected daemon for a user.
 // It prefers local daemons over cloud daemons, then most recently connected.
 // Returns nil if no daemon is connected.
@@ -415,17 +430,19 @@ func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnect
 	}
 
 	// Wait for the correlated response.
-	// Default to 10 minutes for bash commands; use request timeout if set.
+	// Default to 10 minutes for bash commands; use request timeout if set,
+	// plus toolVerdictGrace for the daemon's own answer at that timeout.
 	timeout := 600 * time.Second
 	if request.TimeoutMs > 0 {
-		timeout = time.Duration(request.TimeoutMs) * time.Millisecond
+		timeout = time.Duration(request.TimeoutMs)*time.Millisecond + toolVerdictGrace
 	}
 
 	select {
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("tool request %q timed out after %s", request.RequestID, timeout)
+		// The daemon has the request: it may have run it, and may still be.
+		return nil, fmt.Errorf("tool request %q got no answer from the machine in %s; it may have run", request.RequestID, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("%w while waiting for tool request %q response; the request outcome is unknown and the daemon may still complete it after reconnect", toolexec.ErrDaemonConnectionInterrupted, request.RequestID)
 	case <-ctx.Done():
