@@ -2349,6 +2349,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
+	heads := readRepoHeads(projectPath, discoverRepoSources(ctx, projectPath))
 
 	version := hashBytes(
 		userConfigYAML,
@@ -2364,6 +2365,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		scenarioBytes,
 		skillBytes,
 		repoMemoriesBytes,
+		headsVersion(heads),
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -2385,6 +2387,7 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
 		RepoMemoriesMd:  repoMemories,
+		RepoStates:      repoStates(ctx, projectPath, version, heads),
 	}, nil
 }
 

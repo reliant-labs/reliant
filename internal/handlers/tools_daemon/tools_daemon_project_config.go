@@ -356,6 +356,7 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 		ProjectSkillsJSON:    flattenIndexedSkills(snapshot.Skills),
 		RepoMemoriesJSON:     flattenRepoMemories(snapshot.RepoMemoriesMd),
 		RuntimeType:          daemonRuntimeTypeFromLabels(conn.labels),
+		RepoStatesJSON:       flattenRepoStates(snapshot.RepoStates),
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 
@@ -744,4 +745,29 @@ func bytesToStringPtr(value []byte) *string {
 	}
 	v := string(value)
 	return &v
+}
+
+// flattenRepoStates is the snapshot's git state per repo as stored on the
+// machine's catalog row (config.SyncedRepoState); nil from a daemon that does
+// not report it.
+func flattenRepoStates(states []*reliantv1.SyncedRepoState) *string {
+	items := make([]cfgpkg.SyncedRepoState, 0, len(states))
+	for _, s := range states {
+		if s == nil {
+			continue
+		}
+		items = append(items, cfgpkg.SyncedRepoState{
+			Repo:          s.GetRepo(),
+			Branch:        s.GetBranch(),
+			Commit:        s.GetCommitSha(),
+			Dirty:         s.GetDirty(),
+			DefaultBranch: s.GetDefaultBranch(),
+			Error:         s.GetError(),
+		})
+	}
+	encoded, err := cfgpkg.EncodeCatalogJSON(items)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }

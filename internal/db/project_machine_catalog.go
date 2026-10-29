@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,6 +88,9 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		}); err != nil {
 			return err
 		}
+		if err := store.SetProjectMachineRepoStates(txCtx, r.ORM(), record.ProjectID, record.DaemonID, record.RepoStatesJSON); err != nil {
+			return err
+		}
 		stored = true
 
 		catalogs, err := r.projectMachineCatalogs(txCtx, record.ProjectID)
@@ -122,6 +126,30 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		return false, err
 	}
 	return stored, nil
+}
+
+// ProjectMachineRepoStates reads the git state each machine's synced files of
+// a project were read from, keyed by daemon id; a machine whose daemon has not
+// reported one is absent.
+func (r *Repo) ProjectMachineRepoStates(ctx context.Context, projectID string) (map[string][]config.SyncedRepoState, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	rows, err := store.ListProjectMachineRepoStates(ctx, r.ORM(), projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]config.SyncedRepoState{}
+	for _, row := range rows {
+		states, err := config.ParseSyncedRepoStates(row.RepoStatesJSON)
+		if err != nil {
+			return nil, err
+		}
+		if len(states) > 0 {
+			out[row.DaemonID] = states
+		}
+	}
+	return out, nil
 }
 
 // ProjectMachineCatalogs reads every machine's catalog of a project.
@@ -219,5 +247,40 @@ func (r *Repo) projectMachineRemovals(ctx context.Context, projectID string) (ma
 		}
 		out[row.DaemonID] = removed
 	}
+	return out, nil
+}
+
+// ProjectWorkflowProvenance is, for every machine's copy of every synced
+// workflow of a project, which machine and file it is and the git state it
+// was synced at, ordered by workflow path and then machine.
+func (r *Repo) ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error) {
+	catalogs, err := r.ProjectMachineCatalogs(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	states, err := r.ProjectMachineRepoStates(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	names := r.machineNames(ctx, catalogs)
+	var out []config.WorkflowProvenance
+	for _, c := range catalogs {
+		for _, w := range c.Workflows {
+			p := config.WorkflowProvenance{
+				Name: w.Name, RelativePath: config.WorkflowFileKey(w), DaemonID: c.DaemonID, Machine: names[c.DaemonID],
+			}
+			if s := config.RepoStateFor(states[c.DaemonID], p.RelativePath); s != nil {
+				state := *s
+				p.Repo = &state
+			}
+			out = append(out, p)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].RelativePath != out[j].RelativePath {
+			return out[i].RelativePath < out[j].RelativePath
+		}
+		return out[i].Machine < out[j].Machine
+	})
 	return out, nil
 }
