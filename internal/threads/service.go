@@ -17,8 +17,8 @@ import (
 // Repository defines the subset of *db.Repo needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
-	// Chat operations.
-	GetChatWithUserCheck(ctx context.Context, id string, userID string) (*db.Chat, error)
+	// Chat operations: ownership, from the chats row alone.
+	GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error)
 
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)

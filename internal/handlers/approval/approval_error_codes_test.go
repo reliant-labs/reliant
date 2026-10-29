@@ -46,8 +46,8 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 	pending := func(_ context.Context, id string) (*db.Approval, error) {
 		return &db.Approval{ID: id, ChatID: "chat-1", Status: int32(pb.ApprovalStatus_APPROVAL_STATUS_PENDING)}, nil
 	}
-	own := func(_ context.Context, id string) (*db.Chat, error) {
-		return &db.Chat{ID: id, UserID: "test-user"}, nil
+	own := func(_ context.Context, id string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: id, UserID: "test-user"}, nil
 	}
 	for _, tc := range readFailures {
 		t.Run("Approve, reading the approval: "+tc.name, func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("ListApprovalsByChat, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
-				GetChatFunc: func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.ListApprovalsByChat(approval.AuthedContext(t), connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
 			requireClientReads(t, err, tc.want)
@@ -70,7 +70,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: pending,
-				GetChatFunc:     own,
+				GetChatRowFunc:  own,
 				RunTxFunc: func(context.Context, orm.TxPolicy, func(context.Context) error) error {
 					return tc.err
 				},

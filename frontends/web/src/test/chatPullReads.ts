@@ -27,6 +27,7 @@ export function emptyChatPullReads(): MockHandlers {
     "ChatService.SearchChats": { response: {} },
     "ChatService.ListStepExecutions": { response: {} },
     "ChatService.GetThreadWorkflowInputs": { response: {} },
+    "ChatService.GetWorkflowNodeExecutions": { response: {} },
   };
 }
 

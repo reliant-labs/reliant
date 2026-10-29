@@ -48,7 +48,7 @@ type Repository interface {
 	// caller.
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver

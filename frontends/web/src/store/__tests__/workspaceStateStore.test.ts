@@ -211,7 +211,7 @@ describe('workspaceStateStore', () => {
     // subscriber, which fed an update loop when the save ran during render.
     it('publishes nothing when a write changes nothing', () => {
       const serialize = (): SerializedViewer[] => [
-        { type: 'file', title: 'App.tsx', filePath: '/src/App.tsx', chatId: undefined },
+        { type: 'file', title: 'App.tsx', filePath: '/src/App.tsx', processId: undefined },
       ];
       act(() => {
         useWorkspaceStateStore.getState().setOpenViewers(projectId, worktreeId, serialize(), 0);

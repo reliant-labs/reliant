@@ -12,7 +12,7 @@ import (
 // Repository is the slice of *db.Repo the message handlers use.
 type Repository interface {
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*db.Attachment, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)

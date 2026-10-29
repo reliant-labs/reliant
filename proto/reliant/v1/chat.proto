@@ -500,6 +500,12 @@ service ChatService {
   // forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
   rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
   
+  // GetWorkflowNodeExecutions returns the newest node_execution update of each
+  // node of one of a chat's workflow runs: the node state a run-status view
+  // starts from, before it follows the chat stream's live node events. The
+  // chat snapshot does not carry node state.
+  rpc GetWorkflowNodeExecutions(GetWorkflowNodeExecutionsRequest) returns (GetWorkflowNodeExecutionsResponse) {}
+
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
   rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
 
@@ -1544,6 +1550,19 @@ message ListStepExecutionsResponse {
   repeated StepExecution step_executions = 1;
   // True when older executions were left out to bound the response.
   bool truncated = 2;
+}
+
+message GetWorkflowNodeExecutionsRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  // The run: a workflows.id of the chat (WorkflowExecution.id).
+  string workflow_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetWorkflowNodeExecutionsResponse {
+  // One per node that has run, its newest node_execution update, in sequence
+  // order. update_type is "CHAT_UPDATE_TYPE_NODE_EXECUTION" and data the event
+  // JSON, as the chat stream carries it.
+  repeated ChatUpdate updates = 1;
 }
 
 // SetChatDaemonRequest sets the active daemon for a chat session.

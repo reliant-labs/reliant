@@ -17,6 +17,7 @@ type Repository interface {
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	ListChildWorkflows(ctx context.Context, parentID string) ([]*db.Workflow, error)
 	ListRootWorkflows(ctx context.Context, chatID string) ([]*db.Workflow, error)

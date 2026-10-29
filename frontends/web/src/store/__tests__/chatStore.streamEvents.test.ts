@@ -66,9 +66,11 @@ function nodeExec(
   nodeId: string,
   eventType: string,
   seq: number,
+  workflowId = "wf-1",
 ): ChatUpdate {
   return {
     update_type: "node_execution",
+    workflow_id: workflowId,
     node_id: nodeId,
     event_type: eventType,
     status: 0,
@@ -190,7 +192,17 @@ describe("runOutputs reducer", () => {
 });
 
 describe("nodeExecutions reducer", () => {
-  it("dedups by node_id + event_type and sorts by sequence_number", () => {
+  it("keeps each run's events: two runs of a workflow share every node id", () => {
+    const store = useChatStore.getState();
+    store.processChatStreamUpdates(CHAT, [
+      nodeExec("call_llm", "completed", 1, "run-1"),
+      nodeExec("call_llm", "completed", 2, "run-2"),
+    ]);
+    const execs = useChatStore.getState().nodeExecutions[CHAT] || [];
+    expect(execs.map((n) => n.workflow_id)).toEqual(["run-1", "run-2"]);
+  });
+
+  it("dedups by run + node_id + event_type and sorts by sequence_number", () => {
     const store = useChatStore.getState();
     store.processChatStreamUpdates(CHAT, [
       nodeExec("n1", "started", 1),

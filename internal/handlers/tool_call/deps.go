@@ -14,6 +14,7 @@ import (
 // temporal.SpawnWorkflowReconciler (the spawn stopper's reconcile).
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
 	GetContentBlockByToolCallID(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)

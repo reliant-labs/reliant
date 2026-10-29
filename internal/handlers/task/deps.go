@@ -11,7 +11,7 @@ import (
 
 // Repository is the slice of *db.Repo the task handlers use.
 type Repository interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
 	CreateTask(ctx context.Context, task *db.Task) error

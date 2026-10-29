@@ -441,7 +441,7 @@ func (s *Service) GetLaunchEvent(
 	if req.Msg.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, triggerDBError("get chat", err)
 	}

@@ -22,12 +22,18 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/re
 import type { NodeExecutionUpdate } from "../../../types/streaming";
 
 const chatQuery = vi.hoisted(() => ({ data: undefined as unknown }));
+// The run's node state as GetWorkflowNodeExecutions reports it: none here, so
+// what the tests assert comes from the stream events they seed.
+vi.mock("../../../hooks/chat-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/chat-service-hooks_gen")>()),
+  useGetWorkflowNodeExecutions: () => ({ data: undefined }),
+}));
 vi.mock("../../../hooks/chat-queries", async () => ({
   ...(await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries")),
   useChat: () => chatQuery,
 }));
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({
-  useWorkflowExecutions: () => ({ allWorkflows: [], data: null, hasRunningWorkflow: false, isLoading: false, error: null }),
+  useWorkflowExecutions: () => ({ allWorkflows: [], data: null, isLoading: false, error: null }),
 }));
 
 import { useBuilderRun } from "./useBuilderTestRun";
