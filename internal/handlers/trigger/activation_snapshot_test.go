@@ -230,3 +230,43 @@ nodes:
 	require.ErrorContains(t, err, "fixed privilege choices")
 
 }
+
+func TestActivationSnapshotDisclosesEventDerivedTargetsAsDynamic(t *testing.T) {
+	// Evaluated against the sentinel, the conditional picks "sandbox"; an event
+	// with mode=admin targets production. The card must show neither.
+	yaml := `name: event-target
+inputs:
+  mode: {type: string, default: safe}
+triggers:
+  - name: hook
+    integration: {integration: github, events: [issues.opened]}
+    inputs: {mode: '{{ trigger.payload.data.issue.title }}'}
+    prompt: go
+entry: [act]
+nodes:
+  - id: act
+    type: action
+    uses: github/issue.create@1
+    with:
+      owner: acme
+      repo: "{{ inputs.mode == 'admin' ? 'production' : 'sandbox' }}"
+      title: hello
+    edges: []
+  - id: agent
+    type: workflow
+    ref: builtin://autopilot-agent
+    args:
+      tools: [github__pr_get]
+      tool_params:
+        github__pr_get:
+          owner: acme
+          repo: "{{ inputs.mode == 'admin' ? 'production' : 'sandbox' }}"
+`
+	yaml = strings.Replace(yaml, "    edges: []\n", "", 1) + "edges:\n  - {from: act, default: agent}\n"
+	snap, err := snapshotFor(t, yaml, "hook", nil)
+	require.NoError(t, err)
+	summary := strings.Join(snap.Summary, "\n")
+	require.NotContains(t, summary, "sandbox")
+	require.NotContains(t, summary, "production")
+	require.Contains(t, summary, "owner=acme; repo="+unknownScope)
+}

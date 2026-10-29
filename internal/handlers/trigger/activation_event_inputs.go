@@ -46,8 +46,9 @@ const eventSupplied = "\u27e8event-supplied\u27e9"
 // value: an expression can compare or transform an input away
 // ("{{ inputs.mode == 'admin' ? ['shell'] : ['view'] }}"), so whether its
 // resolved value still carries the sentinel proves nothing. Taint follows
-// arguments into child workflows the same way: a child input whose argument
-// expression references a tainted input is itself tainted.
+// arguments into child workflows: an argument leaf whose expression reads a
+// tainted input reaches the child as the sentinel (maskTaintedArgs), and a
+// target or binding expression that reads one is disclosed as dynamic.
 
 var inputsReference = regexp.MustCompile(`\binputs\b\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([^'"]+)['"]\s*\])?`)
 
@@ -206,33 +207,38 @@ func listValues(v any) []any {
 	}
 }
 
-// taintedArgNames is the child inputs whose argument expressions read a
-// tainted input: they are tainted in the child.
-func taintedArgNames(args map[string]*structpb.Value, tainted map[string]bool) map[string]bool {
-	out := map[string]bool{}
+// maskTaintedArgs replaces every argument leaf whose expression reads a
+// tainted input with the sentinel, so the child sees that input as
+// event-supplied however the parent transformed it.
+func maskTaintedArgs(args map[string]*structpb.Value, tainted map[string]bool) map[string]*structpb.Value {
+	if len(tainted) == 0 || len(args) == 0 {
+		return args
+	}
+	out := make(map[string]*structpb.Value, len(args))
 	for name, v := range args {
-		raw, err := json.Marshal(v.AsInterface())
-		if err != nil || referencesTainted(string(raw), tainted) {
-			out[name] = true
-		}
+		out[name] = maskTainted(v, tainted)
 	}
 	return out
 }
 
-// childTaint is the child's tainted inputs: tainted arguments, plus tainted
-// inputs passed through under their own names.
-func childTaint(args map[string]bool, passthrough []string, tainted map[string]bool) map[string]bool {
-	out := map[string]bool{}
-	for name := range args {
-		out[name] = true
-	}
-	for _, name := range passthrough {
-		if tainted[name] {
-			out[name] = true
+func maskTainted(v *structpb.Value, tainted map[string]bool) *structpb.Value {
+	switch k := v.GetKind().(type) {
+	case *structpb.Value_StringValue:
+		if strings.Contains(k.StringValue, "{{") && referencesTainted(k.StringValue, tainted) {
+			return structpb.NewStringValue(eventSupplied)
 		}
+	case *structpb.Value_ListValue:
+		items := make([]*structpb.Value, len(k.ListValue.GetValues()))
+		for i, item := range k.ListValue.GetValues() {
+			items[i] = maskTainted(item, tainted)
+		}
+		return structpb.NewListValue(&structpb.ListValue{Values: items})
+	case *structpb.Value_StructValue:
+		fields := make(map[string]*structpb.Value, len(k.StructValue.GetFields()))
+		for name, item := range k.StructValue.GetFields() {
+			fields[name] = maskTainted(item, tainted)
+		}
+		return structpb.NewStructValue(&structpb.Struct{Fields: fields})
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	return v
 }

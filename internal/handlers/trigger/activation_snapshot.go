@@ -150,12 +150,8 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 	// defaults and spawn preset declarations too: the validator only loads
 	// presets needed to validate child argument contracts, not every choice.
 	contexts := map[string][]map[string]any{key: rootContexts}
-	// contextTaint[k][i] is the inputs of contexts[k][i] an unbounded event
-	// input reached through an argument (activation_event_inputs.go). Inputs
-	// whose value is the sentinel itself are found from the value.
-	contextTaint := map[string][]map[string]bool{key: make([]map[string]bool, len(rootContexts))}
 	contextSeen := map[string]bool{}
-	addContext := func(ref string, params map[string]any, taint ...map[string]bool) error {
+	addContext := func(ref string, params map[string]any) error {
 		w, err := load(ref)
 		if err != nil {
 			return err
@@ -165,12 +161,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		if err != nil {
 			return err
 		}
-		var reached map[string]bool
-		if len(taint) > 0 {
-			reached = taint[0]
-		}
-		taintKey, _ := json.Marshal(reached)
-		ctxKey := workflowref.RefKey(ref) + string(raw) + string(taintKey)
+		ctxKey := workflowref.RefKey(ref) + string(raw)
 		if contextSeen[ctxKey] {
 			return nil
 		}
@@ -182,7 +173,6 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 			return err
 		}
 		contexts[workflowref.RefKey(ref)] = append(contexts[workflowref.RefKey(ref)], effective)
-		contextTaint[workflowref.RefKey(ref)] = append(contextTaint[workflowref.RefKey(ref)], reached)
 		return nil
 	}
 	visited := map[string]int{}
@@ -196,14 +186,12 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		for _, k := range keys {
 			if len(contexts[k]) == 0 {
 				contexts[k] = []map[string]any{runtime.ApplyDefaults(map[string]any{}, loaded[k].GetInputs())}
-				contextTaint[k] = []map[string]bool{nil}
 			}
 			if visited[k] >= len(contexts[k]) {
 				continue
 			}
 			progress = true
 			valuesForContext := contexts[k][visited[k]]
-			taintForContext := contextTaint[k][visited[k]]
 			visited[k]++
 			w := loaded[k]
 			checked := validation.StaticAnalysisWithOptions(w, &validation.ValidationOptions{CanonicalWorkflowRef: k, WorkflowLoader: load, PresetLoader: func(name string) (map[string]interface{}, error) {
@@ -264,9 +252,6 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				}
 				values := valuesForContext
 				tainted := taintedInputs(values)
-				for name := range taintForContext {
-					tainted[name] = true
-				}
 				if err := walkInputs(w.GetInputs(), values); err != nil {
 					return err
 				}
@@ -286,7 +271,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					}
 				}
 				for _, node := range w.GetNodes() {
-					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k)...)
+					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k, tainted)...)
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {
@@ -318,7 +303,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						if referencesTaintedIn(&pb.SubWorkflowArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
 						}
-						taintedArgs := taintedArgNames(a.GetArgs(), tainted)
+						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return svcerr.FailedPrecondition("Child workflow/preset dependencies must resolve before activation approval")
@@ -349,7 +334,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							params[name] = v.AsInterface()
 						}
 						if childRef != "" {
-							if err := addContext(childRef, params, childTaint(taintedArgs, a.GetPassthrough(), tainted)); err != nil {
+							if err := addContext(childRef, params); err != nil {
 								return err
 							}
 						}
@@ -375,7 +360,8 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						if referencesTaintedIn(&pb.LoopArgs{Ref: a.GetRef(), Presets: a.GetPresets()}, tainted) {
 							return svcerr.FailedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
 						}
-						taintedArgs := taintedArgNames(a.GetArgs(), tainted)
+						a = proto.Clone(a).(*pb.LoopArgs)
+						a.Args = maskTaintedArgs(a.GetArgs(), tainted)
 						resolved, err := wfcel.ResolveCELFields(a, runtime.NewCELContextBuilder().WithWorkflow("", k).WithInputs(values))
 						if err != nil {
 							return svcerr.FailedPrecondition("Loop workflow/preset dependencies must resolve before activation approval")
@@ -411,7 +397,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 							params[name] = v.AsInterface()
 						}
 						if ref := model.CelStringValue(a.GetRef()); ref != "" {
-							if err := addContext(ref, params, childTaint(taintedArgs, a.GetPassthrough(), tainted)); err != nil {
+							if err := addContext(ref, params); err != nil {
 								return err
 							}
 						}
@@ -486,7 +472,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						sort.Strings(boundTools)
 						for _, name := range boundTools {
 							if known[name] {
-								snap.Summary = append(snap.Summary, "Fixed tool binding: "+name+"; "+targetDisclosure(tc.GetTools()[name].GetFields(), values, k))
+								snap.Summary = append(snap.Summary, "Fixed tool binding: "+name+"; "+targetDisclosure(tc.GetTools()[name].GetFields(), values, k, tainted))
 							}
 						}
 						entries := model.CelStringListValue(tc.GetSpawn())

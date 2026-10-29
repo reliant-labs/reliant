@@ -67,7 +67,10 @@ func discloseScope(value any) string {
 		return unknownScope
 	}
 }
-func targetDisclosure(params map[string]*structpb.Value, values map[string]any, identity string) string {
+
+// tainted names the inputs an unbounded event supplies (activation_event_inputs.go):
+// a target expression that reads one is dynamic, whatever it evaluates to now.
+func targetDisclosure(params map[string]*structpb.Value, values map[string]any, identity string, tainted map[string]bool) string {
 	keys := make([]string, 0)
 	for key := range params {
 		if targetKeys[key] {
@@ -80,6 +83,10 @@ func targetDisclosure(params map[string]*structpb.Value, values map[string]any, 
 	for _, key := range keys {
 		value := params[key].AsInterface()
 		if text, ok := value.(string); ok && strings.Contains(text, "{{") {
+			if referencesTainted(text, tainted) {
+				out = append(out, key+"="+unknownScope)
+				continue
+			}
 			resolved, err := evaluator.EvalString(text)
 			if err != nil {
 				out = append(out, key+"="+unknownScope)
@@ -94,10 +101,13 @@ func targetDisclosure(params map[string]*structpb.Value, values map[string]any, 
 	}
 	return "targets: " + strings.Join(out, "; ") + "; unspecified targets remain dynamic/unbounded; non-scope parameters withheld"
 }
-func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity string) []string {
+func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity string, tainted map[string]bool) []string {
 	eval := runtime.NewCELContextBuilder().WithWorkflow("", identity).WithInputs(values)
 	resolveName := func(raw string) string {
 		if strings.Contains(raw, "{{") {
+			if referencesTainted(raw, tainted) {
+				return ""
+			}
 			v, err := eval.EvalString(raw)
 			if err != nil {
 				return ""
@@ -111,7 +121,7 @@ func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity stri
 		uses := resolveName(model.CelStringValue(a.GetUses()))
 		action, err := catalog.MustBuiltin().Resolve(uses)
 		if err != nil {
-			return []string{"Integration action: " + unknownScope + "; " + targetDisclosure(a.GetWith(), values, identity)}
+			return []string{"Integration action: " + unknownScope + "; " + targetDisclosure(a.GetWith(), values, identity, tainted)}
 		}
 		mode := "READ"
 		if action.Spec.GetMutates() {
@@ -136,7 +146,7 @@ func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity stri
 		if hosted != "" {
 			connection += "; hosted grant=" + discloseScope(hosted)
 		}
-		return []string{fmt.Sprintf("Integration action: %s [%s]; connection=%s; %s", uses, mode, connection, targetDisclosure(a.GetWith(), values, identity))}
+		return []string{fmt.Sprintf("Integration action: %s [%s]; connection=%s; %s", uses, mode, connection, targetDisclosure(a.GetWith(), values, identity, tainted))}
 	}
 	if a := node.GetInvokeTool(); a != nil {
 		name := resolveName(model.CelStringValue(a.GetTool()))
@@ -150,7 +160,7 @@ func nodePrivilegeDisclosure(node *pb.Node, values map[string]any, identity stri
 		if !known {
 			name = unknownScope
 		}
-		return []string{"Invoked tool: " + name + "; connection identity dynamic/default unless fixed by tool configuration; " + targetDisclosure(a.GetParams(), values, identity)}
+		return []string{"Invoked tool: " + name + "; connection identity dynamic/default unless fixed by tool configuration; " + targetDisclosure(a.GetParams(), values, identity, tainted)}
 	}
 	if node.GetRun() != nil {
 		return []string{"Shell/process execution: arbitrary command authority on the selected machine; command withheld; targets dynamic/unbounded"}

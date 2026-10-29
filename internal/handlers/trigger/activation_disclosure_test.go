@@ -55,8 +55,8 @@ nodes:
 		require.NoError(t, err)
 		return w.Nodes[0]
 	}
-	read := strings.Join(nodePrivilegeDisclosure(parse("github/issue.get@1"), nil, "workflow"), "\n")
-	write := strings.Join(nodePrivilegeDisclosure(parse("github/issue.create@1"), nil, "workflow"), "\n")
+	read := strings.Join(nodePrivilegeDisclosure(parse("github/issue.get@1"), nil, "workflow", nil), "\n")
+	write := strings.Join(nodePrivilegeDisclosure(parse("github/issue.create@1"), nil, "workflow", nil), "\n")
 	require.Contains(t, read, "github/issue.get@1 [READ]")
 	require.Contains(t, write, "github/issue.create@1 [MUTATES external state]")
 	require.NotEqual(t, read, write)
@@ -85,7 +85,7 @@ nodes:
        body: "{{inputs.secret}}"
 `))
 	require.NoError(t, err)
-	card := strings.Join(nodePrivilegeDisclosure(w.Nodes[0], map[string]any{"channel": "C012345", "environment": "password-do-not-disclose", "secret": "opaque-sensitive-literal"}, "workflow"), "\n")
+	card := strings.Join(nodePrivilegeDisclosure(w.Nodes[0], map[string]any{"channel": "C012345", "environment": "password-do-not-disclose", "secret": "opaque-sensitive-literal"}, "workflow", nil), "\n")
 	require.Contains(t, card, "github/issue.create@1")
 	require.Contains(t, card, "repo=dynamic/unbounded")
 	require.Contains(t, card, "channel=C012345")
@@ -105,7 +105,7 @@ nodes:
      params: {prompt: sk-private-prompt, environment: staging}
 `))
 	require.NoError(t, err)
-	card := strings.Join(nodePrivilegeDisclosure(w.Nodes[0], nil, "workflow"), "\n")
+	card := strings.Join(nodePrivilegeDisclosure(w.Nodes[0], nil, "workflow", nil), "\n")
 	require.Contains(t, card, "Invoked tool: generate_image")
 	require.Contains(t, card, "environment=staging")
 	require.NotContains(t, card, "sk-private-prompt")
