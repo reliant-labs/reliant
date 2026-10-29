@@ -663,11 +663,15 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it would run. A pending chat has produced nothing, so its workflow can
 	// still change; this is the one place the system allows it.
 	workflowName, _, _ := effectiveStart(chat, spec)
-	runMachine := RunMachine(chat)
+	// The chat as this start leaves it: a daemon named at the first send pins
+	// it and ends no-machine. Every admission read below is scoped by it, so
+	// the tree, the presets and the input schema all come from that machine.
+	checked := *chat
 	if spec.DaemonID != "" {
-		runMachine = spec.DaemonID
+		checked.ActiveDaemonID = &spec.DaemonID
+		checked.NoMachine = false
 	}
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, runMachine, ev); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev); err != nil {
 		return nil, err
 	}
 	if noMachine {
@@ -679,11 +683,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, &ValidationError{Reason: err.Error()}
 	}
 	{
-		checked := *chat
 		_, presets, _ := effectiveStart(chat, spec)
-		if spec.DaemonID != "" {
-			checked.ActiveDaemonID = &spec.DaemonID
-		}
 		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, presets, spec.Params); err != nil {
 			return nil, err
 		}

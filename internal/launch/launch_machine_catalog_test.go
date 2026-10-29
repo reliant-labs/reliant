@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // A launch on a machine builds its inputs from that machine's presets and
@@ -83,4 +84,46 @@ func TestLaunchOnAMachineReadsThatMachinesCatalog(t *testing.T) {
 	inputs := starter.lastRootInput(t).Inputs
 	assert.Equal(t, "prod", inputs["env"], "cicd's default")
 	assert.NotContains(t, inputs, "region", "the laptop's default is not cicd's")
+}
+
+// A pending no-machine branch started with a daemon named at its first send
+// is admitted against that daemon's catalog: its tree, presets and input
+// schema. The input check used to keep the chat's no-machine flag and read
+// the union, so the laptop's newer schema rejected a valid start on cicd.
+func TestLaunchPendingNoMachineBranchStartedOnAMachineReadsThatMachine(t *testing.T) {
+	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
+	cicd, laptop := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{cicd, laptop} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: launchTestUserID}))
+	}
+	deploy := func(inputs string) *string {
+		wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "deploy", Name: "deploy", RelativePath: ".reliant/workflows/deploy.yaml",
+			YAMLContent: "name: deploy\napiVersion: v2\ninputs:\n" + inputs + "entry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"}})
+		require.NoError(t, err)
+		return wj
+	}
+	now := time.Now().UTC()
+	for daemonID, push := range map[string]struct {
+		at     time.Time
+		inputs string
+	}{
+		cicd:   {now.Add(-time.Hour), "  env: {type: string, default: prod}\n"},
+		laptop: {now, "  env: {type: string, required: true}\n"},
+	} {
+		_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: deploy(push.inputs), PushedAt: push.at,
+		}, true)
+		require.NoError(t, err)
+	}
+	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
+	_, err := repo.ORM().Exec(ctx, `UPDATE chats SET no_machine = true WHERE id = $1`, chatID)
+	require.NoError(t, err)
+
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	_, err = launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
+		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", DaemonID: cicd, Messages: userSeed("go"),
+	})
+	require.NoError(t, err, "the laptop's required env must not reject a start on cicd")
+	assert.Equal(t, "prod", starter.lastRootInput(t).Inputs["env"])
 }
