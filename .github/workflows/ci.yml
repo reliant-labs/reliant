@@ -364,16 +364,51 @@ jobs:
       - name: task build:electron:smoke
         run: task build:electron:smoke
 
+  # ── The review, checked by the merge ──────────────────────────────────────
+  # In the merge queue every PR in the group must carry pr-review's pass
+  # marker for its CURRENT head, posted by the pipeline's reviewer
+  # (scripts/ci-review-marker.sh; control-plane docs/pr-pipeline.md).
+  # pr-disarm reacts to a push only after the webhook, so a head pushed after
+  # a pass, with its checks already green, could otherwise ride the armed
+  # auto-merge in. On a PR it only reports: the review comes after CI, and a
+  # red here would keep the PR out of the queue it guards.
+  review-marker:
+    name: Review marker
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: scripts
+      - name: pr-review passed every head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          GROUP_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          if [ "${EVENT_NAME}" = merge_group ]; then
+            scripts/ci-review-marker.sh group "${GROUP_REF}" "${GROUP_SHA}"
+          else
+            scripts/ci-review-marker.sh pr "${PR}" || echo "::notice::the merge queue will require pr-review's pass marker on this exact head"
+          fi
+
   # ── One verdict ───────────────────────────────────────────────────────────
   # Green only when every job that ran passed. On a PR a lane the change does
   # not reach is skipped, which is fine, but the merge gate must have run. Off
   # a PR every lane runs (scripts/ci-lanes.sh --full), so a skip there is a
-  # broken `if:`, never a pass: everything but the merge gate, go-cache (only a
-  # push runs it) and cp-contract (only a change to the vendored contract
-  # does) must have succeeded.
+  # broken `if:`, never a pass: everything but the merge gate and the review
+  # marker (merge tier only), go-cache (only a push runs it) and cp-contract
+  # (only a change to the vendored contract does) must have succeeded. In the
+  # merge queue the review marker must have passed.
   ci-result:
     name: CI result
-    needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package]
+    needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -389,8 +424,11 @@ jobs:
           gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-gate)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
+          if [ "${EVENT_NAME}" = merge_group ] && [ "$(jq -r '."review-marker".result' <<< "${RESULTS}")" != success ]; then
+            bad="${bad}"$'\n'"review-marker: pr-review has not passed every head in this merge group"
+          fi
           if [ "${merge_tier}" != true ]; then
-            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "review-marker" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
           bad=$(grep . <<< "${bad}" | sort -u || true)
