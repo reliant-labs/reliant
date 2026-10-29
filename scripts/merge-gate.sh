@@ -359,7 +359,8 @@ elif [ "$fail" = 0 ]; then
       gen_procs=$gate_cpus; phase generate gen_forge "$SCRATCH" || fail=1; gen_procs=$quarter
     else phase generate gen_forge "$SCRATCH" & pids+=($!); fi
   fi
-  if [ "$dgen" = true ]; then
+  # A generate that already failed alone leaves nothing to run docs beside.
+  if [ "$dgen" = true ] && [ "$fail" = 0 ]; then
     if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
@@ -432,8 +433,10 @@ if [ "$fail" = 0 ]; then
   if echo "$files" | grep -qE '^db/migrations/'; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
-  for p in "${pids[@]}"; do wait "$p" || fail=1; done
 fi
+# Every launched phase is waited for, the generators too when the gate failed
+# before build: cleanup must not remove a checkout a generator still writes.
+for p in "${pids[@]}"; do wait "$p" || fail=1; done
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq

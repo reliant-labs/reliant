@@ -120,6 +120,16 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	if !strings.Contains(string(b), `elif [ "$gen_alone" = 1 ]; then`) {
 		t.Fatal("merge-gate computes gen_alone but never sequences generate on it")
 	}
+	// A generate that failed alone must not start docs, and whatever did start
+	// is waited for even on failure: cleanup removes the scratch checkouts.
+	for _, want := range []string{
+		`if [ "$dgen" = true ] && [ "$fail" = 0 ]; then`,
+		"\nfor p in \"${pids[@]}\"; do wait \"$p\" || fail=1; done\n",
+	} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("merge-gate must contain %q", want)
+		}
+	}
 	for _, tc := range []struct {
 		env  []string
 		want string
