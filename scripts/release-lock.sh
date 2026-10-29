@@ -26,7 +26,13 @@ release_lock_acquire() {
   [ "${RELEASE_LOCK_HELD:-}" != "$version" ] || return 0
   local ref="refs/release-lock/${version}" tree msg sha old age
   tree="$(git mktree < /dev/null)" || return 1
-  msg="release lock ${version}: $(id -un 2> /dev/null || echo ?)@$(hostname 2> /dev/null || echo ?) pid $$ ${RELIANT_RUN_ID:+run ${RELIANT_RUN_ID} }$(basename "${0}")"
+  # The nonce makes every acquisition a distinct commit. Without it two acquisitions in
+  # one second with the same holder text (subshells share $$) are the SAME sha, and git
+  # reports pushing an existing sha "up to date" without enforcing the lease.
+  local nonce
+  nonce="$(cat /proc/sys/kernel/random/uuid 2> /dev/null || od -An -N16 -tx1 /dev/urandom 2> /dev/null | tr -d ' \n')"
+  [ -n "$nonce" ] || nonce="${RANDOM}${RANDOM}${RANDOM}-$(date +%s%N)"
+  msg="release lock ${version}: $(id -un 2> /dev/null || echo ?)@$(hostname 2> /dev/null || echo ?) pid $$ ${RELIANT_RUN_ID:+run ${RELIANT_RUN_ID} }$(basename "${0}") nonce ${nonce}"
   sha="$(printf '%s\n' "$msg" | GIT_AUTHOR_NAME=release-lock GIT_AUTHOR_EMAIL=release-lock@invalid \
     GIT_COMMITTER_NAME=release-lock GIT_COMMITTER_EMAIL=release-lock@invalid git commit-tree "$tree")" || return 1
   if git push -q "$remote" "${sha}:${ref}" --force-with-lease="${ref}:" > /dev/null 2>&1; then
