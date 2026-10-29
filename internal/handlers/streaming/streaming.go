@@ -632,8 +632,14 @@ func (s *Service) contentBlocks(ctx context.Context, chatID string, messageIDs [
 // 8,465 updates dropped on a real 24k-update chat), and the snapshot's separate
 // sequence high-water mark meant gap detection never backfilled them.
 //
-// The heads and the two reads the reconciliation needs are independent, so
-// they run at once rather than as three round trips in a row.
+// The thread rows are read AFTER the heads, never alongside them:
+// withThreadMetadata overwrites a head's status with the row's, so a row read
+// first can be older than the head it patches. A thread that completes
+// between the two reads would then show its completed head as "running", and
+// the live loop drops that completion as already delivered (it is at or
+// below the high-water mark), leaving a finished spawn running forever. Read
+// in this order the row is at least as new as every head. The spawn links are
+// written once at dispatch and never change, so that read overlaps the chain.
 func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*reliantv1.ChatUpdateData {
 	var (
 		updates     []db.ChatUpdate
@@ -650,9 +656,6 @@ func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*re
 			}
 			return err
 		})
-		return nil
-	})
-	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.threads", func(ctx context.Context) error {
 			var err error
 			threadRows, err = s.deps.Repo.ListThreadsByConversation(ctx, chatID)
