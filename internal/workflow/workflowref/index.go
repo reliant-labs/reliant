@@ -146,12 +146,23 @@ func NewIndex(files []File) *Index {
 			where = "a synced workflow"
 		}
 		name, err := declaredName(f.Content)
+		if err != nil {
+			// A file that does not parse still claims the name it declares
+			// (or, failing that, its file name), so a ref to it fails with
+			// the parse error. Unclaimed, the ref would quietly resolve to
+			// another directory's workflow of the same name: an older copy
+			// running because the newest one is broken.
+			name = recoverDeclaredName(f.Content)
+			if name == "" {
+				name = e.Stem()
+			}
+		}
 		e.Name = name
 		e.Slug = Slug(name)
 		e.Address = e.Slug
 		switch {
 		case err != nil:
-			e.Problem = fmt.Errorf("%s: cannot read its name: %w", where, err)
+			e.Problem = fmt.Errorf("%s does not parse, so workflow %q cannot run until it is fixed: %w", where, name, err)
 		case name == "":
 			e.Problem = fmt.Errorf("%s has no name: field; a project workflow is addressed by its name: (project://<name>)", where)
 		case e.Slug == "":
@@ -342,6 +353,22 @@ func declaredName(content []byte) (string, error) {
 	default:
 		return "", fmt.Errorf("name: is not a string")
 	}
+}
+
+// recoverDeclaredName reads a top-level name: line out of a file that is not
+// valid YAML, or "" when there is none to read.
+func recoverDeclaredName(content []byte) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		rest, ok := strings.CutPrefix(line, "name:")
+		if !ok {
+			continue
+		}
+		if i := strings.Index(rest, " #"); i >= 0 {
+			rest = rest[:i]
+		}
+		return strings.Trim(strings.TrimSpace(rest), `"'`)
+	}
+	return ""
 }
 
 // Entries returns every indexed file, addressable or not, sorted by repo

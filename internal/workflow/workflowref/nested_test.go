@@ -86,3 +86,33 @@ func TestQualifiedRefKeyAndPaths(t *testing.T) {
 		require.Equal(t, "x.yaml", f)
 	}
 }
+
+// A broken file fails closed: the ref it would answer reports the parse
+// error. It used to claim no name at all, so the same bare name resolved to
+// another directory's copy (the root's pin-bot.yaml beside control-plane's):
+// an older version running because the newest one is broken.
+func TestBrokenWorkflowFailsClosed(t *testing.T) {
+	nested := File{Repo: "control-plane", Path: "release.yaml", Content: []byte(wf("release"))}
+	broken := []byte("name: release\nentry: [x\nnodes:\n")
+	t.Run("a broken root file blocks the nested copy's bare name", func(t *testing.T) {
+		ix := NewIndex([]File{nested, {Path: "release.yaml", Content: broken}})
+		_, err := ix.Lookup("release")
+		require.ErrorContains(t, err, "release.yaml does not parse, so workflow \"release\" cannot run")
+		e, err := ix.Lookup("control-plane/release")
+		require.NoError(t, err, "the nested copy is still addressable by its qualified name")
+		require.Equal(t, "control-plane", e.Repo)
+	})
+	t.Run("a broken file shadows a same-named file in its own directory", func(t *testing.T) {
+		ix := NewIndex([]File{nested, {Repo: "control-plane", Path: "release-v2.yaml", Content: broken}})
+		_, err := ix.Lookup("release")
+		require.Error(t, err)
+	})
+	t.Run("with no readable name it claims its file name", func(t *testing.T) {
+		ix := NewIndex([]File{nested, {Path: "release.yaml", Content: []byte(":\n  - [")}})
+		_, err := ix.Lookup("release")
+		require.ErrorContains(t, err, "does not parse")
+	})
+	t.Run("a quoted, commented name is recovered", func(t *testing.T) {
+		require.Equal(t, "Release Train", recoverDeclaredName([]byte("x: [\nname: \"Release Train\" # the train\n")))
+	})
+}

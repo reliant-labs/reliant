@@ -78,3 +78,40 @@ func TestListInbox_ActivationOnAMachineWithoutItsWorkflowIsBroken(t *testing.T) 
 	push(cicdID, 3000, []config.StoredWorkflow{{Slug: "release", Name: "release", RelativePath: releasePath, YAMLContent: releaseWorkflow}})
 	assert.Empty(t, brokenItems(f.list(t, nil).Items))
 }
+
+// Fail closed: when the run's machine's newest copy of a workflow does not
+// parse, the activation is broken and says which file and why. It must not
+// fall back to another copy of the same name (the project root's beside the
+// nested repo's), which would run an older version because the newest is
+// broken.
+func TestListInbox_ActivationWhoseWorkflowDoesNotParseIsBroken(t *testing.T) {
+	f := newInboxFixture(t)
+	cicdID := uuid.NewString()
+	host := "cicd"
+	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: cicdID, UserID: f.userID, Hostname: &host}))
+	const brokenPath = ".reliant/workflows/release.yaml"
+	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{
+		{Slug: "release", Name: "release", RelativePath: "control-plane/.reliant/workflows/release.yaml", YAMLContent: releaseWorkflow},
+		{RelativePath: brokenPath, YAMLContent: "name: release\nentry: [a\n"},
+	})
+	require.NoError(t, err)
+	_, err = f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
+		ProjectID: f.project(), DaemonID: cicdID, ProjectWorkflowsJSON: wj, PushedAt: time.UnixMilli(1000).UTC(),
+	}, false)
+	require.NoError(t, err)
+
+	name := "merged"
+	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+		ID: "on-cicd", UserID: f.userID, ProjectID: f.project(), Name: "Release",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "release", WorkflowTrigger: &name,
+		DaemonID: cicdID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	items := brokenItems(f.list(t, nil).Items)
+	require.Len(t, items, 1)
+	detail := items[0].GetAutomationFailing().GetHealth().GetLastFailureDetail()
+	assert.Contains(t, detail, `release.yaml does not parse, so workflow "release" cannot run until it is fixed`)
+}
