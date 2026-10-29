@@ -103,11 +103,13 @@ Scenarios stay beside their workflow in that repository's `<name>/scenarios/`. A
 
 Discovery is confined to each source repository. Symlinks within the workflows tree and non-regular YAML files are rejected. Each source is limited to 1 MiB per YAML file, 8 MiB total YAML content, 1,024 filesystem entries (including the directory itself), and four path components below the workflows directory. If a source cannot be read safely or exceeds these bounds, the snapshot fails rather than uploading a partial or empty replacement catalog; fix the reported source and save again.
 
-### Missing workflows and machine snapshots
+### Workflows on more than one machine
 
-The server stores the last synced workflow YAML, so disconnecting a machine alone does not remove it. **Currently, another machine's complete project snapshot replaces that project's catalog, including with an empty workflow list.** A machine whose files have not changed does not automatically resend them to undo that replacement. Durable source ownership/retention across machines is not implemented yet.
+Each machine a project is checked out on syncs its own `.reliant/workflows` (and `.reliant/presets`), and Reliant keeps each machine's copy separately. A machine's sync replaces only its own copy, so a machine that lacks a checkout, or has none of the files, never removes a workflow another machine still provides. Disconnecting or suspending a machine keeps what it last synced, until that machine syncs again; every machine sends its full set each time it connects. So deleting a workflow file takes effect once every machine that has the file has synced the deletion.
 
-If a workflow no longer resolves, the error identifies the last **project snapshot** machine (name or ID), whether it is online, offline or removed, and the workflow source path when still available. If an empty snapshot erased the definition, it reports the searched directories rather than inventing a filename or claiming to know the erased definition's original machine. Reconnect the machine holding the workflow, or save the workflow file again to trigger a normal sync. This does not enable or repoint any automation.
+- **The workflow library, the workflow selector and chats** read the project's combined set: every file any machine provides. When two machines hold the same file, the copy synced most recently is used.
+- **An automation resolves its workflow on its machine**, because its runs execute there. If that machine does not have the workflow, the automation is **broken**, listed in your inbox, and the reason names where the workflow is: `machine "cicd" has no workflow "release"; it is defined on machine "default" at control-plane/.reliant/workflows/release.yaml`. Check that repository out on the automation's machine, or point the automation at a machine that has it. A machine that has never synced the project falls back to the combined set until it does.
+- When no machine provides a workflow any more, the error names the file and machine it was last synced from.
 
 ## Anatomy of a Workflow
 

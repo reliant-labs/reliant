@@ -117,7 +117,9 @@ jobs:
     needs: lanes
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The slowest green run was 25 min (a 208-file proto change). A runner that
+    # dies holds the job, and the merge queue's entry, until this fires.
+    timeout-minutes: 40
     env:
       BASE: ${{ needs.lanes.outputs.base }}
     steps:

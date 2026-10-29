@@ -50,7 +50,8 @@
 # a stale generated file (a mock the merge left a step behind) must never be
 # built and tested before the regenerate that fixes it. On a clean tree without
 # --amend the generators cannot change what is judged, so they run in scratch
-# checkouts beside the other phases.
+# checkouts beside the other phases, except on a host under 32 GiB (a hosted
+# runner), where forge generate runs first and alone (the memory budget below).
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
@@ -66,7 +67,7 @@ while [ $# -gt 0 ]; do
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,57p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -103,6 +104,26 @@ gate_cpus=${MG_CPUS:-$(( free > share ? free : share ))}
 [ "$gate_cpus" -le "$cpus" ] || gate_cpus=$cpus
 half=$(( gate_cpus / 2 )); [ "$half" -ge 2 ] || half=2
 quarter=$(( gate_cpus / 4 )); [ "$quarter" -ge 2 ] || quarter=2
+
+# ── the gate's memory budget ──────────────────────────────────────────────
+# Cores are not the only limit. Measured on reliant#1772 (208 files, a proto
+# change): forge generate alone peaks at 7.5 GB RSS, tsc -b at 2.3 GB, each
+# test link at 2.7 GB, and the phases beside one another reach 13 GB within
+# five minutes. A hosted ubuntu-latest runner has 16 GiB: the merge queue's
+# runner ran out of memory there three times, its agent died ("The runner has
+# received a shutdown signal"), and the job sat until its timeout. So on a
+# host under MG_GEN_ALONE_GIB (default 32) forge generate runs FIRST and alone,
+# with the whole CPU budget, and the other phases start once it is done; on
+# a bigger host it still runs beside them. MG_MEM_GIB=<n> overrides the
+# detected size (the smaller of physical memory and the cgroup's memory.max).
+mem_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null)
+[ -n "$mem_kib" ] || mem_kib=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 ))
+cg_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
+case "$cg_max" in ''|max|*[!0-9]*) ;; *) [ $(( cg_max / 1024 )) -lt "$mem_kib" ] && mem_kib=$(( cg_max / 1024 )) ;; esac
+mem_gib=${MG_MEM_GIB:-$(( mem_kib / 1048576 ))}
+gen_alone=0
+# 0 means the size is unknown: keep the concurrent default.
+[ "$mem_gib" -gt 0 ] && [ "$mem_gib" -lt "${MG_GEN_ALONE_GIB:-32}" ] && gen_alone=1
 
 [ -n "$base" ] || base=$(git merge-base HEAD origin/main) || { echo "merge-gate: no merge-base with origin/main (fetch it, or pass --base)" >&2; exit 2; }
 base=$(git rev-parse "$base")
@@ -331,9 +352,15 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
 elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
-    if scratch gen; then phase generate gen_forge "$SCRATCH" & pids+=($!); else fail=1; fi
+    if ! scratch gen; then fail=1
+    elif [ "$gen_alone" = 1 ]; then
+      # A small host (the memory budget above): generate first, alone.
+      notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; forge generate ran alone before the other phases")
+      gen_procs=$gate_cpus; phase generate gen_forge "$SCRATCH" || fail=1; gen_procs=$quarter
+    else phase generate gen_forge "$SCRATCH" & pids+=($!); fi
   fi
-  if [ "$dgen" = true ]; then
+  # A generate that already failed alone leaves nothing to run docs beside.
+  if [ "$dgen" = true ] && [ "$fail" = 0 ]; then
     if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
@@ -406,8 +433,10 @@ if [ "$fail" = 0 ]; then
   if echo "$files" | grep -qE '^db/migrations/'; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
-  for p in "${pids[@]}"; do wait "$p" || fail=1; done
 fi
+# Every launched phase is waited for, the generators too when the gate failed
+# before build: cleanup must not remove a checkout a generator still writes.
+for p in "${pids[@]}"; do wait "$p" || fail=1; done
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq

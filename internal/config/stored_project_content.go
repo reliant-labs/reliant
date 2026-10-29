@@ -22,9 +22,37 @@ type StoredWorkflow struct {
 
 // StoredPreset represents a project preset stored in the DB via daemon config sync.
 type StoredPreset struct {
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	// Name is the file's name without its extension. A nested repo's preset
+	// is also addressed as "<repo>/<name>" (FindStoredPresetByName).
+	Name string `json:"name"`
+	// RelativePath is the file it was synced from, relative to the project
+	// root: ".reliant/presets/<file>" for the root, "<repo>/.reliant/presets/<file>"
+	// for a nested repo. Empty from a daemon that predates nested presets.
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
+}
+
+// Repo is the nested repository the preset was synced from, "" for the
+// project root.
+func (p StoredPreset) Repo() string {
+	rel := p.RelativePath
+	if rel == "" || strings.HasPrefix(rel, PresetsDir+"/") {
+		return ""
+	}
+	if i := strings.Index(rel, "/"+PresetsDir+"/"); i > 0 {
+		return rel[:i]
+	}
+	return ""
+}
+
+// QualifiedName is the address that names this preset alone: its name for a
+// root preset, "<repo>/<name>" for a nested repo's.
+func (p StoredPreset) QualifiedName() string {
+	if repo := p.Repo(); repo != "" {
+		return repo + "/" + p.Name
+	}
+	return p.Name
 }
 
 // StoredScenario represents a workflow scenario stored in the DB via daemon config sync.
@@ -190,13 +218,32 @@ func NormalizeSlug(name string) string {
 }
 
 // FindStoredPresetByName finds a preset by name in the stored list.
+//
+// Presets are synced from the project root's .reliant/presets and from every
+// nested repository's, so one name can be carried by several files:
+//
+//   - "<repo>/<name>" names one nested repo's preset exactly;
+//   - a bare name is the root's preset of that name when there is one (the
+//     project root shadows its repositories, as a project's own config does),
+//     otherwise the nested one in repository path order.
 func FindStoredPresetByName(presets []StoredPreset, name string) *StoredPreset {
+	var nested *StoredPreset
 	for i := range presets {
-		if presets[i].Name == name {
-			return &presets[i]
+		p := &presets[i]
+		if p.QualifiedName() == name && p.Repo() != "" {
+			return p
+		}
+		if p.Name != name {
+			continue
+		}
+		if p.Repo() == "" {
+			return p
+		}
+		if nested == nil || p.RelativePath < nested.RelativePath {
+			nested = p
 		}
 	}
-	return nil
+	return nested
 }
 
 // FindStoredScenariosByWorkflow returns all scenarios for a given workflow slug.

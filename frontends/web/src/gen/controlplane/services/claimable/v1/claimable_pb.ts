@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/claimable/v1/claimable.proto.
  */
 export const file_services_claimable_v1_claimable: GenFile = /*@__PURE__*/
-  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCJ7Ch1HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXNwb25zZRIRCgljaGFsbGVuZ2UYASABKAkSFwoPZGlmZmljdWx0eV9iaXRzGAIgASgNEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiYKD0dldENsYWltUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCSKXAgoQR2V0Q2xhaW1SZXNwb25zZRIuCgVzdGF0ZRgBIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5DbGFpbWFibGVTdGF0ZRIRCgljbGFpbWFibGUYAiABKAgSDwoHcHJvamVjdBgDIAEoCRILCgNlbnYYBCABKAkSEQoJaG9zdG5hbWVzGAUgAygJEi4KCmV4cGlyZXNfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC3B1cmdlX2FmdGVyGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpjbGFpbWVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIuChdPcGVuQ2xhaW1TZXNzaW9uUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCSJbChhPcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhUKDXJlZnJlc2hfdG9rZW4YAiABKAkSEgoKZXhwaXJlc19pbhgDIAEoAyIrChRDb21wbGV0ZUNsYWltUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCSJ6ChVDb21wbGV0ZUNsYWltUmVzcG9uc2USDgoGb3JnX2lkGAEgASgJEhIKCmNsYWltX3BhdGgYAiABKAkSEQoJaG9zdG5hbWVzGAMgAygJEioKBWhvbGRzGAQgAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUhvbGQqxAEKDkNsYWltYWJsZVN0YXRlEh8KG0NMQUlNQUJMRV9TVEFURV9VTlNQRUNJRklFRBAAEhgKFENMQUlNQUJMRV9TVEFURV9MSVZFEAESHQoZQ0xBSU1BQkxFX1NUQVRFX1NVU1BFTkRFRBACEhsKF0NMQUlNQUJMRV9TVEFURV9DTEFJTUVEEAMSHgoaQ0xBSU1BQkxFX1NUQVRFX1RBS0VOX0RPV04QBBIbChdDTEFJTUFCTEVfU1RBVEVfRVhQSVJFRBAFMp0HChBDbGFpbWFibGVTZXJ2aWNlEt4BChRTdGFydENsYWltYWJsZURlcGxveRIsLmNvbnRyb2xwbGFuZS52MS5TdGFydENsYWltYWJsZURlcGxveVJlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZSJporsYZQgAOmE6X3RoZSBjYWxsZXIgaXMgYW4gYW5vbnltb3VzIG1hY2hpbmUgd2l0aCBubyBhY2NvdW50IHlldDsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEn4KFUdldENsYWltYWJsZUNoYWxsZW5nZRItLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXF1ZXN0Gi4uY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlIgaiuxgCCAASVwoIR2V0Q2xhaW0SIC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1SZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVzcG9uc2UiBqK7GAIIABLXAQoQT3BlbkNsYWltU2Vzc2lvbhIoLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5PcGVuQ2xhaW1TZXNzaW9uUmVzcG9uc2UibqK7GGoIADpmOmR0aGUgY2FsbGVyIGhvbGRzIG9ubHkgdGhlIGNsYWltIHRva2VuIGFuZCBpcyBub3QgeWV0IGEgdXNlcjsgdGhlIGNsYWltYWJsZV9kZXBsb3lzIHJvdyBpcyB0aGUgcmVjb3JkEpgBCg1Db21wbGV0ZUNsYWltEiUuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlQ2xhaW1SZXNwb25zZSI4orsYNAgBOjAKBWNsYWltEhYKA29yZxIPcmVzcG9uc2Uub3JnX2lkIg9yZXNwb25zZS5vcmdfaWQaWoK1GFYKEENsYWltYWJsZVNlcnZpY2USBTEuMC4wGjtOby1zaWdudXAgZGVwbG95cyB0aGF0IGEgaHVtYW4gY2FuIGNsYWltIGJlZm9yZSB0aGV5IGV4cGlyZULZAQoTY29tLmNvbnRyb2xwbGFuZS52MUIOQ2xhaW1hYmxlUHJvdG9QAVpVZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsYWltYWJsZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0ItABCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZSJNChlDbGFpbWFibGVVbmF2YWlsYWJsZUNhdXNlEgwKBGNvZGUYASABKAkSEQoJY29tcG9uZW50GAIgASgJEg8KB21lc3NhZ2UYAyABKAkiewodR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVzcG9uc2USEQoJY2hhbGxlbmdlGAEgASgJEhcKD2RpZmZpY3VsdHlfYml0cxgCIAEoDRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCImCg9HZXRDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkilwIKEEdldENsYWltUmVzcG9uc2USLgoFc3RhdGUYASABKA4yHy5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlU3RhdGUSEQoJY2xhaW1hYmxlGAIgASgIEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEhEKCWhvc3RuYW1lcxgFIAMoCRIuCgpleHBpcmVzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY2xhaW1lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiLgoXT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkiWwoYT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMiKwoUQ29tcGxldGVDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkiegoVQ29tcGxldGVDbGFpbVJlc3BvbnNlEg4KBm9yZ19pZBgBIAEoCRISCgpjbGFpbV9wYXRoGAIgASgJEhEKCWhvc3RuYW1lcxgDIAMoCRIqCgVob2xkcxgEIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5EZXBsb3lIb2xkKsQBCg5DbGFpbWFibGVTdGF0ZRIfChtDTEFJTUFCTEVfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRDTEFJTUFCTEVfU1RBVEVfTElWRRABEh0KGUNMQUlNQUJMRV9TVEFURV9TVVNQRU5ERUQQAhIbChdDTEFJTUFCTEVfU1RBVEVfQ0xBSU1FRBADEh4KGkNMQUlNQUJMRV9TVEFURV9UQUtFTl9ET1dOEAQSGwoXQ0xBSU1BQkxFX1NUQVRFX0VYUElSRUQQBTKnCAoQQ2xhaW1hYmxlU2VydmljZRLeAQoUU3RhcnRDbGFpbWFibGVEZXBsb3kSLC5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLlN0YXJ0Q2xhaW1hYmxlRGVwbG95UmVzcG9uc2UiaaK7GGUIADphOl90aGUgY2FsbGVyIGlzIGFuIGFub255bW91cyBtYWNoaW5lIHdpdGggbm8gYWNjb3VudCB5ZXQ7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBJ+ChVHZXRDbGFpbWFibGVDaGFsbGVuZ2USLS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdBouLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXNwb25zZSIGorsYAggAEocBChhHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHkSMC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5UmVxdWVzdBoxLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZSIGorsYAggAElcKCEdldENsYWltEiAuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbVJlc3BvbnNlIgaiuxgCCAAS1wEKEE9wZW5DbGFpbVNlc3Npb24SKC5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlIm6iuxhqCAA6ZjpkdGhlIGNhbGxlciBob2xkcyBvbmx5IHRoZSBjbGFpbSB0b2tlbiBhbmQgaXMgbm90IHlldCBhIHVzZXI7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBKYAQoNQ29tcGxldGVDbGFpbRIlLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVzcG9uc2UiOKK7GDQIATowCgVjbGFpbRIWCgNvcmcSD3Jlc3BvbnNlLm9yZ19pZCIPcmVzcG9uc2Uub3JnX2lkGlqCtRhWChBDbGFpbWFibGVTZXJ2aWNlEgUxLjAuMBo7Tm8tc2lnbnVwIGRlcGxveXMgdGhhdCBhIGh1bWFuIGNhbiBjbGFpbSBiZWZvcmUgdGhleSBleHBpcmVC2QEKE2NvbS5jb250cm9scGxhbmUudjFCDkNsYWltYWJsZVByb3RvUAFaVWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9jbGFpbWFibGUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.StartClaimableDeployRequest
@@ -181,6 +181,101 @@ export const GetClaimableChallengeRequestSchema: GenMessage<GetClaimableChalleng
   messageDesc(file_services_claimable_v1_claimable, 3);
 
 /**
+ * @generated from message controlplane.v1.GetClaimableAvailabilityRequest
+ */
+export type GetClaimableAvailabilityRequest = Message<"controlplane.v1.GetClaimableAvailabilityRequest"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.GetClaimableAvailabilityRequest.
+ * Use `create(GetClaimableAvailabilityRequestSchema)` to create a new message.
+ */
+export const GetClaimableAvailabilityRequestSchema: GenMessage<GetClaimableAvailabilityRequest> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 4);
+
+/**
+ * @generated from message controlplane.v1.GetClaimableAvailabilityResponse
+ */
+export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaimableAvailabilityResponse"> & {
+  /**
+   * A start would be admitted as far as switches and configuration go (the
+   * rate limits and the proof of work are judged per request). Enough for an
+   * anonymous static site.
+   *
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Why not, when available is false. Empty otherwise.
+   *
+   * @generated from field: repeated controlplane.v1.ClaimableUnavailableCause causes = 2;
+   */
+  causes: ClaimableUnavailableCause[];
+
+  /**
+   * An unclaimed service and database could run too (needs available).
+   *
+   * @generated from field: bool compute_available = 3;
+   */
+  computeAvailable: boolean;
+
+  /**
+   * Why not, when compute_available is false, beyond causes.
+   *
+   * @generated from field: repeated controlplane.v1.ClaimableUnavailableCause compute_causes = 4;
+   */
+  computeCauses: ClaimableUnavailableCause[];
+};
+
+/**
+ * Describes the message controlplane.v1.GetClaimableAvailabilityResponse.
+ * Use `create(GetClaimableAvailabilityResponseSchema)` to create a new message.
+ */
+export const GetClaimableAvailabilityResponseSchema: GenMessage<GetClaimableAvailabilityResponse> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 5);
+
+/**
+ * ClaimableUnavailableCause is one reason claimable deploys, or their compute,
+ * are unavailable.
+ *
+ * @generated from message controlplane.v1.ClaimableUnavailableCause
+ */
+export type ClaimableUnavailableCause = Message<"controlplane.v1.ClaimableUnavailableCause"> & {
+  /**
+   * "disabled" (an operator's switch, its configured default or a runtime
+   * override), "dependency_unavailable" (component names what is missing), or
+   * "not_supported" (this build of the platform cannot do it yet).
+   *
+   * @generated from field: string code = 1;
+   */
+  code: string;
+
+  /**
+   * The switch (claimable_deploys.enabled, claimable_deploys.compute) or the
+   * dependency: admission, claim_secret, anonymous_signup, account_store,
+   * claim_page, content_scan_web_risk, content_scan_clamav, network_policing.
+   *
+   * @generated from field: string component = 2;
+   */
+  component: string;
+
+  /**
+   * A sentence a person can read. Names components, never values or secrets.
+   *
+   * @generated from field: string message = 3;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ClaimableUnavailableCause.
+ * Use `create(ClaimableUnavailableCauseSchema)` to create a new message.
+ */
+export const ClaimableUnavailableCauseSchema: GenMessage<ClaimableUnavailableCause> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 6);
+
+/**
  * GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
  * the server verifies and forge's solver implements:
  *
@@ -223,7 +318,7 @@ export type GetClaimableChallengeResponse = Message<"controlplane.v1.GetClaimabl
  * Use `create(GetClaimableChallengeResponseSchema)` to create a new message.
  */
 export const GetClaimableChallengeResponseSchema: GenMessage<GetClaimableChallengeResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 4);
+  messageDesc(file_services_claimable_v1_claimable, 7);
 
 /**
  * @generated from message controlplane.v1.GetClaimRequest
@@ -240,7 +335,7 @@ export type GetClaimRequest = Message<"controlplane.v1.GetClaimRequest"> & {
  * Use `create(GetClaimRequestSchema)` to create a new message.
  */
 export const GetClaimRequestSchema: GenMessage<GetClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 5);
+  messageDesc(file_services_claimable_v1_claimable, 8);
 
 /**
  * GetClaimResponse is preview metadata for the claim page. It carries no
@@ -302,7 +397,7 @@ export type GetClaimResponse = Message<"controlplane.v1.GetClaimResponse"> & {
  * Use `create(GetClaimResponseSchema)` to create a new message.
  */
 export const GetClaimResponseSchema: GenMessage<GetClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 6);
+  messageDesc(file_services_claimable_v1_claimable, 9);
 
 /**
  * @generated from message controlplane.v1.OpenClaimSessionRequest
@@ -319,7 +414,7 @@ export type OpenClaimSessionRequest = Message<"controlplane.v1.OpenClaimSessionR
  * Use `create(OpenClaimSessionRequestSchema)` to create a new message.
  */
 export const OpenClaimSessionRequestSchema: GenMessage<OpenClaimSessionRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 7);
+  messageDesc(file_services_claimable_v1_claimable, 10);
 
 /**
  * OpenClaimSessionResponse is a Supabase GoTrue session for the anonymous
@@ -351,7 +446,7 @@ export type OpenClaimSessionResponse = Message<"controlplane.v1.OpenClaimSession
  * Use `create(OpenClaimSessionResponseSchema)` to create a new message.
  */
 export const OpenClaimSessionResponseSchema: GenMessage<OpenClaimSessionResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 8);
+  messageDesc(file_services_claimable_v1_claimable, 11);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimRequest
@@ -368,7 +463,7 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
  * Use `create(CompleteClaimRequestSchema)` to create a new message.
  */
 export const CompleteClaimRequestSchema: GenMessage<CompleteClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 9);
+  messageDesc(file_services_claimable_v1_claimable, 12);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimResponse
@@ -409,7 +504,7 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
  * Use `create(CompleteClaimResponseSchema)` to create a new message.
  */
 export const CompleteClaimResponseSchema: GenMessage<CompleteClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 10);
+  messageDesc(file_services_claimable_v1_claimable, 13);
 
 /**
  * ClaimableState is the lifecycle of one claimable deploy
@@ -500,8 +595,13 @@ export const ClaimableStateSchema: GenEnum<ClaimableState> = /*@__PURE__*/
  * 	                       anonymous sign-up limit; carries a ClaimableThrottle
  * 	                       error detail with the retry-after. Nothing was
  * 	                       created. Clients must NOT retry on their own.
- * 	claimable_unavailable  Unavailable        a switch is off, or GoTrue
- * 	                       demands a CAPTCHA. The remedy is `forge login`.
+ * 	claimable_unavailable  Unavailable        a switch is off, or a dependency
+ * 	                       is missing (GoTrue's anonymous sign-up, the claim
+ * 	                       secret, the content scan). The message names every
+ * 	                       cause; metadata x-forge-error-unavailable-cause
+ * 	                       (disabled | dependency_unavailable | not_supported)
+ * 	                       and x-forge-error-unavailable-component carry the
+ * 	                       first. GetClaimableAvailability lists them all.
  * 	claimable_claimed      FailedPrecondition the deploy was already claimed
  * 	claimable_expired      FailedPrecondition expired and purged (or past
  * 	                       purge_after and no longer revivable)
@@ -551,6 +651,22 @@ export const ClaimableService: GenService<{
     methodKind: "unary";
     input: typeof GetClaimableChallengeRequestSchema;
     output: typeof GetClaimableChallengeResponseSchema;
+  },
+  /**
+   * GetClaimableAvailability says whether a claimable deploy can start right
+   * now, and if not, every reason why: an operator's switch, or a dependency
+   * this deployment lacks. Separately, whether an unclaimed SERVICE or
+   * DATABASE could run, which a static site does not need. It reads only
+   * configuration and the kill switches, creates nothing and solves no proof
+   * of work, so forge calls it before any build (`forge env deploy
+   * --claimable`) and in the local preview (`--claimable --plan-only`).
+   *
+   * @generated from rpc controlplane.v1.ClaimableService.GetClaimableAvailability
+   */
+  getClaimableAvailability: {
+    methodKind: "unary";
+    input: typeof GetClaimableAvailabilityRequestSchema;
+    output: typeof GetClaimableAvailabilityResponseSchema;
   },
   /**
    * GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:

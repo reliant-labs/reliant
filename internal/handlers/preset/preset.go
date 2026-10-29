@@ -386,14 +386,15 @@ func (s *Service) loadAllPresetsFromDB(ctx context.Context, projectID string) *p
 			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil {
 				for _, sp := range storedPresets {
-					p, parseErr := preset.ParsePreset([]byte(sp.YAMLContent), sp.Name)
+					name := storedPresetListName(storedPresets, sp)
+					p, parseErr := preset.ParsePreset([]byte(sp.YAMLContent), name)
 					if parseErr != nil {
-						invalidMap[sp.Name] = &preset.InvalidPreset{Name: sp.Name, Source: "project", Errors: []string{parseErr.Error()}}
+						invalidMap[name] = &preset.InvalidPreset{Name: name, Source: "project", Errors: []string{parseErr.Error()}}
 						continue
 					}
 					p.Source = "project"
-					presetMap[sp.Name] = p
-					delete(invalidMap, sp.Name) // valid project preset overrides broken builtin
+					presetMap[name] = p
+					delete(invalidMap, name) // valid project preset overrides broken builtin
 				}
 			}
 		}
@@ -408,6 +409,18 @@ func (s *Service) loadAllPresetsFromDB(ctx context.Context, projectID string) *p
 		invalid = append(invalid, inv)
 	}
 	return &preset.LoadResult{Valid: valid, Invalid: invalid}
+}
+
+// storedPresetListName is the name a synced preset is listed under: its bare
+// name when that name resolves to it (cfg.FindStoredPresetByName: the root
+// shadows nested repos, then repository path order), otherwise the
+// "<repo>/<name>" that names it alone. So every synced preset is listed once,
+// under a name that loads it.
+func storedPresetListName(all []cfg.StoredPreset, sp cfg.StoredPreset) string {
+	if winner := cfg.FindStoredPresetByName(all, sp.Name); winner != nil && winner.RelativePath == sp.RelativePath {
+		return sp.Name
+	}
+	return sp.QualifiedName()
 }
 
 // loadPresetByNameFromDB loads a single preset by name from stored project config or builtins.
