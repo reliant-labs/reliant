@@ -458,6 +458,53 @@ func ListChatsWaitingForMachine(ctx context.Context, db orm.Context, userID stri
 	return runs, nil
 }
 
+// GetChatRow reads a chat's own row (core.ChatRow) from the chats table, by
+// primary key: no activity view. A missing chat is core.ErrChatNotFound.
+func GetChatRow(ctx context.Context, db orm.Context, id string) (*core.ChatRow, error) {
+	row, err := GetChatByID(ctx, db, id)
+	if errors.Is(err, orm.ErrNoRows) {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat: %w", err)
+	}
+	out := &core.ChatRow{
+		ID:             row.ID,
+		Title:          row.Title,
+		ProjectID:      row.ProjectID,
+		UserID:         row.UserID,
+		WorkflowID:     row.WorkflowID,
+		WorkflowName:   row.WorkflowName,
+		RunID:          row.RunID,
+		WorktreeID:     row.WorktreeID,
+		ActiveDaemonID: row.ActiveDaemonID,
+		Unread:         row.Unread != 0,
+		NoMachine:      row.NoMachine,
+		AdoptedAt:      row.AdoptedAt,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
+		LastActive:     row.LastActive,
+	}
+	if row.State != nil {
+		out.State = *row.State
+	}
+	return out, nil
+}
+
+// GetChatRowWithUserCheck is GetChatRow for userID's chat only: any
+// other chat is core.ErrChatNotFound, exactly like one that does not exist, so
+// a chat id is not an existence oracle across users.
+func GetChatRowWithUserCheck(ctx context.Context, db orm.Context, id, userID string) (*core.ChatRow, error) {
+	chat, err := GetChatRow(ctx, db, id)
+	if err != nil {
+		return nil, err
+	}
+	if chat.UserID != userID {
+		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
+	}
+	return chat, nil
+}
+
 // chatToRow maps a core.Chat onto the chats row its writes take. An unset
 // state is IDLE: nil leaves the column to its DEFAULT on insert, and an update
 // writes IDLE explicitly, as the statements these replaced did.

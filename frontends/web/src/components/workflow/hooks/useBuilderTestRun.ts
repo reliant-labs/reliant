@@ -92,7 +92,7 @@ export function useBuilderRun(
 
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes])
   const { statusMap, loopInfo, latestSequence } = useExtendedExecutionStatus(execution, nodeIds, testChatId)
-  const { decidingEventByKey, statusByKey, loopScoped } = useNodeExecutionStatus(testChatId)
+  const { decidingEventByKey, statusByKey, loopScoped } = useNodeExecutionStatus(testChatId, execution?.id)
 
   const chat = useChat(testChatId ?? undefined).data
   const status = chat

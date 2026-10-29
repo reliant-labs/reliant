@@ -87,7 +87,7 @@ func TestInterruptThread_ErrorCodes(t *testing.T) {
 		{"an opaque read failure is Internal", errors.New("dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			broken := &MockRepository{GetChatWithUserCheckFunc: func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err }}
+			broken := &MockRepository{GetChatRowWithUserCheckFunc: func(context.Context, string, string) (*db.ChatRow, error) { return nil, tc.err }}
 			ce := interrupt(t, threads.NewService(broken), fx.chatID, fx.rootThreadID)
 			assert.Equal(t, tc.want, ce.Code())
 			assert.NotContains(t, ce.Message(), "secret")

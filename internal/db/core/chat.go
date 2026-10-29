@@ -248,6 +248,40 @@ func (c *Chat) MainThreadID() string {
 	return ""
 }
 
+// ChatRow is a chat's own row, the chats table alone: who it belongs to, its
+// lifecycle, root workflow, workspace and machine flags. It is what an
+// ownership check reads. Chat is read from the chats_with_activity view, whose
+// activity, last-message, root-workflow-state, working-thread, usage-limit and
+// launch columns are subqueries over the chat's messages, workflows, threads
+// and trigger events — a cost every RPC that only authorizes paid; such a
+// caller reads this instead, and one that needs a derived field reads Chat.
+type ChatRow struct {
+	ID             string
+	Title          string
+	ProjectID      string
+	UserID         string
+	State          ChatState
+	WorkflowID     *string
+	WorkflowName   *string
+	RunID          *string
+	WorktreeID     *string
+	ActiveDaemonID *string
+	Unread         bool
+	NoMachine      bool
+	AdoptedAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	LastActive     time.Time
+}
+
+// MainThreadID is Chat.MainThreadID for the row's root workflow.
+func (c *ChatRow) MainThreadID() string {
+	if c.WorkflowID != nil && *c.WorkflowID != "" {
+		return *c.WorkflowID
+	}
+	return ""
+}
+
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo struct {
 	Chat

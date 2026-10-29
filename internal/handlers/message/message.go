@@ -38,7 +38,7 @@ func (s *Service) GetMessage(
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	chat, err := s.deps.Repo.GetChat(ctx, msg.ChatID)
+	chat, err := s.deps.Repo.GetChatRow(ctx, msg.ChatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}

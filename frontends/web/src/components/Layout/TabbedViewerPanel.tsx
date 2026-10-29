@@ -1,10 +1,10 @@
-import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Workflow, Lock } from "lucide-react";
+import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Lock } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { isElectron } from "../../lib/constants";
 import { ResizableDiffPanel } from "./ResizableDiffPanel";
-import { useViewerStore, type Viewer, type CommandsViewer, type WorkflowViewer } from "../../store/viewerStore";
+import { useViewerStore, type Viewer, type CommandsViewer } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -18,7 +18,6 @@ import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
 import { ProjectPanel } from "../Projects/ProjectPanel";
 import { CommandsViewerTab } from "../PackageCommands/CommandsViewerTab";
 import { SingleBrowserView } from "../Browser/SingleBrowserView";
-import { WorkflowViewerTab } from "../workflow/WorkflowViewerTab";
 import { FileChangeStatus } from "../../gen/reliant/v1/common_pb";
 
 interface TabbedViewerPanelProps {
@@ -250,7 +249,6 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
     if (viewer.type === "projects") return <FolderOpen className="w-3 h-3" />;
     if (viewer.type === "commands") return <Terminal className="w-3 h-3" />;
     if (viewer.type === "browser") return <Globe className="w-3 h-3" />;
-    if (viewer.type === "workflow") return <Workflow className="w-3 h-3" />;
     return "F";
   };
 
@@ -459,19 +457,6 @@ function ViewerContent({ viewer, isActive }: ViewerContentProps) {
       );
     }
     return <SingleBrowserView tabId={viewer.browserTabId} viewerId={viewer.id} />;
-  }
-
-  if (viewer.type === "workflow") {
-    const workflowViewer = viewer as WorkflowViewer;
-    return (
-      <div className="h-full">
-        <WorkflowViewerTab
-          projectId={workflowViewer.projectId}
-          chatId={workflowViewer.chatId}
-          workflowName={workflowViewer.workflowName}
-        />
-      </div>
-    );
   }
 
   return null;

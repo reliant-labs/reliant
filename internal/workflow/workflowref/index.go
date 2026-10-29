@@ -146,12 +146,23 @@ func NewIndex(files []File) *Index {
 			where = "a synced workflow"
 		}
 		name, err := declaredName(f.Content)
+		if err != nil {
+			// A file that does not parse still claims the name it declares
+			// (or, failing that, its file name), so a ref to it fails with
+			// the parse error. Unclaimed, the ref would quietly resolve to
+			// another directory's workflow of the same name: an older copy
+			// running because the newest one is broken.
+			name = recoverDeclaredName(f.Content)
+			if name == "" {
+				name = e.Stem()
+			}
+		}
 		e.Name = name
 		e.Slug = Slug(name)
 		e.Address = e.Slug
 		switch {
 		case err != nil:
-			e.Problem = fmt.Errorf("%s: cannot read its name: %w", where, err)
+			e.Problem = fmt.Errorf("%s does not parse, so workflow %q cannot run until it is fixed: %w", where, name, err)
 		case name == "":
 			e.Problem = fmt.Errorf("%s has no name: field; a project workflow is addressed by its name: (project://<name>)", where)
 		case e.Slug == "":
@@ -342,6 +353,26 @@ func declaredName(content []byte) (string, error) {
 	default:
 		return "", fmt.Errorf("name: is not a string")
 	}
+}
+
+// recoverDeclaredName reads the top-level name: out of a file that is not
+// valid YAML, or "" when there is none to read. Only the name: line itself is
+// decoded, as YAML, so quoting and comments mean what they mean in the file
+// ("Release #1" is a name; # starts a comment only outside quotes).
+func recoverDeclaredName(content []byte) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		if !strings.HasPrefix(line, "name:") {
+			continue
+		}
+		var doc struct {
+			Name yaml.Node `yaml:"name"`
+		}
+		if err := yaml.Unmarshal([]byte(line), &doc); err != nil || doc.Name.Kind != yaml.ScalarNode {
+			return ""
+		}
+		return strings.TrimSpace(doc.Name.Value)
+	}
+	return ""
 }
 
 // Entries returns every indexed file, addressable or not, sorted by repo

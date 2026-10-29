@@ -40,7 +40,7 @@ func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID s
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, chatID)
+	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -64,7 +64,7 @@ func (s *Service) CreatePlan(
 	}
 
 	// Verify user owns the chat
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -168,7 +168,7 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// Verify the chat belongs to the user
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

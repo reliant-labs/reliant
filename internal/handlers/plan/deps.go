@@ -11,7 +11,7 @@ import (
 
 // Repository is the slice of *db.Repo the plan handlers use.
 type Repository interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	CreatePlan(ctx context.Context, plan *db.Plan) error
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
