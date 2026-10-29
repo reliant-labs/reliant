@@ -273,13 +273,14 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 //
 //  1. the sequence high-water mark, alone (see below);
 //  2. everything that needs only the chat: entity heads, the main thread's
-//     window, context usage, live tool calls, the message count;
+//     window, context usage, live tool calls, the message count — of which
+//     only the window gates round 3; the rest joins at assembly;
 //  3. the sibling-thread rows inside the window, and the content blocks;
 //  4. what the blocks name: attachments, tool-call rows, sender titles.
 //
 // Each round, and each read inside it, has its own span (chat_snapshot.*), so
 // a slow open shows which read it waited on.
-func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
+func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_snapshot.build", attribute.String("chat.id", chatID))
 	defer func() {
@@ -336,8 +337,15 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapsho
 		compactionThreshold int64 = threads.DefaultCompactionThreshold
 	)
 
-	g := new(errgroup.Group)
-	g.Go(func() error {
+	// Only the main window gates round 3. The rest of round 2 is read for the
+	// assembly alone, so it joins there (late.Wait below) and runs alongside
+	// rounds 3 and 4 instead of holding them up. The update heads are the
+	// reason: their cost grows with every entity the chat has ever had
+	// (measured in prod: p50 0.2s, p95 2.5s), against ~0.1-0.3s for the
+	// window's blocks and lookups, so waiting on them before the blocks made
+	// the open the sum of the two rather than the longer.
+	late := new(errgroup.Group)
+	late.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.message_count", func(ctx context.Context) error {
 			var err error
 			totalMessageCount, err = s.deps.Repo.CountMessagesInChat(ctx, chatID)
@@ -348,7 +356,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapsho
 		})
 		return nil
 	})
-	g.Go(func() error {
+	late.Go(func() error {
 		// A failure degrades to "no out-of-window live calls" rather than
 		// failing the open.
 		_ = traced(ctx, "chat_snapshot.live_tool_calls", func(ctx context.Context) error {
@@ -362,10 +370,30 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapsho
 		})
 		return nil
 	})
-	g.Go(func() error {
+	late.Go(func() error {
 		otherUpdates = s.getNonMessageUpdates(ctx, chatID)
 		return nil
 	})
+	late.Go(func() error {
+		_ = traced(ctx, "chat_snapshot.context_usage", func(ctx context.Context) error {
+			contextUsage, err := s.deps.Repo.GetContextUsage(ctx, chatID, mainThread)
+			if err != nil {
+				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
+				return err // non-fatal
+			}
+			if contextUsage != nil {
+				threadTokenCount = contextUsage.ThreadTokenCount
+				compactionThreshold = contextUsage.CompactionThreshold
+			}
+			return nil
+		})
+		return nil
+	})
+	// Every late read is non-fatal; waiting is all that is left. Deferred as
+	// well as awaited below, so an early return cannot leave one running.
+	defer func() { _ = late.Wait() }()
+
+	g := new(errgroup.Group)
 	g.Go(func() error {
 		_ = traced(ctx, "chat_snapshot.main_window", func(ctx context.Context) error {
 			threadsSvc := threads.NewService(s.deps.Repo)
@@ -390,22 +418,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapsho
 		})
 		return nil
 	})
-	g.Go(func() error {
-		_ = traced(ctx, "chat_snapshot.context_usage", func(ctx context.Context) error {
-			contextUsage, err := s.deps.Repo.GetContextUsage(ctx, chatID, mainThread)
-			if err != nil {
-				logging.WarnContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", shortID(chatID), "threadID", shortID(mainThread))
-				return err // non-fatal
-			}
-			if contextUsage != nil {
-				threadTokenCount = contextUsage.ThreadTokenCount
-				compactionThreshold = contextUsage.CompactionThreshold
-			}
-			return nil
-		})
-		return nil
-	})
-	_ = g.Wait() // every read above is non-fatal
+	_ = g.Wait() // non-fatal: a failed window degrades to an empty one
 
 	// ── Round 3: sibling threads inside the window, and content blocks ──
 	//
@@ -539,6 +552,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.Chat) (snapsho
 		return nil
 	})
 	_ = g.Wait()
+	_ = late.Wait() // the rest of round 2: heads, count, live calls, usage
 
 	// Assembled exactly like every other display read — including durable
 	// tool-call status and a spawn's child_workflow_id. This snapshot used to

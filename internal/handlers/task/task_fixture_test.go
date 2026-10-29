@@ -44,9 +44,9 @@ func newTaskRepo() *task.MockRepository {
 		otherTaskID: {ID: otherTaskID, PlanID: otherPlanID, Title: "Other task"},
 	}
 	return &task.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
 			if c, ok := chats[id]; ok {
-				return c, nil
+				return &db.ChatRow{ID: c.ID, UserID: c.UserID, ProjectID: c.ProjectID, WorkflowID: c.WorkflowID}, nil
 			}
 			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},

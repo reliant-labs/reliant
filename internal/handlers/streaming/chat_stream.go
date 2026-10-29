@@ -54,12 +54,16 @@ func (s *Service) StreamChatUpdates(
 
 	// Verify user owns the chat before subscribing. A missing chat and
 	// another user's chat are deliberately the same NotFound: the client drops
-	// a refused chat instead of retrying it. The row read here is also the one
-	// a snapshot is built from.
-	var chat *db.Chat
+	// a refused chat instead of retrying it. The identity read here is also
+	// the one a snapshot is built from. It is the chats row alone: this read
+	// is in front of everything else the open does, and the activity view
+	// GetChat reads computes columns (activity, workflow state, working
+	// threads) from the chat's messages, workflows and threads that nothing
+	// here uses — measured in prod at p99 274ms, max 3.8s.
+	var chat *db.ChatRow
 	err := traced(ctx, "chat_stream.authorize", func(ctx context.Context) error {
 		var err error
-		chat, err = s.deps.Repo.GetChat(ctx, chatID)
+		chat, err = s.deps.Repo.GetChatRow(ctx, chatID)
 		return err
 	})
 	if err != nil {
@@ -213,7 +217,7 @@ func (s *Service) StreamChatUpdates(
 // otherwise a replay of (sinceSeq, latest] — unless that replay should not be
 // attempted (see chatCursorNeedsSnapshot), which also gets a snapshot. It
 // returns the chat sequence the sync delivered up to.
-func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.Chat, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
+func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_stream.initial_sync", attribute.Int64("chat.since_seq", sinceSeq))
 	defer func() {
@@ -334,7 +338,7 @@ func (s *Service) sendStreamingDelta(chatID string, delta streaming.StreamingDel
 
 // sendChatSnapshot builds and sends the chat's snapshot, returning the chat
 // sequence it is current as of.
-func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.Chat, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
+func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
 	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat)
 	if err != nil {
 		return 0, err

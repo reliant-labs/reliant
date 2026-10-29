@@ -93,8 +93,8 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 func foreignChatRepo() *streaming.MockRepository {
 	return &streaming.MockRepository{
 		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "someone-else"}, nil
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
 		},
 	}
 }
