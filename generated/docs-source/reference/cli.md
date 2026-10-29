@@ -396,14 +396,26 @@ reliant auth
 Log in to a Reliant server
 
 Logs the CLI in to the resolved server (--server, else RELIANT_SERVER_URL,
-else the built-in default) with the OAuth 2.0 authorization-code flow + PKCE.
+else the built-in default) as your Reliant account. The server names its
+authorization server (the control plane) at /.well-known/oauth-authorization-server.
+Either way you get an rlat_ access token (90 days, scope reliant:api, plus the
+deploy, secret and domain permissions your organization grants you — see below).
 
-The server names its authorization server (the control plane) at
-/.well-known/oauth-authorization-server. Your browser opens there; you sign
-in with your normal Reliant account and approve; a one-time code comes back
-to a temporary listener on a loopback port, and is exchanged for an rlat_
-access token (90 days, scope reliant:api, plus the deploy, secret and domain
-permissions your organization grants you — see below).
+Two ways to approve it:
+
+  Browser (OAuth 2.0 authorization code + PKCE). Your browser opens on the
+  control plane; you sign in and approve; a one-time code comes back to a
+  temporary listener on a loopback port of THIS machine.
+
+  Device code (RFC 8628). The CLI prints a short code and a link. Open the link
+  on any device — your laptop, your phone — sign in, check the code and
+  approve "Sign in the Reliant CLI on <hostname>?". Nothing has to reach back
+  to this machine.
+
+The browser flow is the default, except where its callback cannot reach your
+browser: a Reliant cloud machine (RELIANT_DAEMON_TYPE=managed), an ssh session,
+a Linux host with no display, or a Reliant agent's shell. There the device flow
+is used. --device or --browser chooses explicitly.
 
 The token is stored in the credentials file shared with forge
 (~/.config/forge/credentials.json), under this server. There is no "current"
@@ -419,8 +431,15 @@ leaves this machine's Reliant files.
 For CI, skip login and set RELIANT_TOKEN.
 
 ```
-reliant auth login
+reliant auth login [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
+| `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
 
 ---
 
