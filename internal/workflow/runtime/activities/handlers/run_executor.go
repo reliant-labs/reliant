@@ -135,9 +135,10 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		// activity's retry policy — not the workflow's attempt budget — owns it.
 		if toolexec.IsTransportErrorCode(result.ErrorCode) {
 			return "", "", -1, false, &toolexec.TransportError{
-				Code:    result.ErrorCode,
-				Command: command,
-				Detail:  result.Content,
+				Code:          result.ErrorCode,
+				Command:       command,
+				Detail:        result.Content,
+				NotDispatched: result.NotDispatched,
 			}
 		}
 		// The tool itself reported an error (bad input, tool not found, …):

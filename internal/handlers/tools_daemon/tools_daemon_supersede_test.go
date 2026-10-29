@@ -242,6 +242,57 @@ func TestToolResponseIsStampedWithTheAnsweringDaemon(t *testing.T) {
 	}
 }
 
+// The daemon enforces a request's timeout itself and answers with the verdict
+// (a killed shell command: exit 124, timed out) a moment after it. That answer
+// must reach the caller, not lose a race against the gateway's own timer and
+// be replaced by a transport failure — which a run step can only read as
+// "outcome unknown" and refuse to re-run.
+func TestToolResponseJustAfterTheRequestTimeoutIsDelivered(t *testing.T) {
+	svc := newDaemonlessService(t)
+	stream := newParkedStream()
+	conn := newTestConn("user-1", uuid.NewString(), stream)
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+
+	go func() { _ = svc.handleIncoming(context.Background(), conn) }()
+	defer close(stream.recv)
+
+	type result struct {
+		resp *toolexec.ToolExecutionResponse
+		err  error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		resp, err := svc.sendToolRequestToConn(context.Background(), conn, &toolexec.ToolExecutionRequest{
+			RequestID: "req-timeout",
+			ToolName:  "shell",
+			ToolInput: `{"command":"sleep 600","timeout":50}`,
+			TimeoutMs: 50,
+		})
+		resCh <- result{resp, err}
+	}()
+
+	select {
+	case <-conn.sendCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("tool request was never sent")
+	}
+	time.Sleep(300 * time.Millisecond) // well past the request's 50ms timeout
+	stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{
+		ToolResponse: &reliantv1.ToolResponse{RequestId: "req-timeout", Success: true,
+			Content: `{"stdout":"","stderr":"command timed out","exit_code":124}`},
+	}}
+
+	select {
+	case res := <-resCh:
+		require.NoError(t, res.err, "the daemon's verdict arrived within the grace; it is the answer")
+		require.Contains(t, res.resp.Content, `"exit_code":124`)
+	case <-time.After(5 * time.Second):
+		t.Fatal("tool response never arrived")
+	}
+}
+
 // A tool request whose connection dies must fail as soon as the connection
 // does, so the caller is not left waiting out the full tool timeout.
 func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {

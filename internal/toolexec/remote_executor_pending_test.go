@@ -43,6 +43,15 @@ func TestExecuteOnDaemon_CarriesDaemonPendingAcrossTheResultBoundary(t *testing.
 		require.NoError(t, err)
 		assert.False(t, res.DaemonPending)
 		assert.False(t, res.RanOnDaemon)
+		assert.False(t, res.NotDispatched, "a timeout says nothing about whether it ran")
+	})
+
+	t.Run("a request that never reached a machine says so", func(t *testing.T) {
+		executor := &RemoteExecutor{router: &pendingRouter{err: notDispatched(fmt.Errorf("the machine is suspended: %w", ErrDaemonPending))}}
+		res, err := executor.executeOnDaemon(context.Background(), req, time.Now())
+		require.NoError(t, err)
+		assert.True(t, res.NotDispatched)
+		assert.True(t, res.DaemonPending, "the pending fact survives the wrapping")
 	})
 
 	t.Run("a completed round trip proves the machine is reachable", func(t *testing.T) {

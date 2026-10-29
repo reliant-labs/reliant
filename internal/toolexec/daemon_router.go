@@ -211,18 +211,41 @@ func IsTransportErrorCode(code string) bool {
 // asking again after the reconnect is safe (see daemon_reconnect.go).
 var ErrDaemonConnectionInterrupted = errors.New("daemon connection interrupted")
 
+// ErrNotDispatched marks a tool request failure that proves the request never
+// reached a daemon: no machine resolved, or NATS had no responder for every
+// round trip made. Nothing ran, so sending it again is safe for any tool,
+// shell included. A failure without it — a timeout, an interrupted
+// connection, a cancelled wait — says nothing about whether the request ran.
+// Match it with errors.Is; the error's message is the underlying failure's.
+var ErrNotDispatched = errors.New("the request never reached a machine")
+
+type notDispatchedError struct{ err error }
+
+func (e *notDispatchedError) Error() string        { return e.err.Error() }
+func (e *notDispatchedError) Unwrap() error        { return e.err }
+func (e *notDispatchedError) Is(target error) bool { return target == ErrNotDispatched }
+
+func notDispatched(err error) error { return &notDispatchedError{err: err} }
+
 // TransportError says a tool request never reached a daemon. It exists so
 // callers that would otherwise flatten a failure into an exit code can tell
 // "never ran" from "ran and failed" with errors.As rather than by scanning a
 // message.
 type TransportError struct {
 	Code    string // one of the transport-failure codes above
-	Command string // the command that never ran, for the operator
+	Command string // the command whose result never came back, for the operator
 	Detail  string // the transport's own message
+	// NotDispatched: the request provably never reached a daemon, so the
+	// command never ran (ToolResult.NotDispatched). Otherwise the daemon may
+	// have run it — a timeout or a dropped connection loses only the answer.
+	NotDispatched bool
 }
 
 func (e *TransportError) Error() string {
-	return "daemon transport failure (" + e.Code + "): the command never ran: " + e.Detail
+	if e.NotDispatched {
+		return "daemon transport failure (" + e.Code + "): the command never ran: " + e.Detail
+	}
+	return "daemon transport failure (" + e.Code + "): no result came back, the command may have run: " + e.Detail
 }
 
 // ToolExecutionResponse is the synchronous response from a daemon tool execution.
