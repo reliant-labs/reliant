@@ -214,8 +214,9 @@ export function DeleteEnvironmentDialog({
             running workloads, its URLs, and its namespaces.
           </p>
           <p data-testid="delete-environment-data-note">
-            Database data is <strong>retained</strong>, but it is orphaned: deploying again creates a
-            new environment and does <strong>not</strong> reattach to it.
+            Its databases are <strong>deleted</strong> with it, data included. This cannot be undone. To
+            keep the databases, delete from the CLI with{" "}
+            <code className="font-mono">forge env delete {envName} --keep-data</code>.
           </p>
           <p>
             To bring the environment back (empty), run <code className="font-mono">forge env deploy {envName}</code>{" "}
