@@ -73,6 +73,12 @@ type Options struct {
 	// a suspended machine that predates per-machine catalogs still wakes for
 	// its run and syncs.
 	DaemonID string
+	// ProjectFirst resolves a name against the project's workflows before the
+	// owner's own: an automation's precedence (workflowref.Sources). Set for
+	// every run a trigger starts, so an account workflow of the same name
+	// never silently replaces the project's; the resolution's Shadowed says
+	// when one was passed over.
+	ProjectFirst bool
 	// DraftRoot names the one workflow that may resolve to an unfinished
 	// draft: the root of a builder test run, which runs what the builder
 	// just saved. Every other ref, including the root's children, needs a
@@ -110,26 +116,35 @@ func ProjectIndex(ctx context.Context, store ProjectStore, projectID string) (*w
 // the project. A store that cannot read a machine's catalog is refused, not
 // silently answered with the union: the caller asked what will run THERE.
 func MachineProjectIndex(ctx context.Context, store ProjectStore, projectID, daemonID string) (*workflowref.Index, error) {
+	index, _, err := machineProjectIndex(ctx, store, projectID, daemonID)
+	return index, err
+}
+
+// machineProjectIndex is MachineProjectIndex, and whether the index is
+// daemonID's own catalog (false: the union).
+func machineProjectIndex(ctx context.Context, store ProjectStore, projectID, daemonID string) (*workflowref.Index, bool, error) {
 	if daemonID == "" || projectID == "" || store == nil {
-		return ProjectIndex(ctx, store, projectID)
+		index, err := ProjectIndex(ctx, store, projectID)
+		return index, false, err
 	}
 	machines, ok := store.(MachineStore)
 	if !ok {
-		return nil, &StoreError{Err: fmt.Errorf("this store cannot read machine %s's workflows", daemonID)}
+		return nil, false, &StoreError{Err: fmt.Errorf("this store cannot read machine %s's workflows", daemonID)}
 	}
 	workflowsJSON, synced, err := machines.GetProjectMachineWorkflowsJSON(ctx, projectID, daemonID)
 	if err != nil {
-		return nil, &StoreError{Err: fmt.Errorf("read machine %s's project workflows: %w", daemonID, err)}
+		return nil, false, &StoreError{Err: fmt.Errorf("read machine %s's project workflows: %w", daemonID, err)}
 	}
 	if !synced {
 		warnUnsyncedMachine(ctx, projectID, daemonID, "workflows")
-		return ProjectIndex(ctx, store, projectID)
+		index, err := ProjectIndex(ctx, store, projectID)
+		return index, false, err
 	}
 	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return config.ProjectWorkflowIndex(workflows), nil
+	return config.ProjectWorkflowIndex(workflows), true, nil
 }
 
 // warnUnsyncedMachine says that a read for one machine is answered with the
@@ -176,15 +191,53 @@ func ProjectPresets(ctx context.Context, store interface {
 
 // Sources assembles what a ref resolves against.
 func Sources(ctx context.Context, store Store, opts Options) (workflowref.Sources, error) {
-	project, err := MachineProjectIndex(ctx, store, opts.ProjectID, opts.DaemonID)
+	sources, _, err := sources(ctx, store, opts)
+	return sources, err
+}
+
+// sources is Sources, and whether the project's workflows are opts.DaemonID's
+// own catalog (false: the union of every machine's).
+func sources(ctx context.Context, store Store, opts Options) (workflowref.Sources, bool, error) {
+	project, fromMachine, err := machineProjectIndex(ctx, store, opts.ProjectID, opts.DaemonID)
 	if err != nil {
-		return workflowref.Sources{}, err
+		return workflowref.Sources{}, false, err
 	}
-	sources := workflowref.Sources{Project: project}
+	sources := workflowref.Sources{Project: project, ProjectFirst: opts.ProjectFirst}
 	if opts.UserID != "" && store != nil {
 		sources.User = userWorkflows(ctx, store, opts)
 	}
-	return sources, nil
+	return sources, fromMachine, nil
+}
+
+// Description is where a ref resolves, for surfaces that show it.
+type Description struct {
+	*workflowref.Resolved
+	// MachineCatalog is true when a project workflow was read from
+	// Options.DaemonID's own catalog, false when from the union of every
+	// machine's (no machine given, or it has never synced the project).
+	MachineCatalog bool
+}
+
+// Describe resolves ref exactly as Resolve does and says where from. It
+// skips the miss diagnostic: a surface describing a source reports a miss
+// through the resolution that runs.
+func Describe(ctx context.Context, store Store, opts Options, ref string) (*Description, error) {
+	if parsed, err := workflowref.Parse(ref); err != nil || parsed.Kind == workflowref.Builtin {
+		resolved, err := workflowref.Resolve(ref, workflowref.Sources{})
+		if err != nil {
+			return nil, err
+		}
+		return &Description{Resolved: resolved}, nil
+	}
+	src, fromMachine, err := sources(ctx, store, opts)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := workflowref.Resolve(ref, src)
+	if err != nil {
+		return nil, err
+	}
+	return &Description{Resolved: resolved, MachineCatalog: fromMachine && resolved.Source == workflowref.SourceProject}, nil
 }
 
 // userWorkflows looks a slug up among the caller's own workflows: only a

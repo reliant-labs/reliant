@@ -654,6 +654,12 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	}
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
+	if src := t.GetDefinitionSource(); src != nil {
+		fmt.Fprintf(w, "Definition:\t%s\n", src.GetSummary())
+		for _, warning := range src.GetWarnings() {
+			fmt.Fprintf(w, "Warning:\t%s\n", warning)
+		}
+	}
 	if sched := t.GetSchedule(); sched != nil {
 		fmt.Fprintf(w, "Schedule:\t%s\n", scheduleSummary(sched))
 		fmt.Fprintf(w, "Timezone:\t%s\n", orDash(sched.GetTimezone()))

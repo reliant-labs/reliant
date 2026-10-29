@@ -211,8 +211,8 @@ func paramValues(params map[string]*structpb.Value) map[string]interface{} {
 // presets, which is where a group's params merge with the preset's. scope
 // says where the presets and the workflow's input schema are read from: the
 // run's machine's synced catalog (scope.DaemonID), or the union of every
-// machine's when it is empty (see chatScope). A selected preset that does not
-// resolve there fails the build (applyPresets).
+// machine's when it is empty, and with which precedence (see chatScope). A
+// selected preset that does not resolve there fails the build (applyPresets).
 func (l *Launcher) buildWorkflowInputs(
 	ctx context.Context,
 	scope Scope,
@@ -431,15 +431,24 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 // chatScope is the scope chat's runs resolve workflowName in: the machine
 // the chat is pinned to (RunMachine), whose catalog its admission and its
 // runtime loads read, so its input schema, defaults and validation come from
-// the same definition that runs. The optional draft root lets an input schema
+// the same definition that runs, with an automation's precedence for a run
+// its trigger started (project first, as its activation resolves). The
+// optional draft root lets an input schema
 // be read for a workflow of the user's they are about to start, complete or
 // not, and still finds the project's when they have none of that name.
 func chatScope(userID string, chat *db.Chat, workflowName string) Scope {
 	scope := Scope{UserID: userID, DaemonID: RunMachine(chat), draftRoot: workflowName, draftOptional: true}
 	if chat != nil {
 		scope.ProjectID = chat.ProjectID
+		scope.ProjectFirst = AutomationPrecedence(chat)
 	}
 	return scope
+}
+
+// AutomationPrecedence reports whether chat's runs resolve workflows with an
+// automation's precedence (Scope.ProjectFirst): it was started by a trigger.
+func AutomationPrecedence(chat *db.Chat) bool {
+	return chat != nil && chat.TriggerID != nil && *chat.TriggerID != ""
 }
 
 func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflowName string) map[string]*reliantv1.Input {
@@ -458,12 +467,12 @@ func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflow
 // userID is the OWNER of the run, passed explicitly. It used to be read from
 // the request context, which a scheduled fire on the worker does not have.
 //
-// chat decides where the definition is read from (chatScope): its machine's
-// catalog, as its runs read it.
+// chat decides where the definition is read from and with which precedence
+// (chatScope): its machine's catalog, project first for an automation's run,
+// as its runs read it.
 func (l *Launcher) ValidateChatWorkflowInputs(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []error {
 	// Validate against the definition that will run: the one workflowsource
-	// resolves (the user's own of that name, else the project's) in the
-	// chat's scope.
+	// resolves in the chat's scope.
 	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not load workflow for input validation", "workflow", workflowName, "error", err)
@@ -653,8 +662,11 @@ func draftRootFor(ev Event, workflowName string) string {
 //
 // It is what a trigger reads its declaration from, so an activation fires
 // against the same definition the run it starts will execute.
+//
+// It resolves with an automation's precedence (Scope.ProjectFirst): the
+// project's workflow of that name before the owner's own.
 func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID, ProjectFirst: true}, workflowName)
 }
 
 // A trigger's resolution on its target machine reads that machine's catalog
@@ -668,8 +680,15 @@ var (
 // which machine. DaemonID set resolves against that machine's own synced
 // catalog (workflowsource.Options.DaemonID); empty, against the union of
 // every machine's.
+//
+// ProjectFirst is an automation's precedence: a name resolves to the
+// project's workflow before the owner's own account workflow of that name
+// (workflowsource.Options.ProjectFirst), so an account draft can never
+// silently replace what a trigger runs. Every run a trigger starts resolves
+// this way, at admission and in the runtime.
 type Scope struct {
 	UserID, ProjectID, DaemonID string
+	ProjectFirst                bool
 	draftRoot                   string
 	// draftOptional: see workflowsource.Options.DraftRootOptional.
 	draftOptional bool
@@ -695,15 +714,26 @@ func ResolveValidatedRunWorkflowOn(ctx context.Context, repo WorkflowResolver, s
 // the same whole-tree gate as launch. It is not a cross-worker version check:
 // parsing and validation use this process's compiled runtime contract.
 func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID, ProjectFirst: true}, workflowName)
+}
+
+// DescribeRunWorkflow says where a run in scope reads workflowName from: the
+// kind of workflow, the file and machine catalog, and the definition of the
+// same name its precedence passed over (Resolved.Shadowed). It resolves as
+// the run does, without validating the tree.
+func DescribeRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*workflowsource.Description, error) {
+	return workflowsource.Describe(ctx, repo, scope.sourceOptions(), workflowName)
+}
+
+func (s Scope) sourceOptions() workflowsource.Options {
+	return workflowsource.Options{
+		UserID: s.UserID, ProjectID: s.ProjectID, DaemonID: s.DaemonID, ProjectFirst: s.ProjectFirst,
+		DraftRoot: s.draftRoot, DraftRootOptional: s.draftOptional,
+	}
 }
 
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
 	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
-}
-
-func (s Scope) sourceOptions() workflowsource.Options {
-	return workflowsource.Options{UserID: s.UserID, ProjectID: s.ProjectID, DaemonID: s.DaemonID, DraftRoot: s.draftRoot, DraftRootOptional: s.draftOptional}
 }
 
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
@@ -746,7 +776,9 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 // run will execute on: the tree is admitted against that machine's synced
 // catalog, the one the run's own loads read (the union when it is empty).
 func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID string, ev Event) error {
-	scope := Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, draftRoot: draftRootFor(ev, workflowName)}
+	// A trigger's run resolves with an automation's precedence, the same
+	// rule its activation was read by (Scope.ProjectFirst).
+	scope := Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: ev.TriggerID != "", draftRoot: draftRootFor(ev, workflowName)}
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
 		var lookupErr *WorkflowLookupError

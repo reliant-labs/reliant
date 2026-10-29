@@ -299,6 +299,14 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		LastActive:      now,
 	}
 
+	// The chat's launch trigger, as the chat reads it back once stored: it
+	// decides the precedence its inputs are built and validated under
+	// (AutomationPrecedence).
+	if ev.TriggerID != "" {
+		triggerID := ev.TriggerID
+		chat.TriggerID = &triggerID
+	}
+
 	chat.NoMachine = spec.NoMachine
 
 	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
