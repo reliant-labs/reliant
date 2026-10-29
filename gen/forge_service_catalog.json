@@ -49155,7 +49155,7 @@
           "legacy_name": "db.CreateChatUpdate",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 736
+            "line": 758
           }
         },
         {
@@ -49397,7 +49397,7 @@
           "legacy_name": "db.CreateUserUpdate",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1156
+            "line": 1178
           }
         },
         {
@@ -49749,7 +49749,7 @@
           "legacy_name": "db.EmitNodeExecutionEvent",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1461
+            "line": 1483
           }
         },
         {
@@ -50299,7 +50299,7 @@
           "legacy_name": "db.GetLatestNonMessageUpdatesPerEntity",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 781
+            "line": 803
           }
         },
         {
@@ -50321,7 +50321,7 @@
           "legacy_name": "db.GetLatestUpdateSequence",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 729
+            "line": 751
           }
         },
         {
@@ -50332,7 +50332,7 @@
           "legacy_name": "db.GetLatestUserUpdateSequence",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1120
+            "line": 1142
           }
         },
         {
@@ -51036,7 +51036,7 @@
           "legacy_name": "db.GetUpdatesSince",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 878
+            "line": 900
           }
         },
         {
@@ -51058,7 +51058,7 @@
           "legacy_name": "db.GetUserUpdatesSince",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1177
+            "line": 1199
           }
         },
         {
@@ -51487,7 +51487,7 @@
           "legacy_name": "db.ListChatsPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1396
+            "line": 1418
           }
         },
         {
@@ -51498,7 +51498,7 @@
           "legacy_name": "db.ListChatsQueuedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1374
+            "line": 1396
           }
         },
         {
@@ -51509,7 +51509,7 @@
           "legacy_name": "db.ListChatsWaitingForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1402
+            "line": 1424
           }
         },
         {
@@ -52708,7 +52708,7 @@
           "legacy_name": "db.PinChatDaemonIfUnset",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1296
+            "line": 1318
           }
         },
         {
@@ -53170,7 +53170,7 @@
           "legacy_name": "db.SetChatAdopted",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1327
+            "line": 1349
           }
         },
         {
@@ -53181,7 +53181,7 @@
           "legacy_name": "db.SetChatDaemonBlocked",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1344
+            "line": 1366
           }
         },
         {
@@ -53192,7 +53192,7 @@
           "legacy_name": "db.SetChatPausedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1389
+            "line": 1411
           }
         },
         {
@@ -53203,7 +53203,7 @@
           "legacy_name": "db.SetChatQueuedForMachine",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1358
+            "line": 1380
           }
         },
         {
@@ -53214,7 +53214,7 @@
           "legacy_name": "db.SetChatRunID",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1382
+            "line": 1404
           }
         },
         {
@@ -53555,7 +53555,7 @@
           "legacy_name": "db.UpdateChatActiveDaemon",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1287
+            "line": 1309
           }
         },
         {
@@ -53566,7 +53566,7 @@
           "legacy_name": "db.UpdateChatState",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1185
+            "line": 1207
           }
         },
         {
@@ -53577,7 +53577,7 @@
           "legacy_name": "db.UpdateChatUnread",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 1407
+            "line": 1429
           }
         },
         {
@@ -54083,7 +54083,7 @@
           "legacy_name": "db.attemptTransaction",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 563
+            "line": 585
           }
         },
         {
@@ -54193,7 +54193,7 @@
           "legacy_name": "db.enrichMessageUpdate",
           "source": {
             "path": "internal/db/repo.go",
-            "line": 917
+            "line": 939
           }
         },
         {
@@ -69701,7 +69701,7 @@
           "legacy_name": "chat.ClaimPendingTriggerEvent",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 333
+            "line": 340
           }
         },
         {
@@ -69712,7 +69712,7 @@
           "legacy_name": "chat.ClaimWorkflowStart",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 345
+            "line": 352
           }
         },
         {
@@ -69778,7 +69778,7 @@
           "legacy_name": "chat.CountMessagesInChat",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 319
+            "line": 326
           }
         },
         {
@@ -69822,7 +69822,7 @@
           "legacy_name": "chat.CreateChat",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 315
+            "line": 322
           }
         },
         {
@@ -69921,7 +69921,7 @@
           "legacy_name": "chat.CreateTriggerEvent",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 327
+            "line": 334
           }
         },
         {
@@ -69932,7 +69932,7 @@
           "legacy_name": "chat.CreateUserUpdate",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 322
+            "line": 329
           }
         },
         {
@@ -70284,7 +70284,7 @@
           "legacy_name": "chat.GetPresetBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 352
+            "line": 359
           }
         },
         {
@@ -70295,7 +70295,7 @@
           "legacy_name": "chat.GetPresetBySlugAndProject",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 353
+            "line": 360
           }
         },
         {
@@ -70306,7 +70306,7 @@
           "legacy_name": "chat.GetProject",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 370
+            "line": 377
           }
         },
         {
@@ -70317,7 +70317,7 @@
           "legacy_name": "chat.GetProjectMachinePresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 362
+            "line": 369
           }
         },
         {
@@ -70328,7 +70328,7 @@
           "legacy_name": "chat.GetProjectMachineWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 361
+            "line": 368
           }
         },
         {
@@ -70339,7 +70339,7 @@
           "legacy_name": "chat.GetProjectPresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 357
+            "line": 364
           }
         },
         {
@@ -70350,7 +70350,7 @@
           "legacy_name": "chat.GetProjectWithUserCheck",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 371
+            "line": 378
           }
         },
         {
@@ -70361,7 +70361,7 @@
           "legacy_name": "chat.GetProjectWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 356
+            "line": 363
           }
         },
         {
@@ -70383,7 +70383,7 @@
           "legacy_name": "chat.GetSetting",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 374
+            "line": 381
           }
         },
         {
@@ -70471,7 +70471,7 @@
           "legacy_name": "chat.GetTriggerEventByDedupe",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 328
+            "line": 335
           }
         },
         {
@@ -70493,7 +70493,7 @@
           "legacy_name": "chat.GetUsableWorkflowBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 351
+            "line": 358
           }
         },
         {
@@ -70537,7 +70537,7 @@
           "legacy_name": "chat.GetWorkflowDraftBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 350
+            "line": 357
           }
         },
         {
@@ -70548,7 +70548,7 @@
           "legacy_name": "chat.GetWorktree",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 372
+            "line": 379
           }
         },
         {
@@ -70856,7 +70856,7 @@
           "legacy_name": "chat.ListWorktrees",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 373
+            "line": 380
           }
         },
         {
@@ -70889,7 +70889,7 @@
           "legacy_name": "chat.MarkWorkflowStartFailed",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 344
+            "line": 351
           }
         },
         {
@@ -70977,7 +70977,7 @@
           "legacy_name": "chat.SaveMessageToThread",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 320
+            "line": 327
           }
         },
         {
@@ -70988,7 +70988,7 @@
           "legacy_name": "chat.SaveMessageToThreadOnce",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 321
+            "line": 328
           }
         },
         {
@@ -71109,7 +71109,7 @@
           "legacy_name": "chat.UpdateChatActiveDaemon",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 318
+            "line": 325
           }
         },
         {
@@ -71153,7 +71153,7 @@
           "legacy_name": "chat.UpdateTriggerEventOutcome",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 329
+            "line": 336
           }
         },
         {
@@ -71164,7 +71164,7 @@
           "legacy_name": "chat.UpdateTriggerEventPayload",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 330
+            "line": 337
           }
         },
         {
@@ -71175,7 +71175,7 @@
           "legacy_name": "chat.UpdateWorkflowName",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 340
+            "line": 347
           }
         },
         {
@@ -71219,7 +71219,7 @@
           "legacy_name": "chat.WorkflowSourceDiagnostic",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 365
+            "line": 372
           }
         }
       ],
@@ -72912,7 +72912,7 @@
           "legacy_name": "inbox.GetPresetBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 352
+            "line": 359
           }
         },
         {
@@ -72923,7 +72923,7 @@
           "legacy_name": "inbox.GetPresetBySlugAndProject",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 353
+            "line": 360
           }
         },
         {
@@ -72934,7 +72934,7 @@
           "legacy_name": "inbox.GetProjectMachinePresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 362
+            "line": 369
           }
         },
         {
@@ -72945,7 +72945,7 @@
           "legacy_name": "inbox.GetProjectMachineWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 361
+            "line": 368
           }
         },
         {
@@ -72956,7 +72956,7 @@
           "legacy_name": "inbox.GetProjectPresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 357
+            "line": 364
           }
         },
         {
@@ -72967,7 +72967,7 @@
           "legacy_name": "inbox.GetProjectWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 356
+            "line": 363
           }
         },
         {
@@ -72978,7 +72978,7 @@
           "legacy_name": "inbox.GetUsableWorkflowBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 351
+            "line": 358
           }
         },
         {
@@ -72989,7 +72989,7 @@
           "legacy_name": "inbox.GetWorkflowDraftBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 350
+            "line": 357
           }
         },
         {
@@ -73198,7 +73198,7 @@
           "legacy_name": "inbox.WorkflowSourceDiagnostic",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 365
+            "line": 372
           }
         }
       ],
@@ -79347,7 +79347,7 @@
           "legacy_name": "trigger.GetPresetBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 352
+            "line": 359
           }
         },
         {
@@ -79358,7 +79358,7 @@
           "legacy_name": "trigger.GetPresetBySlugAndProject",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 353
+            "line": 360
           }
         },
         {
@@ -79369,7 +79369,7 @@
           "legacy_name": "trigger.GetProjectMachinePresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 362
+            "line": 369
           }
         },
         {
@@ -79380,7 +79380,7 @@
           "legacy_name": "trigger.GetProjectMachineWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 361
+            "line": 368
           }
         },
         {
@@ -79391,7 +79391,7 @@
           "legacy_name": "trigger.GetProjectPresetsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 357
+            "line": 364
           }
         },
         {
@@ -79413,7 +79413,7 @@
           "legacy_name": "trigger.GetProjectWorkflowsJSON",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 356
+            "line": 363
           }
         },
         {
@@ -79457,7 +79457,7 @@
           "legacy_name": "trigger.GetUsableWorkflowBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 351
+            "line": 358
           }
         },
         {
@@ -79468,7 +79468,7 @@
           "legacy_name": "trigger.GetWorkflowDraftBySlug",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 350
+            "line": 357
           }
         },
         {
@@ -79655,7 +79655,7 @@
           "legacy_name": "trigger.WorkflowSourceDiagnostic",
           "source": {
             "path": "internal/launch/contract.go",
-            "line": 365
+            "line": 372
           }
         }
       ],
