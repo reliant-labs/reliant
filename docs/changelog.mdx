@@ -13,6 +13,14 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.9" description="October 29, 2026">
+### Workflows stay with their machine
+
+- **Keep each machine's workflows and presets** Syncing one machine no longer replaces another machine's workflow and preset catalog. Triggers resolve their workflow on the machine they target.
+- **Recover workflows in the configured namespace** Reset-and-replay recovery uses the configured Temporal namespace rather than assuming the default.
+- **Let issue-write GitHub automations update pull requests** A bot with issue-write permission can label or comment on a pull request, matching GitHub's issue API permissions.
+</Update>
+
 <Update label="v1.8.8" description="October 29, 2026">
 ### Agents can switch on event-driven automations
 
