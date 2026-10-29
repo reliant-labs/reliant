@@ -127,6 +127,7 @@ type processesRepo struct {
 	owners    map[string]string // project -> user
 	daemons   map[string]*db.Daemon
 	adopted   map[string]string
+	installs  map[string][]*core.ProjectDaemon // project -> its installs
 }
 
 func newProcessesRepo() *processesRepo {
@@ -192,8 +193,10 @@ func (r *processesRepo) ListDaemonsByUserID(_ context.Context, userID string) ([
 	return out, nil
 }
 
-func (r *processesRepo) ListProjectDaemonsForProject(context.Context, string) ([]*core.ProjectDaemon, error) {
-	return nil, nil
+func (r *processesRepo) ListProjectDaemonsForProject(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.installs[projectID], nil
 }
 
 func (r *processesRepo) AdoptWorktreeDaemon(_ context.Context, id, daemonID string) (string, error) {
@@ -267,6 +270,43 @@ func TestRunCommand_AnotherUsersWorkspaceIsNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.Empty(t, router.sent, "nothing is sent for someone else's workspace")
+}
+
+// placingRouter is a machineRouter that can place a machine: the user's
+// default is defaultMachine, and every machine of theirs can be placed.
+type placingRouter struct {
+	*machineRouter
+	defaultMachine string
+}
+
+func (r *placingRouter) PlacementDaemonID(_ context.Context, _ string, daemonID string) (string, error) {
+	if daemonID == "" {
+		return r.defaultMachine, nil
+	}
+	return daemonID, nil
+}
+
+// The main checkout is on every machine with the project, so it has no owner.
+// Its commands go to the project-aware default (a machine the project is
+// installed on), never to a project-blind default that may not have it and
+// would run whatever sits at the same path there.
+func TestRunCommand_MainCheckoutRunsWhereTheProjectIsInstalled(t *testing.T) {
+	router := &placingRouter{machineRouter: &machineRouter{}, defaultMachine: "daemon-a"}
+	repo := newProcessesRepo()
+	repo.machine("daemon-a", "test-user")
+	repo.machine("daemon-b", "test-user")
+	repo.installs = map[string][]*core.ProjectDaemon{"p1": {{ProjectID: "p1", DaemonID: "daemon-b", InstallState: core.ProjectInstallInstalled}}}
+	repo.worktree("wt-main", "p1", "")
+	repo.worktrees["wt-main"].IsMain = true
+	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo}))
+
+	resp, err := runBuild(svc, "wt-main")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("pkg.list_commands"), "discovery asks the machine with the project")
+	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_start"))
+	assert.Equal(t, "daemon-b", resp.Msg.DaemonId, "the concrete machine is carried to the process rpcs")
+	assert.Empty(t, router.machinesFor("fs.stat"), "the main checkout is never probed for an owner")
 }
 
 // A workspace whose row records no machine is settled on first use: the one

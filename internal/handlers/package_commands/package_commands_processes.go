@@ -52,7 +52,20 @@ func (s *Service) workspace(ctx context.Context, userID, worktreeID string) (pat
 	if err != nil {
 		return "", "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 	}
-	return worktree.Path, ws.DaemonID, nil
+	if ws.DaemonID != "" {
+		return worktree.Path, ws.DaemonID, nil
+	}
+	// The main checkout (on every machine with the project) or a row no
+	// machine settled: the project-aware default, never project-blind default
+	// resolution, which may pick a machine without this project and run a
+	// command in whatever sits at the same path there. The concrete machine is
+	// carried through discovery, the start and every process lookup.
+	if machines, ok := s.deps.Router.(daemonplacement.Machines); ok {
+		if daemonID, err := daemonplacement.ProjectDefaultDaemonID(ctx, s.deps.Repo, machines, userID, worktree.ProjectID); err == nil {
+			return worktree.Path, daemonID, nil
+		}
+	}
+	return worktree.Path, "", nil
 }
 
 // requestedMachine checks a machine a request names (a process's daemon_id,

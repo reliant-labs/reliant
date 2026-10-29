@@ -16,5 +16,5 @@ func chatDaemonSelector(chat *db.Chat, explicit *types.DaemonSelector) *types.Da
 	if explicit != nil || chat == nil || chat.NoMachine || chat.ActiveDaemonID == nil || *chat.ActiveDaemonID == "" {
 		return explicit
 	}
-	return &types.DaemonSelector{ID: *chat.ActiveDaemonID}
+	return &types.DaemonSelector{ID: *chat.ActiveDaemonID, Session: true}
 }

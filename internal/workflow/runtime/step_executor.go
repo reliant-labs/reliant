@@ -1305,10 +1305,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
 		// Fall back to workflow-level daemon selector
 		rtx.DaemonSelector = &types.DaemonSelector{
-			ID:     e.execContext.DaemonSelector.ID,
-			Name:   e.execContext.DaemonSelector.Name,
-			Type:   e.execContext.DaemonSelector.Type,
-			Labels: e.execContext.DaemonSelector.Labels,
+			ID:      e.execContext.DaemonSelector.ID,
+			Name:    e.execContext.DaemonSelector.Name,
+			Type:    e.execContext.DaemonSelector.Type,
+			Labels:  e.execContext.DaemonSelector.Labels,
+			Session: e.execContext.DaemonSelector.Session,
 		}
 	}
 

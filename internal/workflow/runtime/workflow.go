@@ -1105,7 +1105,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Priority: workflow daemon > session daemon > default resolution.
 	if execCtx.DaemonSelector == nil {
 		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID}
+			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID, Session: true}
 			logger.Debug("[Workflow Runtime] Using session daemon",
 				"daemonID", sessionDaemonID,
 			)
