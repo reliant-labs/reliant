@@ -198,3 +198,59 @@ func TestDaemonRecords_SelectorMatchesTypeAndName(t *testing.T) {
 	_, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Type: "cloud", Name: "mbp"})
 	require.Error(t, err, "a selector no record satisfies must not fall back to some other daemon")
 }
+
+// A workflow's `daemon:` shorthand puts whatever the author wrote in Name. A
+// machine id written there selects that machine — an exact id first, then a
+// name — and a named machine answers to the name its owner gave it, not only
+// to its hostname. Both used to match nothing, so every run of a workflow
+// pinned to `daemon: <machine id>` (or `daemon: cicd`) failed its preflight.
+func TestDaemonRecords_NameSelectorTriesIDFirstThenName(t *testing.T) {
+	const cicdID = "e164d47d-1288-468d-ad0b-c487af2da1c4"
+	records := &fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", DaemonType: strPtr("self_hosted"), Hostname: strPtr("mbp")},
+		{ID: cicdID, UserID: "u", DaemonType: strPtr("managed"), Name: "cicd", Hostname: strPtr("ws-ws-e164d47d")},
+		// Named after the cicd machine's id: the id must still win.
+		{ID: "impostor", UserID: "u", DaemonType: strPtr("self_hosted"), Name: cicdID},
+	}, attached: []string{"laptop", cicdID, "impostor"}}
+	router := recordsRouter(records)
+
+	for _, tc := range []struct {
+		selector *DaemonSelector
+		want     string
+	}{
+		{&DaemonSelector{Name: cicdID}, cicdID},
+		{&DaemonSelector{Name: "cicd"}, cicdID},
+		{&DaemonSelector{Name: "ws-ws-e164d47d"}, cicdID},
+		{&DaemonSelector{Name: "mbp"}, "laptop"},
+		{&DaemonSelector{Type: "cloud", Name: cicdID}, cicdID},
+	} {
+		id, err := router.resolveDaemonID(context.Background(), "u", tc.selector)
+		require.NoError(t, err, "%+v", tc.selector)
+		assert.Equal(t, tc.want, id, "%+v", tc.selector)
+	}
+
+	// An id the user does not own is not taken for one: it stays a name, and
+	// no machine has that name.
+	_, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Name: "someone-elses-id"})
+	require.Error(t, err)
+	// The id selected by id still honours the selector's other criteria.
+	_, err = router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Type: "local", Name: cicdID})
+	require.Error(t, err, "a local selector must not route to the managed machine its name is the id of")
+}
+
+func TestConnectedResolver_NameSelectorTriesIDFirstThenName(t *testing.T) {
+	resolver := NewConnectedDaemonResolver(connectedList{
+		{DaemonID: "d-1", Name: "cicd", Type: "cloud"},
+		{DaemonID: "d-2", Name: "d-1", Type: "local"},
+	})
+	for name, want := range map[string]string{"d-1": "d-1", "cicd": "d-1", "d-2": "d-2"} {
+		got, err := resolver.ResolveDaemons(context.Background(), "u", &DaemonSelector{Name: name})
+		require.NoError(t, err)
+		require.Len(t, got, 1, name)
+		assert.Equal(t, want, got[0].DaemonID, name)
+	}
+}
+
+type connectedList []DaemonInfo
+
+func (l connectedList) ListConnectedDaemons(string) []DaemonInfo { return l }

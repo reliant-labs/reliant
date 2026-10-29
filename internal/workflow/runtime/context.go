@@ -217,7 +217,9 @@ func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, erro
 		if v == "" {
 			return nil, nil
 		}
-		// String shorthand: known types map to type field, others to name
+		// String shorthand: known types map to type field, others to name,
+		// which resolution tries as an exact machine id first, then as a name
+		// (toolexec.DaemonSelector).
 		switch v {
 		case "local", "cloud", "any":
 			return &DaemonSelectorValue{Type: v}, nil

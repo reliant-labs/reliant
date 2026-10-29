@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -367,6 +368,7 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 		attached[id] = true
 	}
 
+	selector = recordSelector(daemons, selector)
 	var lifecycleDown, unconfirmed *daemonRecord
 	for _, d := range daemons {
 		if !daemonRecordMatches(d, selector) {
@@ -416,7 +418,7 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 	if selector.ID != "" && selector.ID != d.ID {
 		return false
 	}
-	if selector.Name != "" && (d.Hostname == nil || *d.Hostname != selector.Name) {
+	if selector.Name != "" && !recordAnswersToName(d, selector.Name) {
 		return false
 	}
 	if want := canonicalDaemonType(selector.Type); want != "" {
@@ -425,6 +427,25 @@ func daemonRecordMatches(d *db.Daemon, selector *DaemonSelector) bool {
 		}
 	}
 	return true
+}
+
+// recordAnswersToName reports whether a record is the machine a caller means
+// by name: the name its owner gave it, or its hostname. Matching the hostname
+// alone missed every named managed machine (`cicd`, hostname ws-ws-…), the
+// same rule the registry's own lookup applies (daemonAnswersToName).
+func recordAnswersToName(d *db.Daemon, name string) bool {
+	if d.Name != "" && d.Name == name {
+		return true
+	}
+	return d.Hostname != nil && *d.Hostname == name
+}
+
+// recordSelector is the selector as the user's records read it: a Name that
+// is one of their daemon ids selects that daemon by id (resolveNameAsID).
+func recordSelector(daemons []*db.Daemon, selector *DaemonSelector) *DaemonSelector {
+	return resolveNameAsID(selector, func(id string) bool {
+		return slices.ContainsFunc(daemons, func(d *db.Daemon) bool { return d.ID == id })
+	})
 }
 
 // canonicalDaemonType folds the two spellings of daemon type onto the
@@ -769,6 +790,7 @@ func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID st
 	if err != nil {
 		return false, fmt.Errorf("listing daemons for liveness: %w", err)
 	}
+	selector = recordSelector(daemons, selector)
 	var candidates []string
 	for _, d := range daemons {
 		if daemonRecordMatches(d, selector) {
