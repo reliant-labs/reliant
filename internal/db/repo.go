@@ -1058,7 +1058,11 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		if t, err := r.GetThread(ctx, *msg.SenderThreadID); err == nil && t != nil {
 			title = t.Title
 		}
-		enrichedData.Sender = NewMessageSenderPayload(*msg.SenderThreadID, title, *msg.SenderKind)
+		var subject string
+		if msg.SenderSubject != nil {
+			subject = *msg.SenderSubject
+		}
+		enrichedData.Sender = NewMessageSenderPayload(*msg.SenderThreadID, title, *msg.SenderKind, subject)
 	}
 
 	// Marshal back to JSON

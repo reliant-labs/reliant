@@ -7816,6 +7816,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ],
         "reliant.v1.PauseChatRequest": [
@@ -21912,6 +21916,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ]
       },
@@ -33038,6 +33046,10 @@
             "name": "kind",
             "kind": "enum",
             "type_name": "reliant.v1.AgentMessageKind"
+          },
+          {
+            "name": "subject",
+            "kind": "string"
           }
         ],
         "reliant.v1.NodeExecutionState": [
@@ -41848,7 +41860,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "e1bd53bbf69d1bd64ac6123a7f43464efb5e62541130baa6d66af3579b0c4c82",
+    "reliant/v1/chat.proto": "3b451df2216c2caaa9edb7ac02b705447e74a808593e73bf20a71f134a33778b",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
