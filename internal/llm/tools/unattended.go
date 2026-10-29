@@ -48,6 +48,12 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't start, message or control other runs",
 	},
 	{
+		// Starting a machine spends the user's money. Named, it still only
+		// starts the machine the run's activation targets (machine_tools.go).
+		withholds: toolNamed(ToolManageMachine),
+		reason:    "unattended runs can't start, stop or resize machines",
+	},
+	{
 		// An integration action that changes something outside Reliant —
 		// posts to Slack, sends an email or a text, opens or comments on an
 		// issue, makes an HTTP request — puts unvetted text in front of other

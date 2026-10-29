@@ -162,7 +162,7 @@ func MinimumPermissionForTool(toolName string) string {
 	// interactive approval. The tier alone never authorizes a mutation.
 	// list_triggers and list_trigger_events only read.
 	switch toolName {
-	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolFireTrigger, ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger:
+	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolFireTrigger, ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolManageMachine:
 		return PermissionOrchestrator
 	}
 

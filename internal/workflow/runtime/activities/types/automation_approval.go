@@ -16,4 +16,7 @@ type AutomationApprovalPreview struct {
 	Title   string
 	Hash    string
 	Refusal string
+	// NoApproval: the tool allows this call without a card
+	// (AutomationApprovalTool.PrepareAutomation reported none needed).
+	NoApproval bool `json:",omitempty"`
 }

@@ -53,7 +53,11 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 			"tool", in.ToolName, "chat_id", in.ChatID, "tool_call_id", in.ToolCallID,
 			"workflow_ref", names.Workflow, "workflow_trigger", names.WorkflowTrigger, "trigger_id", names.TriggerID,
 			"reason", reason, "code", svcerr.Code(err).String(), "error", err)
-		return types.AutomationApprovalPreview{Refusal: "Activation could not be validated for approval: " + reason + ". Nothing changed."}, nil
+		subject := "Activation"
+		if in.ToolName == tools.ToolManageMachine {
+			subject = "Machine change"
+		}
+		return types.AutomationApprovalPreview{Refusal: subject + " could not be validated for approval: " + reason + ". Nothing changed."}, nil
 	}
 	if a.factory == nil {
 		return refuse(tools.RefuseActivation("activation management is unavailable on this server", fmt.Errorf("no tools factory")))
@@ -78,9 +82,9 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 	if !ok {
 		return refuse(tools.RefuseActivation("this tool does not support activation approval", fmt.Errorf("%s is not an AutomationApprovalTool", in.ToolName)))
 	}
-	preview, _, err := approval.PrepareAutomation(rctx.NewToolContext(ctx, in.ChatID, in.Thread, nil, nil), tools.ToolCall{ID: in.ToolCallID, Name: in.ToolName, Input: in.ToolInput}, in.Unattended)
+	preview, needsApproval, err := approval.PrepareAutomation(rctx.NewToolContext(ctx, in.ChatID, in.Thread, nil, nil), tools.ToolCall{ID: in.ToolCallID, Name: in.ToolName, Input: in.ToolInput}, in.Unattended)
 	if err != nil {
 		return refuse(err)
 	}
-	return types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash}, nil
+	return types.AutomationApprovalPreview{Title: preview.Title, Hash: preview.Hash, NoApproval: !needsApproval}, nil
 }
