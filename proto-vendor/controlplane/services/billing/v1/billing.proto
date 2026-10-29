@@ -260,6 +260,18 @@ service BillingService {
     };
   }
 
+  // Independent organization-wide hosted usage funding; never requires a machine plan.
+  rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
+  rpc CreateCurrentUserUsageBillingCheckout(CreateCurrentUserUsageBillingCheckoutRequest) returns (CreateCurrentUserUsageBillingCheckoutResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "billing consent is recorded in the usage agreement and audit log"}
+    };
+  }
+
   // AI credit auto-recharge: refill the wallet from a saved card when the
   // balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
   //
@@ -432,6 +444,50 @@ message GetCurrentUserWalletOverviewRequest {
 
 message GetCurrentUserWalletOverviewResponse {
   WalletOverview overview = 1;
+}
+
+message GetCurrentUserUsageBillingRequest {
+  // Active organization; resolved and authorized server-side. Empty selects primary org.
+  optional string org_id = 1;
+}
+
+// Funding for hosted apps, not a machine entitlement or observability package.
+message UsageBillingAgreement {
+  string id = 1;
+  string status = 2;
+  // UTC calendar-month hosting admission budget, not a synchronous cost ceiling.
+  int64 infra_budget_cents = 3;
+  string policy_version = 4;
+  google.protobuf.Timestamp billing_start_at = 5;
+}
+
+// Exact decimal cents per displayed unit, derived from the canonical catalog.
+message HostedUsageRate {
+  string resource_kind = 1;
+  string display_name = 2;
+  string unit = 3;
+  string price_cents = 4;
+}
+
+message GetCurrentUserUsageBillingResponse {
+  bool enabled = 1;
+  string policy_version = 2;
+  UsageBillingAgreement agreement = 3;
+  // Present before enrollment; never hardcode rates in a checkout page.
+  repeated HostedUsageRate rates = 4;
+}
+
+message CreateCurrentUserUsageBillingCheckoutRequest {
+  string policy_version = 1;
+  int64 infra_budget_cents = 2;
+  string success_url = 3;
+  string cancel_url = 4;
+  // Active organization; requires owner/admin consent. Never trust client scope alone.
+  optional string org_id = 5;
+}
+
+message CreateCurrentUserUsageBillingCheckoutResponse {
+  string checkout_url = 1;
 }
 
 message GetCurrentUserComputeSubscriptionRequest {}

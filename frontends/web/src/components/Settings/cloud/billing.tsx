@@ -108,6 +108,7 @@ import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
 // proxies to admin-api and therefore could never reach these RPCs at all.
 import { DeployUsageSection } from "./usage/DeployUsageSection";
 import { useDeployUsage } from "./usage/useDeployUsage";
+import { UsageBillingPanel } from "./usage/UsageBillingPanel";
 import { useActiveOrg } from "@/hooks/useOrgs";
 
 /**
@@ -199,7 +200,7 @@ export function BillingSection() {
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
         title="Billing & usage"
-        description="Manage wallet credits, your compute plan, usage, limits, and invoices."
+        description="Manage wallet credits, machine subscriptions, independent app hosting billing, usage and invoices."
         className="mb-0"
       />
 
@@ -1379,6 +1380,7 @@ function UsageAndInvoicesTab() {
 
   return (
     <div className="flex flex-col gap-8">
+      <UsageBillingPanel />
       <InvoicesPanel />
       <div className="border-t border-border pt-6">
         <UsagePanel />
@@ -1396,8 +1398,6 @@ function UsageAndInvoicesTab() {
             isLoading={deployUsage.isLoading}
             error={deployUsage.error}
             onRetry={deployUsage.refetch}
-            onSaveCap={deployUsage.saveCap}
-            isSavingCap={deployUsage.isSavingCap}
             deploymentNames={deployUsage.deploymentNames}
             environmentNames={deployUsage.environmentNames}
           />

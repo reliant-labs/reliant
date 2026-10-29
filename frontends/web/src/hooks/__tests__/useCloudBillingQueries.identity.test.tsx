@@ -37,6 +37,7 @@ import {
   CheckoutIdentityRequiredError,
   useCreateCheckoutSession,
   useCreateWalletTopupSession,
+  useUsageBillingCheckout,
 } from "../useCloudBillingQueries";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -54,6 +55,11 @@ beforeEach(() => {
 });
 
 describe("checkout identity guard", () => {
+  it("refuses independent hosting authorization for anonymous sessions", async () => {
+    authState.user = { is_anonymous: true };
+    const { result } = renderHook(() => useUsageBillingCheckout(), { wrapper });
+    await expect(result.current.mutateAsync({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 1000n, successUrl: "https://app.test/settings/billing?tab=usage", cancelUrl: "https://app.test/settings/billing?tab=usage" })).rejects.toBeInstanceOf(CheckoutIdentityRequiredError);
+  });
   it("refuses to mint a checkout session for an anonymous user", async () => {
     authState.user = { is_anonymous: true };
 

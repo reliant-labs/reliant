@@ -94,6 +94,16 @@ export const cloudBillingKeys = {
 
 // ── Queries ───────────────────────────────────────────────────────────
 
+// Independent hosted usage consent; machine checkout remains untouched.
+export function useUsageBillingCheckout() {
+  return useMutation({
+    mutationFn: (request: Parameters<ReturnType<typeof billingClient>["createCurrentUserUsageBillingCheckout"]>[0]) => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserUsageBillingCheckout(request);
+    },
+  });
+}
+
 export function useComputeSubscription() {
   return useQuery({
     queryKey: cloudBillingKeys.computeSubscription,

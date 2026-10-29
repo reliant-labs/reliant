@@ -123,6 +123,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "reliantAI",
   "cloud-billing",
   "deploy-usage",
+  "usage-billing",
   "onboarding",
   "cp",
   "controlPlane",

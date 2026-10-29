@@ -500,6 +500,7 @@ message GraphRPCMethod {
   // or when observations disagreed on histogram version/bounds.
   GraphHistogram duration = 17;
 }
+
 // Exact frozen release-bundle artifact; no current-runtime/version assignment implied.
 // Catalog JSON has schema forge.dev/service-catalog/v1, preserving the existing
 // forge_descriptor schema graph and validation dialect without a second schema.
