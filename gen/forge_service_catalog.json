@@ -60979,7 +60979,7 @@
           "legacy_name": "token.CreateToken",
           "source": {
             "path": "internal/handlers/token/token.go",
-            "line": 125
+            "line": 114
           }
         },
         {
@@ -60990,7 +60990,7 @@
           "legacy_name": "token.ExchangeToken",
           "source": {
             "path": "internal/handlers/token/token_exchange.go",
-            "line": 111
+            "line": 112
           }
         },
         {
@@ -61012,7 +61012,7 @@
           "legacy_name": "token.ListTokens",
           "source": {
             "path": "internal/handlers/token/token.go",
-            "line": 186
+            "line": 174
           }
         },
         {
@@ -61056,7 +61056,7 @@
           "legacy_name": "token.RevokeToken",
           "source": {
             "path": "internal/handlers/token/token.go",
-            "line": 216
+            "line": 204
           }
         },
         {
@@ -61067,7 +61067,7 @@
           "legacy_name": "token.UpdateToken",
           "source": {
             "path": "internal/handlers/token/token.go",
-            "line": 246
+            "line": 234
           }
         },
         {
@@ -61078,7 +61078,7 @@
           "legacy_name": "token.confirmOrg",
           "source": {
             "path": "internal/handlers/token/token_exchange.go",
-            "line": 248
+            "line": 249
           }
         },
         {
@@ -61100,7 +61100,7 @@
           "legacy_name": "token.sessionCredential",
           "source": {
             "path": "internal/handlers/token/token_exchange.go",
-            "line": 224
+            "line": 225
           }
         }
       ],
