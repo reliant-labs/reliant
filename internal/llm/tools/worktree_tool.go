@@ -575,10 +575,13 @@ func (w *worktreeTool) projectRepos(ctx context.Context, rc *rctx.ToolContext, p
 		}
 	}
 	if len(repos) == 0 {
-		repos = repopkg.AdoptFromDaemon(ctx, w.repo, m, project)
+		var err error
+		if repos, err = repopkg.AdoptFromDaemon(ctx, w.repo, m, project); err != nil {
+			return nil, fmt.Errorf("could not check the project for git repositories on this run's machine: %w", err)
+		}
 	}
 	if len(repos) == 0 {
-		return nil, errors.New("the project has no git repositories; initialize one before creating worktrees")
+		return nil, errors.New(repopkg.NoReposMessage(project))
 	}
 	return repos, nil
 }

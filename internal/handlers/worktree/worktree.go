@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 const worktreeDaemonCommandTimeoutMs int32 = 120_000
@@ -258,21 +259,55 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 // listProjectRepos returns the project's nested repos, rejecting projects with
 // none. Empty list is a precondition failure rather than success-with-zero so
 // callers can rely on at least one fan-out target.
-func (s *Service) listProjectRepos(ctx context.Context, project *db.Project) ([]*core.Repo, error) {
+//
+// The registry trails the filesystem — a project cloned onto a cloud machine
+// or announced by a daemon has no repo rows — so an empty registry asks the
+// machine the worktree goes on (place, called only then) what exists and
+// adopts it. Default resolution is project-blind: it can pick a laptop with no
+// checkout, whose "not here" used to surface as "project has no git repos"
+// for a project that is one.
+func (s *Service) listProjectRepos(ctx context.Context, userID string, project *db.Project, place func() (machinewake.Target, error)) ([]*core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
-	if len(repos) == 0 && s.deps.Router != nil {
-		// The registry trails the filesystem when a repo was created outside
-		// the tracked flows (e.g. `git init` in the workspace terminal), so
-		// ask the daemon what actually exists and adopt it before refusing.
-		repos = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, s.deps.Router, project)
+	if len(repos) > 0 {
+		return repos, nil
+	}
+	if s.deps.Router == nil {
+		return nil, svcerr.FailedPrecondition(repopkg.NoReposMessage(project))
+	}
+	target, err := place()
+	if err != nil {
+		return nil, err
+	}
+	repos, err = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, repopkg.OnDaemon(s.deps.Router, target.DaemonID), project)
+	if err != nil {
+		return nil, s.repoDiscoveryError(ctx, userID, project, target, err)
 	}
 	if len(repos) == 0 {
-		return nil, svcerr.FailedPrecondition("project has no git repos; initialize one or add a nested repo before creating worktrees")
+		return nil, svcerr.FailedPrecondition(repopkg.NoReposMessage(project))
 	}
 	return repos, nil
+}
+
+// repoDiscoveryError is the answer when the project's machine could not say
+// which repos the project has. It never claims there are none: a missing
+// folder is the user's to fix (FailedPrecondition, naming the path), an
+// asleep machine is woken (the client retries), anything else is Unavailable.
+func (s *Service) repoDiscoveryError(ctx context.Context, userID string, project *db.Project, target machinewake.Target, err error) error {
+	if toolexec.DaemonReportedMissingPath(err) {
+		return svcerr.FailedPrecondition(fmt.Sprintf("the project folder %s does not exist on the machine this workspace would be created on", project.Path))
+	}
+	err = s.wake().AfterFailure(ctx, userID, target, err)
+	if machinewake.IsWaking(err) {
+		return err
+	}
+	doing := fmt.Sprintf("could not check %s for git repositories", project.Path)
+	if serr, ok := daemonerr.MachineState(doing, err); ok {
+		return serr
+	}
+	return svcerr.WithCause(svcerr.Unavailable(doing+" on the project's machine; try again once it is connected"), err)
 }
 
 // resolveRepoPath resolves a per-RPC repo_id selector against the worktree's

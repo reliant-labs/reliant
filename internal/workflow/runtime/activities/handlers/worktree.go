@@ -143,12 +143,18 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 	if len(repos) == 0 {
 		// Same self-heal as the gRPC gate: the registry trails the filesystem
-		// when a repo was created outside the tracked flows (e.g. a manual
-		// `git init`), so adopt what actually exists before refusing.
-		repos = repopkg.AdoptFromDaemon(ctx, a.repo, a.daemonRouter, project)
+		// (a project cloned onto a cloud machine, a manual `git init`), so
+		// adopt what actually exists on the machine the worktree goes on —
+		// not the user's default, which may not have the checkout.
+		repos, err = repopkg.AdoptFromDaemon(ctx, a.repo, repopkg.OnDaemon(a.daemonRouter, ownerDaemonID), project)
+		if err != nil {
+			// The machine could not answer; that is not "no repos", and a
+			// retry may find it connected.
+			return CreateWorktreeOutput{}, fmt.Errorf("could not check the project for git repositories: %w", err)
+		}
 	}
 	if len(repos) == 0 {
-		return CreateWorktreeOutput{}, fmt.Errorf("project has no git repos; initialize one or add a nested repo before creating worktrees")
+		return CreateWorktreeOutput{}, errors.New(repopkg.NoReposMessage(project))
 	}
 
 	// Resolve args

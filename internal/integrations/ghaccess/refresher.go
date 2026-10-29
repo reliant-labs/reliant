@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
@@ -146,7 +147,11 @@ func (r *Refresher) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
-		r.RefreshDue(ctx)
+		// One trace per pass, so its queries and GitHub calls nest under it.
+		_ = observe.RunRoot(ctx, "ghaccess.refresh_due", func(ctx context.Context) error {
+			r.RefreshDue(ctx)
+			return nil
+		})
 		select {
 		case <-ctx.Done():
 			return
