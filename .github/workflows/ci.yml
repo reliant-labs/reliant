@@ -225,6 +225,10 @@ jobs:
         id: setup
       - name: task build:packages
         run: task build:packages
+      # The protoc plugins buf runs as `go tool`, so a pull request's generate
+      # finds their executables in this cache instead of compiling them.
+      - name: task deps:go-protoc-plugins
+        run: task deps:go-protoc-plugins
       - name: Save Go build cache
         uses: actions/cache/save@v4
         with:

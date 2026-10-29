@@ -198,6 +198,9 @@ gen_forge() {
   b=$(cd "$wt" && snapshot)
   if [ "$hooks_only" = true ]; then
     tc=$(sed -n 's/^toolchain //p' go.mod); [ -n "$tc" ] || tc="go$(sed -n 's/^go //p' go.mod)"
+    # controlplane-client runs buf, whose 2m deadline must not cover compiling
+    # its `go tool` plugins (task generate:forge gets this as a dep).
+    case " $hooks " in *" controlplane-client "*) (cd "$wt" && GOMAXPROCS="$gen_procs" task deps:go-protoc-plugins) || return 1 ;; esac
     for h in $hooks; do
       echo "==> generate hook $h: $(jq -r --arg h "$h" '.forge_generate.hook_commands[$h] | join(" ")' "$L/plan.json")"
       (cd "$wt" && jq -r --arg h "$h" '.forge_generate.hook_commands[$h][]' "$L/plan.json" | tr '\n' '\0' | xargs -0 env GOMAXPROCS="$gen_procs" GOWORK=off GOTOOLCHAIN="$tc") || return 1

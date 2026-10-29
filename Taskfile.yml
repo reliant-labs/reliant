@@ -174,6 +174,20 @@ tasks:
     cmds:
       - npm ci --prefix tools/protoc-gen-es --ignore-scripts --no-audit --no-fund --loglevel=error
 
+  deps:go-protoc-plugins:
+    # buf runs protoc-gen-go and protoc-gen-connect-go as `go tool <name>`,
+    # which compiles the tool on first use, and forge runs `buf generate`
+    # without --timeout, so buf's default 2m deadline covered that compile.
+    # Cold, on a 4-core runner beside the merge gate's other phases, it ran
+    # out and buf killed the plugins ("plugin go tool protoc-gen-connect-go:
+    # signal: killed", PR #1771). Built here first, the executables are in
+    # the build cache and the deadline covers only generation; a cached run
+    # is a no-op of about a second.
+    desc: Build the `go tool` protoc plugins buf.gen.yaml runs, before buf's deadline starts
+    cmds:
+      - '{{.GEN_GO}} tool protoc-gen-go --version'
+      - '{{.GEN_GO}} tool protoc-gen-connect-go --version'
+
   # ── Build ─────────────────────────────────────────────────────────────
 
   build:
@@ -647,7 +661,7 @@ tasks:
     # control-plane client, the YAML bindings, the tool catalog, the
     # integration manifest schema, the integration event projections).
     desc: Run the pinned forge generate (protos, ORM, mocks and the forge.yaml generate hooks)
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} {{.FORGE}} generate'
 
@@ -657,7 +671,7 @@ tasks:
     # touches a forge input. `-- --github` adds CI annotations. FORGE=<binary>
     # in the environment uses a prebuilt forge, refused unless it is the pin.
     desc: Run the pinned forge generate and fail, naming each file, if it changes anything
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} ./scripts/check-forge-generate.sh {{.CLI_ARGS}}'
 
@@ -668,7 +682,7 @@ tasks:
     # task contract:controlplane:sync (which also runs this). Both output dirs are
     # replaced wholesale, but only after buf succeeds.
     desc: Regenerate the control-plane clients (gen/controlplane, frontends/web/src/gen/controlplane) from proto-vendor/
-    deps: [deps:protoc-gen-es]
+    deps: [deps:protoc-gen-es, deps:go-protoc-plugins]
     cmds:
       - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane frontends/web/src/gen/controlplane'
 
