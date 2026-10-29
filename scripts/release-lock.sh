@@ -43,17 +43,36 @@ _release_lock_commit() { # <message> -> a fresh commit sha (nonce: never the sam
     git commit-tree "$tree"
 }
 
-# release_lock_status -> "free" | "live <age-seconds> <owner line>" | "stale <age> <owner>"
-# | "unknown" (origin could not be asked). Read-only; the workflow uses the same rule.
+# _release_lock_read -> "<sha> <committer-epoch> <owner line>" of origin's lock, nothing
+# when there is none; returns 1 when origin cannot be asked. The commit is fetched into a
+# ref private to this call, so what is judged (age, owner) and the sha a caller leases
+# on are one immutable commit: never a shared scratch ref another process in this
+# checkout, or a linked worktree, may have moved in between.
+_release_lock_read() {
+  local remote="${RELEASE_LOCK_REMOTE:-origin}" tmp line ls
+  tmp="refs/release-chain/lock-read/$$-${RANDOM}${RANDOM}"
+  if ! timeout 30 git fetch -q --no-write-fetch-head "$remote" "+${RELEASE_LOCK_REF}:${tmp}" 2> /dev/null; then
+    # No such ref on origin is a free lock; anything else is not knowing.
+    ls="$(timeout 30 git ls-remote "$remote" "$RELEASE_LOCK_REF" 2> /dev/null)" || return 1
+    [ -z "$ls" ] || return 1
+    return 0
+  fi
+  line="$(git log -1 --format='%H %ct %s' "$tmp" 2> /dev/null)" || line=""
+  git update-ref -d "$tmp" 2> /dev/null || true
+  [ -n "$line" ] || return 1
+  printf '%s\n' "$line"
+}
+
+# release_lock_status -> "free" | "live <age-seconds> <sha> <owner line>"
+# | "stale <age> <sha> <owner>" | "unknown" (origin could not be asked). Read-only; the
+# workflow uses the same rule. A caller that acts on it leases on the <sha> it names.
 release_lock_status() {
-  local remote="${RELEASE_LOCK_REMOTE:-origin}" stale_m="${RELEASE_LOCK_STALE_MINUTES:-15}" sha age owner
-  sha="$(timeout 30 git ls-remote "$remote" "$RELEASE_LOCK_REF" 2> /dev/null)" || { echo unknown; return 0; }
-  sha="${sha%%[[:space:]]*}"
-  [ -n "$sha" ] || { echo free; return 0; }
-  timeout 30 git fetch -q "$remote" "+${RELEASE_LOCK_REF}:refs/release-chain/lock" 2> /dev/null || { echo unknown; return 0; }
-  age=$(($(date +%s) - $(git log -1 --format=%ct refs/release-chain/lock 2> /dev/null || date +%s)))
-  owner="$(git log -1 --format=%s refs/release-chain/lock 2> /dev/null)"
-  if [ "$age" -ge $((stale_m * 60)) ]; then echo "stale $age $owner"; else echo "live $age $owner"; fi
+  local stale_m="${RELEASE_LOCK_STALE_MINUTES:-15}" out sha ct owner age
+  out="$(_release_lock_read)" || { echo unknown; return 0; }
+  [ -n "$out" ] || { echo free; return 0; }
+  read -r sha ct owner <<< "$out"
+  age=$(($(date +%s) - ct))
+  if [ "$age" -ge $((stale_m * 60)) ]; then echo "stale $age $sha $owner"; else echo "live $age $sha $owner"; fi
 }
 
 release_lock_acquire() {
@@ -66,14 +85,15 @@ release_lock_acquire() {
     st="$(release_lock_status)"
     case "$st" in
       stale\ *)
-        old="$(git rev-parse refs/release-chain/lock)"
+        # Lease on the exact commit judged stale: if anyone replaced it since, this fails.
+        old="$(echo "$st" | cut -d' ' -f3)"
         if git push -q "$remote" "${sha}:${RELEASE_LOCK_REF}" --force-with-lease="${RELEASE_LOCK_REF}:${old}" > /dev/null 2>&1; then
-          echo "release-lock: replaced a stale lock (no heartbeat for $(($(echo "$st" | cut -d' ' -f2) / 60)) min: $(echo "$st" | cut -d' ' -f3-))" >&2
+          echo "release-lock: replaced a stale lock (no heartbeat for $(($(echo "$st" | cut -d' ' -f2) / 60)) min: $(echo "$st" | cut -d' ' -f4-))" >&2
         else
           echo "release-lock: another cutter took the stale lock first; refusing" >&2; return 1
         fi ;;
       live\ *)
-        echo "release-lock: a release of this repository is already in progress: $(echo "$st" | cut -d' ' -f3-) (heartbeat $(echo "$st" | cut -d' ' -f2)s ago)." >&2
+        echo "release-lock: a release of this repository is already in progress: $(echo "$st" | cut -d' ' -f4-) (heartbeat $(echo "$st" | cut -d' ' -f2)s ago)." >&2
         echo "  Wait for it; it re-checks main when it finishes. If its holder is dead, the lock expires ${RELEASE_LOCK_STALE_MINUTES:-15} min after its last heartbeat." >&2
         return 1 ;;
       *)
@@ -118,12 +138,15 @@ release_lock_release() {
   if ! git push -q "$remote" --force-with-lease="${RELEASE_LOCK_REF}:${cur}" ":${RELEASE_LOCK_REF}" > /dev/null 2>&1; then
     # The heartbeat may have been stopped after its push landed but before it recorded
     # the new sha: a lock carrying our own message is still ours to drop.
-    cur="$(timeout 30 git ls-remote "$remote" "$RELEASE_LOCK_REF" 2> /dev/null | cut -f1 || true)"
-    if [ -n "$cur" ] && timeout 30 git fetch -q "$remote" "+${RELEASE_LOCK_REF}:refs/release-chain/lock" 2> /dev/null \
-      && [ "$(git log -1 --format=%s refs/release-chain/lock)" = "$RELEASE_LOCK_MSG" ] \
+    # Judged and leased on one commit (_release_lock_read), so a lock someone else took
+    # since is never dropped.
+    local out="" owner=""
+    out="$(_release_lock_read || true)" cur=""
+    [ -z "$out" ] || read -r cur _ owner <<< "$out"
+    if [ -n "$cur" ] && [ "$owner" = "$RELEASE_LOCK_MSG" ] \
       && git push -q "$remote" --force-with-lease="${RELEASE_LOCK_REF}:${cur}" ":${RELEASE_LOCK_REF}" > /dev/null 2>&1; then
       :
-    elif [ -n "$cur" ]; then
+    elif [ -n "$out" ]; then
       echo "release-lock: could not remove ${RELEASE_LOCK_REF} (it expires ${RELEASE_LOCK_STALE_MINUTES:-15} min after its last heartbeat)" >&2
     fi
   fi

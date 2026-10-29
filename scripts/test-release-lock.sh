@@ -70,6 +70,23 @@ holder b 'RELEASE_LOCK_RECHECK=off; release_lock_acquire v1.0.3 2> '"$fx"'/repla
 grep -qF 'replaced a stale lock' "$fx/replaced" || fail "the replacement was silent"
 [ -z "$(lock_sha)" ] || fail "the replacing holder did not drop its lock"
 
+# 3b. The stale verdict and the lease are one commit. Another process sharing this
+#     checkout replaces the stale lock with a live one (and moves every shared scratch
+#     ref to it) between this cutter's read and its push: the push must be refused and
+#     the live holder's lock left alone.
+old="$(echo 'release lock: v0.9.9 by dead@box pid 1 cut-release.sh' | GIT_COMMITTER_DATE="$(($(date +%s) - 1200)) +0000" git -C "$fx/a" commit-tree "$tree")"
+git -C "$fx/a" push -q origin "$old:refs/release-lock/release"
+# The racer shares b's object store (it is "another process in this checkout").
+live="$(echo 'release lock: v1.0.5 by racer@box pid 2 cut-release.sh' | git -C "$fx/b" commit-tree "$tree")"
+holder b 'eval "$(declare -f _release_lock_read | sed "1s/_release_lock_read/_real_read/")"
+  _release_lock_read() { local r; r="$(_real_read)" || return 1
+    git push -q origin --force-with-lease=refs/release-lock/release:'"$old"' '"$live"':refs/release-lock/release
+    git update-ref refs/release-chain/lock '"$live"'
+    printf "%s\n" "$r"; }
+  RELEASE_LOCK_RECHECK=off; ! release_lock_acquire v1.0.6 2> /dev/null' || fail "a cutter replaced a lock someone took after it judged the old one stale"
+[ "$(lock_sha)" = "$live" ] || fail "the racing holder's live lock was overwritten"
+git -C "$fx/a" push -q origin :refs/release-lock/release
+
 # 4. Release re-checks main: nothing merged while held -> no label; a merge landed
 #    while held and main is due -> main's newest merged PR is labelled release:asap.
 : > "$GH_CALLS"
