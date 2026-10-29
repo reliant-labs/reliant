@@ -6,7 +6,25 @@
  * a request. Pure, so the components stay layout and the rules stay tested.
  */
 
-import type { Issue, IssuePlatform, IssueSort, IssueStatus, IssueStatusChange } from "@/services/controlPlane/observability/issuesTypes";
+import type { Issue, IssueDetail, IssuePlatform, IssueSort, IssueStatus, IssueStatusChange } from "@/services/controlPlane/observability/issuesTypes";
+
+import type { AskSubject } from "../AskReliant/askReliantPrompt";
+
+/**
+ * What a chat about an issue is handed: references only (askReliantPrompt.ts).
+ * A list row knows the issue; the detail also knows its latest event's trace
+ * and the release the ledger matched its first version to.
+ */
+export function issueAskSubject(issue: Issue, detail?: Pick<IssueDetail, "latestEvent" | "firstRelease">): Extract<AskSubject, { kind: "issue" }> {
+  return {
+    kind: "issue",
+    issueId: issue.id,
+    env: issue.envName || null,
+    latestTraceId: detail?.latestEvent?.traceId || undefined,
+    firstVersion: detail?.firstRelease?.version || issue.firstRelease || issue.firstVersion || undefined,
+    lastVersion: issue.lastVersion || undefined,
+  };
+}
 
 export const STATUS_LABEL: Record<IssueStatus, string> = {
   new: "New",

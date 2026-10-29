@@ -14,6 +14,7 @@ import {
   describeAssignment,
   describeStatus,
   entryOrigin,
+  latestChatLink,
   mergeTimelinePages,
   serverAssignee,
 } from "../issueTimelineModel";
@@ -118,5 +119,24 @@ describe("the assignee filter", () => {
     expect(assigneeFilterWaitsForMe({ kind: "me" }, undefined)).toBe(true);
     expect(assigneeFilterWaitsForMe({ kind: "me" }, "u1")).toBe(false);
     expect(assigneeFilterWaitsForMe({ kind: "user", userId: "u2" }, undefined)).toBe(false);
+  });
+});
+
+describe("the chat an issue leads with", () => {
+  const chat = (id: string, timeMs: number, chatId: string): IssueTimelineEntry => ({
+    id,
+    timeMs,
+    issueId: "iss-a",
+    actor: null,
+    body: { kind: "chat", link: { issueId: "iss-a", chatId, chatTitle: "", linkedBy: null, linkedAtMs: timeMs } },
+  });
+
+  it("is the newest chat started from it", () => {
+    expect(latestChatLink([chat("1", 100, "chat-old"), entry("2", 300), chat("3", 200, "chat-new")])?.chatId).toBe("chat-new");
+  });
+
+  it("is none when no chat has been started", () => {
+    expect(latestChatLink([entry("1", 100)])).toBeNull();
+    expect(latestChatLink([])).toBeNull();
   });
 });

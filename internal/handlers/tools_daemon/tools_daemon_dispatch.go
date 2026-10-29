@@ -301,10 +301,17 @@ func (s *Service) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonI
 // correlation logic but targets the passed conn directly rather than resolving
 // the user's default daemon — required when a user has multiple daemons and the
 // caller needs to ask one particular connection about its own disk.
-func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (resp *reliantv1.DaemonCommandResponse, err error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
+	ctx, span := startDaemonCommandSpan(ctx, conn, req)
+	start := time.Now()
+	defer func() { endDaemonCommandSpan(span, resp, err, time.Since(start)) }()
+	// The daemon continues this span's trace (its log lines carry the
+	// trace_id). Set on the request the caller handed us; it is ours to
+	// stamp, like RequestId's correlation below.
+	req.TraceContext = traceContextOf(ctx)
 	// A connection assembled without its correlation map cannot carry a
 	// command: registering the waiter below would panic on a nil map write
 	// and take the whole server down. Refusing is correct and survivable —
@@ -336,6 +343,7 @@ func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection,
 	if err := s.sendToConn(conn, msg); err != nil {
 		return nil, fmt.Errorf("send daemon command: %w", err)
 	}
+	span.AddEvent("daemon.command.queued")
 
 	// Wait for the correlated response.
 	timeout := 30 * time.Second
@@ -373,10 +381,14 @@ func (s *Service) SendToolRequestSync(ctx context.Context, userID, daemonID stri
 // liveness the wait is bound to must all name the same connection — mixing
 // them is how an answer gets delivered to a connection nobody is listening on.
 // Mirrors sendCommandToConn.
-func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (resp *toolexec.ToolExecutionResponse, err error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
+	// Opened before the request is built: its context is the trace_context
+	// the daemon continues.
+	ctx, span := startDaemonToolSpan(ctx, conn, request)
+	defer func() { endDaemonToolSpan(span, resp, err) }()
 
 	// Register a pending response channel.
 	respCh := make(chan *toolexec.ToolExecutionResponse, 1)

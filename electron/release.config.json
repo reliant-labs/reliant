@@ -13,7 +13,9 @@
     "SENTRY_DSN": "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
     "SENTRY_ENABLED": "true",
     "CLI_DEFAULTS_BAKED": "true",
-    "OTEL_ENDPOINT": "https://ingest.reliantlabs.dev/k/rbk_gqcggno67ruyviiwjt3v6s6pe4"
+    "OTEL_ENDPOINT": "https://ingest.reliantlabs.dev/k/rbk_gqcggno67ruyviiwjt3v6s6pe4",
+    "OTEL_REPLAY": "true",
+    "OTEL_REPLAY_SAMPLE_POLICY": "new-user-funnel"
   },
   "main": {
     "RELIANT_SERVER_URL": "https://api.reliantapi.com",

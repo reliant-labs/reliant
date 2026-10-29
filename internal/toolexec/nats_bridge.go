@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -601,8 +603,15 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 		Policy: daemonpolicy.WireToProto(req.Policy),
 	}
 
+	handleSpan := trace.SpanFromContext(ctx)
+	handleSpan.SetAttributes(
+		attribute.String("reliant.daemon.id", daemonID),
+		attribute.String("reliant.daemon.command.type", req.CommandType),
+		attribute.String("reliant.daemon.command.request_id", req.RequestID),
+	)
 	resp, err := b.mgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, protoReq)
 	if err != nil {
+		natsotel.RecordError(handleSpan, err)
 		// Coded, so the requester can tell the gateway failing the round
 		// trip from the daemon refusing the command.
 		errResp, _ := json.Marshal(map[string]interface{}{
@@ -629,7 +638,16 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 	// the router reassembles, so user RPCs get the full payload. Only
 	// beyond the absolute cap do we substitute a structured, actionable
 	// error reply in the same envelope format.
+	// The reply is its own span: a multi-MB reply is chunked, and its
+	// publish is part of the round trip the requester waits on.
+	_, replySpan := natsotel.StartProducerSpan(ctx, msg.Reply, "nats.reply daemon.command")
 	chunks, err := publishReply(b.nc, msg.Reply, respData)
+	replySpan.SetAttributes(
+		attribute.Int("messaging.message.body.size", len(respData)),
+		attribute.Int("reliant.nats.reply.chunks", chunks),
+	)
+	natsotel.RecordError(replySpan, err)
+	replySpan.End()
 	switch {
 	case errors.Is(err, errReplyExceedsAbsoluteCap):
 		logging.ErrorContext(ctx, "[NATSToolBridge] Daemon command reply exceeds absolute reply cap",

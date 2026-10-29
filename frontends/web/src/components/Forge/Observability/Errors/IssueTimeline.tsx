@@ -13,7 +13,7 @@
  * box so nothing typed is lost.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { CheckCircle2, CircleDot, MessageSquare, MessageSquareText, Pencil, Trash2, UserRound } from "lucide-react";
 
@@ -189,20 +189,28 @@ function TimelineRow({
   }
 }
 
-function ChatLink({ chatId, label }: { chatId: string; label: string }) {
+/** Open a chat from the console: select its project and workspace, then go to the project's chat screen. */
+export function useOpenChat(): (chatId: string) => Promise<void> {
   const router = useRouter({ warn: false });
-  const open = async () => {
-    try {
-      const chat = await loadRunContext(chatId);
-      await router?.navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
-    } catch (error) {
-      void toast.error(error);
-    }
-  };
+  return useCallback(
+    async (chatId: string) => {
+      try {
+        const chat = await loadRunContext(chatId);
+        await router?.navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
+      } catch (error) {
+        void toast.error(error);
+      }
+    },
+    [router]
+  );
+}
+
+function ChatLink({ chatId, label }: { chatId: string; label: string }) {
+  const open = useOpenChat();
   return (
     <button
       type="button"
-      onClick={() => void open()}
+      onClick={() => void open(chatId)}
       className="font-medium text-ink underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`Chat ${chatId}`}
       data-testid={`obs-timeline-chat-${chatId}`}

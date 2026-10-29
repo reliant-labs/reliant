@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Reliant Labs
 import {
   GraphNodeKind, GraphEdgeKind, GraphEvidenceKind, ObservabilityService,
-  type GraphCompleteness,
+  type GraphCompleteness, type GraphHistogram,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { getControlPlaneClient } from "../client";
 import { msOf, wireScope } from "./api";
@@ -20,6 +20,10 @@ const EDGE_KIND: Partial<Record<GraphEdgeKind, GraphEdge["kind"]>> = {
 export const graphEvidence = (kind: GraphEvidenceKind): GraphEdge["evidence"] =>
   kind === GraphEvidenceKind.OBSERVED ? "observed" : kind === GraphEvidenceKind.DECLARED ? "declared" : "unknown";
 
+function histogram(h?: GraphHistogram): GraphEdge["duration"] {
+  return h ? { version: h.version, boundsSeconds: h.upperBoundsSeconds, buckets: h.bucketCounts, count: h.count, sumSeconds: h.sumSeconds } : undefined;
+}
+
 function quality(q?: GraphCompleteness): GraphQuality | null {
   return q ? {
     origin: q.metricsOrigin, lossUnknown: q.upstreamLossUnknown, samplingUnknown: q.upstreamSamplingUnknown,
@@ -32,7 +36,7 @@ function quality(q?: GraphCompleteness): GraphQuality | null {
 
 export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> {
   const res = await getControlPlaneClient(ObservabilityService).getServiceGraph({
-    scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 160,
+    scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 500,
     edgeKinds: [GraphEdgeKind.SYNC, GraphEdgeKind.DATABASE, GraphEdgeKind.EXTERNAL, GraphEdgeKind.ASYNC_SEND,
       GraphEdgeKind.ASYNC_CONSUME, ...(req.includeInternal ? [GraphEdgeKind.INTERNAL] : []), ...(req.includeDeclared ? [GraphEdgeKind.DECLARED] : [])],
   });
@@ -44,8 +48,7 @@ export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> 
       viewpoint: e.viewpoint, cohort: e.cohort, count: e.count, faults: e.serverFaultCount,
       userOutcomes: e.userOutcomeCount, cancelled: e.cancelledCount, unknownStatus: e.unknownStatusCount,
       matched: e.matchedCount, unmatched: e.unmatchedCount,
-      duration: e.duration ? { version: e.duration.version, boundsSeconds: e.duration.upperBoundsSeconds,
-        buckets: e.duration.bucketCounts, count: e.duration.count, sumSeconds: e.duration.sumSeconds } : undefined,
+      duration: histogram(e.duration),
       exemplars: e.exemplars.map((x) => ({ traceId: x.traceId, spanId: x.spanId, availabilityUnknown: x.traceAvailabilityUnknown })),
       firstSeenMs: msOf(e.firstSeen), lastSeenMs: msOf(e.lastSeen),
     })),
@@ -56,11 +59,12 @@ export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> 
 
 export async function getServiceGraphCatalog(req: CatalogRequest): Promise<RPCCatalog> {
   const res = await getControlPlaneClient(ObservabilityService).getServiceGraphCatalog({
-    scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 200,
+    scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500,
   });
   return {
     methods: res.methods.map((m) => ({ id: m.rpcId, service: m.rpcService, method: m.method,
       processIds: m.processNodeIds, evidence: graphEvidence(m.evidence), observedCount: m.observedCount,
+      faults: m.serverFaultCount, userOutcomes: m.userOutcomeCount, duration: histogram(m.duration),
       inputType: m.inputType, outputType: m.outputType, streaming: m.streamMode, sourceUnavailableReason: m.sourceUnavailableReason,
       idempotency: m.idempotency, authRequired: m.authRequired, servesProcessIds: m.servesProcessIds, canCallProcessIds: m.canCallProcessIds })),
     declaredCatalogs: res.declaredCatalogs.map((c) => ({ envId: c.envId, releaseId: c.releaseId,
