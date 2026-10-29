@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isSkillTool, isLoadToolTool, isSpawnTool } from './toolFormatters';
+import { formatToolParams, isSkillTool, isLoadToolTool, isSpawnSendTool, isSpawnTool } from './toolFormatters';
 
 describe('isSkillTool', () => {
   it('returns true for the "skill" tool name', () => {
@@ -65,5 +65,34 @@ describe('isSpawnTool', () => {
   it('is case-insensitive', () => {
     expect(isSpawnTool('Spawn')).toBe(true);
     expect(isSpawnTool('SPAWN')).toBe(true);
+  });
+});
+
+describe('spawn_send', () => {
+  it('is recognised bare and MCP-prefixed, and only spawn_send', () => {
+    expect(isSpawnSendTool('spawn_send')).toBe(true);
+    expect(isSpawnSendTool('mcp__reliant__spawn_send')).toBe(true);
+    expect(isSpawnSendTool('spawn')).toBe(false);
+    expect(isSpawnSendTool('spawn_status')).toBe(false);
+  });
+
+  it('formats the row as the subject addressed to the recipient, never the message', () => {
+    const formatted = formatToolParams('spawn_send', {
+      agent_id: '6b1f3c2e-uuid',
+      title: 'Reviewer',
+      subject: 'Tests pass; PR ready',
+      message: 'A very long report that must not appear on the one-line row.',
+    });
+    expect(formatted?.summary).toBe('to Reviewer: Tests pass; PR ready');
+    expect(formatted?.summary).not.toContain('6b1f3c2e');
+    expect(formatted?.fullText).not.toContain('very long report');
+  });
+
+  it('falls back to the first line of the message when there is no subject', () => {
+    const formatted = formatToolParams('spawn_send', {
+      agent_id: 'thread-1',
+      message: '**Done.** All green\nsecond line',
+    });
+    expect(formatted?.summary).toBe('to agent: Done. All green');
   });
 });

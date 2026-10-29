@@ -107,7 +107,11 @@ type AgentMessage struct {
 	FromThreadID string
 	ToThreadID   string
 	Kind         AgentMessageKind
-	Body         string
+	// Subject is the one-line summary an agent gives a message it sends
+	// (spawn_send's `subject`); the transcript shows the message collapsed to
+	// it. Empty for every kind that carries none.
+	Subject string
+	Body    string
 	// Attachments are attachment IDs, exactly as SaveMessageToThread takes
 	// them -- a queued message carries files the same way a normally-sent
 	// one does, and the drain fold hands this slice straight to

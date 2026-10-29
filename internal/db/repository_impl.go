@@ -2444,7 +2444,28 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
 
-	// Get token count using unified function (handles fork inheritance)
+	// The common case: the thread's current window has a message carrying
+	// token data. That one row is both the count (its token_count) and the
+	// denominator (the threshold of the model that produced it), so read it
+	// once. The general path below reads it twice, behind a thread lookup it
+	// only needs for fork inheritance — four serial round trips on the chat
+	// open path where this is two.
+	if msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), nil); err == nil &&
+		msg != nil && msg.TokenCount != nil && *msg.TokenCount > 0 {
+		threshold := models.UnknownModelCompactionFloor
+		if msg.Model != nil {
+			threshold = models.CompactionThresholdForModel(*msg.Model)
+		}
+		return &ContextUsage{
+			ThreadTokenCount:    int64(*msg.TokenCount),
+			CompactionThreshold: int64(threshold),
+			CurrentContextSeq:   int64(contextSeq),
+		}, nil
+	}
+
+	// No local token data: the count and the threshold are inherited from a
+	// fork's parent, or are zero. Get token count using unified function
+	// (handles fork inheritance)
 	tokens, err := r.threadTokenCount(ctx, thread, nil, &contextSeq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get thread token count: %w", err)
