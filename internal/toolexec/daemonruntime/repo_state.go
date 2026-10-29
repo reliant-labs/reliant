@@ -26,10 +26,12 @@ import (
 // must be cheap: HEAD and its ref are read from the git directory as files
 // (no process), and are part of the snapshot's version, so a commit or a
 // checkout sends a new snapshot. Whether .reliant is dirty takes a git
-// process, so it is computed only when the version moved. What it depends
-// on is in the version too, as stats: the git index (staging or unstaging
-// moves it) and every file under .reliant, synced or not (an untracked
-// README there is still an uncommitted change).
+// process, so it is computed only when what it depends on moved: HEAD, and,
+// as stats, the git index (staging or unstaging moves it) and every file
+// under .reliant, synced or not (an untracked README there is still an
+// uncommitted change). A read that failed (a timeout, a transient git error)
+// is retried with backoff rather than kept. The computed states are part of
+// the snapshot's version, so a retry that recovers sends the corrected one.
 
 // repoHead is a repository's HEAD as read from its git directory.
 type repoHead struct {
@@ -45,16 +47,29 @@ type repoHead struct {
 }
 
 // repoDirtyCache remembers each project's last computed dirty flags by the
-// snapshot version they were computed for.
+// inputs they were computed from (headsVersion).
 var repoDirtyCache = struct {
 	sync.Mutex
 	byProject map[string]repoDirtyEntry
 }{byProject: map[string]repoDirtyEntry{}}
 
 type repoDirtyEntry struct {
-	version string
-	dirty   map[string]repoDirty
+	inputs string
+	dirty  map[string]repoDirty
+	// retryAt is when a failed read is tried again; zero when none failed.
+	retryAt time.Time
+	backoff time.Duration
 }
+
+// The retry backoff after a failed dirty read: first after
+// repoDirtyRetryMin, doubling to repoDirtyRetryMax while it keeps failing.
+var (
+	repoDirtyRetryMin = 10 * time.Second
+	repoDirtyRetryMax = 5 * time.Minute
+)
+
+// reliantDirDirtyFn is reliantDirDirty, replaceable by a test.
+var reliantDirDirtyFn = reliantDirDirty
 
 type repoDirty struct {
 	dirty bool
@@ -121,24 +136,38 @@ func dirtyInputs(dir, gitDir string) string {
 }
 
 // repoStates completes heads with each repo's dirty flag, computing it only
-// when version differs from the one last computed for projectPath.
-func repoStates(ctx context.Context, projectPath, version string, heads []repoHead) []*reliantv1.SyncedRepoState {
+// when its inputs (headsVersion) moved since the last computation for
+// projectPath, or a failed read is due for a retry.
+func repoStates(ctx context.Context, projectPath string, heads []repoHead) []*reliantv1.SyncedRepoState {
 	if len(heads) == 0 {
 		return nil
 	}
+	inputs := string(headsVersion(heads))
+	now := time.Now()
 	repoDirtyCache.Lock()
 	cached, ok := repoDirtyCache.byProject[projectPath]
 	repoDirtyCache.Unlock()
-	if !ok || cached.version != version {
-		cached = repoDirtyEntry{version: version, dirty: map[string]repoDirty{}}
+	retry := ok && cached.inputs == inputs && !cached.retryAt.IsZero() && !now.Before(cached.retryAt)
+	if !ok || cached.inputs != inputs || retry {
+		next := repoDirtyEntry{inputs: inputs, dirty: map[string]repoDirty{}}
+		failed := false
 		for _, h := range heads {
-			dirty, err := reliantDirDirty(ctx, h.dir)
+			dirty, err := reliantDirDirtyFn(ctx, h.dir)
 			d := repoDirty{dirty: dirty}
 			if err != nil {
 				d.err = err.Error()
+				failed = true
 			}
-			cached.dirty[h.repo] = d
+			next.dirty[h.repo] = d
 		}
+		if failed {
+			next.backoff = repoDirtyRetryMin
+			if retry && cached.backoff > 0 {
+				next.backoff = min(2*cached.backoff, repoDirtyRetryMax)
+			}
+			next.retryAt = now.Add(next.backoff)
+		}
+		cached = next
 		repoDirtyCache.Lock()
 		repoDirtyCache.byProject[projectPath] = cached
 		repoDirtyCache.Unlock()
@@ -267,4 +296,14 @@ func resolveRef(gitDir, commonDir, ref string) string {
 		}
 	}
 	return ""
+}
+
+// statesVersion is the part of a snapshot's version the repo states
+// contribute: a recovered (or newly failed) read sends a new snapshot.
+func statesVersion(states []*reliantv1.SyncedRepoState) []byte {
+	var b strings.Builder
+	for _, s := range states {
+		fmt.Fprintf(&b, "%s:%t:%s;", s.GetRepo(), s.GetDirty(), s.GetError())
+	}
+	return []byte(b.String())
 }

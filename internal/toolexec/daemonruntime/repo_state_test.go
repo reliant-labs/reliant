@@ -3,10 +3,12 @@ package daemonruntime
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -79,8 +81,7 @@ func TestRepoStatesReportsDirtyReliantDir(t *testing.T) {
 	// .reliant files' stats.
 	states := func() (bool, string) {
 		t.Helper()
-		heads := readRepoHeads(dir, nil)
-		s := repoStates(ctx, dir, string(headsVersion(heads)), heads)
+		s := repoStates(ctx, dir, readRepoHeads(dir, nil))
 		require.Len(t, s, 1)
 		require.Empty(t, s[0].GetError())
 		return s[0].GetDirty(), s[0].GetBranch()
@@ -112,4 +113,51 @@ func TestRepoStatesReportsDirtyReliantDir(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".reliant", "notes.txt"), "todo\n")
 	dirty, _ = states()
 	assert.True(t, dirty)
+}
+
+// A failed dirty read is retried, with backoff, and not kept: once git
+// recovers, an unchanged checkout reports its real state, and the snapshot's
+// version moves so the watcher sends it.
+func TestRepoStatesRetriesAFailedDirtyRead(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(root, ".git", "refs", "heads", "main"), shaA+"\n")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".reliant"), 0o755))
+
+	calls, fail := 0, true
+	origFn, origMin := reliantDirDirtyFn, repoDirtyRetryMin
+	reliantDirDirtyFn = func(context.Context, string) (bool, error) {
+		calls++
+		if fail {
+			return false, errors.New("git status .reliant: signal: killed")
+		}
+		return true, nil
+	}
+	repoDirtyRetryMin = time.Hour
+	t.Cleanup(func() { reliantDirDirtyFn, repoDirtyRetryMin = origFn, origMin })
+
+	ctx := context.Background()
+	heads := readRepoHeads(root, nil)
+	failed := repoStates(ctx, root, heads)
+	require.Len(t, failed, 1)
+	assert.Contains(t, failed[0].GetError(), "signal: killed")
+	assert.False(t, failed[0].GetDirty())
+	repoStates(ctx, root, heads)
+	assert.Equal(t, 1, calls, "backing off: no retry before retryAt")
+
+	// The retry is due, and git works again.
+	repoDirtyCache.Lock()
+	e := repoDirtyCache.byProject[root]
+	e.retryAt = time.Now().Add(-time.Second)
+	repoDirtyCache.byProject[root] = e
+	repoDirtyCache.Unlock()
+	fail = false
+	recovered := repoStates(ctx, root, heads)
+	assert.Equal(t, 2, calls)
+	assert.Empty(t, recovered[0].GetError())
+	assert.True(t, recovered[0].GetDirty())
+	assert.NotEqual(t, string(statesVersion(failed)), string(statesVersion(recovered)), "the recovery changes the snapshot's version")
+
+	repoStates(ctx, root, heads)
+	assert.Equal(t, 2, calls, "a good read is kept")
 }
