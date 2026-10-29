@@ -39,7 +39,7 @@ func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trig
 	if resolver == nil {
 		return 0, nil
 	}
-	wf, err := resolver.ResolveRunWorkflow(ctx, t.UserID, t.Workflow, t.ProjectID)
+	wf, err := resolveTriggerWorkflow(ctx, resolver, t)
 	if err != nil {
 		return 0, err
 	}

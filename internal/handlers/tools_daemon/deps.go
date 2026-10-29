@@ -34,14 +34,14 @@ type Repository interface {
 	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
 
 	// Projects a daemon reports, the installs it finishes, and the project
-	// config it pushes. GetProjectConfigPushedAt reads the one column the
-	// staleness check needs, never the whole (large) record.
+	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
+	// the staleness check needs, never the whole (large) record.
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
 	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
-	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
-	GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error)
+	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
+	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
 
 	// What the owner's other clients are told.
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
