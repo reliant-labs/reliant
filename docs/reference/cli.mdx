@@ -315,8 +315,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant server api`](#reliant-server-api) | Run the stateless HTTP + gRPC API server |
 | [`reliant server gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
 | [`reliant server worker`](#reliant-server-worker) | Run the Temporal workflow worker |
-| [`reliant trigger`](#reliant-trigger) | Manage schedule triggers |
+| [`reliant trigger`](#reliant-trigger) | Manage triggers and workflow activations |
+| [`reliant trigger activate`](#reliant-trigger-activate) | Turn on the triggers a workflow declares |
 | [`reliant trigger create`](#reliant-trigger-create) | Create a schedule trigger |
+| [`reliant trigger deactivate`](#reliant-trigger-deactivate) | Pause every activation of a workflow |
 | [`reliant trigger delete`](#reliant-trigger-delete) | Delete a trigger and its schedule |
 | [`reliant trigger disable`](#reliant-trigger-disable) | Pause a trigger's schedule |
 | [`reliant trigger enable`](#reliant-trigger-enable) | Resume a trigger's schedule |
@@ -13400,7 +13402,7 @@ reliant server worker [flags]
 
 ## reliant trigger
 
-Manage schedule triggers
+Manage triggers and workflow activations
 
 Manage triggers — standing instructions that start runs without a human typing.
 
@@ -13417,7 +13419,9 @@ reliant trigger
 
 | Command | Description |
 |---------|-------------|
+| [`activate`](#reliant-trigger-activate) | Turn on the triggers a workflow declares |
 | [`create`](#reliant-trigger-create) | Create a schedule trigger |
+| [`deactivate`](#reliant-trigger-deactivate) | Pause every activation of a workflow |
 | [`delete`](#reliant-trigger-delete) | Delete a trigger and its schedule |
 | [`disable`](#reliant-trigger-disable) | Pause a trigger's schedule |
 | [`enable`](#reliant-trigger-enable) | Resume a trigger's schedule |
@@ -13434,6 +13438,47 @@ reliant trigger
 | `--daemon-session` | `bool` | - | Use this server's existing signed-in daemon account without widening its permissions |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant trigger activate
+
+Turn on the triggers a workflow declares
+
+Turn on the triggers a workflow declares in its triggers: block.
+
+This is the app's Enable dialog as a command, and it calls the same RPC. With
+no --trigger it is all or nothing: every declared trigger is validated first,
+and if any one cannot be enabled (a missing connection, a required input with
+no value) none is, and the reason is printed per trigger. Run it again with
+changed flags to change an automation's settings; an existing activation is
+brought to them.
+
+--trigger activates only the named declared triggers, one at a time.
+
+```
+reliant trigger activate [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--acting-as` | `string` | - | Who integration writes speak as: owner or app (default: owner for a new activation, unchanged otherwise) |
+| `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
+| `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
+| `--message` | `string` | - | Prompt for a declared trigger that has none |
+| `--name-prefix` | `string` | - | Names new activations "`<prefix>` · `<trigger>`" (default: the workflow) |
+| `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
+| `--notify` | `bool` | - | Notify you when a run completes |
+| `--param` | `stringArray` | `[]` | Workflow input as key=value; repeatable. Values parse as JSON, else as a string |
+| `--params-json` | `string` | - | Workflow inputs as one JSON object; --param entries win over its keys |
+| `--preset` | `stringArray` | `[]` | Preset assignment as group=name, or just name for the top level; repeatable |
+| `--project` | `string` | - | Project path (resolved to a project id; defaults to the working directory) |
+| `--project-id` | `string` | - | Project id, if you already have it |
+| `--trigger` | `stringArray` | `[]` | Activate only this declared trigger; repeatable (default: all of them, all or nothing) |
+| `--workflow` | `string` | - | Workflow whose declared triggers to turn on: a slug, or builtin://`<name>` (required) |
+| `--worktree` | `string` | - | Worktree id the runs execute in (default: the project's main worktree) |
 
 ---
 
@@ -13464,6 +13509,28 @@ reliant trigger create [flags]
 | `--timezone` | `string` | - | IANA zone the cron expressions are read in (default: UTC) |
 | `--workflow` | `string` | - | Workflow to run (default: your default workflow) |
 | `--worktree` | `string` | - | Worktree id to run in (default: the project's main worktree) |
+
+---
+
+### reliant trigger deactivate
+
+Pause every activation of a workflow
+
+Pause every activation of a workflow, as the app's Disable does.
+
+It is not all or nothing: a pause that fails is reported and the rest still
+pause. Resume with activate; remove one activation with delete.
+
+```
+reliant trigger deactivate [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--project-id` | `string` | - | Pause only this project's activations (default: every project) |
+| `--workflow` | `string` | - | Workflow whose activations to pause (required) |
 
 ---
 
