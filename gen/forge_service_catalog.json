@@ -35815,6 +35815,11 @@
             {
               "name": "webhook_managed",
               "kind": "bool"
+            },
+            {
+              "name": "definition_source",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerDefinitionSource"
             }
           ],
           "reliant.v1.TriggerChange": [
@@ -35954,6 +35959,33 @@
               "name": "acting_identity",
               "kind": "enum",
               "type_name": "reliant.v1.ActingIdentity"
+            }
+          ],
+          "reliant.v1.TriggerDefinitionSource": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.TriggerEvent": [
@@ -36277,6 +36309,7 @@
           "reliant.v1.Trigger": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerChange": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
@@ -62925,6 +62958,17 @@
           }
         },
         {
+          "id": "method1:72ad8b7704df15f5258e653665a157e0f2ef3dd2ffb0568ce038802b5db6ed61",
+          "name": "definitionSource",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger) *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinitionSource",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.definitionSource",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.definitionSource"
+          }
+        },
+        {
           "id": "method1:719f3f23f1fdab37ea7754dd786523043232f75f41348b0bbc1155f442dab85b",
           "name": "existingActivationStep",
           "signature": "func(ctx context.Context, userID string, wf *github.com/reliant-labs/reliant/gen/reliant/v1.Workflow, wt *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTrigger, msg *github.com/reliant-labs/reliant/gen/reliant/v1.EnableWorkflowRequest, existing *github.com/reliant-labs/reliant/internal/db/core.Trigger, override *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTriggerOverride, taken map[string]bool) (*github.com/reliant-labs/reliant/internal/handlers/trigger.enableStep, error)",
@@ -67555,6 +67599,17 @@
           "source": {
             "path": "internal/handlers/trigger/trigger.go",
             "symbol": "Service.connections"
+          }
+        },
+        {
+          "id": "method1:74627450db692e8b2fec1081ac1588f2a4d37c168b32da0fd9dd5c51b4cbbb32",
+          "name": "definitionSource",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger) *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinitionSource",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.definitionSource",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.definitionSource"
           }
         },
         {
