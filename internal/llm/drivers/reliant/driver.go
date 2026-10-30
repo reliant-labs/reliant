@@ -683,6 +683,9 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				// nothing at all while it sleeps: measured on run b7aa4056, eight of
 				// ten fan-out units spent ~113s of their ~129s life here and every
 				// supervision surface read it as "the model is thinking".
+				// The attempt's accumulator is dropped with it; what it billed
+				// goes out on the wait, so the usage ledger counts this request too.
+				wait.Usage = llm.FailedAttemptUsage(c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
 				select {
 				case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
 				case <-ctx.Done():

@@ -43,6 +43,21 @@ func StreamAndAccumulate(
 	messages []message.Message,
 	tools []tools.Tool,
 ) (*llm.DriverResponse, error) {
+	return StreamAndAccumulateObserving(ctx, driver, prompts, messages, tools, nil)
+}
+
+// StreamAndAccumulateObserving is StreamAndAccumulate that also hands every
+// EventRetryWait to onRetry (nil: ignored). Each one is a provider request the
+// driver made, failed and is about to retry inside this one call, so a caller
+// that counts provider requests needs them as well as the final answer.
+func StreamAndAccumulateObserving(
+	ctx context.Context,
+	driver llm.Driver,
+	prompts []string,
+	messages []message.Message,
+	tools []tools.Tool,
+	onRetry func(llm.RetryWait),
+) (*llm.DriverResponse, error) {
 	streamStart := time.Now()
 
 	logging.DebugContext(ctx, "[ACCUMULATOR] Starting streaming with accumulation",
@@ -126,6 +141,11 @@ func StreamAndAccumulate(
 				// Error during streaming
 				streamError = event.Error
 				logging.ErrorContext(ctx, "[ACCUMULATOR] Stream error", "error", event.Error)
+
+			case llm.EventRetryWait:
+				if onRetry != nil && event.Retry != nil {
+					onRetry(*event.Retry)
+				}
 
 			case llm.EventContentStart, llm.EventToolUseStart, llm.EventContentStop:
 				// Lifecycle events - just track for logging
