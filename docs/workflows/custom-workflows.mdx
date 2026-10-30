@@ -83,7 +83,7 @@ Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in t
 
 **Discovery**: The machine your project is on watches `.reliant/workflows/` and syncs it to Reliant every couple of seconds, so a saved file shows up in the workflow selector and the library without a restart. A file that does not parse is listed in the library under **Failed to load**, with the error.
 
-**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike.
+**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike. Automations are the exception: a run a trigger starts always runs the project's workflow of that name, so a workflow of yours can never silently replace what an automation runs. Yours still runs when the project has none of that name. When both exist, the automation's details (`reliant trigger get`, `list_triggers`) say which one it runs and warn about the other; rename yours to tell them apart.
 
 Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
 

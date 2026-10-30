@@ -133,6 +133,10 @@ type workflowContext struct {
 	// workflows and presets are that machine's own synced catalog, the one
 	// a trigger was admitted against, not the union of every machine's.
 	daemonID string
+	// projectFirst is an automation's precedence (launch.AutomationPrecedence):
+	// a run its trigger started resolves the project's workflow before the
+	// owner's own of the same name, as its activation was admitted.
+	projectFirst bool
 }
 
 // sourceOptions is whose workflows, in which project, a ref resolves against.
@@ -140,7 +144,7 @@ func (c *workflowContext) sourceOptions() workflowsource.Options {
 	if c == nil {
 		return workflowsource.Options{}
 	}
-	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, DraftRoot: c.draftRoot}
+	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DaemonID: c.daemonID, ProjectFirst: c.projectFirst, DraftRoot: c.draftRoot}
 }
 
 // resolveWorkflowContext resolves user, project, and path from a chat ID
@@ -161,6 +165,9 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	wfCtx := &workflowContext{
 		userID:    chat.UserID,
 		projectID: chat.ProjectID,
+		// The chat's origin, not its trigger id: deleting the trigger clears
+		// the id, and must not switch a running automation to account-first.
+		projectFirst: chat.Origin == core.ChatOriginAutomation,
 	}
 	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
 		wfCtx.draftRoot = *chat.WorkflowName
