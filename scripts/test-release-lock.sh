@@ -22,7 +22,8 @@ printf '%s\n' "$*" >> "$GH_CALLS"
 case "$*" in
   'pr list '*'--label release:asap'*) ;;
   'pr list '*'--limit 1 '*) [ "${GH_FAIL:-}" != list ] || exit 1; echo 7 ;;
-  'pr view '*) echo false ;;
+  'pr view '*) [ "${GH_FAIL:-}" != view ] || exit 1; echo "${GH_ASAP:-false}" ;;
+  'pr edit '*'--remove-label'*) [ "${GH_FAIL:-}" != remove ] || exit 1 ;;
   'pr edit '*'--add-label'*) [ "${GH_FAIL:-}" != edit ] || exit 1 ;;
   'pr edit '*) ;;
   *) echo "unexpected gh: $*" >&2; exit 90 ;;
@@ -111,11 +112,13 @@ grep -qF 'coalesced: run fixture (a release:asap PR merged since v1.0.0) while a
 [ -z "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || fail "the request was not consumed"
 # ...a request consumed and then not acted on (the PR lookup or the label fails) is put
 # back on origin for the next release, never lost.
-for f in list edit; do
+# (remove: release:asap is already on the PR, so only removing it first makes the add a
+# fresh event.)
+for f in list edit view remove; do
   : > "$GH_CALLS"
   holder a 'release_lock_acquire v1.0.4
     (request "asap")
-    GH_FAIL='"$f"' release_lock_release 2> '"$fx"'/recheck' || fail "release with a failing gh ($f) failed"
+    GH_ASAP=true GH_FAIL='"$f"' release_lock_release 2> '"$fx"'/recheck' || fail "release with a failing gh ($f) failed"
   [ -n "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || { cat "$fx/recheck" >&2; fail "a failed gh $f lost the coalesced request"; }
   grep -qF 'the request is back on origin for the next release' "$fx/recheck" || { cat "$fx/recheck" >&2; fail "a restored request was not reported ($f)"; }
   git -C "$fx/a" push -q origin :refs/release-lock/coalesced

@@ -294,8 +294,16 @@ release_lock_recheck() {
     return 0
   fi
   asap="$(timeout 30 gh pr view "$newest" -R "$slug" --json labels --jq '[.labels[].name] | index("release:asap") != null' 2> /dev/null || true)"
-  # Removed first, so the add is a fresh `labeled` event that starts the workflow.
-  [ "$asap" != true ] || timeout 30 gh pr edit "$newest" -R "$slug" --remove-label release:asap > /dev/null 2>&1 || true
+  if [ "$asap" != true ] && [ "$asap" != false ]; then
+    echo "release-lock: ${why}; reading #$newest's labels failed: $(_release_lock_restore_request "$sha")" >&2
+    return 0
+  fi
+  # Removed first, so the add is a fresh `labeled` event that starts the workflow: adding a
+  # label already present starts nothing, so a removal that fails is a restart that failed.
+  if [ "$asap" = true ] && ! timeout 30 gh pr edit "$newest" -R "$slug" --remove-label release:asap > /dev/null 2>&1; then
+    echo "release-lock: ${why}; removing #$newest's release:asap failed: $(_release_lock_restore_request "$sha")" >&2
+    return 0
+  fi
   if timeout 30 gh pr edit "$newest" -R "$slug" --add-label release:asap > /dev/null 2>&1; then
     echo "release-lock: ${why}; labelled #$newest release:asap to start that release" >&2
   else
