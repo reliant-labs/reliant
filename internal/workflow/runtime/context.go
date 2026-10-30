@@ -72,6 +72,14 @@ type ExecutionContext struct {
 	// resolve the Reliant driver. See activities/types/runtime_context.go for
 	// the lifecycle/security trade-off.
 	UserJWT string
+
+	// CatalogPin is the project workflow catalog the run started with (the
+	// root load's, db.Repo.PinProjectCatalog). It rides the root's context
+	// across continue-as-new and a position-resume, so the successor of a
+	// long run keeps loading the definitions it started with; a fresh run
+	// (a late wake) pins anew. Every load reads it from the workflow
+	// context (catalogPinFrom), not from here.
+	CatalogPin string `json:",omitempty"`
 }
 
 // DaemonSelectorValue holds a resolved daemon selector for runtime routing.
@@ -375,6 +383,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		ProjectPath:    ctx.ProjectPath,
 		DaemonSelector: ctx.DaemonSelector,
 		UserJWT:        ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
+		CatalogPin:     ctx.CatalogPin,
 	}
 
 	if ctx.Loop != nil {

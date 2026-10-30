@@ -290,6 +290,7 @@ type LoadPresetParamsStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 	workflowsource.MachineStore
+	workflowsource.PinnedStore
 }
 
 // LoadWorkflowStore is what LoadWorkflowActivity reads: the chat's project or
@@ -302,6 +303,9 @@ type LoadWorkflowStore interface {
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 	workflowsource.Store
 	workflowsource.MachineStore
+	workflowsource.PinnedStore
+	// PinProjectCatalog stores the catalog a run starts with (db.Repo).
+	PinProjectCatalog(ctx context.Context, scope db.CatalogPinScope) (string, error)
 }
 
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.

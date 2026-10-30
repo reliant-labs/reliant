@@ -138,3 +138,56 @@ func recordLoad(t *testing.T, repo *db.Repo, chatID, thread, toolCallID string, 
 		ToolCallID: toolCallID, Content: "loaded", GrantedTools: granted, CreatedAt: now, UpdatedAt: now,
 	}))
 }
+
+// A restart from the checkpoint resumes the interrupted run against the
+// catalog it started with: the pin rides the checkpoint, and the restarted
+// root load reads it rather than pinning whatever was pushed since. A pin no
+// longer stored is dropped, so the conversation still continues.
+func TestFreshRestart_KeepsTheCatalogTheRunStartedWith(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	projectID, userID := "project-restart-pin", "user-restart-pin"
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: userID, Name: "p", Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	daemonID := "daemon-restart-pin"
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
+	push := func(version string, at time.Time) {
+		wj := `[{"slug":"w","name":"w","relative_path":".reliant/workflows/w.yaml","yaml_content":"name: w\ndescription: ` + version + `\n"}]`
+		_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: &wj, PushedAt: at,
+		}, true)
+		require.NoError(t, err)
+	}
+	push("v1", now)
+	pin, err := repo.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: projectID, DaemonID: daemonID, UserID: userID})
+	require.NoError(t, err)
+
+	const chatID, workflowID = "chat-restart-pin", "wf-restart-pin"
+	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+		WorkflowID: workflowID, ChatID: chatID, NodeID: "agent_loop", CatalogPin: pin,
+	}))
+	push("v2", now.Add(time.Minute))
+
+	resume := ResumeInputFromDurableState(ctx, repo, chatID, workflowID)
+	assert.Equal(t, pin, resume.CatalogPin, "the restart carries the interrupted run's pin")
+	assert.Equal(t, pin, rootCatalogPin(WorkflowInput{Resume: resume}), "and its root load reads it")
+	catalog, found, err := repo.GetPinnedProjectCatalog(ctx, pin)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Contains(t, *catalog.Workflows, "description: v1", "the pinned catalog is the one the run started with")
+
+	assert.Equal(t, "pin-of-a-successor", rootCatalogPin(WorkflowInput{
+		ExecContext: &ExecutionContext{CatalogPin: "pin-of-a-successor"}, Resume: resume,
+	}), "a continue-as-new successor's own pin wins")
+	assert.Empty(t, rootCatalogPin(WorkflowInput{}), "a new run pins anew")
+
+	require.NoError(t, repo.UpsertWorkflowCheckpoint(ctx, &core.WorkflowCheckpoint{
+		WorkflowID: workflowID, ChatID: chatID, NodeID: "agent_loop", CatalogPin: "0000gone",
+	}))
+	assert.Empty(t, ResumeInputFromDurableState(ctx, repo, chatID, workflowID).CatalogPin,
+		"a pin no longer stored is dropped: the restart pins the current catalog")
+}

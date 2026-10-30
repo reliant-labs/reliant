@@ -109,11 +109,17 @@ func lateWakeSuccessorInput(input WorkflowInput) WorkflowInput {
 	inputs := maps.Clone(input.Inputs)
 	delete(inputs, InputKeyLaunchRun)
 	DropActingIdentity(inputs)
+	// A fresh run loads the definitions as they are now: it pins anew.
+	execCtx := input.ExecContext
+	if execCtx != nil && execCtx.CatalogPin != "" {
+		execCtx = execCtx.Clone()
+		execCtx.CatalogPin = ""
+	}
 	return WorkflowInput{
 		ChatID:       input.ChatID,
 		WorkflowName: input.WorkflowName,
 		Inputs:       inputs,
-		ExecContext:  input.ExecContext,
+		ExecContext:  execCtx,
 		Trigger:      input.Trigger,
 	}
 }
