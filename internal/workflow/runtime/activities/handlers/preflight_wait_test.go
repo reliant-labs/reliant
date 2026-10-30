@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
@@ -228,6 +230,39 @@ func TestPreflightWait_HardWakeErrorFailsWithCause(t *testing.T) {
 		"the message waits for a machine to connect rather than being dropped")
 }
 
+// The queue records the machine the run waited for, so delivery waits for
+// that machine — not the user's default one, which may well be up (prod,
+// 2026-10-26: a workflow naming a machine that never connected was delivered,
+// failed here and re-queued ~10k times).
+func TestPreflightWait_QueueRecordsTheMachineTheRunWaitedFor(t *testing.T) {
+	t.Parallel()
+
+	router := &waitFakeRouter{wakeErr: errors.New("no daemon available: the machine this request asked for is not connected")}
+	a, repo, chatID := newWaitFixture(t, false, router)
+
+	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5,
+		DaemonSelector: &toolexec.DaemonSelector{Name: "cicd"}})
+	require.Error(t, err)
+
+	queued, err := repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	assert.Equal(t, chatID, queued[0].ChatID)
+	require.NotNil(t, queued[0].Machine)
+	assert.Equal(t, db.QueuedMachine{Name: "cicd"}, *queued[0].Machine)
+
+	// A deliverer's claim and requeue keeps the machine.
+	_, err = repo.SetChatQueuedForMachine(context.Background(), chatID, false)
+	require.NoError(t, err)
+	_, err = repo.SetChatQueuedForMachine(context.Background(), chatID, true)
+	require.NoError(t, err)
+	queued, err = repo.ListChatsQueuedForMachine(context.Background(), "u1", 10)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.NotNil(t, queued[0].Machine)
+	assert.Equal(t, "cicd", queued[0].Machine.Name)
+}
+
 // A machine that failed to start is not coming up however long the run
 // waits — the prod workspace crash-looped for hours. The wait ends at once,
 // naming the control plane's reason, and the message stays queued for the
@@ -348,4 +383,21 @@ func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
 		ChatID: chatID, DaemonSelector: &toolexec.DaemonSelector{ID: "daemon-b"}})
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
+}
+
+// A run whose machine is offline or gone fails as a user error, so it
+// crosses the activity boundary benign and its failure is logged at INFO, not
+// raised as an issue (prod: ~9.5k ERROR records from one offline machine). A
+// wake that failed for a reason of ours stays a server fault.
+func TestPreflightTerminalErrors_OfflineIsAUserErrorOursIsNot(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(errPreflightNoDaemon(nil)))
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(errPreflightNoDaemon(
+		svcerr.WithMessage(toolexec.ErrNoDaemon, "no daemon available: the machine this request asked for is not connected"))))
+	assert.Equal(t, svcerr.ClassServer, errclass.Classify(errPreflightNoDaemon(errors.New("control plane ResumeDaemon(d1): internal"))))
+
+	removed := svcerr.WithClass(errors.New("This chat's machine was removed"), svcerr.ClassUser)
+	assert.Equal(t, svcerr.ClassUser, errclass.Classify(keepClass(removed, errors.New("removed. queued"))))
+	assert.Equal(t, svcerr.ClassServer, errclass.Classify(keepClass(errors.New("Your machine failed to start"), errors.New("failed. queued"))))
 }

@@ -865,7 +865,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// Its own cgroup with a process limit where the machine allows, so a
 	// runaway command fails alone (internal/proctree). Last before Start:
 	// the heavy-slot and sandbox rewrites above change what cmd execs.
-	tree := proctree.Default().Prepare(cmd)
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
 	err = cmd.Start()
@@ -961,6 +961,7 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		Credentials: credentials,
 		HeavyGate:   c.heavy,
 		Heavy:       req.Heavy,
+		AgentID:     req.ChatID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("starting background process: %w", err)

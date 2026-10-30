@@ -54,6 +54,10 @@ import (
 
 // streamProcessingState holds mutable state during stream event processing
 type streamProcessingState struct {
+	// retries are the provider requests the driver failed and retried inside
+	// this call; each is a usage-ledger row of its own.
+	retries *driverRetries
+
 	blockStates       *BlockStreamState
 	textParts         []string
 	thinkingParts     []string // Extended thinking content parts
@@ -1700,10 +1704,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// liveness the keepalives it reads inside an open content block, which
 	// the progress guard below needs and no driver event carries.
 	llmCallStart := time.Now()
+	streamState.retries = newDriverRetries()
 	liveness := llm.NewStreamLiveness()
 	eventChan := driver.StreamResponse(llm.WithStreamLiveness(streamCtx, liveness), systemPrompts, history, availableTools)
 	var streamErr error
 	streamInterrupted := false
+	// driverErrored is set when the driver itself reported the failure, as
+	// opposed to a cancel, a deadline or the progress guard cutting the turn.
+	driverErrored := false
 
 	// Progress guard, armed above the transport. The idle and content-stall
 	// timers in internal/llm watch bytes, so neither can see a driver that
@@ -1739,6 +1747,7 @@ streamLoop:
 				resetProgressTimer()
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
+					driverErrored = true
 					break streamLoop
 				}
 				continue
@@ -1860,9 +1869,14 @@ streamLoop:
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 				streamErr = err
+				driverErrored = true
 				break streamLoop
 			}
 		}
+	}
+
+	if driverErrored {
+		a.collectUsageAfterStreamError(eventChan, streamState)
 	}
 
 	// A cancelled stream closes the channel without a further event, so the
@@ -1883,6 +1897,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted, streamState.retries)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 	a.trackLLMCallCompleted(ctx, chat, driver, rtx.WorkflowID, rtx.StepID, llmLatencyMs, streamState.usage, usageErr)
 
@@ -2839,6 +2854,9 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 	// the other keeps the marker true at every instant, at two writes per backoff
 	// episode rather than one per delta.
 	if event.Type == llm.EventRetryWait {
+		if state.retries != nil && event.Retry != nil {
+			state.retries.observe(*event.Retry)
+		}
 		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
 		return nil
 	}
@@ -3261,6 +3279,35 @@ func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
 	}
 
 	return toolInput
+}
+
+// usageAfterErrorWindow bounds how long a failed stream is read on for the
+// usage its driver reports after the error.
+const usageAfterErrorWindow = time.Second
+
+// collectUsageAfterStreamError reads what a driver sent after it reported an
+// error. Drivers send their final event, with the usage the provider billed,
+// after the error as well as before it, and CallLLM stops reading at the error;
+// without this the tokens a failed attempt consumed would reach the usage
+// ledger as zero. Only the final event's usage is taken, and the read is
+// bounded: a driver that has nothing more to say costs nothing.
+func (a *CallLLMActivity) collectUsageAfterStreamError(eventChan <-chan llm.DriverEvent, state *streamProcessingState) {
+	timer := time.NewTimer(usageAfterErrorWindow)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-eventChan:
+			if !ok {
+				return
+			}
+			if event.Type == llm.EventComplete && event.Response != nil {
+				state.usage = event.Response.Usage
+				return
+			}
+		case <-timer.C:
+			return
+		}
+	}
 }
 
 // handleError handles error events from the stream
