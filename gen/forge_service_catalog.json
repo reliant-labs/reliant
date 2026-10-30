@@ -10613,6 +10613,11 @@
             {
               "name": "guard_since_ms",
               "kind": "int64"
+            },
+            {
+              "name": "processes",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessReport"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -10778,6 +10783,52 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ProcessReport": [
+            {
+              "name": "count",
+              "kind": "uint64"
+            },
+            {
+              "name": "limit",
+              "kind": "uint64"
+            },
+            {
+              "name": "refusing_heavy",
+              "kind": "bool"
+            },
+            {
+              "name": "refusing_since_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "top",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessTree",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ProcessTree": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "command",
+              "kind": "string"
+            },
+            {
+              "name": "tasks",
+              "kind": "uint64"
+            },
+            {
+              "name": "tracked",
+              "kind": "bool"
+            },
+            {
+              "name": "chat_title",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.RefreshLocalModelsRequest": [
             {
               "name": "daemon_id",
@@ -10873,6 +10924,8 @@
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
           "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -14678,6 +14731,11 @@
               "kind": "message",
               "type_name": "reliant.v1.DiskVolume",
               "repeated": true
+            },
+            {
+              "name": "processes",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessReport"
             }
           ],
           "reliant.v1.InboxWaitingForMachine": [
@@ -14724,6 +14782,52 @@
             {
               "name": "other_projects_count",
               "kind": "int32"
+            }
+          ],
+          "reliant.v1.ProcessReport": [
+            {
+              "name": "count",
+              "kind": "uint64"
+            },
+            {
+              "name": "limit",
+              "kind": "uint64"
+            },
+            {
+              "name": "refusing_heavy",
+              "kind": "bool"
+            },
+            {
+              "name": "refusing_since_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "top",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessTree",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ProcessTree": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "command",
+              "kind": "string"
+            },
+            {
+              "name": "tasks",
+              "kind": "uint64"
+            },
+            {
+              "name": "tracked",
+              "kind": "bool"
+            },
+            {
+              "name": "chat_title",
+              "kind": "string"
             }
           ],
           "reliant.v1.RecoveryInboxItem": [
@@ -14836,6 +14940,8 @@
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
+          "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
           "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
@@ -33196,6 +33302,11 @@
             {
               "name": "guard_since_ms",
               "kind": "int64"
+            },
+            {
+              "name": "processes",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessReport"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -33634,6 +33745,52 @@
           "reliant.v1.ProcessOutputUnsubscribeMessage": [
             {
               "name": "process_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProcessReport": [
+            {
+              "name": "count",
+              "kind": "uint64"
+            },
+            {
+              "name": "limit",
+              "kind": "uint64"
+            },
+            {
+              "name": "refusing_heavy",
+              "kind": "bool"
+            },
+            {
+              "name": "refusing_since_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "top",
+              "kind": "message",
+              "type_name": "reliant.v1.ProcessTree",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ProcessTree": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "command",
+              "kind": "string"
+            },
+            {
+              "name": "tasks",
+              "kind": "uint64"
+            },
+            {
+              "name": "tracked",
+              "kind": "bool"
+            },
+            {
+              "name": "chat_title",
               "kind": "string"
             }
           ],
@@ -34190,6 +34347,8 @@
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProjectConfigDelta": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProjectConfigSnapshot": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProjectDiscovery": "reliant/v1/tools_daemon.proto",
@@ -55645,6 +55804,17 @@
           }
         },
         {
+          "id": "method1:fbcabc6d86cf14a2068d108d8998136ae0e32b6ea277c9cd5eb4ce56bc7af393",
+          "name": "processesItem",
+          "signature": "func(ctx context.Context, userID string, m *github.com/reliant-labs/reliant/internal/worktreesweep.MachineStorage, name string) *github.com/reliant-labs/reliant/gen/reliant/v1.InboxItem",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/inbox",
+          "legacy_name": "inbox.processesItem",
+          "source": {
+            "path": "internal/handlers/inbox/inbox.go",
+            "symbol": "Service.processesItem"
+          }
+        },
+        {
           "id": "method1:d332324a37a9c88a2ca59aa88464a7faea42d0860c7cb0b44641b11e4bb00500",
           "name": "readInbox",
           "signature": "func(ctx context.Context, userID string) (*github.com/reliant-labs/reliant/internal/handlers/inbox.inboxReads, error)",
@@ -73367,6 +73537,17 @@
           "source": {
             "path": "internal/handlers/inbox/deps.go",
             "symbol": "Repository.FiringsSinceLastSuccess"
+          }
+        },
+        {
+          "id": "method1:319db93d4c1b7febc845b5dd0e8d3c313a6fd6faddd572f88e7f411f4688cbdd",
+          "name": "GetChat",
+          "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/inbox",
+          "legacy_name": "inbox.GetChat",
+          "source": {
+            "path": "internal/handlers/inbox/deps.go",
+            "symbol": "Repository.GetChat"
           }
         },
         {

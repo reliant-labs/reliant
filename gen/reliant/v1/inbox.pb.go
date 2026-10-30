@@ -1314,7 +1314,11 @@ type InboxStorage struct {
 	// Every volume the machine last reported, fullest first: the one under
 	// pressure names itself ("build caches & docker") and, while it is, what is
 	// using it.
-	Volumes       []*DiskVolume `protobuf:"bytes,9,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	Volumes []*DiskVolume `protobuf:"bytes,9,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	// Set while the machine is refusing new background heavy commands because
+	// it is near its process limit: the count, the limit, and the largest
+	// process trees by the agent that started them.
+	Processes     *ProcessReport `protobuf:"bytes,10,opt,name=processes,proto3" json:"processes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1394,6 +1398,13 @@ func (x *InboxStorage) GetOnline() bool {
 func (x *InboxStorage) GetVolumes() []*DiskVolume {
 	if x != nil {
 		return x.Volumes
+	}
+	return nil
+}
+
+func (x *InboxStorage) GetProcesses() *ProcessReport {
+	if x != nil {
+		return x.Processes
 	}
 	return nil
 }
@@ -1777,7 +1788,7 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x18DismissInboxItemResponse\"4\n" +
 	"\x17RestoreInboxItemRequest\x12\x19\n" +
 	"\bitem_ids\x18\x01 \x03(\tR\aitemIds\"\x1a\n" +
-	"\x18RestoreInboxItemResponse\"\xaf\x02\n" +
+	"\x18RestoreInboxItemResponse\"\xe8\x02\n" +
 	"\fInboxStorage\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1f\n" +
 	"\vdaemon_name\x18\x02 \x01(\tR\n" +
@@ -1787,7 +1798,9 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"reportedAt\x12,\n" +
 	"\x04held\x18\a \x03(\v2\x18.reliant.v1.HeldWorktreeR\x04held\x12\x16\n" +
 	"\x06online\x18\b \x01(\bR\x06online\x120\n" +
-	"\avolumes\x18\t \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x0fdisk_free_bytesR\x10disk_total_bytes\"\x83\x02\n" +
+	"\avolumes\x18\t \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumes\x127\n" +
+	"\tprocesses\x18\n" +
+	" \x01(\v2\x19.reliant.v1.ProcessReportR\tprocessesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x0fdisk_free_bytesR\x10disk_total_bytes\"\x83\x02\n" +
 	"\fHeldWorktree\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12\x12\n" +
@@ -1874,6 +1887,7 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*TriggerHealth)(nil),               // 23: reliant.v1.TriggerHealth
 	(*TriggerSetupIssue)(nil),           // 24: reliant.v1.TriggerSetupIssue
 	(*DiskVolume)(nil),                  // 25: reliant.v1.DiskVolume
+	(*ProcessReport)(nil),               // 26: reliant.v1.ProcessReport
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
@@ -1892,21 +1906,22 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	24, // 13: reliant.v1.InboxAutomationNeedsSetup.issues:type_name -> reliant.v1.TriggerSetupIssue
 	18, // 14: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
 	25, // 15: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
-	21, // 16: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
-	1,  // 17: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
-	2,  // 18: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
-	19, // 19: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
-	13, // 20: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	15, // 21: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 22: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	20, // 23: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	14, // 24: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	16, // 25: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	22, // [22:26] is the sub-list for method output_type
-	18, // [18:22] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	26, // 16: reliant.v1.InboxStorage.processes:type_name -> reliant.v1.ProcessReport
+	21, // 17: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
+	1,  // 18: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
+	2,  // 19: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
+	19, // 20: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
+	13, // 21: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	15, // 22: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	3,  // 23: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	20, // 24: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	14, // 25: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	16, // 26: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	23, // [23:27] is the sub-list for method output_type
+	19, // [19:23] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_inbox_proto_init() }

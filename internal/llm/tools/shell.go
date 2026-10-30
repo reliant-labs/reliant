@@ -459,6 +459,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		TimeoutMs:   params.Timeout,
 		Credentials: credentials,
 		Heavy:       params.Heavy,
+		ChatID:      chatID,
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
