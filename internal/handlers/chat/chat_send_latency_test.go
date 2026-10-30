@@ -26,18 +26,27 @@ import (
 type slowQueryTemporalClient struct {
 	wakeTestTemporalClient
 	mu      sync.Mutex
-	queries []time.Duration // the time each query's context had left; -1 for no deadline
+	queries []queryBound
+}
+
+// queryBound is one query's context: whether it had a deadline, and how long
+// was left when the fake sampled it. Recorded apart, because a correct
+// deadline may already have passed by the time a descheduled goroutine gets
+// here on a loaded machine, so "left" can be negative and still be bounded.
+type queryBound struct {
+	hasDeadline bool
+	left        time.Duration
 }
 
 func (c *slowQueryTemporalClient) QueryWorkflowWithOptions(
 	ctx context.Context, _ *client.QueryWorkflowWithOptionsRequest,
 ) (*client.QueryWorkflowWithOptionsResponse, error) {
-	left := time.Duration(-1)
+	var bound queryBound
 	if deadline, ok := ctx.Deadline(); ok {
-		left = time.Until(deadline)
+		bound = queryBound{hasDeadline: true, left: time.Until(deadline)}
 	}
 	c.mu.Lock()
-	c.queries = append(c.queries, left)
+	c.queries = append(c.queries, bound)
 	c.mu.Unlock()
 	<-ctx.Done()
 	return nil, ctx.Err()
@@ -77,12 +86,13 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 	// context. (A wall-clock bound on the whole send was flaky: on a loaded
 	// gate the send's DB round trips alone could pass it.)
 	temporal.mu.Lock()
-	queries := append([]time.Duration(nil), temporal.queries...)
+	queries := append([]queryBound(nil), temporal.queries...)
 	temporal.mu.Unlock()
 	require.NotEmpty(t, queries, "the send asks the run whether its params changed")
-	for _, left := range queries {
-		require.GreaterOrEqual(t, left, time.Duration(0), "the advisory query has no deadline of its own")
-		assert.LessOrEqual(t, left, paramsChangeQueryTimeout, "the send waited on the workflow's answer to an advisory query")
+	for _, q := range queries {
+		require.True(t, q.hasDeadline, "the advisory query has no deadline of its own")
+		// An already-expired deadline (negative) is still bounded.
+		assert.LessOrEqual(t, q.left, paramsChangeQueryTimeout, "the send waited on the workflow's answer to an advisory query")
 	}
 	assert.True(t, resp.Msg.Queued, "the message is queued for the running thread's next turn")
 

@@ -27,8 +27,14 @@
 # that follows it, or the `(package <pkg>)` suffix the merge gate prints. Its
 # build tags are taken from the `//go:build` line of the file declaring it.
 #
+# A retry runs under -race, as main's unit and integration lanes do: without it
+# a deterministic data race would fail every main run, pass every retry, and be
+# filed as a flake for someone to delete. A test whose original failure was the
+# race detector's is a real failure and is never retried (scripts/test-flake-report.sh).
+#
 # Environment: GH_TOKEN (actions:read, issues:write), GITHUB_REPOSITORY
-# (owner/name; defaults to the current repo), MAX_TESTS.
+# (owner/name; defaults to the current repo), MAX_TESTS, FLAKE_RACE (the race
+# flag a retry passes; default -race, empty to drop it).
 
 set -uo pipefail
 
@@ -49,6 +55,7 @@ if [[ -z "$run_id" && -z "$logs_dir" ]]; then
   exit 0
 fi
 max_tests="${MAX_TESTS:-15}"
+race_flag="${FLAKE_RACE--race}"
 repo="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)}"
 server="${GITHUB_SERVER_URL:-https://github.com}"
 label="flake:suspected"
@@ -136,6 +143,23 @@ excerpt() {
   ' | cut -c1-300
 }
 
+# raced <Test>: whether its original failure was the race detector's. Go
+# prints the report inside the test's own output: after its `=== RUN` line
+# under -v, after its `--- FAIL` line without -v.
+raced() {
+  {
+    sed -E 's/^[^\t]*\t[^\t]*\t[0-9TZ:.-]+ //' "$work/failed.log"
+    find "$art_dir" -type f -name '*.log' -exec cat {} + 2>/dev/null
+  } | sed -E 's/\x1b\[[0-9;]*m//g' | awk -v t="$1" '
+    $0 == "=== RUN   " t { on = 1; n = 0; next }
+    index($0, "--- FAIL: " t " ") == 1 || $0 == "--- FAIL: " t { on = 1; n = 0; next }
+    on && /race detected during execution of test|WARNING: DATA RACE/ { found = 1; exit }
+    on && /^(=== RUN|--- (PASS|FAIL|SKIP): |ok  |FAIL\t)/ { on = 0 }
+    on && ++n > 400 { on = 0 }
+    END { exit found ? 0 : 1 }
+  '
+}
+
 passed=()
 cut -f1 "$work/failing.tsv" | sort -u >"$work/pkgs"
 while read -r pkg; do
@@ -146,7 +170,16 @@ while read -r pkg; do
   fi
   dir=".${rel}"
   [[ -d "$dir" ]] || { say "skip $pkg: no directory $dir at this commit"; continue; }
-  mapfile -t tests < <(awk -F'\t' -v p="$pkg" '$1 == p { print $2 }' "$work/failing.tsv")
+  mapfile -t candidates < <(awk -F'\t' -v p="$pkg" '$1 == p { print $2 }' "$work/failing.tsv")
+  tests=()
+  for t in "${candidates[@]}"; do
+    if raced "$t"; then
+      say "  $t failed on the race detector: a real failure (a data race), not reported as a flake"
+    else
+      tests+=("$t")
+    fi
+  done
+  [[ "${#tests[@]}" -gt 0 ]] || continue
   tags=""
   for t in "${tests[@]}"; do
     file="$(grep -l -E "^func ${t}\(" "$dir"/*_test.go 2>/dev/null | head -1)"
@@ -157,7 +190,8 @@ while read -r pkg; do
   regex="^($(IFS='|'; echo "${tests[*]}"))\$"
   say "rerunning ${tests[*]} in $pkg${tags:+ (tags $tags)}"
   log="$work/rerun-$(echo "$pkg" | tr '/.' '__').log"
-  go test -count=1 -v -timeout 20m ${tags:+-tags "$tags"} -run "$regex" "$dir" >"$log" 2>&1
+  # shellcheck disable=SC2086 # race_flag is one flag or empty
+  go test -count=1 -v -timeout 20m $race_flag ${tags:+-tags "$tags"} -run "$regex" "$dir" >"$log" 2>&1
   for t in "${tests[@]}"; do
     if grep -q -E "^--- PASS: ${t} " "$log" && ! grep -q -E "^--- FAIL: ${t} " "$log"; then
       say "  $t PASSED on retry: suspected flake"
