@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -148,4 +149,61 @@ func TestLaunchNoMachineRefusesAMachineBoundWorktree(t *testing.T) {
 	})
 	require.NoError(t, err, "the main checkout carries no daemon")
 	assert.Equal(t, mainWorktreeID, *result.Chat.WorktreeID)
+}
+
+// A trigger's no-machine run is checked against the workflow it will run: the
+// project's, which an automation resolves first, not the owner's account
+// workflow of the same name. The account one here runs a shell command and so
+// needs a machine; the project one does not, and the fire must start.
+func TestLaunchNoMachineAutomationChecksTheProjectWorkflowItRuns(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	seedCompleteWorkflow(t, ctx, repo, "digest", `
+name: digest
+apiVersion: v2
+entry: [sh]
+nodes:
+  - id: sh
+    type: run
+    args:
+      command: echo account
+`)
+	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{
+		Slug: "digest", Name: "digest", RelativePath: ".reliant/workflows/digest.yaml",
+		YAMLContent: "name: digest\napiVersion: v2\nentry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: project}\n",
+	}})
+	require.NoError(t, err)
+	laptop := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: laptop, UserID: launchTestUserID}))
+	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+		ProjectID: projectID, DaemonID: laptop, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
+	}, true)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	triggerID := uuid.NewString()
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "digest",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "digest",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
+	}))
+
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	_, err = launcher.Launch(ctx, Event{
+		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
+	}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "digest",
+		Messages: userSeed("go"), Unattended: true, NoMachine: true,
+	})
+	require.NoError(t, err, "the project workflow that runs needs no machine")
+	assert.Len(t, starter.calls, 1)
+
+	// A chat start keeps the account-first rule, and so the account
+	// workflow's machine requirement.
+	_, err = launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "digest",
+		Messages: userSeed("go"), NoMachine: true,
+	})
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	assert.Contains(t, validation.Error(), "needs a machine")
 }

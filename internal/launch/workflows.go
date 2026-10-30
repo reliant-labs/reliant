@@ -783,15 +783,23 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "", Event{Kind: core.TriggerEventKindChatStart})
 }
 
+// admissionScope is what a launch of ev admits workflowName against: the
+// run's machine's catalog (the union when daemonID is empty), the draft ev may
+// run (draftRootFor), and, for a trigger's run, an automation's precedence,
+// the same rule its activation was read by and its runtime loads use
+// (Scope.ProjectFirst). Every admission check of one launch (the tree, the
+// no-machine check) reads the same workflow through it.
+func admissionScope(userID, projectID, daemonID, workflowName string, ev Event) Scope {
+	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: ev.TriggerID != "", draftRoot: draftRootFor(ev, workflowName)}
+}
+
 // validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:
 // its kind decides which workflow may be a draft (see draftRootFor) and
 // whether the workflow's Chat trigger must be on. daemonID is the machine the
 // run will execute on: the tree is admitted against that machine's synced
 // catalog, the one the run's own loads read (the union when it is empty).
 func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID string, ev Event) error {
-	// A trigger's run resolves with an automation's precedence, the same
-	// rule its activation was read by (Scope.ProjectFirst).
-	scope := Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: ev.TriggerID != "", draftRoot: draftRootFor(ev, workflowName)}
+	scope := admissionScope(userID, projectID, daemonID, workflowName, ev)
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
 		var lookupErr *WorkflowLookupError

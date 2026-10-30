@@ -338,7 +338,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -692,7 +692,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, Scope{UserID: userID, ProjectID: project.ID, draftRoot: draftRootFor(ev, workflowName)}, workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev), workflowName); err != nil {
 			return nil, err
 		}
 	}
