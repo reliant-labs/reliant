@@ -440,12 +440,15 @@ func triggerOutcomeColumns(alias string) string {
 // rows returned. Ranking the whole history with row_number() instead read
 // every firing the triggers ever had, and joined each to its run before
 // keeping ten: 280ms for an automation with 20,000 runs, against 7ms.
-func recentTriggerFiringsSQL(cols string) string {
-	return `SELECT ` + cols + `,
+//
+// cols names the event's columns under an alias: the lateral read selects
+// them as x's, and the outer select as e's.
+func recentTriggerFiringsSQL(cols func(alias string) string) string {
+	return `SELECT ` + cols("e") + `,
 	` + triggerFiringRunColumns + `
 FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
 CROSS JOIN LATERAL (
-	SELECT x.* FROM trigger_events x
+	SELECT ` + cols("x") + ` FROM trigger_events x
 	WHERE x.trigger_id = t.id AND x.user_id = ?0::text
 	ORDER BY x.occurred_at DESC, x.id DESC
 	LIMIT ?2::integer
@@ -456,8 +459,8 @@ ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
 var (
-	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent]("e"))
-	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns("e"))
+	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent])
+	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns)
 )
 
 // InboxTriggerFiringsSQL returns the statements of RecentTriggerOutcomes and
@@ -513,7 +516,7 @@ LEFT JOIN LATERAL (
 	LIMIT 1
 ) ls ON true
 CROSS JOIN LATERAL (
-	SELECT x.* FROM trigger_events x
+	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
 	WHERE x.trigger_id = t.id
 		AND x.user_id = ?0::text
 		AND (ls.id IS NULL OR (x.occurred_at, x.id) > (ls.occurred_at, ls.id))

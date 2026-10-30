@@ -124,7 +124,7 @@ SELECT * FROM (
         a.approval_type::integer AS a_int
     FROM (
         -- Fenced by OFFSET 0: see listInboxPendingSQL's comment.
-        SELECT a.* FROM approvals a
+        SELECT a.id, a.chat_id, a.status, a.created_at, a.title, a.approval_type FROM approvals a
         JOIN chats ch ON ch.id = a.chat_id
         WHERE a.status = 1 AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
         OFFSET 0
@@ -159,7 +159,7 @@ SELECT * FROM (
         COALESCE(q.metadata, ''),
         q.async::integer
     FROM (
-        SELECT q.* FROM questions q
+        SELECT q.id, q.chat_id, q.status, q.created_at, q.thread_id, q.metadata, q.async FROM questions q
         JOIN chats ch ON ch.id = q.chat_id
         WHERE q.status = 1 AND ch.user_id = $1::text AND ch.state IS DISTINCT FROM 3
         OFFSET 0
