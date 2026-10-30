@@ -101,14 +101,20 @@ func (d *Dispatcher) WithWorkflows(workflows triggers.WorkflowResolver) *Dispatc
 // specOf is a trigger's effective spec: an activation's from its workflow's
 // declaration, read now; an ad hoc trigger's from its row.
 func (d *Dispatcher) specOf(ctx context.Context, t *core.Trigger) (Spec, error) {
+	return d.specIn(ctx, d.workflows, t)
+}
+
+// specIn is specOf reading the declaration through workflows (the
+// dispatcher's, or that bound to a firing's catalog snapshot).
+func (d *Dispatcher) specIn(ctx context.Context, workflows triggers.WorkflowResolver, t *core.Trigger) (Spec, error) {
 	if t.WorkflowTrigger == nil || *t.WorkflowTrigger == "" {
 		return SpecOf(t)
 	}
-	if d.workflows == nil {
+	if workflows == nil {
 		return Spec{}, &triggers.DeclarationError{Workflow: t.Workflow, Name: *t.WorkflowTrigger,
 			Reason: "this server cannot read declared triggers"}
 	}
-	decl, err := triggers.ResolveDeclaration(ctx, d.workflows, t)
+	decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
 	if err != nil {
 		return Spec{}, err
 	}
@@ -225,6 +231,22 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	if def.Broken() {
 		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, triggers.RefusalDetail(def))
 	}
+	if def != nil && def.CatalogPin != "" {
+		// The declaration this firing runs is the one in the snapshot it
+		// recorded and launches on, not the live one it was matched by.
+		pinned, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, def), trigger)
+		var declErr *triggers.DeclarationError
+		switch {
+		case errors.As(err, &declErr):
+			return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, declErr.Error())
+		case err != nil:
+			return nil, fmt.Errorf("resolve trigger %s in its pinned catalog: %w", trigger.ID, err)
+		case !pinned.Source.Matches(ev.WorkflowName, ev.Outcome):
+			// The definition that would run does not listen to this event.
+			return nil, nil
+		}
+		spec = pinned
+	}
 	if reason, blocked := chain.Blocked(trigger.ID); blocked {
 		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventSkipped, reason)
 	}
@@ -257,6 +279,9 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
 	if err != nil {
 		return d.record(ctx, trigger, ev, chain, def, core.TriggerEventFailed, err.Error())
+	}
+	if def != nil {
+		launchSpec.CatalogPin = def.CatalogPin
 	}
 
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)

@@ -150,7 +150,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	if err != nil {
 		return nil, err
 	}
-	decl, err := activationFor(ctx, in.workflows, trigger)
+	decl, err := activationFor(ctx, PinnedTo(in.workflows, def), trigger)
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
 	origin := in.enrich(ctx, trigger, &ev)

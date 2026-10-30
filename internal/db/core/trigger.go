@@ -496,6 +496,11 @@ type TriggerEventDefinition struct {
 	// Error is why this definition cannot run (it does not parse, or does not
 	// validate, or does not resolve); empty when it can.
 	Error string `json:"error,omitempty"`
+	// CatalogPin is the catalog snapshot (db.Repo.PinProjectCatalog) the
+	// firing read this definition in and launched its run on: the run loads
+	// exactly this version, whatever was synced after. Empty when the firing
+	// read the live catalog.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 }
 
 // Broken reports a definition that resolved to one version of one file which

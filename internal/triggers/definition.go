@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -16,12 +17,27 @@ import (
 
 // DefinitionReader is a WorkflowResolver that can also say WHICH definition a
 // trigger's runs resolve to now: the file, its version, the machine and git
-// state it was synced from, and why it cannot run when it cannot. Every
-// firing records it (TriggerEvent.Definition), and a firing whose definition
-// is Broken is refused. LaunchWorkflows and CachedWorkflows over it are
-// DefinitionReaders.
+// state it was synced from, and why it cannot run when it cannot. It reads
+// the live catalog, for display (the inbox). LaunchWorkflows and
+// CachedWorkflows over it are DefinitionReaders.
 type DefinitionReader interface {
 	TriggerDefinition(ctx context.Context, t *core.Trigger) (*core.TriggerEventDefinition, error)
+}
+
+// FiringDefinitionReader is what a firing decides against: it pins the
+// catalog as it is now (db.Repo.PinProjectCatalog) and describes the
+// definition t resolves to in that snapshot, carrying the pin
+// (TriggerEventDefinition.CatalogPin). The firing then reads its declaration
+// through PinnedTo and launches on the pin (launch.Spec.CatalogPin), so the
+// definition it records is the definition that runs, whatever a machine
+// pushes in between. LaunchWorkflows is one.
+type FiringDefinitionReader interface {
+	FiringDefinition(ctx context.Context, t *core.Trigger) (*core.TriggerEventDefinition, error)
+}
+
+// catalogPinner snapshots a project's catalog (db.Repo.PinProjectCatalog).
+type catalogPinner interface {
+	PinProjectCatalog(ctx context.Context, scope db.CatalogPinScope) (string, error)
 }
 
 // workflowProvenanceStore says which machine's copy of a project workflow is
@@ -31,13 +47,45 @@ type workflowProvenanceStore interface {
 }
 
 var (
-	_ DefinitionReader = LaunchWorkflows{}
-	_ DefinitionReader = (*CachedWorkflows)(nil)
+	_ DefinitionReader       = LaunchWorkflows{}
+	_ FiringDefinitionReader = LaunchWorkflows{}
+	_ DefinitionReader       = (*CachedWorkflows)(nil)
 )
 
 // TriggerDefinition implements DefinitionReader.
 func (w LaunchWorkflows) TriggerDefinition(ctx context.Context, t *core.Trigger) (*core.TriggerEventDefinition, error) {
-	return describeDefinition(ctx, w.Repo, w, t)
+	return describeDefinition(ctx, w.Repo, w, t, w.CatalogPin)
+}
+
+// FiringDefinition implements FiringDefinitionReader. A store that cannot
+// snapshot the catalog describes the live one and leaves the pin empty.
+func (w LaunchWorkflows) FiringDefinition(ctx context.Context, t *core.Trigger) (*core.TriggerEventDefinition, error) {
+	if t == nil || t.Workflow == "" {
+		return nil, nil
+	}
+	pin := w.CatalogPin
+	if pinner, ok := w.Repo.(catalogPinner); ok && pin == "" && t.ProjectID != "" {
+		p, err := pinner.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: t.DaemonID, UserID: t.UserID})
+		if err != nil {
+			return nil, &workflowsource.StoreError{Err: fmt.Errorf("pin the workflow catalog trigger %s fires against: %w", t.ID, err)}
+		}
+		pin = p
+	}
+	pinned := w
+	pinned.CatalogPin = pin
+	return describeDefinition(ctx, w.Repo, pinned, t, pin)
+}
+
+// PinnedTo is workflows reading the catalog snapshot def was described in,
+// so a firing's declaration, capacity and launch read the definition it
+// recorded. workflows unchanged when there is no pin, or it cannot be bound.
+func PinnedTo(workflows WorkflowResolver, def *core.TriggerEventDefinition) WorkflowResolver {
+	lw, ok := workflows.(LaunchWorkflows)
+	if !ok || def == nil || def.CatalogPin == "" {
+		return workflows
+	}
+	lw.CatalogPin = def.CatalogPin
+	return lw
 }
 
 // TriggerDefinition implements DefinitionReader, once per workflow, project
@@ -57,7 +105,7 @@ func (c *CachedWorkflows) TriggerDefinition(ctx context.Context, t *core.Trigger
 	)
 	switch inner := c.inner.(type) {
 	case LaunchWorkflows:
-		def, err = describeDefinition(ctx, inner.Repo, c, t)
+		def, err = describeDefinition(ctx, inner.Repo, c, t, inner.CatalogPin)
 	case DefinitionReader:
 		def, err = inner.TriggerDefinition(ctx, t)
 	}
@@ -86,16 +134,27 @@ func BrokenDefinition(ctx context.Context, workflows *CachedWorkflows, t *core.T
 	return def, nil
 }
 
-// DefinitionOf is the definition t's firing resolves, nil when workflows
-// cannot say (a resolver that is not a DefinitionReader). An error is a
-// failure to READ, which a retry can fix. Every firing path records it and
-// refuses a Broken one.
+// DefinitionOf is the definition t's firing resolves, pinned
+// (FiringDefinitionReader) when workflows can pin, nil when workflows cannot
+// say at all. An error is a failure to READ, which a retry can fix. Every
+// firing path records it, refuses a Broken one, and reads the rest of the
+// firing through PinnedTo.
 func DefinitionOf(ctx context.Context, workflows WorkflowResolver, t *core.Trigger) (*core.TriggerEventDefinition, error) {
-	reader, ok := workflows.(DefinitionReader)
-	if !ok || t == nil {
+	if t == nil {
 		return nil, nil
 	}
-	def, err := reader.TriggerDefinition(ctx, t)
+	var (
+		def *core.TriggerEventDefinition
+		err error
+	)
+	switch reader := workflows.(type) {
+	case FiringDefinitionReader:
+		def, err = reader.FiringDefinition(ctx, t)
+	case DefinitionReader:
+		def, err = reader.TriggerDefinition(ctx, t)
+	default:
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read the definition of trigger %s's workflow %q: %w", t.ID, t.Workflow, err)
 	}
@@ -110,16 +169,18 @@ func RefusalDetail(def *core.TriggerEventDefinition) string {
 }
 
 // describeDefinition resolves t's workflow as its runs do (the automation
-// precedence, on its machine) and says which definition that is, validating
-// it through validate. store reads the catalogs.
-func describeDefinition(ctx context.Context, store launch.WorkflowResolver, validate WorkflowResolver, t *core.Trigger) (*core.TriggerEventDefinition, error) {
+// precedence, on its machine, in the catalog snapshot pin when set) and says
+// which definition that is, validating it through validate, which must read
+// the same catalog. store reads the catalogs.
+func describeDefinition(ctx context.Context, store launch.WorkflowResolver, validate WorkflowResolver, t *core.Trigger, pin string) (*core.TriggerEventDefinition, error) {
 	if t == nil || t.Workflow == "" {
 		// The owner's default workflow, resolved by the launcher: nothing
 		// the trigger names to describe.
 		return nil, nil
 	}
-	def := &core.TriggerEventDefinition{Workflow: t.Workflow}
+	def := &core.TriggerEventDefinition{Workflow: t.Workflow, CatalogPin: pin}
 	scope := launch.AutomationScope(t.UserID, t.ProjectID, t.DaemonID)
+	scope.CatalogPin = pin
 	desc, err := launch.DescribeRunWorkflow(ctx, store, scope, t.Workflow)
 	if err != nil {
 		if retryableRead(err) {

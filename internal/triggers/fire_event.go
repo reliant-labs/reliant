@@ -154,7 +154,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	decl, err := activationFor(ctx, f.workflows, trigger)
+	workflows := PinnedTo(f.workflows, def)
+	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
 			return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
@@ -165,7 +166,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return f.settle(ctx, ev, def, core.TriggerEventFailed, err.Error(), err)
 	}
-	policy, err := capacityPolicy(ctx, f.workflows, trigger)
+	if def != nil {
+		// The run loads the definition this fire recorded (FiringDefinition).
+		spec.CatalogPin = def.CatalogPin
+	}
+	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
 		return nil, err
 	}

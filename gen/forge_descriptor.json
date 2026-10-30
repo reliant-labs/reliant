@@ -12032,6 +12032,10 @@
           {
             "name": "summary",
             "kind": "string"
+          },
+          {
+            "name": "catalog_pin",
+            "kind": "string"
           }
         ],
         "reliant.v1.TriggerEventRun": [
@@ -20964,6 +20968,10 @@
           },
           {
             "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "catalog_pin",
             "kind": "string"
           }
         ],

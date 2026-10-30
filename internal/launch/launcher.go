@@ -333,11 +333,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only,
 	// read from the catalog of the machine the chat is pinned to, which is what the run's
 	// own loads read.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), ev, AutomationPrecedence(chat)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(chat), spec.CatalogPin, ev, AutomationPrecedence(chat)); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
-		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", spec.CatalogPin, workflowName, ev, AutomationPrecedence(chat)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -360,7 +360,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	// Build and validate workflow inputs BEFORE creating chat
-	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.Presets, spec.Params)
+	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.CatalogPin, spec.Presets, spec.Params)
 	if err != nil {
 		return nil, err
 	}
@@ -687,11 +687,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			checked.ActiveDaemonID = &target
 		}
 	}
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev, AutomationPrecedence(&checked)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), spec.CatalogPin, ev, AutomationPrecedence(&checked)); err != nil {
 		return nil, err
 	}
 	if noMachine {
-		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
+		if err := l.validateNoMachine(ctx, admissionScope(userID, project.ID, "", spec.CatalogPin, workflowName, ev, AutomationPrecedence(&checked)), workflowName); err != nil {
 			return nil, err
 		}
 	}
@@ -700,7 +700,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	{
 		_, presets, _ := effectiveStart(chat, spec)
-		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, presets, spec.Params); err != nil {
+		if _, err := l.buildInputs(ctx, userID, &checked, workflowName, spec.CatalogPin, presets, spec.Params); err != nil {
 			return nil, err
 		}
 	}
@@ -882,7 +882,7 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if l.pinner != nil {
 		l.pinner.Pin(ctx, chat)
 	}
-	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, chat.SelectedPresets, params)
+	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, spec.CatalogPin, chat.SelectedPresets, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1085,21 +1085,24 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 
 // buildInputs resolves and validates the root run's inputs. Callers run it
 // BEFORE anything is persisted, so a spec that cannot launch leaves no rows.
+//
+// pin is the catalog snapshot the launch was decided against (Spec.CatalogPin),
+// "" for the live catalog: the presets and the input schema are read from it.
 func (l *Launcher) buildInputs(
 	ctx context.Context,
 	userID string,
 	chat *db.Chat,
-	workflowName string,
+	workflowName, pin string,
 	presets map[string]string,
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
-	initialData, err := l.BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, params)
+	initialData, err := l.buildChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, presets, paramValues(params))
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
-	if validationErrors := l.ValidateChatWorkflowInputs(ctx, userID, chat, workflowName, initialData); len(validationErrors) > 0 {
+	if validationErrors := l.validateChatWorkflowInputsAt(ctx, userID, chat, workflowName, pin, initialData); len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			if errors.Is(e, drivers.ErrDriverLookupFailed) {
@@ -1187,6 +1190,10 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		Thread:       workflowID,
 		ThreadMode:   model.ThreadModeNew,
 		UserJWT:      p.spec.UserJWT,
+		// A launch decided against a catalog snapshot runs on it: the root
+		// load and every later load read the definitions it was admitted
+		// (and its trigger recorded) against, not a later push.
+		CatalogPin: p.spec.CatalogPin,
 	}
 
 	// Start workflow on shared task queue.

@@ -149,7 +149,7 @@ func DefinitionToProto(d *core.TriggerEventDefinition) *reliantv1.TriggerEventDe
 		Workflow: d.Workflow, Source: d.Source, Path: d.Path,
 		DaemonId: d.DaemonID, DaemonName: d.Machine,
 		Repo: d.Repo, Branch: d.Branch, Commit: d.Commit, Dirty: d.Dirty,
-		ContentHash: d.ContentHash, Error: d.Error, Summary: d.Describe(),
+		ContentHash: d.ContentHash, Error: d.Error, Summary: d.Describe(), CatalogPin: d.CatalogPin,
 	}
 }
 

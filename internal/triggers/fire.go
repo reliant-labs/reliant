@@ -117,7 +117,10 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// A declaration that is gone or changed kind is recorded and stops here;
 	// one whose cron or timezone was edited fires this slot under the new
 	// rules (the reconciler re-converges the Temporal schedule itself).
-	decl, err := activationFor(ctx, f.workflows, trigger)
+	// Everything after reads the catalog snapshot the definition was
+	// described in, and the run launches on it: what it recorded is what runs.
+	workflows := PinnedTo(f.workflows, def)
+	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
 			return f.failPermanently(ctx, rec, err.Error(), err)
@@ -172,7 +175,10 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return f.failPermanently(ctx, rec, err.Error(), err)
 	}
-	policy, err := capacityPolicy(ctx, f.workflows, trigger)
+	if def != nil {
+		spec.CatalogPin = def.CatalogPin
+	}
+	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
 		return nil, err
 	}

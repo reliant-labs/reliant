@@ -891,6 +891,11 @@ message TriggerEventDefinition {
   // The definition for display: "machine cicd at .reliant/workflows/x.yaml
   // @ main 1a2b3c4, clean (sha256 9f86d081884c)".
   string summary = 12;
+
+  // The catalog snapshot the firing read this definition in and launched
+  // its run on: the run loads exactly this version, whatever was synced
+  // after. Empty when the firing read the live catalog.
+  string catalog_pin = 13;
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,

@@ -14857,6 +14857,10 @@
             {
               "name": "summary",
               "kind": "string"
+            },
+            {
+              "name": "catalog_pin",
+              "kind": "string"
             }
           ],
           "reliant.v1.TriggerHealth": [
@@ -36180,6 +36184,10 @@
             },
             {
               "name": "summary",
+              "kind": "string"
+            },
+            {
+              "name": "catalog_pin",
               "kind": "string"
             }
           ],
@@ -59517,7 +59525,7 @@
         {
           "id": "method1:75ebcc47d5acd5bf54c4232c1243fb4e4ffe06b135ee71224397cdddd1fc070f",
           "name": "applyPresets",
-          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, data map[string]interface{}, selectedPresets map[string]string) (map[string]interface{}, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, pin string, data map[string]interface{}, selectedPresets map[string]string) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.applyPresets",
           "source": {
@@ -59537,9 +59545,20 @@
           }
         },
         {
+          "id": "method1:2601cbb28a45e93aa50cbe77be1fe79f85fcf2f9ec65396463a12cb45dd4f672",
+          "name": "buildChatWorkflowInputsAt",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, pin string, selectedPresets map[string]string, send map[string]interface{}) (map[string]interface{}, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/launch",
+          "legacy_name": "launch.buildChatWorkflowInputsAt",
+          "source": {
+            "path": "internal/launch/workflows.go",
+            "symbol": "Launcher.buildChatWorkflowInputsAt"
+          }
+        },
+        {
           "id": "method1:582deb45fb42fe0cb1bb8a597ab91c4f419faf0fc53d73c70ce2d980ea9934e4",
           "name": "buildInputs",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, presets map[string]string, params map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, pin string, presets map[string]string, params map[string]*google.golang.org/protobuf/types/known/structpb.Value) (map[string]interface{}, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.buildInputs",
           "source": {
@@ -59572,7 +59591,7 @@
         {
           "id": "method1:c1512341ffcf849fe33491f4d8e4194465c991807441dbcb339f5333d7c0c117",
           "name": "createDBPresetLoaderFull",
-          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string) func(name string) (*github.com/reliant-labs/reliant/internal/preset.Preset, error)",
+          "signature": "func(ctx context.Context, userID string, projectID string, daemonID string, pin string) func(name string) (*github.com/reliant-labs/reliant/internal/preset.Preset, error)",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.createDBPresetLoaderFull",
           "source": {
@@ -59757,6 +59776,17 @@
           }
         },
         {
+          "id": "method1:c18c607854ce7f37461dcc2f6035bb36c1bbfa6b6ec76a63f350056a146537db",
+          "name": "validateChatWorkflowInputsAt",
+          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat, workflowName string, pin string, inputs map[string]interface{}) []error",
+          "scope": "github.com/reliant-labs/reliant/internal/launch",
+          "legacy_name": "launch.validateChatWorkflowInputsAt",
+          "source": {
+            "path": "internal/launch/workflows.go",
+            "symbol": "Launcher.validateChatWorkflowInputsAt"
+          }
+        },
+        {
           "id": "method1:f41612eaf16ccf8d887302507899e59ed99b0000625572cd1dec88a8ef15f050",
           "name": "validateNoMachine",
           "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/launch.Scope, workflowName string) error",
@@ -59770,7 +59800,7 @@
         {
           "id": "method1:b70d4b28a1366357f1ac4a81175728f0e12ecb04d136cba42e0adca4f8eb9751",
           "name": "validateWorkflowTree",
-          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, ev github.com/reliant-labs/reliant/internal/launch.Event, projectFirst bool) error",
+          "signature": "func(ctx context.Context, userID string, workflowName string, projectID string, daemonID string, pin string, ev github.com/reliant-labs/reliant/internal/launch.Event, projectFirst bool) error",
           "scope": "github.com/reliant-labs/reliant/internal/launch",
           "legacy_name": "launch.validateWorkflowTree",
           "source": {

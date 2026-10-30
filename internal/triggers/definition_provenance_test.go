@@ -140,6 +140,8 @@ func TestFiringRecordsTheDefinitionItResolved(t *testing.T) {
 	def := calls[0].Event.Definition
 	p.assertProvenance(t, def, provenanceWorkflow)
 	assert.Empty(t, def.Error)
+	require.NotEmpty(t, def.CatalogPin, "the fire pinned the catalog it described")
+	assert.Equal(t, def.CatalogPin, calls[0].Spec.CatalogPin, "and launches its run on that snapshot")
 	assert.Equal(t, "machine cicd at "+provenancePath+" @ main 1a2b3c4, clean (sha256 "+def.ContentHash[:12]+")", def.Describe())
 
 	// The row the launcher writes from it reads back with it.

@@ -116,6 +116,7 @@ func (t *Triggers) ListTriggerEvents(ctx context.Context, userID, triggerID stri
 				Summary: d.GetSummary(), Workflow: d.GetWorkflow(), Source: d.GetSource(), Path: d.GetPath(),
 				Machine: d.GetDaemonName(), DaemonID: d.GetDaemonId(), Repo: d.GetRepo(), Branch: d.GetBranch(),
 				Commit: d.GetCommit(), Dirty: d.GetDirty(), ContentHash: d.GetContentHash(), Error: d.GetError(),
+				CatalogPin: d.GetCatalogPin(),
 			}
 		}
 		page.Events = append(page.Events, s)

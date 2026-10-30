@@ -62,6 +62,7 @@ type TriggerEventDefinition struct {
 	Dirty       bool   `json:"dirty,omitempty"`
 	ContentHash string `json:"content_hash,omitempty"`
 	Error       string `json:"error,omitempty"`
+	CatalogPin  string `json:"catalog_pin,omitempty"`
 }
 
 type TriggerEventPage struct {

@@ -97,6 +97,14 @@ type Spec struct {
 	// generated id.
 	ClientMessageID string
 
+	// CatalogPin is the workflow catalog snapshot (db.Repo.PinProjectCatalog)
+	// this launch was decided against: a trigger pins the catalog when it
+	// fires, records the definition it read there, and launches on the same
+	// snapshot, so admission, inputs and every load of the run read exactly
+	// that definition. Empty resolves against the live catalog and pins it
+	// when the run first loads.
+	CatalogPin string
+
 	// DaemonID is the daemon every tool call in this run executes on. It
 	// becomes the chat's ActiveDaemonID, which the launcher injects as
 	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.

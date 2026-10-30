@@ -2207,7 +2207,11 @@ type TriggerEventDefinition struct {
 	Error string `protobuf:"bytes,11,opt,name=error,proto3" json:"error,omitempty"`
 	// The definition for display: "machine cicd at .reliant/workflows/x.yaml
 	// @ main 1a2b3c4, clean (sha256 9f86d081884c)".
-	Summary       string `protobuf:"bytes,12,opt,name=summary,proto3" json:"summary,omitempty"`
+	Summary string `protobuf:"bytes,12,opt,name=summary,proto3" json:"summary,omitempty"`
+	// The catalog snapshot the firing read this definition in and launched
+	// its run on: the run loads exactly this version, whatever was synced
+	// after. Empty when the firing read the live catalog.
+	CatalogPin    string `protobuf:"bytes,13,opt,name=catalog_pin,json=catalogPin,proto3" json:"catalog_pin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2322,6 +2326,13 @@ func (x *TriggerEventDefinition) GetError() string {
 func (x *TriggerEventDefinition) GetSummary() string {
 	if x != nil {
 		return x.Summary
+	}
+	return ""
+}
+
+func (x *TriggerEventDefinition) GetCatalogPin() string {
+	if x != nil {
+		return x.CatalogPin
 	}
 	return ""
 }
@@ -5176,7 +5187,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\b_chat_idB\x06\n" +
 	"\x04_runB\t\n" +
 	"\a_senderB\r\n" +
-	"\v_definition\"\xcb\x02\n" +
+	"\v_definition\"\xec\x02\n" +
 	"\x16TriggerEventDefinition\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x12\n" +
@@ -5191,7 +5202,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\fcontent_hash\x18\n" +
 	" \x01(\tR\vcontentHash\x12\x14\n" +
 	"\x05error\x18\v \x01(\tR\x05error\x12\x18\n" +
-	"\asummary\x18\f \x01(\tR\asummary\"r\n" +
+	"\asummary\x18\f \x01(\tR\asummary\x12\x1f\n" +
+	"\vcatalog_pin\x18\r \x01(\tR\n" +
+	"catalogPin\"r\n" +
 	"\rTriggerSender\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12!\n" +
