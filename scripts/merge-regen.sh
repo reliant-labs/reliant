@@ -21,7 +21,10 @@
 # at it instead of pushing, for a caller that pushes as someone else (the PR
 # pipeline's git_publish node, as the GitHub App). The `ready` line names the
 # head and base this run captured; the caller's push leases against THAT head,
-# never a shared ref another run could have moved.
+# never a ref another run could have moved. Every run also prints
+# `merge-regen: used base=<sha> head=<sha>` first and records them in
+# refs/merge-regen/<branch>/{base,head} and refs/merge-regen/{base,head}; those
+# refs are informational (last run wins), never a lease.
 #
 # CONTRACT (stable; callers branch on the exit code, and the last stdout line)
 #   exit 0  `merge-regen: no-drift <head-sha>`   head merges with base cleanly and
@@ -117,6 +120,15 @@ git -C "$repo" fetch -q "$remote" "+refs/heads/$base:$inputs/base" "+refs/heads/
   die "cannot fetch $base and $branch from $remote"
 base_sha=$(git -C "$repo" rev-parse "$inputs/base")
 head_sha=$(git -C "$repo" rev-parse "$inputs/head")
+# Informational only (best effort: a branch named like one of these refs
+# cannot have both).
+if git check-ref-format "refs/merge-regen/$branch/head"; then
+  git -C "$repo" update-ref "refs/merge-regen/$branch/base" "$base_sha" 2>/dev/null || true
+  git -C "$repo" update-ref "refs/merge-regen/$branch/head" "$head_sha" 2>/dev/null || true
+fi
+git -C "$repo" update-ref refs/merge-regen/base "$base_sha" 2>/dev/null || true
+git -C "$repo" update-ref refs/merge-regen/head "$head_sha" 2>/dev/null || true
+echo "merge-regen: used base=$base_sha head=$head_sha"
 git -C "$repo" worktree add -q --detach "$wt" "$head_sha"
 cd "$wt"
 git config user.name >/dev/null || git config user.name "merge-regen"
