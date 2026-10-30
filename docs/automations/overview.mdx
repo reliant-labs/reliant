@@ -261,7 +261,7 @@ requires:
 
 Once the run's machine is up, and before any node runs, the run checks every entry: each tool is on the machine's PATH; each integration's connection resolves, authorized, for the run's owner and acting identity; each checkout exists, reaches its origin (`git ls-remote`, which writes nothing), and has no local tag that differs from origin's (the cause of `git fetch` failing with "would clobber existing tag"). If anything is missing the run fails at once, before any side effect, with every missing item and its fix in the run's error, rather than an hour in. A check that cannot run (the machine dropped the probe) is retried, and reported as such if it still cannot. [Workflow lint](/workflows/lint#requires-undeclared-tool) warns when a triggered workflow's command calls a tool its `requires.tools` does not list.
 
-A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`: chat pickers stop offering it and a chat start of it is refused. A helper that other workflows only `ref:` also sets `hidden: true`, which keeps it out of every picker and listing.
+A workflow that should only ever start from its triggers, never from a chat, can set `automation_only: true`: chat pickers stop offering it and a chat start of it is refused. A deliberate start by hand (Run now, `reliant workflow run`, an agent's `start_run`, a builder test run) still works. A helper that other workflows only `ref:` also sets `hidden: true`, which keeps it out of every picker and listing.
 
 ## Where runs go
 

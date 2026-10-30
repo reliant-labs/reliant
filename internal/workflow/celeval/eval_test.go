@@ -277,6 +277,41 @@ nodes:
 	assert.Equal(t, "webhook", run.Kind)
 }
 
+// Bug 5b73a559: `reliant workflow validate --trigger-payload` evaluated
+// release-forge's `asap: 'true'` happily, and every real firing then failed
+// with "input 'asap' expects boolean, got string". The dry run checks the
+// values the mapping yields against the workflow's inputs, as the launch does.
+func TestDryRunTrigger_ChecksTheInputValuesTheLaunchWouldRefuse(t *testing.T) {
+	const workflow = `
+name: release-forge
+inputs:
+  asap: {type: boolean, default: true}
+  pr: {type: integer, default: 0}
+triggers:
+  - name: asap-after-merge
+    webhook: {}
+    inputs:
+      pr: "{{ trigger.payload.body.number }}"
+      asap: %s
+entry: [a]
+nodes:
+  - id: a
+    type: save_message
+    args: {role: assistant, content: x}
+`
+	payload := map[string]any{"body": map[string]any{"number": 1414}}
+
+	quoted := mustParse(t, strings.Replace(workflow, "%s", "'true'", 1))
+	run := DryRunTrigger(quoted.GetTriggers()[0], quoted.GetInputs(), payload, nil, nil)
+	joined := strings.Join(run.Errors(), "\n")
+	assert.Contains(t, joined, `trigger "asap-after-merge": inputs: input 'asap' expects boolean, got string "true"`)
+
+	bare := mustParse(t, strings.Replace(workflow, "%s", "true", 1))
+	run = DryRunTrigger(bare.GetTriggers()[0], bare.GetInputs(), payload, nil, nil)
+	assert.Empty(t, run.Errors(), "%+v", run)
+	assert.Equal(t, true, run.Inputs["asap"])
+}
+
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {
 	t.Helper()
 	wf, err := wfyaml.ParseWorkflow([]byte(src))

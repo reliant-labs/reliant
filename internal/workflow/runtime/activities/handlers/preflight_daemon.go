@@ -15,13 +15,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
 // PreflightDaemonCheckInput is the input for the preflight daemon check activity.
 type PreflightDaemonCheckInput struct {
-	ChatID         string                   `json:"chat_id" reliant:"-"`
-	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"`
+	ChatID string `json:"chat_id" reliant:"-"`
+	// DaemonSelector is the run's selector; Session marks the chat's pin,
+	// which yields to the chat's workspace owner as it does for tools.
+	DaemonSelector *activitytypes.DaemonSelector `json:"daemon_selector,omitempty"`
 	// WaitSeconds is how long this execution may wait for an offline daemon to
 	// attach after waking it. 0 is a single check.
 	WaitSeconds int `json:"wait_seconds,omitempty"`
@@ -100,11 +103,10 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 		return PreflightDaemonCheckOutput{DaemonAvailable: false}, nil
 	}
 
-	// Resumed workflows can carry inputs from before launch-time pinning.
+	// Resumed workflows can carry inputs from before launch-time pinning, or
+	// a pin from before their chat moved to its workspace's machine.
 	// Wake/check the same durable machine their tools will use.
-	if input.DaemonSelector == nil {
-		input.DaemonSelector = toolDaemonSelector("", chatDaemonSelector(chat, nil))
-	}
+	selector := runMachineSelector(ctx, a.repo, chat, input.DaemonSelector)
 
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
@@ -136,7 +138,7 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 		attended = false
 	}
 
-	online, err := router.IsDaemonOnline(ctx, project.UserID, input.DaemonSelector)
+	online, err := router.IsDaemonOnline(ctx, project.UserID, selector)
 	if err != nil {
 		// Infrastructure error — don't fail, let it proceed and fail at tool execution.
 		return PreflightDaemonCheckOutput{DaemonAvailable: true}, nil
@@ -154,25 +156,25 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// per execution, then waits for the daemon to attach.
 	waker, ok := router.(toolexec.DaemonWaker)
 	if !ok {
-		return a.terminal(exitCtx, input.ChatID, input.DaemonSelector, attended, errPreflightNoDaemon(nil))
+		return a.terminal(exitCtx, input.ChatID, selector, attended, errPreflightNoDaemon(nil))
 	}
 	var daemonID string
 	var wakeErr error
 	if runWaker, isRunWaker := router.(toolexec.RunWaker); input.RunResume && isRunWaker {
 		var res toolexec.WakeResult
-		res, wakeErr = runWaker.WakeForRun(ctx, project.UserID, input.DaemonSelector)
+		res, wakeErr = runWaker.WakeForRun(ctx, project.UserID, selector)
 		daemonID = res.DaemonID
 	} else {
-		daemonID, wakeErr = waker.EnsureAwake(ctx, project.UserID, input.DaemonSelector)
+		daemonID, wakeErr = waker.EnsureAwake(ctx, project.UserID, selector)
 	}
 	if wakeErr != nil && !toolexec.IsDaemonPending(wakeErr) {
-		return a.terminal(exitCtx, input.ChatID, input.DaemonSelector, attended, errPreflightNoDaemon(wakeErr))
+		return a.terminal(exitCtx, input.ChatID, selector, attended, errPreflightNoDaemon(wakeErr))
 	}
 	// A machine that failed to start is not on its way up, however long the
 	// run waits: only its owner (Try again) or the control plane can rebuild
 	// it.
-	if notComing := machineNotComing(ctx, router, project.UserID, input.DaemonSelector); notComing != nil {
-		return a.terminal(exitCtx, input.ChatID, input.DaemonSelector, attended, notComing)
+	if notComing := machineNotComing(ctx, router, project.UserID, selector); notComing != nil {
+		return a.terminal(exitCtx, input.ChatID, selector, attended, notComing)
 	}
 
 	// The daemon exists and is on its way up: this run waits rather than fails.
@@ -196,17 +198,17 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 				a.setBlocked(exitCtx, input.ChatID, false)
 				return PreflightDaemonCheckOutput{Waiting: true}, nil
 			case <-deadline.C:
-				return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, input)
+				return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, selector, input)
 			case <-ticker.C:
 			}
-			if up, upErr := router.IsDaemonOnline(ctx, project.UserID, input.DaemonSelector); upErr == nil && up {
+			if up, upErr := router.IsDaemonOnline(ctx, project.UserID, selector); upErr == nil && up {
 				a.setBlocked(exitCtx, input.ChatID, false)
 				a.machineReady(exitCtx, input.ChatID)
 				return PreflightDaemonCheckOutput{DaemonAvailable: true, DaemonID: daemonID}, nil
 			}
 			continue
 		}
-		return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, input)
+		return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, selector, input)
 	}
 }
 
@@ -214,14 +216,14 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 // machine that failed (or was removed) during the slice ends the wait; so does
 // the final slice of the workflow's budget. Otherwise it reports Waiting and
 // the workflow decides when to look again.
-func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, router toolexec.DaemonRouter, userID string, attended bool, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
-	if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
-		return a.terminal(exitCtx, input.ChatID, input.DaemonSelector, attended, notComing)
+func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, router toolexec.DaemonRouter, userID string, attended bool, selector *toolexec.DaemonSelector, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
+	if notComing := machineNotComing(ctx, router, userID, selector); notComing != nil {
+		return a.terminal(exitCtx, input.ChatID, selector, attended, notComing)
 	}
 	if !input.Final {
 		return PreflightDaemonCheckOutput{Waiting: true}, nil
 	}
-	return a.terminal(exitCtx, input.ChatID, input.DaemonSelector, attended,
+	return a.terminal(exitCtx, input.ChatID, selector, attended,
 		svcerr.WithClass(fmt.Errorf("Your machine didn't come online %s. Check that it is running (or start it from the machines page)", waitBudgetPhrase(input.WaitBudgetSeconds)), svcerr.ClassUser)) //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 }
 

@@ -95,8 +95,10 @@ type APIHTTPRoutesDeps struct {
 type APIHTTPRoutesStore interface {
 	attachment.Repository
 	mcpserver.AttachmentReader
-	// The terminal websocket's checkouts (terminal.WithTerminalCheckouts).
+	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
@@ -428,7 +430,7 @@ const maxConcurrentStreams = 1000
 // holds the connection open indefinitely.
 //
 // ReadTimeout is none: over HTTP/2 it is a deadline on each stream's request
-// body, so it would cut every bidi stream (StreamTerminal, ConnectDaemon) at
+// body, so it would cut every bidi stream (ConnectDaemon, the streaming rpcs) at
 // the same mark. There is no WriteTimeout either, for the same reason on the
 // response side; serverkit's write-stall guard bounds a write to a peer that
 // stopped reading instead.

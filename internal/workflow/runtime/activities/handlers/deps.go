@@ -318,6 +318,8 @@ type LoadWorkflowStore interface {
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.
 type MachineResumeWakeStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
@@ -327,6 +329,8 @@ type MachineResumeWakeStore interface {
 // writes.
 type PreflightDaemonCheckStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	// GetWorktree finds the chat's workspace owner (runMachineSelector).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	QueueChatForMachine(ctx context.Context, chatID string, machine *db.QueuedMachine) (bool, error)
@@ -404,6 +408,7 @@ type WorkflowStatusStore interface {
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error

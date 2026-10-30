@@ -428,19 +428,25 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 	return l.loadWorkflowInputs(ctx, Scope{UserID: userID, ProjectID: projectID, draftRoot: workflowName, draftOptional: true}, workflowName)
 }
 
-// chatScope is the scope chat's runs resolve workflowName in: the machine
-// the chat is pinned to (RunMachine), whose catalog its admission and its
-// runtime loads read, so its input schema, defaults and validation come from
-// the same definition that runs, with an automation's precedence for a run
-// its trigger started (project first, as its activation resolves). The
-// optional draft root lets an input schema
-// be read for a workflow of the user's they are about to start, complete or
-// not, and still finds the project's when they have none of that name.
+// chatScope is the scope chat's runs resolve workflowName in, exactly as the
+// run's own load resolves it (the runtime's LoadWorkflow): the machine the
+// chat is pinned to (RunMachine), an automation's precedence for a run its
+// trigger started (project first), and an unfinished draft only for a
+// builder test run's root. So a run's input schema, defaults and validation
+// come from the definition that runs.
+//
+// It used to read the user's draft of that name even when the run would not
+// (any draft, complete or not, ahead of the project's): admission then
+// checked the inputs against one definition and the run executed another,
+// which failed at its first step on inputs admission had passed.
 func chatScope(userID string, chat *db.Chat, workflowName string) Scope {
-	scope := Scope{UserID: userID, DaemonID: RunMachine(chat), draftRoot: workflowName, draftOptional: true}
+	scope := Scope{UserID: userID, DaemonID: RunMachine(chat)}
 	if chat != nil {
 		scope.ProjectID = chat.ProjectID
 		scope.ProjectFirst = AutomationPrecedence(chat)
+		if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) {
+			scope.draftRoot = workflowName
+		}
 	}
 	return scope
 }
@@ -476,10 +482,17 @@ func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflow
 func (l *Launcher) ValidateChatWorkflowInputs(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []error {
 	// Validate against the definition that will run: the one workflowsource
 	// resolves in the chat's scope.
+	//
+	// A workflow that does not resolve fails the validation: passing inputs
+	// nobody checked is how a run was admitted and then failed at its first
+	// step on them.
 	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
-		logging.WarnContext(ctx, "Could not load workflow for input validation", "workflow", workflowName, "error", err)
-		return nil
+		var storeErr *workflowsource.StoreError
+		if errors.As(err, &storeErr) {
+			return []error{&WorkflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s' to validate its inputs: %w", workflowName, err)}}
+		}
+		return []error{fmt.Errorf("workflow '%s': %w", workflowName, err)}
 	}
 	wf := resolved.Workflow
 

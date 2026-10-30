@@ -71,6 +71,22 @@ func TestWorkflowRun_TitlesAMessagelessRunByWorkflowAndTime(t *testing.T) {
 	assert.Contains(t, out, "listed under Runs")
 }
 
+// Bug 5b73a559: the server never reads text as a boolean or number, so
+// `--input asap=true` must reach it as a boolean (it used to be the text
+// "true", which a boolean input refuses). Text that a number would lose stays
+// text, and a quoted value is always text.
+func TestWorkflowRun_InputsKeepTheirType(t *testing.T) {
+	req, _ := runWorkflowRunCmd(t, "release-forge",
+		"--input", "asap=true", "--input", "every=10", "--input", "version=1.10",
+		"--input", `sha="0123"`, "--input", "ref=main")
+	params := req.GetWorkflowParams()
+	assert.Equal(t, true, params["asap"].AsInterface())
+	assert.Equal(t, float64(10), params["every"].AsInterface())
+	assert.Equal(t, "1.10", params["version"].AsInterface())
+	assert.Equal(t, "0123", params["sha"].AsInterface())
+	assert.Equal(t, "main", params["ref"].AsInterface())
+}
+
 func TestWorkflowRun_KeepsAnExplicitTitle(t *testing.T) {
 	req, _ := runWorkflowRunCmd(t, "cicd-probe", "--title", "probe: kube access")
 	assert.Equal(t, "probe: kube access", req.GetTitle())
