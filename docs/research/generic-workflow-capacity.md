@@ -7,6 +7,24 @@ concurrency:
   max_running: 6
 ```
 
+Coalescing waiting firings (default `waiting: fifo` keeps every one):
+
+```yaml
+concurrency:
+  max_running: 1
+  waiting: latest
+  key: '{{ trigger.payload.attributes.repository }}'
+```
+
+Under `waiting: latest` an event's rendered `key` is stored in
+`trigger_events.capacity_key` when it is enrolled, and in the same transaction,
+under the scope's advisory lock, every older WAITING (`pending`) event of the
+scope and key settles `skipped` with the detail `TriggerCapacitySuperseded`.
+Launched events are never touched, a retried enrollment supersedes nothing more,
+and a key that does not render leaves the event FIFO (never superseded). The key
+only groups replacements; `max_running` still bounds the whole pool. "Newest"
+is the newest to enroll.
+
 A pool is scoped to user, project and workflow reference. Trigger events queue
 FIFO in the existing `trigger_events` table. Schedule overlap skipping is
 replaced by queueing when a cap is configured. Manual trigger fires also obey

@@ -30,7 +30,7 @@ import type { ObsSearch } from "../obsSearch";
 export interface ExploreHrefs {
   logs: (search: ObsSearch) => string;
   traces: (search: ObsSearch) => string;
-  /** The workload's page (the Overview's workload detail). */
+  /** The workload's page (the Overview's workload detail); "" when no single workload is meant. */
   workload: (name: string) => string;
 }
 

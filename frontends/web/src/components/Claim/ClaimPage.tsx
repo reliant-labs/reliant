@@ -21,12 +21,15 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import type { ClaimSite } from "@/services/controlPlane/claim";
 
 import { FINISH_DECLINED_COPY, REFUSAL_COPY, REPLACE_ANONYMOUS_COPY } from "./claimCopy";
+import { ClaimIntoAccount } from "./ClaimIntoAccount";
+import { FreeSiteDialog } from "./FreeSiteDialog";
 import { ExistingAccount } from "./ExistingAccount";
 import type { ClaimSituation } from "./claimSituation";
 import { useClaimFlow } from "./useClaimFlow";
+import { useAuthStore } from "@/store/authStore";
 
 export function ClaimPage() {
-  const { view, claim, retryFinish, retryPreview } = useClaimFlow();
+  const { view, claim, claimIntoAccount, freeSiteDialog, answerFreeSite, cancelFreeSite, retryFinish, retryPreview } = useClaimFlow();
 
   return (
     <AuthLayout>
@@ -83,7 +86,17 @@ export function ClaimPage() {
         )}
 
         {view.kind === "ready" && (
-          <Ready site={view.site} situation={view.situation} working={view.working} error={view.error} onClaim={claim} />
+          <Ready
+            site={view.site}
+            situation={view.situation}
+            working={view.working}
+            error={view.error}
+            onClaim={claim}
+            onClaimIntoAccount={claimIntoAccount}
+          />
+        )}
+        {view.kind === "ready" && freeSiteDialog && (
+          <FreeSiteDialog conflict={freeSiteDialog} site={view.site} onAnswer={answerFreeSite} onCancel={cancelFreeSite} />
         )}
       </div>
     </AuthLayout>
@@ -145,10 +158,12 @@ interface ReadyProps {
   working: boolean;
   error: string | null;
   onClaim: () => void;
+  onClaimIntoAccount: () => void;
 }
 
-function Ready({ site, situation, working, error, onClaim }: ReadyProps) {
+function Ready({ site, situation, working, error, onClaim, onClaimIntoAccount }: ReadyProps) {
   const existing = situation === "existing-account";
+  const email = useAuthStore((s) => s.user?.email);
   return (
     <>
       <AuthHeader
@@ -172,7 +187,7 @@ function Ready({ site, situation, working, error, onClaim }: ReadyProps) {
       )}
 
       {existing ? (
-        <ExistingAccount />
+        <ClaimIntoAccount email={email} working={working} onClaim={onClaimIntoAccount} />
       ) : (
         <div className="space-y-3">
           <Button
@@ -190,7 +205,8 @@ function Ready({ site, situation, working, error, onClaim }: ReadyProps) {
           <p className="text-center text-xs text-muted-foreground">
             You'll add an email or sign in with a provider to keep it. Whoever claims it first owns it.
           </p>
-          {situation === "resume-upgrade" && <ExistingAccount />}
+          {situation === "signed-out" && <ExistingAccount />}
+          {situation === "resume-upgrade" && <ExistingAccount leavesTemporaryAccount />}
         </div>
       )}
     </>
