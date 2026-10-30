@@ -885,6 +885,14 @@ tasks:
     cmds:
       - ./scripts/test-release-lock.sh
 
+  release:lock:sync:
+    desc: Copy scripts/release-lock.sh and its self-test from the pinned forge, their one source (TestReleaseLockIsForgesCopy holds them identical)
+    cmds:
+      - |
+        dir="$(go list -m -f '{{"{{"}}.Dir{{"}}"}}' github.com/reliant-labs/forge)"
+        install -m 0644 "$dir/scripts/release-lock.sh" scripts/release-lock.sh
+        install -m 0755 "$dir/scripts/test-release-lock.sh" scripts/test-release-lock.sh
+
   release:check-tags:
     desc: Verify every release tag is an ancestor of main
     cmds:
