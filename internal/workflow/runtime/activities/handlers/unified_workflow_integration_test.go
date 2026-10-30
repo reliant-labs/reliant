@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,8 +62,10 @@ func (m *MockLLMDriver) ValidateKey(ctx context.Context) error {
 	return nil
 }
 
-// MockToolExecutor simulates tool execution with configurable results
+// MockToolExecutor simulates tool execution with configurable results.
+// ExecuteTools runs a turn's tools concurrently, so mu guards both fields.
 type MockToolExecutor struct {
+	mu            sync.Mutex
 	executedTools []string // Track which tools were called
 	results       map[string]*toolexec.ToolResult
 }
@@ -75,14 +78,26 @@ func NewMockToolExecutor() *MockToolExecutor {
 }
 
 func (m *MockToolExecutor) SetResult(toolName string, result *toolexec.ToolResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.results[toolName] = result
 }
 
+// ExecutedTools returns a copy of the tools called so far.
+func (m *MockToolExecutor) ExecutedTools() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.executedTools...)
+}
+
 func (m *MockToolExecutor) ExecuteTool(ctx context.Context, req *toolexec.ToolRequest) (*toolexec.ToolResult, error) {
+	m.mu.Lock()
 	m.executedTools = append(m.executedTools, req.ToolName)
+	result, ok := m.results[req.ToolName]
+	m.mu.Unlock()
 
 	// Return configured result if available
-	if result, ok := m.results[req.ToolName]; ok {
+	if ok {
 		return result, nil
 	}
 
@@ -344,8 +359,8 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 		assert.Contains(t, executeOutput.ToolResults[1].Content, "written successfully")
 
 		// Verify mock executor was called (order is non-deterministic due to parallel execution)
-		assert.Len(t, mockExecutor.executedTools, 2)
-		assert.ElementsMatch(t, []string{"Read", "Write"}, mockExecutor.executedTools)
+		assert.Len(t, mockExecutor.ExecutedTools(), 2)
+		assert.ElementsMatch(t, []string{"Read", "Write"}, mockExecutor.ExecutedTools())
 	})
 
 	// STEP 3: SaveMessage creates tool message with results
