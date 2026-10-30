@@ -357,9 +357,16 @@ tasks:
         if: '[ -z "{{.CLI_ARGS}}" ]'
 
   test:integration:
-    desc: Run integration tests (-tags=integration)
+    # Only the packages with integration-tagged test files
+    # (scripts/integration-packages.sh); `--` args replace them. `./...` re-ran
+    # every unit test under an unused tag, since no file carries it.
+    desc: Run integration tests (-tags=integration) in the packages that have them
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - |
+        pkgs="{{.CLI_ARGS}}"
+        [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
+        if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
+        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an

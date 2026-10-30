@@ -182,17 +182,31 @@ jobs:
   # note pushed to origin, so `task release:tag` can cut a release from it. A
   # sha that already has a green record (a local run) passes at once. A
   # dispatch on a branch other than main runs it without publishing a record.
+  #
+  # PARALLEL PARTS. The gate's steps run as parts, one job each
+  # (scripts/release-gate.sh's header lists them), and `Release gate` below
+  # assembles their part records into the one record and publishes it. Run in
+  # one job, one step after another, the gate took 45-70 minutes (2026-10-30:
+  # test 1345-2112s, integration 591-897s, lint 365-549s, generate 201-396s),
+  # and every release waited on it. A missing part, or a shard of one, fails
+  # the assembly closed: no record is written.
   release-gate:
-    name: Release gate
+    name: Release gate (${{ matrix.label }})
     needs: lanes
     if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
-    permissions:
-      # refs/notes/release-gate: the record of this run.
-      contents: write
-    env:
-      RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
+    timeout-minutes: 90
+    strategy:
+      # Every part reports: one failure must not hide another part's.
+      fail-fast: false
+      matrix:
+        include:
+          - { label: "static", part: static, shard: "" }
+          - { label: "lint", part: lint, shard: "" }
+          - { label: "go 1/3", part: go, shard: "1/3" }
+          - { label: "go 2/3", part: go, shard: "2/3" }
+          - { label: "go 3/3", part: go, shard: "3/3" }
+          - { label: "web", part: web, shard: "" }
     steps:
       - uses: actions/checkout@v6
         with:
@@ -208,32 +222,79 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: task release:gate
-        run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- "${GITHUB_SHA}"
+      - name: task release:gate (part ${{ matrix.label }})
+        env:
+          PART: ${{ matrix.part }}
+          SHARD: ${{ matrix.shard }}
+        run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- --part "${PART}" ${SHARD:+--shard "${SHARD}"} "${GITHUB_SHA}"
       - name: task ci:repo-checks
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.part == 'static' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
-      - name: Summary
+      - name: Locate the part record and logs
         if: ${{ !cancelled() }}
-        run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
-      - name: Upload the gate's step logs
-        if: failure()
-        run: echo "logs=$(git rev-parse --git-common-dir)/release-gate" >> "$GITHUB_ENV"
+        run: |
+          echo "records=$(git rev-parse --path-format=absolute --git-common-dir)/release-gate" >> "$GITHUB_ENV"
+          echo "artifact=$(echo "${{ matrix.label }}" | tr ' /' '--')" >> "$GITHUB_ENV"
+      # The part record, pass or fail: `Release gate` assembles a red record
+      # from a red part, as the single job recorded a red run.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-part-${{ env.artifact }}
+          path: ${{ env.records }}/${{ github.sha }}.part-*.json
+          retention-days: 7
+          if-no-files-found: ignore
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gate-logs
-          path: ${{ env.logs }}
+          name: release-gate-logs-${{ env.artifact }}
+          path: ${{ env.records }}
           retention-days: 7
           if-no-files-found: ignore
-      # Saves: main only, after the run, whatever it found.
+      # Saves: main only, after the run, whatever it found. One part saves:
+      # the key is the archive's, and a second save would only race it.
       - name: Save embedded Postgres binaries (main only)
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && matrix.label == 'go 1/3' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/forge/embedded-postgres
           key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.embedded-pg }}
         continue-on-error: true
+
+  # The record: every part's part record, assembled into this commit's
+  # release-gate record and published as its git note (on main). Keeps the
+  # name `Release gate`, the verdict gate-health and main-health key on.
+  release-record:
+    name: Release gate
+    needs: [lanes, release-gate]
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # refs/notes/release-gate: the record of this run.
+      contents: write
+    env:
+      RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Identify the record's author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-gate-part-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/parts
+      - name: Assemble the record
+        run: |
+          shopt -s nullglob
+          scripts/release-gate.sh assemble "${GITHUB_SHA}" "${RUNNER_TEMP}"/parts/*.json
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: cat "$(git rev-parse --git-common-dir)/release-gate/${GITHUB_SHA}.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
   # ── The compile cache every Go job restores (main only) ───────────────────
   # Plain -trimpath package compiles only: what a PR can reuse is the compile of
@@ -437,7 +498,7 @@ jobs:
   # succeeded.
   ci-result:
     name: CI result
-    needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
+    needs: [lanes, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -457,7 +518,7 @@ jobs:
             exit 0
           fi
           merge_tier=$([ "${EVENT_NAME}" = pull_request ] || [ "${EVENT_NAME}" = merge_group ] && echo true || echo false)
-          gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-gate)
+          gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-record)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
           if [ "${EVENT_NAME}" = merge_group ] && [ "$(jq -r '."review-marker".result' <<< "${RESULTS}")" != success ]; then
