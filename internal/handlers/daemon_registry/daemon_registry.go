@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
@@ -319,7 +320,17 @@ func (s *Service) ResolveDaemon(
 	}
 
 	var best *db.Daemon
+	// A request that names no machine gets the user's default, in any state,
+	// exactly as toolexec's default resolution does.
+	if req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
+		if i := slices.IndexFunc(daemons, func(d *db.Daemon) bool { return d.IsDefault }); i >= 0 {
+			best = daemons[i]
+		}
+	}
 	for _, d := range daemons {
+		if best != nil && best.IsDefault && req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
+			break // the default chosen above
+		}
 		if req.Msg.DaemonId != "" && d.ID != req.Msg.DaemonId {
 			continue
 		}
@@ -503,6 +514,7 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		LastStatusMessage: d.LastStatusMessage,
 		OomKillCount:      d.OOMKillCount,
 		CreatedAt:         timestamppb.New(d.CreatedAt),
+		IsDefault:         d.IsDefault,
 	}
 	// Sourced from the attachment lease, so both are absent while nothing is
 	// attached. That is deliberate: the lease row is deleted on disconnect and

@@ -373,6 +373,9 @@
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
     },
+    "internal/handlers/daemon_registry/handlers_scaffold_set_default_daemon_test.go": {
+      "scaffolded_at": "2026-10-29T17:39:34Z"
+    },
     "internal/handlers/file_system/handlers_scaffold_copy_file_test.go": {
       "scaffolded_at": "2026-10-13T15:43:35Z"
     },

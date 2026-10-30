@@ -27,6 +27,7 @@ import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { NewChatProjectChip } from "./NewChatProjectChip";
 import { MachinePicker } from "./MachinePicker";
+import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
@@ -147,6 +148,7 @@ export function NewChatView({
   // The machine a new chat lands on is the one the project is installed on
   // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
   const installs = useProjectDaemonInstalls();
+  const { makeDefault } = useMakeDefaultMachine();
   // Until the registry has answered, nothing is known about the user's
   // machines — including when the first read failed (a tab waking with a dead
   // connection). An empty list then is not "no machine", and No machine is a
@@ -428,6 +430,7 @@ export function NewChatView({
                     onChange={setMachineChoice}
                     daemons={daemons}
                     defaultDaemon={defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))}
+                    onMakeDefault={makeDefault}
                     disabled={isCreating}
                   />
                 )}

@@ -1272,7 +1272,8 @@ func (g *Graph) newToken() (*token.Service, error) {
 		ControlPlane: token.TokenControlPlane{
 			Issuer: g.APISettings().AuthorizationServer,
 		},
-		GitTokens: git,
+		GitTokens:    git,
+		GitBotTokens: git,
 	})
 }
 

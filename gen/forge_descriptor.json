@@ -16819,6 +16819,27 @@
             "TargetKind": "daemon",
             "Writer": "INTERCEPTOR"
           }
+        },
+        {
+          "Name": "SetDefaultDaemon",
+          "InputType": "SetDefaultDaemonRequest",
+          "OutputType": "SetDefaultDaemonResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
+          "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_default",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -16942,6 +16963,14 @@
             "IsOptional": false
           }
         ],
+        "SetDefaultDaemonRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "SetDefaultDaemonResponse": null,
         "SetLocalModelEndpointsRequest": [
           {
             "Name": "daemon_id",
@@ -17119,6 +17148,10 @@
           {
             "name": "forge_version",
             "kind": "string"
+          },
+          {
+            "name": "is_default",
+            "kind": "bool"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -17416,6 +17449,13 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.SetDefaultDaemonRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.SetDefaultDaemonResponse": [],
         "reliant.v1.SetLocalModelEndpointsRequest": [
           {
             "name": "daemon_id",
@@ -17457,6 +17497,8 @@
         "reliant.v1.ResolveDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetDefaultDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
       },
@@ -35034,6 +35076,23 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "GetGitHubBotToken",
+          "InputType": "GetGitHubBotTokenRequest",
+          "OutputType": "GetGitHubBotTokenResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": false,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.GetGitHubBotTokenRequest",
+          "OutputTypeFQ": "reliant.v1.GetGitHubBotTokenResponse",
+          "InputProtoFile": "reliant/v1/token.proto",
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/token.proto",
@@ -35109,6 +35168,50 @@
           },
           {
             "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenRequest": [
+          {
+            "Name": "owner",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "permissions",
+            "ProtoType": "message",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenResponse": [
+          {
+            "Name": "token",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "expires_at",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "bot_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "acting_for_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repository",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -35249,6 +35352,44 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.GetGitHubBotTokenRequest": [
+          {
+            "name": "owner",
+            "kind": "string"
+          },
+          {
+            "name": "repo",
+            "kind": "string"
+          },
+          {
+            "name": "permissions",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          }
+        ],
+        "reliant.v1.GetGitHubBotTokenResponse": [
+          {
+            "name": "token",
+            "kind": "string"
+          },
+          {
+            "name": "expires_at",
+            "kind": "string"
+          },
+          {
+            "name": "bot_login",
+            "kind": "string"
+          },
+          {
+            "name": "acting_for_login",
+            "kind": "string"
+          },
+          {
+            "name": "repository",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.GetGitTokenRequest": [
           {
             "name": "provider",
@@ -35369,6 +35510,8 @@
         "reliant.v1.CreateTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenResponse": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenRequest": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ListTokensRequest": "reliant/v1/token.proto",
@@ -39222,6 +39365,11 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "requires",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowRequirements"
           }
         ],
         "reliant.v1.WorkflowConcurrency": [
@@ -39346,6 +39494,23 @@
             "name": "triggers",
             "kind": "message",
             "type_name": "reliant.v1.WorkflowTrigger",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.WorkflowRequirements": [
+          {
+            "name": "tools",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "integrations",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repos",
+            "kind": "string",
             "repeated": true
           }
         ],
@@ -39533,6 +39698,7 @@
         "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
+        "reliant.v1.WorkflowRequirements": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowUI": "reliant/v1/workflow_v2.proto"
       },
@@ -42654,7 +42820,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/daemon_registry.proto": "a7bfb3522a4acd7a538c44c4d5f33b78a73f17438090c505830d874fe776f8c9",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
@@ -42676,13 +42842,13 @@
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
-    "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
+    "reliant/v1/token.proto": "4817e691d2716f164c1b939d53f7f6fe0865646915a5e1147310ceaf8a983de5",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
     "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
     "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "e147f09969abaec0d629efccfce0964975cd97a169b0553bf1600a0b9a4ecf2a",
+    "reliant/v1/workflow_v2.proto": "3bcad76df7a432554afd232c539cc8a4238876f950d727e9c39f3f7deb6bb94e",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }

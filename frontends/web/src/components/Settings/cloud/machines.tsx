@@ -41,6 +41,7 @@ import {
   Server,
   Shield,
   Laptop,
+  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -115,6 +116,7 @@ import { CLOUD_PROJECT_ROOT } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
+import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -732,10 +734,13 @@ function ManagedMachinesTable({
       interactive: true,
       className: "text-right",
       render: (_, { d }) => {
-        if (!cloud) return null;
+        // Default is this server's own write, so it is offered without a
+        // control plane too; lifecycle and delete are the control plane's.
+        if (!cloud) return <MakeDefaultButton daemon={d} />;
         const isSuspended = d.status === DaemonStatus.SUSPENDED;
         return (
           <div className="inline-flex items-center gap-1">
+            <MakeDefaultButton daemon={d} />
             <Button
               variant="ghost"
               size="md"
@@ -779,6 +784,29 @@ function ManagedMachinesTable({
 type MachineRow = { id: string; d: Daemon };
 
 /**
+ * "Make default": the machine new chats, worktrees and anything else that
+ * names no machine run on, in whatever state it is in (a sleeping default is
+ * woken, never passed over). Without one, they go to a connected machine.
+ * Hidden on the machine that already is the default — its Default badge says so.
+ */
+function MakeDefaultButton({ daemon }: { daemon: Daemon }) {
+  const { makeDefault, isPending } = useMakeDefaultMachine();
+  if (daemon.isDefault) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="md"
+      disabled={isPending}
+      onClick={() => makeDefault(daemon.daemonId)}
+      leftIcon={<Star className="h-4 w-4" aria-hidden="true" />}
+      aria-label={`Make ${daemonDisplayName(daemon)} your default machine`}
+    >
+      Make default
+    </Button>
+  );
+}
+
+/**
  * The machine's name, its app-access badge and its reported build: the row's
  * button content (the whole row opens the machine), so spans throughout.
  */
@@ -787,6 +815,7 @@ function MachineName({ daemon, appCount }: { daemon: Daemon; appCount: number })
   return (
     <span className="block">
       <span className="font-medium text-foreground">{daemonDisplayName(daemon)}</span>
+      {daemon.isDefault && <Badge label="Default" variant="neutral" size="sm" className="ml-2 align-middle" />}
       <AppAccessIndicator count={appCount} />
       {build && <span className="mt-0.5 block text-xs text-muted-foreground">{build}</span>}
     </span>
@@ -833,7 +862,7 @@ function SelfHostedMachinesTable({
       interactive: true,
       className: "text-right",
       render: (_, { d }) => {
-        if (!onRemove) return null;
+        if (!onRemove) return <MakeDefaultButton daemon={d} />;
         const removal = canRemoveDaemon(d);
         const button = (
           <Button
@@ -846,12 +875,17 @@ function SelfHostedMachinesTable({
             Remove
           </Button>
         );
-        return removal.allowed ? (
-          button
-        ) : (
-          <Tooltip content={removal.reason ?? ""} side="left">
-            {button}
-          </Tooltip>
+        return (
+          <div className="inline-flex items-center gap-1">
+            <MakeDefaultButton daemon={d} />
+            {removal.allowed ? (
+              button
+            ) : (
+              <Tooltip content={removal.reason ?? ""} side="left">
+                {button}
+              </Tooltip>
+            )}
+          </div>
         );
       },
     },

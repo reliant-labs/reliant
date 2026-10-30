@@ -225,7 +225,7 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 	if nomachine.Is(ctx) {
 		return "", nomachine.ErrNoMachine
 	}
-	selector, err := r.normalizeSelector(ctx, userID, selector)
+	selector, err := r.routingSelector(ctx, userID, selector)
 	if err != nil {
 		return "", err
 	}
@@ -371,6 +371,9 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 	for _, id := range attachedIDs {
 		attached[id] = true
 	}
+	if selector == nil {
+		selector = userDefaultSelector(daemons)
+	}
 
 	selector = recordSelector(daemons, selector)
 	var lifecycleDown, unconfirmed *daemonRecord
@@ -410,6 +413,51 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 		return *unconfirmed, true, sawDaemonRecord, nil
 	}
 	return daemonRecord{}, false, sawDaemonRecord, nil
+}
+
+// defaultSelector is the selector default resolution (a nil selector)
+// stands for: the user's chosen default machine (DaemonRegistryService
+// SetDefaultDaemon) when they have one, in whatever state it is — a
+// suspended default is woken, never passed over for whichever other machine
+// happens to be connected. With no default, or no registry to read, it stays
+// nil and the machine-state rule applies (lookupDaemonRecord, the local
+// resolver's local-first preference). An explicit selector is returned as is.
+//
+// A registry read failure is returned, never read as "no default": falling
+// back to the machine-state rule then would send an unqualified command to
+// whichever other machine is connected while the default sleeps, and run it
+// in the wrong checkout.
+func (r *NATSDaemonRouter) defaultSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	if selector != nil || r.db == nil {
+		return selector, nil
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("reading the user's default machine: %w", err)
+	}
+	return userDefaultSelector(daemons), nil
+}
+
+// routingSelector is the selector both resolution stages read: the user's
+// default machine for a nil selector, and a Name that is one of the user's
+// machine ids read as that id.
+func (r *NATSDaemonRouter) routingSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	selector, err := r.defaultSelector(ctx, userID, selector)
+	if err != nil {
+		return nil, err
+	}
+	return r.normalizeSelector(ctx, userID, selector)
+}
+
+// userDefaultSelector selects the daemon the user made their default, or is
+// nil when none is.
+func userDefaultSelector(daemons []*db.Daemon) *DaemonSelector {
+	for _, d := range daemons {
+		if d.IsDefault {
+			return &DaemonSelector{ID: d.ID}
+		}
+	}
+	return nil
 }
 
 // daemonRecordMatches applies a selector to a registry record. Records carry
@@ -610,7 +658,7 @@ type MachineState struct {
 // it is the machine a waiting run is actually waiting for. Like resolution it
 // reads this process's database only, wakes nothing and asks nobody.
 func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, selector *DaemonSelector) (MachineState, error) {
-	selector, err := r.normalizeSelector(ctx, userID, selector)
+	selector, err := r.routingSelector(ctx, userID, selector)
 	if err != nil {
 		return MachineState{}, err
 	}
@@ -685,7 +733,7 @@ func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *Da
 	if nomachine.Is(ctx) {
 		return WakeResult{}, nomachine.ErrNoMachine
 	}
-	selector, err := r.normalizeSelector(ctx, userID, selector)
+	selector, err := r.routingSelector(ctx, userID, selector)
 	if err != nil {
 		return WakeResult{}, err
 	}

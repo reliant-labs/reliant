@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
@@ -150,6 +151,12 @@ func staticAnalysisOne(wf *reliantv1.Workflow, opts *ValidationOptions) *Result 
 	// independent of the nodes, and one save should show every finding.
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
 	validateConcurrency(wf.GetConcurrency(), result)
+	for _, msg := range requirements.Validate(wf.GetRequires(), func(id string) bool {
+		_, _, ok := catalogIntegrations{}.TriggerTypes(id)
+		return ok
+	}) {
+		result.AddError(CategoryStructure, nil, "requires", msg)
+	}
 
 	valueTypes := opts.valueTypes()
 
