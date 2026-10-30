@@ -786,8 +786,11 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 	})
 
 	var params map[string]interface{}
+	// chat_id scopes a project preset to the run's project and machine,
+	// the catalog the run was admitted against (LoadPresetParamsActivity).
 	err := workflow.ExecuteActivity(activityCtx, "LoadPresetParams", map[string]interface{}{
 		"project_path": e.projectPath,
+		"chat_id":      e.chatID,
 		"preset_name":  presetName,
 	}).Get(ctx, &params)
 
