@@ -97,6 +97,34 @@ describe("states", () => {
     expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
   });
 
+  it("says it is waiting for capacity, not that it failed, while the server's cap refuses it and it retries", () => {
+    const cap = new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted, { "x-forge-error-reason": "in_flight_limit" });
+    const { rerender } = render(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 2, failureReason: cap }} />);
+    expect(screen.getByTestId("obs-panel-waiting")).toHaveTextContent("Waiting for capacity…");
+    expect(screen.queryByTestId("obs-panel-error")).not.toBeInTheDocument();
+    // A different failure being retried is still just loading.
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: true, error: null, failureCount: 1, failureReason: new ConnectError("down", Code.Unavailable) }} />);
+    expect(screen.queryByTestId("obs-panel-waiting")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Loading")).toBeInTheDocument();
+  });
+
+  it("offers Retry on every failure that is not a deliberate answer, and Retry reads this panel again", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    const { rerender } = render(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted), refetch }} />);
+    expect(screen.getByTestId("obs-panel-error")).toHaveTextContent("This panel couldn't be loaded. too many observability queries in flight; retry shortly");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable), refetch }} />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("down", Code.Unavailable), refetch, isFetching: true }} />);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
+    // A panel the server cannot compile is not helped by asking again.
+    rerender(<PanelBody panel={line} query={{ data: undefined, isLoading: false, error: new ConnectError("unknown field", Code.InvalidArgument), refetch }} />);
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
   it("draws a metric with no data in the scope as empty, naming the metric and where", () => {
     const metrics: Panel = { id: "m", title: "Routes", kind: "line", signal: "metrics", series: [{ label: "routes", agg: "max", field: "gnatsd_routez_num_routes", metricType: "gauge" }] };
     const none: PanelResult = {

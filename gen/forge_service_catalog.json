@@ -43768,6 +43768,17 @@
           }
         },
         {
+          "id": "method1:eb6a75ecd4a8bab175475121594ca17885fdb00267911aa31a2b9b067bdc73c7",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
+          }
+        },
+        {
           "id": "method1:165860683a307dacc4bcc9fb153fe7cc165ab71ee50b67012ef1350efe1244a4",
           "name": "resolveDaemonID",
           "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (string, error)",
@@ -50647,6 +50658,17 @@
           }
         },
         {
+          "id": "method1:67d71ff1e2230a6f4f1a9e0f79cdb6b20c00f641746c54841c29a212fce4daa7",
+          "name": "GetPinnedProjectCatalog",
+          "signature": "func(ctx context.Context, pin string) (*github.com/reliant-labs/reliant/internal/db.PinnedCatalog, bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetPinnedProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.GetPinnedProjectCatalog"
+          }
+        },
+        {
           "id": "method1:ca3375d2f2cb6ef496b2be82f03c1dbe7389f305900262eebb9486ffbea5bd21",
           "name": "GetPlan",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Plan, error)",
@@ -52946,6 +52968,17 @@
           }
         },
         {
+          "id": "method1:ec0c0fc40519ff6c6859f69d0d31a63858396cc52aef98f4802eb92ac1bb7bf5",
+          "name": "PinProjectCatalog",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.PinProjectCatalog",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.PinProjectCatalog"
+          }
+        },
+        {
           "id": "method1:4911a81bb3075a3d65683613d7e3edf1e120bff27c2b3c47911859eeb0ea64a9",
           "name": "Ping",
           "signature": "func(ctx context.Context) error",
@@ -54560,6 +54593,17 @@
           "source": {
             "path": "internal/db/workflow_source_diagnostic.go",
             "symbol": "Repo.machineNames"
+          }
+        },
+        {
+          "id": "method1:dfc05674d456155c06ff7972ae3c84d75f9de80864c7e4b6d09bd412a80abbd0",
+          "name": "pinnableUserWorkflows",
+          "signature": "func(ctx context.Context, scope github.com/reliant-labs/reliant/internal/db.CatalogPinScope) (*string, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.pinnableUserWorkflows",
+          "source": {
+            "path": "internal/db/workflow_catalog_snapshot.go",
+            "symbol": "Repo.pinnableUserWorkflows"
           }
         },
         {
@@ -65843,6 +65887,17 @@
           "source": {
             "path": "internal/toolexec/tool_result_redelivery.go",
             "symbol": "NATSDaemonRouter.nextToolReply"
+          }
+        },
+        {
+          "id": "method1:7daa1314a0d84255eb73ca0eb1ad91f58d9d5d942419f4928f44c0522530805f",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
           }
         },
         {

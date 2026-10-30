@@ -792,6 +792,7 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 		"project_path": e.projectPath,
 		"chat_id":      e.chatID,
 		"preset_name":  presetName,
+		"catalog_pin":  catalogPinFrom(ctx),
 	}).Get(ctx, &params)
 
 	if err != nil {
@@ -1178,6 +1179,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 	loadInput := map[string]string{
 		"chat_id":       e.chatID,
 		"workflow_name": workflowRef,
+		"catalog_pin":   catalogPinFrom(e.ctx),
 	}
 	// LoadedWorkflow matches the output of ActivityLoadWorkflow (LoadWorkflowOutput in handlers)
 	var loadedWf LoadedWorkflow
