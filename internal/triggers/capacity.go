@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -35,16 +36,18 @@ type capacityDescriptions interface {
 	DescribeWorkflowExecution(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 }
 
-// capacityPolicy remains trigger-agnostic: no provider identity or subject revision.
-func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trigger) (uint32, error) {
+// capacityPolicy remains trigger-agnostic: no provider identity or subject
+// revision. It is the workflow's declared policy, nil for none; capacityLimit
+// resolves it to a cap for one trigger.
+func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trigger) (*reliantv1.WorkflowConcurrency, error) {
 	if resolver == nil {
-		return 0, nil
+		return nil, nil
 	}
 	wf, err := resolveTriggerWorkflow(ctx, resolver, t)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return wf.GetConcurrency().GetMaxRunning(), nil
+	return wf.GetConcurrency(), nil
 }
 
 func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, n uint32, spec *launch.Spec) error {
@@ -82,6 +85,11 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
 	previous := spec.Guard
 	spec.Guard = func(ctx context.Context) (string, error) {
+		// A per-member policy on a pool with no member able to take work
+		// resolves to 0: wait, as for a full scope.
+		if n == 0 {
+			return capacityWaiting, nil
+		}
 		allowed, err := repo.CanLaunchTriggerCapacity(ctx, enrolled.ID, scope, n)
 		if err != nil {
 			return "", err

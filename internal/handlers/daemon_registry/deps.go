@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -19,6 +20,13 @@ type Repository interface {
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
 	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
+
+	// Machine labels and pools (dev-docs/design/machine-pools.md).
+	SetDaemonLabels(ctx context.Context, userID, daemonID string, labels map[string]string) (bool, error)
+	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*core.MachinePool, error)
+	PutMachinePool(ctx context.Context, p *core.MachinePool) (*core.MachinePool, error)
+	DeleteMachinePoolByName(ctx context.Context, userID, name string) error
+	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 }
 
 // Router is the slice of toolexec.DaemonRouter the daemon_registry handlers

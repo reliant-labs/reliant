@@ -2154,6 +2154,15 @@ message Workflow {
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+//
+// At least one of the two is set. max_running alone is a fixed cap.
+// per_member scales the cap with the machines the trigger runs on: K runs per
+// member of its machine pool that can take work (eligible: installed, synced
+// with the pool's catalog, not failed or removed), so adding a member raises
+// throughput with no workflow edit. A trigger on one machine counts as a pool
+// of one; a no-machine trigger too. With both set, max_running is a ceiling
+// over the scaled cap.
 message WorkflowConcurrency {
-  uint32 max_running = 1 [(buf.validate.field).uint32.gt = 0];
+  uint32 max_running = 1;
+  uint32 per_member = 2;
 }

@@ -75,6 +75,14 @@ type EventFirer struct {
 	launcher  Launcher
 	workflows WorkflowResolver
 	capacity  capacityDescriptions
+	pools     Placer
+}
+
+// WithPlacer lets the firer place a pool-bound trigger's runs. Without it,
+// such a fire fails (and is retried) rather than running on a guessed machine.
+func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
+	f.pools = p
+	return f
 }
 
 // NewEventFirer builds the inbound fire activity's receiver.
@@ -129,8 +137,9 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger is disabled", nil)
 	}
-	// A no-machine trigger names no daemon, by design.
-	if trigger.NoMachine {
+	// A no-machine trigger names no daemon, by design; a pool-bound one is
+	// placed on a member at launch (launchOnPool).
+	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -153,14 +162,18 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return f.settle(ctx, ev, core.TriggerEventFailed, err.Error(), err)
 	}
-	maxRunning, err := capacityPolicy(ctx, f.workflows, trigger)
+	policy, err := capacityPolicy(ctx, f.workflows, trigger)
 	if err != nil {
 		return nil, err
 	}
-	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && maxRunning == 0 {
+	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	if err != nil {
+		return nil, err
+	}
+	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
-	if maxRunning > 0 {
+	if capped {
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
 			if errors.Is(err, errCapacityScopeChanged) {
 				return f.settle(ctx, ev, core.TriggerEventSkipped, err.Error(), nil)
@@ -176,7 +189,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			return nil, errors.New("admitted retry storage unavailable")
 		}
 	}
-	res, launchErr := f.launcher.Launch(ctx, launch.Event{
+	res, launchErr := launchOnPool(ctx, f.pools, f.launcher, trigger, launch.Event{
 		Kind:       ev.Kind,
 		TriggerID:  trigger.ID,
 		DedupeKey:  ev.DedupeKey,
@@ -184,7 +197,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
-	}, spec)
+	}, spec, resuming)
 
 	switch {
 	case launchErr == nil:
@@ -202,7 +215,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		if errors.As(launchErr, &declined) {
 			reason = declined.Reason
 		}
-		if reason == capacityWaiting {
+		if reason == capacityWaiting || isPoolWaiting(reason) {
+			// The event stays pending; the redriver fires it again.
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
 		return f.settle(ctx, ev, core.TriggerEventSkipped, reason, nil)

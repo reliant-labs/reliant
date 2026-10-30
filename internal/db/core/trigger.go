@@ -239,6 +239,12 @@ type Trigger struct {
 	// workflow that needs a machine is refused when the trigger is written.
 	// See research/DAEMONLESS_RUNS.md.
 	NoMachine bool
+	// MachinePoolID is the machine pool whose members each launched run is
+	// placed on (dev-docs/design/machine-pools.md). Exactly one of DaemonID,
+	// NoMachine and MachinePoolID is set.
+	MachinePoolID string
+	// MachinePoolName is MachinePoolID's name, joined in by reads.
+	MachinePoolName string
 	// NotifyOnComplete opts the owner in to being told when a run of this
 	// trigger completes (unread + OS notification + a Run finished Inbox
 	// item). Unattended completions are otherwise silent.

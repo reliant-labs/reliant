@@ -213,6 +213,11 @@ type Chat struct {
 	// daemon is asleep and gets woken). Every run in the chat is offered only
 	// tools that run without the user's machine. See research/DAEMONLESS_RUNS.md.
 	NoMachine bool `json:"no_machine,omitempty"`
+	// MachinePoolID is the machine pool that placed this chat's run on
+	// ActiveDaemonID (one of its members); nil when no pool placed it.
+	// Written at launch, where the pool counts its members' live runs from
+	// it; reads through chats_with_activity do not carry it yet.
+	MachinePoolID *string `json:"machine_pool_id,omitempty"`
 	// AdoptedAt is when the user adopted this run into their chats; nil if not.
 	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
 	// ListInSidebar is the view's sidebar policy for this chat: Origin is USER,

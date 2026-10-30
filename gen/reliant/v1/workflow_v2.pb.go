@@ -8193,9 +8193,18 @@ func (x *Workflow) GetOnFailure() *Workflow {
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+//
+// At least one of the two is set. max_running alone is a fixed cap.
+// per_member scales the cap with the machines the trigger runs on: K runs per
+// member of its machine pool that can take work (eligible: installed, synced
+// with the pool's catalog, not failed or removed), so adding a member raises
+// throughput with no workflow edit. A trigger on one machine counts as a pool
+// of one; a no-machine trigger too. With both set, max_running is a ceiling
+// over the scaled cap.
 type WorkflowConcurrency struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MaxRunning    uint32                 `protobuf:"varint,1,opt,name=max_running,json=maxRunning,proto3" json:"max_running,omitempty"`
+	PerMember     uint32                 `protobuf:"varint,2,opt,name=per_member,json=perMember,proto3" json:"per_member,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8233,6 +8242,13 @@ func (*WorkflowConcurrency) Descriptor() ([]byte, []int) {
 func (x *WorkflowConcurrency) GetMaxRunning() uint32 {
 	if x != nil {
 		return x.MaxRunning
+	}
+	return 0
+}
+
+func (x *WorkflowConcurrency) GetPerMember() uint32 {
+	if x != nil {
+		return x.PerMember
 	}
 	return 0
 }
@@ -9100,10 +9116,12 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"?\n" +
-	"\x13WorkflowConcurrency\x12(\n" +
-	"\vmax_running\x18\x01 \x01(\rB\a\xbaH\x04*\x02 \x00R\n" +
-	"maxRunningB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"U\n" +
+	"\x13WorkflowConcurrency\x12\x1f\n" +
+	"\vmax_running\x18\x01 \x01(\rR\n" +
+	"maxRunning\x12\x1d\n" +
+	"\n" +
+	"per_member\x18\x02 \x01(\rR\tperMemberB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_workflow_v2_proto_rawDescOnce sync.Once

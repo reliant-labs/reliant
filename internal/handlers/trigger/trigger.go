@@ -142,7 +142,7 @@ func (s *Service) CreateTrigger(
 		return nil, triggerSyncError(err)
 	}
 	if trigger.Enabled {
-		s.grants.ensure(ctx, userID, trigger.DaemonID)
+		s.ensureGrants(ctx, trigger)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
@@ -293,7 +293,7 @@ func (s *Service) UpdateTrigger(
 	}
 
 	if updated.Enabled {
-		s.grants.ensure(ctx, updated.UserID, updated.DaemonID)
+		s.ensureGrants(ctx, updated)
 	}
 	if existing.DaemonID != updated.DaemonID || !updated.Enabled {
 		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
@@ -383,7 +383,7 @@ func (s *Service) SetTriggerEnabled(
 		}
 	}
 	if trigger.Enabled {
-		s.grants.ensure(ctx, trigger.UserID, trigger.DaemonID)
+		s.ensureGrants(ctx, trigger)
 	} else {
 		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
@@ -609,11 +609,15 @@ func (s *Service) triggerFromDefinition(
 	// The machine is an explicit choice: a daemon, or no_machine. An empty
 	// daemon_id alone is still the mistake it always was, so a client that
 	// omits the field cannot silently create a run with no machine.
+	// Or a machine pool: exactly one of the three.
 	switch {
+	case def.MachinePoolId != "" && (def.NoMachine || def.DaemonId != ""):
+		return nil, svcerr.InvalidArgument("machine_pool_id, daemon_id and no_machine are mutually exclusive: runs execute on a pool's members, one machine, or none")
+	case def.MachinePoolId != "":
 	case def.NoMachine && def.DaemonId != "":
 		return nil, svcerr.InvalidArgument("no_machine and daemon_id are mutually exclusive: runs either have a machine or they do not")
 	case !def.NoMachine && def.DaemonId == "":
-		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine")
+		return nil, svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, a machine_pool_id, or no_machine")
 	}
 
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); svcerr.IsNotFound(err) {
@@ -622,7 +626,11 @@ func (s *Service) triggerFromDefinition(
 		return nil, triggerDBError("get project", err)
 	}
 
-	if def.NoMachine {
+	if def.MachinePoolId != "" {
+		if err := s.validateTriggerPool(ctx, userID, def); err != nil {
+			return nil, err
+		}
+	} else if def.NoMachine {
 		if err := s.validateNoMachineWorkflow(ctx, userID, def); err != nil {
 			return nil, err
 		}
@@ -705,6 +713,7 @@ func (s *Service) triggerFromDefinition(
 		Message:          def.Message,
 		DaemonID:         def.DaemonId,
 		NoMachine:        def.NoMachine,
+		MachinePoolID:    def.MachinePoolId,
 		ActingIdentity:   identity,
 		NotifyOnComplete: def.NotifyOnComplete,
 		Config:           src.Config,
@@ -837,6 +846,45 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 // cannot probe which daemon ids exist.
 func (s *Service) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
 	return daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, daemonID)
+}
+
+// validateTriggerPool refuses a pool that is not the caller's. A pool with no
+// member that has the project is accepted (its runs wait, saying why), so a
+// pool can be wired before its machines finish cloning.
+func (s *Service) validateTriggerPool(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
+	if _, err := s.deps.Repo.GetMachinePoolForUser(ctx, userID, def.MachinePoolId); errors.Is(err, core.ErrMachinePoolNotFound) {
+		return tools.RefuseActivation("machine pool not found", svcerr.NotFound("machine pool"))
+	} else if err != nil {
+		return triggerDBError("get machine pool", err)
+	}
+	return nil
+}
+
+// ensureGrants mints the trigger's automation (daemon:resume) grant for every
+// machine its runs may wake: its daemon, or each current member of its pool.
+// A member that joins the pool later gets one the next time the trigger is
+// saved while its owner is signed in; until then placement passes over it
+// only when it is asleep (a wake needs the grant).
+func (s *Service) ensureGrants(ctx context.Context, t *core.Trigger) {
+	if t.MachinePoolID == "" {
+		s.grants.ensure(ctx, t.UserID, t.DaemonID)
+		return
+	}
+	pool, err := s.deps.Repo.GetMachinePoolForUser(ctx, t.UserID, t.MachinePoolID)
+	if err != nil {
+		logging.WarnContext(ctx, "automation access not granted to pool members: could not read the pool",
+			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
+		return
+	}
+	members, err := s.deps.Repo.ListMachinePoolMembers(ctx, pool, "")
+	if err != nil {
+		logging.WarnContext(ctx, "automation access not granted to pool members: could not list them",
+			"trigger_id", t.ID, "pool_id", t.MachinePoolID, "error", err)
+		return
+	}
+	for _, m := range members {
+		s.grants.ensure(ctx, t.UserID, m.DaemonID)
+	}
 }
 
 // validateNoMachineWorkflow refuses a no-machine trigger whose workflow will not

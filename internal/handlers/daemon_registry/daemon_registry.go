@@ -503,6 +503,7 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		LastStatusMessage: d.LastStatusMessage,
 		OomKillCount:      d.OOMKillCount,
 		CreatedAt:         timestamppb.New(d.CreatedAt),
+		Labels:            d.Labels,
 	}
 	// Sourced from the attachment lease, so both are absent while nothing is
 	// attached. That is deliberate: the lease row is deleted on disconnect and

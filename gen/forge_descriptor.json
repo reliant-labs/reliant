@@ -10807,6 +10807,11 @@
             "IsOptional": false
           },
           {
+            "Name": "machine_pool_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
             "Name": "connection_ids",
             "ProtoType": "message",
             "IsOptional": false
@@ -11231,6 +11236,10 @@
           {
             "name": "no_machine",
             "kind": "bool"
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string"
           },
           {
             "name": "connection_ids",
@@ -11679,6 +11688,14 @@
             "kind": "bool"
           },
           {
+            "name": "machine_pool_id",
+            "kind": "string"
+          },
+          {
+            "name": "machine_pool_name",
+            "kind": "string"
+          },
+          {
             "name": "health",
             "kind": "message",
             "type_name": "reliant.v1.TriggerHealth"
@@ -11842,6 +11859,10 @@
           {
             "name": "no_machine",
             "kind": "bool"
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string"
           },
           {
             "name": "notify_on_complete",
@@ -12153,6 +12174,11 @@
           {
             "name": "no_machine",
             "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string",
             "optional": true
           },
           {
@@ -16809,6 +16835,89 @@
             "TargetKind": "daemon",
             "Writer": "INTERCEPTOR"
           }
+        },
+        {
+          "Name": "SetMachineLabels",
+          "InputType": "SetMachineLabelsRequest",
+          "OutputType": "SetMachineLabelsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.SetMachineLabelsRequest",
+          "OutputTypeFQ": "reliant.v1.SetMachineLabelsResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_machine_labels",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
+          "Name": "ListMachinePools",
+          "InputType": "ListMachinePoolsRequest",
+          "OutputType": "ListMachinePoolsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "NoSideEffects": true,
+          "Idempotency": "NO_SIDE_EFFECTS",
+          "InputTypeFQ": "reliant.v1.ListMachinePoolsRequest",
+          "OutputTypeFQ": "reliant.v1.ListMachinePoolsResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
+          "Name": "PutMachinePool",
+          "InputType": "PutMachinePoolRequest",
+          "OutputType": "PutMachinePoolResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.PutMachinePoolRequest",
+          "OutputTypeFQ": "reliant.v1.PutMachinePoolResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "put_machine_pool",
+            "TargetKind": "machine_pool",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
+          "Name": "DeleteMachinePool",
+          "InputType": "DeleteMachinePoolRequest",
+          "OutputType": "DeleteMachinePoolResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.DeleteMachinePoolRequest",
+          "OutputTypeFQ": "reliant.v1.DeleteMachinePoolResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete_machine_pool",
+            "TargetKind": "machine_pool",
+            "Writer": "INTERCEPTOR"
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -16839,6 +16948,14 @@
             "MessageType": "reliant.v1.ClearMachineCachesSkip"
           }
         ],
+        "DeleteMachinePoolRequest": [
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DeleteMachinePoolResponse": null,
         "GetDaemonRequest": [
           {
             "Name": "daemon_id",
@@ -16861,6 +16978,31 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.DaemonInfo"
+          }
+        ],
+        "ListMachinePoolsRequest": null,
+        "ListMachinePoolsResponse": [
+          {
+            "Name": "pools",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePool"
+          }
+        ],
+        "PutMachinePoolRequest": [
+          {
+            "Name": "pool",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePoolSpec"
+          }
+        ],
+        "PutMachinePoolResponse": [
+          {
+            "Name": "pool",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePool"
           }
         ],
         "RefreshLocalModelsRequest": [
@@ -16950,6 +17092,26 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelInventory"
+          }
+        ],
+        "SetMachineLabelsRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "labels",
+            "ProtoType": "message",
+            "IsOptional": false
+          }
+        ],
+        "SetMachineLabelsResponse": [
+          {
+            "Name": "daemon",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.DaemonInfo"
           }
         ]
       },
@@ -17109,8 +17271,26 @@
           {
             "name": "forge_version",
             "kind": "string"
+          },
+          {
+            "name": "labels",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "pools",
+            "kind": "string",
+            "repeated": true
           }
         ],
+        "reliant.v1.DeleteMachinePoolRequest": [
+          {
+            "name": "name",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DeleteMachinePoolResponse": [],
         "reliant.v1.DiscoveredProject": [
           {
             "name": "path",
@@ -17272,6 +17452,15 @@
             "repeated": true
           }
         ],
+        "reliant.v1.ListMachinePoolsRequest": [],
+        "reliant.v1.ListMachinePoolsResponse": [
+          {
+            "name": "pools",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePool",
+            "repeated": true
+          }
+        ],
         "reliant.v1.LocalModelEndpoint": [
           {
             "name": "id",
@@ -17344,6 +17533,102 @@
           {
             "name": "probed_at",
             "kind": "string"
+          }
+        ],
+        "reliant.v1.MachinePool": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "spec",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolSpec"
+          },
+          {
+            "name": "members",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolMember",
+            "repeated": true
+          },
+          {
+            "name": "warnings",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "created_at",
+            "kind": "message",
+            "type_name": "google.protobuf.Timestamp"
+          },
+          {
+            "name": "updated_at",
+            "kind": "message",
+            "type_name": "google.protobuf.Timestamp"
+          }
+        ],
+        "reliant.v1.MachinePoolMember": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "state",
+            "kind": "string"
+          },
+          {
+            "name": "live_runs",
+            "kind": "uint32"
+          },
+          {
+            "name": "size",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.MachinePoolSpec": [
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "selector",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "min_members",
+            "kind": "uint32"
+          },
+          {
+            "name": "max_members",
+            "kind": "uint32"
+          },
+          {
+            "name": "member_size",
+            "kind": "string"
+          },
+          {
+            "name": "max_runs_per_member",
+            "kind": "uint32"
+          }
+        ],
+        "reliant.v1.PutMachinePoolRequest": [
+          {
+            "name": "pool",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolSpec"
+          }
+        ],
+        "reliant.v1.PutMachinePoolResponse": [
+          {
+            "name": "pool",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePool"
           }
         ],
         "reliant.v1.RefreshLocalModelsRequest": [
@@ -17423,6 +17708,25 @@
             "kind": "message",
             "type_name": "reliant.v1.LocalModelInventory"
           }
+        ],
+        "reliant.v1.SetMachineLabelsRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "labels",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          }
+        ],
+        "reliant.v1.SetMachineLabelsResponse": [
+          {
+            "name": "daemon",
+            "kind": "message",
+            "type_name": "reliant.v1.DaemonInfo"
+          }
         ]
       },
       "SchemaFiles": {
@@ -17430,6 +17734,8 @@
         "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
         "reliant.v1.DaemonInfo": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.DeleteMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.DeleteMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -17438,9 +17744,16 @@
         "reliant.v1.GetDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ListDaemonsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ListDaemonsResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.ListMachinePoolsRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.ListMachinePoolsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.PutMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -17448,7 +17761,9 @@
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
-        "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
+        "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto"
       },
       "Enums": {
         "reliant.v1.DaemonLifecyclePhase": [
@@ -38910,10 +39225,11 @@
         "reliant.v1.WorkflowConcurrency": [
           {
             "name": "max_running",
-            "kind": "uint32",
-            "validate": {
-              "gt": "0"
-            }
+            "kind": "uint32"
+          },
+          {
+            "name": "per_member",
+            "kind": "uint32"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -42314,7 +42630,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/daemon_registry.proto": "c94522c33f4605d8b89f2fe6be011dfacda7c09fbc2937deb83d72a7deddec1b",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
@@ -42341,7 +42657,7 @@
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
     "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
+    "reliant/v1/workflow_v2.proto": "7b526749d1271075d9ff47331d684dd5b3715f1658254fda0ab58ebeda378ed8",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }
