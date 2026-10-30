@@ -13,10 +13,27 @@ import { setRuntimeConfig } from "@/test/runtimeConfig";
 // The tracker rides the real trackEvent, so these tests also pin that the
 // consent and dev gates apply to page_visited exactly as to every other event.
 
-const consent = vi.hoisted(() => ({ analyticsEnabled: true }));
+const consent = vi.hoisted(() => ({
+  analyticsEnabled: true,
+  crashReportingEnabled: true,
+  known: true,
+  listeners: new Set<(c: { analyticsEnabled: boolean; crashReportingEnabled: boolean }) => void>(),
+}));
 vi.mock("../../hooks/privacy-queries", () => ({
   privacyConsent: () => consent,
+  privacyConsentKnown: () => consent.known,
+  subscribePrivacyConsent: (listener: (c: { analyticsEnabled: boolean; crashReportingEnabled: boolean }) => void) => {
+    consent.listeners.add(listener);
+    return () => consent.listeners.delete(listener);
+  },
 }));
+/** The user's saved settings arriving, as loadPrivacySettings delivers them. */
+const settingsLoad = (analyticsEnabled: boolean, crashReportingEnabled: boolean) => {
+  consent.known = true;
+  consent.analyticsEnabled = analyticsEnabled;
+  consent.crashReportingEnabled = crashReportingEnabled;
+  for (const listener of consent.listeners) listener({ analyticsEnabled, crashReportingEnabled });
+};
 vi.mock("../../lib/constants", () => ({ isDev: false }));
 vi.mock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
 
@@ -63,6 +80,8 @@ describe("PageVisitTracker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     consent.analyticsEnabled = true;
+    consent.crashReportingEnabled = true;
+    consent.known = true;
     setRuntimeConfig({ OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x" });
   });
 
@@ -128,5 +147,38 @@ describe("routeTemplate", () => {
     expect(routeTemplate("/settings/")).toBe("/settings");
     expect(routeTemplate("/workflow/$workflowName")).toBe("/workflow/$workflowName");
     expect(routeTemplate(undefined)).toBe("/");
+  });
+});
+
+describe("PageVisitTracker at startup, before the saved privacy settings load", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consent.known = false;
+    consent.analyticsEnabled = true; // the default, until the settings load
+    consent.crashReportingEnabled = true;
+    setRuntimeConfig({ OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x" });
+  });
+
+  it("drops the held visit when the settings load with analytics off and crash reporting on", async () => {
+    const router = makeRouter("/settings");
+    render(<RouterProvider router={router} />);
+    await act(async () => {
+      await router.load();
+    });
+    expect(pageEvents()).toHaveLength(0);
+    act(() => settingsLoad(false, true));
+    expect(pageEvents()).toHaveLength(0);
+  });
+
+  it("sends the held visit when the settings load with analytics on", async () => {
+    const router = makeRouter("/settings");
+    render(<RouterProvider router={router} />);
+    await act(async () => {
+      await router.load();
+    });
+    expect(pageEvents()).toHaveLength(0);
+    act(() => settingsLoad(true, true));
+    await waitFor(() => expect(pageEvents()).toHaveLength(1));
+    expect(pageEvents()[0]![1]).toMatchObject({ page_name: "/settings" });
   });
 });

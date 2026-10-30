@@ -82,6 +82,16 @@ export function privacyConsent(): PrivacyConsent {
   return data ? consentOf(data) : (consentAfterClear ?? DEFAULT_CONSENT);
 }
 
+/**
+ * Whether privacyConsent() is the user's own answer (loaded, or the last one
+ * seen before a sign-out) rather than the default. Until it is, a reader that
+ * would act on consent (an event queued for replay) waits for the answer.
+ */
+export function privacyConsentKnown(): boolean {
+  installCacheRules();
+  return queryClient.getQueryData(privacySettingsKey()) !== undefined || consentAfterClear !== undefined;
+}
+
 /** Call `listener` with the consent each time the entry's answer changes (a load, a write, a rollback). */
 export function subscribePrivacyConsent(listener: (consent: PrivacyConsent) => void): () => void {
   installCacheRules();
