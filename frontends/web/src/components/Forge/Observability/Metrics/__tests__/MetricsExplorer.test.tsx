@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, getConfig, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
@@ -30,8 +30,17 @@ const hrefs: MetricsExplorerHrefs = {
   dashboard: (ref) => `/d/${ref.kind}/${ref.key}`,
 };
 
-/** Long enough for the builder's 400 ms debounce and a fixture answer under a loaded machine. */
-const SLOW = { timeout: 4000 };
+/**
+ * Long enough for the builder's 400 ms debounce and a fixture answer under a
+ * loaded machine, and never shorter than the load-scaled wait src/test/setup.ts
+ * configured (a fixed 4 s used to cut that budget on a busy host).
+ */
+const SLOW = { timeout: Math.max(4000, getConfig().asyncUtilTimeout) };
+// Every test mounts the whole explorer and chains up to four SLOW waits, so
+// the default test budget (5 s on an idle host, two default waits' worth) is
+// less than one test may honestly need under load: the merge gate timed out
+// here while the page was still answering. Three waits' worth, still load-scaled.
+vi.setConfig({ testTimeout: 3 * SLOW.timeout });
 
 function renderExplorer(options: ExplorerFixtureOptions = {}, initial: Record<string, unknown> = {}, env = "prod") {
   const onCall = vi.fn();
@@ -67,9 +76,17 @@ const calls = (onCall: ReturnType<typeof vi.fn>, rpc: string) => onCall.mock.cal
 const panelCalls = (onCall: ReturnType<typeof vi.fn>) => (calls(onCall, "QueryPanel") as QueryPanelRequest[]).filter((r) => !r.explain);
 const lastPanel = (onCall: ReturnType<typeof vi.fn>): Panel => panelCalls(onCall).at(-1)!.panel;
 
+/**
+ * A catalog row by its metric. Found by `data-metric`, not by role and name:
+ * computing every row's accessible name took ~100 ms a lookup on an idle host
+ * and several times that on a loaded one, which every test pays at least once
+ * (a pick) and pushed this file past its test timeout in the merge gate.
+ */
 async function catalogRow(name: string) {
   const list = await screen.findByTestId("metrics-catalog-list", {}, SLOW);
-  return within(list).getByRole("option", { name: new RegExp(`^${name.replace(/\./g, "\\.")}`) });
+  const rows = [...list.querySelectorAll<HTMLElement>('[role="option"]')].filter((row) => row.getAttribute("data-metric") === name);
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
 }
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {
