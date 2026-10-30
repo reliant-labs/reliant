@@ -314,7 +314,8 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                       <div className="min-w-0">
                         <Link href={hrefs.dashboard(dashboard.ref)} className={INK_LINK}>{dashboard.title}</Link>
                         <p className="text-sm text-ink-muted">{dashboard.description}</p>
-                        <p className="text-sm text-ink-muted">Requires cost-read permission, not billing management.</p>
+                        {/* LLM usage is the caller's own: it needs no billing permission. */}
+                        {dashboard.viewKind !== "llm-usage" && <p className="text-sm text-ink-muted">Requires cost-read permission, not billing management.</p>}
                       </div>
                       <SourceTag source={dashboard.source} />
                     </div>

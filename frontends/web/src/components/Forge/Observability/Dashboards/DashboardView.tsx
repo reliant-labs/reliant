@@ -70,6 +70,9 @@ import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
 import { OrganizationCostsView } from "./OrganizationCostsView";
+import { OrganizationUsageView } from "./OrganizationUsageView";
+import { OrganizationBillingView } from "./OrganizationBillingView";
+import { LLMUsageView } from "./LLMUsageView";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -239,6 +242,9 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   }
 
   if (summary.viewKind === "organization-costs") return <OrganizationCostsView orgId={orgId!} />;
+  if (summary.viewKind === "organization-usage") return <OrganizationUsageView orgId={orgId!} />;
+  if (summary.viewKind === "organization-billing") return <OrganizationBillingView orgId={orgId!} />;
+  if (summary.viewKind === "llm-usage") return <LLMUsageView orgId={orgId!} />;
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
