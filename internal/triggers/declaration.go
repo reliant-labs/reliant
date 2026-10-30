@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -53,6 +54,12 @@ type DeclarationError struct {
 func (e *DeclarationError) Error() string {
 	return fmt.Sprintf("declared trigger %q of workflow %q: %s", e.Name, e.Workflow, e.Reason)
 }
+
+// ErrorClass implements svcerr.Classed. A broken declaration is the trigger
+// owner's to fix, and they are told: the trigger reports BROKEN health and an
+// inbox item (BrokenHealth). As a server fault it was also an ERROR record and
+// an issue on every tick of the trigger.
+func (e *DeclarationError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // Declaration is an activation's effective WHEN, read from its workflow.
 type Declaration struct {

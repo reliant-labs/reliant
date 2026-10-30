@@ -37,6 +37,8 @@ func TestLoadWorkflowActivity_AutomationRunsTheProjectsWorkflow(t *testing.T) {
 				return nil, nil
 			},
 			GetWorkflowDraftBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, nil },
+			// No pin: these loads read the live catalog (the pin is load_workflow_pin_test.go's).
+			PinProjectCatalogFunc: func(context.Context, db.CatalogPinScope) (string, error) { return "", nil },
 		}
 	}
 	load := func(chat *db.Chat) string {
@@ -81,6 +83,8 @@ func TestLoadWorkflowActivity_AutomationOnAMachineRunsThatMachinesProjectWorkflo
 			return &db.WorkflowDraft{Definition: wf("mine")}, nil
 		},
 		GetWorkflowDraftBySlugFunc: func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, nil },
+		// No pin: these loads read the live catalog (the pin is load_workflow_pin_test.go's).
+		PinProjectCatalogFunc: func(context.Context, db.CatalogPinScope) (string, error) { return "", nil },
 	}
 	out, err := NewLoadWorkflowActivity(store).Execute(context.Background(), LoadWorkflowInput{ChatID: chat.ID, WorkflowName: "release"})
 	require.NoError(t, err)

@@ -85,6 +85,8 @@ export const ERROR_REASONS = [
   "obs_query_quota",
   /** A background poll refused early, to keep the last of the quota for a person's own query. */
   "obs_query_quota_soft",
+  /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
+  "in_flight_limit",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",

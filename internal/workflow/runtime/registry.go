@@ -563,6 +563,9 @@ type ActivityWrapper[I any, O any] struct {
 	// shieldFromSpuriousHeartbeatCancel, so a heartbeat RPC that merely timed
 	// out does not cancel its work. Set from heartbeatRPCFailureSurvivor.
 	outlivesHeartbeatRPCFailure bool
+	// directHeartbeat is how the heartbeat loop heartbeats once the shield
+	// has engaged; nil means clientHeartbeat.
+	directHeartbeat directHeartbeater
 }
 
 // writer returns the injected message writer, or nil.
@@ -637,16 +640,21 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	var helpers sync.WaitGroup
 	defer helpers.Wait()
 	workerStopCh := activity.GetWorkerStopChannel(ctx)
+	var shield *heartbeatShield
 	if w.outlivesHeartbeatRPCFailure {
-		var releaseShield func()
-		ctx, releaseShield = shieldFromSpuriousHeartbeatCancel(ctx, workerStopCh, &helpers, func(cause error) {
+		shield = shieldFromSpuriousHeartbeatCancel(ctx, workerStopCh, &helpers, func(cause error) {
 			logging.WarnContext(ctx, "[ActivityWrapper] Heartbeat RPC failed; activity keeps running instead of abandoning its work",
 				"activityType", activityType,
 				"activityID", activityID,
 				"attemptNumber", attemptNumber,
 				"cause", cause)
 		})
-		defer releaseShield()
+		ctx = shield.work
+		defer shield.release()
+	}
+	directHeartbeat := w.directHeartbeat
+	if directHeartbeat == nil {
+		directHeartbeat = clientHeartbeat
 	}
 	ctx, cancelForWorkerStop := context.WithCancel(ctx)
 	defer cancelForWorkerStop()
@@ -766,12 +774,33 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				// where llm.ErrStreamContentStalled now ends it. This is the
 				// diagnostic half of that fix.
 				elapsed := time.Since(startTime)
-				activity.RecordHeartbeat(ctx, map[string]interface{}{
+				details := map[string]interface{}{
 					"activity_type":   activityType,
 					"attempt":         attemptNumber,
 					"status":          "running",
 					"elapsed_seconds": int64(elapsed.Seconds()),
-				})
+				}
+				if shield != nil && shield.engaged() {
+					// The SDK path can no longer report a cancel for this
+					// attempt (see shieldFromSpuriousHeartbeatCancel), so
+					// heartbeat directly and let the verdict stop the work.
+					now := time.Now()
+					if err := shield.heartbeat(now, directHeartbeat, details); err != nil {
+						var failingFor time.Duration
+						if !shield.failingSince.IsZero() {
+							failingFor = now.Sub(shield.failingSince).Round(time.Second)
+						}
+						logging.WarnContext(ctx, "[ActivityWrapper] Direct heartbeat failed",
+							"activityType", activityType,
+							"activityID", activityID,
+							"attemptNumber", attemptNumber,
+							"failingFor", failingFor,
+							"stopsWork", realStopInstruction(err),
+							"error", err)
+					}
+				} else {
+					activity.RecordHeartbeat(ctx, details)
+				}
 
 				if now := time.Now(); now.After(nextStallWarn) {
 					nextStallWarn = now.Add(activityStallWarnInterval)
@@ -1934,6 +1963,9 @@ type ActivityRegistry struct {
 	// messageWriteRetry is the retry policy for messageWriter's writes,
 	// copied into each wrapper at registration. Tests shrink it per registry.
 	messageWriteRetry messageWriteRetry
+	// directHeartbeat is how an engaged heartbeat shield heartbeats, copied
+	// into each wrapper at registration. Tests replace it per registry.
+	directHeartbeat directHeartbeater
 }
 
 // NewActivityRegistry creates a new activity registry
@@ -1943,6 +1975,7 @@ func NewActivityRegistry(repo ActivityStore) *ActivityRegistry {
 		activities:        make(map[string]interface{}),
 		outputTypes:       make(map[string]reflect.Type),
 		messageWriteRetry: defaultMessageWriteRetry(),
+		directHeartbeat:   clientHeartbeat,
 	}
 }
 
@@ -2030,6 +2063,7 @@ func wrapActivity[TInput any, TOutput any](
 	wrapper := NewActivityWrapper(name, execute, registry.repo)
 	wrapper.workKind = kind
 	wrapper.outlivesHeartbeatRPCFailure = outlivesHeartbeatRPCFailure
+	wrapper.directHeartbeat = registry.directHeartbeat
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
 	wrapper.messageWriteRetry = registry.messageWriteRetry
 
