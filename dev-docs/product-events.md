@@ -171,15 +171,16 @@ never see.
   or `StreamAndAccumulate`. A new request path goes through the meter, or is
   added to that test's allow-list with a reason (and to the privacy page if it
   is not recorded).
-- **Idempotent per logical request.** The row id is
-  `<workflow id>/<run id>/<activity id>/<purpose>/<ordinal>`: the activity,
-  what the request was for, and its ordinal among the requests that activity
-  makes (a title or a compaction can make several). Temporal re-runs a failed
-  activity and re-makes the same requests under the same ids, so each row is
-  replaced by the later attempt (`attempt` says which) rather than added to; a
-  repeat or an earlier attempt is a no-op. Purpose and ordinal keep requests
-  apart, so none collides with CallLLM's `.../chat/1`. The daily rollup moves in
-  the same transaction, so a retry never counts twice.
+- **One row per provider request, counted per attempt.** The row key is
+  `(id, attempt)`. The `id` is
+  `<workflow id>/<run id>/<activity id>/<purpose>/<ordinal>`: the activity, what
+  the request was for, and its ordinal among the requests that activity makes (a
+  title or a compaction can make several). `attempt` is the Temporal attempt.
+  Temporal re-runs a failed activity and every attempt is a real request that
+  may have used tokens (a stream can report usage and then break), so each
+  attempt is its own row and its own `calls` in the rollup. Only a repeated
+  write of the same `(id, attempt)` is ignored. Purpose and ordinal keep
+  requests apart, so none collides with CallLLM's `.../chat/1`.
 - **Count-only.** Columns are ids, provider, model, auth mode
   (`managed`/`byok`/`subscription`/`local`), four token counts, outcome, an
   `error_class` from a closed set (a CHECK constraint, so an error string
@@ -187,10 +188,12 @@ never see.
   column, and `TestLLMUsageTablesHoldNoContent` pins the exact column set. A
   new column means changing that test and `docs/help/privacy.mdx` together.
 - **Rollup and retention.** `llm_call_usage_daily` sums per UTC day, user, org,
-  provider, model and auth mode. `LLMUsageRetention` (api root) deletes
+  provider, model, auth mode and purpose. `LLMUsageRetention` (api root) deletes
   per-call rows older than `db.LLMCallUsageRetention` (90 days) hourly, in
   batches; the rollup is kept. `accountpurge` deletes both tables with the
-  account.
+  account and fences the user (`llm_usage_purged_users`, under a per-user
+  advisory lock) so a model call still in flight at deletion cannot write usage
+  back afterwards; fences are pruned after 7 days.
 - **Visibility (v1).** Only the user's own rows are readable
   (`Repo.ListLLMUsageDaily` takes the user id). Org admins do not see members'
   own-key usage. `org_id` is written empty today: reliant chats carry no org.

@@ -34,19 +34,21 @@ func rowCount(t *testing.T, raw *sql.DB, query string, args ...any) int {
 
 func day(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 12, 0, 0, 0, time.UTC) }
 
-// Temporal re-runs an activity under the same id after a failure or a worker
-// loss. The ledger must count that as one call, and the later attempt's counts
-// must be the ones that stand.
-func TestLLMCallUsage_IdempotentUnderActivityRetry(t *testing.T) {
+// Temporal re-runs an activity under the same id after a failure. Every attempt
+// is a real request to the provider, and a failed one can have used tokens (a
+// stream reports usage and then breaks), so the ledger counts each attempt.
+// Only a repeated write of the same attempt is ignored.
+func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T) {
 	t.Parallel()
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
 	at := day(2026, 10, 29)
 
-	// Attempt 1 failed.
+	// Attempt 1 failed after the provider had billed 300 input and 80 output tokens.
 	first := usageRec("wf/run/act-1", at)
-	first.Outcome, first.ErrorClass, first.InputTokens, first.OutputTokens = store.LLMOutcomeError, "network", 0, 0
+	first.Outcome, first.ErrorClass, first.InputTokens, first.OutputTokens = store.LLMOutcomeError, "network", 300, 80
+	first.CacheReadTokens, first.CacheWriteTokens, first.LatencyMs = 0, 0, 900
 	written, err := repo.RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
 	assert.True(t, written)
@@ -56,37 +58,39 @@ func TestLLMCallUsage_IdempotentUnderActivityRetry(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, written, "a repeat of the same attempt must not write")
 	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
-	assert.Equal(t, 1, rowCount(t, raw, `SELECT error_calls FROM llm_call_usage_daily`))
+	assert.Equal(t, 1, rowCount(t, raw, `SELECT calls FROM llm_call_usage_daily`))
 
-	// Attempt 2 of the same activity succeeds: it replaces attempt 1's row.
-	rec := usageRec("wf/run/act-1", at)
-	rec.Attempt, rec.InputTokens, rec.OutputTokens = 2, 120, 60
-	written, err = repo.RecordLLMCallUsage(ctx, rec)
+	// Attempt 2 of the same activity succeeds: a second provider call, added to
+	// the first, not a replacement of it.
+	second := usageRec("wf/run/act-1", at)
+	second.Attempt, second.InputTokens, second.OutputTokens = 2, 120, 60
+	written, err = repo.RecordLLMCallUsage(ctx, second)
 	require.NoError(t, err)
-	assert.True(t, written, "a later attempt replaces the earlier one")
+	assert.True(t, written, "a later attempt is a call of its own")
 
-	// A late delivery of attempt 1 after attempt 2 is ignored.
+	// A late delivery of attempt 1 after attempt 2 changes nothing.
 	written, err = repo.RecordLLMCallUsage(ctx, first)
 	require.NoError(t, err)
-	assert.False(t, written, "an earlier attempt must not overwrite a later one")
+	assert.False(t, written)
 
-	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`), "one activity is one call")
-	var in, out int64
-	var attempt int
-	require.NoError(t, raw.QueryRow(`SELECT input_tokens, output_tokens, attempt FROM llm_call_usage WHERE id = $1`, rec.ID).Scan(&in, &out, &attempt))
-	assert.Equal(t, [3]int64{120, 60, 2}, [3]int64{in, out, int64(attempt)})
+	assert.Equal(t, 2, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`), "two attempts, two provider calls")
+	var attempts int
+	require.NoError(t, raw.QueryRow(`SELECT count(DISTINCT attempt) FROM llm_call_usage WHERE id = $1`, "wf/run/act-1").Scan(&attempts))
+	assert.Equal(t, 2, attempts)
 
 	days, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
 	require.NoError(t, err)
 	require.Len(t, days, 1)
-	assert.EqualValues(t, 1, days[0].Calls, "the rollup counts the call once, whatever the attempts")
-	assert.EqualValues(t, 0, days[0].ErrorCalls, "the replaced failed attempt is out of the rollup")
-	assert.EqualValues(t, 120, days[0].InputTokens)
-	assert.EqualValues(t, 60, days[0].OutputTokens)
+	d := days[0]
+	assert.EqualValues(t, 2, d.Calls, "the failed attempt's request is still a request")
+	assert.EqualValues(t, 1, d.ErrorCalls, "and its failure is still an error")
+	assert.EqualValues(t, 300+120, d.InputTokens, "the tokens the failed attempt consumed are not lost")
+	assert.EqualValues(t, 80+60, d.OutputTokens)
+	assert.EqualValues(t, 900+250, d.LatencyMsTotal)
 }
 
-// Two workers delivering the same activity at once (a retry racing a slow
-// first attempt) must still leave exactly one call.
+// Two workers delivering the same attempt at once (a duplicate delivery) must
+// still leave exactly one call.
 func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 	t.Parallel()
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
@@ -127,11 +131,12 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"created_at": "timestamp with time zone",
 		},
 		"llm_call_usage_daily": {
-			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text",
+			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
 			"day": "date", "calls": "bigint", "error_calls": "bigint", "input_tokens": "bigint",
 			"output_tokens": "bigint", "cache_read_tokens": "bigint", "cache_write_tokens": "bigint",
 			"latency_ms_total": "bigint", "updated_at": "timestamp with time zone",
 		},
+		"llm_usage_purged_users": {"user_id": "text", "purged_at": "timestamp with time zone"},
 	}
 	for table, cols := range want {
 		rows, err := raw.Query(`SELECT column_name, data_type FROM information_schema.columns
@@ -272,4 +277,81 @@ func TestLLMCallUsage_PruneWorksInBatches(t *testing.T) {
 
 	_, err := store.PruneLLMCallUsage(ctx, repo.ORM(), cutoff, 0)
 	assert.Error(t, err, "a non-positive batch is a caller bug")
+}
+
+// Purpose splits the rollup, so a dashboard can tell a chat turn from a
+// compaction or a title for as long as the rollup lives.
+func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
+	t.Parallel()
+	repo, _, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	at := day(2026, 10, 29)
+	for i, purpose := range []string{store.LLMPurposeChat, store.LLMPurposeChat, store.LLMPurposeCompaction, store.LLMPurposeTitle, store.LLMPurposeDraftAutomation} {
+		r := usageRec(fmt.Sprintf("p%d", i), at)
+		r.Purpose = purpose
+		_, err := repo.RecordLLMCallUsage(ctx, r)
+		require.NoError(t, err)
+	}
+	rows, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
+	require.NoError(t, err)
+	calls := map[string]int64{}
+	for _, r := range rows {
+		calls[r.Purpose] += r.Calls
+	}
+	assert.Equal(t, map[string]int64{"chat": 2, "compaction": 1, "title": 1, "draft_automation": 1}, calls)
+	assert.Len(t, rows, 4, "one rollup row per purpose")
+
+	bad := usageRec("bad", at)
+	bad.Purpose = "chatting"
+	_, err = repo.RecordLLMCallUsage(ctx, bad)
+	assert.Error(t, err, "purpose is a closed set")
+}
+
+// A model call already in flight when its account is purged must not write
+// usage back afterwards, in either table.
+func TestLLMCallUsage_RefusedForAPurgedUser(t *testing.T) {
+	t.Parallel()
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	at := day(2026, 10, 29)
+
+	_, err := repo.RecordLLMCallUsage(ctx, usageRec("before", at))
+	require.NoError(t, err)
+	_, err = raw.Exec(`INSERT INTO llm_usage_purged_users (user_id, purged_at) VALUES ('u1', $1)`, at.Add(time.Hour))
+	require.NoError(t, err)
+	_, err = raw.Exec(`DELETE FROM llm_call_usage WHERE user_id = 'u1'; DELETE FROM llm_call_usage_daily WHERE user_id = 'u1'`)
+	require.NoError(t, err)
+
+	written, err := repo.RecordLLMCallUsage(ctx, usageRec("after", at))
+	require.NoError(t, err)
+	assert.False(t, written, "the call that began before deletion is not recorded")
+	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
+	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage_daily`))
+
+	returned := usageRec("began-after", at.Add(2*time.Hour))
+	written, err = repo.RecordLLMCallUsage(ctx, returned)
+	require.NoError(t, err)
+	assert.True(t, written, "a call that began after the purge belongs to a returning user")
+
+	other := usageRec("other-user", at)
+	other.UserID = "u2"
+	written, err = repo.RecordLLMCallUsage(ctx, other)
+	require.NoError(t, err)
+	assert.True(t, written, "the fence is per user")
+}
+
+func TestLLMUsagePurgeFences_AgeOut(t *testing.T) {
+	t.Parallel()
+	repo, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	now := day(2026, 10, 29)
+	_, err := raw.Exec(`INSERT INTO llm_usage_purged_users (user_id, purged_at) VALUES ('old', $1), ('recent', $2)`,
+		now.Add(-store.LLMUsagePurgeFenceRetention-time.Hour), now.Add(-time.Hour))
+	require.NoError(t, err)
+	n, err := repo.PruneLLMUsagePurgeFences(context.Background(), now)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+	assert.Equal(t, 1, rowCount(t, raw, `SELECT count(*) FROM llm_usage_purged_users WHERE user_id = 'recent'`))
 }

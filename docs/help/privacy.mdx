@@ -119,7 +119,8 @@ Two kinds of request are not recorded: image and video generation (the generatio
 - how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
 - the number of input, output, cache-read and cache-write tokens
 - whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
-- how long it took, which attempt it was, and when it happened
+- what the request was for (a chat turn, summarizing a conversation, titling a chat or drafting an automation)
+- how long it took, which attempt it was, and when it happened. A request that Reliant has to retry is recorded once per attempt, because each attempt is a real request to the provider
 
 **What it never contains:** your prompt, the model's reply, tool inputs or outputs, file names or paths, the text of an error message, or your API key. The database tables have no column that could hold any of these, and a test fails if one is added.
 
@@ -127,7 +128,7 @@ Two kinds of request are not recorded: image and video generation (the generatio
 
 **Who can see it:** only you, and only your own. Organization admins can't see usage on your own API keys or logins. Usage on Reliant AI is also part of your billing records.
 
-**How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider and payment type, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
+**How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider, payment type and purpose, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
 
 ## Telemetry
 

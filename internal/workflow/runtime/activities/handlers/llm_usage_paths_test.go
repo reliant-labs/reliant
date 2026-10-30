@@ -144,6 +144,24 @@ func ledgerRows(t *testing.T, h *IdempotencyTestHelper, purpose string) []ledger
 	return out
 }
 
+// requireAttempts asserts rows are the failed attempt 1 and the answered
+// attempt 2 of one logical request (same id): both are provider requests, so
+// both are in the ledger.
+func requireAttempts(t *testing.T, rows []ledgerPathRow) (failed, ok ledgerPathRow) {
+	t.Helper()
+	require.Len(t, rows, 2, "a failed attempt and its retry are two provider requests: %+v", rows)
+	failed, ok = rows[0], rows[1]
+	if failed.Attempt > ok.Attempt {
+		failed, ok = ok, failed
+	}
+	assert.Equal(t, 1, failed.Attempt)
+	assert.Equal(t, "error", failed.Outcome)
+	assert.Equal(t, "network", failed.ErrorClass)
+	assert.Equal(t, 2, ok.Attempt)
+	assert.Equal(t, failed.ID, ok.ID, "the attempts are one logical request")
+	return failed, ok
+}
+
 func dailyCalls(t *testing.T, h *IdempotencyTestHelper) (calls, errCalls, in int64) {
 	t.Helper()
 	require.NoError(t, h.DB().QueryRow(`SELECT COALESCE(sum(calls),0), COALESCE(sum(error_calls),0), COALESCE(sum(input_tokens),0)
@@ -152,8 +170,8 @@ func dailyCalls(t *testing.T, h *IdempotencyTestHelper) (calls, errCalls, in int
 }
 
 // Compaction makes its own model request. It must reach the ledger and the
-// rollup, once, however many times Temporal runs the activity.
-func TestCompaction_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
+// rollup, and each Temporal attempt is its own provider request.
+func TestCompaction_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -171,25 +189,22 @@ func TestCompaction_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
 	require.Equal(t, 2, driver.requests, "attempt 1 fails, attempt 2 answers")
 
 	rows := ledgerRows(t, h, "compaction")
-	require.Len(t, rows, 1, "one logical summary request, however many attempts: %+v", rows)
-	r := rows[0]
+	_, r := requireAttempts(t, rows)
 	assert.Equal(t, chatID, r.ChatID)
 	assert.Equal(t, "claude", r.Provider)
 	assert.Equal(t, "subscription", r.AuthMode)
 	assert.Equal(t, "success", r.Outcome)
 	assert.Equal(t, [4]int64{700, 90, 400, 30}, [4]int64{r.In, r.Out, r.CacheRead, r.CacheWrite})
-	assert.Equal(t, 2, r.Attempt)
 
 	calls, errCalls, in := dailyCalls(t, h)
-	assert.EqualValues(t, 1, calls)
-	assert.EqualValues(t, 0, errCalls, "the failed first attempt is not in the rollup")
-	assert.EqualValues(t, 700, in)
+	assert.EqualValues(t, 2, calls, "the failed attempt and the answered one")
+	assert.EqualValues(t, 1, errCalls)
+	assert.EqualValues(t, 700, in, "the failed attempt reported no tokens")
 }
 
-// A title is requested through requestTitle, which retries on another account:
-// a title is one or several logical requests, each its own row, and a
-// Temporal retry of the activity replaces them rather than adding.
-func TestTitle_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
+// A title is one or several logical requests, each its own row; a Temporal
+// retry of the activity makes them again, and each attempt is counted.
+func TestTitle_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -203,19 +218,18 @@ func TestTitle_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
 	require.Equal(t, 2, driver.requests)
 
 	rows := ledgerRows(t, h, "title")
-	require.Len(t, rows, 1, "%+v", rows)
-	assert.Equal(t, chat.ID, rows[0].ChatID)
-	assert.Equal(t, "byok", rows[0].AuthMode, "a pasted OpenAI key is the user's own")
-	assert.Equal(t, "success", rows[0].Outcome)
-	assert.Equal(t, int64(700), rows[0].In)
-	assert.Equal(t, 2, rows[0].Attempt)
+	_, r := requireAttempts(t, rows)
+	assert.Equal(t, chat.ID, r.ChatID)
+	assert.Equal(t, "byok", r.AuthMode, "a pasted OpenAI key is the user's own")
+	assert.Equal(t, "success", r.Outcome)
+	assert.Equal(t, int64(700), r.In)
 	calls, _, _ := dailyCalls(t, h)
-	assert.EqualValues(t, 1, calls)
+	assert.EqualValues(t, 2, calls)
 }
 
 // A draft belongs to no chat, so its row has none; it still reaches the
 // ledger under the user who asked.
-func TestDraftAutomation_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
+func TestDraftAutomation_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -226,13 +240,13 @@ func TestDraftAutomation_RequestReachesTheLedgerOncePerRetry(t *testing.T) {
 	require.Equal(t, 2, driver.requests)
 
 	rows := ledgerRows(t, h, "draft_automation")
-	require.Len(t, rows, 1, "%+v", rows)
-	assert.Equal(t, "", rows[0].ChatID)
-	assert.Equal(t, "managed", rows[0].AuthMode)
-	assert.Equal(t, int64(700), rows[0].In)
-	var userID string
-	require.NoError(t, h.DB().QueryRow(`SELECT user_id FROM llm_call_usage WHERE purpose = 'draft_automation'`).Scan(&userID))
-	assert.Equal(t, "user-draft-ledger", userID)
+	_, r := requireAttempts(t, rows)
+	assert.Equal(t, "", r.ChatID)
+	assert.Equal(t, "managed", r.AuthMode)
+	assert.Equal(t, int64(700), r.In)
+	var users int
+	require.NoError(t, h.DB().QueryRow(`SELECT count(*) FROM llm_call_usage WHERE purpose = 'draft_automation' AND user_id = 'user-draft-ledger'`).Scan(&users))
+	assert.Equal(t, 2, users)
 }
 
 // Several requests inside one activity are distinct logical requests, each

@@ -1205,6 +1205,9 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 		} else if n > 0 {
 			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
 		}
+		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
+		}
 		select {
 		case <-ctx.Done():
 			return nil

@@ -50,12 +50,14 @@ type llmUsageCall struct {
 // is the ledger's only write path: CallLLM's turn and every other model request
 // (through usageMeter) end here.
 //
-// The record's id is the logical request: the activity (workflow id, run id,
-// activity id), what it was for, and its ordinal among the requests that
-// activity makes. Temporal re-running the activity re-makes the same logical
-// requests under the same ids, so each replaces its row instead of adding a
-// second call; the attempt number says which attempt's counts stand. A
-// different purpose or ordinal is a different request and never collides.
+// The record is keyed on the logical request, the activity (workflow id, run
+// id, activity id), what it was for, and its ordinal among the requests that
+// activity makes, plus the Temporal attempt. Temporal re-running an activity
+// makes the same logical requests again, and each attempt is a real request to
+// the provider that may have used tokens (a stream can fail after reporting
+// usage), so every attempt is its own row and is counted. Only a repeated write
+// of the same attempt is ignored. A different purpose or ordinal is a different
+// request and never collides.
 //
 // A failed write is logged and dropped; usage accounting never fails the work
 // it describes.
@@ -119,7 +121,7 @@ func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat,
 // request and records it, so an activity cannot make a request the ledger
 // misses. One meter per activity execution: its ordinal counts the requests
 // made so far, which is what keeps a retried execution's requests on the same
-// ids (and so replacing, not adding to, the first attempt's).
+// ids, which the attempt number then tells apart.
 //
 // TestModelRequestsGoThroughTheUsageLedger fails when a new call site streams a
 // request any other way.

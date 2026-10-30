@@ -37,7 +37,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -93,13 +92,22 @@ type LLMCallUsageRecord struct {
 	CreatedAt        time.Time
 }
 
-// RecordLLMCallUsage writes one call and folds it into its day's rollup, in one
-// transaction. It is idempotent under Temporal's activity retry: the row for
-// rec.ID is locked, and a repeat of the same or an earlier attempt changes
-// nothing, while a later attempt replaces the row and moves the rollup by the
-// difference. Reports whether anything was written.
+// RecordLLMCallUsage writes one provider request and folds it into its day's
+// rollup, in one transaction. A request is (ID, Attempt): Temporal re-runs an
+// activity after a failure, and every attempt is a real call to the provider
+// that may have used tokens, so each attempt is counted. Only a repeated write
+// of the same attempt (a duplicate delivery) is ignored. Reports whether
+// anything was written.
 //
-// The caller's ctx should be a transaction (db.Repo.RunTx) so the lock holds
+// A write for a call that began before its user's account was purged is refused
+// (false, nil): a model call already in flight when the account was deleted must
+// not recreate usage that the deletion promised to remove. Its start is its
+// completion time minus its latency. The write holds a shared advisory lock
+// on the user, so a purge (which takes it exclusively, see accountpurge) either
+// waits for this write and then deletes its rows, or commits first and is seen
+// here.
+//
+// The caller's ctx must be a transaction (db.Repo.RunTx) so the lock holds
 // until the rollup is written.
 func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) (bool, error) {
 	if rec.ID == "" || rec.UserID == "" {
@@ -110,40 +118,34 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	}
 	rec.CreatedAt = rec.CreatedAt.UTC()
 
-	if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, "llm-call-usage:"+rec.ID).Exec(ctx); err != nil {
-		return false, fmt.Errorf("lock llm call usage %s: %w", rec.ID, err)
+	if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock_shared(hashtextextended(?, 0))`, LLMUsageUserLockKey(rec.UserID)).Exec(ctx); err != nil {
+		return false, fmt.Errorf("lock llm call usage for user: %w", err)
+	}
+	// Only a call that began before the purge is refused: a user who signs up
+	// again under the same id starts a new history, and their calls begin after.
+	startedAt := rec.CreatedAt.Add(-time.Duration(rec.LatencyMs) * time.Millisecond)
+	var purged bool
+	if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM llm_usage_purged_users WHERE user_id = ? AND purged_at > ?)`, rec.UserID, startedAt).Scan(ctx, &purged); err != nil {
+		return false, fmt.Errorf("check purged user: %w", err)
+	}
+	if purged {
+		return false, nil
 	}
 
-	var prev LLMCallUsageRecord
-	err := db.Bun().NewRaw(`SELECT id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
-		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class,
-		latency_ms, attempt, created_at FROM llm_call_usage WHERE id = ?`, rec.ID).Scan(ctx,
-		&prev.ID, &prev.UserID, &prev.OrgID, &prev.ChatID, &prev.RunID, &prev.Provider, &prev.Model, &prev.AuthMode, &prev.Purpose,
-		&prev.InputTokens, &prev.OutputTokens, &prev.CacheReadTokens, &prev.CacheWriteTokens, &prev.Outcome, &prev.ErrorClass,
-		&prev.LatencyMs, &prev.Attempt, &prev.CreatedAt)
-	switch {
-	case err == nil:
-		if prev.Attempt >= rec.Attempt {
-			return false, nil
-		}
-		if err := removeLLMUsageDaily(ctx, db, prev); err != nil {
-			return false, err
-		}
-		if _, err := db.Bun().NewRaw(`DELETE FROM llm_call_usage WHERE id = ?`, rec.ID).Exec(ctx); err != nil {
-			return false, fmt.Errorf("replace llm call usage %s: %w", rec.ID, err)
-		}
-	case errors.Is(err, sql.ErrNoRows):
-	default:
-		return false, fmt.Errorf("read llm call usage %s: %w", rec.ID, err)
-	}
-
-	if _, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
+	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)`,
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
-		rec.LatencyMs, rec.Attempt, rec.CreatedAt).Exec(ctx); err != nil {
+		rec.LatencyMs, rec.Attempt, rec.CreatedAt).Exec(ctx)
+	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
+	} else if n == 0 {
+		return false, nil
 	}
 	if err := addLLMUsageDaily(ctx, db, rec); err != nil {
 		return false, err
@@ -151,12 +153,16 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	return true, nil
 }
 
+// LLMUsageUserLockKey is the advisory-lock key that serializes usage writes
+// against an account purge for one user.
+func LLMUsageUserLockKey(userID string) string { return "llm-usage-user:" + userID }
+
 // addLLMUsageDaily adds one call to its UTC day's rollup row.
 func addLLMUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) error {
-	_, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage_daily AS d (user_id, day, org_id, provider, model, auth_mode,
+	_, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage_daily AS d (user_id, day, org_id, provider, model, auth_mode, purpose,
 		calls, error_calls, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms_total, updated_at)
-		VALUES (?0, (?1::timestamptz AT TIME ZONE 'UTC')::date, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9, ?10, ?11, now())
-		ON CONFLICT (user_id, day, org_id, provider, model, auth_mode) DO UPDATE SET
+		VALUES (?0, (?1::timestamptz AT TIME ZONE 'UTC')::date, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12, now())
+		ON CONFLICT (user_id, day, org_id, provider, model, auth_mode, purpose) DO UPDATE SET
 		    calls = d.calls + EXCLUDED.calls,
 		    error_calls = d.error_calls + EXCLUDED.error_calls,
 		    input_tokens = d.input_tokens + EXCLUDED.input_tokens,
@@ -165,34 +171,11 @@ func addLLMUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecor
 		    cache_write_tokens = d.cache_write_tokens + EXCLUDED.cache_write_tokens,
 		    latency_ms_total = d.latency_ms_total + EXCLUDED.latency_ms_total,
 		    updated_at = now()`,
-		rec.UserID, rec.CreatedAt.UTC(), rec.OrgID, rec.Provider, rec.Model, rec.AuthMode,
+		rec.UserID, rec.CreatedAt.UTC(), rec.OrgID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		llmErrorCalls(rec), rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens,
 		rec.CacheWriteTokens, rec.LatencyMs).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("update llm call usage rollup: %w", err)
-	}
-	return nil
-}
-
-// removeLLMUsageDaily takes one call back out of its day's rollup row. It is an
-// UPDATE, not a negative upsert: Postgres checks a row's CHECK constraints
-// before ON CONFLICT resolves, so a negative INSERT is refused.
-func removeLLMUsageDaily(ctx context.Context, db orm.Context, rec LLMCallUsageRecord) error {
-	_, err := db.Bun().NewRaw(`UPDATE llm_call_usage_daily SET
-		    calls = calls - 1,
-		    error_calls = error_calls - ?0,
-		    input_tokens = input_tokens - ?1,
-		    output_tokens = output_tokens - ?2,
-		    cache_read_tokens = cache_read_tokens - ?3,
-		    cache_write_tokens = cache_write_tokens - ?4,
-		    latency_ms_total = latency_ms_total - ?5,
-		    updated_at = now()
-		WHERE user_id = ?6 AND day = (?7::timestamptz AT TIME ZONE 'UTC')::date
-		  AND org_id = ?8 AND provider = ?9 AND model = ?10 AND auth_mode = ?11`,
-		llmErrorCalls(rec), rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.LatencyMs,
-		rec.UserID, rec.CreatedAt.UTC(), rec.OrgID, rec.Provider, rec.Model, rec.AuthMode).Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("revert llm call usage rollup: %w", err)
 	}
 	return nil
 }
@@ -211,8 +194,8 @@ func PruneLLMCallUsage(ctx context.Context, db orm.Context, cutoff time.Time, ba
 	if batch <= 0 {
 		return 0, errors.New("prune llm call usage: batch must be positive")
 	}
-	res, err := db.Bun().NewRaw(`DELETE FROM llm_call_usage WHERE id IN (
-		SELECT id FROM llm_call_usage WHERE created_at < ? ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
+	res, err := db.Bun().NewRaw(`DELETE FROM llm_call_usage WHERE (id, attempt) IN (
+		SELECT id, attempt FROM llm_call_usage WHERE created_at < ? ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
 		cutoff.UTC(), batch).Exec(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("prune llm call usage: %w", err)
@@ -229,7 +212,7 @@ func ListLLMUsageDaily(ctx context.Context, db orm.Context, userID string, from,
 		Where("user_id = ?", userID).
 		Where("day >= ?::date", from.UTC().Format("2006-01-02")).
 		Where("day <= ?::date", to.UTC().Format("2006-01-02")).
-		OrderExpr("day, provider, model, auth_mode, org_id").
+		OrderExpr("day, provider, model, auth_mode, purpose, org_id").
 		Scan(ctx)
 	return rows, err
 }
@@ -259,4 +242,20 @@ func DeleteLLMCallUsageForUser(ctx context.Context, db orm.Context, userID strin
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type LlmCallUsageExtra struct {
+}
+
+// LLMUsagePurgeFenceRetention is how long a purged user's fence row is kept:
+// longer than an activity and all of its retries can run, so a call in flight
+// at deletion has long finished (or been abandoned) by the time it goes.
+const LLMUsagePurgeFenceRetention = 7 * 24 * time.Hour
+
+// PruneLLMUsagePurgeFences deletes purge fences older than
+// LLMUsagePurgeFenceRetention at now.
+func PruneLLMUsagePurgeFences(ctx context.Context, db orm.Context, now time.Time) (int64, error) {
+	res, err := db.Bun().NewRaw(`DELETE FROM llm_usage_purged_users WHERE purged_at < ?`,
+		now.Add(-LLMUsagePurgeFenceRetention).UTC()).Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("prune llm usage purge fences: %w", err)
+	}
+	return res.RowsAffected()
 }

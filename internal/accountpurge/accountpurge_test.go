@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,8 +118,8 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 
 	exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, created_at)
 	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
-	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, calls)
-	      VALUES ($1,$2,'anthropic','m','byok',1)`, userID, now)
+	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, purpose, calls)
+	      VALUES ($1,$2,'anthropic','m','byok','chat',1)`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -454,5 +455,98 @@ func mustExec(t *testing.T, d *sql.DB, q string, args ...any) {
 	t.Helper()
 	if _, err := d.Exec(q, args...); err != nil {
 		t.Fatalf("exec %q: %v", q, err)
+	}
+}
+
+// A model call that is still in flight when its account is deleted finishes
+// afterwards and records its usage. That must not bring the user's usage back:
+// the purge fences the user, and the ledger refuses a fenced user. Run with the
+// writer racing the purge so both orderings are exercised: a write that lands
+// first is deleted by the purge, a write that lands after is refused.
+func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "user-in-flight"
+	seedUser(t, rawDB, userID)
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+				ID: fmt.Sprintf("late-%d", i), UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
+				AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
+				LatencyMs: time.Hour.Milliseconds(), // began well before the purge
+			})
+			if err != nil {
+				t.Errorf("RecordLLMCallUsage: %v", err)
+			}
+		}()
+	}
+	close(start)
+	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+	wg.Wait()
+
+	// Writers that were still running after the purge committed are refused, and
+	// those that finished before it were deleted by it.
+	for _, table := range []string{"llm_call_usage", "llm_call_usage_daily"} {
+		if n := countRows(t, rawDB, table, userID); n != 0 {
+			t.Errorf("%s: %d rows for a purged account, want 0", table, n)
+		}
+	}
+
+	// A call that finishes long after the purge is refused too.
+	written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+		ID: "much-later", UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
+		Outcome: "success", Attempt: 1, CreatedAt: time.Now(), LatencyMs: time.Hour.Milliseconds(),
+	})
+	if err != nil || written {
+		t.Fatalf("a call after the purge: written=%v err=%v, want refused", written, err)
+	}
+	if n := countRows(t, rawDB, "llm_call_usage_daily", userID); n != 0 {
+		t.Errorf("rollup recreated after the purge: %d rows", n)
+	}
+}
+
+// The same user id can come back (signing up again with the same identity). Its
+// new calls begin after the purge and are recorded; only calls that began before
+// it are refused.
+func TestPurge_AUserWhoSignsUpAgainIsRecorded(t *testing.T) {
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "user-returns"
+	seedUser(t, rawDB, userID)
+	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+
+	call := func(id string, started time.Time) bool {
+		written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+			ID: id, UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
+			InputTokens: 10, Outcome: "success", Attempt: 1, LatencyMs: 1000,
+			CreatedAt: started.Add(time.Second),
+		})
+		if err != nil {
+			t.Fatalf("RecordLLMCallUsage(%s): %v", id, err)
+		}
+		return written
+	}
+	if call("in-flight-at-deletion", time.Now().Add(-time.Hour)) {
+		t.Error("a call that began before the purge was recorded")
+	}
+	if !call("after-signup", time.Now().Add(time.Minute)) {
+		t.Error("a call that began after the purge was refused")
+	}
+	if n := countRows(t, rawDB, "llm_call_usage", userID); n != 1 {
+		t.Errorf("llm_call_usage: %d rows, want 1 (the post-signup call)", n)
 	}
 }

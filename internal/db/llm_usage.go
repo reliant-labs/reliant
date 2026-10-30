@@ -28,10 +28,11 @@ const LLMCallUsageRetention = 90 * 24 * time.Hour
 // short transactions rather than one long one.
 const llmUsagePruneBatch = 5000
 
-// RecordLLMCallUsage writes one call and its rollup. Idempotent by rec.ID (the
-// activity's idempotency key): a Temporal retry of the same activity changes
-// nothing, and a later attempt replaces the earlier one's row. Reports whether
-// anything was written.
+// RecordLLMCallUsage writes one provider request and its rollup. A request is
+// (rec.ID, rec.Attempt): each Temporal attempt is its own call and is counted,
+// and only a repeated write of the same attempt changes nothing. A user whose
+// account was purged is refused (false, nil). Reports whether anything was
+// written.
 func (r *Repo) RecordLLMCallUsage(ctx context.Context, rec LLMCallUsage) (bool, error) {
 	var written bool
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
@@ -63,6 +64,16 @@ func (r *Repo) PruneLLMCallUsage(ctx context.Context, now time.Time) (int64, err
 			return total, err
 		}
 	}
+}
+
+// PruneLLMUsagePurgeFences deletes the account-deletion fences old enough that
+// no call in flight at deletion can still be running.
+func (r *Repo) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time) (int64, error) {
+	n, err := store.PruneLLMUsagePurgeFences(orm.Detached(ctx), r.ORM(), now)
+	if err != nil {
+		return 0, fmt.Errorf("prune llm usage purge fences: %w", err)
+	}
+	return n, nil
 }
 
 // ListLLMUsageDaily returns the user's rollup rows for the UTC days from..to

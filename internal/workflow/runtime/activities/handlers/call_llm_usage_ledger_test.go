@@ -27,6 +27,10 @@ type usageDriver struct {
 	name     string
 	streams  int
 	failures int
+	// failWithUsage makes a failing stream report its token usage before the
+	// error, the way a provider that bills a request and then drops the
+	// connection does.
+	failWithUsage bool
 }
 
 func (d *usageDriver) Name() string                          { return d.name }
@@ -43,8 +47,14 @@ func (d *usageDriver) StreamResponse(ctx context.Context, prompts []string, mess
 	fail := d.streams <= d.failures
 	d.mu.Unlock()
 
-	ch := make(chan llm.DriverEvent, 1)
+	ch := make(chan llm.DriverEvent, 2)
 	if fail {
+		if d.failWithUsage {
+			ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
+				FinishReason: message.FinishReasonEndTurn,
+				Usage:        llm.TokenUsage{InputTokens: 500, OutputTokens: 120, CacheReadInputTokens: 100},
+			}}
+		}
 		ch <- llm.DriverEvent{Type: llm.EventError, Error: errors.New("http2: client connection lost; secret prompt text sk-live-123")}
 	} else {
 		ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
@@ -100,10 +110,10 @@ func runCallLLMWithRetries(t *testing.T, h *IdempotencyTestHelper, driver llm.Dr
 	require.NoError(t, env.GetWorkflowError())
 }
 
-// One model call is one ledger row, even when Temporal runs the activity twice:
-// attempt 1 drops the connection, attempt 2 answers, and the row holds attempt
-// 2's counts with the attempt number that produced them.
-func TestCallLLM_UsageLedgerIsIdempotentUnderActivityRetry(t *testing.T) {
+// Temporal runs the activity twice: attempt 1 drops the connection, attempt 2
+// answers. Both are requests to the provider, so both are in the ledger and the
+// rollup, each under the attempt that made it.
+func TestCallLLM_UsageLedgerCountsEveryAttemptOfARetriedActivity(t *testing.T) {
 	t.Parallel()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -117,22 +127,72 @@ func TestCallLLM_UsageLedgerIsIdempotentUnderActivityRetry(t *testing.T) {
 	require.Equal(t, 2, driver.streams, "the test must really run the activity twice")
 
 	rows := readLedger(t, h)
-	require.Len(t, rows, 1, "a retried activity is one call: %+v", rows)
-	r := rows[0]
-	assert.Equal(t, "user-ledger", r.UserID)
-	assert.Equal(t, chat.ID, r.ChatID)
-	assert.Equal(t, "anthropic", r.Provider)
-	assert.Equal(t, "mock-model", r.Model)
-	assert.Equal(t, "byok", r.AuthMode)
-	assert.Equal(t, "success", r.Outcome)
-	assert.Empty(t, r.ErrorClass)
-	assert.Equal(t, [4]int64{1200, 340, 800, 50}, [4]int64{r.In, r.Out, r.CacheRead, r.CacheWrite})
-	assert.Equal(t, 2, r.Attempt, "the row says which attempt produced it")
+	require.Len(t, rows, 2, "two attempts are two provider requests: %+v", rows)
+	failed, ok := rows[0], rows[1]
+	if failed.Attempt > ok.Attempt {
+		failed, ok = ok, failed
+	}
+	assert.Equal(t, 1, failed.Attempt)
+	assert.Equal(t, "error", failed.Outcome)
+	assert.Equal(t, "network", failed.ErrorClass)
+	assert.Equal(t, 2, ok.Attempt)
+	assert.Equal(t, "success", ok.Outcome)
+	assert.Empty(t, ok.ErrorClass)
+	assert.Equal(t, [4]int64{1200, 340, 800, 50}, [4]int64{ok.In, ok.Out, ok.CacheRead, ok.CacheWrite})
+	assert.Equal(t, failed.ID, ok.ID, "the attempts are one logical request")
+	for _, r := range rows {
+		assert.Equal(t, "user-ledger", r.UserID)
+		assert.Equal(t, chat.ID, r.ChatID)
+		assert.Equal(t, "anthropic", r.Provider)
+		assert.Equal(t, "mock-model", r.Model)
+		assert.Equal(t, "byok", r.AuthMode)
+	}
 
 	var calls, errorCalls int64
 	require.NoError(t, h.DB().QueryRow(`SELECT COALESCE(sum(calls),0), COALESCE(sum(error_calls),0) FROM llm_call_usage_daily`).Scan(&calls, &errorCalls))
-	assert.EqualValues(t, 1, calls)
-	assert.EqualValues(t, 0, errorCalls, "the failed first attempt is not a second call in the rollup")
+	assert.EqualValues(t, 2, calls)
+	assert.EqualValues(t, 1, errorCalls, "the failed attempt stays an error in the rollup")
+}
+
+// A provider can bill a request and then drop the connection. Attempt 1 reports
+// usage and fails, attempt 2 succeeds: the tokens attempt 1 consumed are in the
+// totals next to attempt 2's, not overwritten by them.
+func TestCallLLM_UsageLedgerKeepsTokensAFailedAttemptConsumed(t *testing.T) {
+	t.Parallel()
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "proj-ledger-billed", "user-ledger-billed")
+	chat := h.CreateTestChat(ctx, "chat-ledger-billed", project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	driver := &usageDriver{name: "anthropic", failures: 1, failWithUsage: true}
+	runCallLLMWithRetries(t, h, driver, chat.ID)
+	require.Equal(t, 2, driver.streams)
+
+	rows := readLedger(t, h)
+	require.Len(t, rows, 2, "%+v", rows)
+	byAttempt := map[int]ledgerRow{}
+	for _, r := range rows {
+		byAttempt[r.Attempt] = r
+	}
+	require.Contains(t, byAttempt, 1)
+	require.Contains(t, byAttempt, 2)
+	assert.Equal(t, "error", byAttempt[1].Outcome)
+	assert.Equal(t, [3]int64{500, 120, 100}, [3]int64{byAttempt[1].In, byAttempt[1].Out, byAttempt[1].CacheRead},
+		"the failed attempt keeps the usage it reported")
+	assert.Equal(t, "success", byAttempt[2].Outcome)
+	assert.Equal(t, [3]int64{1200, 340, 800}, [3]int64{byAttempt[2].In, byAttempt[2].Out, byAttempt[2].CacheRead})
+
+	var calls, errorCalls, in, out, cacheRead int64
+	require.NoError(t, h.DB().QueryRow(`SELECT COALESCE(sum(calls),0), COALESCE(sum(error_calls),0),
+		COALESCE(sum(input_tokens),0), COALESCE(sum(output_tokens),0), COALESCE(sum(cache_read_tokens),0)
+		FROM llm_call_usage_daily`).Scan(&calls, &errorCalls, &in, &out, &cacheRead))
+	assert.EqualValues(t, 2, calls)
+	assert.EqualValues(t, 1, errorCalls)
+	assert.EqualValues(t, 500+1200, in, "the rollup holds both attempts' input tokens")
+	assert.EqualValues(t, 120+340, out)
+	assert.EqualValues(t, 100+800, cacheRead)
 }
 
 // A call that fails for good is recorded as a failed call with a coarse class,
