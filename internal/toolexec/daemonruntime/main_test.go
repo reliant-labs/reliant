@@ -2,14 +2,18 @@
 package daemonruntime
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	forgecli "github.com/reliant-labs/forge/cli"
 	"github.com/reliant-labs/reliant/internal/credsandbox"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
@@ -43,6 +47,12 @@ func TestMain(m *testing.M) {
 	// host that does not allow it the sandbox is turned off, so the tests that
 	// only use credentials: none still check what they were written to check.
 	credsandbox.DispatchForTest()
+	// No test resolves, builds or runs a real pinned forge for the framework
+	// memory (forge_memory.go): every project is served by the embedded forge
+	// unless a test installs fakes (useFakePinnedForges).
+	pinnedForge = &forgepin.Source{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+		return forgecli.PinnedForge{}, false, nil
+	}}
 	os.Exit(runIsolated(m))
 }
 

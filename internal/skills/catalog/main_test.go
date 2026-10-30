@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 )
 
 // TestMain keeps every test off a real pinned forge. Resolving one can build
@@ -17,8 +18,10 @@ import (
 // embedded forge serves every test unless the test installs a fake
 // (useFakePinnedForge).
 func TestMain(m *testing.M) {
-	resolvePinnedForge = func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
-		return forgecli.PinnedForge{}, false, nil
+	pinnedForge = &forgepin.Source{
+		Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+			return forgecli.PinnedForge{}, false, nil
+		},
 	}
 	os.Exit(m.Run())
 }

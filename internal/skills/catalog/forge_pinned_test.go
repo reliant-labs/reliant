@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,19 +28,19 @@ type fakePinnedForge struct {
 	resolves   int
 	// withBodies: the pinned forge has `skill list --with-bodies`.
 	withBodies bool
+	// restart stands in for a new process: fresh memory, the same disk cache.
+	restart func()
 }
 
 func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 	t.Helper()
-	prevResolve, prevRun, prevDir := resolvePinnedForge, runPinnedForge, pinnedSkillCacheDir
+	prev := pinnedForge
 	cache := t.TempDir()
 	t.Cleanup(func() {
-		resolvePinnedForge, runPinnedForge, pinnedSkillCacheDir = prevResolve, prevRun, prevDir
-		pinnedForgeCache.Range(func(k, _ any) bool { pinnedForgeCache.Delete(k); return true })
-		pinnedResolutions.Range(func(k, _ any) bool { pinnedResolutions.Delete(k); return true })
+		pinnedForge = prev
+		clearPinnedCatalog()
 	})
-	pinnedSkillCacheDir = func() string { return cache }
-	resolvePinnedForge = func(_ context.Context, _, command string, _ io.Writer) (forgecli.PinnedForge, bool, error) {
+	resolve := func(_ context.Context, _, command string, _ io.Writer) (forgecli.PinnedForge, bool, error) {
 		f.mu.Lock()
 		f.resolves++
 		f.mu.Unlock()
@@ -51,7 +52,7 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 		}
 		return forgecli.PinnedForge{Path: "/pinned/forge", Key: "pin:v1.0.4", Want: "forge_version v1.0.4"}, true, nil
 	}
-	runPinnedForge = func(bin, _ string, args ...string) ([]byte, error) {
+	run := func(bin, _ string, args ...string) ([]byte, error) {
 		f.mu.Lock()
 		f.runs = append(f.runs, strings.Join(args, " "))
 		f.mu.Unlock()
@@ -71,6 +72,16 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 		}
 		return nil, errors.New("unexpected " + strings.Join(args, " "))
 	}
+	f.restart = func() {
+		clearPinnedCatalog()
+		pinnedForge = &forgepin.Source{Resolve: resolve, Run: run, CacheDir: func() string { return cache }}
+	}
+	f.restart()
+}
+
+// clearPinnedCatalog forgets every parsed pinned catalog, as a new process would.
+func clearPinnedCatalog() {
+	pinnedForgeCache.Range(func(k, _ any) bool { pinnedForgeCache.Delete(k); return true })
 }
 
 func pinnedProject(t *testing.T) string {
@@ -117,11 +128,12 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	// Cached per pinned forge: in memory, and on disk across a restart.
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
-	pinnedForgeCache.Range(func(k, _ any) bool { pinnedForgeCache.Delete(k); return true })
+	f.restart()
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
 	assert.Equal(t, []string{"skill list --json --with-bodies", "skill list --json", "skill load only-in-v104"}, f.runs, "the pinned forge was asked again for what it already said")
-	assert.Equal(t, 1, f.resolves, "which forge the project pins was resolved again within the TTL")
+	// One resolution per process: the restart asked again.
+	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
 }
 
 // With no pin (or the pin is the embedded forge), nothing changes.
@@ -161,37 +173,6 @@ func TestPinnedProject_UnobtainablePinSaysSoAndServesNoOtherForge(t *testing.T) 
 
 	_, err := loadForgeDefinition(Definition{Scope: defs["forge"].Scope, Path: forgeSyntheticPath(dir, "db"), SkillPath: "forge/db"})
 	require.Error(t, err, "a framework skill loaded from the embedded forge")
-}
-
-// The pinned forge names itself as an agent types it, so a body says
-// `reliant forge …` as the embedded forge's did.
-func TestExecPinnedForge_NamesItselfAsReliantForge(t *testing.T) {
-	if os.Getenv("CATALOG_ARGV0_HELPER") == "1" {
-		return
-	}
-	out, err := execPinnedForgeWith(t, os.Args[0], "-test.run=^TestArgv0Helper$")
-	require.NoError(t, err)
-	assert.Equal(t, reliantForgeName(), strings.TrimSpace(string(out)))
-}
-
-func execPinnedForgeWith(t *testing.T, bin string, args ...string) ([]byte, error) {
-	t.Helper()
-	t.Setenv("CATALOG_ARGV0_HELPER", "1")
-	t.Setenv("FORGE_VERSION_DELEGATED", "1")
-	return execPinnedForge(bin, t.TempDir(), args...)
-}
-
-// TestArgv0Helper is not a test: re-executed above, it prints its argv[0] and
-// whether a hand-off marker reached it.
-func TestArgv0Helper(t *testing.T) {
-	if os.Getenv("CATALOG_ARGV0_HELPER") != "1" {
-		return
-	}
-	if _, ok := os.LookupEnv("FORGE_VERSION_DELEGATED"); ok {
-		os.Stdout.WriteString("marker leaked\n")
-	}
-	os.Stdout.WriteString(os.Args[0] + "\n")
-	os.Exit(0)
 }
 
 // A pinned forge that lists every body in one call is asked once, for all of

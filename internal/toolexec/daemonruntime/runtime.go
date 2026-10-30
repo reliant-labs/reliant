@@ -2436,15 +2436,19 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 	result := make(map[string][]byte, len(sorted))
 	acc := strings.Builder{}
 
-	// The Forge framework guide is ~18KB and identical across forge repos,
-	// so it is carried once per snapshot: by the project root's memory when
-	// the root is a forge project, otherwise by the first forge repo in
-	// sorted order (the order the server emits entries in).
-	frameworkCarrier := ""
+	// The Forge framework guide is ~18KB and the same for every repo one
+	// forge renders it for, so it is carried once per forge per snapshot: by
+	// the project root's memory when the root's forge renders it, otherwise
+	// by the first forge repo in sorted order (the order the server emits
+	// entries in). Repos pinned to different forges get different guides
+	// (forgeFrameworkMemoryFrom asks each repo's pinned forge), and pointing
+	// one at another's would hand it the wrong version's rules — so a repo
+	// points only at a guide from the forge that renders its own.
+	carriers := map[string]string{} // forge identity -> repo carrying its guide
 	// Ask the same question buildProjectSnapshot does (rendered, not merely
 	// forge.yaml present): a root forge.yaml that fails to render carries no
 	// guide, and a pointer to it would name something the model never sees.
-	_, rootCarriesFramework := forgeFrameworkMemory(projectPath)
+	_, rootForge, rootCarriesFramework := forgeFrameworkMemoryFrom(projectPath)
 	// Byte-identical repo memories (e.g. two clones of one repo) collapse
 	// to a pointer at the first repo carrying that content.
 	seen := map[string]string{}
@@ -2456,15 +2460,15 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 		repoDir := filepath.Join(projectPath, rel)
 		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
 		if hasForgeYAML(repoDir) {
-			switch {
-			case rootCarriesFramework:
-				md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
-			case frameworkCarrier != "":
-				md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", frameworkCarrier)), md)
-			default:
-				if framework, ok := forgeFrameworkMemory(repoDir); ok {
+			if framework, forge, ok := forgeFrameworkMemoryFrom(repoDir); ok {
+				switch carrier, carried := carriers[forge]; {
+				case rootCarriesFramework && forge == rootForge:
+					md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
+				case carried:
+					md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", carrier)), md)
+				default:
 					md = prependMemory(framework, md)
-					frameworkCarrier = rel
+					carriers[forge] = rel
 				}
 			}
 		}

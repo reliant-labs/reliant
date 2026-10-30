@@ -2,21 +2,15 @@
 package catalog
 
 import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
 
@@ -24,49 +18,30 @@ import (
 // THE PINNED FORGE'S SKILLS
 //
 // forge's shipped skills live inside the forge binary, so the skills a forge
-// serves describe THAT forge: its commands, flags, generated layout and
-// conventions. The forge compiled into reliant is whatever reliant was built
-// with; every project pins its own (forge.yaml forge_version). Reading the
-// shipped skills from the embedded forge handed a chat in a project pinned to
-// v1.0.4 the v0.1.47 guidance — the same skew forge report 86c6fd64 found in
-// `reliant forge generate`, one layer up.
+// serves describe THAT forge. Read from the forge compiled into reliant, a
+// chat in a project pinned to v1.0.4 got the v0.1.47 guidance (package
+// forgepin says why this matters everywhere).
 //
 // So inside a project that pins another forge, the shipped skills come from
-// THAT forge: `forge skill list --json` for the catalog and `forge skill load
-// <path>` for each body, run by the binary forge's own hand-off resolves
-// (forgecli.ResolvePinnedForge: the project's .tools/bin/forge, the pinned
-// build cache, or a one-time build). Both outputs are a pure function of the
-// forge version for shipped skills, so they are cached per pinned forge, in
-// memory and — for a module version, which never changes — on disk.
+// THAT forge: `forge skill list --json --with-bodies` (one call for the whole
+// catalog), or — from a pin that predates the flag — `skill list --json` and
+// `skill load <path>` per body. forgepin caches them per pinned forge.
 //
 // What stays on the embedded forge: user (~/.forge/skills) and project
 // (.forge/skills) skills, which are the user's files rather than any forge's
 // content, and every project with no pin.
 //
-// When the pinned forge cannot be obtained (offline, an unpublished pin),
-// substituting the embedded forge's framework skills is the bug. Instead the
-// forge namespace is one entry that says what failed and how to fix it; the
-// project-agnostic methodology skills (emit: general) keep coming from the
-// embedded forge, so presets that preload them still start — a chat must
-// never fail to start over this.
+// When the pinned forge cannot be obtained, substituting the embedded forge's
+// framework skills is the bug. Instead the forge namespace is one entry that
+// says what failed and how to fix it; the project-agnostic methodology skills
+// (emit: general) keep coming from the embedded forge, so presets that
+// preload them still start — a chat must never fail to start over this.
 // =============================================================================
 
-// pinnedSkillTimeout bounds obtaining the pinned forge during discovery,
-// which may build it once (about a minute).
-const pinnedSkillTimeout = 4 * time.Minute
+// pinnedForge runs the forge projects pin; the tests replace it.
+var pinnedForge = forgepin.Default
 
-// Seams, swapped by the tests.
-var (
-	// resolvePinnedForge is forge's own decision of which forge a command
-	// runs under in a project.
-	resolvePinnedForge = forgecli.ResolvePinnedForge
-	// runPinnedForge runs the pinned forge bin with args in dir.
-	runPinnedForge = execPinnedForge
-	// pinnedSkillCacheDir is where a module version's skills are kept.
-	pinnedSkillCacheDir = defaultPinnedSkillCacheDir
-)
-
-// pinnedForgeCache holds what a pinned forge printed, per forge identity.
+// pinnedForgeCache holds a pinned forge's parsed catalog, per forge identity.
 var pinnedForgeCache sync.Map // key -> *pinnedForgeEntry
 
 type pinnedForgeEntry struct {
@@ -75,40 +50,10 @@ type pinnedForgeEntry struct {
 	bodies map[string]string
 }
 
-// pinnedResolutionTTL is how long one answer to "which forge does this project
-// pin" is reused. Resolving can run the project's .tools/bin/forge to read its
-// version, and a discovery that loads every body asks once per skill.
-const pinnedResolutionTTL = time.Minute
-
-type pinnedResolution struct {
-	yamlKey string
-	at      time.Time
-	pf      forgecli.PinnedForge
-	ok      bool
-	err     error
-}
-
-var pinnedResolutions sync.Map // baseDir -> pinnedResolution
-
 // pinnedForgeFor reports the forge the project at baseDir pins when it is not
-// the embedded one (ok), or why it could not be obtained (err). An answer is
-// reused for pinnedResolutionTTL while forge.yaml is unchanged — a failure
-// too, so an unobtainable pin is not rebuilt once per skill.
+// the embedded one (ok), or why it could not be obtained (err).
 func pinnedForgeFor(baseDir string) (forgecli.PinnedForge, bool, error) {
-	yaml, _ := os.ReadFile(filepath.Join(baseDir, "forge.yaml"))
-	sum := sha256.Sum256(yaml)
-	key := hex.EncodeToString(sum[:])
-	if v, ok := pinnedResolutions.Load(baseDir); ok {
-		r := v.(pinnedResolution)
-		if r.yamlKey == key && time.Since(r.at) < pinnedResolutionTTL {
-			return r.pf, r.ok, r.err
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), pinnedSkillTimeout)
-	defer cancel()
-	pf, ok, err := resolvePinnedForge(ctx, baseDir, "skill load", io.Discard)
-	pinnedResolutions.Store(baseDir, pinnedResolution{yamlKey: key, at: time.Now(), pf: pf, ok: ok, err: err})
-	return pf, ok, err
+	return pinnedForge.Pinned(baseDir, "skill load")
 }
 
 func pinnedEntry(key string) *pinnedForgeEntry {
@@ -124,21 +69,14 @@ func pinnedShippedSkills(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Sk
 	return e.loadList(pf, baseDir)
 }
 
-// loadList reads the pinned forge's catalog once: `skill list --json
-// --with-bodies`, which carries every body in one call, or — from a forge that
-// predates the flag — the bare listing, the bodies then loaded one by one.
-// e.mu is held.
+// loadList reads the pinned forge's catalog once. e.mu is held.
 func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Skill, error) {
 	if e.list != nil {
 		return e.list, nil
 	}
-	raw, err := cachedPinnedOutput(pf, "list.json", func() ([]byte, error) {
-		out, err := runPinnedForge(pf.Path, baseDir, "skill", "list", "--json", "--with-bodies")
-		if err != nil {
-			out, err = runPinnedForge(pf.Path, baseDir, "skill", "list", "--json")
-		}
-		return out, err
-	})
+	raw, err := pinnedForge.Output(pf, baseDir, "skills-list.json",
+		[]string{"skill", "list", "--json", "--with-bodies"},
+		[]string{"skill", "list", "--json"})
 	if err != nil {
 		return nil, err
 	}
@@ -179,89 +117,13 @@ func pinnedSkillBody(pf forgecli.PinnedForge, baseDir, path string) (string, err
 	if body, ok := e.bodies[path]; ok {
 		return body, nil
 	}
-	sum := sha256.Sum256([]byte(path))
-	raw, err := cachedPinnedOutput(pf, "body-"+hex.EncodeToString(sum[:12])+".md", func() ([]byte, error) {
-		return runPinnedForge(pf.Path, baseDir, "skill", "load", path)
-	})
+	raw, err := pinnedForge.Output(pf, baseDir, "skill-"+forgepin.Fingerprint([]byte(path))+".md",
+		[]string{"skill", "load", path})
 	if err != nil {
 		return "", err
 	}
 	e.bodies[path] = string(raw)
 	return string(raw), nil
-}
-
-// cachedPinnedOutput returns the file name under pf's cache entry, producing
-// and keeping it with produce when absent. Only a module version is kept on
-// disk: a linked checkout's key moves with every edit.
-func cachedPinnedOutput(pf forgecli.PinnedForge, name string, produce func() ([]byte, error)) ([]byte, error) {
-	dir := ""
-	if strings.HasPrefix(pf.Key, "pin:") {
-		if base := pinnedSkillCacheDir(); base != "" {
-			sum := sha256.Sum256([]byte(pf.Key))
-			dir = filepath.Join(base, hex.EncodeToString(sum[:12]))
-		}
-	}
-	if dir != "" {
-		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
-			return b, nil
-		}
-	}
-	b, err := produce()
-	if err != nil {
-		return nil, err
-	}
-	if dir != "" && os.MkdirAll(dir, 0o755) == nil {
-		// Written aside and renamed: a reader never sees half a file.
-		if tmp, err := os.CreateTemp(dir, "."+name+"-"); err == nil {
-			_, werr := tmp.Write(b)
-			cerr := tmp.Close()
-			if werr != nil || cerr != nil || os.Rename(tmp.Name(), filepath.Join(dir, name)) != nil {
-				_ = os.Remove(tmp.Name())
-			}
-		}
-	}
-	return b, nil
-}
-
-func defaultPinnedSkillCacheDir() string {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(base, "reliant", "forge-skills")
-}
-
-// execPinnedForge runs the pinned forge. Its argv[0] is the name an agent
-// types, so command references in a body read `reliant forge …` exactly as the
-// embedded forge renders them (forge names itself from argv[0]); with the
-// hand-off, that command runs the pinned forge too.
-func execPinnedForge(bin, dir string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Args[0] = reliantForgeName()
-	cmd.Dir = dir
-	var env []string
-	for _, kv := range os.Environ() {
-		// No inherited hand-off marker: a forge older than the
-		// single-process marker would believe one.
-		if !strings.HasPrefix(kv, "FORGE_VERSION_DELEGATED=") {
-			env = append(env, kv)
-		}
-	}
-	cmd.Env = env
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("forge %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return out, nil
-}
-
-// reliantForgeName is how forge names itself when embedded here.
-func reliantForgeName() string {
-	return filepath.Base(os.Args[0]) + " forge"
 }
 
 // shippedSkillsFor returns the forge-shipped skills baseDir's agents should
@@ -334,7 +196,7 @@ func pinnedForgeUnavailable(baseDir, source string, cause error) Definition {
 		"and the forge built into reliant is a different version, whose guidance would be wrong here.\n\n" +
 		"```\n" + strings.TrimSpace(cause.Error()) + "\n```\n\n" +
 		"Fix what stopped it (offline? a pin nobody published?), or move the pin deliberately with `" +
-		reliantForgeName() + " project upgrade`. Every `" + reliantForgeName() + "` command in this project " +
+		forgepin.CLIName() + " project upgrade`. Every `" + forgepin.CLIName() + "` command in this project " +
 		"fails the same way until then.\n"
 	return Definition{
 		Name:        forgeNamespace,
