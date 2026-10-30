@@ -85,6 +85,7 @@
         "TriggerRedriver",
         "TriggerScheduleSync",
         "TriggerSenders",
+        "Usage",
         "UserAuth",
         "UserChain",
         "UserRoutes",
@@ -324,6 +325,13 @@
         {
           "component": "Trigger",
           "service": "reliant.v1.TriggerService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "Usage",
+          "service": "reliant.v1.UsageService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -36482,6 +36490,329 @@
       }
     },
     {
+      "name": "reliant.v1.UsageService",
+      "proto_file": "reliant/v1/usage.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.UsageService/GetLLMUsage",
+          "name": "GetLLMUsage",
+          "input": "reliant.v1.GetLLMUsageRequest",
+          "output": "reliant.v1.GetLLMUsageResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "UsageService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetLLMUsage",
+            "InputType": "GetLLMUsageRequest",
+            "OutputType": "GetLLMUsageResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetLLMUsageRequest",
+            "OutputTypeFQ": "reliant.v1.GetLLMUsageResponse",
+            "InputProtoFile": "reliant/v1/usage.proto",
+            "OutputProtoFile": "reliant/v1/usage.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: the caller's own usage totals; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/usage.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetLLMUsageRequest": [
+            {
+              "Name": "start_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "end_date",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "provider",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "auth_mode",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "model",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "purpose",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "GetLLMUsageResponse": [
+            {
+              "Name": "group_by",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "buckets",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.LLMUsageBucket"
+            },
+            {
+              "Name": "totals",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.LLMUsageBucket"
+            },
+            {
+              "Name": "completeness",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "as_of",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "detail_available_from",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "note",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetLLMUsageRequest": [
+            {
+              "name": "start_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "end_date",
+              "kind": "string",
+              "validate": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            },
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMUsageGroupBy"
+            },
+            {
+              "name": "provider",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "auth_mode",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMAuthMode",
+              "optional": true
+            },
+            {
+              "name": "model",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "purpose",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMPurpose",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetLLMUsageResponse": [
+            {
+              "name": "group_by",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMUsageGroupBy"
+            },
+            {
+              "name": "buckets",
+              "kind": "message",
+              "type_name": "reliant.v1.LLMUsageBucket",
+              "repeated": true
+            },
+            {
+              "name": "totals",
+              "kind": "message",
+              "type_name": "reliant.v1.LLMUsageBucket"
+            },
+            {
+              "name": "completeness",
+              "kind": "enum",
+              "type_name": "reliant.v1.LLMUsageCompleteness"
+            },
+            {
+              "name": "as_of",
+              "kind": "string"
+            },
+            {
+              "name": "detail_available_from",
+              "kind": "string"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.LLMUsageBucket": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "calls",
+              "kind": "int64"
+            },
+            {
+              "name": "error_calls",
+              "kind": "int64"
+            },
+            {
+              "name": "input_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "output_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_read_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "cache_write_tokens",
+              "kind": "int64"
+            },
+            {
+              "name": "latency_ms_total",
+              "kind": "int64"
+            },
+            {
+              "name": "avg_latency_ms",
+              "kind": "double"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetLLMUsageRequest": "reliant/v1/usage.proto",
+          "reliant.v1.GetLLMUsageResponse": "reliant/v1/usage.proto",
+          "reliant.v1.LLMUsageBucket": "reliant/v1/usage.proto"
+        },
+        "Enums": {
+          "reliant.v1.LLMAuthMode": [
+            "LLM_AUTH_MODE_UNSPECIFIED",
+            "LLM_AUTH_MODE_MANAGED",
+            "LLM_AUTH_MODE_BYOK",
+            "LLM_AUTH_MODE_SUBSCRIPTION",
+            "LLM_AUTH_MODE_LOCAL"
+          ],
+          "reliant.v1.LLMPurpose": [
+            "LLM_PURPOSE_UNSPECIFIED",
+            "LLM_PURPOSE_CHAT",
+            "LLM_PURPOSE_COMPACTION",
+            "LLM_PURPOSE_TITLE",
+            "LLM_PURPOSE_DRAFT_AUTOMATION"
+          ],
+          "reliant.v1.LLMUsageCompleteness": [
+            "LLM_USAGE_COMPLETENESS_UNSPECIFIED",
+            "LLM_USAGE_COMPLETENESS_COMPLETE",
+            "LLM_USAGE_COMPLETENESS_PARTIAL"
+          ],
+          "reliant.v1.LLMUsageGroupBy": [
+            "LLM_USAGE_GROUP_BY_UNSPECIFIED",
+            "LLM_USAGE_GROUP_BY_DAY",
+            "LLM_USAGE_GROUP_BY_MODEL",
+            "LLM_USAGE_GROUP_BY_PROVIDER",
+            "LLM_USAGE_GROUP_BY_AUTH_MODE",
+            "LLM_USAGE_GROUP_BY_PURPOSE"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.LLMAuthMode": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.LLMPurpose": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.LLMUsageCompleteness": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.LLMUsageGroupBy": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.LLMAuthMode": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMAuthMode"
+          },
+          "reliant.v1.LLMPurpose": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMPurpose"
+          },
+          "reliant.v1.LLMUsageCompleteness": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMUsageCompleteness"
+          },
+          "reliant.v1.LLMUsageGroupBy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "LLMUsageGroupBy"
+          }
+        }
+      }
+    },
+    {
       "name": "reliant.v1.WorkflowService",
       "proto_file": "reliant/v1/workflow.proto",
       "methods": [
@@ -63593,6 +63924,63 @@
       "implementation_candidates": []
     },
     {
+      "id": "Usage",
+      "name": "Usage",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/usage.Service",
+      "source": {
+        "path": "internal/handlers/usage/service.go",
+        "symbol": "New"
+      },
+      "methods": [
+        {
+          "id": "method1:735af83ce94d1de1471aaf97d6da1d83e6d680a8c564adb190b7efb239851ed9",
+          "name": "GetLLMUsage",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetLLMUsageRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetLLMUsageResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/usage",
+          "legacy_name": "usage.GetLLMUsage",
+          "source": {
+            "path": "internal/handlers/usage/rpc_get_llm_usage.go",
+            "symbol": "Service.GetLLMUsage"
+          }
+        },
+        {
+          "id": "method1:dfed8dd0f47bb852822ef102255250ebb40755792fab6805d96b338da07fea47",
+          "name": "Name",
+          "signature": "func() string",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/usage",
+          "legacy_name": "usage.Name",
+          "source": {
+            "path": "internal/handlers/usage/service.go",
+            "symbol": "Service.Name"
+          }
+        },
+        {
+          "id": "method1:59f89cde3c60461b3129138b66c1b74dfd0b1067bd51915307a62e84895f6fa2",
+          "name": "Register",
+          "signature": "func(mux *net/http.ServeMux, opts ...connectrpc.com/connect.HandlerOption)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/usage",
+          "legacy_name": "usage.Register",
+          "source": {
+            "path": "internal/handlers/usage/service.go",
+            "symbol": "Service.Register"
+          }
+        },
+        {
+          "id": "method1:4a6d18ff9f2230302898d4dafff88cffedf0e1fe3ec70182b2e846a6b9c11004",
+          "name": "RegisterHTTP",
+          "signature": "func(_ *net/http.ServeMux, _ func(net/http.Handler) net/http.Handler)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/usage",
+          "legacy_name": "usage.RegisterHTTP",
+          "source": {
+            "path": "internal/handlers/usage/service.go",
+            "symbol": "Service.RegisterHTTP"
+          }
+        }
+      ],
+      "implementation_candidates": []
+    },
+    {
       "id": "UserAuth",
       "name": "UserAuth",
       "kind": "provider",
@@ -80217,6 +80605,31 @@
       ],
       "providers": [
         "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Usage",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
+      "methods": [
+        {
+          "id": "method1:20e05ef5926e03a978c43097e47c76073fa8b206b22154d665474763cbd71b18",
+          "name": "ListLLMUsageDaily",
+          "signature": "func(ctx context.Context, userID string, from time.Time, to time.Time) ([]*github.com/reliant-labs/reliant/internal/db.LLMUsageDay, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/usage",
+          "legacy_name": "usage.ListLLMUsageDaily",
+          "source": {
+            "path": "internal/handlers/usage/service.go",
+            "symbol": "Store.ListLLMUsageDaily"
+          }
+        }
+      ],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },
