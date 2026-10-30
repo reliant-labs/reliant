@@ -377,7 +377,7 @@ export function InlineAutomationForm({
   }
 
   const title = isEdit ? "Edit automation" : "New automation";
-  const showWritesAsInAdvanced = when.kind !== "integration" && (!!workflow || actingIdentity === "app");
+  const showWritesAsInAdvanced = when.kind !== "integration";
   const primaryLabel = isEdit ? "Save changes" : when.kind === "webhook" ? "Create and show URL" : "Create";
 
   return (

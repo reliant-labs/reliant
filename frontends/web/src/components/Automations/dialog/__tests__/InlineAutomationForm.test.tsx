@@ -156,6 +156,36 @@ const sentCreate = () => createTrigger.mock.calls[0]![0] as CreateTriggerRequest
 const machineReady = () => waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
 
 describe("InlineAutomationForm: new", () => {
+  it("keeps the default-agent identity reversible after choosing You", async () => {
+    createTrigger.mockResolvedValue(created());
+    renderAtRoute(<InlineAutomationForm onClose={vi.fn()} prefill={{ message: "Triage" }} />);
+    await machineReady();
+    await userEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    await userEvent.click(screen.getByRole("radio", { name: /You/ }));
+    expect(screen.getByRole("radio", { name: /You/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: /Reliant bot/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    expect(sentCreate().trigger!.actingIdentity).toBe(ActingIdentity.APP);
+  });
+
+  it("can change a stored owner default-agent automation back to the bot", async () => {
+    const stored = triggerFromProto(create(TriggerSchema, {
+      id: "saved", name: "Saved schedule", projectId: "proj-1", daemonId: "daemon-1", enabled: true,
+      message: "Triage", actingIdentity: ActingIdentity.OWNER,
+      source: { case: "schedule", value: { cron: ["0 9 * * 1-5"] } },
+    }));
+    updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "saved" }) }));
+    renderAtRoute(<InlineAutomationForm onClose={vi.fn()} trigger={stored} />);
+    await machineReady();
+    // A stored non-default actor opens Advanced automatically.
+    expect(screen.getByRole("radio", { name: /You/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: /Reliant bot/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+    expect((updateTrigger.mock.calls[0]![0] as UpdateTriggerRequest).trigger!.actingIdentity).toBe(ActingIdentity.APP);
+  });
+
   it.each([
     ["github", false, ActingIdentity.APP],
     ["github", true, ActingIdentity.OWNER],
