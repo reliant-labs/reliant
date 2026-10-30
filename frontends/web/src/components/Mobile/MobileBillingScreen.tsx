@@ -27,7 +27,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { overageSmallDaemonSeconds, remainingHeadline } from "@/components/Billing/daemonUsage";
+import { measuredMachineUsage, remainingHeadline } from "@/components/Billing/daemonUsage";
+import { exactUsageDisplay } from "@/components/Billing/exactMachineUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -51,7 +52,6 @@ import {
   nanosFromFields,
   // The two-band derivations, shared with desktop so a phone and a laptop can
   // never disagree about whether a plan's detail loaded.
-  deriveComputeCapacity,
   isPlanDetailUnavailable,
 } from "../Settings/cloud/billingUtils";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
@@ -156,12 +156,11 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
 
   const planUi = useMemo(() => {
     const plan = subscription?.plan;
-    const d = derivePlanDisplay(plan);
     return {
       // null, not "No compute plan": absence is a different state from a plan
       // whose detail failed to load, and the two get different copy.
       planName: plan?.name ?? null,
-      includedHours: d.includedSmallDaemonHours,
+      includedHours: Number(plan?.structuredLimits?.machineIncludedHours ?? 0n),
       // The screenshot's `0 h` state. On a phone a bare zero is MORE alarming,
       // not less — there is no surrounding detail to contradict it.
       detailUnavailable: isPlanDetailUnavailable(plan),
@@ -169,27 +168,22 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   }, [subscription]);
 
   const usageUi = useMemo(() => {
-    const included = Number(usage?.includedSmallDaemonSeconds ?? 0);
-    const used = Number(usage?.usedSmallDaemonSeconds ?? 0);
+    const exact = exactUsageDisplay(usage ?? undefined);
     // A stubbed or unmeasurable period answers 200 with zeros, so
     // "ran nothing" and "we didn't measure" arrive identical. Rendering the
     // second as "0.0 h used" told a user they had consumed nothing while the
     // daemon start gate was refusing them against real metered usage — and a
     // phone has no surrounding detail to contradict it. `usageMeasured` is
     // false by default, so an older server is read as unknown, not as zero.
-    const measured = !!usage && usage.usageMeasured;
+    const measured = measuredMachineUsage(usage ?? undefined) && !!exact;
     return {
       measured,
       // The same headline as desktop, from the same server fields. Null when
       // unmeasured, never "0.0 … left".
-      headline: measured ? remainingHeadline(usage) : null,
-      includedHours: included / 3600,
-      usedHours: used / 3600,
-      capacity: deriveComputeCapacity({
-        used,
-        included,
-        overage: usage ? overageSmallDaemonSeconds(usage) : 0,
-      }),
+      headline: measured ? remainingHeadline(usage ?? undefined) : null,
+      includedLabel: exact?.includedLabel ?? "Unavailable",
+      usedLabel: exact?.usedLabel ?? "Unavailable",
+      capacity: exact?.capacity ?? { usedPct: 0, overagePct: 0, state: "unknown" },
     };
   }, [usage]);
 
@@ -369,10 +363,10 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   )}
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
-                      {usageUi.usedHours.toFixed(1)} h used
+                      {usageUi.usedLabel}
                     </span>
                     <span className="text-muted-foreground">
-                      {`${usageUi.includedHours.toFixed(0)} h included`}
+                      {usageUi.includedLabel}
                     </span>
                   </div>
                   {/* `bg-primary/10` track, not `bg-muted` — in dark mode

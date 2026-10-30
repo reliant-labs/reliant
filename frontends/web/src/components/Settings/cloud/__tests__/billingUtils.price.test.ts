@@ -55,7 +55,7 @@ function plan(
       maxLlmKeys: 1,
       requestsPerMin: 0,
       allowedDaemonSizes: [],
-      includedSmallDaemonHours: 0n,
+      machineIncludedHours: 0n,
       ...limits,
     },
   } as unknown as Plan;
@@ -67,12 +67,12 @@ describe("derivePlanDisplay reads the server, not a table", () => {
       plan("plan_compute_medium", {
         priceCents: 4000n,
         allowedDaemonSizes: ["small", "medium"],
-        includedSmallDaemonHours: 320n,
+        machineIncludedHours: 320n,
       }),
     );
 
     expect(d.monthlyPriceCents).toBe(4000);
-    expect(d.includedSmallDaemonHours).toBe(320);
+    expect(d.machineIncludedHours).toBe(320);
     expect(d.allowedSizes).toEqual(["small", "medium"]);
   });
 
@@ -86,12 +86,12 @@ describe("derivePlanDisplay reads the server, not a table", () => {
     const d = derivePlanDisplay(
       plan("plan_compute_medium", {
         priceCents: 5500n,
-        includedSmallDaemonHours: 410n,
+        machineIncludedHours: 410n,
       }),
     );
 
     expect(d.monthlyPriceCents).toBe(5500);
-    expect(d.includedSmallDaemonHours).toBe(410);
+    expect(d.machineIncludedHours).toBe(410);
   });
 
   /**

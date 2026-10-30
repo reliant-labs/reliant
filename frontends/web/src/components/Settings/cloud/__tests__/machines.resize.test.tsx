@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n, remainingSmallDaemonSeconds: 3600n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'small', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
@@ -173,7 +173,7 @@ describe('machine detail — resize', () => {
     expect(within(dialog).getByTestId('resize-size-large')).not.toHaveTextContent(/\$|hrs|GiB|suspended|included/i)
     // Plan includes 160 small hours; largest allowed size here is large (x4).
     expect(within(dialog).getByTestId('resize-pricing-note')).toHaveTextContent(
-      'Includes 40 hours a month. Extra hours and storage are billed separately.',
+      'Includes 40.0 hours a month. Extra hours and storage are billed separately.',
     )
     expect(dialog).not.toHaveTextContent(/×|uses included hours|burn/i)
     // Nothing is chosen until the user chooses.

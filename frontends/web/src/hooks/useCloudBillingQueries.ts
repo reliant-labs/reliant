@@ -25,6 +25,12 @@ function billingClient() {
   return getControlPlaneClient(BillingService);
 }
 
+/** Candidate sales require versioned commissioned terms, never incumbent-price fallback. */
+async function assertVersionedMachineSale(): Promise<void> {
+  const state = await billingClient().getCurrentUserComputeSubscription({});
+  if (!state.subscription) throw new Error("New paid machine checkout is held until commissioned pricing and explicit versioned terms can be verified. Existing machines and your own computer remain available.");
+}
+
 /**
  * Thrown instead of minting a Stripe session for a session that has no real
  * identity behind it.
@@ -217,8 +223,9 @@ export interface CheckoutArgs {
 export function useCreateCheckoutSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: CheckoutArgs) => {
+    mutationFn: async (args: CheckoutArgs) => {
       assertPurchaseIdentity();
+      await assertVersionedMachineSale();
       return billingClient().createCurrentUserCheckoutSession(args);
     },
     onSuccess: () => {
@@ -289,8 +296,9 @@ export function useCreateWalletTopupPaymentIntent() {
  */
 export function useCreateComputeSubscriptionIntent() {
   return useMutation({
-    mutationFn: (planId: string) => {
+    mutationFn: async (planId: string) => {
       assertPurchaseIdentity();
+      await assertVersionedMachineSale();
       return billingClient().createCurrentUserComputeSubscriptionIntent({
         planId,
       });

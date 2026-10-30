@@ -146,7 +146,6 @@ export function useCloudEligibility() {
     eligible,
     reason,
     isLoading,
-    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
     refetch,
   };
 }

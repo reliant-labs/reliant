@@ -42,6 +42,9 @@ const (
 	// BillingServiceGetOrganizationCostSummaryProcedure is the fully-qualified name of the
 	// BillingService's GetOrganizationCostSummary RPC.
 	BillingServiceGetOrganizationCostSummaryProcedure = "/controlplane.v1.BillingService/GetOrganizationCostSummary"
+	// BillingServiceListOrganizationUsageProcedure is the fully-qualified name of the BillingService's
+	// ListOrganizationUsage RPC.
+	BillingServiceListOrganizationUsageProcedure = "/controlplane.v1.BillingService/ListOrganizationUsage"
 	// BillingServiceListPlansProcedure is the fully-qualified name of the BillingService's ListPlans
 	// RPC.
 	BillingServiceListPlansProcedure = "/controlplane.v1.BillingService/ListPlans"
@@ -107,6 +110,12 @@ const (
 	// BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure is the fully-qualified name of
 	// the BillingService's CreateCurrentUserComputeSubscriptionIntent RPC.
 	BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure = "/controlplane.v1.BillingService/CreateCurrentUserComputeSubscriptionIntent"
+	// BillingServiceGetMachinePricingReadinessProcedure is the fully-qualified name of the
+	// BillingService's GetMachinePricingReadiness RPC.
+	BillingServiceGetMachinePricingReadinessProcedure = "/controlplane.v1.BillingService/GetMachinePricingReadiness"
+	// BillingServiceAcceptNextMachinePricingProcedure is the fully-qualified name of the
+	// BillingService's AcceptNextMachinePricing RPC.
+	BillingServiceAcceptNextMachinePricingProcedure = "/controlplane.v1.BillingService/AcceptNextMachinePricing"
 	// BillingServiceGetCurrentUserUsageBillingProcedure is the fully-qualified name of the
 	// BillingService's GetCurrentUserUsageBilling RPC.
 	BillingServiceGetCurrentUserUsageBillingProcedure = "/controlplane.v1.BillingService/GetCurrentUserUsageBilling"
@@ -150,6 +159,10 @@ type BillingServiceClient interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// History of the organization's usage and spend, built from durable
+	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
+	// and is scoped to the caller's organization. Range is at most 400 days.
+	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
 	// Read-only catalog.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
@@ -243,6 +256,9 @@ type BillingServiceClient interface {
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
 	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	// Machine pricing is accepted explicitly for the next billing period only.
+	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
+	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -305,6 +321,12 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetOrganizationCostSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrganizationUsage: connect.NewClient[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse](
+			httpClient,
+			baseURL+BillingServiceListOrganizationUsageProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
 			connect.WithClientOptions(opts...),
 		),
 		listPlans: connect.NewClient[v1.ListPlansRequest, v1.ListPlansResponse](
@@ -439,6 +461,18 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
 			connect.WithClientOptions(opts...),
 		),
+		getMachinePricingReadiness: connect.NewClient[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse](
+			httpClient,
+			baseURL+BillingServiceGetMachinePricingReadinessProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+			connect.WithClientOptions(opts...),
+		),
+		acceptNextMachinePricing: connect.NewClient[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse](
+			httpClient,
+			baseURL+BillingServiceAcceptNextMachinePricingProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
+			connect.WithClientOptions(opts...),
+		),
 		getCurrentUserUsageBilling: connect.NewClient[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserUsageBillingProcedure,
@@ -517,6 +551,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // billingServiceClient implements BillingServiceClient.
 type billingServiceClient struct {
 	getOrganizationCostSummary                 *connect.Client[v1.GetOrganizationCostSummaryRequest, v1.GetOrganizationCostSummaryResponse]
+	listOrganizationUsage                      *connect.Client[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse]
 	listPlans                                  *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
 	getPlan                                    *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
 	getCurrentUserSubscription                 *connect.Client[v1.GetCurrentUserSubscriptionRequest, v1.GetCurrentUserSubscriptionResponse]
@@ -539,6 +574,8 @@ type billingServiceClient struct {
 	setCurrentUserInfraOverage                 *connect.Client[v1.SetCurrentUserInfraOverageRequest, v1.SetCurrentUserInfraOverageResponse]
 	getCurrentUserInfraOverage                 *connect.Client[v1.GetCurrentUserInfraOverageRequest, v1.GetCurrentUserInfraOverageResponse]
 	createCurrentUserComputeSubscriptionIntent *connect.Client[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse]
+	getMachinePricingReadiness                 *connect.Client[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse]
+	acceptNextMachinePricing                   *connect.Client[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse]
 	getCurrentUserUsageBilling                 *connect.Client[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse]
 	createCurrentUserUsageBillingCheckout      *connect.Client[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse]
 	getCurrentUserWalletAutoRecharge           *connect.Client[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse]
@@ -556,6 +593,11 @@ type billingServiceClient struct {
 // GetOrganizationCostSummary calls controlplane.v1.BillingService.GetOrganizationCostSummary.
 func (c *billingServiceClient) GetOrganizationCostSummary(ctx context.Context, req *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return c.getOrganizationCostSummary.CallUnary(ctx, req)
+}
+
+// ListOrganizationUsage calls controlplane.v1.BillingService.ListOrganizationUsage.
+func (c *billingServiceClient) ListOrganizationUsage(ctx context.Context, req *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
+	return c.listOrganizationUsage.CallUnary(ctx, req)
 }
 
 // ListPlans calls controlplane.v1.BillingService.ListPlans.
@@ -677,6 +719,16 @@ func (c *billingServiceClient) CreateCurrentUserComputeSubscriptionIntent(ctx co
 	return c.createCurrentUserComputeSubscriptionIntent.CallUnary(ctx, req)
 }
 
+// GetMachinePricingReadiness calls controlplane.v1.BillingService.GetMachinePricingReadiness.
+func (c *billingServiceClient) GetMachinePricingReadiness(ctx context.Context, req *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
+	return c.getMachinePricingReadiness.CallUnary(ctx, req)
+}
+
+// AcceptNextMachinePricing calls controlplane.v1.BillingService.AcceptNextMachinePricing.
+func (c *billingServiceClient) AcceptNextMachinePricing(ctx context.Context, req *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
+	return c.acceptNextMachinePricing.CallUnary(ctx, req)
+}
+
 // GetCurrentUserUsageBilling calls controlplane.v1.BillingService.GetCurrentUserUsageBilling.
 func (c *billingServiceClient) GetCurrentUserUsageBilling(ctx context.Context, req *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {
 	return c.getCurrentUserUsageBilling.CallUnary(ctx, req)
@@ -748,6 +800,10 @@ type BillingServiceHandler interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// History of the organization's usage and spend, built from durable
+	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
+	// and is scoped to the caller's organization. Range is at most 400 days.
+	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
 	// Read-only catalog.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
@@ -841,6 +897,9 @@ type BillingServiceHandler interface {
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
 	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	// Machine pricing is accepted explicitly for the next billing period only.
+	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
+	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
 	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
@@ -899,6 +958,12 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetOrganizationCostSummaryProcedure,
 		svc.GetOrganizationCostSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceListOrganizationUsageHandler := connect.NewUnaryHandler(
+		BillingServiceListOrganizationUsageProcedure,
+		svc.ListOrganizationUsage,
+		connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceListPlansHandler := connect.NewUnaryHandler(
@@ -1033,6 +1098,18 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
 		connect.WithHandlerOptions(opts...),
 	)
+	billingServiceGetMachinePricingReadinessHandler := connect.NewUnaryHandler(
+		BillingServiceGetMachinePricingReadinessProcedure,
+		svc.GetMachinePricingReadiness,
+		connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceAcceptNextMachinePricingHandler := connect.NewUnaryHandler(
+		BillingServiceAcceptNextMachinePricingProcedure,
+		svc.AcceptNextMachinePricing,
+		connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
+		connect.WithHandlerOptions(opts...),
+	)
 	billingServiceGetCurrentUserUsageBillingHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserUsageBillingProcedure,
 		svc.GetCurrentUserUsageBilling,
@@ -1109,6 +1186,8 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case BillingServiceGetOrganizationCostSummaryProcedure:
 			billingServiceGetOrganizationCostSummaryHandler.ServeHTTP(w, r)
+		case BillingServiceListOrganizationUsageProcedure:
+			billingServiceListOrganizationUsageHandler.ServeHTTP(w, r)
 		case BillingServiceListPlansProcedure:
 			billingServiceListPlansHandler.ServeHTTP(w, r)
 		case BillingServiceGetPlanProcedure:
@@ -1153,6 +1232,10 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceGetCurrentUserInfraOverageHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure:
 			billingServiceCreateCurrentUserComputeSubscriptionIntentHandler.ServeHTTP(w, r)
+		case BillingServiceGetMachinePricingReadinessProcedure:
+			billingServiceGetMachinePricingReadinessHandler.ServeHTTP(w, r)
+		case BillingServiceAcceptNextMachinePricingProcedure:
+			billingServiceAcceptNextMachinePricingHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserUsageBillingProcedure:
 			billingServiceGetCurrentUserUsageBillingHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure:
@@ -1188,6 +1271,10 @@ type UnimplementedBillingServiceHandler struct{}
 
 func (UnimplementedBillingServiceHandler) GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetOrganizationCostSummary is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListOrganizationUsage is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error) {
@@ -1276,6 +1363,14 @@ func (UnimplementedBillingServiceHandler) GetCurrentUserInfraOverage(context.Con
 
 func (UnimplementedBillingServiceHandler) CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetMachinePricingReadiness is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.AcceptNextMachinePricing is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {

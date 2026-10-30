@@ -1096,7 +1096,7 @@ function ResizeMachineModal({
   allowedSizes: DaemonSize[];
   sizesLoading: boolean;
   pricing?: DaemonPricingLike;
-  includedHours?: number;
+  includedHours?: string;
   isPending: boolean;
   stage: RestartStage | null;
   error: string;
@@ -1458,8 +1458,7 @@ function EnvironmentDetail({
   );
   const pricing = usePlans({ enabled: cloud }).data?.daemonPricing;
   // The plan's monthly allowance (a server total, not what is left of it).
-  const includedSmallHours = useComputeUsage("current", { enabled: cloud }).data?.includedSmallDaemonSeconds;
-  const includedHours = includedSmallHours === undefined ? undefined : Number(includedSmallHours) / 3600;
+  const includedHours = useComputeUsage("current", { enabled: cloud }).data?.allowanceWeightedSeconds;
   const disk = spec?.disk;
   const maxDiskGib = eligibilityQ.data?.maxDaemonStorageGib ?? 0;
   // Offered only where the plan grows disks at all. A machine already at

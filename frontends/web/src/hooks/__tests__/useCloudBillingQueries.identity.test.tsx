@@ -15,9 +15,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createCheckout = vi.fn();
 const createTopup = vi.fn();
+const subscription = vi.fn();
 
 vi.mock("@/services/controlPlane/client", () => ({
   getControlPlaneClient: () => ({
+    getCurrentUserComputeSubscription: subscription,
     createCurrentUserCheckoutSession: createCheckout,
     createCurrentUserWalletTopupSession: createTopup,
   }),
@@ -50,11 +52,19 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   authState.user = null;
+  subscription.mockResolvedValue({ subscription: { id: "incumbent-subscription" } });
   createCheckout.mockResolvedValue({ checkoutUrl: "https://checkout.stripe.com/x" });
   createTopup.mockResolvedValue({ checkoutUrl: "https://checkout.stripe.com/y" });
 });
 
 describe("checkout identity guard", () => {
+  it("holds unversioned new machine sales instead of falling back to incumbent prices", async () => {
+    authState.user = { is_anonymous: false };
+    subscription.mockResolvedValue({});
+    const { result } = renderHook(() => useCreateCheckoutSession(), { wrapper });
+    await expect(result.current.mutateAsync({ planId: "compute-standard", successUrl: "https://app.test/settings/billing", cancelUrl: "https://app.test/settings/billing" })).rejects.toThrow(/held until commissioned pricing/);
+    expect(createCheckout).not.toHaveBeenCalled();
+  });
   it("refuses independent hosting authorization for anonymous sessions", async () => {
     authState.user = { is_anonymous: true };
     const { result } = renderHook(() => useUsageBillingCheckout(), { wrapper });

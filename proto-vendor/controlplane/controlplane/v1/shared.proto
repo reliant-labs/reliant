@@ -212,6 +212,12 @@ message Daemon {
   // The disk, as it is and as it was asked to be (managed daemons only).
   // Unset for an external daemon.
   DaemonDisk disk = 32;
+
+  // The machine's own environment variables (managed daemons only), declared
+  // by its owner with DaemonService.UpdateDaemon. Every process on the
+  // machine inherits them, from the next time its pod is built (resume,
+  // resize or re-create). Plain text: not for secrets.
+  map<string, string> env = 35;
 }
 
 // DaemonDisk is a managed daemon's disk, in GiB of DATA: the part the customer
@@ -491,13 +497,23 @@ message DaemonPricing {
   // month (730 hours), running or suspended, in cents, as an exact decimal
   // string (never a float: it is money).
   string storage_cents_per_gib_month = 4;
+  // Immutable accepted exchange/rate version, independent of retail merchandising.
+  string pricing_version = 5;
+  // Candidate catalog is staged only; false until all routes are commissioned.
+  bool activation_ready = 6;
+  string activation_hold_reason = 7;
 }
 
 // DaemonSizePrice is one size's row of DaemonPricing.
 message DaemonSizePrice {
   string size = 1;
-  // Small-daemon-hours this size burns per wall-clock hour.
-  int64 multiplier = 2;
+  // Deprecated integer multiplier cannot represent exact cost-weight fractions.
+  int64 multiplier = 2 [deprecated = true];
+  // Exact rational num/den; not retail-price credit or a runtime billing multiplier.
+  string cost_weight = 5;
+  string route_id = 6;
+  // Canonical exact rational cents per running hour (num/den).
+  string exact_hourly_price_cents = 7;
   // Overage price per wall-clock hour at this size, in cents, as an exact
   // decimal string: multiplier × the small hourly price.
   string hourly_price_cents = 3;

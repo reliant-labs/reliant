@@ -23,7 +23,6 @@ import {
 import { onboardingService } from "@/services/controlPlane/onboarding";
 import { getEventBus } from "@/lib/events";
 import { logger } from "@/lib/logger";
-import { formatMachineMinutes, formatMachineSeconds } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
@@ -114,8 +113,7 @@ export function RedeemCouponForm({
       onSuccess: (res) => {
         setRedeemed(
           res.kind === RedeemedCouponKind.COMPUTE_MINUTES
-            ? `Added ${formatMachineMinutes(res.computeMinutes)}. ` +
-                `You now have ${formatMachineSeconds(res.newGrantedSmallDaemonSecondsRemaining)} available.`
+            ? "Machine-time coupon redeemed. Check the versioned machine usage balance for equivalent hours; a legacy grant may require reconciliation before use."
             : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
         );
         setCode("");

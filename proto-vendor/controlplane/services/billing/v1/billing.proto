@@ -9,6 +9,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "controlplane/v1/shared.proto";
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -60,6 +61,165 @@ message OrganizationCostSource {
   repeated string limitations = 13;
 }
 
+enum OrganizationUsageGranularity {
+  // Unspecified reads as DAY.
+  ORGANIZATION_USAGE_GRANULARITY_UNSPECIFIED = 0;
+  ORGANIZATION_USAGE_GRANULARITY_DAY = 1;
+  ORGANIZATION_USAGE_GRANULARITY_MONTH = 2;
+}
+
+enum OrganizationUsageGroupBy {
+  // Unspecified reads as CATEGORY.
+  ORGANIZATION_USAGE_GROUP_BY_UNSPECIFIED = 0;
+  // One row per (bucket, category); group_key is empty.
+  ORGANIZATION_USAGE_GROUP_BY_CATEGORY = 1;
+  // Hosted categories split by environment id. Categories with no environment
+  // attribution (managed_llm, machines, observability) keep an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_ENV = 2;
+  // managed_llm splits by model. Every other category keeps an empty group_key.
+  ORGANIZATION_USAGE_GROUP_BY_MODEL = 3;
+}
+
+message ListOrganizationUsageRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // Inclusive, UTC. Truncated down to the start of its granularity bucket.
+  google.protobuf.Timestamp start = 2;
+  // Exclusive, UTC. Rounded up to a bucket boundary. end - start <= 400 days.
+  google.protobuf.Timestamp end = 3;
+  optional OrganizationUsageGranularity granularity = 4 [(buf.validate.field).enum.defined_only = true];
+  optional OrganizationUsageGroupBy group_by = 5 [(buf.validate.field).enum.defined_only = true];
+}
+
+// History of one organization's usage and spend, one point per
+// (bucket, category, group_key, detail). Within a category, points of one
+// bucket partition the category's total: summing over group_key and detail
+// reproduces it. Dollar amounts of different categories rest on different
+// bases (settled debits vs plan-rate list equivalents) and MUST NOT be added
+// into one grand total.
+message ListOrganizationUsageResponse {
+  string org_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp generated_at = 3;
+  // The effective, bucket-aligned range that was read.
+  google.protobuf.Timestamp start = 4;
+  google.protobuf.Timestamp end = 5;
+  OrganizationUsageGranularity granularity = 6;
+  OrganizationUsageGroupBy group_by = 7;
+  // Buckets with no usage are omitted, not zero-filled.
+  repeated OrganizationUsagePoint points = 8;
+  // One entry per source the server tried to read, including those that
+  // returned no points.
+  repeated OrganizationUsageCoverage coverage = 9;
+  // Trailing spend rate for categories that have a dollar figure.
+  repeated OrganizationUsageRate spend_rates = 10;
+  // What exists right now (dev boxes, hosted apps, databases, static sites),
+  // independent of the requested range.
+  repeated OrganizationUsageInventoryItem inventory = 11;
+  // complete when every source is complete; unavailable when none could be
+  // read; partial otherwise.
+  string completeness = 12;
+}
+
+message OrganizationUsagePoint {
+  google.protobuf.Timestamp bucket_start = 1;
+  // managed_llm, machines, hosted_apps, databases, static_hosting,
+  // hosted_other, observability.
+  string category = 2;
+  // Environment id (group_by ENV) or model (group_by MODEL); empty when the
+  // category has no such dimension or the usage is unattributed.
+  string group_key = 3;
+  // Display name for group_key: the environment's name. Empty when unknown.
+  string group_label = 4;
+  // A further split of the category: machine size for machines, signal for
+  // observability; empty otherwise.
+  string detail = 5;
+  // USD nanos. Settled wallet debits (managed_llm). Absent means not measured.
+  optional int64 actual_charges_usd_nanos = 6;
+  // USD nanos at the plan's overage rates, before any allowance (hosted
+  // categories, observability). Absent means not measured.
+  optional int64 list_equivalent_usd_nanos = 7;
+  repeated OrganizationUsageQuantity quantities = 8;
+  // Hosted categories: metered dimensions this point has usage in that the
+  // current plan declares no rate for (infra_cpu, infra_memory, infra_storage).
+  // Their usage is not in list_equivalent_usd_nanos, so when this is non-empty
+  // that amount is a LOWER BOUND, not the full list equivalent.
+  repeated string unpriced_dimensions = 9;
+}
+
+message OrganizationUsageQuantity {
+  // managed_llm: llm_requests, llm_input_tokens, llm_output_tokens,
+  //   llm_cached_input_tokens.
+  // machines: running_seconds, suspended_seconds, running_machines and
+  //   suspended_machines (distinct dev boxes that spent part of the bucket in
+  //   that state; one box can be in both).
+  // hosted_apps, databases, hosted_other: infra_cpu, infra_memory,
+  //   infra_storage.
+  // static_hosting: egress_kib.
+  // observability: stored_bytes, billed_bytes, uncharged_bytes.
+  string id = 1;
+  // count, seconds, vcpu_hours, gib_hours, kib, bytes.
+  string unit = 2;
+  double value = 3;
+}
+
+message OrganizationUsageCoverage {
+  // A source: managed_llm, machines, hosted_infrastructure (covers hosted_apps,
+  // databases, static_hosting and hosted_other), observability, or inventory.
+  string category = 1;
+  // complete: the source covers the whole range with no known gap. partial:
+  // a known gap (settlements are pending, the measurement watermark is behind
+  // the range end, or a price needed for the dollar figures could not be
+  // resolved).
+  // unavailable: the source could not be read. A figure that is absent is
+  // never zero.
+  string completeness = 2;
+  google.protobuf.Timestamp coverage_start = 3;
+  google.protobuf.Timestamp coverage_end = 4;
+  // Newest measurement behind this category within the range; absent when
+  // there is none.
+  google.protobuf.Timestamp measured_through = 5;
+  repeated string limitations = 6;
+}
+
+message OrganizationUsageRate {
+  string category = 1;
+  // actual or list_equivalent.
+  string basis = 2;
+  // Dollars over the exact 24 hours before generated_at.
+  optional int64 last_24h_usd_nanos = 3;
+  // Dollars over the exact 7 days before generated_at, divided by 7.
+  optional int64 average_daily_7d_usd_nanos = 4;
+  // Distinct hours of the trailing 7 days in which this category has a
+  // measurement (0..168). Gaps are not counted and a category does not inherit
+  // another category's age. A projection is only honest from 24 hours up.
+  int32 measured_hours = 5;
+  // Hosted categories only: metered dimensions the current plan declares no
+  // rate for (infra_cpu, build_cpu, ...). Their usage is excluded from the
+  // dollar figures above, so a non-empty list means the rate is a lower bound.
+  // A hosted category none of whose usage is priced has no rate at all.
+  repeated string unpriced_dimensions = 6;
+  // True when the figures leave out something that exists: unpriced
+  // dimensions, settlements still pending, or hours the meter has not measured
+  // yet. The dollar amounts are then lower bounds.
+  bool lower_bound = 7;
+}
+
+// The organization's live footprint at generated_at.
+message OrganizationUsageInventoryItem {
+  // machines, hosted_apps, databases, static_hosting, hosted_other.
+  string category = 1;
+  // Machine size; empty for deployments.
+  string size = 2;
+  // Machines: running or suspended. Deployments: the observed state.
+  string state = 3;
+  string environment_id = 4;
+  string environment_name = 5;
+  int64 count = 6;
+  // Provisioned disk of dev boxes; 0 for deployments, which carry no
+  // provisioned-storage figure.
+  int64 storage_gib = 7;
+}
+
 // === BillingService (public) ===
 //
 // User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
@@ -70,6 +230,16 @@ service BillingService {
   // Canonical current-period organization accounting. Requires billing:read,
   // not billing management. Unknown amounts stay absent; no historical range.
   rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // History of the organization's usage and spend, built from durable
+  // ledgers (never live telemetry). Requires billing:read, re-checked at use,
+  // and is scoped to the caller's organization. Range is at most 400 days.
+  rpc ListOrganizationUsage(ListOrganizationUsageRequest) returns (ListOrganizationUsageResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -260,6 +430,14 @@ service BillingService {
     };
   }
 
+  // Machine pricing is accepted explicitly for the next billing period only.
+  rpc GetMachinePricingReadiness(GetMachinePricingReadinessRequest) returns (GetMachinePricingReadinessResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  rpc AcceptNextMachinePricing(AcceptNextMachinePricingRequest) returns (AcceptNextMachinePricingResponse) {
+    option (forge.v1.method) = {auth_required: true activity: {none: "explicit future-period pricing consent is persisted in the acceptance ledger"}};
+  }
+
   // Independent organization-wide hosted usage funding; never requires a machine plan.
   rpc GetCurrentUserUsageBilling(GetCurrentUserUsageBillingRequest) returns (GetCurrentUserUsageBillingResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -444,6 +622,41 @@ message GetCurrentUserWalletOverviewRequest {
 
 message GetCurrentUserWalletOverviewResponse {
   WalletOverview overview = 1;
+}
+
+message GetMachinePricingReadinessRequest {
+  optional string org_id = 1;
+  string pricing_version = 2;
+  string plan_id = 3;
+}
+message GetMachinePricingReadinessResponse {
+  string pricing_version = 1;
+  bool activation_ready = 2;
+  repeated string hold_reasons = 3;
+  string terms_sha256 = 4;
+  google.protobuf.Timestamp effective_period_start = 5;
+  // Authoritative disclosure; the digest binds these exact proposed terms.
+  int64 monthly_price_cents = 6;
+  int64 included_own_size_hours = 7;
+  int64 included_disk_gib = 8;
+  string size = 9;
+  string exact_hourly_rate_cents = 10;
+  string exact_cost_weight = 11;
+  string route_id = 12;
+  // Consent alone schedules no Stripe change; activation remains pending verification.
+  string activation_state = 13;
+}
+message AcceptNextMachinePricingRequest {
+  optional string org_id = 1;
+  string pricing_version = 2;
+  string plan_id = 3;
+  string terms_sha256 = 4;
+}
+message AcceptNextMachinePricingResponse {
+  string acceptance_id = 1;
+  google.protobuf.Timestamp effective_period_start = 2;
+  string pricing_version = 3;
+  string activation_state = 4;
 }
 
 message GetCurrentUserUsageBillingRequest {
@@ -1050,19 +1263,32 @@ message GetCurrentUserComputeUsageResponse {
   bool usage_measured = 10;
 
   // The plan allowance for this period, in small-daemon-seconds.
-  int64 included_small_daemon_seconds = 11;
+  int64 included_small_daemon_seconds = 11 [deprecated = true];
   // Consumed this period: drained counter + undrained segments.
-  int64 used_small_daemon_seconds = 12;
+  int64 used_small_daemon_seconds = 12 [deprecated = true];
   // max(0, included − used). Never negative.
-  int64 remaining_small_daemon_seconds = 13;
+  int64 remaining_small_daemon_seconds = 13 [deprecated = true];
   // One-time coupon grant still unspent, in small-daemon-seconds. Reported
   // alongside the allowance rather than folded into it: the allowance
   // refills every period, a grant depletes once. Spent after the allowance
   // and before overage.
-  int64 granted_small_daemon_seconds_remaining = 14;
+  int64 granted_small_daemon_seconds_remaining = 14 [deprecated = true];
   // Sum of the multipliers of the daemons running right now (the burn rate
   // in SDS per second). Zero when nothing runs.
-  int64 running_multiplier = 15;
+  int64 running_multiplier = 15 [deprecated = true];
+  // Exact rational weighted-second accounting; no legacy integer truncation.
+  string pricing_version = 23;
+  string allowance_weighted_seconds = 24;
+  string consumed_weighted_seconds = 25;
+  string remaining_weighted_seconds = 26;
+  string grant_remaining_weighted_seconds = 27;
+  string running_cost_weight_sum = 28;
+  // Nonempty means usage/charge estimate is held for explicit reconciliation.
+  string billing_hold_reason = 29;
+  // Runtime/cost history covers only this proven window after an audited bridge.
+  google.protobuf.Timestamp measured_from = 30;
+  string opening_consumed_weighted_seconds = 31;
+  string bridge_evidence_ref = 32;
   // When the allowance runs out at the current burn rate. UNSET when nothing
   // is running or nothing remains — never a fabricated far-future instant.
   google.protobuf.Timestamp exhausts_at = 16;
@@ -1090,17 +1316,19 @@ message GetCurrentUserComputeUsageResponse {
 // SizeUsage is one size's running usage within a period (design §6.1).
 message SizeUsage {
   string size = 1;
-  int64 multiplier = 2;
-  // Native wall-clock seconds at this size.
-  int64 running_seconds = 3;
-  // Small-daemon-seconds of this size's running time covered by the plan
-  // allowance or a grant.
-  int64 included_small_daemon_seconds = 4;
-  // Native seconds at this size past allowance and grant — the priced part.
-  int64 overage_seconds = 5;
+  int64 multiplier = 2 [deprecated = true];
+  // Deprecated whole seconds; exact rational field is canonical.
+  int64 running_seconds = 3 [deprecated = true];
+  int64 included_small_daemon_seconds = 4 [deprecated = true];
+  int64 overage_seconds = 5 [deprecated = true];
   // overage_seconds × this size's hourly price / 3600, in cents, as an exact
   // decimal string rounded half-up to 4 places.
   string overage_cost_cents = 6;
+  string pricing_version = 7;
+  string cost_weight = 8;
+  string exact_running_seconds = 9;
+  string included_weighted_seconds = 10;
+  string exact_overage_seconds = 11;
 }
 
 // StorageUsage is machine disk against the plan's pooled allowance
@@ -1115,7 +1343,8 @@ message StorageUsage {
   // max(0, provisioned − included): what bills right now.
   int64 extra_gib = 3;
   // Billed excess GiB × seconds so far this period.
-  int64 extra_gib_seconds = 4;
+  int64 extra_gib_seconds = 4 [deprecated = true];
+  string exact_extra_gib_seconds = 8;
   // extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
   string cost_cents = 5;
   // cost_cents plus extra_gib carried to the end of the period.

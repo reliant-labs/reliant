@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import Button from "@/components/forge-ui/button";
 import { formatCentsAsDollars } from "./billingUtils";
-import { centsDecimalToDollars, hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { centsDecimalToDollars, hourlyPriceShort, storageCostLabel, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
 
 /**
@@ -94,10 +94,10 @@ export function suggestedLimitCents(monthlyPriceCents: number | null): number {
 
 function parseDollarsToCents(input: string): number | null {
   const trimmed = input.trim();
-  if (trimmed === "") return null;
-  const dollars = Number(trimmed);
-  if (!Number.isFinite(dollars) || dollars < 0) return null;
-  return Math.round(dollars * 100);
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(trimmed);
+  if (!match) return null;
+  const cents = BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
 }
 
 export function ComputeOverageControl({
@@ -364,12 +364,12 @@ export function StorageLine({
   pricing?: DaemonPricingLike;
   storage?: { includedGib: number; extraGib: number };
 }) {
-  const perGib = Number(pricing?.storageCentsPerGibMonth);
-  if (!storage || !Number.isFinite(perGib)) return null;
-  const rate = centsDecimalToDollars(String(perGib));
+  if (!storage || !pricing) return null;
+  const rate = centsDecimalToDollars(pricing.storageCentsPerGibMonth);
+  const extra = storageCostLabel(pricing, storage.extraGib);
   const text =
     storage.extraGib > 0
-      ? `Storage: ${centsDecimalToDollars(String(perGib * storage.extraGib))}/mo for ${storage.extraGib} GB beyond your included ${storage.includedGib} GB`
+      ? `Storage: ${extra ?? "price unavailable"} for ${storage.extraGib} GB beyond your included ${storage.includedGib} GB`
       : `Storage: ${storage.includedGib} GB included, then ${rate}/GB-month`;
   return (
     <p className="text-xs text-muted-foreground" data-testid="overage-storage-line">

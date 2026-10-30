@@ -124,6 +124,7 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "cloud-billing",
   "deploy-usage",
   "usage-billing",
+  "machine-pricing-readiness",
   "onboarding",
   "cp",
   "controlPlane",

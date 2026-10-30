@@ -109,8 +109,8 @@ export const COMPUTE_PLAN_UNPRICED = null;
 export interface PlanDisplay {
   allowedSizes: string[];
   monthlyPriceCents: number | null;
-  /** Small-daemon-hours the plan includes each period (0 with none). */
-  includedSmallDaemonHours: number;
+  /** Native running hours at the plan's declared machine size. */
+  machineIncludedHours: number;
 }
 
 /** The wire fields this module reads. Narrow on purpose. */
@@ -122,7 +122,7 @@ export function derivePlanDisplay(
   const limits = plan?.structuredLimits;
   return {
     allowedSizes: limits?.allowedDaemonSizes ?? [],
-    includedSmallDaemonHours: Number(limits?.includedSmallDaemonHours ?? 0),
+    machineIncludedHours: Number(limits?.machineIncludedHours ?? 0),
     monthlyPriceCents:
       plan && plan.priceCents > 0n
         ? Number(plan.priceCents)
@@ -332,7 +332,7 @@ export function isPlanDetailUnavailable(plan?: PlanPricing | null): boolean {
   const d = derivePlanDisplay(plan);
   return (
     d.allowedSizes.length === 0 &&
-    d.includedSmallDaemonHours === 0
+    d.machineIncludedHours === 0
   );
 }
 
