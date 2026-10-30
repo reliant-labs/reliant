@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -474,6 +475,13 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// workflow over running threads and reaped them as a missed cascade.
 		return a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Failed()); err != nil {
+				return err
+			}
+			// Why, on the run itself and in the same commit as the status:
+			// a run that failed before any node ran has nowhere else to
+			// carry it (no node attempt), and every surface that reads the
+			// run (GetRun, get_run, the run page) reads it from here.
+			if err := a.repo.SetWorkflowFailureDetail(txCtx, input.WorkflowID, rundiagnostics.ErrorText(input.Error)); err != nil {
 				return err
 			}
 			if err := a.cascadeTerminalStatus(txCtx, input.WorkflowID, db.StopReasonFailed); err != nil {

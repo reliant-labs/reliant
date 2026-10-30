@@ -24041,6 +24041,10 @@
             {
               "name": "archived",
               "kind": "bool"
+            },
+            {
+              "name": "failure_detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.RunNodeExecution": [
@@ -43768,6 +43772,17 @@
           }
         },
         {
+          "id": "method1:eb6a75ecd4a8bab175475121594ca17885fdb00267911aa31a2b9b067bdc73c7",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
+          }
+        },
+        {
           "id": "method1:165860683a307dacc4bcc9fb153fe7cc165ab71ee50b67012ef1350efe1244a4",
           "name": "resolveDaemonID",
           "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (string, error)",
@@ -53702,6 +53717,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetWorkflowDraftStatus"
+          }
+        },
+        {
+          "id": "method1:71e9926f7713d4a5bb7d7bdbc8979727349cd039d810ae279fedda72353975cd",
+          "name": "SetWorkflowFailureDetail",
+          "signature": "func(ctx context.Context, id string, detail string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetWorkflowFailureDetail",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetWorkflowFailureDetail"
           }
         },
         {
@@ -65876,6 +65902,17 @@
           "source": {
             "path": "internal/toolexec/tool_result_redelivery.go",
             "symbol": "NATSDaemonRouter.nextToolReply"
+          }
+        },
+        {
+          "id": "method1:7daa1314a0d84255eb73ca0eb1ad91f58d9d5d942419f4928f44c0522530805f",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
           }
         },
         {

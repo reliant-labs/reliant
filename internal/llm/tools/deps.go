@@ -241,6 +241,8 @@ type getRunStore interface {
 	threads.Repository
 	runCallerStore
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	// GetWorkflow reads the run's root workflow, which carries why it failed.
+	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 }
 
 // bugReportLookup is what report_bug reads to say where a report came from.

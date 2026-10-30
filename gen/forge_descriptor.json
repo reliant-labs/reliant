@@ -10021,6 +10021,10 @@
           {
             "name": "archived",
             "kind": "bool"
+          },
+          {
+            "name": "failure_detail",
+            "kind": "string"
           }
         ],
         "reliant.v1.RunNodeExecution": [
@@ -42326,7 +42330,7 @@
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "41361c4d530daffc74850527b0953baab9a7681b7f659e580c96d1de6d01498a",
-    "reliant/v1/run.proto": "a09b4a2effcec6e5917076f86cf7b9945961d1ecfc280f85670d69b63df8a6a6",
+    "reliant/v1/run.proto": "60e5adfe63608f8abf63550151e225e7de88ee1f140da0525ed459fce99ff47f",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
     "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",

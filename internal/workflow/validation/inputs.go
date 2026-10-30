@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -119,7 +120,7 @@ func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, v
 	expectedType := inputDef.GetType()
 	switch expectedType {
 	case "string", "message":
-		stringValue, ok := value.(string)
+		stringValue, ok := textValue(value)
 		if !ok {
 			return fmt.Errorf("input '%s' expects string, got %T", name, value)
 		}
@@ -154,7 +155,7 @@ func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, v
 	case "integer":
 		integerValue, ok := coerceInteger(value)
 		if !ok {
-			return fmt.Errorf("input '%s' expects integer, got %T", name, value)
+			return typeMismatch(name, "integer", value)
 		}
 		if cfg := inputDef.GetIntegerInput(); cfg != nil {
 			if cfg.Min != nil && integerValue < cfg.GetMin() {
@@ -169,7 +170,7 @@ func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, v
 	case "number":
 		numberValue, ok := coerceNumber(value)
 		if !ok {
-			return fmt.Errorf("input '%s' expects number, got %T", name, value)
+			return typeMismatch(name, "number", value)
 		}
 		if cfg := inputDef.GetNumberInput(); cfg != nil {
 			if cfg.Min != nil && numberValue < cfg.GetMin() {
@@ -183,7 +184,7 @@ func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, v
 
 	case "boolean":
 		if _, ok := value.(bool); !ok {
-			return fmt.Errorf("input '%s' expects boolean, got %T", name, value)
+			return typeMismatch(name, "boolean", value)
 		}
 		return nil
 
@@ -306,7 +307,7 @@ func validateEnumInputType(name string, value any, enumConfig *reliantv1.EnumInp
 		return nil
 	}
 
-	enumString, ok := value.(string)
+	enumString, ok := textValue(value)
 	if !ok {
 		return fmt.Errorf("input '%s' expects string, got %T", name, value)
 	}
@@ -314,6 +315,106 @@ func validateEnumInputType(name string, value any, enumConfig *reliantv1.EnumInp
 		return fmt.Errorf("input '%s' has invalid enum value %q (allowed: %s)", name, enumString, strings.Join(allowedValues, ", "))
 	}
 	return nil
+}
+
+// InputValue is the one rule for what a value of an input's declared type
+// may be, and the form a run holds it in. Admission (launch), the runtime's
+// own input check and `reliant workflow validate` all apply it, so a value
+// one accepts the others accept:
+//
+//   - boolean: a bool. Never text: "true" (a quoted 'true' in YAML, a JSON
+//     string) is refused rather than read as a boolean. YAML and JSON both
+//     have real booleans, so text where a boolean is declared is a mistake to
+//     report, not a meaning to guess.
+//   - integer: a number with no fractional part, held as int64. number: any
+//     number, held as float64. Never text, for the same reason.
+//   - string, message, single enum: text only. A number is not text either:
+//     a template yielding a PR number fills a string input through
+//     {{ string(...) }}, so what the run holds is what the author wrote.
+//   - every other type is held as given (the type check proper is in
+//     validateProtoInputType).
+//
+// ok is false when value does not fit the type; the value is then returned
+// unchanged, for the check to report.
+func InputValue(value any, input *reliantv1.Input) (any, bool) {
+	if input == nil || value == nil {
+		return value, false
+	}
+	if isIntegrationInput(input) {
+		return value, true
+	}
+	if enumCfg := input.GetEnumInput(); enumCfg != nil && enumCfg.GetMulti() {
+		items, ok := toAnySlice(value)
+		if !ok {
+			return value, false
+		}
+		return items, true
+	}
+	switch model.GetInputType(input) {
+	case "boolean":
+		b, ok := value.(bool)
+		if !ok {
+			return value, false
+		}
+		return b, true
+	case "integer":
+		i, ok := coerceInteger(value)
+		if !ok {
+			return value, false
+		}
+		return i, true
+	case "number":
+		f, ok := coerceNumber(value)
+		if !ok {
+			return value, false
+		}
+		return f, true
+	case "string", "message", "enum":
+		s, ok := textValue(value)
+		if !ok {
+			return value, false
+		}
+		return s, true
+	}
+	return value, false
+}
+
+// textValue is value when it is text.
+func textValue(value any) (string, bool) {
+	s, ok := value.(string)
+	return s, ok
+}
+
+// typeMismatch is the error for a value of the wrong type for a boolean,
+// integer or number input. Text that spells such a value gets the fix named:
+// it is almost always a quoted literal ('true', "10") where the bare one was
+// meant.
+func typeMismatch(name, want string, value any) error {
+	text, isText := value.(string)
+	if !isText {
+		return fmt.Errorf("input '%s' expects %s, got %T", name, want, value)
+	}
+	if spellsType(want, text) {
+		return fmt.Errorf("input '%s' expects %s, got string %q: text is never read as a %s; write %s without quotes, or an expression that yields a %s",
+			name, want, text, want, strings.TrimSpace(text), want)
+	}
+	return fmt.Errorf("input '%s' expects %s, got string %q", name, want, text)
+}
+
+// spellsType reports whether text is how a value of type want is written.
+func spellsType(want, text string) bool {
+	text = strings.TrimSpace(text)
+	switch want {
+	case "boolean":
+		return text == "true" || text == "false"
+	case "integer":
+		_, err := strconv.ParseInt(text, 10, 64)
+		return err == nil
+	case "number":
+		_, err := strconv.ParseFloat(text, 64)
+		return err == nil
+	}
+	return false
 }
 
 func validatePresetInputType(name string, value any, presetConfig *reliantv1.PresetInputConfig) error {

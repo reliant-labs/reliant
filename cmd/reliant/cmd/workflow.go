@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -363,7 +364,10 @@ format, exit codes, and --hook).`,
 				if len(parts) != 2 {
 					return fmt.Errorf("invalid input format %q — expected key=value", kv)
 				}
-				inputMap[parts[0]] = parts[1]
+				// Read as `workflow validate --input` reads it: asap=true is
+				// a boolean and every=10 a number, which a boolean or number
+				// input requires (the server never parses text into one).
+				inputMap[parts[0]] = parseCLIInputValue(parts[1])
 			}
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
@@ -1109,8 +1113,11 @@ func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}
 	return inputMap, nil
 }
 
-// parseCLIInputValue attempts to parse the raw value as JSON if it looks like a
-// JSON literal; otherwise returns the raw string.
+// parseCLIInputValue reads a --input value: a JSON literal (true, 10, 0.5,
+// null, "text", [..], {..}) as that value, anything else as text. A number is
+// read only when written canonically: 1.10 and 1e3 stay text, since reading
+// them as numbers would lose what was typed if the input is a string. Quote a
+// value to keep it text: --input 'sha="0123"'.
 func parseCLIInputValue(raw string) interface{} {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -1129,6 +1136,9 @@ func parseCLIInputValue(raw string) interface{} {
 	}
 	var v interface{}
 	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		return raw
+	}
+	if f, isNumber := v.(float64); isNumber && strconv.FormatFloat(f, 'f', -1, 64) != trimmed {
 		return raw
 	}
 	return v

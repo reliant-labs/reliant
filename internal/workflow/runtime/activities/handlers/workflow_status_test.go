@@ -266,6 +266,49 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 	})
 }
 
+// Bugs fe84af3c / eef49267 and run 658dbba8: a run that failed before any node
+// ran (here, input validation) recorded its reason nowhere on the run, so
+// get_run and the run page said "failed" and nothing else. The failed status
+// writes the reason onto the run, and the next run of the chat (which reuses
+// the root workflow id) starts without it.
+func TestWorkflowStatus_FailedRecordsWhyOnTheRun(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
+		ID: chatID, ChatID: chatID, WorkflowName: "release-forge", Thread: chatID, Status: db.Active(),
+	}))
+	activity := NewWorkflowStatusActivity(h.Repo())
+
+	reason := "workflow input validation failed: validation failed with 1 error(s):\n  1. release-forge.inputs.asap: input 'asap' expects boolean, got string \"true\""
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "failed", Thread: chatID, Error: reason,
+	}, &output))
+
+	failed, err := h.Repo().GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.Failed(), failed.Status)
+	require.NotNil(t, failed.FailureDetail, "a failed run records why on the run")
+	assert.Equal(t, rundiagnostics.ErrorText(reason), *failed.FailureDetail)
+
+	// The chat's next run reuses the workflow id: it has not failed.
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "started", Thread: chatID,
+	}, &output))
+	revived, err := h.Repo().GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Nil(t, revived.FailureDetail, "a live run carries no earlier run's failure")
+}
+
 // A run that completes at an `outcome: failure` save_message: the status write
 // marks that node's attempt failed, so run diagnostics (get_run, trigger
 // health) show where the run ended and the text it wrote, instead of no failed

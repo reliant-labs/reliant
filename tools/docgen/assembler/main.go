@@ -465,8 +465,9 @@ event: evaluation does not require enabling the trigger or waiting for a real ev
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with ` + bt + `--activation-params` + bt + ` and ` + bt + `--owner-github-id` + bt + ` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
-` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused.
+A deliberate start by hand still works: Run now, ` + bt + `reliant workflow run` + bt + `, an agent's ` + bt + `start_run` + bt + ` and a
+builder test run. Leave it unset for anything a person starts by chatting. A helper that only
 other workflows ` + bt + `ref:` + bt + ` sets ` + bt + `hidden: true` + bt + ` as well: hidden keeps it out of every picker and listing, and
 the pair marks it as an automation's internal step.
 
