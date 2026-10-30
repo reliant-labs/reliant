@@ -42,7 +42,8 @@
 #   vet          go vet ./...
 #   test         task test  (Go -race -count=1 without -short: every slow
 #                test, plus web and electron in full)
-#   integration  task test:integration
+#   integration  task test:integration  (only the packages with an
+#                integration-tagged test file: over ./... it re-ran `test`)
 #   e2e          task test:e2e  (e2e/stories, ephemeral Temporal dev server)
 #
 # Records: <git-common-dir>/release-gate/<sha>.{json,md} (outside every tree,

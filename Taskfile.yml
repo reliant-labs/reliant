@@ -357,9 +357,24 @@ tasks:
         if: '[ -z "{{.CLI_ARGS}}" ]'
 
   test:integration:
-    desc: Run integration tests (-tags=integration)
+    # `--` args replace the default packages. With none it runs only the
+    # packages that have an integration-tagged test file
+    # (scripts/integration-packages.sh), NOT ./...: the tag only adds files,
+    # so ./... re-ran the whole unit lane a second time after `task test`
+    # (~14 minutes of the release gate, #1934). No such package: nothing runs.
+    desc: Run integration tests (-tags=integration) in the packages that have them
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - cmd: |
+          set -euo pipefail
+          pkgs='{{.CLI_ARGS}}'
+          if [ -z "$pkgs" ]; then
+            pkgs="$(scripts/integration-packages.sh)"
+            if [ -z "$pkgs" ]; then
+              echo "test:integration: no package has an integration-tagged test file; nothing to run"
+              exit 0
+            fi
+          fi
+          {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
