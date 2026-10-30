@@ -1024,8 +1024,63 @@ func (m *BackgroundManager) GetCombinedOutputWithSeq(processID string, afterSeq 
 }
 
 // KillGraceTimeout is how long a kill waits for a process group to go down on
-// SIGTERM before escalating to SIGKILL.
-const KillGraceTimeout = 3 * time.Second
+// SIGTERM before escalating to SIGKILL. A var only so tests can shorten it.
+var KillGraceTimeout = 3 * time.Second
+
+// killSettleTimeout is how long a SIGKILLed group gets to disappear: the
+// kernel delivers SIGKILL at once, but each member must still be scheduled to
+// exit and be reaped.
+const killSettleTimeout = 2 * time.Second
+
+// groupPollInterval is how often a kill looks whether the group is empty.
+const groupPollInterval = 50 * time.Millisecond
+
+// stopProcessGroup stops a command's whole process group: SIGTERM to every
+// member, then onTerm (the context cancel, when there is one), then — if any
+// member is still alive after KillGraceTimeout — SIGKILL to the group. It
+// returns whether the group is gone. leaderDone closes once the leader has
+// been reaped (until then it is a zombie member of its own group).
+func stopProcessGroup(pgid int, leaderDone <-chan struct{}, onTerm func()) bool {
+	if err := terminateProcessGroup(pgid); err != nil {
+		logging.Warn("Failed to terminate process group gracefully", "pgid", pgid, "error", err)
+	}
+	if onTerm != nil {
+		onTerm()
+	}
+	if waitProcessGroupGone(pgid, leaderDone, KillGraceTimeout) {
+		logging.Debug("Process group terminated gracefully", "pgid", pgid)
+		return true
+	}
+	logging.Warn("Process group did not terminate gracefully, force killing", "pgid", pgid)
+	if err := forceKillProcessGroup(pgid); err != nil {
+		logging.Error("Failed to force kill process group", "pgid", pgid, "error", err)
+	}
+	return waitProcessGroupGone(pgid, leaderDone, killSettleTimeout)
+}
+
+// waitProcessGroupGone waits up to d for the leader to be reaped and every
+// other member of the group to exit.
+func waitProcessGroupGone(pgid int, leaderDone <-chan struct{}, d time.Duration) bool {
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+	if leaderDone != nil {
+		select {
+		case <-leaderDone:
+		case <-deadline.C:
+			return false
+		}
+	}
+	tick := time.NewTicker(groupPollInterval)
+	defer tick.Stop()
+	for processGroupAlive(pgid) {
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return !processGroupAlive(pgid)
+		}
+	}
+	return true
+}
 
 // KillProcess terminates a background process and all its child processes
 func (m *BackgroundManager) KillProcess(processID string) error {
@@ -1034,7 +1089,26 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return err
 	}
 
+	// The leader's pid is the process group's id (setProcessGroup).
+	var pid int
+	if process.cmd != nil && process.cmd.Process != nil {
+		pid = process.cmd.Process.Pid
+	}
+
 	if status := process.StatusSafe(); status != "running" {
+		// The command's shell exited, but what it started may not have: a
+		// `task ci &`, a `nohup server &`, a child that trapped SIGTERM when
+		// the shell was killed. They are still in its process group, still
+		// this command's, and a kill reaches them — otherwise they run on,
+		// orphaned, where nothing can see or stop them.
+		if process.cmd != nil && processGroupAlive(pid) {
+			logging.Info("Killing what an exited background command left running in its process group",
+				"id", processID, "pgid", pid, "status", status)
+			if !stopProcessGroup(pid, process.done, nil) {
+				return fmt.Errorf("process %s (%s) left processes in its group %d that did not die on SIGKILL", processID, status, pid)
+			}
+			return nil
+		}
 		return fmt.Errorf("process %s is not running (status: %s)", processID, status)
 	}
 
@@ -1045,49 +1119,31 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return m.killRecoveredProcessByPID(processID)
 	}
 
-	// Get the PID before we do anything
-	var pid int
-	if process.cmd != nil && process.cmd.Process != nil {
-		pid = process.cmd.Process.Pid
-	}
-
 	logging.Info("Killing background process and process group",
 		"id", processID,
 		"pid", pid)
 
-	// First, try to gracefully terminate the process group
-	// This sends SIGTERM to all processes in the group
+	// SIGTERM to the whole group, cancel the context (CommandContext's own
+	// kill of the leader), then wait until the GROUP is empty — not just the
+	// leader. A leader that dies at once used to end the wait while children
+	// that trapped or ignored SIGTERM ran on with nothing left to kill them.
 	if pid > 0 {
-		if err := terminateProcessGroup(pid); err != nil {
-			logging.Warn("Failed to terminate process group gracefully",
-				"pid", pid,
-				"error", err)
+		if !stopProcessGroup(pid, process.done, process.cancelFunc) {
+			logging.Error("Process group survived SIGKILL", "id", processID, "pgid", pid)
+		}
+	} else {
+		process.cancelFunc()
+		select {
+		case <-process.done:
+		case <-time.After(KillGraceTimeout):
 		}
 	}
-
-	// Cancel the context as well (this triggers CommandContext cancellation)
-	process.cancelFunc()
-
-	// Wait for process to finish with timeout
+	// The leader itself, if the group could not be signalled at all.
 	select {
 	case <-process.done:
-		// Process finished
-		logging.Debug("Process group terminated gracefully", "id", processID)
-	case <-time.After(KillGraceTimeout):
-		// Force kill the entire process group if it doesn't stop gracefully
-		logging.Warn("Process group did not terminate gracefully, force killing",
-			"id", processID,
-			"pid", pid)
-		if pid > 0 {
-			if err := forceKillProcessGroup(pid); err != nil {
-				logging.Error("Failed to force kill process group",
-					"pid", pid,
-					"error", err)
-			}
-		}
-		// Also try direct process kill as last resort
-		if process.cmd != nil && process.cmd.Process != nil {
-			process.cmd.Process.Kill()
+	default:
+		if process.cmd.Process != nil {
+			_ = process.cmd.Process.Kill()
 		}
 	}
 
@@ -1171,22 +1227,10 @@ func (m *BackgroundManager) killRecoveredProcessByPID(processID string) error {
 		"id", processID,
 		"pid", pid)
 
-	// Try graceful termination first.
-	if err := terminateProcessGroup(pid); err != nil {
-		logging.Warn("Failed to terminate recovered process group gracefully",
-			"pid", pid,
-			"error", err)
-	}
-
-	// Give it a brief moment then force kill.
-	time.Sleep(3 * time.Second)
-	if osutil.IsProcessRunning(pid) {
-		if err := forceKillProcessGroup(pid); err != nil {
-			logging.Error("Failed to force kill recovered process group",
-				"pid", pid,
-				"error", err)
-			return err
-		}
+	// The whole group, SIGTERM then SIGKILL, until it is empty. This daemon
+	// did not start it, so it is not our child and no reap is waited for.
+	if !stopProcessGroup(pid, nil, nil) {
+		return fmt.Errorf("recovered process %s: process group %d survived SIGKILL", processID, pid)
 	}
 
 	now := time.Now()

@@ -39,6 +39,13 @@ func killProcessGroup(pid int, signal syscall.Signal) error {
 	return nil
 }
 
+// processGroupAlive reports whether the tree is still running. taskkill /T
+// takes the whole tree at once, so once the root is gone there is nothing
+// left to wait for here.
+func processGroupAlive(pid int) bool {
+	return false
+}
+
 // terminateProcessGroup gracefully terminates a process group.
 // On Windows, we just use taskkill which forcefully terminates.
 func terminateProcessGroup(pid int) error {

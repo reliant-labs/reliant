@@ -25,3 +25,10 @@ import (
 func terminateGracefully(proc *os.Process) error {
 	return proc.Kill()
 }
+
+// killGroup kills the child. Windows has no process groups to signal here.
+func killGroup(proc *os.Process) { _ = proc.Kill() }
+
+// groupAlive is false: there is no group left to wait on once the child is
+// gone.
+func groupAlive(int) bool { return false }

@@ -112,3 +112,9 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `testkit.Slow(t, "<why>")` first, which moves it off the merge gate into the
   release gate. Gate it, never weaken the assertion.
 - Anything expected to run >~2 min: `run_in_background` + `shell_wait`.
+- **Never start long work with `nohup`, a trailing `&`, `setsid` or `disown`.**
+  Use `run_in_background`: the daemon then owns the command's whole process
+  group, limits it, and `shell_kill` takes all of it down. What you detach
+  yourself is invisible to the daemon and to every other agent. On 2026-10-30
+  the shared machine ran out of processes (~5,200 bash) and was restarted,
+  killing every agent's work; gates started with `nohup … &` were part of it.

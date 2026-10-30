@@ -50,3 +50,24 @@ func terminateGracefully(proc *os.Process) error {
 	}
 	return nil
 }
+
+// killGroup SIGKILLs the child's whole process group, then the child itself
+// (Kill is a harmless ErrProcessDone once Wait has reaped it).
+//
+// Signalling the group by the leader's pid stays safe after the leader is
+// reaped: the kernel does not hand out a pid that is still in use as a group
+// id, so while any member we mean is alive the id is still ours, and once they
+// are all gone it is ESRCH unless the pid space has wrapped since. A child
+// started without a group of its own leads no group: ESRCH, and only the
+// direct kill applies.
+func killGroup(proc *os.Process) {
+	if proc.Pid > 0 {
+		_ = syscall.Kill(-proc.Pid, syscall.SIGKILL)
+	}
+	_ = proc.Kill()
+}
+
+// groupAlive reports whether any process of the group pid leads is alive.
+func groupAlive(pid int) bool {
+	return pid > 0 && !errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH)
+}
