@@ -76,12 +76,12 @@ func workspaces() fakeWorkspaces {
 // handed another tenant's machine id.
 func TestWorkspaceDaemon_ForeignWorkspaceIsNotRead(t *testing.T) {
 	for _, projectID := range []string{"p-theirs", "p1", ""} {
-		ws, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", projectID, "theirs", "")
+		ws, err := WorkspaceDaemon(context.Background(), workspaces(), "u1", projectID, "theirs", "")
 		require.ErrorIs(t, err, ErrForeignWorkspace, projectID)
 		assert.Empty(t, ws.DaemonID)
 	}
 	// One of the caller's own worktrees named under another project is refused too.
-	_, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", "p2", "branch", "")
+	_, err := WorkspaceDaemon(context.Background(), workspaces(), "u1", "p2", "branch", "")
 	require.ErrorIs(t, err, ErrForeignWorkspace)
 }
 
@@ -104,7 +104,7 @@ func TestWorkspaceDaemon(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", "p1", tc.worktreeID, tc.chatID)
+			got, err := WorkspaceDaemon(context.Background(), workspaces(), "u1", "p1", tc.worktreeID, tc.chatID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
@@ -112,7 +112,7 @@ func TestWorkspaceDaemon(t *testing.T) {
 }
 
 func TestWorkspaceDaemon_ForeignChat(t *testing.T) {
-	_, err := WorkspaceDaemon(context.Background(), workspaces(), nil, "u1", "p1", "main", "chat-foreign")
+	_, err := WorkspaceDaemon(context.Background(), workspaces(), "u1", "p1", "main", "chat-foreign")
 	assert.ErrorIs(t, err, ErrForeignChat)
 }
 
@@ -149,24 +149,6 @@ func TestMachineName(t *testing.T) {
 	assert.Equal(t, `"Seans-MacBook-Pro.local"`, MachineName(ctx, r, "host"))
 	assert.Equal(t, "self-hosted machine uuidhost", MachineName(ctx, r, "uuidhost"))
 	assert.Equal(t, "machine 12345678", MachineName(ctx, r, "1234567890"))
-}
-
-// A request scoped to a chat alone (the Files tab with no worktree_id) reads
-// the chat's branch workspace, so it goes to that workspace's machine, even
-// one no row recorded yet: the Resolver settles it on first use. The chat's
-// stale pin to another machine is never the route.
-func TestWorkspaceDaemon_ChatOnlySettlesTheChatsWorkspace(t *testing.T) {
-	f := newOwnerFixture()
-	f.machine("a", true, wtPath) // holds the checkout
-	f.machine("b", true)         // the chat's stale pin
-	r := workspaces()
-	r.worktrees["wt-1"] = unattributed()
-	r.chats["chat-stale"] = &db.Chat{ID: "chat-stale", UserID: "u1", ProjectID: "p1", ActiveDaemonID: strp("b"), WorktreeID: strp("wt-1")}
-
-	ws, err := WorkspaceDaemon(context.Background(), r, NewResolver(f, f), "u1", "p1", "", "chat-stale")
-	require.NoError(t, err)
-	assert.Equal(t, Workspace{DaemonID: "a"}, ws)
-	assert.Equal(t, map[string]string{"wt-1": "a"}, f.adopted, "settled and recorded on first use")
 }
 
 // ChatDaemonID is where the chat's tools run: a branch workspace's owner

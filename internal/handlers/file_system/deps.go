@@ -22,10 +22,6 @@ type Repository interface {
 	// GetDaemon checks that a machine about to be woken is the caller's
 	// (machinewake.Owners).
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	// ListDaemonsByUserID and AdoptWorktreeDaemon settle the machine of a
-	// workspace whose row records none (daemonplacement.Resolver).
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
 }
 
 // Router is the slice of toolexec.DaemonRouter the filesystem handlers use.

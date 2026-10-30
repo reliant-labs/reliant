@@ -43813,6 +43813,17 @@
           }
         },
         {
+          "id": "method1:eb6a75ecd4a8bab175475121594ca17885fdb00267911aa31a2b9b067bdc73c7",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
+          }
+        },
+        {
           "id": "method1:165860683a307dacc4bcc9fb153fe7cc165ab71ee50b67012ef1350efe1244a4",
           "name": "resolveDaemonID",
           "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (string, error)",
@@ -47423,17 +47434,6 @@
           "source": {
             "path": "internal/handlers/chat/chat_resume_agent.go",
             "symbol": "Service.withdrawQueuedAgentMessage"
-          }
-        },
-        {
-          "id": "method1:3abc0ea30182eb63e352c1d64f2d1729e2e1e0b53c6fddfd9e8ebe7f754b4d53",
-          "name": "workspaceOwners",
-          "signature": "func() *github.com/reliant-labs/reliant/internal/daemonplacement.Resolver",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
-          "legacy_name": "chat.workspaceOwners",
-          "source": {
-            "path": "internal/handlers/chat/service.go",
-            "symbol": "Service.workspaceOwners"
           }
         }
       ],
@@ -65502,17 +65502,6 @@
             "path": "internal/handlers/chat/chat_resume_agent.go",
             "symbol": "Service.withdrawQueuedAgentMessage"
           }
-        },
-        {
-          "id": "method1:8fd646b060693f8ef584ff216e5c67a3a6f255cf3c7c723a5e8f5bf417fb6e6b",
-          "name": "workspaceOwners",
-          "signature": "func() *github.com/reliant-labs/reliant/internal/daemonplacement.Resolver",
-          "scope": "github.com/reliant-labs/reliant/internal/app",
-          "legacy_name": "app.workspaceOwners",
-          "source": {
-            "path": "internal/handlers/chat/service.go",
-            "symbol": "Service.workspaceOwners"
-          }
         }
       ],
       "implementation_candidates": []
@@ -65965,6 +65954,17 @@
           "source": {
             "path": "internal/toolexec/tool_result_redelivery.go",
             "symbol": "NATSDaemonRouter.nextToolReply"
+          }
+        },
+        {
+          "id": "method1:7daa1314a0d84255eb73ca0eb1ad91f58d9d5d942419f4928f44c0522530805f",
+          "name": "normalizeSelector",
+          "signature": "func(ctx context.Context, userID string, selector *github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector) (*github.com/reliant-labs/reliant/internal/toolexec.DaemonSelector, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.normalizeSelector",
+          "source": {
+            "path": "internal/toolexec/daemon_router_nats.go",
+            "symbol": "NATSDaemonRouter.normalizeSelector"
           }
         },
         {
@@ -68755,17 +68755,6 @@
           }
         },
         {
-          "id": "method1:6282521b945f511a9bbf792cd35d8f189d741653af88663c5a428c224e2fe717",
-          "name": "chatMachine",
-          "signature": "func(ctx context.Context, userID string, chat *github.com/reliant-labs/reliant/internal/db.Chat) (string, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
-          "legacy_name": "worktree.chatMachine",
-          "source": {
-            "path": "internal/handlers/worktree/worktree_placement.go",
-            "symbol": "Service.chatMachine"
-          }
-        },
-        {
           "id": "method1:4308ea676ecff96d07e281a400952b8cd0d6804667ba815615fb3f1aea4aca73",
           "name": "cleanupWorktreeBranch",
           "signature": "func(ctx context.Context, userID string, daemonID string, projectPath string, branch string) bool",
@@ -68829,17 +68818,6 @@
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
             "symbol": "Service.listProjectRepos"
-          }
-        },
-        {
-          "id": "method1:fb73ce914d36a4eb039b550fada16c641966fcb7e401e0ca91835e55409a1a85",
-          "name": "owner",
-          "signature": "func(ctx context.Context, userID string, worktree *github.com/reliant-labs/reliant/internal/db.Worktree) string",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
-          "legacy_name": "worktree.owner",
-          "source": {
-            "path": "internal/handlers/worktree/worktree_placement.go",
-            "symbol": "Service.owner"
           }
         },
         {
@@ -69016,17 +68994,6 @@
           "source": {
             "path": "internal/handlers/worktree/worktree.go",
             "symbol": "Service.settleArchived"
-          }
-        },
-        {
-          "id": "method1:9e4927ab6bdf58dc9950f3778014a64096c5838a2103456958d3736b063897af",
-          "name": "settleOwnersInBackground",
-          "signature": "func(ctx context.Context, userID string, worktrees []*github.com/reliant-labs/reliant/internal/db.Worktree)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
-          "legacy_name": "worktree.settleOwnersInBackground",
-          "source": {
-            "path": "internal/handlers/worktree/rpc_list_worktrees.go",
-            "symbol": "Service.settleOwnersInBackground"
           }
         },
         {
@@ -70160,17 +70127,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Repository",
       "methods": [
         {
-          "id": "method1:f681b225ed2fd98c134f288bd62696381bb5c0c21c0c3dc4065e2d83a9f5ae20",
-          "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
-          "legacy_name": "chat.AdoptWorktreeDaemon",
-          "source": {
-            "path": "internal/daemonplacement/owner.go",
-            "symbol": "OwnerStore.AdoptWorktreeDaemon"
-          }
-        },
-        {
           "id": "method1:5ddceecb825d82ae36f442a969c1b23f9ae93fff5c29edf3b94f0358a2548a7f",
           "name": "AllocateContextWindowSequence",
           "signature": "func(ctx context.Context, threadID string) (int, error)",
@@ -71180,17 +71136,6 @@
           "source": {
             "path": "internal/handlers/chat/deps.go",
             "symbol": "Repository.ListContentBlocksForMessages"
-          }
-        },
-        {
-          "id": "method1:e2b8f0ae4db906edb63c5a5611277755ba349f9601b22568b8c8ed8a76211e0a",
-          "name": "ListDaemonsByUserID",
-          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
-          "legacy_name": "chat.ListDaemonsByUserID",
-          "source": {
-            "path": "internal/daemonplacement/owner.go",
-            "symbol": "OwnerStore.ListDaemonsByUserID"
           }
         },
         {
@@ -72941,17 +72886,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Repository",
       "methods": [
         {
-          "id": "method1:bfa868481f895bc40aac7a1005424a815a68e3f9afceff842f03a7a725141678",
-          "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/file_system",
-          "legacy_name": "file_system.AdoptWorktreeDaemon",
-          "source": {
-            "path": "internal/handlers/file_system/deps.go",
-            "symbol": "Repository.AdoptWorktreeDaemon"
-          }
-        },
-        {
           "id": "method1:27b34b4b81215688ad28c49cbf7182b8c1bb4955af7506f2336442d99557083b",
           "name": "GetChat",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Chat, error)",
@@ -72993,17 +72927,6 @@
           "source": {
             "path": "internal/handlers/file_system/deps.go",
             "symbol": "Repository.GetWorktree"
-          }
-        },
-        {
-          "id": "method1:e2280c09327b5e17c40ba53959364adc645bae5f146f911d33e5c8ac081ff9f4",
-          "name": "ListDaemonsByUserID",
-          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/file_system",
-          "legacy_name": "file_system.ListDaemonsByUserID",
-          "source": {
-            "path": "internal/handlers/file_system/deps.go",
-            "symbol": "Repository.ListDaemonsByUserID"
           }
         },
         {
@@ -81128,17 +81051,6 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [
         {
-          "id": "method1:6ab74dfd4788e2d3b4427d826402f7e6cc5d234267c61c26946451534e3b393f",
-          "name": "AdoptWorktreeDaemon",
-          "signature": "func(ctx context.Context, id string, daemonID string) (string, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
-          "legacy_name": "worktree.AdoptWorktreeDaemon",
-          "source": {
-            "path": "internal/handlers/worktree/deps.go",
-            "symbol": "Repository.AdoptWorktreeDaemon"
-          }
-        },
-        {
           "id": "method1:6ceeb20bccc889a7a7165d1262c235d767a10e1e0b80f31a1ead7e01821b2467",
           "name": "ArchiveWorktree",
           "signature": "func(ctx context.Context, id string) error",
@@ -81334,17 +81246,6 @@
           "source": {
             "path": "internal/handlers/worktree/deps.go",
             "symbol": "Repository.ListChats"
-          }
-        },
-        {
-          "id": "method1:7fdff8da8de7362c15a20a97979db9abc9642fd91e556e5b6142dd3648dfbc13",
-          "name": "ListDaemonsByUserID",
-          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
-          "legacy_name": "worktree.ListDaemonsByUserID",
-          "source": {
-            "path": "internal/handlers/worktree/deps.go",
-            "symbol": "Repository.ListDaemonsByUserID"
           }
         },
         {

@@ -22,13 +22,9 @@ import (
 // selects its machine — so this is the server's half of that rule. The error
 // names the machine to pick.
 //
-// A workspace whose row records no machine (made before owners were
-// recorded) is settled first (daemonplacement.Resolver), so the check — and
-// the placement of a chat that names no machine, which reads the recorded
-// owner — sees where it really is. That is why it runs with daemonID "" too.
-//
-// An empty worktreeID or daemonID, the main checkout, a row no connected
-// machine could settle, and a worktree that no longer exists never conflict.
+// An empty worktreeID or daemonID, the main checkout, a row that records no
+// machine (made before owners were recorded), and a worktree that no longer
+// exists never conflict.
 func (s *Service) checkWorkspaceMachine(ctx context.Context, userID, worktreeID, daemonID string) error {
 	if worktreeID == "" {
 		return nil
@@ -50,7 +46,7 @@ func (s *Service) checkWorkspaceMachine(ctx context.Context, userID, worktreeID,
 	if project == nil || project.UserID != userID {
 		return svcerr.NotFound("worktree")
 	}
-	owner := s.workspaceOwners().Owner(ctx, userID, worktree)
+	owner := daemonplacement.WorktreeOwner(worktree)
 	if daemonID == "" || owner == "" || owner == daemonID {
 		return nil
 	}

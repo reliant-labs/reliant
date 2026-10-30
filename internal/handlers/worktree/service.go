@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -91,9 +90,6 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedWorktreeServiceHandler
 	deps Deps
-	// owners settles the machine of a workspace whose row records none; see
-	// owner.
-	owners *daemonplacement.Resolver
 }
 
 // New creates a new worktree service instance with the supplied Deps.
@@ -102,8 +98,7 @@ func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
 		return nil, err
 	}
-	probe, _ := deps.Router.(daemonplacement.OwnerProbe)
-	return &Service{deps: deps, owners: daemonplacement.NewResolver(deps.Repo, probe)}, nil
+	return &Service{deps: deps}, nil
 }
 
 // Name returns the service name for logging and registry.
