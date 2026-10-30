@@ -430,10 +430,13 @@ Beside them run the lanes neither gate covers (`scripts/ci-lanes.sh`,
 Playwright (`task test:web:e2e`), the electron package
 (`task build:electron:smoke`) and the vendored control-plane contract
 (`task contract:controlplane:check`, which reads private control-plane with a
-deploy key). Main runs all of them (the contract only when a push changed what
-it checks). The merge queue runs those the diff reaches: the release-gate record
-does not include them, so the queue is still where they protect a release. A `ci:run`
-pull request runs those its paths reach. `CI result` is the one verdict.
+deploy key and judges the tree against the control-plane commit its `SOURCE`
+declares, never against control-plane's moving main; lag behind main is
+`cp-contract-drift.yml`'s issue, not a gate). Main runs all of them (the
+contract only when a push changed what it checks). The merge queue runs those
+the diff reaches: the release-gate record does not include them, so the queue
+is still where they protect a release. A `ci:run` pull request runs those its
+paths reach. `CI result` is the one verdict.
 
 `license-gate.yml`, `pin-drift.yml` and `release-tag-guard.yml` still run on a
 pull request that touches their inputs (dependency manifests, the forge pin,
