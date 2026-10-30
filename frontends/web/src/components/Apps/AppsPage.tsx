@@ -26,6 +26,7 @@ import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_tabl
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
 import { verdictLabel } from "@/services/forge/topology";
@@ -70,7 +71,7 @@ function AppsBody() {
   return (
     <div className="space-y-5" data-testid="apps-page">
       {header}
-      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} />}
+      {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
         <NoApps onBuild={startBuilding} />
@@ -238,7 +239,18 @@ function LastDeployCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: 
  * the user's own org by the time this shows; the list below may still be
  * catching up, which the banner says rather than leaving the user to wonder.
  */
-function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolean; loading: boolean }) {
+function ClaimedBanner({
+  name,
+  listed,
+  loading,
+  paused,
+}: {
+  name: string;
+  listed: boolean;
+  loading: boolean;
+  paused: PausedSite | null;
+}) {
+  const goToBilling = useGoToBilling("upgrade");
   return (
     <p
       className="flex items-start gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground"
@@ -249,6 +261,17 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
       <span>
         <strong className="font-semibold">{name}</strong> is yours now.
         {!loading && !listed && " It can take a moment to appear in this list."}
+        {paused && (
+          <span data-testid="apps-claimed-paused">
+            {" "}
+            {paused.kept === "claimed" ? "You kept this site live, so " : "You kept your existing site live, so "}
+            <strong className="font-semibold">{paused.name}</strong> is paused: the free plan includes one static site.{" "}
+            <button type="button" onClick={goToBilling} className="font-medium underline underline-offset-2">
+              Subscribe
+            </button>{" "}
+            to run both.
+          </span>
+        )}
       </span>
     </p>
   );
@@ -261,18 +284,31 @@ function ClaimedBanner({ name, listed, loading }: { name: string; listed: boolea
  * until the list has loaded: the claim moved the site into the user's org, and
  * the list is what shows it.
  */
-function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean } {
+function useClaimedApp(names: string[], loading: boolean): { name: string | null; found: boolean; paused: PausedSite | null } {
   const navigate = useNavigate();
-  const { claimed } = useSearch({ strict: false }) as { claimed?: string };
+  const { claimed, pausedSite, kept } = useSearch({ strict: false }) as {
+    claimed?: string;
+    pausedSite?: string;
+    kept?: "claimed" | "existing";
+  };
   const [name, setName] = useState<string | null>(null);
+  const [paused, setPaused] = useState<PausedSite | null>(null);
 
   useEffect(() => {
     if (!claimed) return;
     setName(claimed);
+    setPaused(pausedSite && kept ? { name: pausedSite, kept } : null);
     void navigate({ to: "/apps", search: {}, replace: true });
-  }, [claimed, navigate]);
+  }, [claimed, pausedSite, kept, navigate]);
 
-  return { name, found: !loading && name !== null && names.includes(name) };
+  return { name, found: !loading && name !== null && names.includes(name), paused };
+}
+
+interface PausedSite {
+  /** The site that is paused. */
+  name: string;
+  /** Which one the person kept live. */
+  kept: "claimed" | "existing";
 }
 
 function NoApps({ onBuild }: { onBuild: () => void }) {
