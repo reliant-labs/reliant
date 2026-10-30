@@ -267,6 +267,11 @@ enum TriggerEventKind {
   // (RunService.RunNow). Attended, with the chat id as its dedupe key. When it
   // replays a past event, its payload names that event.
   TRIGGER_EVENT_KIND_MANUAL_RUN = 8;
+  // CLI_RUN is a run started from the command line (`reliant workflow run`):
+  // by a script, or by an agent shelling out. Attended, with the chat id as
+  // its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
+  // the sidebar until adopted.
+  TRIGGER_EVENT_KIND_CLI_RUN = 9;
 }
 
 // TriggerEventOutcome records what a firing did.

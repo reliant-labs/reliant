@@ -36,7 +36,7 @@ describe('trigger.kind: core.TriggerEventKind, mirrored', () => {
     const description = TRIGGER_CEL_FIELDS.find((field) => field.name === 'kind')?.description ?? ''
     for (const kind of TRIGGER_KINDS) expect(description).toContain(`"${kind}"`)
     expect(description).toBe(
-      'What started the run: "chat.start", "schedule", "agent.start_run", "builder.test", "webhook", "integration", "workflow_event" or "manual.run".',
+      'What started the run: "chat.start", "schedule", "agent.start_run", "builder.test", "webhook", "integration", "workflow_event", "manual.run" or "cli.run".',
     )
   })
 })

@@ -191,12 +191,14 @@ export function RunMachineBanner({ chat }: { chat: Chat }) {
   const daemonId = chat.activeDaemonId || triggerDaemonId;
   if (!daemonId) return null;
 
-  // A builder test or a Run now is attended, like a chat: a person pressed Run.
+  // A builder test, a Run now or a command-line run is attended, like a chat:
+  // a person (or their agent) started it.
   const automation =
     !!chat.launchKind &&
     chat.launchKind !== "chat.start" &&
     chat.launchKind !== "agent.start_run" &&
     chat.launchKind !== "builder.test" &&
-    chat.launchKind !== "manual.run";
+    chat.launchKind !== "manual.run" &&
+    chat.launchKind !== "cli.run";
   return <MachineStatus daemonId={daemonId} automation={automation} />;
 }

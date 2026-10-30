@@ -14,10 +14,12 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/repo"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
@@ -293,6 +295,7 @@ func newWorkflowRunCmd() *cobra.Command {
 		inputs      []string
 		inputFile   string
 		message     string
+		title       string
 		follow      bool
 		projectID   string
 		projectPath string
@@ -303,9 +306,14 @@ func newWorkflowRunCmd() *cobra.Command {
 		Use:   "run <workflow-name>",
 		Short: "Run a workflow",
 		Long: `Triggers a workflow execution by creating a chat bound to the workflow,
-via the Reliant ChatService.StartChat Connect RPC — the exact path the web
-app takes. A run IS a chat: sending the first user message kicks the root
-workflow.
+via the Reliant ChatService.StartChat Connect RPC. A run IS a chat: sending
+the first user message kicks the root workflow.
+
+The run is recorded as a command-line run (launch kind cli.run): it is listed
+under Runs, not among your conversations in the sidebar, the same as a run an
+agent starts with start_run. Open it from Runs, or by the chat id printed
+below; adopting it moves it into the sidebar. Its title is --title, else
+"<workflow> · <first line of the message>", else "<workflow> · <start time>".
 
 The target server is --server (else RELIANT_SERVER_URL, else the default);
 the bearer is RELIANT_TOKEN, else the login 'reliant auth login' stored for
@@ -376,14 +384,25 @@ format, exit codes, and --hook).`,
 				return err
 			}
 
+			workflowRef := normalizeRunWorkflowRef(workflowName)
+			runMessage, messageGiven := resolveRunMessage(workflowName, message, inputMap)
 			createReq := &reliantv1.StartChatRequest{
 				ProjectId: resolvedProjectID,
-				Workflow:  normalizeRunWorkflowRef(workflowName),
+				Workflow:  workflowRef,
 				Messages: []*reliantv1.InputMessage{{
 					Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
-					Content: resolveRunMessage(workflowName, message, inputMap),
+					Content: runMessage,
 				}},
 				WorkflowParams: params,
+				CliRun:         proto.Bool(true),
+			}
+			switch {
+			case title != "":
+				createReq.Title = proto.String(title)
+			case !messageGiven:
+				// The kick message is not a subject; without one the server's
+				// "<workflow> · <first line>" would title every run with it.
+				createReq.Title = proto.String(launch.RunTitle(workflowRef, "", time.Now()))
 			}
 
 			// Connect client authenticated by the context bearer, mirroring how
@@ -401,6 +420,9 @@ format, exit codes, and --hook).`,
 			fmt.Fprintf(out, "Workflow %q triggered\n", workflowName)
 			if chatID != "" {
 				fmt.Fprintf(out, "  Chat/Execution ID: %s\n", chatID)
+			}
+			if t := resp.Msg.GetChat().GetTitle(); t != "" {
+				fmt.Fprintf(out, "  Title:             %s (listed under Runs)\n", t)
 			}
 			if wid := resp.Msg.GetWorkflowId(); wid != "" {
 				fmt.Fprintf(out, "  Workflow ID:       %s\n", wid)
@@ -422,6 +444,7 @@ format, exit codes, and --hook).`,
 	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable)")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default)")
+	cmd.Flags().StringVar(&title, "title", "", "Title for the run (default: \"<workflow> · <first line of the message>\")")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow the execution and stream NDJSON lifecycle events")
 	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (takes precedence over --project-path)")
 	cmd.Flags().StringVar(&projectPath, "project-path", "", "Project directory path; resolves (find-or-create) to a project ID when --project-id is absent")
@@ -454,17 +477,18 @@ func normalizeRunWorkflowRef(name string) string {
 // resolveRunMessage picks the chat's first user message: explicit --message,
 // then inputs.message, then inputs.prompt, then a generic kick message
 // (StartChat requires at least one user message; input-driven workflows read
-// their params, not the message).
-func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) string {
+// their params, not the message). given is false for the kick message, which
+// names no subject.
+func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) (message string, given bool) {
 	if explicit != "" {
-		return explicit
+		return explicit, true
 	}
 	for _, key := range []string{"message", "prompt"} {
 		if s, ok := inputs[key].(string); ok && s != "" {
-			return s
+			return s, true
 		}
 	}
-	return fmt.Sprintf("Run the %s workflow with the provided inputs.", workflowName)
+	return fmt.Sprintf("Run the %s workflow with the provided inputs.", workflowName), false
 }
 
 // workflowParamsFromInputs converts the CLI input map to the proto

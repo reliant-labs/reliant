@@ -44,7 +44,7 @@ import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
 import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
-import { isAdoptedAutomation, isAutomationLaunch, withOpenChatPinned } from "../../lib/sidebarChatList";
+import { isAdoptedAutomation, isRun, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
@@ -385,7 +385,7 @@ const ChatItem = memo(function ChatItem({
           />
         ) : (
           <div className="flex min-w-0 items-center gap-1.5">
-            {isAutomationLaunch(chat.launchKind) && <AutomationOriginGlyph chat={chat} />}
+            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
             <div className="truncate group-hover:text-foreground transition-colors duration-200">
               {chatTitle}
             </div>
@@ -735,7 +735,9 @@ function SidebarComponent({
       }),
     [listedChats, openedChat, activeChatId, projectFilterId, releasedChatId],
   );
-  const listedChatIds = useMemo(() => new Set(listedChats.map((chat) => chat.id)), [listedChats]);
+  // The rows the list renders: a run counted here has its own row, so the
+  // automation pill does not count it again.
+  const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
   // ONE condition: the experimental gate. While the forge UI is unreleased this
   // is off in a packaged build, so the entry does not exist for anyone who has
   // not opted in.

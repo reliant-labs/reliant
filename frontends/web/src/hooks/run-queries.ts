@@ -334,6 +334,7 @@ const LAUNCH_EVENT_KINDS: Record<TriggerEventKind, string> = {
   [TriggerEventKind.AGENT_START_RUN]: "agent.start_run",
   [TriggerEventKind.BUILDER_TEST]: "builder.test",
   [TriggerEventKind.MANUAL_RUN]: "manual.run",
+  [TriggerEventKind.CLI_RUN]: "cli.run",
   [TriggerEventKind.WEBHOOK]: "webhook",
   [TriggerEventKind.INTEGRATION]: "integration",
   [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",

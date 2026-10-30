@@ -10,6 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -41,16 +43,43 @@ func (s *Service) StartChat(
 ) (*connect.Response[reliantv1.StartChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	// The launch kind is the server's decision. A client can ask for exactly
-	// one non-default kind, builder.test, through builder_test; schedule,
-	// agent.start_run and manual.run have no way in through this RPC.
+	// two non-default kinds, builder.test through builder_test and cli.run
+	// through cli_run; schedule, agent.start_run and manual.run have no way in
+	// through this RPC.
 	eventKind := core.TriggerEventKindChatStart
-	if req.Msg.GetBuilderTest() {
-		if err := s.validateBuilderTest(ctx, userID, req.Msg); err != nil {
+	msg := req.Msg
+	switch {
+	case msg.GetBuilderTest() && msg.GetCliRun():
+		return nil, svcerr.InvalidArgument("builder_test and cli_run are different launch kinds; set at most one")
+	case msg.GetBuilderTest():
+		if err := s.validateBuilderTest(ctx, userID, msg); err != nil {
 			return nil, err
 		}
 		eventKind = core.TriggerEventKindBuilderTest
+	case msg.GetCliRun():
+		if msg.GetChatId() != "" {
+			return nil, svcerr.InvalidArgument("cli_run starts a new run; chat_id must be empty")
+		}
+		eventKind = core.TriggerEventKindCLIRun
+		if msg.Title == nil {
+			// A command-line run's first message is usually an instruction
+			// to the workflow, not a subject a generated title could name.
+			msg = proto.Clone(msg).(*reliantv1.StartChatRequest)
+			title := launch.RunTitle(msg.GetWorkflow(), firstUserContent(msg.GetMessages()), time.Now())
+			msg.Title = &title
+		}
 	}
-	return s.startChat(ctx, userID, req.Msg, eventKind, nil)
+	return s.startChat(ctx, userID, msg, eventKind, nil)
+}
+
+// firstUserContent is the text of the first user message, or "".
+func firstUserContent(messages []*reliantv1.InputMessage) string {
+	for _, m := range messages {
+		if m.GetRole() == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+			return m.GetContent()
+		}
+	}
+	return ""
 }
 
 // startChat is the start path every attended launch kind shares: StartChat's
@@ -118,8 +147,10 @@ func (s *Service) startChat(
 		ClientMessageID: clientID,
 
 		// An interactive start always had both of these, and still does. A
-		// branch is not a first turn of new work, so it skips the probe.
-		GenerateTitle:   true,
+		// branch is not a first turn of new work, so it skips the probe. A
+		// command-line run is always titled by StartChat (RunTitle), and a
+		// generated title would replace it with "Run X Workflow".
+		GenerateTitle:   eventKind != core.TriggerEventKindCLIRun,
 		GreenfieldProbe: msg.GetChatId() == "",
 	}
 	if jwt, ok := auth.GetUserJWT(userID); ok {
@@ -249,7 +280,9 @@ func (s *Service) ListChats(
 		ProjectID:       projectID,
 		Limit:           limit,
 		ExcludeArchived: true,
-		SidebarOnly:     req.Msg.GetSidebarOnly(),
+		// The chat list holds conversations: USER-origin chats and adopted
+		// runs. Every other run lists under Runs (RunService.ListRuns).
+		SidebarOnly: true,
 	}
 
 	chats, err := s.deps.Repo.ListChats(ctx, filters)

@@ -214,6 +214,10 @@ func TestChatListAndSearch(t *testing.T) {
 		if id == "l-5" {
 			c.Title = "needle in the title"
 		}
+		if id == "l-3" {
+			// An automation's run, as the launcher writes it: born a run.
+			c.Origin = core.ChatOriginAutomation
+		}
 		if err := store.InsertChat(ctx, env.ORM, c); err != nil {
 			t.Fatalf("InsertChat(%s): %v", id, err)
 		}
