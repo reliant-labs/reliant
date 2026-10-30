@@ -88,6 +88,11 @@ type DaemonSelectorValue struct {
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Session marks the chat's pin (session_daemon_id) rather than a
+	// selector the workflow or node configures. A pin can go stale while the
+	// run lives (its chat moves to the workspace's machine); configured
+	// routing cannot.
+	Session bool `json:"session,omitempty"`
 }
 
 // RouterDecisionMeta holds routing decision metadata for display in the UI.

@@ -3150,6 +3150,11 @@
             "Name": "idempotency_key",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "CreateWorktreeResponse": [
@@ -3219,6 +3224,11 @@
             "Name": "background",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "DiscoverWorktreesResponse": [
@@ -3488,6 +3498,11 @@
             "Name": "confirm_move",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ImportWorktreeResponse": [
@@ -3618,6 +3633,11 @@
             "Name": "project_id",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PruneWorktreesResponse": [
@@ -4042,6 +4062,11 @@
             "name": "idempotency_key",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.CreateWorktreeResponse": [
@@ -4106,6 +4131,11 @@
           {
             "name": "background",
             "kind": "bool"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.DiscoverWorktreesResponse": [
@@ -4400,6 +4430,11 @@
           {
             "name": "confirm_move",
             "kind": "bool"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ImportWorktreeResponse": [
@@ -4527,6 +4562,11 @@
           {
             "name": "project_id",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PruneWorktreesResponse": [
@@ -4842,6 +4882,11 @@
           {
             "name": "failure_reason",
             "kind": "string"
+          },
+          {
+            "name": "daemon_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.WorktreeFileChange": [
@@ -42541,6 +42586,6 @@
     "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "3bcad76df7a432554afd232c539cc8a4238876f950d727e9c39f3f7deb6bb94e",
-    "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
+    "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
   }
 }

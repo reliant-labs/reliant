@@ -28,15 +28,15 @@ import (
 
 // ExecuteRunStepInput is the input for ExecuteRunStep activity
 type ExecuteRunStepInput struct {
-	WorkflowID     string                   `json:"workflow_id"`
-	ChatID         string                   `json:"chat_id" reliant:"-"`
-	StepID         string                   `json:"step_id"`
-	Command        string                   `json:"command"`
-	Timeout        int                      `json:"timeout"`                   // in milliseconds, default 5 minutes
-	LoopNodeID     string                   `json:"loop_node_id,omitempty"`    // Loop context: which loop node spawned this
-	LoopIteration  int                      `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
-	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
-	LogFile        string                   `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
+	WorkflowID     string                        `json:"workflow_id"`
+	ChatID         string                        `json:"chat_id" reliant:"-"`
+	StepID         string                        `json:"step_id"`
+	Command        string                        `json:"command"`
+	Timeout        int                           `json:"timeout"`                   // in milliseconds, default 5 minutes
+	LoopNodeID     string                        `json:"loop_node_id,omitempty"`    // Loop context: which loop node spawned this
+	LoopIteration  int                           `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
+	DaemonSelector *activitytypes.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
+	LogFile        string                        `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
 	// Credentials is the node's `credentials` setting: "none" runs the command
 	// with no GitHub, git, ssh or cloud credentials.
 	Credentials string `json:"credentials,omitempty"`
@@ -163,9 +163,12 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// Propagate daemon selector from workflow input. Priority: explicit
 	// node/workflow-level selector > durable chat pin > worktree owner
 	// (set by resolveRunExecutorContext) > default resolution. Override the
-	// resolved binding only when the input actually carries a selector.
+	// resolved binding only when the input actually carries a selector, and
+	// by the rule ExecuteTools applies: the chat's pin (a session selector)
+	// naming another machine than a branch workspace's owner is stale and
+	// yields to the owner (toolDaemonSelector).
 	if input.DaemonSelector != nil {
-		execCtx.DaemonSelector = input.DaemonSelector
+		execCtx.DaemonSelector = toolDaemonSelector(execCtx.WorktreeDaemonID, input.DaemonSelector)
 	}
 	credentials, err := daemonpolicy.ParseCredentials(input.Credentials)
 	if err != nil {

@@ -10,13 +10,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
 // MachineResumeWakeInput is one slice of a resuming run's wake.
 type MachineResumeWakeInput struct {
-	ChatID         string                   `json:"chat_id" reliant:"-"`
-	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"`
+	ChatID string `json:"chat_id" reliant:"-"`
+	// DaemonSelector is the run's selector; Session marks the chat's pin,
+	// which yields to the chat's workspace owner as it does for tools.
+	DaemonSelector *activitytypes.DaemonSelector `json:"daemon_selector,omitempty"`
 	// ToolNames are the tool calls the step about to run makes, when it is an
 	// execute_tools step. A batch none of whose tools touch the machine wakes
 	// nothing. ToolsKnown false means the step needs the machine whatever it
@@ -95,10 +98,9 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
 	// A resumed run can still carry the snapshot from before its chat was
-	// pinned. Check/wake the same machine its commands and tools will use.
-	if input.DaemonSelector == nil {
-		input.DaemonSelector = toolDaemonSelector("", chatDaemonSelector(chat, nil))
-	}
+	// pinned, or a pin from before its chat moved to its workspace's machine.
+	// Check/wake the same machine its commands and tools will use.
+	selector := runMachineSelector(ctx, a.repo, chat, input.DaemonSelector)
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return MachineResumeWakeOutput{}, fmt.Errorf("loading project for the resume wake: %w", err)
@@ -111,14 +113,14 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 	userID := project.UserID
 	exitCtx := context.WithoutCancel(ctx)
 
-	if online, err := router.IsDaemonOnline(ctx, userID, input.DaemonSelector); err != nil || online {
+	if online, err := router.IsDaemonOnline(ctx, userID, selector); err != nil || online {
 		// Up — or the check itself failed, which the step's own call
 		// reports better than a guess here.
 		return MachineResumeWakeOutput{Ready: true}, nil
 	}
 
 	out := MachineResumeWakeOutput{}
-	if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
+	if notComing := machineNotComing(ctx, router, userID, selector); notComing != nil {
 		return MachineResumeWakeOutput{Ready: true, NotComing: notComing.Error()}, nil
 	}
 	if waker, ok := router.(toolexec.RunWaker); ok {
@@ -127,7 +129,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 		if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
 			ctx = automationcred.Allow(ctx)
 		}
-		res, wakeErr := waker.WakeForRun(ctx, userID, input.DaemonSelector)
+		res, wakeErr := waker.WakeForRun(ctx, userID, selector)
 		switch {
 		case wakeErr == nil:
 			out.Woke = res.Resumed
@@ -158,7 +160,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 			out.Waiting = true
 			return out, nil
 		case <-deadline.C:
-			if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
+			if notComing := machineNotComing(ctx, router, userID, selector); notComing != nil {
 				a.setBlocked(exitCtx, input.ChatID, false)
 				return MachineResumeWakeOutput{Ready: true, Woke: out.Woke, NotComing: notComing.Error()}, nil
 			}
@@ -169,7 +171,7 @@ func (a *MachineResumeWakeActivity) Execute(ctx context.Context, input MachineRe
 			return out, nil
 		case <-ticker.C:
 		}
-		if up, upErr := router.IsDaemonOnline(ctx, userID, input.DaemonSelector); upErr == nil && up {
+		if up, upErr := router.IsDaemonOnline(ctx, userID, selector); upErr == nil && up {
 			a.setBlocked(exitCtx, input.ChatID, false)
 			out.Ready = true
 			return out, nil

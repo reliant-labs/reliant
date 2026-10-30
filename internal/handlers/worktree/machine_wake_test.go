@@ -295,6 +295,24 @@ func TestFileSystemProxy_NoMachineChat_NeverWakes(t *testing.T) {
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake anything")
 }
 
+// Naming a machine for a no-machine chat's new workspace does not wake it
+// either: the requested-machine path carries the chat's NoMachine like the
+// placement path does, so an asleep machine is reported, never resumed.
+func TestCreateWorktree_NoMachineChatWithRequestedMachine_NeverWakes(t *testing.T) {
+	f := newAsleepFixture(t, asleepMachineB)
+	chatID := f.noMachineChat(t)
+	machine := asleepMachineB
+
+	_, err := f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		ProjectId: f.projectID, Name: "nm-" + uuid.NewString()[:8], Branch: "nm-branch",
+		ChatId: &chatID, DaemonId: &machine,
+	}))
+	if err != nil {
+		assert.False(t, machinewake.IsWaking(err), "got %v", err)
+	}
+	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake a machine, even one it names")
+}
+
 // A machine that is not the caller's, by the record here, is never woken for
 // them: the request names a worktree whose owning machine belongs to another
 // user.

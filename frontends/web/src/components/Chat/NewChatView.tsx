@@ -24,6 +24,15 @@ import {
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
 import { useProjectDaemonInstalls } from "@/hooks/project-queries";
+import {
+  choiceLeavesWorkspace,
+  resolveChatMachine,
+  startChoice,
+  workspaceFilterMachine,
+  workspaceMachine,
+  workspacesOnMachine,
+} from "@/lib/workspaceMachine";
+import { daemonLabel } from "../Automations/daemonChoices";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { NewChatProjectChip } from "./NewChatProjectChip";
 import { MachinePicker } from "./MachinePicker";
@@ -165,8 +174,23 @@ export function NewChatView({
     setMachineChoiceProjectId(currentProject?.id);
     setMachineChoice(null);
   }
-  const machine = (canPickMachine ? machineChoice : null) ?? defaultMachine ?? DEFAULT_MACHINE;
+  // A branch workspace is a checkout on one machine, so selecting one selects
+  // its machine (lib/workspaceMachine.ts); the server refuses anything else.
+  const machineIds = new Set(daemons.map((d) => d.daemonId));
+  const selectedWorkspace = selectedWorkspaceId
+    ? (worktrees.find((w) => w.id === selectedWorkspaceId) ?? getCachedWorktree(selectedWorkspaceId))
+    : undefined;
+  const effectiveChoice = canPickMachine ? machineChoice : null;
+  const resolvedMachine = resolveChatMachine({
+    choice: effectiveChoice,
+    fallback: defaultMachine ?? DEFAULT_MACHINE,
+    workspaceDaemonId: workspaceMachine(selectedWorkspace, machineIds),
+  });
+  const machine = resolvedMachine.value;
   const noMachine = machine === NO_MACHINE;
+  // The machine the workspace list is narrowed to, and that a workspace made
+  // or adopted from here goes on; undefined leaves both to the server.
+  const workspaceMachineId = workspaceFilterMachine(effectiveChoice, resolvedMachine);
   // A chat on a machine still waits for one to be connected, as before.
   const machineReady = noMachine || daemonConnected;
 
@@ -178,8 +202,16 @@ export function NewChatView({
   // Find the main worktree for this project
   const mainWorktree = worktrees.find((w) => w.is_main === true);
 
-  // Filter out the main worktree and archived ones from the dropdown list
-  const nonMainWorktrees = worktrees.filter((w) => !w.is_main && !w.deleted_at);
+  // Filter out the main worktree and archived ones from the dropdown list, and
+  // the workspaces on a machine other than the chosen one.
+  const nonMainWorktrees = workspacesOnMachine(
+    worktrees.filter((w) => !w.is_main && !w.deleted_at),
+    workspaceMachineId,
+  );
+  // With several machines and none chosen, each workspace says where it is.
+  const showWorkspaceMachines = daemons.length > 1 && !workspaceMachineId;
+  const machineName = (daemonId: string) =>
+    daemonLabel(daemons.find((d) => d.daemonId === daemonId), daemonId);
 
   // Auto-focus input when new chat view is shown
   useEffect(() => {
@@ -273,7 +305,7 @@ export function NewChatView({
       // A chat with no machine runs in the project's main checkout: a branch
       // workspace is a checkout on one machine.
       const chatWorktreeId = noMachine ? mainWorktree?.id : selectedWorkspaceId || mainWorktree?.id;
-      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(machine);
+      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(startChoice(resolvedMachine));
 
       if (!chatWorktreeId) {
         const error = `Cannot create chat: No worktree found. worktrees.length=${worktrees.length}, mainWorktree=${mainWorktree?.id}`;
@@ -366,6 +398,15 @@ export function NewChatView({
     setShowWorkspaceDropdown(false);
   };
 
+  // Choosing a machine that does not hold the selected workspace falls back to
+  // the main checkout, which every machine has.
+  const handleMachineChange = (next: ChatMachineChoice) => {
+    setMachineChoice(next);
+    if (choiceLeavesWorkspace(next, resolvedMachine.lockedBy)) {
+      void handleWorkspaceSelect(mainWorktree?.id ?? null);
+    }
+  };
+
   // Get display name for selected workspace
   const selectedWorkspaceName = selectedWorkspaceId
     ? worktrees.find((w) => w.id === selectedWorkspaceId)?.branch ||
@@ -427,7 +468,7 @@ export function NewChatView({
                 {canPickMachine && (
                   <MachinePicker
                     value={machine}
-                    onChange={setMachineChoice}
+                    onChange={handleMachineChange}
                     daemons={daemons}
                     defaultDaemon={defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))}
                     onMakeDefault={makeDefault}
@@ -490,7 +531,14 @@ export function NewChatView({
                             )}
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-medium">{worktree.branch || worktree.name}</span>
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{worktree.branch || worktree.name}</div>
+                                {showWorkspaceMachines && worktree.daemon_id && (
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    On {machineName(worktree.daemon_id)}
+                                  </div>
+                                )}
+                              </div>
                               {selectedWorkspaceId === worktree.id && (
                                 <Check className="w-3 h-3 text-primary flex-shrink-0" />
                               )}
@@ -500,7 +548,9 @@ export function NewChatView({
 
                         {nonMainWorktrees.length === 0 && (
                           <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-                            No additional workspaces
+                            {workspaceMachineId && daemons.length > 1
+                              ? `No other workspaces on ${machineName(workspaceMachineId)}`
+                              : "No additional workspaces"}
                           </div>
                         )}
                         <LoadMoreWorktreesRow projectId={currentProject?.id} />
@@ -555,6 +605,13 @@ export function NewChatView({
                 </>
                 )}
               </div>
+
+              {/* Why the machine moved with the workspace. */}
+              {canPickMachine && resolvedMachine.lockedBy && daemons.length > 1 && (
+                <p role="note" data-testid="new-chat-workspace-machine-note" className="text-xs text-muted-foreground">
+                  Runs on {machineName(resolvedMachine.lockedBy)}, where this workspace lives.
+                </p>
+              )}
 
               {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}
             </div>
@@ -638,12 +695,14 @@ export function NewChatView({
             onClose={() => setShowCreateWorktreeModal(false)}
             onWorktreeCreated={handleWorktreeCreated}
             projectId={currentProject.id}
+            daemonId={workspaceMachineId}
           />
           <DiscoverWorktreesModal
             isOpen={showDiscoverWorktreeModal}
             onClose={() => setShowDiscoverWorktreeModal(false)}
             onWorktreesImported={handleWorktreesImported}
             projectId={currentProject.id}
+            daemonId={workspaceMachineId}
           />
         </>
       )}
