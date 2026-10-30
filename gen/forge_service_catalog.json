@@ -70985,6 +70985,17 @@
           }
         },
         {
+          "id": "method1:ed50741505dd862df85fdf0d8b7ea646980020362aee60467ef6452bee455bb6",
+          "name": "ListLiveToolCallsByChat",
+          "signature": "func(ctx context.Context, chatID string) ([]*github.com/reliant-labs/reliant/internal/db.ToolCall, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
+          "legacy_name": "chat.ListLiveToolCallsByChat",
+          "source": {
+            "path": "internal/threads/service.go",
+            "symbol": "Repository.ListLiveToolCallsByChat"
+          }
+        },
+        {
           "id": "method1:5b7b8ace4bbf7075513e44bbbbd129ec77fd0f9003c1b54c18755a55c0570b7e",
           "name": "ListMainWorktreesForUser",
           "signature": "func(ctx context.Context, userID string, projectID *string) ([]*github.com/reliant-labs/reliant/internal/db.Worktree, error)",
@@ -71103,17 +71114,6 @@
           "source": {
             "path": "internal/messageproto/messageproto.go",
             "symbol": "ThreadReader.ListThreadsByIDs"
-          }
-        },
-        {
-          "id": "method1:422b2d5b51b71202c71ef11035713fb098f55799078d8be0cb63585a0df8a225",
-          "name": "ListToolCallsByChat",
-          "signature": "func(ctx context.Context, chatID string) ([]*github.com/reliant-labs/reliant/internal/db.ToolCall, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/chat",
-          "legacy_name": "chat.ListToolCallsByChat",
-          "source": {
-            "path": "internal/threads/service.go",
-            "symbol": "Repository.ListToolCallsByChat"
           }
         },
         {
@@ -77137,17 +77137,6 @@
           "source": {
             "path": "internal/messageproto/messageproto.go",
             "symbol": "ThreadReader.ListThreadsByIDs"
-          }
-        },
-        {
-          "id": "method1:8f41c5fb1267d007c51fdcee1e38d525675af05750680e2c7a18785dc7709ee9",
-          "name": "ListToolCallsByChat",
-          "signature": "func(ctx context.Context, chatID string) ([]*github.com/reliant-labs/reliant/internal/db.ToolCall, error)",
-          "scope": "github.com/reliant-labs/reliant/internal/handlers/streaming",
-          "legacy_name": "streaming.ListToolCallsByChat",
-          "source": {
-            "path": "internal/threads/service.go",
-            "symbol": "Repository.ListToolCallsByChat"
           }
         },
         {
