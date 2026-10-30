@@ -298,3 +298,46 @@ describe("a day-grained dashboard (the empty-dashboards audit)", () => {
     expect(current().range).toBeUndefined();
   });
 });
+
+describe("a dashboard of many panels", () => {
+  class Viewport {
+    static all: Viewport[] = [];
+    elements: Element[] = [];
+    callback: (entries: Partial<IntersectionObserverEntry>[]) => void;
+    constructor(callback: (entries: Partial<IntersectionObserverEntry>[]) => void) {
+      this.callback = callback;
+      Viewport.all.push(this);
+    }
+    observe(element: Element) {
+      this.elements.push(element);
+    }
+    disconnect() {}
+    reveal(element: Element) {
+      this.callback([{ isIntersecting: true, target: element }]);
+    }
+  }
+
+  it("reads only the panels near the viewport, and the rest as they scroll in", async () => {
+    Viewport.all = [];
+    vi.stubGlobal("IntersectionObserver", Viewport);
+    try {
+      const { onCall } = renderDashboard(ref("release", "overview"));
+      expect(await screen.findByTestId("dashboard-grid")).toBeInTheDocument();
+      const asked = () => new Set(calls(onCall, "QueryPanel").map((request) => (request as { panel: { id: string } }).panel.id));
+      // Nothing has scrolled near yet: nothing is read.
+      expect(asked().size).toBe(0);
+
+      const bodies = Viewport.all.flatMap((observer) => observer.elements.map((element) => ({ observer, element })));
+      expect(bodies.length).toBe(12);
+      act(() => bodies.slice(0, 4).forEach(({ observer, element }) => observer.reveal(element)));
+      await waitFor(() => expect(asked().size).toBe(4));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(asked().size).toBe(4);
+
+      act(() => bodies.slice(4, 8).forEach(({ observer, element }) => observer.reveal(element)));
+      await waitFor(() => expect(asked().size).toBe(8));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

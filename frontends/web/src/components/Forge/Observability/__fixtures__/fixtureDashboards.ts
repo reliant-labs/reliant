@@ -38,6 +38,10 @@ export interface DashboardFixtureOptions {
   dashboardsFailWith?: Code;
   /** Ships control-plane's day-grained product-usage dashboard (a 7d defaultRange, sql panels bucketed by day). */
   dashboardsDayGrained?: boolean;
+  /** A control plane that predates DashboardSummary.group/tags: the page infers each group. */
+  dashboardsUngrouped?: boolean;
+  /** A young app: its overview and one service dashboard, nothing saved. */
+  dashboardsFew?: boolean;
 }
 
 type Call = <T>(rpc: string, request: unknown, answer: () => T) => Promise<T>;
@@ -123,6 +127,38 @@ function billingFunnel(): Dashboard {
   };
 }
 
+/**
+ * The group and tags each fixture dashboard's spec declares, as the control
+ * plane fills DashboardSummary.group/tags (absent group reads as custom).
+ */
+const GROUPING: Record<string, { group: string; tags?: string[] }> = {
+  "release/overview": { group: "overview" },
+  "release/service-orders": { group: "services", tags: ["rpc"] },
+  "release/service-api": { group: "services", tags: ["rpc"] },
+  "release/jobs": { group: "jobs" },
+  "release/workloads": { group: "platform", tags: ["kubernetes"] },
+  "release/releases": { group: "releases" },
+  "release/checkout": { group: "product", tags: ["checkout", "funnel"] },
+  "release/frontend-web": { group: "product", tags: ["web"] },
+  "workspace/checkout-latency": { group: "custom", tags: ["checkout"] },
+  "workspace/daemon-fleet": { group: "platform", tags: ["daemons"] },
+  "workspace/billing-funnel": { group: "product", tags: ["billing"] },
+};
+
+/** forge's consolidated jobs dashboard: every job and cron job of the app on one page. */
+function jobsDashboard(): Dashboard {
+  return {
+    id: "jobs",
+    title: "shop: jobs",
+    description: "Every job and cron job: runs, failures and how long they took.",
+    filters: [{ id: "job", label: "k8s.job.name", field: "k8s.job.name", signal: "metrics" }],
+    panels: [
+      { id: "failed-runs", title: "Failed runs", kind: "number", signal: "metrics", series: [{ label: "failed", agg: "sum", field: "k8s.job.failed_pods", metricType: "sum" }], unit: "count", width: 8, height: 4 },
+      { id: "runs-by-job", title: "Runs by job", kind: "line", signal: "metrics", series: [{ label: "succeeded", agg: "sum", field: "k8s.job.successful_pods", metricType: "sum" }], groupBy: ["k8s.job.name"], unit: "count", width: 16, height: 7 },
+    ],
+  };
+}
+
 /** What the index shows small: up to three number and line panels, numbers first. */
 function previewsOf(spec: Dashboard): Panel[] {
   const pick = (kind: string) => spec.panels.filter((p) => p.kind === kind);
@@ -135,7 +171,7 @@ function seed(now: number) {
   const prod = FIXTURE_ENVS.find((e) => e.name === "prod")!.id;
   const staging = FIXTURE_ENVS.find((e) => e.name === "staging")!.id;
   const releases: ReleaseRow[] = [
-    ...[...generated, serviceApi].map((spec) => ({
+    ...[...generated, serviceApi, jobsDashboard()].map((spec) => ({
       spec,
       source: "generated" as const,
       releaseVersion: "v1.8.3",
@@ -246,6 +282,13 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
     });
   }
+  if (options.dashboardsFew) {
+    state.releases = state.releases.filter((row) => row.spec.id === "overview" || row.spec.id === "service-orders");
+    state.workspace = [];
+    state.stars = new Set(["release/overview"]);
+    state.viewed = new Map();
+  }
+  const grouping = (ref: DashboardRef) => (options.dashboardsUngrouped ? {} : (GROUPING[keyOf(ref)] ?? {}));
   const canWrite = !options.dashboardsReadOnly;
 
   const guarded: Call = (rpc, request, answer) =>
@@ -285,6 +328,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       release: { releaseVersion: row.releaseVersion, shippedAtMs: row.shippedAtMs, filePath: row.filePath, envIds: row.envIds },
       workspace: null,
       category: "",
+      ...grouping(ref),
     };
   };
   const workspaceSummary = (row: WorkspaceRow): DashboardSummary => {
@@ -311,6 +355,7 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
         envIds: row.envIds,
       },
       category: "",
+      ...grouping(ref),
     };
   };
   const templateSummary = (t: (typeof state.templates)[number]): DashboardSummary => ({

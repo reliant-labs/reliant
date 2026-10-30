@@ -393,14 +393,17 @@ function predicateInit(p: Predicate) {
  * signal, and the browser kinds (funnel, issues, sessions) over the tenant's
  * browser tables. Search panels are not run here.
  */
-export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
-  const res = await client().queryPanel({
-    scope: scope(req, req.window, req.services),
-    panel: panelInit(req.panel),
-    stepSeconds: req.stepSeconds,
-    groupBy: req.groupBy ?? [],
-    explain: req.explain ?? false,
-  });
+export async function queryPanel(req: QueryPanelRequest, options: { signal?: AbortSignal } = {}): Promise<PanelResult> {
+  const res = await client().queryPanel(
+    {
+      scope: scope(req, req.window, req.services),
+      panel: panelInit(req.panel),
+      stepSeconds: req.stepSeconds,
+      groupBy: req.groupBy ?? [],
+      explain: req.explain ?? false,
+    },
+    options.signal ? { signal: options.signal } : undefined
+  );
   return {
     kind: res.kind,
     unit: res.unit,
