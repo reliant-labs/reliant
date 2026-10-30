@@ -69,6 +69,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
   [InboxItemKind.AUTOMATION_RUN_PAUSED]: "Paused automation runs",
+  [InboxItemKind.AUTOMATION_DEFINITION_BROKEN]: "Broken workflow definitions",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */

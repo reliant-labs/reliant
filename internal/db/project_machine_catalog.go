@@ -369,6 +369,7 @@ func (r *Repo) ProjectWorkflowProvenance(ctx context.Context, projectID string) 
 		for _, w := range c.Workflows {
 			p := config.WorkflowProvenance{
 				Name: w.Name, RelativePath: config.WorkflowFileKey(w), DaemonID: c.DaemonID, Machine: names[c.DaemonID],
+				ContentHash: config.DefinitionHash([]byte(w.YAMLContent)),
 			}
 			if s := config.RepoStateFor(states[c.DaemonID], p.RelativePath); s != nil {
 				state := *s

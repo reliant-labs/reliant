@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -110,8 +111,13 @@ func TestListInbox_ActivationWhoseWorkflowDoesNotParseIsBroken(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
-	items := brokenItems(f.list(t, nil).Items)
-	require.Len(t, items, 1)
-	detail := items[0].GetAutomationFailing().GetHealth().GetLastFailureDetail()
-	assert.Contains(t, detail, `release.yaml does not parse, so workflow "release" cannot run until it is fixed`)
+	// The broken version is listed once, as the definition it is, naming the
+	// newest file rather than falling back to the older copy.
+	items := f.list(t, nil).Items
+	assert.Empty(t, brokenItems(items), "the definition item replaces the activation's own")
+	defs := inboxByKind(items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN)
+	require.Len(t, defs, 1)
+	def := defs[0].GetAutomationDefinitionBroken().GetDefinition()
+	assert.Equal(t, brokenPath, def.GetPath())
+	assert.Contains(t, def.GetError(), `release.yaml does not parse, so workflow "release" cannot run until it is fixed`)
 }

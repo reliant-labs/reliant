@@ -63,7 +63,7 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	var errs []error
 	for _, ev := range stale {
 		if ev.TriggerID == nil {
-			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted"); err != nil {
+			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted", nil); err != nil {
 				errs = append(errs, err)
 			}
 			continue
@@ -75,7 +75,7 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		// keeps being redriven so its slot is bound or recovered.
 		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
-				"the event was never launched; it is too old to start now"); err != nil {
+				"the event was never launched; it is too old to start now", nil); err != nil {
 				errs = append(errs, err)
 			}
 			continue

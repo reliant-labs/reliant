@@ -562,7 +562,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
 | `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}, trigger.origin.{caused_by_reliant,confidence,run_id,workflow,trigger_name,same_workflow,actor,lineage_depth}). Interactive chats have kind chat.start. A trigger's filter, inputs and prompt can also read trigger.activation.params.<input>, trigger.activation.id and trigger.activation.owner.{user_id,github_id}; nodes cannot | workflow-specific |
-| `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
+| `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `chat_id`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields
 
@@ -575,6 +575,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | Field | Type | Description |
 |-------|------|-------------|
 | `workflow.branch` | `string` | That worktree's git branch (empty in the project's main checkout, whose branch is not tracked; test with has(workflow.branch)) |
+| `workflow.chat_id` | `string` | The chat the run belongs to; its page is /workflows/runs/<chat_id>, so a run can link to itself (a GitHub check run's details_url) |
 | `workflow.id` | `string` | Workflow execution ID (unique per run) |
 | `workflow.mode` | `string` | Execution mode (auto, manual, plan), from inputs.mode |
 | `workflow.name` | `string` | Workflow definition name |

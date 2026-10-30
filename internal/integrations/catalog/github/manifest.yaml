@@ -125,6 +125,9 @@ actions:
   - $ref: actions/repo.get_tree.yaml
   - $ref: actions/code.search.yaml
   - $ref: actions/workflow.dispatch.yaml
+  - $ref: actions/check_run.create.yaml
+  - $ref: actions/check_run.update.yaml
+  - $ref: actions/check_run.list.yaml
 
 triggers:
   - $ref: events/issue.opened.yaml
@@ -149,5 +152,6 @@ triggers:
   - $ref: events/workflow_run.completed.yaml
   - $ref: events/check_run.completed.yaml
   - $ref: events/check_suite.completed.yaml
+  - $ref: events/check_suite.requested.yaml
   - $ref: events/pull_request.auto_merge_disabled.yaml
   - $ref: events/pull_request.dequeued.yaml

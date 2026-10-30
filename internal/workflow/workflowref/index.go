@@ -452,13 +452,55 @@ func (ix *Index) Lookup(slug string) (*Entry, error) {
 	return nil, notFound("no project workflow is named %q", slug)
 }
 
+// FileError is a ref that names a project workflow file which cannot run as
+// written: it does not parse, or it claims a name it cannot hold. It names the
+// file and carries the content that was refused, so a caller can say which
+// version of which file broke, not only that something did. Its message is
+// Err's.
+type FileError struct {
+	// Path is the file, relative to the project root
+	// (".reliant/workflows/nightly.yaml", "<repo>/.reliant/workflows/…").
+	Path string
+	// Content is the file as it was synced: the version that was refused.
+	Content []byte
+	Err     error
+}
+
+func (e *FileError) Error() string { return e.Err.Error() }
+func (e *FileError) Unwrap() error { return e.Err }
+
+// fileError is err as a FileError naming e; nil stays nil.
+func fileError(e *Entry, err error) error {
+	if err == nil {
+		return nil
+	}
+	rel := ""
+	if e.Path != "" {
+		rel = RelativePath(e.Repo, e.Path)
+	}
+	return &FileError{Path: rel, Content: e.Content, Err: err}
+}
+
+// ProjectRelative is a Resolved.Path (Entry.Location) relative to the project
+// root: a root workflow's location is relative to its workflows directory, a
+// nested repo's already to the root.
+func ProjectRelative(location string) string {
+	if location == "" {
+		return ""
+	}
+	if _, _, ok := SplitRelativePath(location); ok {
+		return location
+	}
+	return RelativePath("", location)
+}
+
 // lookup is Lookup within one directory.
 func (g *group) lookup(slug string) (*Entry, error) {
 	if claimants := g.bySlug[slug]; len(claimants) > 0 {
 		if len(claimants) == 1 && claimants[0].Problem == nil {
 			return claimants[0], nil
 		}
-		return nil, claimants[0].Problem
+		return nil, fileError(claimants[0], claimants[0].Problem)
 	}
 	if err := g.stemHint(slug); err != nil {
 		return nil, err

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -30,6 +31,12 @@ type PinnedCatalog struct {
 	// UserWorkflows is how each of the owner's account workflows resolved
 	// at the pin, by slug. A slug absent here resolved to nothing.
 	UserWorkflows map[string]PinnedUserWorkflow
+	// DaemonID is the machine whose catalog was pinned, "" for the union of
+	// every machine's (no one machine's copy can be named).
+	DaemonID string
+	// RepoStates is the git state DaemonID's files were synced from, read in
+	// the same row read as Workflows; nil when none was reported.
+	RepoStates []config.SyncedRepoState
 }
 
 // PinnedUserWorkflow is one account workflow as a ref resolved it at the pin.
@@ -57,16 +64,18 @@ func (r *Repo) PinProjectCatalog(ctx context.Context, scope CatalogPinScope) (st
 	if scope.ProjectID == "" {
 		return "", fmt.Errorf("project ID cannot be empty")
 	}
-	var workflows, presets *string
+	var workflows, presets, repoStates *string
 	var machine *string
 	synced := false
 	if scope.DaemonID != "" {
+		// One row read: the machine's catalog and the git state it was
+		// synced from, so the pin's provenance is the catalog's.
 		row, err := store.GetProjectMachineCatalog(ctx, r.ORM(), scope.ProjectID, scope.DaemonID)
 		if err != nil {
 			return "", err
 		}
 		if row != nil {
-			workflows, presets, synced = row.WorkflowsJSON, row.PresetsJSON, true
+			workflows, presets, repoStates, synced = row.WorkflowsJSON, row.PresetsJSON, row.RepoStatesJSON, true
 			daemonID := scope.DaemonID
 			machine = &daemonID
 		}
@@ -82,10 +91,13 @@ func (r *Repo) PinProjectCatalog(ctx context.Context, scope CatalogPinScope) (st
 	if err != nil {
 		return "", err
 	}
-	pin := catalogPin(scope.ProjectID, workflows, presets, userWorkflows)
+	// The machine and its git state are part of the content address: two
+	// machines (or two commits) holding the same bytes are two snapshots,
+	// each naming its own provenance.
+	pin := catalogPin(scope.ProjectID, workflows, presets, userWorkflows, machine, repoStates)
 	if err := store.PutWorkflowCatalogSnapshot(ctx, r.ORM(), &store.WorkflowCatalogSnapshot{
 		ID: pin, ProjectID: scope.ProjectID, DaemonID: machine,
-		WorkflowsJSON: workflows, PresetsJSON: presets, UserWorkflowsJSON: userWorkflows,
+		WorkflowsJSON: workflows, PresetsJSON: presets, UserWorkflowsJSON: userWorkflows, RepoStatesJSON: repoStates,
 	}, time.Now().UTC()); err != nil {
 		return "", err
 	}
@@ -137,6 +149,12 @@ func (r *Repo) GetPinnedProjectCatalog(ctx context.Context, pin string) (*Pinned
 		return nil, false, err
 	}
 	catalog := &PinnedCatalog{Workflows: row.WorkflowsJSON, Presets: row.PresetsJSON}
+	if row.DaemonID != nil {
+		catalog.DaemonID = *row.DaemonID
+	}
+	if catalog.RepoStates, err = config.ParseSyncedRepoStates(row.RepoStatesJSON); err != nil {
+		return nil, false, fmt.Errorf("read the git state of catalog %s: %w", pin, err)
+	}
 	if row.UserWorkflowsJSON != nil {
 		if err := json.Unmarshal([]byte(*row.UserWorkflowsJSON), &catalog.UserWorkflows); err != nil {
 			return nil, false, fmt.Errorf("read the account workflows of catalog %s: %w", pin, err)

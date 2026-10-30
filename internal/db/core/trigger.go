@@ -4,6 +4,8 @@ package core
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -467,6 +469,104 @@ type TriggerEvent struct {
 	// at intake from the write ledger (see TriggerOrigin). Nil for an event no
 	// enricher looked at; readers treat nil as "not caused by Reliant".
 	Origin *TriggerOrigin
+	// Definition is which workflow definition the firing resolved: the file,
+	// its version and where it was synced from, read when the firing was
+	// decided. Nil for a firing recorded without one (an ad hoc start, or a
+	// firing recorded before definitions were).
+	Definition *TriggerEventDefinition
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved, so
+// "which version of which file did this run, from which machine and commit?"
+// has an answer after the file has changed again.
+type TriggerEventDefinition struct {
+	// Workflow is the ref the trigger names.
+	Workflow string `json:"workflow"`
+	// Source is where it resolved: "builtin", "user" (the owner's account
+	// workflow) or "project" (a synced .reliant/workflows file); "" when it
+	// did not resolve at all.
+	Source string `json:"source,omitempty"`
+	// Path is the project file, relative to the project root, for a project
+	// workflow; empty otherwise.
+	Path string `json:"path,omitempty"`
+	// DaemonID and Machine are the machine whose synced copy of Path was
+	// read (Machine is its display name); empty when no one machine's copy
+	// can be named.
+	DaemonID string `json:"daemon_id,omitempty"`
+	Machine  string `json:"machine,omitempty"`
+	// Repo, Branch, Commit and Dirty are the git state of the checkout the
+	// file was synced from (config.SyncedRepoState); empty when the machine
+	// reported none.
+	Repo   string `json:"repo,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	Dirty  bool   `json:"dirty,omitempty"`
+	// ContentHash is the hex SHA-256 of the definition's bytes: the version,
+	// comparable with `sha256sum` of the file.
+	ContentHash string `json:"content_hash,omitempty"`
+	// Error is why this definition cannot run (it does not parse, or does not
+	// validate, or does not resolve); empty when it can.
+	Error string `json:"error,omitempty"`
+	// CatalogPin is the catalog snapshot (db.Repo.PinProjectCatalog) the
+	// firing read this definition in and launched its run on: the run loads
+	// exactly this version, whatever was synced after. Empty when the firing
+	// read the live catalog.
+	CatalogPin string `json:"catalog_pin,omitempty"`
+}
+
+// Broken reports a definition that resolved to one version of one file which
+// cannot run as written. A firing against it is refused, never run from some
+// other version.
+func (d *TriggerEventDefinition) Broken() bool {
+	return d != nil && d.Error != "" && d.Path != "" && d.ContentHash != ""
+}
+
+// Describe is the definition for display: "machine cicd at
+// .reliant/workflows/nightly.yaml @ main 1a2b3c4, clean (sha256 9f86d081884c)".
+func (d *TriggerEventDefinition) Describe() string {
+	if d == nil {
+		return ""
+	}
+	var b strings.Builder
+	switch {
+	case d.Path != "":
+		if d.Machine != "" {
+			b.WriteString("machine " + d.Machine + " at ")
+		}
+		b.WriteString(d.Path)
+	case d.Source == "builtin":
+		b.WriteString("builtin workflow " + d.Workflow)
+	case d.Source == "user":
+		b.WriteString("your account workflow " + strconv.Quote(d.Workflow))
+	default:
+		b.WriteString("workflow " + strconv.Quote(d.Workflow))
+	}
+	if d.Commit != "" || d.Branch != "" {
+		branch := d.Branch
+		if branch == "" {
+			branch = "detached HEAD"
+		}
+		b.WriteString(" @ " + branch)
+		if d.Commit != "" {
+			b.WriteString(" " + shortHash(d.Commit, 7))
+		}
+		if d.Dirty {
+			b.WriteString(", uncommitted changes")
+		} else {
+			b.WriteString(", clean")
+		}
+	}
+	if d.ContentHash != "" {
+		b.WriteString(" (sha256 " + shortHash(d.ContentHash, 12) + ")")
+	}
+	return b.String()
+}
+
+func shortHash(h string, n int) string {
+	if len(h) > n {
+		return h[:n]
+	}
+	return h
 }
 
 // TriggerSenderKind is what kind of party sent the event that fired a

@@ -33,7 +33,7 @@ func claimCapacity(ctx context.Context, env *storetest.Env, id string, scope sto
 		if err != nil || !allowed {
 			return err
 		}
-		claimed, err = store.ClaimPendingTriggerEvent(ctx, env.ORM, id, map[string]any{})
+		claimed, err = store.ClaimPendingTriggerEvent(ctx, env.ORM, id, map[string]any{}, nil)
 		return err
 	})
 	return claimed, err
@@ -192,7 +192,7 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 		allowed, err := store.CanLaunchTriggerCapacity(ctx, env.ORM, first.ID, scope, 1)
 		require.NoError(t, err)
 		require.True(t, allowed)
-		claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, first.ID, map[string]any{})
+		claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, first.ID, map[string]any{}, nil)
 		require.NoError(t, err)
 		require.True(t, claimed)
 		return crashed

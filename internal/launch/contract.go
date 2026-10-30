@@ -57,6 +57,9 @@ type Event struct {
 	// Origin is trigger.origin, resolved at intake. nil for a source with no
 	// attribution.
 	Origin *core.TriggerOrigin
+	// Definition is which workflow definition the firing resolved, recorded
+	// on its event row. nil for a start that records none.
+	Definition *core.TriggerEventDefinition
 }
 
 // SeedMessage is one message written to the root thread before the run starts.
@@ -93,6 +96,14 @@ type Spec struct {
 	// what lets a later send of the same message find it. Empty means a
 	// generated id.
 	ClientMessageID string
+
+	// CatalogPin is the workflow catalog snapshot (db.Repo.PinProjectCatalog)
+	// this launch was decided against: a trigger pins the catalog when it
+	// fires, records the definition it read there, and launches on the same
+	// snapshot, so admission, inputs and every load of the run read exactly
+	// that definition. Empty resolves against the live catalog and pins it
+	// when the run first loads.
+	CatalogPin string
 
 	// DaemonID is the daemon every tool call in this run executes on. It
 	// becomes the chat's ActiveDaemonID, which the launcher injects as
@@ -365,7 +376,7 @@ type TriggerEventStore interface {
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
 	// as pending; claimed=false means another launch got it first.
-	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (claimed bool, err error)
 }
 
 // WorkflowStore is the root workflow row a launch starts.
