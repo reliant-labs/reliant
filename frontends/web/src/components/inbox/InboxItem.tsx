@@ -33,7 +33,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
@@ -235,6 +235,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.AUTOMATION_RUN_PAUSED:
+      return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation run paused" />;
     case InboxItemKind.RECOVERY:
       return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
@@ -410,6 +412,12 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "automationRunPaused": {
+      // Why it paused; while it waits it holds its automation's slot.
+      const reason = payload.value.reason;
+      const text = reason ? `Paused: ${reason}` : "Paused";
+      return { node: text, title: `${text} — later runs of this automation wait until it resumes or ends.` };
+    }
     default:
       return null;
   }
@@ -536,6 +544,7 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
     case "runFinished":
+    case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open

@@ -332,6 +332,7 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		LastStatusChangedAt: row.LastStatusChangedAt,
 		LastOOMKilledAt:     row.LastOomKilledAt,
 		OOMKillCount:        row.OomKillCount,
+		Labels:              daemonLabels(row.Labels),
 		IsDefault:           row.IsDefault,
 	}
 }

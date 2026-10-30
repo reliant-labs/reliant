@@ -312,6 +312,13 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	chat.NoMachine = spec.NoMachine
+	if spec.MachinePool != nil {
+		if spec.NoMachine || spec.DaemonID == "" {
+			return nil, &ValidationError{Reason: "a pool-placed run names the member it was placed on, and has a machine"}
+		}
+		poolID := spec.MachinePool.ID
+		chat.MachinePoolID = &poolID
+	}
 
 	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
 	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
@@ -1257,6 +1264,11 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// key from a client, so only a launch can make a run unattended.
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
+	}
+	// The pool that placed the run, injected like session_daemon_id: a fact
+	// about the run, not a declared input (workflow.RuntimeInjectedInputs).
+	if pool := p.spec.MachinePool; pool != nil {
+		initialData[InputKeyMachinePool] = machinePoolInput(pool, chat)
 	}
 	// Who the integration writes speak as. Injected after validation like
 	// unattended, and only for an unattended launch: the bot is an

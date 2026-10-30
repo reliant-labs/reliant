@@ -586,6 +586,7 @@ func chatToRow(chat *core.Chat) *Chat {
 		SelectedPresets: chatPresetsToColumn(chat.SelectedPresets),
 		ActiveDaemonID:  chat.ActiveDaemonID,
 		NoMachine:       chat.NoMachine,
+		MachinePoolID:   chat.MachinePoolID,
 		Origin:          origin,
 	}
 	return row

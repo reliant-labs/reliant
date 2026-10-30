@@ -48,7 +48,8 @@ type capacityDescriptions interface {
 }
 
 // capacityPolicy remains trigger-agnostic: no provider identity or subject
-// revision. Nil (or a zero max_running) is no policy.
+// revision. It is the workflow's declared policy, nil for none; capacityLimit
+// resolves it to a cap for one trigger.
 func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trigger) (*reliantv1.WorkflowConcurrency, error) {
 	if resolver == nil {
 		return nil, nil
@@ -115,6 +116,11 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
 	previous := spec.Guard
 	spec.Guard = func(ctx context.Context) (string, error) {
+		// A per-member policy on a pool with no member able to take work
+		// resolves to 0: wait, as for a full scope.
+		if n == 0 {
+			return capacityWaiting, nil
+		}
 		allowed, err := repo.CanLaunchTriggerCapacity(ctx, enrolled.ID, scope, n)
 		if err != nil {
 			return "", err

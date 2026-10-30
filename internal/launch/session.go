@@ -278,3 +278,20 @@ func ExtractModelSelectors(inputs map[string]interface{}, schemas map[string]*re
 
 	return result
 }
+
+// InputKeyMachinePool is the run input a pool-placed run carries:
+// {id, name, member, members: [{id, name, state}]}. A workflow loops
+// members with a node-level `daemon: {id: …}` to reach every member.
+const InputKeyMachinePool = "machine_pool"
+
+func machinePoolInput(pool *PoolPlacement, chat *db.Chat) map[string]interface{} {
+	members := make([]interface{}, 0, len(pool.Members))
+	for _, m := range pool.Members {
+		members = append(members, map[string]interface{}{"id": m.ID, "name": m.Name, "state": m.State})
+	}
+	member := ""
+	if chat != nil && chat.ActiveDaemonID != nil {
+		member = *chat.ActiveDaemonID
+	}
+	return map[string]interface{}{"id": pool.ID, "name": pool.Name, "member": member, "members": members}
+}

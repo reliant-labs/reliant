@@ -486,6 +486,16 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// loops trip the breaker. May block until resume.
 	e.pauseCtrl.ObserveDaemonOfflineStep(e.ctx, running.ActivityName, stepEvent)
 
+	// A run that gave up (an unattended self-pause outlived its ladder) is
+	// ending: a step that completes now fails with that, so whichever
+	// executor holds it returns it instead of carrying on — the pause that
+	// gave up may have been armed by another thread, or by the breaker above.
+	if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil && stepEvent != nil {
+		stepEvent.Data = nil
+		stepEvent.Error = gaveUp
+		stepEvent.RetryExhausted = true
+	}
+
 	// Repeated-identical-tool-error breaker: an unattended agent that has been
 	// told the same thing three times and keeps asking is not going to get
 	// another answer. Ending its step makes the surrounding loop and run fail
@@ -1054,20 +1064,49 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs[types.RunStepSaveMessageKey] = saveReq
 	}
 
-	future := workflow.ExecuteActivity(e.activityOptions(node), "ExecuteRunStep", runInputs)
+	// The node's timeout bounds the COMMAND: it is the command timeout the
+	// machine enforces (ExecuteRunStepInput.Timeout, in ms). The activity gets
+	// RunStepMachineWaitBudget on top of it, for a command that never reached
+	// its machine to wait for it inside the attempt — an allowance for that
+	// wait only, never extra time for a command running on a healthy machine.
+	// The resolved node first, so a timeout written as an expression counts.
+	if timeout, ok := nodeTimeout(evalResult); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	} else if timeout, ok := nodeTimeout(node); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	}
+	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget+types.RunStepSendOverhead), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep", saveReq != nil
+}
+
+// nodeTimeout is the node's own `timeout`, when it sets a positive one.
+func nodeTimeout(node *reliantv1.Node) (time.Duration, bool) {
+	if node == nil {
+		return 0, false
+	}
+	timeoutStr := model.TimeoutExpr(node)
+	if timeoutStr == "" {
+		return 0, false
+	}
+	parsed, err := time.ParseDuration(timeoutStr)
+	if err != nil || parsed <= 0 {
+		return 0, false
+	}
+	return parsed, true
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.
 func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
+	return e.activityOptionsWithSlack(node, 0)
+}
+
+// activityOptionsWithSlack is activityOptions with slack added to a node's own
+// timeout, for an activity that may legitimately wait before its work starts.
+func (e *StepExecutor) activityOptionsWithSlack(node *reliantv1.Node, slack time.Duration) workflow.Context {
 	// Default to 30 days - we have our own timeout mechanism via heartbeats
 	timeout := 30 * 24 * time.Hour
-	if node != nil {
-		if timeoutStr := model.TimeoutExpr(node); timeoutStr != "" {
-			if parsed, err := time.ParseDuration(timeoutStr); err == nil {
-				timeout = parsed
-			}
-		}
+	if parsed, ok := nodeTimeout(node); ok {
+		timeout = parsed + slack
 	}
 
 	// HeartbeatTimeout controls how quickly Temporal detects a worker that died

@@ -1432,6 +1432,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// PauseService.ResumeWorkflow).
 	repeatedToolErrors := NewRepeatedToolErrorBreaker(RepeatedToolErrorLimit)
 	daemonOfflineBreaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
+		// A run that already gave up is ending: nothing may park any more
+		// (StepExecutor.HandleCompletion fails the step instead).
+		if pauser.GaveUp() != nil {
+			return
+		}
 		logger.Warn("[Workflow Runtime] Pausing: daemon offline for consecutive steps",
 			"workflowID", workflowID,
 			"chatID", input.ChatID,
@@ -1470,6 +1475,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// cancel in-flight activities: anything still running either fails
 		// with the same daemon-offline condition or proves the daemon is back.
 		pauser.Arm()
+		pauser.noteSelfPauseCause(errors.New(strings.TrimSuffix(DaemonOfflinePauseMessage, ".")))
 		checkPause(callerCtx)
 		// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 		_ = workflow.Sleep(callerCtx, 0)
@@ -1500,6 +1506,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
 			MachineWake:        machineWake,
+			GaveUp:             pauser.GaveUp,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
 			ResetCancelled: func() {
 				delete(cancelledThreads, thread)
@@ -1554,6 +1561,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
 		MachineWake:        machineWake,
+		GaveUp:             pauser.GaveUp,
 	}
 
 	// STEP 8.7: Create step executor for unified step lifecycle
@@ -2553,6 +2561,16 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Handle retry exhaustion - pause workflow and retry on resume
 				if stepEvent.RetryExhausted {
+					// Unless pausing would only hold the run for nothing: see
+					// endsRunInsteadOfPausing.
+					if endErr := pauseCtrl.endsRunInsteadOfPausing(running.StepID, stepEvent.Error); endErr != nil {
+						logger.Warn("[Workflow Runtime] Step failed; ending the run instead of pausing",
+							"stepID", running.StepID,
+							"error", endErr,
+						)
+						recordFailedNode(ctx, running.StepID, 1)
+						return nil, endErr
+					}
 					logger.Warn("[Workflow Runtime] Activity exhausted retries; pausing until resume",
 						"stepID", running.StepID,
 						"activityID", running.ActivityID,
@@ -2591,6 +2609,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					pauser.Arm()
 					pauser.noteSelfPauseCause(stepEvent.Error)
 					checkPause(ctx)
+					// An unattended run whose pause outlived its self-resume
+					// ladder ends here, with the cause (pause_coordinator.go).
+					if gaveUp := pauser.GaveUp(); gaveUp != nil {
+						recordFailedNode(ctx, running.StepID, 1)
+						return nil, gaveUp
+					}
 					// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 					_ = workflow.Sleep(ctx, 0)
 

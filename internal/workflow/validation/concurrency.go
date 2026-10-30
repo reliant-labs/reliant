@@ -12,8 +12,8 @@ func validateConcurrency(policy *reliantv1.WorkflowConcurrency, result *Result) 
 	if policy == nil {
 		return
 	}
-	if policy.GetMaxRunning() == 0 {
-		result.AddError(CategoryStructure, nil, "concurrency.max_running", "must be positive")
+	if policy.GetMaxRunning() == 0 && policy.GetPerMember() == 0 {
+		result.AddError(CategoryStructure, nil, "concurrency", "set max_running, per_member, or both")
 	}
 	latest := policy.GetWaiting() == reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST
 	if policy.GetKey() != "" && !latest {

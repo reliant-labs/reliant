@@ -262,6 +262,7 @@ func sameActivationSettings(a, b *core.Trigger) bool {
 		a.Message == b.Message &&
 		a.DaemonID == b.DaemonID &&
 		a.NoMachine == b.NoMachine &&
+		a.MachinePoolID == b.MachinePoolID &&
 		a.NotifyOnComplete == b.NotifyOnComplete &&
 		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
 		ptrValue(a.ConnectionID) == ptrValue(b.ConnectionID) &&
@@ -363,7 +364,7 @@ func (s *Service) restoreActivation(ctx context.Context, prev *core.Trigger) err
 		return err
 	}
 	if prev.Enabled {
-		s.grants.ensure(ctx, prev.UserID, prev.DaemonID)
+		s.ensureGrants(ctx, prev)
 	}
 	if current.DaemonID != prev.DaemonID || !prev.Enabled {
 		s.grants.releaseIfUnused(ctx, prev.UserID, current.DaemonID)
@@ -489,6 +490,7 @@ func (s *Service) workflowActivationDefinition(
 		Message:          msg.Message,
 		DaemonId:         msg.DaemonId,
 		NoMachine:        msg.NoMachine,
+		MachinePoolId:    msg.MachinePoolId,
 		NotifyOnComplete: msg.NotifyOnComplete,
 		Source:           &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: wt.GetName()},
 	}
@@ -513,9 +515,10 @@ func (s *Service) workflowActivationDefinition(
 		if override.Name != nil {
 			def.Name = *override.Name
 		}
-		if override.NoMachine != nil || override.DaemonId != nil {
+		if override.NoMachine != nil || override.DaemonId != nil || override.MachinePoolId != nil {
 			def.NoMachine = override.GetNoMachine()
 			def.DaemonId = override.GetDaemonId()
+			def.MachinePoolId = override.GetMachinePoolId()
 		}
 		if override.ConnectionId != nil {
 			def.ConnectionId = override.ConnectionId

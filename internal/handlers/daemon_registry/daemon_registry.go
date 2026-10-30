@@ -514,6 +514,7 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		LastStatusMessage: d.LastStatusMessage,
 		OomKillCount:      d.OOMKillCount,
 		CreatedAt:         timestamppb.New(d.CreatedAt),
+		Labels:            d.Labels,
 		IsDefault:         d.IsDefault,
 	}
 	// Sourced from the attachment lease, so both are absent while nothing is

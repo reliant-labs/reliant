@@ -2175,10 +2175,18 @@ message WorkflowRequirements {
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+//
+// At least one of the two is set. max_running alone is a fixed cap.
+// per_member scales the cap with the machines the trigger runs on: K runs per
+// member of its machine pool that can take work (eligible: installed, synced
+// with the pool's catalog, not failed or removed), so adding a member raises
+// throughput with no workflow edit. A trigger on one machine counts as a pool
+// of one; a no-machine trigger too. With both set, max_running is a ceiling
+// over the scaled cap.
 message WorkflowConcurrency {
   // MaxRunning is how many trigger-launched runs may run at once; later
-  // firings wait.
-  uint32 max_running = 1 [(buf.validate.field).uint32.gt = 0];
+  // firings wait. With per_member it is a ceiling over the scaled cap.
+  uint32 max_running = 1;
   // Waiting is what happens to firings that wait: fifo (the default) keeps
   // every one, in arrival order; latest keeps only the newest waiting firing
   // per key, and each older one it replaces is recorded skipped with the
@@ -2187,10 +2195,13 @@ message WorkflowConcurrency {
   // Key groups waiting firings for waiting: latest, a template over `trigger`
   // like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
   // Unset: every firing of the workflow shares one key. It only decides which
-  // waiting firings replace each other; max_running still bounds the whole
+  // waiting firings replace each other; the cap still bounds the whole
   // workflow. A firing whose key cannot be rendered waits and is never
   // superseded.
   string key = 3;
+  // PerMember scales the cap with the trigger's machine pool: this many runs
+  // per member that can take work (dev-docs/design/machine-pools.md).
+  uint32 per_member = 4;
 }
 
 // WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting

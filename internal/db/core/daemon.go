@@ -43,6 +43,11 @@ type Daemon struct {
 	LastOOMKilledAt     *time.Time
 	OOMKillCount        int32
 
+	// Labels are the machine's durable labels, set by its owner. They decide
+	// machine-pool membership (dev-docs/design/machine-pools.md) and, unlike
+	// the labels a daemon reports when it connects, hold while it sleeps.
+	Labels map[string]string
+
 	// IsDefault: the owner chose this machine as their default
 	// (SetDefaultDaemon). Work that names no machine runs here first; at most
 	// one of a user's daemons carries it.

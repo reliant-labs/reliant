@@ -1432,6 +1432,11 @@ type Trigger struct {
 	DaemonId string `protobuf:"bytes,14,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	// Launched runs have no machine; see TriggerDefinition.no_machine.
 	NoMachine bool `protobuf:"varint,27,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
+	// Launched runs are placed on a member of this machine pool; see
+	// TriggerDefinition.machine_pool_id.
+	MachinePoolId string `protobuf:"bytes,33,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
+	// Read-only: that pool's name.
+	MachinePoolName string `protobuf:"bytes,34,opt,name=machine_pool_name,json=machinePoolName,proto3" json:"machine_pool_name,omitempty"`
 	// Read-only: how this trigger's recent firings went.
 	Health *TriggerHealth `protobuf:"bytes,15,opt,name=health,proto3" json:"health,omitempty"`
 	// Read-only: name of the project the runs execute in. Empty if it was
@@ -1645,6 +1650,20 @@ func (x *Trigger) GetNoMachine() bool {
 		return x.NoMachine
 	}
 	return false
+}
+
+func (x *Trigger) GetMachinePoolId() string {
+	if x != nil {
+		return x.MachinePoolId
+	}
+	return ""
+}
+
+func (x *Trigger) GetMachinePoolName() string {
+	if x != nil {
+		return x.MachinePoolName
+	}
+	return ""
 }
 
 func (x *Trigger) GetHealth() *TriggerHealth {
@@ -2276,6 +2295,12 @@ type TriggerDefinition struct {
 	// the builtin agent: its `tools` param, which defaults to tag:coding:default;
 	// set it to e.g. ["tag:web"]). See research/DAEMONLESS_RUNS.md.
 	NoMachine bool `protobuf:"varint,14,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
+	// Launched runs execute on one member of this machine pool of the
+	// caller's, chosen at launch (the connected member with the most free
+	// room; a suspended one is woken; with none free the run waits) and fixed
+	// for the run's life. Exactly one of daemon_id, no_machine and
+	// machine_pool_id is set. See dev-docs/design/machine-pools.md.
+	MachinePoolId string `protobuf:"bytes,26,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
 	// Notify the owner when a run completes. Replaced on update, like every
 	// other field here, so a client editing a trigger must send the current
 	// value back.
@@ -2412,6 +2437,13 @@ func (x *TriggerDefinition) GetNoMachine() bool {
 		return x.NoMachine
 	}
 	return false
+}
+
+func (x *TriggerDefinition) GetMachinePoolId() string {
+	if x != nil {
+		return x.MachinePoolId
+	}
+	return ""
 }
 
 func (x *TriggerDefinition) GetNotifyOnComplete() bool {
@@ -3284,9 +3316,10 @@ type EnableWorkflowRequest struct {
 	// Worktree the runs execute in. Unset means the project's main worktree.
 	WorktreeId *string `protobuf:"bytes,3,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
 	// The machine the runs execute on: daemon_id, or no_machine, exactly as in
-	// TriggerDefinition. One of the two is required.
-	DaemonId  string `protobuf:"bytes,4,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
-	NoMachine bool   `protobuf:"varint,5,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
+	// TriggerDefinition, or machine_pool_id. Exactly one is required.
+	DaemonId      string `protobuf:"bytes,4,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	NoMachine     bool   `protobuf:"varint,5,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
+	MachinePoolId string `protobuf:"bytes,14,opt,name=machine_pool_id,json=machinePoolId,proto3" json:"machine_pool_id,omitempty"`
 	// The connection each integration trigger listens through, keyed by
 	// integration id (e.g. "github"). One entry serves every trigger of that
 	// integration. An integration with no entry keeps the connection an
@@ -3314,14 +3347,8 @@ type EnableWorkflowRequest struct {
 	// TriggerDefinition.acting_identity. Unspecified means APP for each new
 	// activation and preserves an existing activation's stored identity.
 	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
-	// Only these declared triggers (WorkflowTrigger.name). Empty means every
-	// trigger the workflow declares. Each named trigger is created or brought
-	// to the request exactly as in the whole-workflow case, all or nothing
-	// within the selection; the others are left as they are. A name the
-	// workflow does not declare refuses the request.
-	Triggers      []string `protobuf:"bytes,14,rep,name=triggers,proto3" json:"triggers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EnableWorkflowRequest) Reset() {
@@ -3389,6 +3416,13 @@ func (x *EnableWorkflowRequest) GetNoMachine() bool {
 	return false
 }
 
+func (x *EnableWorkflowRequest) GetMachinePoolId() string {
+	if x != nil {
+		return x.MachinePoolId
+	}
+	return ""
+}
+
 func (x *EnableWorkflowRequest) GetConnectionIds() map[string]string {
 	if x != nil {
 		return x.ConnectionIds
@@ -3445,13 +3479,6 @@ func (x *EnableWorkflowRequest) GetActingIdentity() ActingIdentity {
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
 }
 
-func (x *EnableWorkflowRequest) GetTriggers() []string {
-	if x != nil {
-		return x.Triggers
-	}
-	return nil
-}
-
 // WorkflowTriggerOverride changes one declared trigger's activation away from
 // the shared choices of an EnableWorkflowRequest.
 type WorkflowTriggerOverride struct {
@@ -3460,9 +3487,11 @@ type WorkflowTriggerOverride struct {
 	Trigger string `protobuf:"bytes,1,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	// Replaces the activation's name.
 	Name *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	// Replaces the shared machine for this trigger: a daemon, or no machine.
-	DaemonId  *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
-	NoMachine *bool   `protobuf:"varint,4,opt,name=no_machine,json=noMachine,proto3,oneof" json:"no_machine,omitempty"`
+	// Replaces the shared machine for this trigger: a daemon, no machine, or a
+	// machine pool.
+	DaemonId      *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	NoMachine     *bool   `protobuf:"varint,4,opt,name=no_machine,json=noMachine,proto3,oneof" json:"no_machine,omitempty"`
+	MachinePoolId *string `protobuf:"bytes,8,opt,name=machine_pool_id,json=machinePoolId,proto3,oneof" json:"machine_pool_id,omitempty"`
 	// Replaces the shared connection for this integration trigger.
 	ConnectionId *string `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
 	// Replaces the shared prompt for this trigger.
@@ -3529,6 +3558,13 @@ func (x *WorkflowTriggerOverride) GetNoMachine() bool {
 		return *x.NoMachine
 	}
 	return false
+}
+
+func (x *WorkflowTriggerOverride) GetMachinePoolId() string {
+	if x != nil && x.MachinePoolId != nil {
+		return *x.MachinePoolId
+	}
+	return ""
 }
 
 func (x *WorkflowTriggerOverride) GetConnectionId() string {
@@ -4921,7 +4957,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\xeb\f\n" +
+	"\x06source\"\xbf\r\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -4946,7 +4982,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\achanges\x18\x1f \x03(\v2\x19.reliant.v1.TriggerChangeR\achanges\x12\x1b\n" +
 	"\tdaemon_id\x18\x0e \x01(\tR\bdaemonId\x12\x1d\n" +
 	"\n" +
-	"no_machine\x18\x1b \x01(\bR\tnoMachine\x121\n" +
+	"no_machine\x18\x1b \x01(\bR\tnoMachine\x12&\n" +
+	"\x0fmachine_pool_id\x18! \x01(\tR\rmachinePoolId\x12*\n" +
+	"\x11machine_pool_name\x18\" \x01(\tR\x0fmachinePoolName\x121\n" +
 	"\x06health\x18\x0f \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12!\n" +
 	"\fproject_name\x18\x10 \x01(\tR\vprojectName\x12\x1f\n" +
 	"\vdaemon_name\x18\x11 \x01(\tR\n" +
@@ -5023,7 +5061,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1a\n" +
-	"\bverified\x18\x04 \x01(\bR\bverified\"\xfa\b\n" +
+	"\bverified\x18\x04 \x01(\bR\bverified\"\xa2\t\n" +
 	"\x11TriggerDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -5037,7 +5075,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\amessage\x18\b \x01(\tR\amessage\x12\x1b\n" +
 	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12\x1d\n" +
 	"\n" +
-	"no_machine\x18\x0e \x01(\bR\tnoMachine\x12,\n" +
+	"no_machine\x18\x0e \x01(\bR\tnoMachine\x12&\n" +
+	"\x0fmachine_pool_id\x18\x1a \x01(\tR\rmachinePoolId\x12,\n" +
 	"\x12notify_on_complete\x18\n" +
 	" \x01(\bR\x10notifyOnComplete\x12\x16\n" +
 	"\x06filter\x18\v \x01(\tR\x06filter\x12(\n" +
@@ -5096,7 +5135,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"J\n" +
 	"\x19SetTriggerEnabledResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\x90\a\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\x9c\a\n" +
 	"\x15EnableWorkflowRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1d\n" +
 	"\n" +
@@ -5105,7 +5144,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"worktreeId\x88\x01\x01\x12\x1b\n" +
 	"\tdaemon_id\x18\x04 \x01(\tR\bdaemonId\x12\x1d\n" +
 	"\n" +
-	"no_machine\x18\x05 \x01(\bR\tnoMachine\x12[\n" +
+	"no_machine\x18\x05 \x01(\bR\tnoMachine\x12&\n" +
+	"\x0fmachine_pool_id\x18\x0e \x01(\tR\rmachinePoolId\x12[\n" +
 	"\x0econnection_ids\x18\x06 \x03(\v24.reliant.v1.EnableWorkflowRequest.ConnectionIdsEntryR\rconnectionIds\x12E\n" +
 	"\x06params\x18\a \x03(\v2-.reliant.v1.EnableWorkflowRequest.ParamsEntryR\x06params\x12H\n" +
 	"\apresets\x18\b \x03(\v2..reliant.v1.EnableWorkflowRequest.PresetsEntryR\apresets\x12,\n" +
@@ -5115,8 +5155,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vname_prefix\x18\v \x01(\tR\n" +
 	"namePrefix\x12A\n" +
 	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x12C\n" +
-	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12\x1a\n" +
-	"\btriggers\x18\x0e \x03(\tR\btriggers\x1a@\n" +
+	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a@\n" +
 	"\x12ConnectionIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +
@@ -5126,15 +5165,16 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
-	"\f_worktree_id\"\xbb\x03\n" +
+	"\f_worktree_id\"\xfc\x03\n" +
 	"\x17WorkflowTriggerOverride\x12\x18\n" +
 	"\atrigger\x18\x01 \x01(\tR\atrigger\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12 \n" +
 	"\tdaemon_id\x18\x03 \x01(\tH\x01R\bdaemonId\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"no_machine\x18\x04 \x01(\bH\x02R\tnoMachine\x88\x01\x01\x12(\n" +
-	"\rconnection_id\x18\x05 \x01(\tH\x03R\fconnectionId\x88\x01\x01\x12\x1d\n" +
-	"\amessage\x18\x06 \x01(\tH\x04R\amessage\x88\x01\x01\x12G\n" +
+	"no_machine\x18\x04 \x01(\bH\x02R\tnoMachine\x88\x01\x01\x12+\n" +
+	"\x0fmachine_pool_id\x18\b \x01(\tH\x03R\rmachinePoolId\x88\x01\x01\x12(\n" +
+	"\rconnection_id\x18\x05 \x01(\tH\x04R\fconnectionId\x88\x01\x01\x12\x1d\n" +
+	"\amessage\x18\x06 \x01(\tH\x05R\amessage\x88\x01\x01\x12G\n" +
 	"\x06params\x18\a \x03(\v2/.reliant.v1.WorkflowTriggerOverride.ParamsEntryR\x06params\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
@@ -5142,7 +5182,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05_nameB\f\n" +
 	"\n" +
 	"_daemon_idB\r\n" +
-	"\v_no_machineB\x10\n" +
+	"\v_no_machineB\x12\n" +
+	"\x10_machine_pool_idB\x10\n" +
 	"\x0e_connection_idB\n" +
 	"\n" +
 	"\b_message\"\x93\x02\n" +
