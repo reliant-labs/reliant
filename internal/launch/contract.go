@@ -211,6 +211,11 @@ func (e *DeclinedError) TxOutcome() {}
 
 var _ db.TxOutcome = (*DeclinedError)(nil)
 
+// ErrorClass implements svcerr.Classed: a guard declining a launch ("waiting
+// for workflow capacity") is the system working, never a fault, wherever the
+// error surfaces. TxOutcome only quiets the transaction ladder's own log.
+func (e *DeclinedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.
 var ErrNotPending = svcerr.FailedPrecondition("chat has already started; use SendMessage")

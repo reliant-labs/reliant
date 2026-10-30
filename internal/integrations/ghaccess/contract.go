@@ -37,6 +37,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -61,14 +62,15 @@ type Store interface {
 }
 
 // Permanent token outcomes: the user has to act (connect, reconnect) before
-// any refresh can succeed, so their grants are cleared rather than kept.
+// any refresh can succeed, so their grants are cleared rather than kept. Each
+// is a user error (svcerr.ClassUser): logged at INFO, never an issue.
 var (
-	ErrNotConnected   = errors.New("ghaccess: GitHub is not connected")
-	ErrNeedsReconnect = errors.New("ghaccess: GitHub needs to be reconnected")
+	ErrNotConnected   = svcerr.WithClass(errors.New("ghaccess: GitHub is not connected"), svcerr.ClassUser)
+	ErrNeedsReconnect = svcerr.WithClass(errors.New("ghaccess: GitHub needs to be reconnected"), svcerr.ClassUser)
 	// ErrTokenRejected is GitHub refusing the token (401).
-	ErrTokenRejected = errors.New("ghaccess: GitHub rejected the token")
+	ErrTokenRejected = svcerr.WithClass(errors.New("ghaccess: GitHub rejected the token"), svcerr.ClassUser)
 	// ErrUnsupportedToken is a token kind that cannot list installations.
-	ErrUnsupportedToken = errors.New("ghaccess: this GitHub connection cannot list App installations")
+	ErrUnsupportedToken = svcerr.WithClass(errors.New("ghaccess: this GitHub connection cannot list App installations"), svcerr.ClassUser)
 )
 
 // IsPermanent reports whether a refresh error means the user must act.
