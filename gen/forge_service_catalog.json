@@ -69043,7 +69043,7 @@
         {
           "id": "method1:a6afc1620a32bb0637bd91d162d525466094479447c90820ee70bc7aef18ead3",
           "name": "trackedWorktreePaths",
-          "signature": "func(ctx context.Context, projectID string) ([]string, error)",
+          "signature": "func(ctx context.Context, projectID string, daemonID string) ([]string, error)",
           "scope": "github.com/reliant-labs/reliant/internal/handlers/worktree",
           "legacy_name": "worktree.trackedWorktreePaths",
           "source": {

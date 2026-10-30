@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -95,7 +96,7 @@ func (s *Service) ImportWorktree(
 	ownerDaemonID := placement.DaemonID
 
 	// Re-discover on the daemon and take the entry from there.
-	exclude, err := s.trackedWorktreePaths(ctx, project.ID)
+	exclude, err := s.trackedWorktreePaths(ctx, project.ID, placement.DaemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -260,10 +261,14 @@ func importMoves(repos map[string]*core.Repo) bool {
 	return false
 }
 
-// trackedWorktreePaths lists every path a row of the project holds, archived
-// rows included: an archived row's directory may still exist, and its
-// checkout is not "outside Reliant".
-func (s *Service) trackedWorktreePaths(ctx context.Context, projectID string) ([]string, error) {
+// trackedWorktreePaths lists every path a row of the project holds on
+// daemonID, archived included, for the daemon to leave out of discovery: a
+// tracked checkout is not offered for import again. A path is one machine's:
+// a row another machine owns says nothing about the directory at the same
+// absolute path here, so it is not excluded. A row that records no owner
+// might be this machine's, so it is (conservatively) excluded. daemonID ""
+// (default resolution) excludes every row.
+func (s *Service) trackedWorktreePaths(ctx context.Context, projectID, daemonID string) ([]string, error) {
 	tracked, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
 		ProjectID: &projectID, IncludeArchived: true, Limit: 100000,
 	})
@@ -272,9 +277,13 @@ func (s *Service) trackedWorktreePaths(ctx context.Context, projectID string) ([
 	}
 	paths := make([]string, 0, len(tracked))
 	for _, wt := range tracked {
-		if wt.Path != "" {
-			paths = append(paths, wt.Path)
+		if wt.Path == "" {
+			continue
 		}
+		if owner := daemonplacement.WorktreeOwner(wt); daemonID != "" && owner != "" && owner != daemonID {
+			continue
+		}
+		paths = append(paths, wt.Path)
 	}
 	return paths, nil
 }
@@ -338,11 +347,6 @@ func (s *Service) DiscoverWorktrees(
 		return nil, err
 	}
 
-	exclude, err := s.trackedWorktreePaths(ctx, project.ID)
-	if err != nil {
-		return nil, err
-	}
-
 	// A background poll (the sidebar hint) never wakes a suspended machine:
 	// it answers Unavailable and the hint stays hidden.
 	if req.Msg.Background {
@@ -351,6 +355,10 @@ func (s *Service) DiscoverWorktrees(
 
 	// The same machine a new workspace for this project would be placed on.
 	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "discover")
+	if err != nil {
+		return nil, err
+	}
+	exclude, err := s.trackedWorktreePaths(ctx, project.ID, placement.DaemonID)
 	if err != nil {
 		return nil, err
 	}
