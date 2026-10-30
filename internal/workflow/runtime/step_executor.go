@@ -1046,7 +1046,10 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	// RunStepMachineWaitBudget on top of it, for a command that never reached
 	// its machine to wait for it inside the attempt — an allowance for that
 	// wait only, never extra time for a command running on a healthy machine.
-	if timeout, ok := nodeTimeout(node); ok {
+	// The resolved node first, so a timeout written as an expression counts.
+	if timeout, ok := nodeTimeout(evalResult); ok {
+		runInputs["timeout"] = int(timeout / time.Millisecond)
+	} else if timeout, ok := nodeTimeout(node); ok {
 		runInputs["timeout"] = int(timeout / time.Millisecond)
 	}
 	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget), "ExecuteRunStep", runInputs)
