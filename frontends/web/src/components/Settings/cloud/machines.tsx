@@ -1458,7 +1458,9 @@ function EnvironmentDetail({
   );
   const pricing = usePlans({ enabled: cloud }).data?.daemonPricing;
   // The plan's monthly allowance (a server total, not what is left of it).
-  const includedHours = useComputeUsage("current", { enabled: cloud }).data?.allowanceWeightedSeconds;
+  const machineUsage = useComputeUsage("current", { enabled: cloud }).data;
+  const includedHours = machineUsage?.usageMeasured && !machineUsage.billingHoldReason && machineUsage.pricingVersion === pricing?.pricingVersion
+    ? machineUsage.allowanceWeightedSeconds : undefined;
   const disk = spec?.disk;
   const maxDiskGib = eligibilityQ.data?.maxDaemonStorageGib ?? 0;
   // Offered only where the plan grows disks at all. A machine already at

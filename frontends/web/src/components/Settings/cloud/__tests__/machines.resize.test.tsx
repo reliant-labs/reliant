@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'small', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { usageMeasured: true, pricingVersion: 'test-version', billingHoldReason: '', allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'small', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
