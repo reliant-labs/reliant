@@ -1,7 +1,0 @@
-name: fixture
-entry: [release]
-nodes:
-# The child's on_failure (see the test's loader) never runs from here.
-- id: release
-  type: workflow
-  ref: project://with-handler

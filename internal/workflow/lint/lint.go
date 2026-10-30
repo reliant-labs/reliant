@@ -99,7 +99,6 @@ const (
 	RuleAutomationUntriggered  = "automation-only-untriggered"
 	RuleRequiresUndeclaredTool = "requires-undeclared-tool"
 	RuleTimeoutIgnored         = "timeout-ignored"
-	RuleChildOnFailureIgnored  = "child-on-failure-ignored"
 	RuleScenarioNone           = "scenario-none"
 	RuleScenarioTrigger        = "scenario-trigger-uncovered"
 	RuleScenarioTerminal       = "scenario-terminal-uncovered"
@@ -117,7 +116,6 @@ var rules = []Rule{
 	rule(RuleExitCodeUnhandled, SeverityError, "An edge branches on a run node's exit_code and has no default, so an exit code no case names ends the run silently."),
 	rule(RuleEdgeNoDefault, SeverityWarning, "An edge has cases and no default: when no case matches, that branch of the run ends silently."),
 	rule(RuleActionErrorUnread, SeverityWarning, "Nothing reads an action node's is_error, so a failed call (a 4xx, a revoked credential) looks like a successful one."),
-	rule(RuleChildOnFailureIgnored, SeverityWarning, "A workflow node runs a child that declares on_failure; the child's handler never runs as a node, because on_failure belongs to the root run."),
 	rule(RuleNoFailurePath, SeverityWarning, "A triggered workflow has no on_failure handler, so an unattended run that fails tells nobody."),
 	rule(RuleAgentTurnBudget, SeverityWarning, "An agent node leaves the child's max_turns at its default: the turn budget is a decision, not an accident."),
 	rule(RuleLoopUnbounded, SeverityWarning, "A loop's while never reads iter.iteration and the loop has no items, so nothing bounds it."),

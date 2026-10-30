@@ -28,12 +28,6 @@ var agentChild = &reliantv1.Workflow{
 	},
 }
 
-// withHandlerChild declares an on_failure, as project://release does.
-var withHandlerChild = &reliantv1.Workflow{
-	Name:      "with-handler",
-	OnFailure: &reliantv1.Workflow{Nodes: []*reliantv1.Node{{Id: "reconcile_tag", Type: "run"}}},
-}
-
 func loadFixture(t *testing.T, path string) Input {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -46,9 +40,6 @@ func loadFixture(t *testing.T, path string) Input {
 		t.Fatalf("%s does not parse: %v", path, err)
 	}
 	in := Input{Workflow: wf, Source: data, LoadRef: func(ref string) (*reliantv1.Workflow, error) {
-		if ref == "project://with-handler" {
-			return withHandlerChild, nil
-		}
 		return agentChild, nil
 	}}
 	sc := strings.TrimSuffix(path, ".yaml") + ".scenarios.yaml"
