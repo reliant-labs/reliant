@@ -15,15 +15,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// setProcessGroup sets up the command to run in its own process group.
-// This allows us to kill the entire process tree when terminating.
-func setProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-}
-
 // killProcessGroup signals the process group a command leads.
 //
-// Every command the daemon starts runs under setProcessGroup, so its process
+// Every command the daemon starts runs in a process group of its own (proctree.Prepare), so its process
 // group id IS the command's pid, and the group keeps that id for as long as
 // any member is alive — including after the leader itself has exited and been
 // reaped. So the group is signalled by that id directly. This used to look

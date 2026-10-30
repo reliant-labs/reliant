@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // ErrPersistenceSkipped is returned by OnCreate when the process was intentionally
@@ -111,6 +112,9 @@ type BackgroundProcess struct {
 	// oomSnap captures the workspace cgroup's oom_kill counter at spawn so a
 	// SIGKILLed process can be attributed to the kernel OOM killer on exit.
 	oomSnap cgroupmem.OOMSnapshot
+	// tree bounds the command's processes and reaches all of them on a kill
+	// (internal/proctree). Nil for a process recovered from the database.
+	tree *proctree.Tree
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -408,10 +412,6 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	}
 	cmd.Dir = opts.WorkingDir
 
-	// Set up process group so we can kill all child processes
-	// This is critical for commands that spawn subprocesses (e.g., npm run dev)
-	setProcessGroup(cmd)
-
 	// Set up environment variables.
 	// RELIANT_SPAWNED=1 allows scripts to detect they're running from Reliant.
 	//
@@ -479,11 +479,19 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	cmd.Stderr = stderrLines
 	cmd.WaitDelay = BackgroundWaitDelay
 
+	// Its own process group, so a kill reaches every child (e.g. npm run dev),
+	// and — where the machine allows — its own cgroup with a process limit,
+	// so a runaway command fails alone (internal/proctree). Last before
+	// Start: everything above may still rewrite what cmd execs.
+	process.tree = proctree.Default().Prepare(cmd)
+
 	// Start the command
 	if err := cmd.Start(); err != nil {
+		process.tree.Started(0)
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
+	process.tree.Started(cmd.Process.Pid)
 
 	// Steer the kernel OOM killer toward the workload (and its descendants,
 	// which inherit the score) rather than the daemon. No-op outside Linux;
@@ -622,6 +630,7 @@ func (w *outputLineWriter) emit(raw []byte) {
 func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs ...*outputLineWriter) {
 	err := process.cmd.Wait()
 	process.recordSurvivors()
+	process.tree.Release()
 	for _, output := range outputs {
 		output.flush()
 	}
@@ -640,6 +649,7 @@ func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs .
 func (m *BackgroundManager) waitForProcessWithChannel(process *BackgroundProcess, waitErrCh <-chan error) {
 	err := <-waitErrCh
 	process.recordSurvivors()
+	process.tree.Release()
 	m.handleProcessCompletion(process, err)
 }
 
@@ -1116,6 +1126,28 @@ func (p *BackgroundProcess) recordSurvivors() {
 	p.outputMu.Unlock()
 }
 
+// stopTree is stopProcessGroup, then — when the command has a cgroup of its
+// own — a cgroup.kill for anything left in it: a member that left the process
+// group with setsid is out of the group's reach but not the cgroup's.
+func stopTree(w *groupWatch, tree *proctree.Tree, leaderDone <-chan struct{}, onTerm func()) bool {
+	// The group is signalled only while it is provably the command's (a
+	// running command's leader, or a member it left); an exited command whose
+	// group is gone but whose cgroup is not is reached through the cgroup
+	// alone.
+	gone := true
+	if onTerm != nil || w.alive() {
+		gone = stopProcessGroup(w, leaderDone, onTerm)
+	}
+	if tree.Populated() && tree.Kill() {
+		deadline := time.Now().Add(killSettleTimeout)
+		for tree.Populated() && time.Now().Before(deadline) {
+			time.Sleep(groupPollInterval)
+		}
+		return gone && !tree.Populated()
+	}
+	return gone
+}
+
 // waitProcessGroupGone waits up to d for the leader to be reaped and every
 // other member of the group to exit.
 func waitProcessGroupGone(w *groupWatch, leaderDone <-chan struct{}, d time.Duration) bool {
@@ -1147,7 +1179,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return err
 	}
 
-	// The leader's pid is the process group's id (setProcessGroup).
+	// The leader's pid is the process group's id (proctree.Prepare).
 	var pid int
 	if process.cmd != nil && process.cmd.Process != nil {
 		pid = process.cmd.Process.Pid
@@ -1164,10 +1196,12 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		process.outputMu.RLock()
 		w := &groupWatch{pgid: pid, members: process.survivors, listable: true}
 		process.outputMu.RUnlock()
-		if process.cmd != nil && w.alive() {
+		// Its own cgroup is unambiguous (named per daemon and command, never
+		// reused), so what is still in it is the command's.
+		if process.cmd != nil && (w.alive() || process.tree.Populated()) {
 			logging.Info("Killing what an exited background command left running in its process group",
 				"id", processID, "pgid", pid, "status", status)
-			if !stopProcessGroup(w, process.done, nil) {
+			if !stopTree(w, process.tree, process.done, nil) {
 				return fmt.Errorf("process %s (%s) left processes in its group %d that did not die on SIGKILL", processID, status, pid)
 			}
 			return nil
@@ -1193,7 +1227,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 	if pid > 0 {
 		// Recorded now, while the leader is unreaped and the group id is
 		// therefore certainly this command's.
-		if !stopProcessGroup(watchGroup(pid), process.done, process.cancelFunc) {
+		if !stopTree(watchGroup(pid), process.tree, process.done, process.cancelFunc) {
 			logging.Error("Process group survived SIGKILL", "id", processID, "pgid", pid)
 		}
 	} else {
@@ -1357,6 +1391,9 @@ type AdoptRunningProcessOptions struct {
 	StdoutBuf  *bytes.Buffer // Existing stdout buffer
 	StderrBuf  *bytes.Buffer // Existing stderr buffer
 	WaitErrCh  <-chan error  // Channel that receives cmd.Wait() result from caller (REQUIRED to avoid double-wait)
+	// Tree is the command's process tree (proctree), which the background
+	// manager takes over: it releases it, and a kill reaches all of it.
+	Tree *proctree.Tree
 }
 
 // AdoptRunningProcess adopts an already-running command into the background manager.
@@ -1412,6 +1449,7 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
 		cmd:            opts.Cmd,
+		tree:           opts.Tree,
 		stdout:         stdout,
 		stderr:         stderr,
 		combinedOutput: make([]OutputLineWithSeq, 0),
