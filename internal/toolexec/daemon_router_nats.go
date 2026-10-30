@@ -225,6 +225,10 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 	if nomachine.Is(ctx) {
 		return "", nomachine.ErrNoMachine
 	}
+	selector, err := r.normalizeSelector(ctx, userID, selector)
+	if err != nil {
+		return "", err
+	}
 
 	// Step 1: Try local resolver (connected daemons).
 	if r.resolver != nil {
@@ -440,6 +444,23 @@ func recordAnswersToName(d *db.Daemon, name string) bool {
 	return d.Hostname != nil && *d.Hostname == name
 }
 
+// normalizeSelector reads a Name that is one of the user's machine ids as that
+// id, against the user's COMPLETE registry, before either resolution stage
+// sees the selector. The connected resolver alone cannot decide it: with
+// machine A suspended (or attached to another gateway) and a connected
+// machine B named A's id, A's id is not among the connected ids, so the
+// resolver would keep it a name and route A's requests to B.
+func (r *NATSDaemonRouter) normalizeSelector(ctx context.Context, userID string, selector *DaemonSelector) (*DaemonSelector, error) {
+	if selector == nil || selector.ID != "" || selector.Name == "" || r.db == nil {
+		return selector, nil
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing daemons to resolve %q: %w", selector.Name, err)
+	}
+	return recordSelector(daemons, selector), nil
+}
+
 // recordSelector is the selector as the user's records read it: a Name that
 // is one of their daemon ids selects that daemon by id (resolveNameAsID).
 func recordSelector(daemons []*db.Daemon, selector *DaemonSelector) *DaemonSelector {
@@ -589,6 +610,10 @@ type MachineState struct {
 // it is the machine a waiting run is actually waiting for. Like resolution it
 // reads this process's database only, wakes nothing and asks nobody.
 func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, selector *DaemonSelector) (MachineState, error) {
+	selector, err := r.normalizeSelector(ctx, userID, selector)
+	if err != nil {
+		return MachineState{}, err
+	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
 			return MachineState{DaemonID: daemons[0].DaemonID, Exists: true}, nil
@@ -659,6 +684,10 @@ func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selec
 func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *DaemonSelector) (WakeResult, error) {
 	if nomachine.Is(ctx) {
 		return WakeResult{}, nomachine.ErrNoMachine
+	}
+	selector, err := r.normalizeSelector(ctx, userID, selector)
+	if err != nil {
+		return WakeResult{}, err
 	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
@@ -774,6 +803,10 @@ func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string, se
 // isSelectedDaemonOnline answers IsDaemonOnline for a non-nil selector: is a
 // daemon the selector names connected right now.
 func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID string, selector *DaemonSelector) (bool, error) {
+	selector, err := r.normalizeSelector(ctx, userID, selector)
+	if err != nil {
+		return false, err
+	}
 	// The gateway-local resolver sees connected daemons and honours labels.
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {

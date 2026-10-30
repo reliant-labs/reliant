@@ -254,3 +254,37 @@ func TestConnectedResolver_NameSelectorTriesIDFirstThenName(t *testing.T) {
 type connectedList []DaemonInfo
 
 func (l connectedList) ListConnectedDaemons(string) []DaemonInfo { return l }
+
+// Machine A is suspended, so the gateway's connected list lacks it, while a
+// connected machine B is NAMED A's id. Only the user's complete registry knows
+// A's id is an id: every resolution stage must read the selector against it
+// first, or A's requests route to B.
+func TestNameSelector_IDOfDisconnectedMachineNeverRoutesToNamesake(t *testing.T) {
+	const aID = "e164d47d-1288-468d-ad0b-c487af2da1c4"
+	records := &fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: aID, UserID: "u", DaemonType: strPtr("managed"), Name: "cicd", LifecyclePhase: strPtr("suspended")},
+		{ID: "b", UserID: "u", DaemonType: strPtr("self_hosted"), Name: aID},
+	}, attached: []string{"b"}}
+	router := NewNATSDaemonRouter(nil, WithDatabase(records), WithResolver(NewConnectedDaemonResolver(connectedList{
+		{DaemonID: "b", Name: aID, Type: "local"},
+	})))
+	ctx := context.Background()
+
+	id, err := router.resolveDaemonID(ctx, "u", &DaemonSelector{Name: aID})
+	assert.NotEqual(t, "b", id, "A's id must never resolve to the machine named after it")
+	require.Error(t, err, "suspended A is pending, not B")
+
+	state, err := router.MachineState(ctx, "u", &DaemonSelector{Name: aID})
+	require.NoError(t, err)
+	assert.Equal(t, aID, state.DaemonID)
+	assert.True(t, state.Suspended)
+
+	online, err := router.isSelectedDaemonOnline(ctx, "u", &DaemonSelector{Name: aID})
+	require.NoError(t, err)
+	assert.False(t, online, "B being connected says nothing about A")
+
+	// B is still reachable by its own id.
+	id, err = router.resolveDaemonID(ctx, "u", &DaemonSelector{Name: "b"})
+	require.NoError(t, err)
+	assert.Equal(t, "b", id)
+}
