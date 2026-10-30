@@ -405,11 +405,10 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 		m.Content = append(m.Content, scalarNode("automation_only", ""), scalarNode("true", "!!bool"))
 	}
 	if wf.Concurrency != nil {
-		if wf.Concurrency.MaxRunning == 0 {
-			return nil, fmt.Errorf("concurrency.max_running must be positive")
+		policy, err := marshalWorkflowConcurrency(wf.Concurrency)
+		if err != nil {
+			return nil, err
 		}
-		policy := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		policy.Content = append(policy.Content, scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(wf.Concurrency.MaxRunning), 10), "!!int"))
 		m.Content = append(m.Content, scalarNode("concurrency", ""), policy)
 	}
 

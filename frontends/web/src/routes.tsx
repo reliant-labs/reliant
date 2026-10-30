@@ -264,7 +264,7 @@ function RootShell() {
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
-      navigate({ href: mobilePathFor(pathname), replace: true });
+      navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
   }, [pathname, search, navigate]);
 
