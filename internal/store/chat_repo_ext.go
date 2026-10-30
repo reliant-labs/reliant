@@ -513,6 +513,12 @@ func chatToRow(chat *core.Chat) *Chat {
 	if state == core.ChatStateUnspecified {
 		state = core.ChatStateIdle
 	}
+	// A chat nobody classified is a person's (the column default): the
+	// launcher, the one creator of runs, always names the origin.
+	origin := chat.Origin
+	if origin == core.ChatOriginUnspecified {
+		origin = core.ChatOriginUser
+	}
 	row := &Chat{
 		ID:              chat.ID,
 		Title:           chat.Title,
@@ -529,6 +535,7 @@ func chatToRow(chat *core.Chat) *Chat {
 		SelectedPresets: chatPresetsToColumn(chat.SelectedPresets),
 		ActiveDaemonID:  chat.ActiveDaemonID,
 		NoMachine:       chat.NoMachine,
+		Origin:          origin,
 	}
 	return row
 }

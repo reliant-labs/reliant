@@ -31,8 +31,7 @@ func archivedChatIDs(t *testing.T, ctx context.Context, service *Service) map[st
 
 func sidebarChatIDs(t *testing.T, ctx context.Context, service *Service, projectID string) map[string]bool {
 	t.Helper()
-	yes := true
-	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID, SidebarOnly: &yes}))
+	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
 	require.NoError(t, err)
 	ids := map[string]bool{}
 	for _, c := range resp.Msg.Chats {

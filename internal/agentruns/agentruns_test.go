@@ -298,6 +298,8 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	chat, err := repo.GetChat(ctx, first.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, owner, chat.UserID)
+	assert.Equal(t, core.ChatOriginAgent, chat.Origin, "an agent's run lists in Runs, not the chat list")
+	assert.False(t, chat.ListInSidebar)
 	require.Len(t, starter.input, 1)
 	_, unattended := starter.input[0].Inputs[v2.InputKeyUnattended]
 	assert.False(t, unattended, "an agent-started run must not be marked unattended")

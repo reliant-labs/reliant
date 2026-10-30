@@ -33,7 +33,11 @@ func TestListInSidebarTruthTable(t *testing.T) {
 		{"none", ""},
 		{"chat.start", core.TriggerEventKindChatStart},
 		{"schedule", core.TriggerEventKindSchedule},
+		{"webhook", core.TriggerEventKindWebhook},
+		{"integration", core.TriggerEventKindIntegration},
+		{"workflow_event", core.TriggerEventKindWorkflowEvent},
 		{"agent.start_run", core.TriggerEventKindAgentStartRun},
+		{"manual.run", core.TriggerEventKindManualRun},
 		{"builder.test", core.TriggerEventKindBuilderTest},
 	}
 
@@ -44,7 +48,7 @@ func TestListInSidebarTruthTable(t *testing.T) {
 				createActivityTestChat(t, repo, id)
 				if lk.kind != "" {
 					var trigger *string
-					if lk.kind == core.TriggerEventKindSchedule {
+					if lk.kind.Unattended() {
 						trigger = &triggerID
 					}
 					recordLaunchEvent(t, repo, id, lk.kind, trigger, now)
@@ -67,6 +71,11 @@ func TestListInSidebarTruthTable(t *testing.T) {
 				chat, err := repo.GetChat(ctx, id)
 				require.NoError(t, err)
 				assert.Equal(t, want, chat.ListInSidebar, id)
+				wantOrigin := core.ChatOriginUser
+				if lk.kind != "" {
+					wantOrigin = core.ChatOriginOf(lk.kind)
+				}
+				assert.Equal(t, wantOrigin, chat.Origin, id)
 			}
 		}
 	}

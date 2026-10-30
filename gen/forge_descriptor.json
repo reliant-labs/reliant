@@ -6220,11 +6220,6 @@
             "Name": "limit",
             "ProtoType": "int32",
             "IsOptional": true
-          },
-          {
-            "Name": "sidebar_only",
-            "ProtoType": "bool",
-            "IsOptional": true
           }
         ],
         "ListChatsResponse": [
@@ -7227,6 +7222,11 @@
           {
             "name": "working_threads",
             "kind": "int32"
+          },
+          {
+            "name": "origin",
+            "kind": "enum",
+            "type_name": "reliant.v1.ChatOrigin"
           }
         ],
         "reliant.v1.ChatPlan": [
@@ -7710,11 +7710,6 @@
           {
             "name": "limit",
             "kind": "int32",
-            "optional": true
-          },
-          {
-            "name": "sidebar_only",
-            "kind": "bool",
             "optional": true
           }
         ],
@@ -8898,6 +8893,14 @@
           "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
           "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
         ],
+        "reliant.v1.ChatOrigin": [
+          "CHAT_ORIGIN_UNSPECIFIED",
+          "CHAT_ORIGIN_USER",
+          "CHAT_ORIGIN_AUTOMATION",
+          "CHAT_ORIGIN_AGENT",
+          "CHAT_ORIGIN_MANUAL_RUN",
+          "CHAT_ORIGIN_BUILDER_TEST"
+        ],
         "reliant.v1.ChatState": [
           "CHAT_STATE_UNSPECIFIED",
           "CHAT_STATE_IDLE",
@@ -9006,6 +9009,14 @@
           6,
           7
         ],
+        "reliant.v1.ChatOrigin": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
         "reliant.v1.ChatState": [
           0,
           2,
@@ -9103,6 +9114,10 @@
         "reliant.v1.ChatActivity": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "ChatActivity"
+        },
+        "reliant.v1.ChatOrigin": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "ChatOrigin"
         },
         "reliant.v1.ChatState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -42244,7 +42259,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "fc5924c181017a0a1ceffe34f6c678c532c24bc8c655f05f3f54d73f013c2be6",
+    "reliant/v1/chat.proto": "1eef4790b6e46b6b5b63cf0fac4f8c6dd70a8bee2b58b49f5ebefd8b37270139",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",

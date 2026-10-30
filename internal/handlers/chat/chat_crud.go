@@ -249,7 +249,9 @@ func (s *Service) ListChats(
 		ProjectID:       projectID,
 		Limit:           limit,
 		ExcludeArchived: true,
-		SidebarOnly:     req.Msg.GetSidebarOnly(),
+		// The chat list holds conversations: USER-origin chats and adopted
+		// runs. Every other run lists under Runs (RunService.ListRuns).
+		SidebarOnly: true,
 	}
 
 	chats, err := s.deps.Repo.ListChats(ctx, filters)

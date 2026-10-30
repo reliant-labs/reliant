@@ -136,6 +136,31 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindManualRun:     false,
 }
 
+// eventKindOrigin takes a position on every TriggerEventKind: who started a
+// chat its launch event launches. The migration that added chats.origin
+// (20261030033817_chat_origin) backfills with the same mapping.
+var eventKindOrigin = map[TriggerEventKind]ChatOrigin{
+	TriggerEventKindChatStart:     ChatOriginUser,
+	TriggerEventKindSchedule:      ChatOriginAutomation,
+	TriggerEventKindWebhook:       ChatOriginAutomation,
+	TriggerEventKindIntegration:   ChatOriginAutomation,
+	TriggerEventKindWorkflowEvent: ChatOriginAutomation,
+	TriggerEventKindAgentStartRun: ChatOriginAgent,
+	TriggerEventKindManualRun:     ChatOriginManualRun,
+	TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
+}
+
+// ChatOriginOf is the origin of a chat launched by an event of this kind. A
+// kind missing from eventKindOrigin reads as AUTOMATION, so a new launch path
+// that was never classified keeps its runs out of the chat list rather than
+// flooding it — and a test fails until it is classified.
+func ChatOriginOf(kind TriggerEventKind) ChatOrigin {
+	if origin, ok := eventKindOrigin[kind]; ok {
+		return origin
+	}
+	return ChatOriginAutomation
+}
+
 // TriggerEventOutcome records what a firing did.
 type TriggerEventOutcome string
 

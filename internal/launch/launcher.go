@@ -283,12 +283,15 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Create chat object (not yet persisted) - model/temperature/max_tokens are workflow input params, not stored on chat
 	chat := &db.Chat{
-		ID:              chatID,
-		UserID:          userID,
-		Title:           title,
-		ProjectID:       spec.ProjectID,
-		WorkflowName:    &workflowName,
-		State:           db.ChatStateIdle,
+		ID:           chatID,
+		UserID:       userID,
+		Title:        title,
+		ProjectID:    spec.ProjectID,
+		WorkflowName: &workflowName,
+		State:        db.ChatStateIdle,
+		// Who started it decides whether it is a conversation (the chat
+		// list) or a run (Runs), for the life of the chat.
+		Origin:          core.ChatOriginOf(ev.Kind),
 		WorkflowID:      &workflowID,
 		SelectedPresets: spec.Presets,
 		CreatedAt:       now,

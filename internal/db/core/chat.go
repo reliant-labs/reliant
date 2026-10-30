@@ -25,6 +25,20 @@ const (
 	ChatStateArchived    ChatState = reliantv1.ChatState_CHAT_STATE_ARCHIVED
 )
 
+// ChatOrigin is who started a chat (chats.origin). It is the chat list's
+// policy key: a USER chat lists in the sidebar, any other origin is a run that
+// lists only once adopted (chats_with_activity.list_in_sidebar).
+type ChatOrigin = reliantv1.ChatOrigin
+
+const (
+	ChatOriginUnspecified ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_UNSPECIFIED
+	ChatOriginUser        ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_USER
+	ChatOriginAutomation  ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_AUTOMATION
+	ChatOriginAgent       ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_AGENT
+	ChatOriginManualRun   ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_MANUAL_RUN
+	ChatOriginBuilderTest ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_BUILDER_TEST
+)
+
 // WorkflowState is where a run IS; WorkflowStopReason is why a stopped run
 // stopped. They are always read together — see WorkflowStatus below, which is
 // the pair, and the Live/Resumable predicates, which are what callers should
@@ -200,8 +214,13 @@ type Chat struct {
 	NoMachine bool `json:"no_machine,omitempty"`
 	// AdoptedAt is when the user adopted this run into their chats; nil if not.
 	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
-	// ListInSidebar is the view's sidebar policy for this chat.
+	// ListInSidebar is the view's sidebar policy for this chat: Origin is USER,
+	// or the user adopted the run.
 	ListInSidebar bool `json:"list_in_sidebar"`
+	// Origin is who started the chat, written once at launch (ChatOriginOf the
+	// launch event's kind; USER for a branch). Unspecified on insert stores
+	// USER, the column's default.
+	Origin ChatOrigin `json:"origin,omitempty"`
 
 	// UsageLimitResumesAt is when the chat's root run retries, while it is parked
 	// until a provider's usage limit resets (activity 7); nil otherwise.
@@ -296,7 +315,9 @@ type ChatFilters struct {
 	State           *ChatState
 	ExcludeArchived bool
 	// SidebarOnly keeps only chats the sidebar lists: the view's
-	// list_in_sidebar column is the single definition of that policy.
+	// list_in_sidebar column is the single definition of that policy. The
+	// ListChats rpc always sets it; internal sweeps (a worktree's chats) do
+	// not, because they act on runs too.
 	SidebarOnly bool
 	Limit       int
 	Offset      int
