@@ -87,23 +87,37 @@ holder b 'eval "$(declare -f _release_lock_read | sed "1s/_release_lock_read/_re
 [ "$(lock_sha)" = "$live" ] || fail "the racing holder's live lock was overwritten"
 git -C "$fx/a" push -q origin :refs/release-lock/release
 
-# 4. Release re-checks main: nothing merged while held -> no label; a merge landed
-#    while held and main is due -> main's newest merged PR is labelled release:asap.
+# 4. Release acts on a coalesced request (refs/release-lock/coalesced, what the release
+#    workflow records when a due run meets a live lock): no request -> no label, even
+#    after merges (a failed cut never re-starts itself); a request recorded while held,
+#    with main NOT moving (a pending asap merge whose run lands mid-release) -> main's
+#    newest merged PR is labelled release:asap and the request is consumed.
+request() { # record a coalesced request on origin, as the workflow's coalesce node does
+  local r; r="$(echo "coalesced: run fixture ($1) while a release" | git -C "$fx/b" commit-tree "$tree")"
+  git -C "$fx/b" push -q -f origin "$r:refs/release-lock/coalesced"
+}
 : > "$GH_CALLS"
-holder a 'RELEASE_EVERY=1; release_lock_acquire v1.0.4; release_lock_release'
-grep -q 'pr edit' "$GH_CALLS" && fail "a release with nothing merged behind it re-started itself"
-: > "$GH_CALLS"
-holder a 'RELEASE_EVERY=1; release_lock_acquire v1.0.4
+holder a 'release_lock_acquire v1.0.4
   git commit -q --allow-empty -m "merged while held" && git push -q origin HEAD:main
-  release_lock_release 2> '"$fx"'/recheck'
-grep -qx 'pr edit 7 -R acme/repo --add-label release:asap' "$GH_CALLS" || { cat "$GH_CALLS" >&2; fail "a coalesced merge was not re-started"; }
-grep -qF 'labelled #7 release:asap' "$fx/recheck" || fail "the re-check was silent"
-# ...and not when main moved but is not due (below RELEASE_EVERY, no asap PR).
-: > "$GH_CALLS"
-holder a 'RELEASE_EVERY=10; release_lock_acquire v1.0.4
-  git commit -q --allow-empty -m "another" && git push -q origin HEAD:main
   release_lock_release'
-grep -q 'pr edit' "$GH_CALLS" && fail "a not-due main was labelled"
+grep -q 'pr edit' "$GH_CALLS" && fail "a release nobody asked to repeat re-started itself"
+: > "$GH_CALLS"
+holder a 'release_lock_acquire v1.0.4
+  (request "a release:asap PR merged since v1.0.0")
+  release_lock_release 2> '"$fx"'/recheck' || fail "release with a request failed"
+grep -qx 'pr edit 7 -R acme/repo --add-label release:asap' "$GH_CALLS" || { cat "$GH_CALLS" >&2; fail "a coalesced request was lost"; }
+grep -qF 'coalesced: run fixture (a release:asap PR merged since v1.0.0) while a release; labelled #7 release:asap' "$fx/recheck" || { cat "$fx/recheck" >&2; fail "the re-check was silent"; }
+[ -z "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || fail "the request was not consumed"
+# ...and a release that LOST its lock leaves the request for the new holder.
+: > "$GH_CALLS"
+holder a 'RELEASE_LOCK_HEARTBEAT_SECS=3600; release_lock_acquire v1.0.4
+  (request "asap")
+  echo "replaced" > "$RELEASE_LOCK_STATE/lost"
+  release_lock_release 2> /dev/null'
+grep -q 'pr edit' "$GH_CALLS" && fail "a release that lost its lock acted on the new holder's request"
+[ -n "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || fail "a lost release consumed the request"
+git -C "$fx/a" push -q origin :refs/release-lock/coalesced :refs/release-lock/release 2> /dev/null || true
+
 # 5. release_lock_assert proves ownership on origin at the moment of publication: ours ->
 #    0; replaced by another cutter (before our heartbeat has noticed) -> refused.
 holder a 'RELEASE_LOCK_RECHECK=off RELEASE_LOCK_HEARTBEAT_SECS=3600; release_lock_acquire v2.0.0

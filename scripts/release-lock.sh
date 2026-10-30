@@ -15,12 +15,12 @@
 # The release workflow reads the same ref before it starts a captain: a live lock makes
 # the run exit at once as "release in progress by <owner>; coalesced".
 #
-# When the holder releases it, it RE-CHECKS main (release_lock_recheck): if main moved
-# while it held the lock (the merges whose runs were coalesced) and main is now due (a
-# release:asap PR, or RELEASE_EVERY merges since the newest tag), it re-applies
-# release:asap to main's newest merged PR, which starts the release workflow again,
-# judged at main's tip. So a coalesced run is never lost, and a failed cut with nothing
-# merged behind it never re-starts itself.
+# A run that was DUE but coalesced records that on origin (refs/release-lock/coalesced).
+# When the holder releases the lock it acts on that record (release_lock_recheck): it
+# re-applies release:asap to main's newest merged PR, which starts the release workflow
+# again, judged at main's tip. So a coalesced run is never lost, whenever it was asked
+# for (a pending asap merge whose run lands mid-release included), and a failed cut
+# nobody asked to repeat never re-starts itself.
 #
 # The lock FAILS CLOSED. A heartbeat that finds the lock on origin is no longer ours, or
 # that cannot renew it for RELEASE_LOCK_RENEW_DEADLINE_SECS (default: 3 min before it
@@ -39,7 +39,9 @@
 # RELEASE_LOCK=off skips it (fixtures with no remote only); RELEASE_LOCK_RECHECK=off skips
 # the re-check (tests).
 RELEASE_LOCK_REF="refs/release-lock/release" RELEASE_LOCK_STATE="" RELEASE_LOCK_HB_PID=""
-RELEASE_LOCK_MSG="" RELEASE_LOCK_MAIN=""
+RELEASE_LOCK_MSG=""
+# Where the release workflow records a request it coalesced into a live lock.
+RELEASE_LOCK_COALESCED_REF="refs/release-lock/coalesced"
 
 # How long the holder may go without a confirmed renewal before it stops: comfortably
 # inside the stale window, so no other cutter can have replaced a lock we still act on.
@@ -84,12 +86,12 @@ _release_lock_commit() { # <message> -> a fresh commit sha (nonce: never the sam
 # ref private to this call, so what is judged (age, owner) and the sha a caller leases
 # on are one immutable commit: never a shared scratch ref another process in this
 # checkout, or a linked worktree, may have moved in between.
-_release_lock_read() {
-  local remote="${RELEASE_LOCK_REMOTE:-origin}" tmp line ls
+_release_lock_read() { # [ref, default the lock]
+  local remote="${RELEASE_LOCK_REMOTE:-origin}" ref="${1:-$RELEASE_LOCK_REF}" tmp line ls
   tmp="refs/release-chain/lock-read/$$-${RANDOM}${RANDOM}"
-  if ! timeout 30 git fetch -q --no-write-fetch-head "$remote" "+${RELEASE_LOCK_REF}:${tmp}" 2> /dev/null; then
+  if ! timeout 30 git fetch -q --no-write-fetch-head "$remote" "+${ref}:${tmp}" 2> /dev/null; then
     # No such ref on origin is a free lock; anything else is not knowing.
-    ls="$(timeout 30 git ls-remote "$remote" "$RELEASE_LOCK_REF" 2> /dev/null)" || return 1
+    ls="$(timeout 30 git ls-remote "$remote" "$ref" 2> /dev/null)" || return 1
     [ -z "$ls" ] || return 1
     return 0
   fi
@@ -140,7 +142,6 @@ release_lock_acquire() {
   RELEASE_LOCK_STATE="$(mktemp -d)" || return 1
   printf '%s\n' "$sha" > "$RELEASE_LOCK_STATE/sha" && date +%s > "$RELEASE_LOCK_STATE/ok" || return 1
   RELEASE_LOCK_MSG="$msg"
-  RELEASE_LOCK_MAIN="$(timeout 30 git ls-remote "$remote" refs/heads/main 2> /dev/null | cut -f1 || true)"
   export RELEASE_LOCK_HELD="$RELEASE_LOCK_STATE"
   # The heartbeat: replace our own lock commit (CAS on the previous one) until released,
   # or until the holder is gone; fail closed when it cannot (see the header). Detached
@@ -266,39 +267,37 @@ release_lock_release() {
   return 0
 }
 
-# release_lock_recheck: what merged while the lock was held may be due. Re-apply
-# release:asap to main's newest merged PR when it is: an untagged release:asap PR, or
-# RELEASE_EVERY (10) first-parent merges since origin's newest tag. Best effort, quiet;
-# the label event starts the release workflow, which judges main's tip itself.
+# release_lock_recheck: a release run that came due while this lock was held was
+# coalesced into it, and recorded that on origin (refs/release-lock/coalesced: the release
+# workflow's coalesce node). Act on it: consume it (CAS) and re-apply release:asap to
+# main's newest merged PR, which starts the release workflow again, judged at main's tip
+# (a no-op when this release already shipped everything). Nothing recorded, nothing to
+# do: a failed cut never re-starts itself, and a hand cut with no workflow behind it is
+# left alone. Best effort; a request this misses stays on origin for the next release.
 # Like release_lock_release, safe under set -e (it runs from EXIT traps).
 release_lock_recheck() {
   [ "${RELEASE_LOCK_RECHECK:-on}" != off ] || return 0
   command -v gh > /dev/null 2>&1 || return 0
-  local remote="${RELEASE_LOCK_REMOTE:-origin}" slug tag n due="" asap newest oid main
+  local remote="${RELEASE_LOCK_REMOTE:-origin}" slug out sha why asap newest
   slug="${RELEASE_LOCK_SLUG:-$(git remote get-url "$remote" 2> /dev/null | sed -n 's|.*github\.com[:/]\([^/]*/[^/.]*\)\(\.git\)\{0,1\}$|\1|p')}"
   [ -n "$slug" ] || return 0
-  timeout 60 git fetch -q --prune "$remote" '+refs/heads/main:refs/release-chain/main' '+refs/tags/v*:refs/release-chain/origin-tags/v*' 2> /dev/null || return 0
-  main="$(git rev-parse -q --verify refs/release-chain/main)" || return 0
-  # Nothing merged while we held the lock: no run was coalesced behind us, and a cut
-  # that failed must not re-start itself.
-  [ "$main" != "$RELEASE_LOCK_MAIN" ] || return 0
-  tag="$(git for-each-ref --sort=-v:refname --format='%(refname)' refs/release-chain/origin-tags/ | head -n 1)"
-  [ -n "$tag" ] || return 0
-  n="$(git rev-list --first-parent --count "$(git merge-base "$tag" "$main")..$main" 2> /dev/null || echo 0)"
-  [ "$n" -gt 0 ] || return 0
-  [ "$n" -lt "${RELEASE_EVERY:-10}" ] || due="$n merges since the newest tag"
-  if [ -z "$due" ]; then
-    for oid in $(timeout 60 gh pr list -R "$slug" --state merged --base main --label release:asap --limit 1000 --json mergeCommit --jq '.[].mergeCommit.oid' 2> /dev/null); do
-      git merge-base --is-ancestor "$oid" "$main" 2> /dev/null && ! git merge-base --is-ancestor "$oid" "$tag" 2> /dev/null && { due="an untagged release:asap PR"; break; }
-    done
-  fi
-  [ -n "$due" ] || return 0
+  out="$(_release_lock_read "$RELEASE_LOCK_COALESCED_REF" || true)"
+  [ -n "$out" ] || return 0
+  read -r sha _ why <<< "$out"
+  # Consumed by exactly one releaser: a newer request (another sha) stays for the next.
+  timeout 30 git push -q "$remote" --force-with-lease="${RELEASE_LOCK_COALESCED_REF}:${sha}" ":${RELEASE_LOCK_COALESCED_REF}" > /dev/null 2>&1 || return 0
   newest="$(timeout 60 gh pr list -R "$slug" --state merged --base main --limit 1 --json number --jq '.[0].number' 2> /dev/null || true)"
-  [ -n "$newest" ] || return 0
+  if [ -z "$newest" ]; then
+    echo "release-lock: ${why}; no merged PR was found to re-label: add release:asap to one" >&2
+    return 0
+  fi
   asap="$(timeout 30 gh pr view "$newest" -R "$slug" --json labels --jq '[.labels[].name] | index("release:asap") != null' 2> /dev/null || true)"
   # Removed first, so the add is a fresh `labeled` event that starts the workflow.
   [ "$asap" != true ] || timeout 30 gh pr edit "$newest" -R "$slug" --remove-label release:asap > /dev/null 2>&1 || true
-  timeout 30 gh pr edit "$newest" -R "$slug" --add-label release:asap > /dev/null 2>&1 \
-    && echo "release-lock: main has more to release ($due); labelled #$newest release:asap to start the next release" >&2
+  if timeout 30 gh pr edit "$newest" -R "$slug" --add-label release:asap > /dev/null 2>&1; then
+    echo "release-lock: ${why}; labelled #$newest release:asap to start that release" >&2
+  else
+    echo "release-lock: ${why}; labelling #$newest release:asap failed: add it by hand" >&2
+  fi
   return 0
 }
