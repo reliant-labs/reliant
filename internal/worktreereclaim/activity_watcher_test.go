@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -67,6 +68,76 @@ func eventually(t *testing.T, what string, cond func() bool) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// pausedInventoryContext pauses an inventory before it can acquire a watch.
+// The command context deliberately outlives the observation's own context.
+type pausedInventoryContext struct {
+	context.Context
+	once    sync.Once
+	entered chan struct{}
+	resume  chan struct{}
+}
+
+func (c *pausedInventoryContext) Err() error {
+	c.once.Do(func() {
+		close(c.entered)
+		<-c.resume
+	})
+	return c.Context.Err()
+}
+
+func TestRecoveryActivityEndedInventoryCannotAcquireWatches(t *testing.T) {
+	for _, overflow := range []bool{false, true} {
+		name := "cancel"
+		if overflow {
+			name = "overflow"
+		}
+		t.Run(name, func(t *testing.T) {
+			o, ctx, cancel := startedObserver(t)
+			root := t.TempDir()
+			if err := o.Start(ctx, root); err != nil {
+				t.Fatal(err)
+			}
+			_, key, err := activityKey(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			o.mu.Lock()
+			w, watcher := o.running[key], o.watcher
+			o.mu.Unlock()
+			paused := &pausedInventoryContext{
+				Context: context.Background(), entered: make(chan struct{}), resume: make(chan struct{}),
+			}
+			done := make(chan struct{})
+			var scanErr error
+			go func() {
+				_, scanErr = o.inventory(paused, root, w)
+				close(done)
+			}()
+			var resume sync.Once
+			unpause := func() { resume.Do(func() { close(paused.resume) }) }
+			defer func() { unpause(); <-done }()
+			<-paused.entered
+			if overflow {
+				watcher.Errors <- fsnotify.ErrEventOverflow
+			} else {
+				cancel()
+			}
+			eventually(t, "observation teardown", func() bool { return !o.Running(root) })
+			// Allow the old command's inventory to continue only after cleanup.
+			unpause()
+			<-done
+			if scanErr == nil {
+				t.Error("ended inventory acquired watches instead of failing closed")
+			}
+			o.mu.Lock()
+			defer o.mu.Unlock()
+			if len(o.watchRefs) != 0 || len(w.watched) != 0 || len(watcher.WatchList()) != 0 {
+				t.Errorf("ended inventory leaked watches: refs=%v owned=%v kernel=%v", o.watchRefs, w.watched, watcher.WatchList())
+			}
+		})
 	}
 }
 

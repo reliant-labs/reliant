@@ -75,6 +75,7 @@ type activityWatch struct {
 	scanMu         sync.Mutex
 	root           string
 	gitDir         string
+	stopped        bool                // teardown has fenced out new watches; guarded by ActivityObserver.mu
 	gone           bool                // workspace deleted or moved away; guarded by ActivityObserver.mu
 	events         chan fsnotify.Event // this workspace's share of the shared watcher's events
 	errors         chan error          // coverage loss; one pending error is enough
@@ -192,6 +193,11 @@ func (o *ActivityObserver) dropWatcher(watcher *fsnotify.Watcher) {
 func (o *ActivityObserver) addWatch(w *activityWatch, path string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	// Command inventories can outlive the observation's event loop. Fence
+	// acquisition with the same lock teardown holds while releasing watches.
+	if w.stopped {
+		return errors.New("workspace watcher not running")
+	}
 	if w.watched[path] {
 		return nil
 	}
@@ -424,6 +430,7 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 		w.cancel()
 		o.mu.Lock()
 		defer o.mu.Unlock()
+		w.stopped = true
 		if o.running[key] == w {
 			delete(o.running, key)
 			o.publishRoutesLocked()
