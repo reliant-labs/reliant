@@ -74,3 +74,19 @@ func TestWorkflowConcurrencyWaitingLatestRoundTrip(t *testing.T) {
 	require.Equal(t, reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST, wf.GetConcurrency().GetWaiting())
 	require.Equal(t, "{{ trigger.payload.attributes.repository }}", wf.GetConcurrency().GetKey())
 }
+
+func TestWorkflowConcurrencyPerMemberRoundTrip(t *testing.T) {
+	for _, policy := range []string{"{per_member: 4}", "{per_member: 4, max_running: 12}", "{per_member: 4, waiting: latest}"} {
+		t.Run(policy, func(t *testing.T) {
+			wf, err := ParseWorkflow([]byte("name: pooled\nconcurrency: " + policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.NoError(t, err)
+			require.EqualValues(t, 4, wf.GetConcurrency().GetPerMember())
+			encoded, err := MarshalWorkflow(wf)
+			require.NoError(t, err)
+			require.Contains(t, string(encoded), "per_member: 4")
+			again, err := ParseWorkflow(encoded)
+			require.NoError(t, err)
+			require.Equal(t, wf, again)
+		})
+	}
+}

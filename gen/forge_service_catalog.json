@@ -10044,6 +10044,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.DaemonRegistryService/DeleteMachinePool",
+          "name": "DeleteMachinePool",
+          "input": "reliant.v1.DeleteMachinePoolRequest",
+          "output": "reliant.v1.DeleteMachinePoolResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.DaemonRegistryService/GetDaemon",
           "name": "GetDaemon",
           "input": "reliant.v1.GetDaemonRequest",
@@ -10058,6 +10068,26 @@
           "name": "ListDaemons",
           "input": "reliant.v1.ListDaemonsRequest",
           "output": "reliant.v1.ListDaemonsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.DaemonRegistryService/ListMachinePools",
+          "name": "ListMachinePools",
+          "input": "reliant.v1.ListMachinePoolsRequest",
+          "output": "reliant.v1.ListMachinePoolsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.DaemonRegistryService/PutMachinePool",
+          "name": "PutMachinePool",
+          "input": "reliant.v1.PutMachinePoolRequest",
+          "output": "reliant.v1.PutMachinePoolResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -10098,6 +10128,16 @@
           "name": "SetLocalModelEndpoints",
           "input": "reliant.v1.SetLocalModelEndpointsRequest",
           "output": "reliant.v1.SetLocalModelEndpointsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.DaemonRegistryService/SetMachineLabels",
+          "name": "SetMachineLabels",
+          "input": "reliant.v1.SetMachineLabelsRequest",
+          "output": "reliant.v1.SetMachineLabelsResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -10241,6 +10281,89 @@
               "TargetKind": "daemon",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "SetMachineLabels",
+            "InputType": "SetMachineLabelsRequest",
+            "OutputType": "SetMachineLabelsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetMachineLabelsRequest",
+            "OutputTypeFQ": "reliant.v1.SetMachineLabelsResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_machine_labels",
+              "TargetKind": "daemon",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListMachinePools",
+            "InputType": "ListMachinePoolsRequest",
+            "OutputType": "ListMachinePoolsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListMachinePoolsRequest",
+            "OutputTypeFQ": "reliant.v1.ListMachinePoolsResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "PutMachinePool",
+            "InputType": "PutMachinePoolRequest",
+            "OutputType": "PutMachinePoolResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.PutMachinePoolRequest",
+            "OutputTypeFQ": "reliant.v1.PutMachinePoolResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "put_machine_pool",
+              "TargetKind": "machine_pool",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "DeleteMachinePool",
+            "InputType": "DeleteMachinePoolRequest",
+            "OutputType": "DeleteMachinePoolResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DeleteMachinePoolRequest",
+            "OutputTypeFQ": "reliant.v1.DeleteMachinePoolResponse",
+            "InputProtoFile": "reliant/v1/daemon_registry.proto",
+            "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "delete_machine_pool",
+              "TargetKind": "machine_pool",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -10271,6 +10394,14 @@
               "MessageType": "reliant.v1.ClearMachineCachesSkip"
             }
           ],
+          "DeleteMachinePoolRequest": [
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DeleteMachinePoolResponse": null,
           "GetDaemonRequest": [
             {
               "Name": "daemon_id",
@@ -10293,6 +10424,31 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.DaemonInfo"
+            }
+          ],
+          "ListMachinePoolsRequest": null,
+          "ListMachinePoolsResponse": [
+            {
+              "Name": "pools",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.MachinePool"
+            }
+          ],
+          "PutMachinePoolRequest": [
+            {
+              "Name": "pool",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.MachinePoolSpec"
+            }
+          ],
+          "PutMachinePoolResponse": [
+            {
+              "Name": "pool",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.MachinePool"
             }
           ],
           "RefreshLocalModelsRequest": [
@@ -10382,6 +10538,26 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.LocalModelInventory"
+            }
+          ],
+          "SetMachineLabelsRequest": [
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "labels",
+              "ProtoType": "message",
+              "IsOptional": false
+            }
+          ],
+          "SetMachineLabelsResponse": [
+            {
+              "Name": "daemon",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.DaemonInfo"
             }
           ]
         },
@@ -10541,8 +10717,26 @@
             {
               "name": "forge_version",
               "kind": "string"
+            },
+            {
+              "name": "labels",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "pools",
+              "kind": "string",
+              "repeated": true
             }
           ],
+          "reliant.v1.DeleteMachinePoolRequest": [
+            {
+              "name": "name",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.DeleteMachinePoolResponse": [],
           "reliant.v1.DiscoveredProject": [
             {
               "name": "path",
@@ -10704,6 +10898,15 @@
               "repeated": true
             }
           ],
+          "reliant.v1.ListMachinePoolsRequest": [],
+          "reliant.v1.ListMachinePoolsResponse": [
+            {
+              "name": "pools",
+              "kind": "message",
+              "type_name": "reliant.v1.MachinePool",
+              "repeated": true
+            }
+          ],
           "reliant.v1.LocalModelEndpoint": [
             {
               "name": "id",
@@ -10776,6 +10979,106 @@
             {
               "name": "probed_at",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.MachinePool": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "spec",
+              "kind": "message",
+              "type_name": "reliant.v1.MachinePoolSpec"
+            },
+            {
+              "name": "members",
+              "kind": "message",
+              "type_name": "reliant.v1.MachinePoolMember",
+              "repeated": true
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.MachinePoolMember": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "live_runs",
+              "kind": "uint32"
+            },
+            {
+              "name": "size",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.MachinePoolSpec": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "selector",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "min_members",
+              "kind": "uint32"
+            },
+            {
+              "name": "max_members",
+              "kind": "uint32"
+            },
+            {
+              "name": "member_size",
+              "kind": "string"
+            },
+            {
+              "name": "max_runs_per_member",
+              "kind": "uint32"
+            },
+            {
+              "name": "member_idle_timeout",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.PutMachinePoolRequest": [
+            {
+              "name": "pool",
+              "kind": "message",
+              "type_name": "reliant.v1.MachinePoolSpec"
+            }
+          ],
+          "reliant.v1.PutMachinePoolResponse": [
+            {
+              "name": "pool",
+              "kind": "message",
+              "type_name": "reliant.v1.MachinePool"
             }
           ],
           "reliant.v1.RefreshLocalModelsRequest": [
@@ -10855,6 +11158,25 @@
               "kind": "message",
               "type_name": "reliant.v1.LocalModelInventory"
             }
+          ],
+          "reliant.v1.SetMachineLabelsRequest": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "labels",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.SetMachineLabelsResponse": [
+            {
+              "name": "daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonInfo"
+            }
           ]
         },
         "SchemaFiles": {
@@ -10862,6 +11184,8 @@
           "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
           "reliant.v1.DaemonInfo": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.DeleteMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.DeleteMachinePoolResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -10870,9 +11194,16 @@
           "reliant.v1.GetDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ListDaemonsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ListDaemonsResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.ListMachinePoolsRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.ListMachinePoolsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.PutMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -10880,7 +11211,9 @@
           "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
-          "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
+          "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto"
         },
         "Enums": {
           "reliant.v1.DaemonLifecyclePhase": [
@@ -34872,6 +35205,11 @@
               "IsOptional": false
             },
             {
+              "Name": "machine_pool_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
               "Name": "connection_ids",
               "ProtoType": "message",
               "IsOptional": false
@@ -35301,6 +35639,10 @@
             {
               "name": "no_machine",
               "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
             },
             {
               "name": "connection_ids",
@@ -35754,6 +36096,14 @@
               "kind": "bool"
             },
             {
+              "name": "machine_pool_id",
+              "kind": "string"
+            },
+            {
+              "name": "machine_pool_name",
+              "kind": "string"
+            },
+            {
               "name": "health",
               "kind": "message",
               "type_name": "reliant.v1.TriggerHealth"
@@ -35917,6 +36267,10 @@
             {
               "name": "no_machine",
               "kind": "bool"
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string"
             },
             {
               "name": "notify_on_complete",
@@ -36228,6 +36582,11 @@
             {
               "name": "no_machine",
               "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "machine_pool_id",
+              "kind": "string",
               "optional": true
             },
             {
@@ -39965,10 +40324,7 @@
           "reliant.v1.WorkflowConcurrency": [
             {
               "name": "max_running",
-              "kind": "uint32",
-              "validate": {
-                "gt": "0"
-              }
+              "kind": "uint32"
             },
             {
               "name": "waiting",
@@ -39978,6 +40334,10 @@
             {
               "name": "key",
               "kind": "string"
+            },
+            {
+              "name": "per_member",
+              "kind": "uint32"
             }
           ],
           "reliant.v1.WorkflowEventSource": [
@@ -48596,6 +48956,17 @@
           }
         },
         {
+          "id": "method1:4ca80467374dd958f73d7df4c37aae932c224730623ba69699105dc660cb6cd9",
+          "name": "DeleteMachinePool",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.DeleteMachinePoolRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.DeleteMachinePoolResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.DeleteMachinePool",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_delete_machine_pool.go",
+            "symbol": "Service.DeleteMachinePool"
+          }
+        },
+        {
           "id": "method1:ea0956f4b0c106156a6bed474ee7c0a22e3bef923e1e1317598ea60de4d3e555",
           "name": "GetDaemon",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetDaemonRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetDaemonResponse], error)",
@@ -48618,6 +48989,17 @@
           }
         },
         {
+          "id": "method1:abd20062229dd379710cd7b995a93d9f91f1afa276352877dd3f141b89b9ac53",
+          "name": "ListMachinePools",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.ListMachinePoolsRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.ListMachinePoolsResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.ListMachinePools",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_list_machine_pools.go",
+            "symbol": "Service.ListMachinePools"
+          }
+        },
+        {
           "id": "method1:6575ad124c20df6a48251c105314d6202b2b1755cbf05d322866a37ca98feef6",
           "name": "Name",
           "signature": "func() string",
@@ -48626,6 +49008,17 @@
           "source": {
             "path": "internal/handlers/daemon_registry/service.go",
             "symbol": "Service.Name"
+          }
+        },
+        {
+          "id": "method1:44c5f9308b6be89f309007b0961695cc667b7d7d4293609d64eb4c8e30bb57ef",
+          "name": "PutMachinePool",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.PutMachinePoolRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.PutMachinePoolResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.PutMachinePool",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_put_machine_pool.go",
+            "symbol": "Service.PutMachinePool"
           }
         },
         {
@@ -48695,6 +49088,17 @@
           }
         },
         {
+          "id": "method1:fd22624cb4f3cc76180c7e636e2024a82d8f19eb6dfcf174fb2b20dd30d58fd1",
+          "name": "SetMachineLabels",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.SetMachineLabelsRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.SetMachineLabelsResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetMachineLabels",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_set_machine_labels.go",
+            "symbol": "Service.SetMachineLabels"
+          }
+        },
+        {
           "id": "method1:425fbf741716036c2cb2e18f9b18ed17b4df11d64790171cabd3521d11c233b2",
           "name": "attachedDaemonSet",
           "signature": "func(ctx context.Context, userID string) (map[string]*github.com/reliant-labs/reliant/internal/db.DaemonAttachment, error)",
@@ -48714,6 +49118,17 @@
           "source": {
             "path": "internal/handlers/daemon_registry/daemon_registry.go",
             "symbol": "Service.ownedOnlineDaemon"
+          }
+        },
+        {
+          "id": "method1:1eaf48c534ba788b368c4db6c9e0873ac0d1000cf4058df869d018921f06f649",
+          "name": "poolToProto",
+          "signature": "func(ctx context.Context, p *github.com/reliant-labs/reliant/internal/db/core.MachinePool) (*github.com/reliant-labs/reliant/gen/reliant/v1.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.poolToProto",
+          "source": {
+            "path": "internal/handlers/daemon_registry/rpc_list_machine_pools.go",
+            "symbol": "Service.poolToProto"
           }
         },
         {
@@ -49250,6 +49665,17 @@
           }
         },
         {
+          "id": "method1:040b0b4375bd01321ec5fceb73a1508f6c2e3ef0741a69856357551f20c9b49d",
+          "name": "CountMachinePoolMemberLiveRuns",
+          "signature": "func(ctx context.Context, poolID string, daemonID string) (int, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.CountMachinePoolMemberLiveRuns",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.CountMachinePoolMemberLiveRuns"
+          }
+        },
+        {
           "id": "method1:4e34bd7773634a1f3ff9dac4ef2633739c861df81489ebee05d08543e8ddc969",
           "name": "CountMessagesByContextWindow",
           "signature": "func(ctx context.Context, contextWindowID string) (int, error)",
@@ -49335,6 +49761,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.CountThreadsInConversation"
+          }
+        },
+        {
+          "id": "method1:2497033787209f79908b5470f2801da5a6501018216351a4961f34309ab7df15",
+          "name": "CountTriggerCapacityHeldByMember",
+          "signature": "func(ctx context.Context, poolID string, userID string, projectID string, workflowRef string) (map[string]int, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.CountTriggerCapacityHeldByMember",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.CountTriggerCapacityHeldByMember"
           }
         },
         {
@@ -49753,6 +50190,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.DeleteDispatchedRunEventsBefore"
+          }
+        },
+        {
+          "id": "method1:3c097ad6213af57091871aa1d7abbd7339f92dc297748d387fcd2b19488e08eb",
+          "name": "DeleteMachinePoolByName",
+          "signature": "func(ctx context.Context, userID string, name string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.DeleteMachinePoolByName",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.DeleteMachinePoolByName"
           }
         },
         {
@@ -50633,6 +51081,28 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.GetLiveWorktreeByName"
+          }
+        },
+        {
+          "id": "method1:7c2178a0da6caf7d0b60c3a168a486d28e9a5851a1bc4ff9251a051fc4cd60ea",
+          "name": "GetMachinePoolByName",
+          "signature": "func(ctx context.Context, userID string, name string) (*github.com/reliant-labs/reliant/internal/db.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetMachinePoolByName",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.GetMachinePoolByName"
+          }
+        },
+        {
+          "id": "method1:71f0abf875c431e5217b2f8839214cf8414400ba399345e4855041ce4117d77f",
+          "name": "GetMachinePoolForUser",
+          "signature": "func(ctx context.Context, userID string, id string) (*github.com/reliant-labs/reliant/internal/db.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetMachinePoolForUser",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.GetMachinePoolForUser"
           }
         },
         {
@@ -52055,6 +52525,28 @@
           }
         },
         {
+          "id": "method1:0841e1cf02a3d1ab7a565d1c7f06ab34900c491182f1a98c6080d90844a12218",
+          "name": "ListMachinePoolMembers",
+          "signature": "func(ctx context.Context, pool *github.com/reliant-labs/reliant/internal/db.MachinePool, projectID string) ([]github.com/reliant-labs/reliant/internal/db.MachinePoolMemberRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ListMachinePoolMembers",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.ListMachinePoolMembers"
+          }
+        },
+        {
+          "id": "method1:ca7909a512d997cf741f22efb97745417f85039908e03516274dff686fbaca0b",
+          "name": "ListMachinePoolsForUser",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.ListMachinePoolsForUser",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.ListMachinePoolsForUser"
+          }
+        },
+        {
           "id": "method1:02208a52a5545255bdd0cc080b7b32207167f9b6d529d7d1bc0362aea3a59bff",
           "name": "ListMainWorktreesForUser",
           "signature": "func(ctx context.Context, userID string, projectID *string) ([]*github.com/reliant-labs/reliant/internal/db.Worktree, error)",
@@ -52814,6 +53306,17 @@
           }
         },
         {
+          "id": "method1:32226dc8d62733dd3e34e58f4178382de10ffbe26acf74e3b6abb05833318794",
+          "name": "LockMachinePool",
+          "signature": "func(ctx context.Context, id string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.LockMachinePool",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.LockMachinePool"
+          }
+        },
+        {
           "id": "method1:e02ceaf037dcb81904f098ea8d75311e0d9d3705ad918b55cf2e5a2c16b55cf8",
           "name": "LockProviderKey",
           "signature": "func(ctx context.Context, userID string, provider string) (func(), error)",
@@ -53097,6 +53600,17 @@
           "source": {
             "path": "internal/db/integration_access.go",
             "symbol": "Repo.PruneIntegrationAccess"
+          }
+        },
+        {
+          "id": "method1:0265175001d7b0090337f1f705257d0e3c0aed7116d15f1fe3e4314cf386fd84",
+          "name": "PutMachinePool",
+          "signature": "func(ctx context.Context, p *github.com/reliant-labs/reliant/internal/db.MachinePool) (*github.com/reliant-labs/reliant/internal/db.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.PutMachinePool",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.PutMachinePool"
           }
         },
         {
@@ -53570,6 +54084,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetCompactionSummaryMessage"
+          }
+        },
+        {
+          "id": "method1:d03ffffcbb88fae3dd534636ae0c0947804fb2d9da96464447c50087ac427ca5",
+          "name": "SetDaemonLabels",
+          "signature": "func(ctx context.Context, userID string, daemonID string, labels map[string]string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetDaemonLabels",
+          "source": {
+            "path": "internal/db/machine_pool.go",
+            "symbol": "Repo.SetDaemonLabels"
           }
         },
         {
@@ -63101,6 +63626,17 @@
           }
         },
         {
+          "id": "method1:a3148cb1d1b81521903a61516ef58eb9228f779587b1193d34fa5b1a079fb0e6",
+          "name": "ensureGrants",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.ensureGrants",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.ensureGrants"
+          }
+        },
+        {
           "id": "method1:719f3f23f1fdab37ea7754dd786523043232f75f41348b0bbc1155f442dab85b",
           "name": "existingActivationStep",
           "signature": "func(ctx context.Context, userID string, wf *github.com/reliant-labs/reliant/gen/reliant/v1.Workflow, wt *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTrigger, msg *github.com/reliant-labs/reliant/gen/reliant/v1.EnableWorkflowRequest, existing *github.com/reliant-labs/reliant/internal/db/core.Trigger, override *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTriggerOverride, taken map[string]bool) (*github.com/reliant-labs/reliant/internal/handlers/trigger.enableStep, error)",
@@ -63384,6 +63920,17 @@
           "source": {
             "path": "internal/handlers/trigger/trigger.go",
             "symbol": "Service.validateTriggerDaemon"
+          }
+        },
+        {
+          "id": "method1:fc897d53b0528bf77cfccdfe51a981c7a7551ddba4f985f73d45441624dcfeb2",
+          "name": "validateTriggerPool",
+          "signature": "func(ctx context.Context, userID string, def *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinition) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.validateTriggerPool",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.validateTriggerPool"
           }
         },
         {
@@ -67767,6 +68314,17 @@
           }
         },
         {
+          "id": "method1:508238666a87d8ad24b725cbd92e2321d144e2ddfb754241fcd35804ad77794e",
+          "name": "ensureGrants",
+          "signature": "func(ctx context.Context, t *github.com/reliant-labs/reliant/internal/db/core.Trigger)",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.ensureGrants",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.ensureGrants"
+          }
+        },
+        {
           "id": "method1:cf8780e13e1022a974d52f64e16b47845f2d24b9cf896cef05e8651f0571285e",
           "name": "existingActivationStep",
           "signature": "func(ctx context.Context, userID string, wf *github.com/reliant-labs/reliant/gen/reliant/v1.Workflow, wt *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTrigger, msg *github.com/reliant-labs/reliant/gen/reliant/v1.EnableWorkflowRequest, existing *github.com/reliant-labs/reliant/internal/db/core.Trigger, override *github.com/reliant-labs/reliant/gen/reliant/v1.WorkflowTriggerOverride, taken map[string]bool) (*github.com/reliant-labs/reliant/internal/handlers/trigger.enableStep, error)",
@@ -68050,6 +68608,17 @@
           "source": {
             "path": "internal/handlers/trigger/trigger.go",
             "symbol": "Service.validateTriggerDaemon"
+          }
+        },
+        {
+          "id": "method1:7aae1cf0104addb6e5985ed4eed89d571b6183aeaa66312be6a5bdee73c06596",
+          "name": "validateTriggerPool",
+          "signature": "func(ctx context.Context, userID string, def *github.com/reliant-labs/reliant/gen/reliant/v1.TriggerDefinition) error",
+          "scope": "github.com/reliant-labs/reliant/internal/app",
+          "legacy_name": "app.validateTriggerPool",
+          "source": {
+            "path": "internal/handlers/trigger/trigger.go",
+            "symbol": "Service.validateTriggerPool"
           }
         },
         {
@@ -72757,6 +73326,17 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.Repository",
       "methods": [
         {
+          "id": "method1:c80c293bea9a0fc2c4d6fd36981c534677c152fd21b5e11acb73d895644a368e",
+          "name": "DeleteMachinePoolByName",
+          "signature": "func(ctx context.Context, userID string, name string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.DeleteMachinePoolByName",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.DeleteMachinePoolByName"
+          }
+        },
+        {
           "id": "method1:e2d8eb3aff4a78c416514e90c992db845925cb17b7c297966fa64f517f562ef4",
           "name": "GetDaemon",
           "signature": "func(ctx context.Context, id string) (*github.com/reliant-labs/reliant/internal/db.Daemon, error)",
@@ -72809,6 +73389,50 @@
           "source": {
             "path": "internal/handlers/daemon_registry/deps.go",
             "symbol": "Repository.ListFreshDaemonAttachmentsForUser"
+          }
+        },
+        {
+          "id": "method1:8f9d4b928284396d4e5984a8ea1a31221d5555065ffd7f9a392731e745d11a54",
+          "name": "ListMachinePoolMembers",
+          "signature": "func(ctx context.Context, pool *github.com/reliant-labs/reliant/internal/db/core.MachinePool, projectID string) ([]github.com/reliant-labs/reliant/internal/db/core.MachinePoolMemberRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.ListMachinePoolMembers",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.ListMachinePoolMembers"
+          }
+        },
+        {
+          "id": "method1:cd520fbac2b76bf2d35fa9dc399e38b1eb280da3d0d7fe16e6d532975b720c12",
+          "name": "ListMachinePoolsForUser",
+          "signature": "func(ctx context.Context, userID string) ([]*github.com/reliant-labs/reliant/internal/db/core.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.ListMachinePoolsForUser",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.ListMachinePoolsForUser"
+          }
+        },
+        {
+          "id": "method1:b097f4e468ec0148246bb9eff89d8cd355088d767f13a035c3accf1a3a44c573",
+          "name": "PutMachinePool",
+          "signature": "func(ctx context.Context, p *github.com/reliant-labs/reliant/internal/db/core.MachinePool) (*github.com/reliant-labs/reliant/internal/db/core.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.PutMachinePool",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.PutMachinePool"
+          }
+        },
+        {
+          "id": "method1:64b3d2a5aa4a61d7be9c8e0649c365f64a918a634e8c39a05e01089110468c40",
+          "name": "SetDaemonLabels",
+          "signature": "func(ctx context.Context, userID string, daemonID string, labels map[string]string) (bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry",
+          "legacy_name": "daemon_registry.SetDaemonLabels",
+          "source": {
+            "path": "internal/handlers/daemon_registry/deps.go",
+            "symbol": "Repository.SetDaemonLabels"
           }
         }
       ],
@@ -79871,6 +80495,17 @@
           }
         },
         {
+          "id": "method1:f43b97f3d1c360d14358f24a2b826137a2d79e25c8d411321abe48ba176af38a",
+          "name": "GetMachinePoolForUser",
+          "signature": "func(ctx context.Context, userID string, id string) (*github.com/reliant-labs/reliant/internal/db/core.MachinePool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.GetMachinePoolForUser",
+          "source": {
+            "path": "internal/handlers/trigger/deps.go",
+            "symbol": "Repository.GetMachinePoolForUser"
+          }
+        },
+        {
           "id": "method1:375e19c8ae29e558637398f7710bfc04bfa4e50806ea918344d0bf43104f091e",
           "name": "GetPresetBySlug",
           "signature": "func(ctx context.Context, userID string, slug string) (*github.com/reliant-labs/reliant/internal/db.Preset, error)",
@@ -80011,6 +80646,17 @@
           "source": {
             "path": "internal/handlers/trigger/deps.go",
             "symbol": "Repository.GetWorktree"
+          }
+        },
+        {
+          "id": "method1:2f6fbe4667e36179e7ad02185c758b56ede88fe1152e970ee72223e77b034dc9",
+          "name": "ListMachinePoolMembers",
+          "signature": "func(ctx context.Context, pool *github.com/reliant-labs/reliant/internal/db/core.MachinePool, projectID string) ([]github.com/reliant-labs/reliant/internal/db/core.MachinePoolMemberRow, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/trigger",
+          "legacy_name": "trigger.ListMachinePoolMembers",
+          "source": {
+            "path": "internal/handlers/trigger/deps.go",
+            "symbol": "Repository.ListMachinePoolMembers"
           }
         },
         {

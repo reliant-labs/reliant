@@ -14,9 +14,6 @@ var concurrencyWaiting = map[string]reliantv1.WorkflowConcurrencyWaiting{
 	"latest": reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST,
 }
 
-// unmarshalWorkflowConcurrency reads `concurrency:`: max_running (a fixed
-// cap), per_member (K runs per member of the trigger's machine pool), or both
-// (max_running then caps the scaled value). At least one is required.
 func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurrency, error) {
 	if node.Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("concurrency must be a mapping with max_running, per_member, or both")
@@ -41,6 +38,8 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 			if name == "max_running" {
 				policy.MaxRunning = uint32(n)
 			} else {
+				// K runs per member of the trigger's machine pool that can take
+				// work; max_running, when set too, caps the scaled value.
 				policy.PerMember = uint32(n)
 			}
 		case "waiting":
@@ -67,18 +66,18 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 	return policy, nil
 }
 
-// marshalWorkflowConcurrency is the inverse of unmarshalWorkflowConcurrency,
-// emitting only the keys set.
+// marshalWorkflowConcurrency is the inverse of unmarshalWorkflowConcurrency.
+// waiting is emitted only when it was set.
 func marshalWorkflowConcurrency(policy *reliantv1.WorkflowConcurrency) (*yaml.Node, error) {
-	if policy.GetMaxRunning() == 0 && policy.GetPerMember() == 0 {
+	if policy.MaxRunning == 0 && policy.PerMember == 0 {
 		return nil, fmt.Errorf("concurrency requires max_running, per_member, or both")
 	}
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	if policy.GetMaxRunning() > 0 {
-		node.Content = append(node.Content, scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(policy.GetMaxRunning()), 10), "!!int"))
+	if policy.MaxRunning > 0 {
+		node.Content = append(node.Content, scalarNode("max_running", ""), scalarNode(strconv.FormatUint(uint64(policy.MaxRunning), 10), "!!int"))
 	}
-	if policy.GetPerMember() > 0 {
-		node.Content = append(node.Content, scalarNode("per_member", ""), scalarNode(strconv.FormatUint(uint64(policy.GetPerMember()), 10), "!!int"))
+	if policy.PerMember > 0 {
+		node.Content = append(node.Content, scalarNode("per_member", ""), scalarNode(strconv.FormatUint(uint64(policy.PerMember), 10), "!!int"))
 	}
 	for spelling, waiting := range concurrencyWaiting {
 		if policy.Waiting == waiting {

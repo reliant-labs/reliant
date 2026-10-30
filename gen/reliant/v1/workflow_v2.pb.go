@@ -8248,10 +8248,18 @@ func (x *Workflow) GetOnFailure() *Workflow {
 }
 
 // WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+//
+// At least one of the two is set. max_running alone is a fixed cap.
+// per_member scales the cap with the machines the trigger runs on: K runs per
+// member of its machine pool that can take work (eligible: installed, synced
+// with the pool's catalog, not failed or removed), so adding a member raises
+// throughput with no workflow edit. A trigger on one machine counts as a pool
+// of one; a no-machine trigger too. With both set, max_running is a ceiling
+// over the scaled cap.
 type WorkflowConcurrency struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// MaxRunning is how many trigger-launched runs may run at once; later
-	// firings wait.
+	// firings wait. With per_member it is a ceiling over the scaled cap.
 	MaxRunning uint32 `protobuf:"varint,1,opt,name=max_running,json=maxRunning,proto3" json:"max_running,omitempty"`
 	// Waiting is what happens to firings that wait: fifo (the default) keeps
 	// every one, in arrival order; latest keeps only the newest waiting firing
@@ -8261,10 +8269,13 @@ type WorkflowConcurrency struct {
 	// Key groups waiting firings for waiting: latest, a template over `trigger`
 	// like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
 	// Unset: every firing of the workflow shares one key. It only decides which
-	// waiting firings replace each other; max_running still bounds the whole
+	// waiting firings replace each other; the cap still bounds the whole
 	// workflow. A firing whose key cannot be rendered waits and is never
 	// superseded.
-	Key           string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// PerMember scales the cap with the trigger's machine pool: this many runs
+	// per member that can take work (dev-docs/design/machine-pools.md).
+	PerMember     uint32 `protobuf:"varint,4,opt,name=per_member,json=perMember,proto3" json:"per_member,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8318,6 +8329,13 @@ func (x *WorkflowConcurrency) GetKey() string {
 		return x.Key
 	}
 	return ""
+}
+
+func (x *WorkflowConcurrency) GetPerMember() uint32 {
+	if x != nil {
+		return x.PerMember
+	}
+	return 0
 }
 
 var File_reliant_v1_workflow_v2_proto protoreflect.FileDescriptor
@@ -9183,12 +9201,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
-	"\x13WorkflowConcurrency\x12(\n" +
-	"\vmax_running\x18\x01 \x01(\rB\a\xbaH\x04*\x02 \x00R\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa9\x01\n" +
+	"\x13WorkflowConcurrency\x12\x1f\n" +
+	"\vmax_running\x18\x01 \x01(\rR\n" +
 	"maxRunning\x12@\n" +
 	"\awaiting\x18\x02 \x01(\x0e2&.reliant.v1.WorkflowConcurrencyWaitingR\awaiting\x12\x10\n" +
-	"\x03key\x18\x03 \x01(\tR\x03key*\x9a\x01\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\x1d\n" +
+	"\n" +
+	"per_member\x18\x04 \x01(\rR\tperMember*\x9a\x01\n" +
 	"\x1aWorkflowConcurrencyWaiting\x12,\n" +
 	"(WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED\x10\x00\x12%\n" +
 	"!WORKFLOW_CONCURRENCY_WAITING_FIFO\x10\x01\x12'\n" +
