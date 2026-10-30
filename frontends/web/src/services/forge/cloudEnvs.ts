@@ -410,7 +410,11 @@ export async function restartWorkload(environmentId: string, workload: string): 
   };
 }
 
-/** Tear the environment down. `force` removes its deployments with it. */
+/**
+ * Tear the environment down. `force` removes its deployments with it, and
+ * (keep_data unset, the control plane's default) its managed databases' data
+ * too, irreversibly: the caller's confirm must say so.
+ */
 export async function deleteEnvironment(environmentId: string): Promise<void> {
   await client().deleteEnvironment({ environmentId, force: true });
 }
