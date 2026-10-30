@@ -30,6 +30,7 @@ import { usePromotionBundle, usePromotionRollout, useReleaseComparison } from "@
 import type {
   ArtifactChange,
   ChangeKind,
+  ForgeAppliedSlot,
   ObjectDelta,
   ReleaseArtifact,
   ReleaseComparison as Comparison,
@@ -488,6 +489,7 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
   if (!data) return <Note testId="release-rollout-none">The control plane has no rollout record for this promotion.</Note>;
   const workloads: WorkloadRollout[] = [...data.workloads, ...data.unpinned];
   const converged = data.workloads.filter((w) => w.phase === "succeeded").length;
+  const forgeApplied = data.forgeApplied;
   return (
     <Panel
       title={
@@ -495,7 +497,10 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
           Rollout in {env.name} <PhaseStatus phase={data.phase} />
         </span>
       }
-      meta={`${converged} of ${data.workloads.length} workloads converged`}
+      meta={
+        `${converged} of ${data.workloads.length} workloads converged` +
+        (forgeApplied.length > 0 ? ` · ${forgeApplied.length} applied by forge` : "")
+      }
       flush
       testId="release-rollout"
     >
@@ -504,7 +509,7 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
         <p className="px-4 pb-2 text-xs text-ink-muted">A scoped deploy: only {promotion.targets.join(", ")} moved.</p>
       )}
       {workloads.length === 0 ? (
-        <p className="px-4 pb-4 text-sm text-ink-muted">This promotion pinned no workloads.</p>
+        forgeApplied.length === 0 && <p className="px-4 pb-4 text-sm text-ink-muted">This promotion pinned no workloads.</p>
       ) : (
         <Table<WorkloadRollout>
           label="Workloads"
@@ -528,7 +533,7 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
               key: "phase",
               header: "Status",
               render: (_, workload) => (
-                <span title={workload.lastError || undefined}>
+                <span title={workload.lastError || workload.reason || undefined}>
                   <PhaseStatus phase={workload.phase} />
                 </span>
               ),
@@ -543,7 +548,43 @@ export function RolloutTab({ env, promotion }: { env: ReleaseEnv | null; promoti
           ]}
         />
       )}
+      {forgeApplied.length > 0 && <ForgeAppliedGroup slots={forgeApplied} />}
     </Panel>
+  );
+}
+
+/**
+ * The slots forge applies itself, apart from the judged workloads: the control
+ * plane does not observe them, so each row says so in its own reason instead
+ * of a phase badge (their wire phase is UNSPECIFIED, which is not "Cannot be
+ * observed").
+ */
+function ForgeAppliedGroup({ slots }: { slots: ForgeAppliedSlot[] }) {
+  return (
+    <section aria-labelledby="release-rollout-forge-applied-label" data-testid="release-rollout-forge-applied">
+      <p id="release-rollout-forge-applied-label" className="px-4 pb-2 pt-3 text-xs text-ink-muted">
+        Applied by forge
+      </p>
+      <Table<ForgeAppliedSlot>
+        label="Applied by forge"
+        rows={slots}
+        rowKey={(slot) => slot.name}
+        columns={[
+          { key: "name", header: "Workload", className: "font-medium", render: (_, slot) => slot.name },
+          {
+            key: "reason",
+            header: "Status",
+            className: `${GROW} text-ink-muted`,
+            render: (_, slot) => truncated(slot.reason || "Applied by forge (not observed by the control plane)", slot.reason || undefined),
+          },
+          {
+            key: "pinnedDigest",
+            header: "Pinned",
+            render: (_, slot) => (slot.pinnedDigest ? <Mono value={slot.pinnedDigest} /> : <span className="text-ink-muted">—</span>),
+          },
+        ]}
+      />
+    </section>
   );
 }
 

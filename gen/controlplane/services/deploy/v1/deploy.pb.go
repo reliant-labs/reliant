@@ -1045,13 +1045,14 @@ type DeleteDeployEnvironmentRequest struct {
 	// Delete the environment's deployments along with it. Without this, an
 	// environment that still has deployments is refused.
 	Force bool `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
-	// Also destroy the environment's DATA: its managed databases' Postgres
-	// clusters, volumes and credentials, and the workload-cluster namespace.
-	// IRREVERSIBLE. Default false RETAINS the data: the databases keep running
-	// in their namespace (and keep billing as storage) and are listed by
-	// ListRetainedDatabases until purged with DeleteRetainedDatabase. A
-	// re-deploy creates a NEW environment and does not reattach them.
-	DeleteData bool `protobuf:"varint,3,opt,name=delete_data,json=deleteData,proto3" json:"delete_data,omitempty"`
+	// Keep the environment's DATA. By default (false) a delete removes
+	// EVERYTHING the environment runs: workloads, URLs, namespaces AND its
+	// managed databases' Postgres clusters, volumes and credentials
+	// (IRREVERSIBLE). keep_data=true RETAINS the databases instead: they keep
+	// running in their workload namespace, keep billing as storage, and are
+	// listed by ListRetainedDatabases until purged with DeleteRetainedDatabase.
+	// A re-deploy creates a NEW environment and does not reattach them.
+	KeepData bool `protobuf:"varint,5,opt,name=keep_data,json=keepData,proto3" json:"keep_data,omitempty"`
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
@@ -1104,9 +1105,9 @@ func (x *DeleteDeployEnvironmentRequest) GetForce() bool {
 	return false
 }
 
-func (x *DeleteDeployEnvironmentRequest) GetDeleteData() bool {
+func (x *DeleteDeployEnvironmentRequest) GetKeepData() bool {
 	if x != nil {
-		return x.DeleteData
+		return x.KeepData
 	}
 	return false
 }
@@ -1154,8 +1155,8 @@ func (*DeleteDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
 	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{15}
 }
 
-// RetainedDatabase is a managed database whose environment was deleted
-// without delete_data. Its data still exists and still costs storage.
+// RetainedDatabase is a managed database whose environment was deleted with
+// keep_data. Its data still exists and still costs storage.
 type RetainedDatabase struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -8095,14 +8096,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"g\n" +
 	"\x1fUpdateDeployEnvironmentResponse\x12D\n" +
-	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\"\xa5\x01\n" +
+	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\"\xb4\x01\n" +
 	"\x1eDeleteDeployEnvironmentRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x14\n" +
-	"\x05force\x18\x02 \x01(\bR\x05force\x12\x1f\n" +
-	"\vdelete_data\x18\x03 \x01(\bR\n" +
-	"deleteData\x12\x1a\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\x12\x1b\n" +
+	"\tkeep_data\x18\x05 \x01(\bR\bkeepData\x12\x1a\n" +
 	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"!\n" +
+	"\a_org_idJ\x04\b\x03\x10\x04R\vdelete_data\"!\n" +
 	"\x1fDeleteDeployEnvironmentResponse\"\xce\x02\n" +
 	"\x10RetainedDatabase\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +

@@ -1311,6 +1311,11 @@ message DeployWorkloadRollout {
   // completion test `kubectl rollout status` applies.
   int32 updated_replicas = 13;
   int32 desired_replicas = 14;
+
+  // One human line explaining this row's phase: the same sentence the phase
+  // function produced for it. For a DeployRollout.forge_applied row it is
+  // "applied by forge (not observed by the control plane)".
+  string reason = 15;
 }
 
 // DeployRollout is how far ONE promotion has rolled out — the single
@@ -1346,6 +1351,19 @@ message DeployRollout {
   string reason = 9;
   // Set exactly when phase is HELD: what this promotion is waiting on.
   repeated DeployHold holds = 10;
+  // The runtime slots of a snapshot promotion on clusters FORGE applies (a
+  // self-managed environment the hub does not converge, beside any hosted
+  // part the platform does). The control plane holds no applier for them and
+  // makes no observation of them, so they are REPORTED, never gating: phase
+  // above is judged over what the control plane converges — the same rule
+  // the in-flight promote refusal applies — and reason names these clusters.
+  //
+  // Each row's phase and verdict are UNSPECIFIED (not judged here, which is
+  // not UNKNOWN), and its reason is "applied by forge (not observed by the
+  // control plane)". name is `<cluster>/<workload>/<slot>`; pinned_digest is
+  // the snapshot's content for that slot. Printed apart from workloads and
+  // unpinned, because the three have different authority over the phase.
+  repeated DeployWorkloadRollout forge_applied = 11;
 }
 
 // DeployRunStage is one step in a run's timeline, as assembled from the

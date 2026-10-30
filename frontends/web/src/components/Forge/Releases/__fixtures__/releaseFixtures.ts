@@ -23,6 +23,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { DoraMetrics, Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type {
   ArtifactChange,
+  ForgeAppliedSlot,
   ObjectDelta,
   ReleaseArtifact,
   ReleaseBundle,
@@ -455,6 +456,7 @@ function rollout(environmentId: string, promotionId: string): ReleaseRollout {
     desiredReplicas: i === 0 ? 2 : 1,
     convergedAt: p?.createdAt ? new Date(Date.parse(p.createdAt) + (3 + i) * MIN).toISOString() : undefined,
     lastError: "",
+    reason: "",
   }));
   return {
     promotionId,
@@ -464,6 +466,7 @@ function rollout(environmentId: string, promotionId: string): ReleaseRollout {
     finishedAt: p?.createdAt ? new Date(Date.parse(p.createdAt) + 9 * MIN).toISOString() : undefined,
     workloads,
     unpinned: [],
+    forgeApplied: [],
   };
 }
 
@@ -529,6 +532,8 @@ export interface ReleasesFixtureOptions {
   promotionsFail?: boolean;
   /** CompareReleases fails. */
   compareFails?: boolean;
+  /** GetRollout's forge-applied slots (a self-managed environment the hub does not converge). */
+  forgeApplied?: ForgeAppliedSlot[];
 }
 
 export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): ReleasesApi {
@@ -560,7 +565,8 @@ export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): 
         if (options.promotionsFail) throw new ConnectError("ledger unavailable", Code.Unavailable);
         return empty ? [] : (PROMOTIONS[environmentId] ?? []);
       }),
-    getRollout: (environmentId, promotionId) => answer(() => rollout(environmentId, promotionId)),
+    getRollout: (environmentId, promotionId) =>
+      answer(() => ({ ...rollout(environmentId, promotionId), forgeApplied: options.forgeApplied ?? [] })),
     getBundle: (environmentId, bundleId, digest) => answer(() => bundle(environmentId, bundleId, digest)),
     listDeployRuns: (_project, env) => answer(() => (empty ? [] : DEPLOY_RUNS.filter((run) => !env || run.env === env))),
     getDeployRun: (id) =>
