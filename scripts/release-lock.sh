@@ -273,7 +273,9 @@ release_lock_release() {
 # main's newest merged PR, which starts the release workflow again, judged at main's tip
 # (a no-op when this release already shipped everything). Nothing recorded, nothing to
 # do: a failed cut never re-starts itself, and a hand cut with no workflow behind it is
-# left alone. Best effort; a request this misses stays on origin for the next release.
+# left alone. Best effort; a request this misses stays on origin for the next release:
+# one consumed and then not acted on (no merged PR found, the label not applied) is put
+# back, never lost.
 # Like release_lock_release, safe under set -e (it runs from EXIT traps).
 release_lock_recheck() {
   [ "${RELEASE_LOCK_RECHECK:-on}" != off ] || return 0
@@ -288,7 +290,7 @@ release_lock_recheck() {
   timeout 30 git push -q "$remote" --force-with-lease="${RELEASE_LOCK_COALESCED_REF}:${sha}" ":${RELEASE_LOCK_COALESCED_REF}" > /dev/null 2>&1 || return 0
   newest="$(timeout 60 gh pr list -R "$slug" --state merged --base main --limit 1 --json number --jq '.[0].number' 2> /dev/null || true)"
   if [ -z "$newest" ]; then
-    echo "release-lock: ${why}; no merged PR was found to re-label: add release:asap to one" >&2
+    echo "release-lock: ${why}; no merged PR was found to re-label: $(_release_lock_restore_request "$sha")" >&2
     return 0
   fi
   asap="$(timeout 30 gh pr view "$newest" -R "$slug" --json labels --jq '[.labels[].name] | index("release:asap") != null' 2> /dev/null || true)"
@@ -297,7 +299,20 @@ release_lock_recheck() {
   if timeout 30 gh pr edit "$newest" -R "$slug" --add-label release:asap > /dev/null 2>&1; then
     echo "release-lock: ${why}; labelled #$newest release:asap to start that release" >&2
   else
-    echo "release-lock: ${why}; labelling #$newest release:asap failed: add it by hand" >&2
+    echo "release-lock: ${why}; labelling #$newest release:asap failed: $(_release_lock_restore_request "$sha")" >&2
   fi
   return 0
+}
+
+# _release_lock_restore_request <sha>: put a consumed coalesced request back on origin,
+# only where none exists (a newer request recorded since wins), and say what became of it.
+_release_lock_restore_request() {
+  local remote="${RELEASE_LOCK_REMOTE:-origin}"
+  if timeout 30 git push -q "$remote" --force-with-lease="${RELEASE_LOCK_COALESCED_REF}:" "$1:${RELEASE_LOCK_COALESCED_REF}" > /dev/null 2>&1; then
+    echo "the request is back on origin for the next release"
+  elif [ -n "$(_release_lock_read "$RELEASE_LOCK_COALESCED_REF" || true)" ]; then
+    echo "a newer request is on origin for the next release"
+  else
+    echo "the request could not be put back: add release:asap to main's newest merged PR by hand"
+  fi
 }
