@@ -89,9 +89,10 @@ describe("Dashboards", () => {
     const titles = (group: string) => within(screen.getByTestId(`dashboards-group-${group}`)).getAllByRole("row").slice(1).map((r) => r.querySelector("a")?.getAttribute("aria-label"));
     expect(titles("services")).toEqual(["shop: orders service", "shop: api service"]);
     expect(titles("jobs")).toEqual(["shop: jobs"]);
-    expect(titles("product")).toEqual(["Checkout funnel", "Frontend · web", "Billing funnel"]);
+    // The client's own LLM usage built-in is a product dashboard too.
+    expect(titles("product")).toEqual(["LLM usage", "Checkout funnel", "Frontend · web", "Billing funnel"]);
     expect(titles("platform")).toEqual(["shop: workloads", "Daemon fleet"]);
-    expect(screen.getByTestId("dashboards-group-product-count")).toHaveTextContent("3");
+    expect(screen.getByTestId("dashboards-group-product-count")).toHaveTextContent("4");
 
     // A row names its Forge workload; where it came from is secondary, the release in its tooltip.
     const services = screen.getByTestId("dashboards-group-services");
@@ -149,7 +150,8 @@ describe("Dashboards", () => {
     expect(titles("jobs")).toEqual(["shop: jobs"]);
     expect(titles("platform")).toEqual(["shop: workloads"]);
     expect(titles("custom")).toEqual(["Checkout funnel", "Frontend · web", "Checkout latency", "Daemon fleet", "Billing funnel"]);
-    expect(screen.queryByTestId("dashboards-group-product")).not.toBeInTheDocument();
+    // Only the client's own built-in names its group; the server's rows do not.
+    expect(titles("product")).toEqual(["LLM usage"]);
   });
 
   it("stars and unstars at once, for the caller, and pins the star at the top", async () => {

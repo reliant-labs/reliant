@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
@@ -771,6 +772,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithConnectionSecrets(d.Connections.Tokens)
@@ -1175,6 +1177,48 @@ func NewPayloadGC(d PayloadGCDeps) (*PayloadGC, error) {
 func (p *PayloadGC) Run(ctx context.Context) error {
 	p.store.RunGC(ctx, p.horizon)
 	return nil
+}
+
+// llmUsageRetentionInterval is how often the retention job runs. Each pass
+// deletes only what has aged out, so an hour keeps the backlog small.
+const llmUsageRetentionInterval = time.Hour
+
+// LLMUsageRetention deletes per-call LLM usage rows older than
+// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// the delete is idempotent and skips rows another replica is deleting.
+type LLMUsageRetention struct{ repo *db.Repo }
+
+// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+type LLMUsageRetentionDeps struct {
+	DB *db.Repo
+}
+
+// NewLLMUsageRetention is the retention loop.
+//
+//forge:root-only api
+func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
+	return &LLMUsageRetention{repo: d.DB}, nil
+}
+
+// Run prunes until ctx ends.
+func (l *LLMUsageRetention) Run(ctx context.Context) error {
+	ticker := time.NewTicker(llmUsageRetentionInterval)
+	defer ticker.Stop()
+	for {
+		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // apiMountOptions is each user-audience service's mount options on top of the

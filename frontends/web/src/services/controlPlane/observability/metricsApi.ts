@@ -96,22 +96,22 @@ function mapExemplar(e: WireMetricExemplar): MetricExemplar {
 }
 
 /** The metric catalog for the scope's window (the server caps it at 24 hours). */
-export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } & ListMetricCatalogRequest): Promise<ListMetricCatalogResult> {
+export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } & ListMetricCatalogRequest, options: { signal?: AbortSignal } = {}): Promise<ListMetricCatalogResult> {
   const res = await client().listMetrics({
     scope: wireScope(req, req.window),
     nameContains: req.name || undefined,
     limit: req.limit ?? 0,
-  });
+  }, options);
   return { metrics: res.metrics.map(mapMetricInfo), truncated: res.truncated };
 }
 
 /** One metric's detail: its catalog entry, export interval, attribute cardinalities and suggested breakdowns. */
-export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetricRequest): Promise<MetricDetail> {
+export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetricRequest, options: { signal?: AbortSignal } = {}): Promise<MetricDetail> {
   const res = await client().getMetric({
     scope: wireScope(req, req.window),
     metricName: req.name,
     metricType: req.kind ? WIRE_KIND[req.kind] : undefined,
-  });
+  }, options);
   return {
     info: mapMetricInfo(res.info ?? ({ name: req.name } as WireMetricInfo)),
     intervalSeconds: res.intervalSeconds,
@@ -122,7 +122,7 @@ export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetr
 }
 
 /** Up to 20 exemplars of one metric (a sampled observation and its trace), stored traces first. */
-export async function listMetricExemplars(req: ObsScope & { window: TimeWindow } & ListMetricExemplarsRequest): Promise<MetricExemplar[]> {
+export async function listMetricExemplars(req: ObsScope & { window: TimeWindow } & ListMetricExemplarsRequest, options: { signal?: AbortSignal } = {}): Promise<MetricExemplar[]> {
   const range = req.range ? wireScope(req, req.range).timeRange : undefined;
   const res = await client().listMetricExemplars({
     scope: wireScope(req, req.window),
@@ -133,6 +133,6 @@ export async function listMetricExemplars(req: ObsScope & { window: TimeWindow }
     timeRange: range,
     minValue: req.minValue,
     limit: req.limit ?? 0,
-  });
+  }, options);
   return res.exemplars.map(mapExemplar);
 }

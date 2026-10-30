@@ -118,6 +118,14 @@ type Spec struct {
 	// `create_worktree`, …) is refused here. Mutually exclusive with DaemonID.
 	NoMachine bool
 
+	// MachinePool records that a machine pool placed this run: DaemonID is
+	// the member it chose (empty when resuming a launch whose chat is already
+	// pinned). It becomes the chat's MachinePoolID, which is how the pool
+	// counts its members' live runs, and the run's inputs.machine_pool, so a
+	// workflow can address every member (sync-checkouts). Requires DaemonID
+	// on a new chat; mutually exclusive with NoMachine.
+	MachinePool *PoolPlacement
+
 	// Unattended sets inputs.unattended: no human will answer questions or
 	// approvals, so the run must not block on one, and it is withheld the
 	// tools tools.UnattendedWithholding names. Launch sets it for every event
@@ -164,6 +172,21 @@ type Spec struct {
 	// PrepareExecution records the immutable workflow ID in the SAME launch
 	// transaction, before Temporal may accept it or the activation disappears.
 	PrepareExecution func(ctx context.Context, eventID, workflowID string) error
+}
+
+// PoolPlacement is the pool a run was placed by, and its members as
+// placement saw them.
+type PoolPlacement struct {
+	ID      string
+	Name    string
+	Members []PoolMember
+}
+
+// PoolMember is one member of a PoolPlacement.
+type PoolMember struct {
+	ID    string
+	Name  string
+	State string
 }
 
 // Result is what Launch produced.

@@ -33,7 +33,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -242,6 +242,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Workflow definition broken" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.AUTOMATION_RUN_PAUSED:
+      return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation run paused" />;
     case InboxItemKind.RECOVERY:
       return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
@@ -255,7 +257,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
-    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
+    const what = item.payload.value.processes ? "processes" : "storage";
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} ${what}`;
   }
   if (item.payload.case === "automationDefinitionBroken") {
     return item.payload.value.definition?.path || item.workflowName || "Workflow definition";
@@ -423,6 +426,12 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "automationRunPaused": {
+      // Why it paused; while it waits it holds its automation's slot.
+      const reason = payload.value.reason;
+      const text = reason ? `Paused: ${reason}` : "Paused";
+      return { node: text, title: `${text} — later runs of this automation wait until it resumes or ends.` };
+    }
     default:
       return null;
   }
@@ -436,6 +445,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
  * nothing about why every build was failing.
  */
 export function storageDetail(storage: InboxStorageData): string {
+  if (storage.processes) return processesDetail(storage);
   const parts: string[] = [];
   const full = pressuredVolume(storage);
   if (full) {
@@ -470,6 +480,32 @@ export function definitionBrokenDetail(broken: InboxAutomationDefinitionBroken):
   if (def?.dirty) parts.push("uncommitted changes");
   const names = broken.automations.map((a) => a.triggerName).filter(Boolean);
   if (names.length > 0) parts.push(`refuses ${names.join(", ")}`);
+  return parts.join(" · ");
+}
+
+/**
+ * "7,120 of 7,650 processes (93%) · heavy background commands paused · Fix the
+ * gate: `bash scripts/ci-gate.sh all` 4,950 · …". The machine is near its
+ * process limit; the item names the largest process trees by the agent that
+ * started each, so the person can stop the one at fault.
+ */
+export function processesDetail(storage: InboxStorageData): string {
+  const procs = storage.processes;
+  if (!procs) return "";
+  const parts: string[] = [];
+  const count = Number(procs.count);
+  const limit = Number(procs.limit);
+  parts.push(
+    limit > 0
+      ? `${count.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} processes (${Math.round((100 * count) / limit)}%)`
+      : `${count.toLocaleString("en-US")} processes`,
+  );
+  if (procs.refusingHeavy) parts.push("heavy background commands paused");
+  for (const tree of procs.top.slice(0, 3)) {
+    const who = tree.chatTitle || (tree.chatId ? `agent ${tree.chatId.slice(0, 8)}` : "untracked");
+    parts.push(`${who}: \`${tree.command}\` ${Number(tree.tasks).toLocaleString("en-US")}`);
+  }
+  if (!storage.online) parts.push("offline");
   return parts.join(" · ");
 }
 
@@ -549,6 +585,7 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
     case "runFinished":
+    case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open

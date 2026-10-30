@@ -2,7 +2,13 @@
 package runtime
 
 import (
+	"errors"
+	"fmt"
+
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // PauseController bundles the pause-related callbacks that every executor
@@ -90,6 +96,51 @@ type PauseController struct {
 	// threads resuming together share one wake. nil when the run needs no
 	// machine, and in tests.
 	MachineWake *machineResumeWaker
+
+	// GaveUp is the error the run must end with because an unattended
+	// self-pause outlived its self-resume ladder (pauseCoordinator.GaveUp),
+	// or nil. nil func when not wired (tests, on_failure handlers).
+	GaveUp func() error
+}
+
+// gaveUp is GaveUp, nil-safe.
+func (pc *PauseController) gaveUp() error {
+	if pc == nil || pc.GaveUp == nil {
+		return nil
+	}
+	return pc.GaveUp()
+}
+
+// endsRunInsteadOfPausing is the error a step that exhausted its retries ends
+// the run with instead of pausing it, or nil to pause as usual:
+//
+//   - the run already gave up (an unattended self-pause outlived its ladder):
+//     nothing may park any more;
+//   - the step's machine never took its command within the run step's own
+//     wait (types.RunStepMachineUnavailableErrType). That wait was the retry:
+//     a pause would only hold the run, and an automation's capacity slot, for
+//     a resume nobody may send.
+//
+// Every executor's pause site asks this first.
+func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) error {
+	if gaveUp := pc.gaveUp(); gaveUp != nil {
+		return gaveUp
+	}
+	// Any application error on the chain, not only the outermost: a wrapper
+	// may have re-typed the outer one.
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		var appErr *temporal.ApplicationError
+		if !errors.As(e, &appErr) {
+			break
+		}
+		if appErr.Type() == types.RunStepMachineUnavailableErrType {
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
+				types.RunStepMachineUnavailableErrType, nil)
+		}
+		e = appErr
+	}
+	return nil
 }
 
 // failsFast reports whether a step that exhausted its retries on this

@@ -20,6 +20,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -291,7 +292,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat
 		// list) or a run (Runs), for the life of the chat.
-		Origin:          core.ChatOriginOf(ev.Kind),
+		Origin: core.ChatOriginOf(ev.Kind),
+		// Not a column (the chat view derives it from the launch event): set
+		// here so this launch's admission reads the workflow the run will
+		// (chatScope), before that event exists.
+		LaunchKind:      string(ev.Kind),
 		WorkflowID:      &workflowID,
 		SelectedPresets: spec.Presets,
 		CreatedAt:       now,
@@ -307,6 +312,13 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	chat.NoMachine = spec.NoMachine
+	if spec.MachinePool != nil {
+		if spec.NoMachine || spec.DaemonID == "" {
+			return nil, &ValidationError{Reason: "a pool-placed run names the member it was placed on, and has a machine"}
+		}
+		poolID := spec.MachinePool.ID
+		chat.MachinePoolID = &poolID
+	}
 
 	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
 	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
@@ -356,6 +368,20 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if spec.NoMachine && spec.WorktreeID != nil && *spec.WorktreeID != "" {
 		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
 			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
+		}
+	}
+	// A branch workspace's checkout is on one machine; a chat pinned to
+	// another would run its tools against a directory that is not there.
+	// StartChat refuses this first, naming the machine; this covers every
+	// other caller of Launch.
+	if spec.DaemonID != "" {
+		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil {
+			if _, conflict := daemonplacement.WorkspaceMachineConflict(wt, spec.DaemonID); conflict {
+				return nil, &ValidationError{
+					Kind:   ValidationFailedPrecondition,
+					Reason: "this workspace's checkout lives on another machine, so a chat in it cannot run on the one named: omit daemon_id or name the workspace's machine",
+				}
+			}
 		}
 	}
 
@@ -677,6 +703,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it and ends no-machine. Every admission read below is scoped by it, so
 	// the tree, the presets and the input schema all come from that machine.
 	checked := *chat
+	if checked.LaunchKind == "" {
+		// The launch this start records: it decides, as for the run, whether
+		// the workflow may be read from an unfinished draft (chatScope).
+		checked.LaunchKind = string(ev.Kind)
+	}
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
@@ -1123,6 +1154,11 @@ func (l *Launcher) buildInputs(
 				// problem, not a verdict on the inputs.
 				return nil, &InternalError{Reason: "failed to read provider settings", Err: e}
 			}
+			var lookupErr *WorkflowLookupError
+			if errors.As(e, &lookupErr) {
+				// Could not read the workflow: retryable, not a verdict.
+				return nil, &InternalError{Reason: "failed to look up workflow", Err: e}
+			}
 			errMsgs[i] = e.Error()
 		}
 		return nil, &ValidationError{
@@ -1249,6 +1285,11 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// key from a client, so only a launch can make a run unattended.
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
+	}
+	// The pool that placed the run, injected like session_daemon_id: a fact
+	// about the run, not a declared input (workflow.RuntimeInjectedInputs).
+	if pool := p.spec.MachinePool; pool != nil {
+		initialData[InputKeyMachinePool] = machinePoolInput(pool, chat)
 	}
 	// Who the integration writes speak as. Injected after validation like
 	// unattended, and only for an unattended launch: the bot is an

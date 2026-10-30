@@ -77,6 +77,8 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		Message:          t.Message,
 		DaemonId:         t.DaemonID,
 		NoMachine:        t.NoMachine,
+		MachinePoolId:    t.MachinePoolID,
+		MachinePoolName:  t.MachinePoolName,
 		ActingIdentity:   ActingIdentityToProto(t.ActingIdentity),
 		NotifyOnComplete: t.NotifyOnComplete,
 		ProjectName:      t.ProjectName,

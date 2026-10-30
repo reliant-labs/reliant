@@ -554,7 +554,8 @@ function NameCell({ d }: { d: DashboardSummary }) {
             <Tag key={tag}>{tag}</Tag>
           ))}
         </span>
-      ) : d.source === "builtin" ? (
+      ) : d.source === "builtin" && d.viewKind !== "llm-usage" ? (
+        // LLM usage is the caller's own: it needs no billing permission.
         <span className="text-xs text-ink-muted">Requires cost-read permission, not billing management.</span>
       ) : d.description ? (
         <span className="line-clamp-1 text-xs text-ink-muted">{d.description}</span>

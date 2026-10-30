@@ -46,6 +46,12 @@ type MachineSummary struct {
 	Type  string `json:"type,omitempty"`
 	State string `json:"state,omitempty"`
 	Size  string `json:"size,omitempty"`
+	// Labels are the machine's durable labels; Pools the owner's machine
+	// pools whose selector they match (dev-docs/design/machine-pools.md).
+	Labels map[string]string `json:"labels,omitempty"`
+	Pools  []string          `json:"pools,omitempty"`
+	// LiveRuns is, per pool, the live runs that pool placed on this machine.
+	LiveRuns map[string]int `json:"pool_live_runs,omitempty"`
 }
 
 // MachineController reads and acts on the user's machines. internal/app

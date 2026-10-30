@@ -19,7 +19,7 @@ import (
 func TestGetRunNodeOutput(t *testing.T) {
 	rows := []*db.StepExecution{{ID: "a", WorkflowID: "root", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, DurationMs: sql.NullInt64{Int64: 53, Valid: true}, OutputJSON: sql.NullString{String: `{"stdout":"building","stderr":"password=hidden\ncompile failed"}`, Valid: true}}}
 	var b strings.Builder
-	writeRunNodes(&b, rundiagnostics.Nodes(rows), true)
+	writeRunNodes(&b, rundiagnostics.Nodes(rows), true, false)
 	require.Contains(t, b.String(), "gate [failed] (workflow root, attempt 0, 53 ms, exit 2)")
 	require.Contains(t, b.String(), "stdout (tail):\nbuilding")
 	require.Contains(t, b.String(), "stderr (tail):\n[REDACTED: credential-bearing diagnostic omitted]")
@@ -92,9 +92,39 @@ func TestGetRunReportsAUsageLimitWait(t *testing.T) {
 	require.Equal(t, "2026-10-28T09:00:00Z", detail.UsageLimitRetriesAt)
 }
 
+// Bugs fe84af3c / eef49267: release-forge run 5104d4ee failed in the second it
+// was created, with no node attempts, and get_run said only "State failed, No
+// recorded nodes yet". A failed run reports the reason recorded on the run
+// itself, and says the run never reached a node.
+func TestGetRunReportsWhyARunFailedBeforeItsFirstNode(t *testing.T) {
+	root := "root"
+	reason := "workflow input validation failed: validation failed with 1 error(s):\n  1. release-forge.inputs.asap: input 'asap' expects boolean, got string \"true\""
+	repo := &MockgetRunStore{}
+	repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+		return &db.Chat{ID: id, UserID: "owner", WorkflowID: &root,
+			RootStatus: db.WorkflowStatus{State: db.WorkflowStateStopped, StopReason: db.StopReasonFailed}}, nil
+	}
+	repo.GetWorkflowFunc = func(_ context.Context, id string) (*db.Workflow, error) {
+		require.Equal(t, root, id)
+		return &db.Workflow{ID: id, FailureDetail: &reason}, nil
+	}
+	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) { return nil, sql.ErrNoRows }
+	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
+
+	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "State: failed\nFailure: workflow input validation failed")
+	require.Contains(t, resp.Content, "input 'asap' expects boolean")
+	require.Contains(t, resp.Content, "None: the run failed before its first node ran")
+	var detail RunDetail
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &detail))
+	require.Equal(t, reason, detail.Failure)
+}
+
 func TestRunNodesEmptyIsExplicit(t *testing.T) {
 	var b strings.Builder
-	writeRunNodes(&b, []*pb.RunNodeExecution{}, false)
+	writeRunNodes(&b, []*pb.RunNodeExecution{}, false, false)
 	require.Contains(t, b.String(), "No recorded nodes yet")
 }
 
@@ -114,7 +144,7 @@ func TestGetRunShowsNestedNodesAndTheDeclaringNode(t *testing.T) {
 			ActivityName: "CallLLM", Success: sql.NullBool{Bool: true, Valid: true}, LoopIteration: sql.NullInt64{Int64: 3, Valid: true}},
 	}
 	var b strings.Builder
-	writeRunNodes(&b, rundiagnostics.Nodes(rows), false)
+	writeRunNodes(&b, rundiagnostics.Nodes(rows), false, false)
 	out := b.String()
 	require.Contains(t, out, "- stopped [failed]")
 	require.Contains(t, out, "Error: declared the run's outcome: failure: Review did not finish: Bearer [REDACTED]")

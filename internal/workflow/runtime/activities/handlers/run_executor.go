@@ -28,14 +28,18 @@ type RunExecutor interface {
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
 // Set by the activity before calling ExecuteCommand.
 type RunExecutorContext struct {
-	UserID         string
-	ChatID         string
-	ProjectID      string
-	ProjectPath    string
-	ProjectName    string
-	WorktreeID     string
-	WorktreePath   string
-	DaemonSelector *toolexec.DaemonSelector // Target daemon for execution (optional)
+	UserID       string
+	ChatID       string
+	ProjectID    string
+	ProjectPath  string
+	ProjectName  string
+	WorktreeID   string
+	WorktreePath string
+	// WorktreeDaemonID is the machine holding the chat's branch workspace
+	// (worktrees.daemon_id); empty for the main checkout or an unattributed
+	// row.
+	WorktreeDaemonID string
+	DaemonSelector   *toolexec.DaemonSelector // Target daemon for execution (optional)
 	// NoMachine is the chat's no-machine fact: a command has nowhere to run.
 	NoMachine bool
 	// Credentials is the run node's `credentials` setting ("none" strips
@@ -139,6 +143,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 				Command:       command,
 				Detail:        result.Content,
 				NotDispatched: result.NotDispatched,
+				DaemonID:      result.DaemonID,
 			}
 		}
 		// The tool itself reported an error (bad input, tool not found, …):
@@ -202,6 +207,7 @@ func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore
 		execCtx.WorktreePath = worktree.Path
 		worktreeOwner = ptrValue(worktree.DaemonID)
 	}
+	execCtx.WorktreeDaemonID = worktreeOwner
 	// Live workflow snapshots can predate launch-time pinning. The durable
 	// chat pin, not a newly connected default, places commands and log writes.
 	// A chat worktree's owner is the fallback when the chat has no pin; an

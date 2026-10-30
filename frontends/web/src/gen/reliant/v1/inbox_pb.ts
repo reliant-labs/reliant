@@ -12,7 +12,7 @@ import type { ApprovalType } from "./approval_pb";
 import { file_reliant_v1_approval } from "./approval_pb";
 import type { DiskVolume } from "./tools_daemon_pb";
 import { file_reliant_v1_tools_daemon } from "./tools_daemon_pb";
-import type { TriggerEventDefinition, TriggerHealth, TriggerSetupIssue } from "./trigger_pb";
+import type { TriggerHealth, TriggerSetupIssue } from "./trigger_pb";
 import { file_reliant_v1_trigger } from "./trigger_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLrBgoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAElMKHGF1dG9tYXRpb25fZGVmaW5pdGlvbl9icm9rZW4YHSABKAsyKy5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkRlZmluaXRpb25Ccm9rZW5IAEIJCgdwYXlsb2FkIosCChFSZWNvdmVyeUluYm94SXRlbRITCgtyZWNvdmVyeV9pZBgBIAEoCRIaChJzb3VyY2Vfd29ya3RyZWVfaWQYAiABKAkSHAoUc291cmNlX3dvcmt0cmVlX25hbWUYAyABKAkSEgoKcHJvamVjdF9pZBgEIAEoCRIUCgxwcm9qZWN0X25hbWUYBSABKAkSDQoFcGhhc2UYBiABKAkSFgoOY2hlY2tvdXRfY291bnQYByABKAUSEgoKbGFzdF9lcnJvchgIIAEoCRIRCglvcGVyYXRpb24YCSABKAkSFQoNb3BlcmF0aW9uX2tleRgKIAEoCRIYChB0YXJnZXRfZGFlbW9uX2lkGAsgASgJIqEBCg1JbmJveEFwcHJvdmFsEhMKC2FwcHJvdmFsX2lkGAEgASgJEi8KDWFwcHJvdmFsX3R5cGUYAiABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRINCgV0aXRsZRgDIAEoCUoECAQQBUoECAUQBkoECAYQB1IJdG9vbF9uYW1lUgx0b29sX2NhbGxfaWRSEGFyZ3VtZW50X3N1bW1hcnkiegoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQESDQoFYXN5bmMYBSABKAhCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCKSAQofSW5ib3hBdXRvbWF0aW9uRGVmaW5pdGlvbkJyb2tlbhI2CgpkZWZpbml0aW9uGAEgASgLMiIucmVsaWFudC52MS5UcmlnZ2VyRXZlbnREZWZpbml0aW9uEjcKC2F1dG9tYXRpb25zGAIgAygLMiIucmVsaWFudC52MS5JbmJveFJlZnVzZWRBdXRvbWF0aW9uIkIKFkluYm94UmVmdXNlZEF1dG9tYXRpb24SEgoKdHJpZ2dlcl9pZBgBIAEoCRIUCgx0cmlnZ2VyX25hbWUYAiABKAkiSgoZSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cBItCgZpc3N1ZXMYASADKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJTZXR1cElzc3VlIl0KG0luYm94QXV0b21hdGlvbkxhdW5jaEZhaWxlZBIOCgZyZWFzb24YASABKAkSEAoIZXZlbnRfaWQYAiABKAkSHAoUY29uc2VjdXRpdmVfZmFpbHVyZXMYAyABKAUiEgoQSW5ib3hSdW5GaW5pc2hlZCIrChdEaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBIQCghpdGVtX2lkcxgCIAMoCSIaChhEaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiKwoXUmVzdG9yZUluYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYASADKAkiGgoYUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIu0BCgxJbmJveFN0b3JhZ2USEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhAKCGRpc2tfbG93GAUgASgIEhMKC3JlcG9ydGVkX2F0GAYgASgJEiYKBGhlbGQYByADKAsyGC5yZWxpYW50LnYxLkhlbGRXb3JrdHJlZRIOCgZvbmxpbmUYCCABKAgSJwoHdm9sdW1lcxgJIAMoCzIWLnJlbGlhbnQudjEuRGlza1ZvbHVtZUoECAMQBEoECAQQBVIPZGlza19mcmVlX2J5dGVzUhBkaXNrX3RvdGFsX2J5dGVzIq4BCgxIZWxkV29ya3RyZWUSEwoLd29ya3RyZWVfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgxwcm9qZWN0X25hbWUYAyABKAkSDAoEcGF0aBgEIAEoCRIOCgZyZWFzb24YBSABKAkSDgoGZGV0YWlsGAYgASgJEhIKCnNpemVfYnl0ZXMYByABKAMSEQoJcmVtb3ZhYmxlGAggASgIEhAKCGNsZWFuaW5nGAkgASgIIkAKFUNsZWFudXBTdG9yYWdlUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSFAoMd29ya3RyZWVfaWRzGAIgAygJIksKFkNsZWFudXBTdG9yYWdlUmVzcG9uc2USMQoHcmVzdWx0cxgBIAMoCzIgLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXN1bHQicAoUQ2xlYW51cFN0b3JhZ2VSZXN1bHQSEwoLd29ya3RyZWVfaWQYASABKAkSMgoHb3V0Y29tZRgCIAEoDjIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VPdXRjb21lEg8KB21lc3NhZ2UYAyABKAkqpgMKDUluYm94SXRlbUtpbmQSHwobSU5CT1hfSVRFTV9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYSU5CT1hfSVRFTV9LSU5EX0FQUFJPVkFMEAESHAoYSU5CT1hfSVRFTV9LSU5EX1FVRVNUSU9OEAISJwojSU5CT1hfSVRFTV9LSU5EX1dBSVRJTkdfRk9SX01BQ0hJTkUQAxImCiJJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9GQUlMSU5HEAQSLAooSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTEFVTkNIX0ZBSUxFRBAFEiAKHElOQk9YX0lURU1fS0lORF9SVU5fRklOSVNIRUQQBhIbChdJTkJPWF9JVEVNX0tJTkRfU1RPUkFHRRAHEioKJklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX05FRURTX1NFVFVQEAgSHAoYSU5CT1hfSVRFTV9LSU5EX1JFQ09WRVJZEAkSMAosSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fREVGSU5JVElPTl9CUk9LRU4QCiqLAQoVQ2xlYW51cFN0b3JhZ2VPdXRjb21lEicKI0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASJAogQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfQUNDRVBURUQQARIjCh9DTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9TS0lQUEVEEAIyngQKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgAShQEKDkNsZWFudXBTdG9yYWdlEiEucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzcG9uc2UiLKK7GCg6JgoPY2xlYW51cF9zdG9yYWdlEhMKBmRhZW1vbhIJZGFlbW9uX2lkEqQBChBEaXNtaXNzSW5ib3hJdGVtEiMucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIkWiuxhBOj86PXBlci11c2VyIGluYm94IHJlYWQgc3RhdGU6IGhpZGVzIGl0ZW1zIHdpdGhvdXQgcmVzb2x2aW5nIHRoZW0SkgEKEFJlc3RvcmVJbmJveEl0ZW0SIy5yZWxpYW50LnYxLlJlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVzcG9uc2UiM6K7GC86LTorcGVyLXVzZXIgaW5ib3ggcmVhZCBzdGF0ZTogdW5kb2VzIGEgZGlzbWlzc0I6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLdBgoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAEkUKFWF1dG9tYXRpb25fcnVuX3BhdXNlZBgdIAEoCzIkLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uUnVuUGF1c2VkSABCCQoHcGF5bG9hZCIqChhJbmJveEF1dG9tYXRpb25SdW5QYXVzZWQSDgoGcmVhc29uGAEgASgJIosCChFSZWNvdmVyeUluYm94SXRlbRITCgtyZWNvdmVyeV9pZBgBIAEoCRIaChJzb3VyY2Vfd29ya3RyZWVfaWQYAiABKAkSHAoUc291cmNlX3dvcmt0cmVlX25hbWUYAyABKAkSEgoKcHJvamVjdF9pZBgEIAEoCRIUCgxwcm9qZWN0X25hbWUYBSABKAkSDQoFcGhhc2UYBiABKAkSFgoOY2hlY2tvdXRfY291bnQYByABKAUSEgoKbGFzdF9lcnJvchgIIAEoCRIRCglvcGVyYXRpb24YCSABKAkSFQoNb3BlcmF0aW9uX2tleRgKIAEoCRIYChB0YXJnZXRfZGFlbW9uX2lkGAsgASgJIqEBCg1JbmJveEFwcHJvdmFsEhMKC2FwcHJvdmFsX2lkGAEgASgJEi8KDWFwcHJvdmFsX3R5cGUYAiABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRINCgV0aXRsZRgDIAEoCUoECAQQBUoECAUQBkoECAYQB1IJdG9vbF9uYW1lUgx0b29sX2NhbGxfaWRSEGFyZ3VtZW50X3N1bW1hcnkiegoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQESDQoFYXN5bmMYBSABKAhCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCJKChlJbmJveEF1dG9tYXRpb25OZWVkc1NldHVwEi0KBmlzc3VlcxgBIAMoCzIdLnJlbGlhbnQudjEuVHJpZ2dlclNldHVwSXNzdWUiXQobSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkEg4KBnJlYXNvbhgBIAEoCRIQCghldmVudF9pZBgCIAEoCRIcChRjb25zZWN1dGl2ZV9mYWlsdXJlcxgDIAEoBSISChBJbmJveFJ1bkZpbmlzaGVkIisKF0Rpc21pc3NJbmJveEl0ZW1SZXF1ZXN0EhAKCGl0ZW1faWRzGAIgAygJIhoKGERpc21pc3NJbmJveEl0ZW1SZXNwb25zZSIrChdSZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBIQCghpdGVtX2lkcxgBIAMoCSIaChhSZXN0b3JlSW5ib3hJdGVtUmVzcG9uc2Ui7QEKDEluYm94U3RvcmFnZRIRCglkYWVtb25faWQYASABKAkSEwoLZGFlbW9uX25hbWUYAiABKAkSEAoIZGlza19sb3cYBSABKAgSEwoLcmVwb3J0ZWRfYXQYBiABKAkSJgoEaGVsZBgHIAMoCzIYLnJlbGlhbnQudjEuSGVsZFdvcmt0cmVlEg4KBm9ubGluZRgIIAEoCBInCgd2b2x1bWVzGAkgAygLMhYucmVsaWFudC52MS5EaXNrVm9sdW1lSgQIAxAESgQIBBAFUg9kaXNrX2ZyZWVfYnl0ZXNSEGRpc2tfdG90YWxfYnl0ZXMirgEKDEhlbGRXb3JrdHJlZRITCgt3b3JrdHJlZV9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHByb2plY3RfbmFtZRgDIAEoCRIMCgRwYXRoGAQgASgJEg4KBnJlYXNvbhgFIAEoCRIOCgZkZXRhaWwYBiABKAkSEgoKc2l6ZV9ieXRlcxgHIAEoAxIRCglyZW1vdmFibGUYCCABKAgSEAoIY2xlYW5pbmcYCSABKAgiQAoVQ2xlYW51cFN0b3JhZ2VSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIUCgx3b3JrdHJlZV9pZHMYAiADKAkiSwoWQ2xlYW51cFN0b3JhZ2VSZXNwb25zZRIxCgdyZXN1bHRzGAEgAygLMiAucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlc3VsdCJwChRDbGVhbnVwU3RvcmFnZVJlc3VsdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIyCgdvdXRjb21lGAIgASgOMiEucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZU91dGNvbWUSDwoHbWVzc2FnZRgDIAEoCSqfAwoNSW5ib3hJdGVtS2luZBIfChtJTkJPWF9JVEVNX0tJTkRfVU5TUEVDSUZJRUQQABIcChhJTkJPWF9JVEVNX0tJTkRfQVBQUk9WQUwQARIcChhJTkJPWF9JVEVNX0tJTkRfUVVFU1RJT04QAhInCiNJTkJPWF9JVEVNX0tJTkRfV0FJVElOR19GT1JfTUFDSElORRADEiYKIklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0ZBSUxJTkcQBBIsCihJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9MQVVOQ0hfRkFJTEVEEAUSIAocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRBAGEhsKF0lOQk9YX0lURU1fS0lORF9TVE9SQUdFEAcSKgomSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTkVFRFNfU0VUVVAQCBIcChhJTkJPWF9JVEVNX0tJTkRfUkVDT1ZFUlkQCRIpCiVJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9SVU5fUEFVU0VEEAoqiwEKFUNsZWFudXBTdG9yYWdlT3V0Y29tZRInCiNDTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9VTlNQRUNJRklFRBAAEiQKIENMRUFOVVBfU1RPUkFHRV9PVVRDT01FX0FDQ0VQVEVEEAESIwofQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfU0tJUFBFRBACMp4ECgxJbmJveFNlcnZpY2USSgoJTGlzdEluYm94EhwucmVsaWFudC52MS5MaXN0SW5ib3hSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0SW5ib3hSZXNwb25zZSIAEoUBCg5DbGVhbnVwU3RvcmFnZRIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXF1ZXN0GiIucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlc3BvbnNlIiyiuxgoOiYKD2NsZWFudXBfc3RvcmFnZRITCgZkYWVtb24SCWRhZW1vbl9pZBKkAQoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSJForsYQTo/Oj1wZXItdXNlciBpbmJveCByZWFkIHN0YXRlOiBoaWRlcyBpdGVtcyB3aXRob3V0IHJlc29sdmluZyB0aGVtEpIBChBSZXN0b3JlSW5ib3hJdGVtEiMucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIjOiuxgvOi06K3Blci11c2VyIGluYm94IHJlYWQgc3RhdGU6IHVuZG9lcyBhIGRpc21pc3NCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -114,7 +114,9 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
    * Stable key for dismissal and de-duplication, prefixed by kind
    * ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
    * "automation_launch_failed:", "run_finished:", "storage:",
-   * "automation_needs_setup:"). Approvals and questions
+   * "automation_needs_setup:", "automation_run_paused:"). An automation run
+   * paused embeds the chat id and when the failure that paused it happened,
+   * so a later pause is a new item. Approvals and questions
    * embed their row id; waiting-for-machine embeds the chat id and when the
    * block began, so a later block is a new item; run-finished embeds the chat
    * id. Automation failure items embed the id of the FIRST failing event of the
@@ -242,10 +244,10 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
     case: "recovery";
   } | {
     /**
-     * @generated from field: reliant.v1.InboxAutomationDefinitionBroken automation_definition_broken = 29;
+     * @generated from field: reliant.v1.InboxAutomationRunPaused automation_run_paused = 29;
      */
-    value: InboxAutomationDefinitionBroken;
-    case: "automationDefinitionBroken";
+    value: InboxAutomationRunPaused;
+    case: "automationRunPaused";
   } | { case: undefined; value?: undefined };
 };
 
@@ -255,6 +257,30 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
  */
 export const InboxItemSchema: GenMessage<InboxItem> = /*@__PURE__*/
   messageDesc(file_reliant_v1_inbox, 2);
+
+/**
+ * InboxAutomationRunPaused is a paused run of an automation. The item's
+ * chat_id is the run to open; waiting_since is when the step that paused it
+ * failed.
+ *
+ * @generated from message reliant.v1.InboxAutomationRunPaused
+ */
+export type InboxAutomationRunPaused = Message<"reliant.v1.InboxAutomationRunPaused"> & {
+  /**
+   * The failure that paused the run (the failing step's error), or empty
+   * when none was recorded.
+   *
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message reliant.v1.InboxAutomationRunPaused.
+ * Use `create(InboxAutomationRunPausedSchema)` to create a new message.
+ */
+export const InboxAutomationRunPausedSchema: GenMessage<InboxAutomationRunPaused> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 3);
 
 /**
  * Catalog-backed information; RestoreInboxItem still only undismisses.
@@ -325,7 +351,7 @@ export type RecoveryInboxItem = Message<"reliant.v1.RecoveryInboxItem"> & {
  * Use `create(RecoveryInboxItemSchema)` to create a new message.
  */
 export const RecoveryInboxItemSchema: GenMessage<RecoveryInboxItem> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 3);
+  messageDesc(file_reliant_v1_inbox, 4);
 
 /**
  * @generated from message reliant.v1.InboxApproval
@@ -354,7 +380,7 @@ export type InboxApproval = Message<"reliant.v1.InboxApproval"> & {
  * Use `create(InboxApprovalSchema)` to create a new message.
  */
 export const InboxApprovalSchema: GenMessage<InboxApproval> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 4);
+  messageDesc(file_reliant_v1_inbox, 5);
 
 /**
  * @generated from message reliant.v1.InboxQuestion
@@ -399,7 +425,7 @@ export type InboxQuestion = Message<"reliant.v1.InboxQuestion"> & {
  * Use `create(InboxQuestionSchema)` to create a new message.
  */
 export const InboxQuestionSchema: GenMessage<InboxQuestion> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 5);
+  messageDesc(file_reliant_v1_inbox, 6);
 
 /**
  * @generated from message reliant.v1.InboxWaitingForMachine
@@ -423,7 +449,7 @@ export type InboxWaitingForMachine = Message<"reliant.v1.InboxWaitingForMachine"
  * Use `create(InboxWaitingForMachineSchema)` to create a new message.
  */
 export const InboxWaitingForMachineSchema: GenMessage<InboxWaitingForMachine> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 6);
+  messageDesc(file_reliant_v1_inbox, 7);
 
 /**
  * @generated from message reliant.v1.InboxAutomationFailing
@@ -447,66 +473,13 @@ export type InboxAutomationFailing = Message<"reliant.v1.InboxAutomationFailing"
  * Use `create(InboxAutomationFailingSchema)` to create a new message.
  */
 export const InboxAutomationFailingSchema: GenMessage<InboxAutomationFailing> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 7);
+  messageDesc(file_reliant_v1_inbox, 8);
 
 /**
  * InboxAutomationNeedsSetup is an automation waiting for its owner to finish
  * setting it up. The item's workflow_name and project_id locate the workflow
  * page's automation.
- * InboxAutomationDefinitionBroken is one broken version of one workflow file
- * and the enabled automations it refuses.
  *
- * @generated from message reliant.v1.InboxAutomationDefinitionBroken
- */
-export type InboxAutomationDefinitionBroken = Message<"reliant.v1.InboxAutomationDefinitionBroken"> & {
-  /**
-   * The broken version: path, machine, branch, commit, content hash and the
-   * error.
-   *
-   * @generated from field: reliant.v1.TriggerEventDefinition definition = 1;
-   */
-  definition?: TriggerEventDefinition | undefined;
-
-  /**
-   * The enabled automations whose firings it refuses, by name.
-   *
-   * @generated from field: repeated reliant.v1.InboxRefusedAutomation automations = 2;
-   */
-  automations: InboxRefusedAutomation[];
-};
-
-/**
- * Describes the message reliant.v1.InboxAutomationDefinitionBroken.
- * Use `create(InboxAutomationDefinitionBrokenSchema)` to create a new message.
- */
-export const InboxAutomationDefinitionBrokenSchema: GenMessage<InboxAutomationDefinitionBroken> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 8);
-
-/**
- * InboxRefusedAutomation is one automation a broken definition refuses.
- *
- * @generated from message reliant.v1.InboxRefusedAutomation
- */
-export type InboxRefusedAutomation = Message<"reliant.v1.InboxRefusedAutomation"> & {
-  /**
-   * @generated from field: string trigger_id = 1;
-   */
-  triggerId: string;
-
-  /**
-   * @generated from field: string trigger_name = 2;
-   */
-  triggerName: string;
-};
-
-/**
- * Describes the message reliant.v1.InboxRefusedAutomation.
- * Use `create(InboxRefusedAutomationSchema)` to create a new message.
- */
-export const InboxRefusedAutomationSchema: GenMessage<InboxRefusedAutomation> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 9);
-
-/**
  * @generated from message reliant.v1.InboxAutomationNeedsSetup
  */
 export type InboxAutomationNeedsSetup = Message<"reliant.v1.InboxAutomationNeedsSetup"> & {
@@ -523,7 +496,7 @@ export type InboxAutomationNeedsSetup = Message<"reliant.v1.InboxAutomationNeeds
  * Use `create(InboxAutomationNeedsSetupSchema)` to create a new message.
  */
 export const InboxAutomationNeedsSetupSchema: GenMessage<InboxAutomationNeedsSetup> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 10);
+  messageDesc(file_reliant_v1_inbox, 9);
 
 /**
  * @generated from message reliant.v1.InboxAutomationLaunchFailed
@@ -557,7 +530,7 @@ export type InboxAutomationLaunchFailed = Message<"reliant.v1.InboxAutomationLau
  * Use `create(InboxAutomationLaunchFailedSchema)` to create a new message.
  */
 export const InboxAutomationLaunchFailedSchema: GenMessage<InboxAutomationLaunchFailed> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 11);
+  messageDesc(file_reliant_v1_inbox, 10);
 
 /**
  * InboxRunFinished is a completed run of an automation that opted in to
@@ -574,7 +547,7 @@ export type InboxRunFinished = Message<"reliant.v1.InboxRunFinished"> & {
  * Use `create(InboxRunFinishedSchema)` to create a new message.
  */
 export const InboxRunFinishedSchema: GenMessage<InboxRunFinished> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 12);
+  messageDesc(file_reliant_v1_inbox, 11);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemRequest
@@ -593,7 +566,7 @@ export type DismissInboxItemRequest = Message<"reliant.v1.DismissInboxItemReques
  * Use `create(DismissInboxItemRequestSchema)` to create a new message.
  */
 export const DismissInboxItemRequestSchema: GenMessage<DismissInboxItemRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 13);
+  messageDesc(file_reliant_v1_inbox, 12);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemResponse
@@ -606,7 +579,7 @@ export type DismissInboxItemResponse = Message<"reliant.v1.DismissInboxItemRespo
  * Use `create(DismissInboxItemResponseSchema)` to create a new message.
  */
 export const DismissInboxItemResponseSchema: GenMessage<DismissInboxItemResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 14);
+  messageDesc(file_reliant_v1_inbox, 13);
 
 /**
  * @generated from message reliant.v1.RestoreInboxItemRequest
@@ -623,7 +596,7 @@ export type RestoreInboxItemRequest = Message<"reliant.v1.RestoreInboxItemReques
  * Use `create(RestoreInboxItemRequestSchema)` to create a new message.
  */
 export const RestoreInboxItemRequestSchema: GenMessage<RestoreInboxItemRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 15);
+  messageDesc(file_reliant_v1_inbox, 14);
 
 /**
  * @generated from message reliant.v1.RestoreInboxItemResponse
@@ -636,7 +609,7 @@ export type RestoreInboxItemResponse = Message<"reliant.v1.RestoreInboxItemRespo
  * Use `create(RestoreInboxItemResponseSchema)` to create a new message.
  */
 export const RestoreInboxItemResponseSchema: GenMessage<RestoreInboxItemResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 16);
+  messageDesc(file_reliant_v1_inbox, 15);
 
 /**
  * InboxStorage describes one machine's disk and the archived worktrees it is
@@ -703,7 +676,7 @@ export type InboxStorage = Message<"reliant.v1.InboxStorage"> & {
  * Use `create(InboxStorageSchema)` to create a new message.
  */
 export const InboxStorageSchema: GenMessage<InboxStorage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 17);
+  messageDesc(file_reliant_v1_inbox, 16);
 
 /**
  * HeldWorktree is one archived workspace kept on a machine, and why.
@@ -779,7 +752,7 @@ export type HeldWorktree = Message<"reliant.v1.HeldWorktree"> & {
  * Use `create(HeldWorktreeSchema)` to create a new message.
  */
 export const HeldWorktreeSchema: GenMessage<HeldWorktree> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 18);
+  messageDesc(file_reliant_v1_inbox, 17);
 
 /**
  * @generated from message reliant.v1.CleanupStorageRequest
@@ -808,7 +781,7 @@ export type CleanupStorageRequest = Message<"reliant.v1.CleanupStorageRequest"> 
  * Use `create(CleanupStorageRequestSchema)` to create a new message.
  */
 export const CleanupStorageRequestSchema: GenMessage<CleanupStorageRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 19);
+  messageDesc(file_reliant_v1_inbox, 18);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResponse
@@ -828,7 +801,7 @@ export type CleanupStorageResponse = Message<"reliant.v1.CleanupStorageResponse"
  * Use `create(CleanupStorageResponseSchema)` to create a new message.
  */
 export const CleanupStorageResponseSchema: GenMessage<CleanupStorageResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 20);
+  messageDesc(file_reliant_v1_inbox, 19);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResult
@@ -857,7 +830,7 @@ export type CleanupStorageResult = Message<"reliant.v1.CleanupStorageResult"> & 
  * Use `create(CleanupStorageResultSchema)` to create a new message.
  */
 export const CleanupStorageResultSchema: GenMessage<CleanupStorageResult> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 21);
+  messageDesc(file_reliant_v1_inbox, 20);
 
 /**
  * InboxItemKind is declared in priority order: lower values sort first. The
@@ -943,17 +916,15 @@ export enum InboxItemKind {
   RECOVERY = 9,
 
   /**
-   * The newest version of a workflow file that enabled automations run does
-   * not parse or validate, so every firing of them is refused until a valid
-   * version is synced. ONE item per broken version (machine, file, content
-   * hash), however many automations and firings it refuses; it names the
-   * file, the error and the branch and commit, and leaves the list when a
-   * valid version lands. It replaces those automations' own failing items.
-   * Informational.
+   * A run an automation launched is paused: a step failed and the run is
+   * waiting to retry it. While it is paused it holds its automation's
+   * capacity slot, so later firings queue behind it. An unattended run retries
+   * on its own and ends, failed, if the cause does not clear; this item says
+   * what paused it in the meantime. One item per pause. Informational.
    *
-   * @generated from enum value: INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 10;
+   * @generated from enum value: INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED = 10;
    */
-  AUTOMATION_DEFINITION_BROKEN = 10,
+  AUTOMATION_RUN_PAUSED = 10,
 }
 
 /**

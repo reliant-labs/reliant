@@ -64,11 +64,19 @@ type service struct {
 	machines  Machines
 	deliverer Deliverer
 	signaler  Signaler
+
+	// redeliveries holds back a chat whose delivered run queued its message
+	// again (see redeliveryBackoff); now is its clock.
+	redeliveries *redeliveryBackoff
+	now          func() time.Time
 }
 
 // New builds the service.
 func New(deps Deps) Service {
-	return &service{store: deps.Store, machines: deps.Machines, deliverer: deps.Deliverer, signaler: deps.Signaler}
+	return &service{
+		store: deps.Store, machines: deps.Machines, deliverer: deps.Deliverer, signaler: deps.Signaler,
+		redeliveries: newRedeliveryBackoff(), now: time.Now,
+	}
 }
 
 const (
@@ -178,13 +186,15 @@ func (s *service) resumePaused(ctx context.Context, paused []db.PausedForMachine
 // One whose machine is still down stays queued for its own connect.
 func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat) int {
 	started := 0
+	now := s.now()
 	for _, chat := range queued {
-		var selector *toolexec.DaemonSelector
-		if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
-			selector = &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
-		}
-		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, selector)
+		online, err := s.machines.IsDaemonOnline(ctx, chat.UserID, queuedSelector(chat))
 		if err != nil || !online {
+			continue
+		}
+		if wait, held := s.redeliveries.hold(chat.ChatID, now); held {
+			logging.DebugContext(ctx, "[QueuedDelivery] The run delivered for this chat queued it again; holding the next delivery",
+				"chatID", chat.ChatID, "retryIn", wait.Round(time.Second))
 			continue
 		}
 		ok, err := s.deliverer.ContinueQueued(ctx, chat.ChatID)
@@ -195,11 +205,27 @@ func (s *service) deliver(ctx context.Context, queued []db.QueuedForMachineChat)
 		}
 		if ok {
 			started++
+			s.redeliveries.delivered(chat.ChatID, now)
 			logging.InfoContext(ctx, "[QueuedDelivery] The chat's machine is back; delivering the message queued for it",
 				"chatID", chat.ChatID, "userID", chat.UserID, "queuedFor", time.Since(chat.QueuedAt).Round(time.Second))
 		}
 	}
 	return started
+}
+
+// queuedSelector is the machine a queued chat waits for: the one its run
+// waited for when it queued the message, else the chat's pinned machine, else
+// (nil) any of the user's. Asking about any other machine than the run's own
+// is how one chat whose workflow named a machine that never connected was
+// delivered, failed its preflight and re-queued every few seconds for days.
+func queuedSelector(chat db.QueuedForMachineChat) *toolexec.DaemonSelector {
+	if m := chat.Machine; m != nil {
+		return &toolexec.DaemonSelector{ID: m.ID, Name: m.Name, Type: m.Type, Labels: m.Labels}
+	}
+	if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
+		return &toolexec.DaemonSelector{ID: *chat.ActiveDaemonID}
+	}
+	return nil
 }
 
 // Run implements Service.

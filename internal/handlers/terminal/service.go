@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -18,8 +17,8 @@ import (
 // constructs it (internal/app/compose.go). The rpc methods on *Service are
 // where this service's logic lives; see the forge `api` / `services` skill.
 //
-// The interactive browser terminal is also served by TerminalWSHandler, a
-// websocket endpoint server.go mounts beside this service.
+// Terminal I/O is served by TerminalWSHandler, a websocket endpoint server.go
+// mounts beside this service; the rpcs here only list and close sessions.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -32,9 +31,9 @@ type Deps struct {
 // toolexec.DaemonRouter implements it.
 type SessionRouter interface {
 	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-	SendTerminalInput(ctx context.Context, userID, sessionID string, data []byte) error
-	SendTerminalResize(ctx context.Context, userID, sessionID string, cols, rows uint32) error
-	SubscribeTerminalOutput(ctx context.Context, userID, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error)
+	// SendDaemonCommandToDaemon reaches one named machine: a session lives on
+	// the machine that holds its workspace, not on the default one.
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

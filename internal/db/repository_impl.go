@@ -1188,6 +1188,27 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 	return applied, nil
 }
 
+// SetDefaultDaemon makes daemonID the user's default machine, replacing any
+// previous one; "" clears it. A machine the user does not own (or that does
+// not exist) is svcerr.NotFound, and nothing changes.
+func (r *Repo) SetDefaultDaemon(ctx context.Context, userID, daemonID string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	// ReadCommitted: store.SetDefaultDaemon locks the user's rows first, and
+	// that lock is what makes the clear-then-set correct.
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		owned, err := store.SetDefaultDaemon(txCtx, r.ORM(), userID, daemonID)
+		if err != nil {
+			return fmt.Errorf("failed to set default daemon for user %s: %w", userID, err)
+		}
+		if !owned {
+			return svcerr.NotFound("daemon")
+		}
+		return nil
+	})
+}
+
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
@@ -1711,9 +1732,9 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
-func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error) {
 	if id == "" || daemonID == "" {
-		return fmt.Errorf("worktree and daemon IDs cannot be empty")
+		return "", fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
 	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
@@ -2693,6 +2714,11 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 // change whether the chat is busy, only what the finished run means.
 func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
+}
+
+// SetWorkflowFailureDetail records why a run failed, on the run.
+func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
+	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
 }
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
