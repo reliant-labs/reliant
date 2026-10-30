@@ -47,13 +47,16 @@ func (s *fakeStore) ListChatsWaitingForMachine(context.Context, string) ([]db.Wa
 }
 
 // fakeMachines reports online exactly the daemons named in up ("" = the
-// user's default machine).
+// user's default machine, "name:<n>" = a selector by name).
 type fakeMachines struct{ up map[string]bool }
 
 func (m fakeMachines) IsDaemonOnline(_ context.Context, _ string, selector *toolexec.DaemonSelector) (bool, error) {
 	id := ""
 	if selector != nil {
 		id = selector.ID
+		if id == "" && selector.Name != "" {
+			id = "name:" + selector.Name
+		}
 	}
 	return m.up[id], nil
 }
@@ -216,4 +219,61 @@ func TestSweep_ResumesBreakerPausedChatsWhoseMachineIsBack(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 	assert.Equal(t, []string{"c2"}, deliverer.resumed)
+}
+
+// The machine the queuing run waited for decides delivery, not the chat's pin
+// or the user's default machine. Prod, 2026-10-26: a workflow named a machine
+// that never connected while the user's default one was up; every sweep
+// delivered, the run failed its preflight and queued again — ~10k runs.
+func TestDeliver_WaitsForTheMachineTheRunWaitedFor(t *testing.T) {
+	store := &fakeStore{queued: []db.QueuedForMachineChat{
+		{ChatID: "c-named-down", UserID: "u", Machine: &db.QueuedMachine{Name: "cicd"}},
+		{ChatID: "c-named-up", UserID: "u", Machine: &db.QueuedMachine{Name: "laptop"}},
+		{ChatID: "c-run-machine-over-pin", UserID: "u", ActiveDaemonID: ptr("d-down"), Machine: &db.QueuedMachine{ID: "d-up"}},
+		{ChatID: "c-pin-only", UserID: "u", ActiveDaemonID: ptr("d-down")},
+	}}
+	deliverer := &fakeDeliverer{}
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"": true, "d-up": true, "name:laptop": true}},
+		Deliverer: deliverer, Signaler: &fakeSignaler{}})
+
+	_, err := svc.Sweep(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c-named-up", "c-run-machine-over-pin"}, deliverer.continued)
+}
+
+// A chat whose delivered run queued its message again is not delivered again
+// at once: each redelivery waits twice as long as the last, so a liveness
+// disagreement between the deliverer and the run costs a few runs an hour,
+// not one every sweep. The message stays queued throughout.
+func TestDeliver_BacksOffAChatItKeepsRedelivering(t *testing.T) {
+	store := &fakeStore{queued: []db.QueuedForMachineChat{{ChatID: "c1", UserID: "u"}}}
+	deliverer := &fakeDeliverer{}
+	svc := New(Deps{Store: store, Machines: fakeMachines{up: map[string]bool{"": true}}, Deliverer: deliverer, Signaler: &fakeSignaler{}}).(*service)
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return now }
+	sweep := func(after time.Duration) int {
+		now = now.Add(after)
+		n, err := svc.Sweep(context.Background())
+		require.NoError(t, err)
+		return n
+	}
+
+	assert.Equal(t, 1, sweep(0), "the first delivery is never held")
+	assert.Zero(t, sweep(30*time.Second), "queued again at once: held")
+	assert.Equal(t, 1, sweep(31*time.Second), "one minute after the first")
+	assert.Zero(t, sweep(90*time.Second), "the second hold is two minutes")
+	assert.Equal(t, 1, sweep(31*time.Second))
+	assert.Equal(t, []string{"c1", "c1", "c1"}, deliverer.continued)
+
+	// A chat queued again long after its last hold is a new outage.
+	assert.Equal(t, 1, sweep(redeliveryMax+redeliveryForget+time.Minute))
+}
+
+func TestRedeliveryHold_DoublesUpToTheCap(t *testing.T) {
+	assert.Equal(t, time.Minute, redeliveryHold(1))
+	assert.Equal(t, 2*time.Minute, redeliveryHold(2))
+	assert.Equal(t, 16*time.Minute, redeliveryHold(5))
+	assert.Equal(t, redeliveryMax, redeliveryHold(6))
+	assert.Equal(t, redeliveryMax, redeliveryHold(50))
 }
