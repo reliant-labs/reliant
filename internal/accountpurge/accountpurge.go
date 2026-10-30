@@ -308,8 +308,8 @@ func Purge(ctx context.Context, db *sql.DB, userID string) (int64, error) {
 	// Fence the LLM usage ledger before deleting anything. A model call already
 	// in flight finishes after the account is gone and writes its usage row; the
 	// ledger takes this same lock (shared) per write and refuses a fenced user, so
-	// a write either lands before this point and is deleted by the steps below, or
-	// is refused after it. Neither lock nor fence counts toward the deleted total.
+	// a write either commits before the lock is granted and is deleted by the
+	// steps below, or waits for this transaction and is refused. Neither lock nor fence counts toward the deleted total.
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
 		return 0, fmt.Errorf("accountpurge: lock llm usage: %w", err)
 	}

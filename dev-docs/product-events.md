@@ -193,7 +193,8 @@ never see.
   batches; the rollup is kept. `accountpurge` deletes both tables with the
   account and fences the user (`llm_usage_purged_users`, under a per-user
   advisory lock) so a model call still in flight at deletion cannot write usage
-  back afterwards; fences are pruned after 7 days.
+  back afterwards; a fence refuses every later write for that user and is pruned after 30 days,
+  longer than the 14-day workflow timeout.
 - **Visibility (v1).** Only the user's own rows are readable
   (`Repo.ListLLMUsageDaily` takes the user id). Org admins do not see members'
   own-key usage. `org_id` is written empty today: reliant chats carry no org.

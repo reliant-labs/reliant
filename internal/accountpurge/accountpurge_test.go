@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedUser builds a realistic account: a project with a repo, a chat with a
@@ -481,7 +482,6 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 			_, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
 				ID: fmt.Sprintf("late-%d", i), UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
 				AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
-				LatencyMs: time.Hour.Milliseconds(), // began well before the purge
 			})
 			if err != nil {
 				t.Errorf("RecordLLMCallUsage: %v", err)
@@ -505,7 +505,7 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 	// A call that finishes long after the purge is refused too.
 	written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
 		ID: "much-later", UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
-		Outcome: "success", Attempt: 1, CreatedAt: time.Now(), LatencyMs: time.Hour.Milliseconds(),
+		Outcome: "success", Attempt: 1, CreatedAt: time.Now(),
 	})
 	if err != nil || written {
 		t.Fatalf("a call after the purge: written=%v err=%v, want refused", written, err)
@@ -515,38 +515,72 @@ func TestPurge_AnInFlightModelCallCannotRecreateUsage(t *testing.T) {
 	}
 }
 
-// The same user id can come back (signing up again with the same identity). Its
-// new calls begin after the purge and are recorded; only calls that began before
-// it are refused.
-func TestPurge_AUserWhoSignsUpAgainIsRecorded(t *testing.T) {
+// The reviewer's reproduction: a call that STARTS after the purge transaction
+// began, while the purge is still running, and commits after it. The purge's
+// fence timestamp is the transaction's start, so any comparison of times lets
+// this call through. The purge holds the user's lock; the call is started
+// during that window and must be refused once the purge commits.
+func TestPurge_ACallStartedMidPurgeCannotRecreateUsage(t *testing.T) {
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
 
-	const userID = "user-returns"
+	const userID = "user-mid-purge"
 	seedUser(t, rawDB, userID)
-	if _, err := accountpurge.Purge(ctx, rawDB, userID); err != nil {
-		t.Fatalf("Purge: %v", err)
-	}
 
-	call := func(id string, started time.Time) bool {
-		written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
-			ID: id, UserID: userID, Provider: "anthropic", Model: "m", AuthMode: "byok", Purpose: "chat",
-			InputTokens: 10, Outcome: "success", Attempt: 1, LatencyMs: 1000,
-			CreatedAt: started.Add(time.Second),
-		})
-		if err != nil {
-			t.Fatalf("RecordLLMCallUsage(%s): %v", id, err)
+	// The purge's lock, fence and ledger deletes, held open: what a concurrent
+	// writer can observe of Purge before it commits.
+	tx, err := rawDB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, store.LLMUsageUserLockKey(userID)); err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO llm_usage_purged_users (user_id) VALUES ($1)`, userID); err != nil {
+		t.Fatalf("fence: %v", err)
+	}
+	for _, table := range []string{"llm_call_usage", "llm_call_usage_daily"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE user_id = $1`, userID); err != nil {
+			t.Fatalf("delete %s: %v", table, err)
 		}
-		return written
 	}
-	if call("in-flight-at-deletion", time.Now().Add(-time.Hour)) {
-		t.Error("a call that began before the purge was recorded")
+	time.Sleep(50 * time.Millisecond) // the purge transaction is now older than the call below
+
+	type result struct {
+		written bool
+		err     error
 	}
-	if !call("after-signup", time.Now().Add(time.Minute)) {
-		t.Error("a call that began after the purge was refused")
+	done := make(chan result, 1)
+	go func() {
+		written, err := repo.RecordLLMCallUsage(ctx, db.LLMCallUsage{
+			ID: "started-mid-purge", UserID: userID, ChatID: "gone", Provider: "anthropic", Model: "m",
+			AuthMode: "byok", Purpose: "chat", InputTokens: 10, Outcome: "success", Attempt: 1,
+			CreatedAt: time.Now(), // later than the purge transaction's start
+		})
+		done <- result{written, err}
+	}()
+
+	select {
+	case r := <-done:
+		t.Fatalf("the call did not wait for the purge's lock: %+v", r)
+	case <-time.After(300 * time.Millisecond):
 	}
-	if n := countRows(t, rawDB, "llm_call_usage", userID); n != 1 {
-		t.Errorf("llm_call_usage: %d rows, want 1 (the post-signup call)", n)
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	r := <-done
+	if r.err != nil {
+		t.Fatalf("RecordLLMCallUsage: %v", r.err)
+	}
+	if r.written {
+		t.Error("a call that started during the purge was recorded after it")
+	}
+	if n := countRows(t, rawDB, "llm_call_usage", userID); n != 0 {
+		t.Errorf("llm_call_usage: %d rows after the purge, want 0", n)
+	}
+	if n := countRows(t, rawDB, "llm_call_usage_daily", userID); n != 0 {
+		t.Errorf("llm_call_usage_daily: %d rows after the purge, want 0", n)
 	}
 }

@@ -93,8 +93,9 @@ CREATE TABLE llm_call_usage_daily (
 -- write usage under a user that no longer exists, which would outlive the
 -- deletion (the rollup is kept indefinitely). The purge takes a per-user
 -- advisory lock and writes the row in its transaction; every usage write takes
--- the same lock and refuses a user listed here. Rows are removed after
--- 7 days, longer than any activity or its retries run.
+-- the same lock and refuses every write for a user listed here, whatever time
+-- the call started. Rows are removed after 30 days, longer than the 14-day
+-- workflow execution timeout, so no call in flight at deletion outlives one.
 CREATE TABLE llm_usage_purged_users (
     user_id   text PRIMARY KEY,
     purged_at timestamp with time zone NOT NULL DEFAULT now()

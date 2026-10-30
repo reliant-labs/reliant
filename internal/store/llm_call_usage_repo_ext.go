@@ -99,10 +99,10 @@ type LLMCallUsageRecord struct {
 // of the same attempt (a duplicate delivery) is ignored. Reports whether
 // anything was written.
 //
-// A write for a call that began before its user's account was purged is refused
-// (false, nil): a model call already in flight when the account was deleted must
-// not recreate usage that the deletion promised to remove. Its start is its
-// completion time minus its latency. The write holds a shared advisory lock
+// A write for a user whose account was purged is refused (false, nil): a model
+// call already in flight when the account was deleted must not recreate usage
+// that the deletion promised to remove, whenever it started. The write holds a
+// shared advisory lock
 // on the user, so a purge (which takes it exclusively, see accountpurge) either
 // waits for this write and then deletes its rows, or commits first and is seen
 // here.
@@ -121,11 +121,13 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock_shared(hashtextextended(?, 0))`, LLMUsageUserLockKey(rec.UserID)).Exec(ctx); err != nil {
 		return false, fmt.Errorf("lock llm call usage for user: %w", err)
 	}
-	// Only a call that began before the purge is refused: a user who signs up
-	// again under the same id starts a new history, and their calls begin after.
-	startedAt := rec.CreatedAt.Add(-time.Duration(rec.LatencyMs) * time.Millisecond)
+	// Any fence row refuses the write. The purge holds the exclusive lock while it
+	// writes the fence, so a write that waited on that lock sees the committed
+	// fence here (READ COMMITTED takes a fresh snapshot per statement). No
+	// timestamps are compared: purged_at is the purge transaction's start, and a
+	// call that began mid-purge would compare as newer than it.
 	var purged bool
-	if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM llm_usage_purged_users WHERE user_id = ? AND purged_at > ?)`, rec.UserID, startedAt).Scan(ctx, &purged); err != nil {
+	if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM llm_usage_purged_users WHERE user_id = ?)`, rec.UserID).Scan(ctx, &purged); err != nil {
 		return false, fmt.Errorf("check purged user: %w", err)
 	}
 	if purged {
@@ -245,9 +247,10 @@ type LlmCallUsageExtra struct {
 }
 
 // LLMUsagePurgeFenceRetention is how long a purged user's fence row is kept:
-// longer than an activity and all of its retries can run, so a call in flight
-// at deletion has long finished (or been abandoned) by the time it goes.
-const LLMUsagePurgeFenceRetention = 7 * 24 * time.Hour
+// longer than any workflow that could still be running at deletion (the
+// workflow execution timeout is 14 days), so no call in flight at deletion can
+// outlive it.
+const LLMUsagePurgeFenceRetention = 30 * 24 * time.Hour
 
 // PruneLLMUsagePurgeFences deletes purge fences older than
 // LLMUsagePurgeFenceRetention at now.

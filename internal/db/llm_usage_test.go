@@ -319,21 +319,21 @@ func TestLLMCallUsage_RefusedForAPurgedUser(t *testing.T) {
 
 	_, err := repo.RecordLLMCallUsage(ctx, usageRec("before", at))
 	require.NoError(t, err)
-	_, err = raw.Exec(`INSERT INTO llm_usage_purged_users (user_id, purged_at) VALUES ('u1', $1)`, at.Add(time.Hour))
+	_, err = raw.Exec(`INSERT INTO llm_usage_purged_users (user_id) VALUES ('u1')`)
 	require.NoError(t, err)
 	_, err = raw.Exec(`DELETE FROM llm_call_usage WHERE user_id = 'u1'; DELETE FROM llm_call_usage_daily WHERE user_id = 'u1'`)
 	require.NoError(t, err)
 
 	written, err := repo.RecordLLMCallUsage(ctx, usageRec("after", at))
 	require.NoError(t, err)
-	assert.False(t, written, "the call that began before deletion is not recorded")
+	assert.False(t, written, "a call that finishes after deletion is not recorded")
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage`))
 	assert.Zero(t, rowCount(t, raw, `SELECT count(*) FROM llm_call_usage_daily`))
 
-	returned := usageRec("began-after", at.Add(2*time.Hour))
-	written, err = repo.RecordLLMCallUsage(ctx, returned)
+	later := usageRec("started-after-the-purge", at.Add(2*time.Hour))
+	written, err = repo.RecordLLMCallUsage(ctx, later)
 	require.NoError(t, err)
-	assert.True(t, written, "a call that began after the purge belongs to a returning user")
+	assert.False(t, written, "the fence refuses every write, whatever time the call started")
 
 	other := usageRec("other-user", at)
 	other.UserID = "u2"
