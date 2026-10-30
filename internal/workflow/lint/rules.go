@@ -56,7 +56,6 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 					c.checkChildBounded(path, ref)
 				}
 			}
-			c.checkChildOnFailure(path, n)
 			c.checkTurnBudget(path, n)
 		case model.NodeTypeLoop:
 			if timed {
@@ -105,27 +104,6 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 				"add a default:, even one that only saves a message")
 		}
 	}
-}
-
-// checkChildOnFailure: a workflow node runs its child inline, in the parent's
-// run, and on_failure is a property of the RUN (the root's handler runs, once,
-// when the run fails). A child's own on_failure therefore never runs when it is
-// started as a node, whatever cleanup it was written to do.
-func (c *checker) checkChildOnFailure(path string, n *reliantv1.Node) {
-	ref := childRef(n)
-	if ref == "" || strings.Contains(ref, "{{") || c.in.LoadRef == nil {
-		return
-	}
-	child, err := c.in.LoadRef(ref)
-	if err != nil || child == nil || child.GetOnFailure() == nil {
-		return
-	}
-	var ids []string
-	for _, h := range child.GetOnFailure().GetNodes() {
-		ids = append(ids, h.GetId())
-	}
-	c.add(RuleChildOnFailureIgnored, path, fmt.Sprintf("%s declares on_failure (%s), which does not run when it runs as this node: on_failure belongs to the run, and only the root's runs", ref, strings.Join(ids, ", ")),
-		"give this workflow an on_failure that does what the child's does, or start the child as its own run")
 }
 
 // checkChildBounded: a slot-bounded workflow's child holds the slot for as
