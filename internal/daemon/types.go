@@ -234,6 +234,11 @@ type RunCommandRequest struct {
 	// heavy slots like the commands the daemon recognizes by itself (see
 	// internal/heavyjob). There is no way to declare a command light.
 	Heavy bool `json:"heavy,omitempty"`
+	// ChatID is the agent (chat or sub-agent thread) whose tool call runs the
+	// command. The daemon attributes the command's processes to it, so a
+	// machine near its process limit can say whose they are
+	// (internal/procguard). Informational only: it grants nothing.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.

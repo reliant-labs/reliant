@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
@@ -22,17 +23,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// LoadWorkflowInput contains the input for loading a workflow
-type LoadWorkflowInput struct {
-	ChatID       string `json:"chat_id" reliant:"-"` // Chat ID to resolve project path
-	WorkflowName string `json:"workflow_name"`       // Workflow name or path
-	// CatalogPin is the project catalog the run started with (the root
-	// load's LoadWorkflowOutput.CatalogPin): every later load of the run (a
-	// child, a loop body, a router target) reads its project workflows and
-	// presets from it, so one run executes one definition tree. Empty pins
-	// the catalog as it is now: a root load, or a run recorded before pins.
-	CatalogPin string `json:"catalog_pin,omitempty" reliant:"-"`
-}
+// LoadWorkflowInput is defined in activities/types: this activity runs as a
+// LOCAL activity (runtime.executeBookkeeping), whose input must already be
+// the registered parameter type, so the workflow names it too.
+type LoadWorkflowInput = types.LoadWorkflowInput
 
 // LoadWorkflowOutput contains both the raw YAML and validated workflow
 // The raw YAML is needed for runtime template resolution with actual inputs

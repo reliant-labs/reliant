@@ -108,6 +108,12 @@ type Config struct {
 	// (internal/diskguard refuses them on a nearly full disk). It is asked
 	// whether or not the slots are on.
 	Admission Admission
+	// BackgroundAdmission, when set, may refuse a heavy command started in
+	// the background (internal/procguard refuses them when the machine is
+	// near its process limit). Foreground heavy commands are not asked: the
+	// agent waits on those, so they cannot pile up the way background ones
+	// did on 2026-10-30.
+	BackgroundAdmission Admission
 }
 
 // Admission decides whether a heavy command may start now.
@@ -136,8 +142,9 @@ func (e *RefusedError) Error() string {
 // Admission before any starts. A nil *Gate does neither, so callers outside a
 // daemon need no special case.
 type Gate struct {
-	patterns  []pattern
-	admission Admission
+	patterns    []pattern
+	admission   Admission
+	bgAdmission Admission
 	// self is the wrapper command; nil when heavy commands run unqueued
 	// (unqueued says why).
 	self     []string
@@ -165,10 +172,11 @@ func New(cfg Config) (*Gate, error) {
 		commands = DefaultCommands
 	}
 	g := &Gate{
-		patterns:  parsePatterns(commands),
-		admission: cfg.Admission,
-		dir:       hostslot.Options{Env: cfg.Env}.BaseDir(),
-		capacity:  capy,
+		patterns:    parsePatterns(commands),
+		admission:   cfg.Admission,
+		bgAdmission: cfg.BackgroundAdmission,
+		dir:         hostslot.Options{Env: cfg.Env}.BaseDir(),
+		capacity:    capy,
 	}
 	if _, ok := lookup(cfg.Env, hostslot.SlotsEnv(hostslot.Heavy)); ok {
 		g.slots = strconv.Itoa(capy.Slots)
@@ -210,6 +218,9 @@ type Job struct {
 	// words are (a project script that builds everything, say). There is
 	// no way to declare a command light: the patterns are the floor.
 	Declared bool
+	// Background is a command started in the background (run_in_background),
+	// which Config.BackgroundAdmission is also asked about.
+	Background bool
 }
 
 // label is what the slot records as this job's command.
@@ -254,6 +265,11 @@ func (g *Gate) Prepare(cmd *exec.Cmd, job Job) (heavy bool, err error) {
 	}
 	if g.admission != nil {
 		if why := g.admission.HeavyRefusal(); why != "" {
+			return true, &RefusedError{Command: job.label(), Reason: why}
+		}
+	}
+	if job.Background && g.bgAdmission != nil {
+		if why := g.bgAdmission.HeavyRefusal(); why != "" {
 			return true, &RefusedError{Command: job.label(), Reason: why}
 		}
 	}
