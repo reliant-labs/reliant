@@ -226,7 +226,7 @@ export function mapIssueDetail(res: GetIssueResponse): IssueDetail {
 }
 
 /** One page of the scope's issues. No statuses is the server's default: the open ones. */
-export async function listIssues(req: ListIssuesRequest): Promise<IssueList> {
+export async function listIssues(req: ListIssuesRequest, options: { signal?: AbortSignal } = {}): Promise<IssueList> {
   const res = await client().listIssues({
     scope: {
       orgId: req.orgId,
@@ -242,22 +242,22 @@ export async function listIssues(req: ListIssuesRequest): Promise<IssueList> {
     sort: WIRE_SORT[req.sort],
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  });
+  }, options);
   return { issues: res.issues.map(mapIssue), nextPageToken: res.nextPageToken };
 }
 
 /** One issue, with counts and trend over `window` (the server's 24 hours when absent). */
-export async function getIssue(req: { issueId: string; window?: { startMs: number; endMs: number } }): Promise<IssueDetail> {
+export async function getIssue(req: { issueId: string; window?: { startMs: number; endMs: number } }, options: { signal?: AbortSignal } = {}): Promise<IssueDetail> {
   const res = await client().getIssue({
     issueId: req.issueId,
     timeRange: req.window ? { start: timestamp(req.window.startMs), end: timestamp(req.window.endMs) } : undefined,
-  });
+  }, options);
   return mapIssueDetail(res);
 }
 
 /** One issue's events, newest first, a page at a time (default range: its first to its last event). */
-export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string }): Promise<IssueEventList> {
-  const res = await client().listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" });
+export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string }, options: { signal?: AbortSignal } = {}): Promise<IssueEventList> {
+  const res = await client().listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" }, options);
   return { events: res.events.map(mapIssueEvent), nextPageToken: res.nextPageToken };
 }
 

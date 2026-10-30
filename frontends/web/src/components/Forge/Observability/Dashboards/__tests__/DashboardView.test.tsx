@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -107,6 +107,77 @@ describe("a release dashboard", () => {
     expect(await screen.findByTestId("obs-panel-funnel")).toBeInTheDocument();
     expect(await screen.findByTestId("obs-panel-issues")).toBeInTheDocument();
     expect(await screen.findByTestId("obs-panel-sessions")).toBeInTheDocument();
+  });
+});
+
+describe("a platform dashboard", () => {
+  function platformApi(scope: "platform" | undefined) {
+    const base = createFixtureApi();
+    return {
+      ...base,
+      getDashboard: async (req: Parameters<typeof base.getDashboard>[0]) => {
+        const doc = await base.getDashboard(req);
+        return { ...doc, spec: { ...doc.spec, scope } };
+      },
+    };
+  }
+
+  function render(scope: "platform" | undefined, env: string) {
+    const onCall = vi.fn();
+    const api = platformApi(scope);
+    const wrapped = { ...api, queryPanel: (req: Parameters<typeof api.queryPanel>[0]) => (onCall(req), api.queryPanel(req)) };
+    renderWithApi(
+      wrapped,
+      <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env={env} environments={FIXTURE_ENVS} search={{}} onSearch={vi.fn()}
+        onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+    );
+    return onCall;
+  }
+
+  it("reads platform-wide, whatever environment the top bar names, and says so", async () => {
+    const onCall = render("platform", "prod");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    for (const [req] of onCall.mock.calls) {
+      expect(req).toMatchObject({ platformScope: true, envIds: [] });
+      expect(req.projectId).toBeUndefined();
+    }
+  });
+
+  it("still reads platform-wide for an environment this project has no record of", async () => {
+    const onCall = render("platform", "a-preview-that-is-gone");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    expect(onCall.mock.calls[0][0]).toMatchObject({ platformScope: true, envIds: [] });
+  });
+
+  it("borrows no environment's alert bands or release to compare with, whatever environment is selected", async () => {
+    for (const env of ["prod", "staging"]) {
+      const api = platformApi("platform");
+      const history = vi.fn(api.listAlertHistory);
+      const releases = vi.fn(api.listReleases);
+      const queried = vi.fn();
+      renderWithApi(
+        { ...api, listAlertHistory: history, listReleases: releases, queryPanel: (req: Parameters<typeof api.queryPanel>[0]) => (queried(req), api.queryPanel(req)) },
+        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env={env} environments={FIXTURE_ENVS} search={{ compare: "release" }} onSearch={vi.fn()}
+          onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+      );
+      await screen.findByTestId("dashboard-grid");
+      await waitFor(() => expect(queried).toHaveBeenCalled());
+      expect(history).not.toHaveBeenCalled();
+      expect(releases).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it("is unchanged for an ordinary dashboard: scoped to the environment, never platform-wide", async () => {
+    const onCall = render(undefined, "prod");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    for (const [req] of onCall.mock.calls) {
+      expect(req.envIds).toEqual(["env-prod"]);
+      expect(req.platformScope).toBeUndefined();
+    }
   });
 });
 

@@ -49,15 +49,24 @@ commit that lands is the commit that was tested. **Review first:** a PR push run
 nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
 runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
 main after the merge and gates the release, never the merge. Label a PR `ci:run`
-(then push) to run the merge gate on it before review. Queue a PR with:
+(then push) to run the merge gate on it before review.
 
-```bash
-gh pr merge <pr> --squash --auto --match-head-commit <sha>
-```
+**GitHub identity (owner, 2026-10-30):** implementation is yours: commit, push
+and open PRs as the user, with plain `git` and `gh`. Every review, label, comment
+on someone else's PR, enqueue and merge is the Reliant bot's (`reliant-labs[bot]`):
+run it through `reliant github gh --repo <owner/name> -- <gh args>`, or take a
+one-hour token scoped to that repository from `reliant github token --as app
+--repo <owner/name>`. Never review, label or merge as the owner's account
+(`reliant-01`): its ruleset bypass is the owner's alone. Fall back to the user
+only where the bot cannot act at all, and say so.
 
-The PR pipeline does this for you: label the PR `merge:queue` and stop. The
-`pr-review` workflow reviews the exact head; on `review:passed` it enqueues it.
-`review:changes` means fix, push, and re-add `merge:queue`. Design:
+**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included.** Label
+the PR `merge:queue` and stop. The `pr-review` workflow reviews the exact head;
+on `review:passed` it enqueues it (`gh pr merge --auto --match-head-commit`).
+`CI result` is green on a PR within a minute, so auto-merge armed before the
+review puts the unreviewed head straight into the queue, where the review
+marker check (`scripts/ci-review-marker.sh`) fails it and every group behind
+it. `review:changes` means fix, push, and re-add `merge:queue`. Design:
 control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
 script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
 
@@ -96,9 +105,19 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   everything in full: `-race`, every slow test, integration, e2e. So a slow
   test, or a package two imports away from your change, runs only there: when
   you touch code one covers, run its package with `task test -- ./<pkg>/...`.
-  New and changed tests run 3x (`task test:flake`): a test that fails on a
-  repeat is a flake to fix, never to re-run. A red main opens a `ci:main-red`
-  issue. Details: `dev-docs/merge-and-release-gates.md`.
+  New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
+  repeat does not merge. A red main opens a `ci:main-red` issue. Details:
+  `dev-docs/merge-and-release-gates.md`.
+- **A flaky test never blocks a merge or keeps main red** (owner, 2026-10-30:
+  "I'd rather remove a test than have it be flaky"). An existing test that
+  fails intermittently is fixed within the day, or deleted (the test, or just
+  its flaky assertion) in the same PR that finds it, with an issue labelled
+  `flake:removed` holding the test body, the failure signature and its
+  frequency, so coverage is restored on purpose later. A failure caused by the
+  host (inotify or fd budget exhausted, disk full) makes the test `t.Skip` with
+  a message naming the missing resource, never fail. Never re-run to green: the
+  `Flake report` workflow on main reruns failed tests once and files a
+  `flake:suspected` issue for each that then passes, without turning anything red.
 - **DB-backed tests need no database from you.** They use forge pgtest's
   shared embedded Postgres (the major `forge.yaml` declares, booted on first
   use and shared by every test process on the machine; each test gets its own
@@ -116,3 +135,9 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `testkit.Slow(t, "<why>")` first, which moves it off the merge gate into the
   release gate. Gate it, never weaken the assertion.
 - Anything expected to run >~2 min: `run_in_background` + `shell_wait`.
+- **Never start long work with `nohup`, a trailing `&`, `setsid` or `disown`.**
+  Use `run_in_background`: the daemon then owns the command's whole process
+  group, limits it, and `shell_kill` takes all of it down. What you detach
+  yourself is invisible to the daemon and to every other agent. On 2026-10-30
+  the shared machine ran out of processes (~5,200 bash) and was restarted,
+  killing every agent's work; gates started with `nohup … &` were part of it.

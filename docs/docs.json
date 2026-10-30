@@ -104,6 +104,7 @@
               "workflows/patterns",
               "workflows/routing",
               "workflows/testing",
+              "workflows/lint",
               "examples/workflow-snippets",
               "guides/self-improvement"
             ]

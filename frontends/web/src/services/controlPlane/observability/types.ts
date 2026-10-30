@@ -40,6 +40,11 @@ export interface ObsScope {
   projectId?: string;
   /** control-plane environment ids (stamped on telemetry as `reliant.env.id`). Empty: every environment. */
   envIds: string[];
+  /**
+   * Read platform telemetry, which belongs to no environment (a platform
+   * dashboard's signals). Names no environment or project; tenant zero only.
+   */
+  platformScope?: boolean;
   /** ANDed attribute predicates over allowlisted keys (attributes.ts). */
   filters: AttributeFilter[];
 }

@@ -310,6 +310,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge tools install`](#reliant-forge-tools-install) | Install codegen tools (protoc-gen-go, protoc-gen-connect-go, goimports), or the named tools (golangci-lint, buf) |
 | [`reliant forge tools pins`](#reliant-forge-tools-pins) | Print the tool versions this forge pins (golangci-lint, buf, …), for CI to read |
 | [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
+| [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 | [`reliant machine`](#reliant-machine) | List, start, stop and resize your machines |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
@@ -340,6 +343,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant workflow answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`reliant workflow eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`reliant workflow follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`reliant workflow lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`reliant workflow list`](#reliant-workflow-list) | List available workflows |
 | [`reliant workflow pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
 | [`reliant workflow questions`](#reliant-workflow-questions) | List the open question(s) awaiting input on a workflow execution |
@@ -13977,6 +13981,90 @@ reliant forge version
 
 ---
 
+## reliant github
+
+Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself
+
+Act on GitHub as the Reliant GitHub App's bot, reliant-labs[bot], or as yourself.
+
+Implementation is yours: commit, push and open pull requests as you (git's
+credential helper already does). Reviewing, labelling and merging are the
+bot's: use 'reliant github gh --repo owner/name -- <gh args>' for them.
+
+The bot writes only where you can push: control-plane checks your own GitHub
+access before it mints the token, scopes the token to one repository, and
+records the mint in its audit log. Tokens last at most an hour and are never
+stored.
+
+```
+reliant github
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
+| [`token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant github gh
+
+Run gh as the Reliant bot for one repository (--as app, the default) or as yourself
+
+Run the GitHub CLI with a freshly minted token, so its writes are made as the
+Reliant bot (reliant-labs[bot]) in the one repository --repo names. GH_REPO is
+set to that repository, so gh's commands default to it; a command aimed at any
+other repository is refused by GitHub, because the token reaches only this one.
+
+Use it for reviews, labels and merges. Commits, pushes and opening a pull
+request stay yours: run git and gh as usual for those.
+
+```
+reliant github gh [flags] -- <gh arguments>
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--as` | `string` | `app` | Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you) |
+| `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
+| `--daemon-server` | `string` | - | Use the session of the daemon at this server |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
+
+---
+
+### reliant github token
+
+Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user)
+
+```
+reliant github token [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--as` | `string` | `app` | Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you) |
+| `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
+| `--daemon-server` | `string` | - | Use the session of the daemon at this server |
+| `--json` | `bool` | - | Print the token with who it speaks as, its repository and its expiry |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
+
+---
+
 ## reliant machine
 
 List, start, stop and resize your machines
@@ -14337,7 +14425,9 @@ no value) none is, and the reason is printed per trigger. Run it again with
 changed flags to change an automation's settings; an existing activation is
 brought to them.
 
---trigger activates only the named declared triggers, one at a time.
+--trigger enables only the named declared triggers (all or nothing among
+them) and leaves the workflow's other activations as they are. A named
+trigger that is already activated is brought to the flags, not duplicated.
 
 ```
 reliant trigger activate [flags]
@@ -14591,6 +14681,7 @@ reliant workflow
 | [`answer`](#reliant-workflow-answer) | Answer a pending question on a workflow execution |
 | [`eval`](#reliant-workflow-eval) | Evaluate a CEL expression or {{ }} template against a sample context |
 | [`follow`](#reliant-workflow-follow) | Follow a workflow execution and stream NDJSON lifecycle events |
+| [`lint`](#reliant-workflow-lint) | Check workflows for behaviour validation cannot see |
 | [`list`](#reliant-workflow-list) | List available workflows |
 | [`pause`](#reliant-workflow-pause) | Pause a running workflow execution (keeps it resumable) |
 | [`questions`](#reliant-workflow-questions) | List the open question(s) awaiting input on a workflow execution |
@@ -14762,6 +14853,42 @@ reliant workflow follow <execution-id> [flags]
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--tail` | `bool` | - | Skip historical events and follow from now |
 | `--timeout` | `duration` | `0s` | Stop following after this long (exit code 2); 0 means no timeout |
+
+---
+
+### reliant workflow lint
+
+Check workflows for behaviour validation cannot see
+
+Lints workflow YAML files: rules about whether a workflow that validates will
+also behave when nobody is watching. Does every run end, does a failure reach
+someone, can a run hold a max_running slot forever, does a step fetch into the
+shared checkout, is a secret written into the file, do the scenarios fire every
+trigger and expect every ending.
+
+Every finding names its rule and links to the rule's section of the docs. An
+error fails (exit 1); a warning is reported. `reliant workflow validate` runs the same
+rules, so a repository's gate that validates its workflows lints them too.
+
+Silence a finding you have judged where it is, with the reason, in a comment
+on the node (or on a top-level key, for the whole workflow):
+
+  # lint:allow action-error-unread — best effort: a 404 means already removed
+  - id: clear_label
+
+--rules lists every rule with its severity.
+
+```
+reliant workflow lint [path] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
+| `--json` | `bool` | - | Output in JSON format (for CI) |
+| `--rules` | `bool` | - | List the rules instead of linting |
 
 ---
 
@@ -15082,6 +15209,9 @@ reported under "Breaks activations": each activation of it would turn BROKEN
 and fire nothing. These are warnings, since the CLI cannot see whether anyone
 activated the trigger; the server lists any enabled activation a synced change
 broke in its owner's Inbox.
+
+Each project workflow is also linted (reliant workflow lint --rules lists the
+rules): a lint error fails validation, a lint warning is reported.
 
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 

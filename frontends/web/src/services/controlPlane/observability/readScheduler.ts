@@ -1,27 +1,30 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The console's ONE admission queue for dashboard panel reads.
+ * The console's ONE admission queue for observability reads.
  *
  * control-plane lets a console user run SIX observability reads at once per org
  * (obsratelimit.DefaultMaxInFlight), waits two seconds for a slot, then refuses
- * with `in_flight_limit`. A dashboard of twenty panels used to fire all twenty
- * the moment it mounted, so most were refused. This queue starts at most
- * PANEL_CONCURRENCY at a time, first come first served, and leaves the rest of
- * the server's cap for the logs, traces and metrics views and other tabs.
+ * with `in_flight_limit`. Every read that takes one of those slots (see
+ * obsClient's READ_SLOT_RPCS) goes through this queue, whichever view asked: a
+ * dashboard of twenty panels, the metrics explorer, logs, traces, the service
+ * graph. It starts at most OBS_READ_CONCURRENCY at a time, first come first
+ * served, and leaves the rest of the server's cap for other tabs and devices.
  *
- * One scheduler per QueryClient, not per dashboard: the cap is per user, so the
- * dashboard, the home strip and a drawer preview must share it.
+ * ONE scheduler per page, not per view or per QueryClient: the cap is per
+ * user, so every consumer must draw on the same budget or they starve each
+ * other.
  *
  * A retry after a refusal goes back to the END of the queue (it is a fresh
- * `run`), so refused panels never jump ahead of ones still waiting their first
+ * `run`), so refused reads never jump ahead of ones still waiting their first
  * turn.
  */
 
-import type { QueryClient } from "@tanstack/react-query";
+/** control-plane's per-user, per-org concurrent-read cap (obsratelimit.DefaultMaxInFlight). */
+export const SERVER_READ_CAP = 6;
 
-/** Below the server's cap of 6: the difference is headroom for every other view. */
-export const PANEL_CONCURRENCY = 3;
+/** At or below the server's cap; the difference is headroom for the user's other tabs and devices. */
+export const OBS_READ_CONCURRENCY = 4;
 
 interface Entry {
   task: (signal: AbortSignal) => Promise<unknown>;
@@ -31,12 +34,12 @@ interface Entry {
   onAbort: (() => void) | undefined;
 }
 
-export class PanelScheduler {
+export class ReadScheduler {
   private readonly queue: Entry[] = [];
   private running = 0;
   private readonly maxConcurrent: number;
 
-  constructor(maxConcurrent: number = PANEL_CONCURRENCY) {
+  constructor(maxConcurrent: number = OBS_READ_CONCURRENCY) {
     this.maxConcurrent = Math.max(1, maxConcurrent);
   }
 
@@ -127,14 +130,15 @@ export class PanelScheduler {
   }
 }
 
-const schedulers = new WeakMap<QueryClient, PanelScheduler>();
+let shared: ReadScheduler | null = null;
 
-/** The scheduler of a query client, made on first use. */
-export function panelSchedulerFor(client: QueryClient): PanelScheduler {
-  let scheduler = schedulers.get(client);
-  if (!scheduler) {
-    scheduler = new PanelScheduler();
-    schedulers.set(client, scheduler);
-  }
-  return scheduler;
+/** The page's scheduler, made on first use. */
+export function obsReadScheduler(): ReadScheduler {
+  shared ??= new ReadScheduler();
+  return shared;
+}
+
+/** Tests only: a fresh page. */
+export function resetObsReadScheduler(): void {
+  shared = null;
 }
