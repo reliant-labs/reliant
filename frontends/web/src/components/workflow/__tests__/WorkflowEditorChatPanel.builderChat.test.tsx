@@ -35,6 +35,11 @@ function storeMock(state: () => any) {
 
 // Where the project is installed decides which machine a new chat names
 // (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+// "Make default" in the machine picker writes through the query client;
+// these tests render no provider and never click it.
+vi.mock("@/hooks/useMakeDefaultMachine", () => ({
+  useMakeDefaultMachine: () => ({ makeDefault: vi.fn(), isPending: false }),
+}));
 vi.mock("@/hooks/project-queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
   useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),

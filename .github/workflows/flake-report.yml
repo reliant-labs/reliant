@@ -1,0 +1,68 @@
+# Files a `flake:suspected` issue for a test that failed on main, then passed
+# when rerun alone on the same commit.
+#
+# WHY THIS EXISTS
+# ===============
+#
+# Owner policy (2026-10-30): "I'd rather remove a test than have it be flaky."
+# A flaky test is fixed within the day or removed with a `flake:removed` issue;
+# it never keeps main red. NEW tests are kept out before they merge: `task
+# test:flake` runs every added or edited test three times. EXISTING tests have
+# no such net, and the 2026-10-30 purge found the cost of that: a test failing
+# one main run in nine (rollout_test.go's lagging-replica check) read as "main
+# is red again" for days, and the only remedy anyone used was a re-run.
+#
+# WHAT IT DOES
+# ============
+#
+# After a CI run on main fails, `scripts/flake-report.sh` reads the run's
+# failed logs and gate-log artifacts, reruns each failing Go test once at the
+# run's commit, and opens (or comments on) one `flake:suspected` issue per test
+# that passes on the retry, with the failure excerpt. A test that fails again is
+# a real failure and is left to gate-health's `ci:main-red` issue.
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+# ================================
+#
+# It never turns anything red and never changes a run's verdict: the job is
+# continue-on-error and the script always exits 0. It does not re-run CI jobs
+# (that is the "re-run until green" habit this replaces), and it skips a run
+# with more failing tests than MAX_TESTS — a broad break is not a flake.
+
+name: Flake report
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  flake-report:
+    name: Rerun main's failed tests once; file flake:suspected
+    # A push or nightly run on main that failed. Pull request and merge-queue
+    # runs are the author's to read; a cancelled run carries no verdict.
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event != 'pull_request' &&
+      github.event.workflow_run.event != 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: ./.github/actions/setup
+      - name: Rerun the failed tests and report the ones that pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/flake-report.sh "${{ github.event.workflow_run.id }}"

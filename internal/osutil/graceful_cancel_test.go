@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -221,6 +222,52 @@ func TestApplyGracefulCancel_EscalatesToKill(t *testing.T) {
 	}
 }
 
+// TestApplyGracefulCancel_KillsGrandchildThatOutlivesTheShell: the shell dies
+// on SIGTERM at once, its background grandchild ignores SIGTERM. Wait returns
+// as soon as the shell is reaped, which used to stop the escalation timer — and
+// the grandchild ran on, orphaned (2026-10-30: `task ci` and heavy-lock.sh
+// children outliving their killed shells). The escalation must still SIGKILL
+// what is left of the group.
+func TestApplyGracefulCancel_KillsGrandchildThatOutlivesTheShell(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir := t.TempDir()
+	ready, pidFile := filepath.Join(dir, "ready"), filepath.Join(dir, "pid")
+	script := `( trap "" TERM; echo $BASHPID > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done ) >/dev/null 2>&1 &
+	           wait`
+	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = 60 * time.Second
+	stop := ApplyGracefulCancel(cmd, 300*time.Millisecond)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	pgid := cmd.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pgid, syscall.SIGKILL) })
+	awaitTrapInstalled(t, ready)
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grandchild, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+
+	cancel()
+	_ = cmd.Wait()
+	stop() // what every caller does once Wait has returned
+
+	deadline := time.Now().Add(conditionTimeout)
+	for syscall.Kill(grandchild, 0) == nil {
+		if state, _ := os.ReadFile("/proc/" + strconv.Itoa(grandchild) + "/stat"); strings.Contains(string(state), ") Z ") {
+			break // dead, awaiting its reaper
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("grandchild %d that ignored SIGTERM is still running %v after cancel; it outlived its shell", grandchild, conditionTimeout)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // TestApplyGracefulCancel_CleanExitNotReportedAsFailure pins the regression in
 // the opposite direction. os/exec reports the context error from Wait whenever
 // Cancel ran, so a child that took the SIGTERM and exited 0 would be reported
@@ -342,5 +389,33 @@ func TestApplyGracefulCancel_ZeroGraceUsesDefault(t *testing.T) {
 
 	if got := waitForMarker(t, marker, "cleaned", conditionTimeout); got != "cleaned" {
 		t.Fatalf("cleanup marker = %q with grace=0; want the default grace to apply, not an immediate kill", got)
+	}
+}
+
+// GroupMembers lists live members only, and GroupOwned recognises a member by
+// its start time, not its pid alone.
+func TestGroupMembersAndOwnership(t *testing.T) {
+	if _, ok := GroupMembers(1); !ok {
+		t.Skip("needs /proc")
+	}
+	cmd := exec.Command("sleep", "300")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	pgid := cmd.Process.Pid
+	members, _ := GroupMembers(pgid)
+	if len(members) != 1 || members[0].PID != pgid {
+		t.Fatalf("members = %v", members)
+	}
+	if !GroupOwned(pgid, members) {
+		t.Fatal("a live recorded member does not prove the group")
+	}
+	if GroupOwned(pgid, []GroupMember{{PID: pgid, Start: members[0].Start + 1}}) {
+		t.Fatal("a pid with another start time proved the group: that is pid reuse")
+	}
+	if GroupOwned(pgid+1, members) {
+		t.Fatal("a member proved a group it is not in")
 	}
 }

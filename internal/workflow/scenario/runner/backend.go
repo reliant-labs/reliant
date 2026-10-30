@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.temporal.io/sdk/workflow"
 	"sort"
 	"strings"
 	"sync"
@@ -104,9 +105,16 @@ type Runner struct {
 	// mock, so the catch-all can be exercised.
 	omitActivity string
 
+	// versionOverrides pins workflow.GetVersion for these change ids — a
+	// test seam standing in for a run recorded before a versioned change.
+	versionOverrides map[string]versionOverride
+
 	// onRunStep is Options.OnRunStep.
 	onRunStep func(nodePath, command string)
 }
+
+// versionOverride is what GetVersion(changeID, DefaultVersion, max) returns.
+type versionOverride struct{ max, returns workflow.Version }
 
 // NewRunner builds a scenario runner for a workflow that resolves only
 // builtin refs.
@@ -729,11 +737,24 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	if err := r.registerActivities(env, rec, events, guard, sc); err != nil {
 		return errorResult(sc, err, start)
 	}
+	// Mocks may only follow registration.
+	for changeID, o := range r.versionOverrides {
+		env.OnGetVersion(changeID, workflow.DefaultVersion, o.max).Return(o.returns)
+	}
 
 	// project_path is a real production input, not harness scaffolding: it is
 	// what ChatService.buildWorkflowInputs injects, and preset loading fails
 	// terminally without it. A scenario may override it like any other input.
 	inputs := map[string]interface{}{"project_path": scenarioProjectPath}
+	if sc.Trigger != nil {
+		fired, err := triggerInputs(r.workflow, sc.Trigger)
+		if err != nil {
+			return errorResult(sc, err, start)
+		}
+		for k, v := range fired {
+			inputs[k] = v
+		}
+	}
 	for k, v := range sc.Inputs {
 		inputs[k] = v
 	}
@@ -1054,6 +1075,9 @@ var infrastructureActivities = []string{
 	"EmitStreamFinalized",
 	"EmitToolCallStatus",
 	"PreflightDaemonCheck",
+	// A scenario has no machine or connections: its requirements are what
+	// the run would check, not what a scenario tests.
+	"PreflightRequirements",
 	"MachineResumeWake",
 	"ValidateThreadOwnership",
 	// QuestionCreate is NOT here: it resolves an ask_question node from the

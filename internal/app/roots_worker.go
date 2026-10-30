@@ -63,7 +63,8 @@ type Worker struct {
 	Streaming      *StreamingHub
 	Temporal       *TemporalClient
 	// Feed publishes the repository's user and chat updates; it has no
-	// lifecycle, and orders the hubs and NATS after the Temporal client.
+	// lifecycle, and orders the hubs after the Temporal client. NATS starts
+	// before the client, which publishes stop nudges on it (stopnudge).
 	Feed *RepoUpdateFeed
 	// Debug is off with PPROF_PORT=0; it stops after NATS, so a profile can
 	// be taken through the drain.

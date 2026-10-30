@@ -13,15 +13,17 @@ import { MobileBackButton, MobileScreenHeader } from "./MobileChrome";
 export function MobileSettingsSectionHeader({
   title,
   onBack,
+  backLabel = "Back to settings",
 }: {
   title: string;
   onBack: () => void;
+  backLabel?: string;
 }) {
   return (
     <MobileScreenHeader
       title={title}
       leading={
-        <MobileBackButton onClick={onBack} label="Back to settings" />
+        <MobileBackButton onClick={onBack} label={backLabel} />
       }
     />
   );

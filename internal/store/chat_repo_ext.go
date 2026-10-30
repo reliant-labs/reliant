@@ -317,6 +317,40 @@ func SetChatQueuedForMachine(ctx context.Context, db orm.Context, chatID string,
 	return n > 0, err
 }
 
+// queueChatForMachineSQL sets the queued-for-machine marker (keeping the
+// time of a marker already set) and records the machine the message waits
+// for, matching a row only when either changes. ?1 is NULL when the run named
+// no machine.
+const queueChatForMachineSQL = `
+UPDATE chats SET
+    queued_for_machine_at = COALESCE(queued_for_machine_at, NOW()),
+    queued_for_machine_selector = ?1::jsonb
+WHERE id = ?0
+  AND (queued_for_machine_at IS NULL OR queued_for_machine_selector IS DISTINCT FROM ?1::jsonb)`
+
+// QueueChatForMachine sets the queued-for-machine marker with the machine
+// the message waits for, and reports whether the stored row changed.
+// SetChatQueuedForMachine's clear leaves the machine in place: it is read
+// only while the marker is set, so a deliverer that claims the message and
+// then puts it back (ContinueQueued's requeue) keeps it.
+func QueueChatForMachine(ctx context.Context, db orm.Context, chatID string, machine *core.QueuedMachine) (bool, error) {
+	var selector *string
+	if machine != nil {
+		raw, err := json.Marshal(machine)
+		if err != nil {
+			return false, fmt.Errorf("encode the machine a queued message waits for: %w", err)
+		}
+		s := string(raw)
+		selector = &s
+	}
+	res, err := db.Bun().NewRaw(queueChatForMachineSQL, chatID, selector).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to queue chat for its machine: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // setChatRunIDSQL records the Temporal run currently executing a chat's root
 // workflow. It only touches the chat whose root workflow it is, and only when
 // the id changes, so the write a run makes at every start is free when nothing
@@ -364,7 +398,7 @@ func SetChatPausedForMachine(ctx context.Context, db orm.Context, chatID string,
 // sweep); otherwise one user's (a machine of theirs just connected).
 // Archived chats are left alone.
 const listChatsQueuedForMachineSQL = `
-SELECT id, user_id, active_daemon_id, queued_for_machine_at
+SELECT id, user_id, active_daemon_id, queued_for_machine_at, queued_for_machine_selector
 FROM chats
 WHERE queued_for_machine_at IS NOT NULL
   AND state IS DISTINCT FROM 3
@@ -380,6 +414,7 @@ func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID strin
 		UserID             string    `bun:"user_id"`
 		ActiveDaemonID     *string   `bun:"active_daemon_id"`
 		QueuedForMachineAt time.Time `bun:"queued_for_machine_at"`
+		Selector           *string   `bun:"queued_for_machine_selector"`
 	}
 	if err := db.Bun().NewRaw(listChatsQueuedForMachineSQL, userID, limit).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list chats queued for their machine: %w", err)
@@ -391,6 +426,14 @@ func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID strin
 			UserID:         row.UserID,
 			ActiveDaemonID: row.ActiveDaemonID,
 			QueuedAt:       row.QueuedForMachineAt,
+		}
+		if row.Selector != nil {
+			var machine core.QueuedMachine
+			// A selector that does not decode leaves Machine nil: delivery
+			// falls back to the chat's pinned machine, as before the column.
+			if err := json.Unmarshal([]byte(*row.Selector), &machine); err == nil {
+				chats[i].Machine = &machine
+			}
 		}
 	}
 	return chats, nil
