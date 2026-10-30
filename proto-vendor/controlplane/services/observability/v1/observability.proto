@@ -1618,6 +1618,17 @@ message QueryPanelResponse {
   // metric_kind_mismatch, and metric_absent (a series' metric has no data in
   // the scope and range: its series is empty, never an error). Metrics panels.
   repeated string warnings = 17;
+  // sql panels drawn as a time series: the width of one bucket in seconds, so a
+  // client need not guess it from the points. A Date or Date32 first column is
+  // a calendar day (86400). A DateTime column is the {step} the statement was
+  // bound to when it uses {step}; a statement that buckets by its own rule
+  // reports 0 (unknown). 0 for every other panel kind (see step_seconds).
+  int32 bucket_seconds = 18;
+  // sql panels drawn as a time series: the zone the bucket dates are in. "UTC"
+  // when the first column is a Date or Date32: each point's time is that date's
+  // midnight UTC and a client labels it as that calendar date, never converts it
+  // to its own zone. Empty when the first column is a DateTime (instants).
+  string bucket_timezone = 19;
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
