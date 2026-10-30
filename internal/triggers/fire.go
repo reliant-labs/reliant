@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // chatIDNamespace seeds the deterministic chat id a scheduled fire launches
@@ -157,10 +158,11 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if err != nil {
 		return f.failPermanently(ctx, trigger, req, err.Error(), err)
 	}
-	maxRunning, err := capacityPolicy(ctx, f.workflows, trigger)
+	policy, err := capacityPolicy(ctx, f.workflows, trigger)
 	if err != nil {
 		return nil, err
 	}
+	maxRunning := policy.GetMaxRunning()
 	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && maxRunning == 0 {
 		return f.recordSkip(ctx, trigger, req, "queued workflow capacity policy was removed")
 	}
@@ -176,8 +178,14 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if existing != nil {
 			row = existing
 		}
+		row.CapacityKey = capacityKey(ctx, policy, row, func() triggerspec.Scope {
+			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{
+				Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
+				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
+			}.Root())
+		})
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
-			if errors.Is(err, errCapacityScopeChanged) {
+			if capacitySettled(err) {
 				return f.recordSkip(ctx, trigger, req, err.Error())
 			}
 			return nil, err

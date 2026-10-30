@@ -657,6 +657,7 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		CapacityOrder:       row.CapacityOrder,
 		CapacityProjectID:   row.CapacityProjectID,
 		CapacityWorkflowRef: row.CapacityWorkflowRef,
+		CapacityKey:         row.CapacityKey,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus
