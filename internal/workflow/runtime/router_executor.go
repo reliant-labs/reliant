@@ -481,6 +481,7 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 		loadInput := map[string]string{
 			"chat_id":       r.chatID,
 			"workflow_name": ref,
+			"catalog_pin":   catalogPinFrom(r.ctx),
 		}
 		var loadedWf LoadedWorkflow
 		if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(r.ctx, &loadedWf); err != nil {
