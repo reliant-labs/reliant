@@ -130,6 +130,10 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
+	// machines resolves the turn's selector to the machine whose synced
+	// config it reads (configMachine); nil reads the project's union for any
+	// selector that names no id. Set by WithDaemonRouter.
+	machines toolexec.DaemonRouter
 	// allowPrivateEgress is the dial policy for user-supplied model endpoint
 	// URLs; see WithPrivateEgress.
 	allowPrivateEgress bool
@@ -154,9 +158,12 @@ func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
 	return a
 }
 
-// WithLocalModels wires the daemon relay local models are reached through.
-func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallLLMActivity {
-	a.localRelay = relay
+// WithDaemonRouter wires the daemon router: the relay local models are
+// reached through, and the resolution that picks the machine whose synced
+// config (skills, memory, MCP servers) a turn reads.
+func (a *CallLLMActivity) WithDaemonRouter(router toolexec.DaemonRouter) *CallLLMActivity {
+	a.machines = router
+	a.localRelay = router
 	return a
 }
 
@@ -997,7 +1004,10 @@ func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread 
 	}
 }
 
-func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project) (*cfgpkg.Config, error) {
+// getProjectConfig reads the project's config as daemonID (the machine the
+// turn's tools run on) synced it: its skills, memories and MCP servers, not
+// the last pusher's.
+func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project, daemonID string) (*cfgpkg.Config, error) {
 	if project == nil {
 		return nil, fmt.Errorf("project is nil")
 	}
@@ -1008,6 +1018,7 @@ func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Proj
 
 	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{
 		ProjectID: project.ID,
+		DaemonID:  daemonID,
 	})
 	if err != nil {
 		return nil, err
@@ -1083,11 +1094,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 	projectPath := project.Path
 
-	projectCfg, err := a.getProjectConfig(ctx, project)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load project config: %w", err)
-	}
-
 	// Load worktree path if applicable
 	var worktreePath string
 	// worktreeDaemonID is the daemon that physically owns this worktree's
@@ -1115,6 +1121,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	workingDir := projectPath
 	if worktreePath != "" {
 		workingDir = worktreePath
+	}
+
+	// The project config (skills, memory, MCP servers) is the one the machine
+	// this turn's tools run on synced: routed as ExecuteTools routes them.
+	projectCfg, err := a.getProjectConfig(ctx, project,
+		configMachine(ctx, a.machines, chat.UserID, toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector))))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
 
 	// Explicit per-call overrides from workflow args. Zero values mean "use
