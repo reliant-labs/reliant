@@ -378,12 +378,16 @@ queued PR is tested on main plus the entries ahead of it, and lands only if that
 run is green. That `merge_group` run is the only run of the merge gate an
 unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
-required checks are green on its head. Queue a PR with
-`gh pr merge <pr> --squash --auto --match-head-commit <sha>`; the `pr-review`
-workflow does this when a review passes (control-plane `docs/pr-pipeline.md`).
-In the queue, `CI result` also requires `pr-review`'s pass marker on every PR
-head in the group (`scripts/ci-review-marker.sh`). A queue failure dequeues the
-PR, which the pipeline's fixer picks up.
+required checks are green on its head. Only the `pr-review` workflow enqueues,
+with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
+passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
+`merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
+`CI result` also requires `pr-review`'s pass marker on every PR head in the
+group (`scripts/ci-review-marker.sh`). Because the PR's own `CI result` is
+green within a minute, auto-merge an author arms before the review enqueues
+the unreviewed head at once: its group fails the review marker
+(`latest: none`), and so does every group behind it. A queue failure dequeues
+the PR, which the pipeline's fixer picks up.
 
 Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
 `Merge gate` job runs, and a red queue run costs every PR behind yours a retry
