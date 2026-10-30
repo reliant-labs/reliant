@@ -51,7 +51,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 	spy := &fullConfigRowReads{Repo: repo}
 
 	// CallLLM: the spawn tool's description lists the project preset's own.
-	spawn := (&CallLLMActivity{repo: spy}).getSpawnTool(ctx, "test-project", &SpawnConfig{Presets: []string{"project-reviewer"}})
+	spawn := (&CallLLMActivity{repo: spy}).getSpawnTool(ctx, spawnPresetSource{projectID: "test-project"}, &SpawnConfig{Presets: []string{"project-reviewer"}})
 	require.NotNil(t, spawn)
 	require.Contains(t, spawn.Description(), "- project-reviewer: Reviews with house rules")
 

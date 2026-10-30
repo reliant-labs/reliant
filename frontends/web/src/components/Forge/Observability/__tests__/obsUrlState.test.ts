@@ -214,8 +214,8 @@ describe("a dashboard's link (Share)", () => {
   });
 
   it("keeps the index's search and filters", () => {
-    const search = { env: "all", q: "checkout", source: "workspace", owner: "sean" };
+    const search = { env: "all", view: "all", q: "checkout", group: "services", source: "workspace", owner: "sean" };
     expect(throughTheUrl(search, forgeConsoleDashboardsSearchSchema as never).parsed).toEqual(search);
-    expect(forgeConsoleDashboardsSearchSchema.parse({ source: "template" })).toEqual({});
+    expect(forgeConsoleDashboardsSearchSchema.parse({ source: "template", view: "grid", group: "misc" })).toEqual({});
   });
 });

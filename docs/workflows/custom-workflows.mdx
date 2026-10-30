@@ -83,7 +83,7 @@ Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in t
 
 **Discovery**: The machine your project is on watches `.reliant/workflows/` and syncs it to Reliant every couple of seconds, so a saved file shows up in the workflow selector and the library without a restart. A file that does not parse is listed in the library under **Failed to load**, with the error.
 
-**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike.
+**Your workflows and the project's**: Workflows you create in the app (in the builder, or by asking an agent) belong to your account rather than to a file. When one of yours has the same `name:` as a project workflow, yours wins for you, in chats, refs and scenarios alike. Automations are the exception: a run a trigger starts always runs the project's workflow of that name, so a workflow of yours can never silently replace what an automation runs. Yours still runs when the project has none of that name. When both exist, the automation's details (`reliant trigger get`, `list_triggers`) say which one it runs and warn about the other; rename yours to tell them apart.
 
 Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
 
@@ -110,6 +110,7 @@ Each machine a project is checked out on syncs its own `.reliant/workflows` (and
 - **The workflow library, the workflow selector and chats** read the project's combined set: every file any machine provides. When two machines hold the same file, the copy synced most recently is used.
 - **An automation resolves its workflow on its machine**, because its runs execute there. If that machine does not have the workflow, the automation is **broken**, listed in your inbox, and the reason names where the workflow is: `machine "cicd" has no workflow "release"; it is defined on machine "default" at control-plane/.reliant/workflows/release.yaml`. Check that repository out on the automation's machine, or point the automation at a machine that has it. A machine that has never synced the project falls back to the combined set until it does.
 - When no machine provides a workflow any more, the error names the file and machine it was last synced from.
+- **Skills, memories and MCP servers follow the same rule.** Each machine's `.reliant/skills`, `reliant.md` files, MCP configuration and config are kept separately too, and a run reads its own machine's: a skill or MCP server is used on the machine that has it. Listings with no machine read the combined skills and memories, so a machine syncing without a checkout no longer removes that checkout's skills for everyone.
 
 ## Anatomy of a Workflow
 

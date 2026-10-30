@@ -73,6 +73,7 @@ import { OrganizationCostsView } from "./OrganizationCostsView";
 import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
 import { LLMUsageView } from "./LLMUsageView";
+import { useNearViewport } from "./useNearViewport";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -973,7 +974,11 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
-  const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
+  // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
+  const [bodyRef, near] = useNearViewport();
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  // Not yet near is "not loaded yet", not "no data".
+  const query = near || queryPanel.kind === "search" ? rawQuery : { ...rawQuery, isLoading: true };
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
@@ -981,7 +986,7 @@ function DashboardPanelCard({
     offsetMs:
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
-    enabled: comparable,
+    enabled: comparable && near,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1054,7 +1059,7 @@ function DashboardPanelCard({
           />
         )}
       </div>
-      <div className="px-4 pb-4 pt-2">
+      <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <PanelBody
           panel={queryPanel}
           query={query}

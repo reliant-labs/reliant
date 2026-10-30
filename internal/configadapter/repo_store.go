@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // NewRepoConfigStore creates a StoredConfigStore backed by the stored project config records.
@@ -25,12 +26,27 @@ type repoConfigStore struct {
 	repo ConfigRecordReader
 }
 
+var _ config.MachineConfigStore = (*repoConfigStore)(nil)
+
 func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID string) (*config.StoredProjectConfigRecord, error) {
 	record, err := s.repo.GetProjectConfigRecord(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
+	return storedRecord(record), nil
+}
 
+// GetProjectMachineConfigRecord implements config.MachineConfigStore: one
+// machine's own snapshot, which a run on that machine reads.
+func (s *repoConfigStore) GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (*config.StoredProjectConfigRecord, bool, error) {
+	record, synced, err := s.repo.GetProjectMachineConfigRecord(ctx, projectID, daemonID)
+	if err != nil || !synced {
+		return nil, false, err
+	}
+	return storedRecord(record), true, nil
+}
+
+func storedRecord(record *db.ProjectConfigRecord) *config.StoredProjectConfigRecord {
 	return &config.StoredProjectConfigRecord{
 		ProjectID: record.ProjectID,
 		// DaemonID distinguishes a real daemon push from CreateProject's seed
@@ -52,5 +68,5 @@ func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID 
 		// store and Config.RepoMemories was always empty.
 		RepoMemoriesJSON: record.RepoMemoriesJSON,
 		RuntimeType:      record.RuntimeType,
-	}, nil
+	}
 }

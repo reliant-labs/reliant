@@ -89,7 +89,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		if w := loaded[key]; w != nil {
 			return w, nil
 		} // cycle detection: fingerprint once, no recursive expansion
-		w, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, user, ref, def.ProjectId)
+		w, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), ref)
 		if err != nil {
 			return nil, refusedPrecondition("Could not resolve a referenced workflow for approval")
 		}

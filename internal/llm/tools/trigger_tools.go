@@ -75,6 +75,11 @@ type TriggerSummary struct {
 	HealthDetail    string
 	Source          string // a one-line description of what fires it
 	Filter          string
+	// Definition is where its runs read the workflow from ("project workflow
+	// at control-plane/.reliant/workflows/release.yaml on machine cicd"), and
+	// DefinitionWarnings what about that the owner should act on.
+	Definition         string
+	DefinitionWarnings []string
 }
 
 // =============================================================================
@@ -151,6 +156,12 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 			fmt.Fprintf(&b, "  machine: %s (id %s), state %s\n", t.DaemonName, t.DaemonID, state)
 		}
 		fmt.Fprintf(&b, "  fires on: %s\n", t.Source)
+		if t.Definition != "" {
+			fmt.Fprintf(&b, "  definition: %s\n", t.Definition)
+		}
+		for _, w := range t.DefinitionWarnings {
+			fmt.Fprintf(&b, "  warning: %s\n", w)
+		}
 		if t.Filter != "" {
 			fmt.Fprintf(&b, "  filter: %s\n", t.Filter)
 		}

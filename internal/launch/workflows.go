@@ -211,8 +211,8 @@ func paramValues(params map[string]*structpb.Value) map[string]interface{} {
 // presets, which is where a group's params merge with the preset's. scope
 // says where the presets and the workflow's input schema are read from: the
 // run's machine's synced catalog (scope.DaemonID), or the union of every
-// machine's when it is empty (see chatScope). A selected preset that does not
-// resolve there fails the build (applyPresets).
+// machine's when it is empty, and with which precedence (see chatScope). A
+// selected preset that does not resolve there fails the build (applyPresets).
 func (l *Launcher) buildWorkflowInputs(
 	ctx context.Context,
 	scope Scope,
@@ -431,15 +431,27 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 // chatScope is the scope chat's runs resolve workflowName in: the machine
 // the chat is pinned to (RunMachine), whose catalog its admission and its
 // runtime loads read, so its input schema, defaults and validation come from
-// the same definition that runs. The optional draft root lets an input schema
+// the same definition that runs, with an automation's precedence for a run
+// its trigger started (project first, as its activation resolves). The
+// optional draft root lets an input schema
 // be read for a workflow of the user's they are about to start, complete or
 // not, and still finds the project's when they have none of that name.
 func chatScope(userID string, chat *db.Chat, workflowName string) Scope {
 	scope := Scope{UserID: userID, DaemonID: RunMachine(chat), draftRoot: workflowName, draftOptional: true}
 	if chat != nil {
 		scope.ProjectID = chat.ProjectID
+		scope.ProjectFirst = AutomationPrecedence(chat)
 	}
 	return scope
+}
+
+// AutomationPrecedence reports whether chat's runs resolve workflows with an
+// automation's precedence (Scope.ProjectFirst): a stored trigger started it.
+// Read from the chat's origin, written once at launch: deleting the trigger
+// clears the chat's trigger id (ON DELETE SET NULL) but not its origin, so a
+// running or paused automation keeps loading the project's definitions.
+func AutomationPrecedence(chat *db.Chat) bool {
+	return chat != nil && chat.Origin == core.ChatOriginAutomation
 }
 
 func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflowName string) map[string]*reliantv1.Input {
@@ -458,12 +470,12 @@ func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflow
 // userID is the OWNER of the run, passed explicitly. It used to be read from
 // the request context, which a scheduled fire on the worker does not have.
 //
-// chat decides where the definition is read from (chatScope): its machine's
-// catalog, as its runs read it.
+// chat decides where the definition is read from and with which precedence
+// (chatScope): its machine's catalog, project first for an automation's run,
+// as its runs read it.
 func (l *Launcher) ValidateChatWorkflowInputs(ctx context.Context, userID string, chat *db.Chat, workflowName string, inputs map[string]interface{}) []error {
 	// Validate against the definition that will run: the one workflowsource
-	// resolves (the user's own of that name, else the project's) in the
-	// chat's scope.
+	// resolves in the chat's scope.
 	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not load workflow for input validation", "workflow", workflowName, "error", err)
@@ -653,8 +665,18 @@ func draftRootFor(ev Event, workflowName string) string {
 //
 // It is what a trigger reads its declaration from, so an activation fires
 // against the same definition the run it starts will execute.
+//
+// It resolves with an interactive run's precedence (the owner's own workflow
+// first): a manual run and its replay preview. An automation's resolution
+// says so with ResolveRunWorkflowOn and Scope.ProjectFirst.
 func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
 	return resolveRunWorkflow(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
+}
+
+// ResolveRunWorkflowOn is ResolveRunWorkflow in an explicit scope: a machine,
+// and the precedence (an automation's is Scope.ProjectFirst).
+func ResolveRunWorkflowOn(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, repo, scope, workflowName)
 }
 
 // A trigger's resolution on its target machine reads that machine's catalog
@@ -668,8 +690,15 @@ var (
 // which machine. DaemonID set resolves against that machine's own synced
 // catalog (workflowsource.Options.DaemonID); empty, against the union of
 // every machine's.
+//
+// ProjectFirst is an automation's precedence: a name resolves to the
+// project's workflow before the owner's own account workflow of that name
+// (workflowsource.Options.ProjectFirst), so an account draft can never
+// silently replace what a trigger runs. Every run a trigger starts resolves
+// this way, at admission and in the runtime.
 type Scope struct {
 	UserID, ProjectID, DaemonID string
+	ProjectFirst                bool
 	draftRoot                   string
 	// draftOptional: see workflowsource.Options.DraftRootOptional.
 	draftOptional bool
@@ -698,12 +727,29 @@ func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, use
 	return ResolveValidatedRunWorkflowOn(ctx, repo, Scope{UserID: userID, ProjectID: projectID}, workflowName)
 }
 
-func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
+// AutomationScope is where an activation's runs resolve their workflow: on
+// its machine (daemonID; "" for none), with the automation precedence.
+func AutomationScope(userID, projectID, daemonID string) Scope {
+	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: true}
+}
+
+// DescribeRunWorkflow says where a run in scope reads workflowName from: the
+// kind of workflow, the file and machine catalog, and the definition of the
+// same name its precedence passed over (Resolved.Shadowed). It resolves as
+// the run does, without validating the tree.
+func DescribeRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*workflowsource.Description, error) {
+	return workflowsource.Describe(ctx, repo, scope.sourceOptions(), workflowName)
 }
 
 func (s Scope) sourceOptions() workflowsource.Options {
-	return workflowsource.Options{UserID: s.UserID, ProjectID: s.ProjectID, DaemonID: s.DaemonID, DraftRoot: s.draftRoot, DraftRootOptional: s.draftOptional}
+	return workflowsource.Options{
+		UserID: s.UserID, ProjectID: s.ProjectID, DaemonID: s.DaemonID, ProjectFirst: s.ProjectFirst,
+		DraftRoot: s.draftRoot, DraftRootOptional: s.draftOptional,
+	}
+}
+
+func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
+	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
 }
 
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
@@ -737,7 +783,17 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, scope Scope) va
 // A workflow that cannot be LOADED is an invalid argument; one that loads but
 // does not validate is a failed precondition.
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
-	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "", Event{Kind: core.TriggerEventKindChatStart})
+	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "", Event{Kind: core.TriggerEventKindChatStart}, false)
+}
+
+// admissionScope is what a launch of ev admits workflowName against: the
+// run's machine's catalog (the union when daemonID is empty), the draft ev may
+// run (draftRootFor), and projectFirst: the chat's AutomationPrecedence, the
+// same rule its activation was read by and its runtime loads use. Every
+// admission check of one launch (the tree, the no-machine check, the inputs)
+// reads the same workflow through it.
+func admissionScope(userID, projectID, daemonID, workflowName string, ev Event, projectFirst bool) Scope {
+	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: projectFirst, draftRoot: draftRootFor(ev, workflowName)}
 }
 
 // validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:
@@ -745,8 +801,8 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 // whether the workflow's Chat trigger must be on. daemonID is the machine the
 // run will execute on: the tree is admitted against that machine's synced
 // catalog, the one the run's own loads read (the union when it is empty).
-func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID string, ev Event) error {
-	scope := Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, draftRoot: draftRootFor(ev, workflowName)}
+func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID string, ev Event, projectFirst bool) error {
+	scope := admissionScope(userID, projectID, daemonID, workflowName, ev, projectFirst)
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
 		var lookupErr *WorkflowLookupError

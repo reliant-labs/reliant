@@ -21,6 +21,9 @@ type WorkflowCheckpointInput struct {
 	WorkflowID    string `json:"workflow_id"`
 	NodeID        string `json:"node_id"`
 	LoopIteration int64  `json:"loop_iteration,omitempty"`
+	// CatalogPin is the catalog the run started with, recorded beside its
+	// position so a restart from here loads the same definitions.
+	CatalogPin string `json:"catalog_pin,omitempty"`
 }
 
 // WorkflowCheckpointOutput is the output from the WorkflowCheckpoint activity.
@@ -56,6 +59,7 @@ func (a *WorkflowCheckpointActivity) Execute(ctx context.Context, input Workflow
 		ChatID:        input.ChatID,
 		NodeID:        input.NodeID,
 		LoopIteration: input.LoopIteration,
+		CatalogPin:    input.CatalogPin,
 	}); err != nil {
 		return WorkflowCheckpointOutput{Success: false}, err
 	}

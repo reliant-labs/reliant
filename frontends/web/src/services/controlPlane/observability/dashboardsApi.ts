@@ -96,6 +96,9 @@ function mapRef(ref: WireRef | undefined, source: DashboardSource): DashboardRef
 function mapSummary(s: WireSummary): DashboardSummary {
   const source = SOURCE_OF_WIRE[s.source] ?? SOURCE_OF_WIRE[s.ref?.source ?? WireSource.UNSPECIFIED] ?? "workspace";
   return {
+    // An older server sends neither (proto3 defaults): absent, so the page infers the group.
+    group: s.group || undefined,
+    tags: s.tags.length ? [...s.tags] : undefined,
     ref: mapRef(s.ref, source),
     source,
     viewKind: VIEW_KIND_OF_WIRE[s.viewKind],

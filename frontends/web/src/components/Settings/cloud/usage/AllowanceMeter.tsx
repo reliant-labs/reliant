@@ -125,7 +125,7 @@ export function AllowanceMeter({
             <span className="tabular-nums text-foreground">
               {formatQuantity(reading.consumed)}
             </span>{" "}
-            {reading.unitLabel} used — this plan includes none
+            {reading.unitLabel} requested — this plan includes none
           </>
         )}
       </p>
