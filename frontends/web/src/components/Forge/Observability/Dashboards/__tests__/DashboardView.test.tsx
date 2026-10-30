@@ -285,7 +285,7 @@ describe("an org-scoped dashboard", () => {
     { id: "env-landing-staging", name: "landing/staging", project: "landing" },
   ];
 
-  function render(scope: "org" | undefined, initial: DashboardSearch = {}) {
+  function render(scope: "org" | undefined, initial: DashboardSearch = {}, roster: { loading?: boolean; error?: Error; retry?: () => void } = {}) {
     const onCall = vi.fn();
     const base = createFixtureApi({ onCall });
     const api = {
@@ -299,7 +299,8 @@ describe("an org-scoped dashboard", () => {
     function Stateful() {
       const [search, setSearch] = useState<DashboardSearch>(initial);
       return (
-        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env="prod" environments={FIXTURE_ENVS} orgEnvironments={ORG_ENVS}
+        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env="prod" environments={FIXTURE_ENVS} orgEnvironments={roster.loading || roster.error ? [] : ORG_ENVS}
+          orgEnvironmentsLoading={roster.loading} orgEnvironmentsError={roster.error} onRetryOrgEnvironments={roster.retry}
           search={search} onSearch={(next) => setSearch((prev) => ({ ...prev, ...next }))} onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
       );
     }
@@ -308,6 +309,22 @@ describe("an org-scoped dashboard", () => {
   }
 
   const scopes = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([name]) => name === "scope").map(([, req]) => req);
+
+  it("does not widen a selected environment while the org roster is loading", async () => {
+    const onCall = render("org", { orgEnvs: ["landing/prod"] }, { loading: true });
+    await waitFor(() => expect(calls(onCall, "GetDashboard").length).toBeGreaterThan(0));
+    expect(screen.getByTestId("dashboard-loading")).toBeInTheDocument();
+    expect(scopes(onCall)).toHaveLength(0);
+  });
+
+  it("shows a retryable roster failure instead of querying every environment", async () => {
+    const retry = vi.fn();
+    const onCall = render("org", { orgEnvs: ["landing/prod"] }, { error: new Error("Roster unavailable"), retry });
+    await screen.findByRole("alert");
+    expect(scopes(onCall)).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
 
   it("reads the whole org: no project, no environment, whatever the console's environment is", async () => {
     const onCall = render("org");

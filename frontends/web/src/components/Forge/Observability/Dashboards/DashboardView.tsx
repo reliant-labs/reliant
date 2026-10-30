@@ -122,6 +122,9 @@ export interface DashboardViewProps {
   environments: readonly ObsEnvironment[];
   /** Every environment of the org, named `project/env`: what a `scope: "org"` dashboard reads and offers. */
   orgEnvironments?: readonly ObsEnvironment[];
+  orgEnvironmentsLoading?: boolean;
+  orgEnvironmentsError?: Error | null;
+  onRetryOrgEnvironments?: () => void;
   search: DashboardSearch;
   onSearch: (next: Partial<DashboardSearch>) => void;
   onEnvChange: (env: string) => void;
@@ -133,7 +136,7 @@ const NO_MARKERS: readonly ChartMarker[] = [];
 
 const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 
-export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
@@ -151,6 +154,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // lists the org's environments as project/env, and narrows by its own picker
   // (the top bar's control is the route project's).
   const orgScoped = spec?.scope === "org";
+  const orgRosterBlocked = orgScoped && (orgEnvironmentsLoading || !!orgEnvironmentsError);
   const orgPick = useMemo(() => orgSelection(orgEnvironments, search.orgEnvs), [orgEnvironments, search.orgEnvs]);
   const env = orgScoped ? orgPick.env : consoleEnv;
   const environments = orgScoped ? orgEnvironments : projectEnvironments;
@@ -162,9 +166,9 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
   const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
-    if (!orgId || unrecorded || dashRef.kind === "builtin") return null;
+    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
-  }, [orgId, project, envId, unrecorded, orgScoped, orgPick, dashRef.kind]);
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, orgScoped, orgPick, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -187,8 +191,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const marks = !!spec && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
-  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  const history = useAlertHistory(dashRef.kind === "builtin" || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(
     () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
     [envId, environments, orgScoped, orgPick.ids]
@@ -236,7 +240,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const exitTv = useCallback(() => onSearch({ tv: undefined }), [onSearch]);
   const tvLayer = useEscapeLayer(tv, exitTv);
 
-  if (doc.isLoading || org.isLoading) return <DashboardSkeleton />;
+  if (doc.isLoading || org.isLoading || (orgScoped && orgEnvironmentsLoading)) return <DashboardSkeleton />;
+  if (orgScoped && orgEnvironmentsError) return <ObsError error={orgEnvironmentsError} subject="organization environments" onRetry={onRetryOrgEnvironments} />;
   if (!orgId && org.error) return <ObsError error={org.error} subject={project} onRetry={() => void org.refetch()} />;
   if (doc.error || !spec || !summary) {
     const missing = doc.error instanceof ConnectError && doc.error.code === Code.NotFound;

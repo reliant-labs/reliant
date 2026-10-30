@@ -43,9 +43,16 @@ function useRecordedEnvs(): ObsEnvironment[] {
 }
 
 /** Every environment of the org as `project/env` (hooks/apps-queries.ts): what an org-scoped dashboard offers. */
-function useOrgScopedEnvs(): ObsEnvironment[] {
-  const orgEnvs = useOrgEnvironments();
-  return useMemo(() => orgPlaceOf(orgEnvs.data?.envs ?? []).environments, [orgEnvs.data]);
+function useOrgScopedEnvs() {
+  const query = useOrgEnvironments();
+  const environments = useMemo(() => orgPlaceOf(query.data?.envs ?? []).environments, [query.data]);
+  const unavailable = query.data && query.data.availability !== "available";
+  return {
+    environments,
+    loading: query.isLoading,
+    error: query.error ?? (unavailable ? new Error(query.data?.detail || "Organization environments are unavailable") : !query.isLoading && !query.data ? new Error("Organization environments could not be read") : null),
+    retry: () => void query.refetch(),
+  };
 }
 
 /** Merge viewer state into the URL; dashboard controls keep browser history. */
@@ -208,7 +215,7 @@ export function DashboardPage() {
   };
   if (!dashRef) return null;
   // Organization accounting is discoverable without a deployed environment.
-  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
+  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView
@@ -218,7 +225,7 @@ export function DashboardPage() {
         dashRef={dashRef}
         env={env}
         environments={environments}
-        orgEnvironments={orgEnvironments}
+        orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry}
         search={search}
         onSearch={onSearch}
         onEnvChange={setEnv}
