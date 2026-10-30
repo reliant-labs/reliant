@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	temporaltest "go.temporal.io/sdk/testsuite"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
