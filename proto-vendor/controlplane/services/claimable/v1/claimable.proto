@@ -138,8 +138,24 @@ service ClaimableService {
   //
   // Path "upgrade": the caller IS the anonymous user, now upgraded in place
   // (same user id, now with an email). Path "membership": the caller is a
-  // different, existing user who joins the anonymous org as owner (off until
-  // users belong to more than one org in practice, design §9 M1).
+  // different, existing user. In the claim's own transaction they become an
+  // owner member of the anonymous org and organizations.owner_id moves to
+  // them (this is the only way an org's owner changes; there is no general
+  // transfer). The anonymous user and its sign-in identity are then retired.
+  // The org is one more org the caller belongs to; it is not made their
+  // default.
+  //
+  // FREE STATIC SITE. Each person's plan-less orgs share ONE free static site
+  // (docs/orgs.md). If the caller already has one and the claimed deploy brings
+  // another, the claim needs to know which keeps the slot: set free_site to
+  // FREE_SITE_CHOICE_CLAIMED or FREE_SITE_CHOICE_EXISTING. Without it the claim
+  // is refused (FailedPrecondition, claimable_free_site_choice_required, with a
+  // FreeSiteChoiceRequired detail naming both sites) and NOTHING changes. There
+  // is no default. The choice is re-checked inside the claim's transaction: if
+  // the other site is gone or the caller subscribed meanwhile, the real state is
+  // applied and the response's free_site_outcome says what happened. To keep
+  // both sites, subscribe first (the claim link stays valid); no choice is
+  // needed afterwards.
   //
   // Completion is ONE compare-and-set on the claimable_deploys row; the first
   // completion wins. It revokes the CLI's token.
@@ -154,6 +170,17 @@ service ClaimableService {
         }
         scope: "response.org_id"
       }
+    };
+  }
+
+  // GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
+  // claiming would put a second site on their one free slot, and names both
+  // sites. GetClaim cannot say: it is public and does not know who is asking.
+  // Read-only; the claim re-checks, so a stale answer cannot mis-claim.
+  rpc GetClaimFreeSite(GetClaimFreeSiteRequest) returns (GetClaimFreeSiteResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a read of the claim preview for the signed-in caller; the claimable_deploys row is the record"}
     };
   }
 }
@@ -223,6 +250,44 @@ message GetClaimableAvailabilityResponse {
   bool compute_available = 3;
   // Why not, when compute_available is false, beyond causes.
   repeated ClaimableUnavailableCause compute_causes = 4;
+  // The anonymous plan's caps: the numbers admission and the operators
+  // enforce. forge reads them here rather than compiling its own copy, so
+  // its checks and the platform's cannot disagree. Set whether or not a
+  // deploy is available.
+  ClaimableLimits limits = 5;
+}
+
+// ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
+// cap and zero means none allowed. "Per workload" holds for the service and,
+// separately, its migration job: each runs with request = limit (no burst).
+message ClaimableLimits {
+  // Static sites, and what the site may store (live copy and archives).
+  int32 max_static_sites = 1;
+  int32 max_static_stored_mib = 2;
+
+  // Services (one replica each, no autoscaling) and pre-rollout migration
+  // jobs. No other workload kind is admitted.
+  int32 max_services = 3;
+  int32 max_replicas = 4;
+  int32 max_migration_jobs = 5;
+  // Per workload: CPU and memory request = limit, and scratch disk.
+  int32 workload_cpu_millicores = 6;
+  int32 workload_memory_mib = 7;
+  int32 workload_ephemeral_storage_mib = 8;
+
+  // Managed Postgres: how many, and each one's own server (it is not a
+  // database on a shared server): instances, CPU and memory request = limit,
+  // provisioned storage (WAL included) and max_connections. No backups.
+  int32 max_databases = 9;
+  int32 database_instances = 10;
+  int32 database_cpu_millicores = 11;
+  int32 database_memory_mib = 12;
+  int32 database_storage_mib = 13;
+  int32 database_max_connections = 14;
+  // The largest storage_gib a ManagedDatabase may declare (its spec counts
+  // whole GiB); the platform provisions database_storage_mib whatever it
+  // declares.
+  int32 database_declared_storage_gib = 15;
 }
 
 // ClaimableUnavailableCause is one reason claimable deploys, or their compute,
@@ -310,8 +375,66 @@ message OpenClaimSessionResponse {
   int64 expires_in = 3;
 }
 
+// Which site keeps the claimer's one free static slot.
+enum FreeSiteChoice {
+  FREE_SITE_CHOICE_UNSPECIFIED = 0;
+  // The claimed site is live; the caller's existing free site is paused.
+  FREE_SITE_CHOICE_CLAIMED = 1;
+  // The caller's existing free site stays live; the claimed site is claimed but
+  // paused.
+  FREE_SITE_CHOICE_EXISTING = 2;
+}
+
+// What a membership claim did about the free slot.
+enum FreeSiteOutcome {
+  FREE_SITE_OUTCOME_UNSPECIFIED = 0;
+  // Nothing was paused: the caller had no other free site, or the situation
+  // changed since they chose (the other site was deleted, or they subscribed).
+  FREE_SITE_OUTCOME_NO_CONFLICT = 1;
+  // The claimed site is live; paused_site is the caller's other site.
+  FREE_SITE_OUTCOME_CLAIMED_SITE_LIVE = 2;
+  // The caller's other site is live; paused_site is the claimed site.
+  FREE_SITE_OUTCOME_EXISTING_SITE_LIVE = 3;
+}
+
+// One static site, named for a person deciding which to keep.
+message FreeSite {
+  string deployment_id = 1;
+  string org_id = 2;
+  string project = 3;
+  // The environment's name and the deployment's.
+  string env = 4;
+  string name = 5;
+  // The platform URL (with scheme); empty until one is allocated.
+  string url = 6;
+}
+
+// FreeSiteChoiceRequired is the error detail (svcerr.WithDetail) on a
+// FailedPrecondition/claimable_free_site_choice_required refusal.
+message FreeSiteChoiceRequired {
+  // The caller's site that holds their free slot now.
+  FreeSite existing_site = 1;
+  // The site the claim would add.
+  FreeSite claimed_site = 2;
+}
+
 message CompleteClaimRequest {
   string claim_token = 1;
+  // Which site keeps the free slot when the caller already has a free site.
+  // Ignored (and may be unset) when they do not.
+  FreeSiteChoice free_site = 2;
+}
+
+message GetClaimFreeSiteRequest {
+  string claim_token = 1;
+}
+
+message GetClaimFreeSiteResponse {
+  // True when claiming now needs a free_site choice.
+  bool choice_required = 1;
+  // Set when choice_required.
+  FreeSite existing_site = 2;
+  FreeSite claimed_site = 3;
 }
 
 message CompleteClaimResponse {
@@ -324,4 +447,12 @@ message CompleteClaimResponse {
   // Open holds on the claimed org's deploys, if any: the claimed org is
   // ordinary, so billing rules apply from here on.
   repeated DeployHold holds = 4;
+  // Path "membership" only: what the claim did about the caller's one free
+  // static slot. This is what happened, which can differ from what was asked
+  // when the situation changed between the choice and the claim.
+  FreeSiteOutcome free_site_outcome = 5;
+  // The site that is paused because of it (the other one holds the slot). Unset
+  // unless the outcome is CLAIMED_SITE_LIVE or EXISTING_SITE_LIVE. Reversible:
+  // it runs again when the person subscribes or deletes the other site.
+  FreeSite paused_site = 6;
 }

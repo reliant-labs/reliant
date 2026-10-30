@@ -28,6 +28,7 @@ import { mockTransport } from "@/lib/test-utils";
 import {
   loadPrivacySettings,
   privacyConsent,
+  privacyConsentKnown,
   privacySettingsKey,
   subscribePrivacyConsent,
   usePrivacyConsent,
@@ -174,6 +175,21 @@ describe("imperative readers", () => {
     await loadPrivacySettings();
     const query = queryClient.getQueryCache().find({ queryKey: privacySettingsKey(), exact: true });
     expect(query?.gcTime).toBe(Infinity);
+  });
+
+  it("is not known after a sign-out until the next account's settings load", async () => {
+    stored.analyticsEnabled = true; // account A opted in
+    await loadPrivacySettings();
+    expect(privacyConsentKnown()).toBe(true);
+
+    queryClient.clear(); // A signs out
+    expect(privacyConsent().analyticsEnabled).toBe(true); // A's answer, kept for the signed-out stretch
+    expect(privacyConsentKnown()).toBe(false); // ...but not B's
+
+    stored.analyticsEnabled = false; // account B signs in, opted out
+    await loadPrivacySettings();
+    expect(privacyConsentKnown()).toBe(true);
+    expect(privacyConsent().analyticsEnabled).toBe(false);
   });
 
   it("an opt-out still holds after a sign-out clears the cache", async () => {
