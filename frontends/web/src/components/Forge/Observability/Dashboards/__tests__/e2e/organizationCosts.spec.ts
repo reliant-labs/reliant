@@ -8,8 +8,8 @@ for (const width of [390, 1440]) {
   test(`automatic cost selection without deployments ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/src/components/Forge/Observability/Dashboards/__tests__/e2e/dashboard-selection.html");
-    await expect(page.getByTestId("dashboards-builtin")).toContainText("Organization costs");
-    await expect(page.getByTestId("dashboards-builtin")).toContainText("Requires cost-read permission");
+    await expect(page.getByTestId("dashboards-group-platform")).toContainText("Organization costs");
+    await expect(page.getByTestId("dashboards-group-platform")).toContainText("Requires cost-read permission");
     await test.info().attach(`dashboard-selection-${width}.png`, { body: await page.screenshot({ animations: "disabled" }), contentType: "image/png" });
     await page.getByRole("link", { name: "Organization costs", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Organization costs", exact: true })).toBeVisible();
