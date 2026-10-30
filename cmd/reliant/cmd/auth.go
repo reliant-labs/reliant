@@ -170,7 +170,9 @@ func runLogin(cmd *cobra.Command, server string, flow loginFlow) (credentials.Cr
 	// short-lived deploy token instead of asking for a second login. A token
 	// may never grant authority it does not hold, so without them there would
 	// be nothing to exchange.
-	scopes := append([]string{cliauth.ScopeAPI}, cliauth.ForgeScopes()...)
+	// ScopeMachines: `reliant machine` manages the user's own machines as
+	// this login.
+	scopes := append([]string{cliauth.ScopeAPI, cliauth.ScopeMachines}, cliauth.ForgeScopes()...)
 	if flow.Device {
 		if !flow.Forced {
 			fmt.Fprintf(out, "Signing in with a device code: %s, so a browser login's callback could not reach your browser (--browser overrides).\n", flow.Remote)

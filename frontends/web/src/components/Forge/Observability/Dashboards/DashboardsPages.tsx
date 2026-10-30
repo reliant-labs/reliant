@@ -20,12 +20,13 @@ import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import Card from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
+import { useOrgEnvironments } from "@/hooks/apps-queries";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 
 import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
 import { CloudNotice } from "../../SourceNotices";
-import type { ObsEnvironment } from "../obsPlace";
+import { orgPlaceOf, type ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import { ObsNoEnvironments, type ObsTopic } from "../ObsStates";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
@@ -39,6 +40,19 @@ function useRecordedEnvs(): ObsEnvironment[] {
     () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : [])),
     [roster.envs]
   );
+}
+
+/** Every environment of the org as `project/env` (hooks/apps-queries.ts): what an org-scoped dashboard offers. */
+function useOrgScopedEnvs() {
+  const query = useOrgEnvironments();
+  const environments = useMemo(() => orgPlaceOf(query.data?.envs ?? []).environments, [query.data]);
+  const unavailable = query.data && query.data.availability !== "available";
+  return {
+    environments,
+    loading: query.isLoading,
+    error: query.error ?? (unavailable ? new Error(query.data?.detail || "Organization environments are unavailable") : !query.isLoading && !query.data ? new Error("Organization environments could not be read") : null),
+    retry: () => void query.refetch(),
+  };
 }
 
 /** Merge viewer state into the URL; dashboard controls keep browser history. */
@@ -173,6 +187,7 @@ export function DashboardPage() {
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
   const onSearch = useSearchUpdater<DashboardSearch>(false);
   const environments = useRecordedEnvs();
+  const orgEnvironments = useOrgScopedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   const dashRef = useMemo<DashboardRef | null>(
@@ -196,10 +211,11 @@ export function DashboardPage() {
     tv: raw.tv === true || undefined,
     version: typeof raw.version === "number" ? raw.version : undefined,
     release: typeof raw.release === "string" ? raw.release : undefined,
+    orgEnvs: Array.isArray(raw.orgEnvs) ? raw.orgEnvs.filter((name): name is string => typeof name === "string") : undefined,
   };
   if (!dashRef) return null;
   // Organization accounting is discoverable without a deployed environment.
-  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
+  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView
@@ -209,6 +225,7 @@ export function DashboardPage() {
         dashRef={dashRef}
         env={env}
         environments={environments}
+        orgEnvironments={orgEnvironments.environments} orgEnvironmentsLoading={orgEnvironments.loading} orgEnvironmentsError={orgEnvironments.error} onRetryOrgEnvironments={orgEnvironments.retry}
         search={search}
         onSearch={onSearch}
         onEnvChange={setEnv}
