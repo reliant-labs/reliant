@@ -334,8 +334,9 @@ func TestUsageMeter_RequestsInOneActivityAreDistinctAndNeverCollideWithChatTurns
 	assert.True(t, strings.HasSuffix(ids[0], "/compaction/1"), ids[0])
 	assert.True(t, strings.HasSuffix(ids[1], "/compaction/2"), ids[1])
 	assert.True(t, strings.HasSuffix(ids[2], "/title/1"), ids[2])
-	assert.NotEqual(t, llmUsageID("w", "r", "a", "chat", 1), llmUsageID("w", "r", "a", "compaction", 1))
-	assert.NotEqual(t, llmUsageID("w", "r", "a", "title", 1), llmUsageID("w", "r", "a", "title", 2))
+	assert.NotEqual(t, llmUsageID("w", "r", "a", "chat", 1, 0), llmUsageID("w", "r", "a", "compaction", 1, 0))
+	assert.NotEqual(t, llmUsageID("w", "r", "a", "title", 1, 0), llmUsageID("w", "r", "a", "title", 2, 0))
+	assert.NotEqual(t, llmUsageID("w", "r", "a", "title", 1, 0), llmUsageID("w", "r", "a", "title", 1, 1), "a driver-retried request is its own row")
 }
 
 // A request that fails for good is recorded as a failed call with a class and

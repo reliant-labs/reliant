@@ -33,11 +33,15 @@ const llmUsageWriteTimeout = 5 * time.Second
 // llmUsageCall is one model request, as the ledger sees it. Counts and
 // metadata only: no prompt, reply or error text can be put in it.
 type llmUsageCall struct {
-	Recorder    LLMUsageRecorder
-	UserID      string
-	ChatID      string
-	Purpose     string
-	Ordinal     int
+	Recorder LLMUsageRecorder
+	UserID   string
+	ChatID   string
+	Purpose  string
+	Ordinal  int
+	// Request is the driver-level request number of a request the driver
+	// failed and retried inside the call (RetryWait.Attempt); 0 is the request
+	// that ended the call.
+	Request     int
 	Provider    string
 	Model       string
 	LatencyMs   int64
@@ -52,7 +56,10 @@ type llmUsageCall struct {
 //
 // The record is keyed on the logical request, the activity (workflow id, run
 // id, activity id), what it was for, and its ordinal among the requests that
-// activity makes, plus the Temporal attempt. Temporal re-running an activity
+// activity makes, plus the Temporal attempt. A driver that fails and retries
+// a request inside one call (its own backoff ladder) made several provider
+// requests for that logical one: each failed one is its own row, keyed by its
+// driver request number (recordDriverRetries). Temporal re-running an activity
 // makes the same logical requests again, and each attempt is a real request to
 // the provider that may have used tokens (a stream can fail after reporting
 // usage), so every attempt is its own row and is counted. Only a repeated write
@@ -67,7 +74,7 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 	}
 	info := activity.GetInfo(ctx)
 	rec := db.LLMCallUsage{
-		ID:               llmUsageID(info.WorkflowExecution.ID, info.WorkflowExecution.RunID, info.ActivityID, c.Purpose, c.Ordinal),
+		ID:               llmUsageID(info.WorkflowExecution.ID, info.WorkflowExecution.RunID, info.ActivityID, c.Purpose, c.Ordinal, c.Request),
 		UserID:           c.UserID,
 		ChatID:           c.ChatID,
 		RunID:            info.WorkflowExecution.RunID,
@@ -102,18 +109,87 @@ func recordLLMUsage(ctx context.Context, c llmUsageCall) {
 	}
 }
 
-func llmUsageID(workflowID, runID, activityID, purpose string, ordinal int) string {
-	return workflowID + "/" + runID + "/" + activityID + "/" + purpose + "/" + strconv.Itoa(ordinal)
+func llmUsageID(workflowID, runID, activityID, purpose string, ordinal, request int) string {
+	id := workflowID + "/" + runID + "/" + activityID + "/" + purpose + "/" + strconv.Itoa(ordinal)
+	if request > 0 {
+		id += "/request/" + strconv.Itoa(request)
+	}
+	return id
 }
 
-// recordLLMCallUsage is CallLLM's turn: the one streamed request it makes.
-func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool) {
-	recordLLMUsage(ctx, llmUsageCall{
+// driverRetries collects the provider requests a driver failed and retried
+// inside one call, from its EventRetryWait events, each with how long it ran.
+type driverRetries struct {
+	start time.Time
+	list  []driverRetry
+}
+
+type driverRetry struct {
+	wait      llm.RetryWait
+	latencyMs int64
+}
+
+func newDriverRetries() *driverRetries { return &driverRetries{start: time.Now()} }
+
+// observe records one failed request. The next one starts once the driver has
+// slept out the wait.
+func (r *driverRetries) observe(wait llm.RetryWait) {
+	now := time.Now()
+	r.list = append(r.list, driverRetry{wait: wait, latencyMs: now.Sub(r.start).Milliseconds()})
+	r.start = now.Add(wait.Delay)
+}
+
+// finalLatencyMs is how long the request that ended the call ran: the whole
+// call when the driver retried nothing, else the time since its last wait.
+func (r *driverRetries) finalLatencyMs(callLatencyMs int64) int64 {
+	if len(r.list) == 0 {
+		return callLatencyMs
+	}
+	return max(time.Since(r.start).Milliseconds(), 0)
+}
+
+// retriedRequestError is a failed request a driver retried, as the ledger
+// classifies it: from the status and reason its wait names. The ledger keeps
+// only the class.
+type retriedRequestError struct{ wait llm.RetryWait }
+
+func (e retriedRequestError) Error() string {
+	return "http " + strconv.Itoa(e.wait.StatusCode) + ": " + e.wait.Reason
+}
+
+// recordDriverRetries writes one row per provider request the driver failed
+// and retried within call: the same logical request under its own driver
+// request number, as an error of the class its wait names, holding whatever
+// usage it reported before failing.
+func recordDriverRetries(ctx context.Context, call llmUsageCall, retries *driverRetries) {
+	for _, r := range retries.list {
+		c := call
+		c.Request = r.wait.Attempt
+		c.LatencyMs = r.latencyMs
+		c.Usage = llm.TokenUsage{}
+		if r.wait.Usage != nil {
+			c.Usage = *r.wait.Usage
+		}
+		c.Err = retriedRequestError{wait: r.wait}
+		c.Interrupted = false
+		recordLLMUsage(ctx, c)
+	}
+}
+
+// recordLLMCallUsage is CallLLM's turn: the streamed request it makes, plus
+// every request its driver failed and retried along the way.
+func (a *CallLLMActivity) recordLLMCallUsage(ctx context.Context, chat *db.Chat, provider, modelID string, latencyMs int64, usage llm.TokenUsage, callErr error, interrupted bool, retries *driverRetries) {
+	call := llmUsageCall{
 		Recorder: a.repo, UserID: chat.UserID, ChatID: chat.ID,
 		Purpose: store.LLMPurposeChat, Ordinal: 1,
 		Provider: provider, Model: modelID, LatencyMs: latencyMs,
 		Usage: usage, Err: callErr, Interrupted: interrupted,
-	})
+	}
+	if retries != nil {
+		recordDriverRetries(ctx, call, retries)
+		call.LatencyMs = retries.finalLatencyMs(latencyMs)
+	}
+	recordLLMUsage(ctx, call)
 }
 
 // usageMeter is how every model request other than CallLLM's turn is made:
@@ -145,14 +221,16 @@ func newUsageMeter(recorder LLMUsageRecorder, userID, chatID, purpose string) *u
 // those tokens were consumed.
 func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolvedLLMCall, prompts []string, messages []message.Message, available []tools.Tool) (*llm.DriverResponse, error) {
 	m.n++
-	start := time.Now()
-	resp, err := accumulator.StreamAndAccumulate(ctx, resolved.Driver, prompts, messages, available)
+	retries := newDriverRetries()
+	resp, err := accumulator.StreamAndAccumulateObserving(ctx, resolved.Driver, prompts, messages, available, retries.observe)
 	call := llmUsageCall{
 		Recorder: m.recorder, UserID: m.userID, ChatID: m.chatID,
 		Purpose: m.purpose, Ordinal: m.n,
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
-		LatencyMs: time.Since(start).Milliseconds(), Err: err,
 	}
+	recordDriverRetries(ctx, call, retries)
+	call.LatencyMs = retries.finalLatencyMs(time.Since(retries.start).Milliseconds())
+	call.Err = err
 	if err != nil && ctx.Err() != nil {
 		// A driver that stops because its context ended closes the stream
 		// without a final event, which the accumulator reports as a stream that
