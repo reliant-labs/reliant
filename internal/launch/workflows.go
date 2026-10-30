@@ -446,9 +446,11 @@ func chatScope(userID string, chat *db.Chat, workflowName string) Scope {
 }
 
 // AutomationPrecedence reports whether chat's runs resolve workflows with an
-// automation's precedence (Scope.ProjectFirst): it was started by a trigger.
+// automation's precedence (Scope.ProjectFirst): a stored trigger started it.
+// Read from the launch kind, which deleting the trigger does not clear
+// (core.TriggerEventKind.FiredByTrigger).
 func AutomationPrecedence(chat *db.Chat) bool {
-	return chat != nil && chat.TriggerID != nil && *chat.TriggerID != ""
+	return chat != nil && core.TriggerEventKind(chat.LaunchKind).FiredByTrigger()
 }
 
 func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflowName string) map[string]*reliantv1.Input {
@@ -790,7 +792,7 @@ func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, w
 // (Scope.ProjectFirst). Every admission check of one launch (the tree, the
 // no-machine check) reads the same workflow through it.
 func admissionScope(userID, projectID, daemonID, workflowName string, ev Event) Scope {
-	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: ev.TriggerID != "", draftRoot: draftRootFor(ev, workflowName)}
+	return Scope{UserID: userID, ProjectID: projectID, DaemonID: daemonID, ProjectFirst: ev.Kind.FiredByTrigger(), draftRoot: draftRootFor(ev, workflowName)}
 }
 
 // validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:

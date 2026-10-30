@@ -163,9 +163,11 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 	}
 
 	wfCtx := &workflowContext{
-		userID:       chat.UserID,
-		projectID:    chat.ProjectID,
-		projectFirst: chat.TriggerID != nil && *chat.TriggerID != "",
+		userID:    chat.UserID,
+		projectID: chat.ProjectID,
+		// The launch kind, not the trigger id: deleting the trigger clears
+		// the id, and must not switch a running automation to account-first.
+		projectFirst: core.TriggerEventKind(chat.LaunchKind).FiredByTrigger(),
 	}
 	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
 		wfCtx.draftRoot = *chat.WorkflowName

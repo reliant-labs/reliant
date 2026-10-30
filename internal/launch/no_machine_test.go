@@ -207,3 +207,34 @@ nodes:
 	require.ErrorAs(t, err, &validation)
 	assert.Contains(t, validation.Error(), "needs a machine")
 }
+
+// An automation's precedence is read from how its chat was launched, which
+// survives deleting the trigger; the trigger id does not.
+func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	now := time.Now().UTC()
+	triggerID := uuid.NewString()
+	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "nightly",
+		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
+		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
+	}))
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	result, err := launcher.Launch(ctx, Event{
+		Kind: core.TriggerEventKindSchedule, TriggerID: triggerID, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: now,
+	}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+		Params: mockModelParams(t), Messages: userSeed("go"), Unattended: true,
+	})
+	require.NoError(t, err)
+
+	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	require.NoError(t, err)
+	assert.True(t, AutomationPrecedence(chat))
+	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
+	chat, err = repo.GetChat(ctx, result.Chat.ID)
+	require.NoError(t, err)
+	require.Nil(t, chat.TriggerID, "deleting the trigger clears the chat's trigger id")
+	assert.True(t, AutomationPrecedence(chat), "and leaves the run an automation")
+}
