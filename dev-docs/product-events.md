@@ -181,6 +181,21 @@ never see.
   attempt is its own row and its own `calls` in the rollup. Only a repeated
   write of the same `(id, attempt)` is ignored. Purpose and ordinal keep
   requests apart, so none collides with CallLLM's `.../chat/1`.
+- **Usage reported before a failure is kept.** A provider can bill a request
+  and then drop the connection, and drivers send the final event (the one with
+  the usage) either before or after the error event. `accumulator.StreamAndAccumulate`
+  therefore returns the partial response next to its error (usage, content and
+  tool calls seen so far; nil only when the stream produced nothing), and
+  `usageMeter` records that usage while still returning no response to its
+  callers. `CallLLM` stops reading at the error, so it reads on for the final
+  event for up to one second (`collectUsageAfterStreamError`). A request cut by a
+  cancel, a deadline or the progress guard is recorded as `cancelled` or a
+  `timeout`/`stalled` error. The limit: a driver only reports usage in its final
+  event, so a request cut before that event has no usage to record and is counted
+  as a call with zero tokens. Tests: `TestUsageMeter_AFailedStreamKeepsTheUsageItReported`,
+  `TestBackgroundRequests_FailedAttemptKeepsItsUsage`,
+  `TestCallLLM_UsageLedgerKeepsTokensAFailedAttemptConsumed`,
+  `TestUsageMeter_ContextEndedRequestsAreRecordedAsWhatCutThem`.
 - **Count-only.** Columns are ids, provider, model, auth mode
   (`managed`/`byok`/`subscription`/`local`), four token counts, outcome, an
   `error_class` from a closed set (a CHECK constraint, so an error string

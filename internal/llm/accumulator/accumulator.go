@@ -28,6 +28,14 @@ import (
 // - Tool call accumulation
 // - Error handling from streaming events
 // - Final response construction with usage stats
+//
+// A failed stream still returns what it produced. When err is non-nil the
+// response may be non-nil too: it carries the usage a final event reported
+// (a provider can bill a request and then drop the connection, and drivers send
+// that final event after the error as well as before it) and whatever content
+// and tool calls had streamed. Callers must check err first and treat the
+// response as partial; its only legitimate use on error is accounting for the
+// tokens the request consumed.
 func StreamAndAccumulate(
 	ctx context.Context,
 	driver llm.Driver,
@@ -150,7 +158,7 @@ StreamingDone:
 		observability.LLMRequestsTotal.WithLabelValues(provider, "error").Inc()
 		observability.LLMStreamDuration.WithLabelValues(provider).Observe(duration)
 		observability.LLMRequestDuration.WithLabelValues(provider).Observe(duration)
-		return nil, fmt.Errorf("streaming failed: %w", streamError)
+		return partialResponse(finalResponse, contentBuilder.String(), toolCalls), fmt.Errorf("streaming failed: %w", streamError)
 	}
 
 	// Check if we got a final response
@@ -158,7 +166,7 @@ StreamingDone:
 		observability.LLMRequestsTotal.WithLabelValues(provider, "error").Inc()
 		observability.LLMStreamDuration.WithLabelValues(provider).Observe(duration)
 		observability.LLMRequestDuration.WithLabelValues(provider).Observe(duration)
-		return nil, fmt.Errorf("stream ended without final response (processed %d events)", eventCount)
+		return partialResponse(nil, contentBuilder.String(), toolCalls), fmt.Errorf("stream ended without final response (processed %d events)", eventCount)
 	}
 
 	// Record request metrics
@@ -198,4 +206,24 @@ StreamingDone:
 	}
 
 	return finalResponse, nil
+}
+
+// partialResponse is what a failed stream produced: the final event's response
+// (and so its usage) when one arrived, with the content and tool calls seen
+// while streaming. It is nil when the stream produced nothing at all.
+func partialResponse(final *llm.DriverResponse, content string, toolCalls []message.ToolCall) *llm.DriverResponse {
+	if final == nil && content == "" && len(toolCalls) == 0 {
+		return nil
+	}
+	out := &llm.DriverResponse{}
+	if final != nil {
+		*out = *final
+	}
+	if content != "" {
+		out.Content = content
+	}
+	if len(out.ToolCalls) == 0 && len(toolCalls) > 0 {
+		out.ToolCalls = toolCalls
+	}
+	return out
 }

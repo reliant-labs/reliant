@@ -31,6 +31,9 @@ type usageDriver struct {
 	// error, the way a provider that bills a request and then drops the
 	// connection does.
 	failWithUsage bool
+	// usageAfterError sends the failing stream's final event after the error
+	// rather than before it, the order the Anthropic driver uses.
+	usageAfterError bool
 }
 
 func (d *usageDriver) Name() string                          { return d.name }
@@ -47,15 +50,19 @@ func (d *usageDriver) StreamResponse(ctx context.Context, prompts []string, mess
 	fail := d.streams <= d.failures
 	d.mu.Unlock()
 
-	ch := make(chan llm.DriverEvent, 2)
+	ch := make(chan llm.DriverEvent, 3)
 	if fail {
-		if d.failWithUsage {
-			ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
-				FinishReason: message.FinishReasonEndTurn,
-				Usage:        llm.TokenUsage{InputTokens: 500, OutputTokens: 120, CacheReadInputTokens: 100},
-			}}
+		billed := llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
+			FinishReason: message.FinishReasonEndTurn,
+			Usage:        llm.TokenUsage{InputTokens: 500, OutputTokens: 120, CacheReadInputTokens: 100},
+		}}
+		if d.failWithUsage && !d.usageAfterError {
+			ch <- billed
 		}
 		ch <- llm.DriverEvent{Type: llm.EventError, Error: errors.New("http2: client connection lost; secret prompt text sk-live-123")}
+		if d.failWithUsage && d.usageAfterError {
+			ch <- billed
+		}
 	} else {
 		ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
 			Content:      "a reply that must never reach the ledger",
@@ -159,14 +166,24 @@ func TestCallLLM_UsageLedgerCountsEveryAttemptOfARetriedActivity(t *testing.T) {
 // totals next to attempt 2's, not overwritten by them.
 func TestCallLLM_UsageLedgerKeepsTokensAFailedAttemptConsumed(t *testing.T) {
 	t.Parallel()
+	for name, usageAfterError := range map[string]bool{"usage then error": false, "error then usage": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			callLLMKeepsFailedAttemptUsage(t, usageAfterError)
+		})
+	}
+}
+
+func callLLMKeepsFailedAttemptUsage(t *testing.T, usageAfterError bool) {
+	t.Helper()
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
-	project := h.CreateTestProject(ctx, "proj-ledger-billed", "user-ledger-billed")
-	chat := h.CreateTestChat(ctx, "chat-ledger-billed", project.ID, project.UserID)
+	project := h.CreateTestProject(ctx, "proj-ledger-billed-"+fmt.Sprint(usageAfterError), "user-ledger-billed")
+	chat := h.CreateTestChat(ctx, "chat-ledger-billed-"+fmt.Sprint(usageAfterError), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	driver := &usageDriver{name: "anthropic", failures: 1, failWithUsage: true}
+	driver := &usageDriver{name: "anthropic", failures: 1, failWithUsage: true, usageAfterError: usageAfterError}
 	runCallLLMWithRetries(t, h, driver, chat.ID)
 	require.Equal(t, 2, driver.streams)
 

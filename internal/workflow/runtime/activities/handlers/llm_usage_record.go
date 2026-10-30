@@ -141,6 +141,8 @@ func newUsageMeter(recorder LLMUsageRecorder, userID, chatID, purpose string) *u
 
 // streamAndAccumulate sends one request to resolved's driver, accumulates the
 // streamed reply and records the request's usage, whether it succeeded or not.
+// A request that fails after the provider reported usage records that usage:
+// those tokens were consumed.
 func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolvedLLMCall, prompts []string, messages []message.Message, available []tools.Tool) (*llm.DriverResponse, error) {
 	m.n++
 	start := time.Now()
@@ -151,11 +153,23 @@ func (m *usageMeter) streamAndAccumulate(ctx context.Context, resolved *resolved
 		Provider: usageProvider(resolved, resolved.Driver), Model: resolvedUsageModel(resolved),
 		LatencyMs: time.Since(start).Milliseconds(), Err: err,
 	}
+	if err != nil && ctx.Err() != nil {
+		// A driver that stops because its context ended closes the stream
+		// without a final event, which the accumulator reports as a stream that
+		// ended early. The cause is the context: a cancel or a deadline.
+		call.Err = ctx.Err()
+	}
 	if resp != nil {
 		call.Usage = resp.Usage
 	}
 	recordLLMUsage(ctx, call)
-	return resp, err
+	if err != nil {
+		// The accumulator hands back what a failed stream produced so its usage
+		// can be recorded above; the callers of the meter get the old contract,
+		// no response with an error.
+		return nil, err
+	}
+	return resp, nil
 }
 
 // resolvedUsageModel is the concrete model that served the call: the registry

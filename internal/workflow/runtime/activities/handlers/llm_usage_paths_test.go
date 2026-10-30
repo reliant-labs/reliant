@@ -39,9 +39,26 @@ type pathDriver struct {
 	mu        sync.Mutex
 	name      string
 	failFirst bool
+	// failShape is how the first request fails when failFirst is set: the error
+	// alone (the zero value), the final event with its usage and then the error,
+	// or the error and then the final event, which is the order the Anthropic
+	// driver sends them in.
+	failShape failShape
 	requests  int
 	toolInput map[string]string
 }
+
+type failShape int
+
+const (
+	failErrorOnly failShape = iota
+	failUsageThenError
+	failErrorThenUsage
+)
+
+// failedUsage is what a request that the provider billed reports before it
+// fails; it differs from the usage of the answer so a test can tell them apart.
+var failedUsage = llm.TokenUsage{InputTokens: 500, OutputTokens: 120, CacheReadInputTokens: 100, CacheCreationInputTokens: 20}
 
 func (d *pathDriver) Name() string                          { return d.name }
 func (d *pathDriver) Model() models.Model                   { return models.Model{ID: "mock-model"} }
@@ -57,10 +74,23 @@ func (d *pathDriver) StreamResponse(_ context.Context, _ []string, _ []message.M
 	fail := d.failFirst && d.requests == 1
 	d.mu.Unlock()
 
-	ch := make(chan llm.DriverEvent, 1)
+	ch := make(chan llm.DriverEvent, 2)
 	defer close(ch)
 	if fail {
-		ch <- llm.DriverEvent{Type: llm.EventError, Error: errors.New("http2: client connection lost; a secret prompt sk-live-9")}
+		failure := llm.DriverEvent{Type: llm.EventError, Error: errors.New("http2: client connection lost; a secret prompt sk-live-9")}
+		billed := llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
+			FinishReason: message.FinishReasonEndTurn, Usage: failedUsage,
+		}}
+		switch d.failShape {
+		case failUsageThenError:
+			ch <- billed
+			ch <- failure
+		case failErrorThenUsage:
+			ch <- failure
+			ch <- billed
+		default:
+			ch <- failure
+		}
 		return ch
 	}
 	resp := &llm.DriverResponse{
@@ -86,8 +116,12 @@ func (d *pathDriver) resolver() drivers.DriverResolver {
 }
 
 func newPathDriver(provider string, failFirst bool) *pathDriver {
+	return newPathDriverShaped(provider, failFirst, failErrorOnly)
+}
+
+func newPathDriverShaped(provider string, failFirst bool, shape failShape) *pathDriver {
 	return &pathDriver{
-		name: provider, failFirst: failFirst,
+		name: provider, failFirst: failFirst, failShape: shape,
 		toolInput: map[string]string{
 			tools.SetTitleToolName: `{"title":"Debugging Workflows"}`,
 			tools.ToolDraftAutomation: `{"when":{"kind":"schedule","cron":["0 9 * * 1-5"]},` +
@@ -425,4 +459,199 @@ func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {
 	src, err := os.ReadFile("call_llm.go")
 	require.NoError(t, err)
 	assert.Contains(t, string(src), "a.recordLLMCallUsage(", "CallLLM's turn must write its ledger row")
+}
+
+// ledgerTotals sums the per-call table and the rollup over every row.
+func ledgerTotals(t *testing.T, h *IdempotencyTestHelper) (callRows, rollupCalls, rollupErrors, in, out, cacheRead, cacheWrite int64) {
+	t.Helper()
+	require.NoError(t, h.DB().QueryRow(`SELECT count(*) FROM llm_call_usage`).Scan(&callRows))
+	require.NoError(t, h.DB().QueryRow(`SELECT COALESCE(sum(calls),0), COALESCE(sum(error_calls),0), COALESCE(sum(input_tokens),0),
+		COALESCE(sum(output_tokens),0), COALESCE(sum(cache_read_tokens),0), COALESCE(sum(cache_write_tokens),0)
+		FROM llm_call_usage_daily`).Scan(&rollupCalls, &rollupErrors, &in, &out, &cacheRead, &cacheWrite))
+	return
+}
+
+// The reviewer's case, on the meter path itself: a provider that reports usage
+// and then fails. The accumulator used to return no response with an error, so
+// the meter recorded the failed request as zero tokens. Both orders drivers use
+// must keep what the request consumed: the final event before the error, and
+// (as the Anthropic driver sends it) after.
+func TestUsageMeter_AFailedStreamKeepsTheUsageItReported(t *testing.T) {
+	t.Parallel()
+	for name, shape := range map[string]failShape{
+		"usage then error": failUsageThenError,
+		"error then usage": failErrorThenUsage,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := NewIdempotencyTestHelper(t)
+			defer h.Cleanup()
+			ctx := context.Background()
+			project := h.CreateTestProject(ctx, "proj-meter-billed", "user-meter-billed")
+			chat := h.CreateTestChat(ctx, "chat-meter-billed", project.ID, project.UserID)
+
+			driver := newPathDriverShaped("anthropic", true, shape)
+			resolved := &resolvedLLMCall{Driver: driver, Model: models.Model{ID: "mock-model"}}
+			exec := func(ctx context.Context, _ string) (string, error) {
+				resp, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+				assert.Nil(t, resp, "callers still get no response with an error")
+				return "", err
+			}
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestActivityEnvironment()
+			env.RegisterActivityWithOptions(exec, activity.RegisterOptions{Name: "FailsBilled"})
+			_, err := env.ExecuteActivity("FailsBilled", "x")
+			require.Error(t, err)
+
+			rows := ledgerRows(t, h, "compaction")
+			require.Len(t, rows, 1)
+			assert.Equal(t, "error", rows[0].Outcome)
+			assert.Equal(t, "network", rows[0].ErrorClass)
+			assert.Equal(t, [4]int64{500, 120, 100, 20}, [4]int64{rows[0].In, rows[0].Out, rows[0].CacheRead, rows[0].CacheWrite},
+				"the failed request's row holds the tokens it consumed")
+
+			calls, errCalls, in := dailyCalls(t, h)
+			assert.EqualValues(t, 1, calls)
+			assert.EqualValues(t, 1, errCalls)
+			assert.EqualValues(t, 500, in, "and so does the rollup")
+			var dump string
+			require.NoError(t, h.DB().QueryRow(`SELECT l::text FROM llm_call_usage l`).Scan(&dump))
+			assert.NotContains(t, dump, "sk-live-9")
+		})
+	}
+}
+
+// Every background purpose, through its real activity on a retry ladder: the
+// first attempt reports usage and fails, the second answers. The failed
+// attempt's tokens are in the ledger and the rollup next to the answer's.
+func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
+	t.Parallel()
+	const (
+		failIn, failOut, failRead, failWrite = 500, 120, 100, 20
+		okIn, okOut, okRead, okWrite         = 700, 90, 400, 30
+	)
+	check := func(t *testing.T, h *IdempotencyTestHelper, purpose string) {
+		t.Helper()
+		failed, ok := requireAttempts(t, ledgerRows(t, h, purpose))
+		assert.Equal(t, [4]int64{failIn, failOut, failRead, failWrite}, [4]int64{failed.In, failed.Out, failed.CacheRead, failed.CacheWrite},
+			"%s: the failed attempt keeps the tokens it reported", purpose)
+		assert.Equal(t, [4]int64{okIn, okOut, okRead, okWrite}, [4]int64{ok.In, ok.Out, ok.CacheRead, ok.CacheWrite})
+		callRows, calls, errCalls, in, out, cacheRead, cacheWrite := ledgerTotals(t, h)
+		assert.EqualValues(t, 2, callRows)
+		assert.EqualValues(t, 2, calls)
+		assert.EqualValues(t, 1, errCalls)
+		assert.EqualValues(t, failIn+okIn, in, "%s: the rollup holds both attempts", purpose)
+		assert.EqualValues(t, failOut+okOut, out)
+		assert.EqualValues(t, failRead+okRead, cacheRead)
+		assert.EqualValues(t, failWrite+okWrite, cacheWrite)
+	}
+
+	t.Run("compaction", func(t *testing.T) {
+		t.Parallel()
+		h := NewIdempotencyTestHelper(t)
+		defer h.Cleanup()
+		ctx := context.Background()
+		chatID, thread, svc := setupChatWithWorkflowAndThread(t, h.Repo())
+		_, err := h.Repo().SaveMessageToThread(ctx, chatID, thread, roleUser, "Summarize where we are.", &thread, nil, nil)
+		require.NoError(t, err)
+		saveTurn(t, svc, chatID, thread, "call_1", 20_000, 80_000)
+		driver := newPathDriverShaped("claude", true, failUsageThenError)
+		input := CompactInput{ChatID: chatID, Thread: thread}.V3()
+		input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
+		runRetried(t, "Compact", NewCompactActivity(h.Repo(), driver.resolver()).Execute, input)
+		check(t, h, "compaction")
+	})
+	t.Run("title", func(t *testing.T) {
+		t.Parallel()
+		h := NewIdempotencyTestHelper(t)
+		defer h.Cleanup()
+		project := h.CreateTestProject(context.Background(), "proj-title-billed", "user-title-billed")
+		chat := h.CreateTestChat(context.Background(), "chat-title-billed", project.ID, project.UserID)
+		driver := newPathDriverShaped("openai", true, failErrorThenUsage)
+		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(h.Repo(), driver.resolver()).Execute,
+			GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
+		check(t, h, "title")
+	})
+	t.Run("draft_automation", func(t *testing.T) {
+		t.Parallel()
+		h := NewIdempotencyTestHelper(t)
+		defer h.Cleanup()
+		driver := newPathDriverShaped("reliant", true, failUsageThenError)
+		draft := NewDraftAutomationActivity(driver.resolver()).WithUsageRecorder(h.Repo())
+		runRetried(t, "DraftAutomation", draft.Execute, DraftAutomationInput{UserID: "user-draft-billed", Description: "every weekday at 9 summarise failed CI"})
+		check(t, h, "draft_automation")
+	})
+}
+
+// ctxDriver streams usage and then waits for its context to end, the way a
+// driver whose request is cut by a cancel or a deadline does.
+type ctxDriver struct{ pathDriver }
+
+func (d *ctxDriver) StreamResponse(ctx context.Context, _ []string, _ []message.Message, _ []tools.Tool) <-chan llm.DriverEvent {
+	ch := make(chan llm.DriverEvent)
+	go func() {
+		defer close(ch)
+		select {
+		case ch <- llm.DriverEvent{Type: llm.EventContentDelta, Content: "partial"}:
+		case <-ctx.Done():
+			return
+		}
+		<-ctx.Done()
+	}()
+	return ch
+}
+
+// A request cut by its context is recorded for what it was: a cancel is a
+// cancelled call, a deadline is a timeout. Neither is an "unknown" error and
+// neither is lost. The cut contexts derive from the activity's, so the request
+// id (which comes from the activity) is still available when the row is written.
+func TestUsageMeter_ContextEndedRequestsAreRecordedAsWhatCutThem(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		cut         func(parent context.Context) (context.Context, context.CancelFunc)
+		wantOutcome string
+		wantClass   string
+	}{
+		"cancel": {
+			cut: func(parent context.Context) (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(parent)
+				time.AfterFunc(50*time.Millisecond, cancel)
+				return ctx, cancel
+			},
+			wantOutcome: "cancelled",
+		},
+		"deadline": {
+			cut: func(parent context.Context) (context.Context, context.CancelFunc) {
+				return context.WithTimeout(parent, 50*time.Millisecond)
+			},
+			wantOutcome: "error", wantClass: "timeout",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := NewIdempotencyTestHelper(t)
+			defer h.Cleanup()
+			ctx := context.Background()
+			project := h.CreateTestProject(ctx, "proj-meter-ctx-"+name, "user-meter-ctx-"+name)
+			chat := h.CreateTestChat(ctx, "chat-meter-ctx-"+name, project.ID, project.UserID)
+			resolved := &resolvedLLMCall{Driver: &ctxDriver{pathDriver{name: "anthropic"}}, Model: models.Model{ID: "mock-model"}}
+
+			exec := func(actCtx context.Context, _ string) (string, error) {
+				cut, cancel := tc.cut(actCtx)
+				defer cancel()
+				_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "title").streamAndAccumulate(cut, resolved, nil, nil, nil)
+				return "", err
+			}
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestActivityEnvironment()
+			env.RegisterActivityWithOptions(exec, activity.RegisterOptions{Name: "Cut"})
+			_, err := env.ExecuteActivity("Cut", "x")
+			require.Error(t, err)
+
+			rows := ledgerRows(t, h, "title")
+			require.Len(t, rows, 1, "a cut request is still a request")
+			assert.Equal(t, tc.wantOutcome, rows[0].Outcome)
+			assert.Equal(t, tc.wantClass, rows[0].ErrorClass)
+		})
+	}
 }
