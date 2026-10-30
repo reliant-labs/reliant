@@ -149,6 +149,8 @@ vi.mock("@/hooks/observability-queries", () => ({
 
 // The index the nav reads its starred dashboards from (the Dashboards page shares it).
 vi.mock("@/hooks/dashboard-queries", () => ({
+  // The open dashboard's own document, which the layout reads for its scope.
+  useDashboard: () => ({ data: undefined }),
   useDashboardIndex: () => ({
     data: {
       canWrite: true,
