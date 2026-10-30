@@ -404,7 +404,7 @@ func mergePresetParams(subInputs map[string]interface{}, groupName string, param
 // loadPresetParams loads a preset by name and returns its params.
 // Uses the V2_LoadPresetParams activity to avoid import cycles.
 func (e *InlineWorkflowExecutor) loadPresetParams(presetName string) (map[string]interface{}, error) {
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -412,16 +412,16 @@ func (e *InlineWorkflowExecutor) loadPresetParams(presetName string) (map[string
 			MaximumInterval:    10 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	var params map[string]interface{}
 	// chat_id scopes a project preset to the run's project and machine,
 	// the catalog the run was admitted against (LoadPresetParamsActivity).
-	err := workflow.ExecuteActivity(activityCtx, "LoadPresetParams", map[string]interface{}{
-		"project_path": e.projectPath,
-		"chat_id":      e.chatID,
-		"preset_name":  presetName,
-		"catalog_pin":  catalogPinFrom(e.ctx),
+	err := executeBookkeeping(e.ctx, activityOpts, "LoadPresetParams", types.LoadPresetParamsInput{
+		ProjectPath: e.projectPath,
+		ChatID:      e.chatID,
+		PresetName:  presetName,
+		CatalogPin:  catalogPinFrom(e.ctx),
 	}).Get(e.ctx, &params)
 
 	if err != nil {
@@ -665,7 +665,7 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 		return e.compileSubWorkflowSemantics()
 	}
 
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -673,20 +673,20 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	workflowRef := e.subWorkflowName
 	if e.invocationContract != nil && e.invocationContract.WorkflowRef != "" && !strings.Contains(e.invocationContract.WorkflowRef, "{{") {
 		workflowRef = e.invocationContract.WorkflowRef
 	}
-	loadInput := map[string]string{
-		"chat_id":       e.chatID,
-		"workflow_name": workflowRef,
-		"catalog_pin":   catalogPinFrom(e.ctx),
+	loadInput := types.LoadWorkflowInput{
+		ChatID:       e.chatID,
+		WorkflowName: workflowRef,
+		CatalogPin:   catalogPinFrom(e.ctx),
 	}
 	// LoadedWorkflow matches the output of ActivityLoadWorkflow (LoadWorkflowOutput in handlers)
 	var loadedWf LoadedWorkflow
-	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
+	if err := executeBookkeeping(e.ctx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
 		return fmt.Errorf("activity load failed: %w", err)
 	}
 

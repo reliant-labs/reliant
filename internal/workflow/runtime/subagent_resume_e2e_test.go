@@ -156,7 +156,7 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 	wfJSON, err := protojson.Marshal(wf)
 	require.NoError(t, err)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -756,9 +756,9 @@ edges:
     default: implementations
 `)
 	child := resumeTestWorkflow(s.T(), subAgentResumeYAML)
-	env.RegisterActivityWithOptions(func(_ context.Context, values map[string]string) (LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, values types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		wf := root
-		if values["workflow_name"] == "builtin://agent" {
+		if values.WorkflowName == "builtin://agent" {
 			wf = child
 		}
 		raw, err := protojson.Marshal(wf)
