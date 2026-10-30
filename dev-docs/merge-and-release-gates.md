@@ -405,7 +405,7 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`; the review marker must pass. Target ≤10 minutes |
+| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, and the path lanes below that the diff reaches; the review marker must pass |
 | push to `main`, nightly, `workflow_dispatch` | `Release gate` and every lane | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag`. Never required for a merge |
 
 Beside them run the lanes neither gate covers (`scripts/ci-lanes.sh`,
@@ -414,11 +414,8 @@ Playwright (`task test:web:e2e`), the electron package
 (`task build:electron:smoke`) and the vendored control-plane contract
 (`task contract:controlplane:check`, which reads private control-plane with a
 deploy key). Main runs all of them (the contract only when a push changed what
-it checks). The merge queue runs none of them: the queue is the fast tier, and
-a red web build, Playwright run, electron package or contract drift on main is
-fixed before the release like any other red main. (The contract's verdict moves
-with control-plane main, so in the queue a control-plane merge turned every
-queued reliant PR red.) A `ci:run`
+it checks). The merge queue runs those the diff reaches: the release-gate record
+does not include them, so the queue is still where they protect a release. A `ci:run`
 pull request runs those its paths reach. `CI result` is the one verdict.
 
 `license-gate.yml`, `pin-drift.yml` and `release-tag-guard.yml` still run on a

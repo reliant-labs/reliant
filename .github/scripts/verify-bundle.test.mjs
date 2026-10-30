@@ -141,7 +141,7 @@ for (const [name, block, build, verify, buildLine] of [
 }
 
 test("CI's web-bundle job runs the task, on every change that can alter the bundle it verifies", () => {
-  assert.match(CI_WEB, /\n {4}if: needs\.lanes\.outputs\.web == 'true' && github\.event_name != 'merge_group'\n/);
+  assert.match(CI_WEB, /\n {4}if: needs\.lanes\.outputs\.web == 'true'\n/);
   assert.match(CI_WEB, /\n\s+run: task build:web:verify\n/);
   assert.ok(!CI_WEB.includes("NODE_ENV"), "ci.yml's web-bundle job must not set NODE_ENV: the task does, on the build command only");
 

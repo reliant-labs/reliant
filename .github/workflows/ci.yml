@@ -13,8 +13,9 @@ name: CI
 #                                     which is what lets GitHub enqueue the PR
 #                                     once pr-review passes it
 #   merge_group                       task ci:merge   the merge tier: what the
-#                                     diff can affect, -short, ~10 min; the
-#                                     run that decides the merge
+#                                     diff can affect, -short, ~10 min, plus
+#                                     the path lanes; the run that decides
+#                                     the merge
 #   push to main, schedule, dispatch  task release:gate  the whole suite plus
 #                                     every lane, recorded per sha; never
 #                                     blocks a merge, gates every release
@@ -31,9 +32,9 @@ name: CI
 #
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
-# control-plane contract. Main runs all of them; the merge queue runs none, so
-# the queue stays a fast tier that only this PR's own diff can turn red; a
-# `ci:run` pull request runs those its paths reach.
+# control-plane contract. The merge queue (and a `ci:run` pull request) runs
+# those its paths reach; main runs all of them. They stay in the queue because
+# the release-gate record does not include them.
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
@@ -276,10 +277,7 @@ jobs:
   cp-contract:
     name: Vendored control-plane contract matches control-plane main
     needs: lanes
-    # Not in the merge queue: its verdict moves with control-plane main, so a
-    # control-plane merge would turn every queued reliant PR red (it did on
-    # 2026-10-30: claimable.proto). Main judges it and the release waits on it.
-    if: needs.lanes.outputs.cp_contract == 'true' && github.event_name != 'merge_group' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    if: needs.lanes.outputs.cp_contract == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -312,9 +310,7 @@ jobs:
   web-bundle:
     name: Web (lint, typecheck, release build, verify-bundle)
     needs: lanes
-    # Main and a ci:run pull request, not the merge queue: the queue is the
-    # fast tier (merge gate only), and a red here is fixed before the release.
-    if: needs.lanes.outputs.web == 'true' && github.event_name != 'merge_group'
+    if: needs.lanes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -340,7 +336,7 @@ jobs:
   playwright:
     name: E2E Frontend (Playwright)
     needs: lanes
-    if: needs.lanes.outputs.playwright == 'true' && github.event_name != 'merge_group'
+    if: needs.lanes.outputs.playwright == 'true'
     # Not ubuntu-latest: it resolves to ubuntu 26.04, which Playwright 1.58
     # refuses at `playwright install --with-deps`.
     runs-on: ubuntu-24.04
@@ -380,7 +376,7 @@ jobs:
   electron-package:
     name: Electron (package smoke)
     needs: lanes
-    if: needs.lanes.outputs.electron == 'true' && github.event_name != 'merge_group'
+    if: needs.lanes.outputs.electron == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
