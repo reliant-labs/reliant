@@ -130,6 +130,10 @@ type CallLLMStore interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// The spawn tool lists presets from the run's pinned catalog, or its
+	// machine's, as LoadPresetParams loads them (projectPresets).
+	workflowsource.MachineStore
+	workflowsource.PinnedStore
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*db.AgentMessage, error)
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*db.SpawnChild, error)

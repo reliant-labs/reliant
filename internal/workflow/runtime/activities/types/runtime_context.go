@@ -135,6 +135,12 @@ type RuntimeContext struct {
 	// means something upstream is wrong. Set on call_llm nodes only.
 	SpeculativeTurn bool `json:"speculative_turn,omitempty"`
 
+	// CatalogPin is the workflow catalog the run started with
+	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
+	// describes from it, so the model is offered the presets a spawn then
+	// loads. Set on call_llm nodes; empty for a run with no pin.
+	CatalogPin string `json:"catalog_pin,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 
