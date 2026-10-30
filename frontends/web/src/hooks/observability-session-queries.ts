@@ -51,7 +51,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
   const api = useObsReadApi();
   return useQuery({
     queryKey: sessionKeys.list(scope, filters),
-    queryFn: (): Promise<SessionList> =>
+    queryFn: ({ signal }): Promise<SessionList> =>
       api.listSessions({
         ...(scope as RumScope),
         services: filters.service ? [filters.service] : [],
@@ -62,7 +62,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
         pathContains: filters.pathContains,
         pageSize: SESSION_PAGE_SIZE,
         pageToken: filters.pageToken,
-      }),
+      }, { signal }),
     enabled: !!scope,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -75,7 +75,7 @@ export function useSession(scope: RumScope | null, sessionId: string | undefined
   const api = useObsReadApi();
   return useQuery({
     queryKey: sessionKeys.detail(scope, sessionId ?? ""),
-    queryFn: () => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }),
+    queryFn: ({ signal }) => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }, { signal }),
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
@@ -87,13 +87,13 @@ export function useSessionTimeline(scope: RumScope | null, sessionId: string | u
   const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: sessionKeys.timeline(scope, sessionId ?? ""),
-    queryFn: ({ pageParam }): Promise<Timeline> =>
+    queryFn: ({ pageParam, signal }): Promise<Timeline> =>
       api.getSessionTimeline({
         ...(scope as RumScope),
         sessionId: sessionId as string,
         pageSize: TIMELINE_PAGE_SIZE,
         pageToken: pageParam ?? undefined,
-      }),
+      }, { signal }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!scope && !!sessionId,

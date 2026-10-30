@@ -54,7 +54,7 @@ vi.mock("../../services/controlPlane/client", async () => {
       const timer = setTimeout(() => {
         server.live--;
         server.served++;
-        resolve(RESPONSE[name] ?? {});
+        resolve(RESPONSE[name] ?? (name.startsWith("listMetrics:") ? { metrics: [], truncated: false } : {}));
       }, server.serveMs);
       signal?.addEventListener("abort", () => {
         clearTimeout(timer);
@@ -72,7 +72,8 @@ vi.mock("../../services/controlPlane/client", async () => {
 });
 
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { useObsReadApi, usePanelQuery } from "../observability-queries";
+import { useMetricCatalog, useObsReadApi, usePanelQuery } from "../observability-queries";
+import { listMetricCatalog } from "@/services/controlPlane/observability/metricsApi";
 import { obsClient } from "@/services/controlPlane/observability/obsClient";
 
 const SCOPE: ObsScope = { orgId: "org", envIds: [], filters: [] };
@@ -87,6 +88,7 @@ function realisticApi(): ObservabilityApi {
       const res = (await client().queryPanel({ id: req.panel.id }, options)) as Record<string, unknown>;
       return { kind: "number", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [], seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [], ...res };
     },
+    listMetricCatalog,
     searchLogs: async () => (await client().searchLogs({ id: "logs" })) as never,
     getServiceGraph: async () => (await client().getServiceGraph({ id: "graph" })) as never,
     getObservabilityUsage: async () => (await client().getObservabilityUsage({ id: "usage" })) as never,
@@ -205,6 +207,28 @@ describe("other views share the budget", () => {
     expect(server.refused).toBe(0);
     expect(server.peak).toBeLessThanOrEqual(OBS_READ_CONCURRENCY + 1);
     expect(result.current.panels.every((q) => q.data !== undefined)).toBe(true);
+  });
+});
+
+describe("abandoned non-panel reads", () => {
+  it("removes an unmounted metric catalog from the queue before sending the current view", async () => {
+    const { wrapper } = setup();
+    const blockers = Array.from({ length: OBS_READ_CONCURRENCY }, () =>
+      obsClient(ObservabilityService).queryPanel({} as never)
+    );
+    await advance(0);
+    expect(server.live).toBe(OBS_READ_CONCURRENCY);
+
+    const obsolete = renderHook(() => useMetricCatalog(SCOPE, "1h", "old"), { wrapper });
+    await advance(0);
+    obsolete.unmount();
+    const current = renderHook(() => useMetricCatalog(SCOPE, "1h", "current"), { wrapper });
+    await advance(2_000);
+    await Promise.all(blockers);
+
+    expect(server.arrivals.filter((name) => name.startsWith("listMetrics:"))).toHaveLength(1);
+    expect(current.result.current.isError).toBe(false);
+    expect(current.result.current.data).toBeDefined();
   });
 });
 

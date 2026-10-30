@@ -51,9 +51,9 @@ export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.panel(scope, range, panel ?? EMPTY_PANEL, [], [], options.offsetKey ?? ""),
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel: panel as Panel, services: [], stepSeconds: 0, groupBy: [] });
+      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel: panel as Panel, services: [], stepSeconds: 0, groupBy: [] }, { signal });
     },
     enabled: options.enabled && !!scope && !!panel,
     // Every range is relative ("the last hour"), so an answer is stale once time has moved on.
@@ -76,9 +76,9 @@ export function useExplainPanel(scope: ObsScope | null, range: RangePreset, pane
   const api = useObservabilityApi();
   return useQuery({
     queryKey: [...metricKeys.all(scope), "explain", range, panel] as const,
-    queryFn: async (): Promise<Explained> => {
+    queryFn: async ({ signal }): Promise<Explained> => {
       const window = resolveWindow(range);
-      const result = await api.queryPanel({ ...(scope as ObsScope), window, panel: panel as Panel, services: [], stepSeconds: 0, explain: true });
+      const result = await api.queryPanel({ ...(scope as ObsScope), window, panel: panel as Panel, services: [], stepSeconds: 0, explain: true }, { signal });
       return { result, window };
     },
     enabled: enabled && !!scope && !!panel,

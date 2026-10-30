@@ -94,8 +94,8 @@ function useResources(scope: ObsScope, side: "before" | "after", window: TimeWin
   const usable = !!window && window.endMs > window.startMs;
   return useQuery({
     queryKey: [...obsKeys.all(scope), "compare", RESOURCES_PANEL.id, side, window?.startMs ?? 0, window?.endMs ?? 0] as const,
-    queryFn: () =>
-      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
+    queryFn: ({ signal }) =>
+      api.queryPanel({ ...scope, window: window!, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }, { signal }),
     enabled: usable,
     staleTime: 5 * 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
