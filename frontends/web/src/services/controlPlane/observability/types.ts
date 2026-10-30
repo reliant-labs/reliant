@@ -438,6 +438,12 @@ export interface DashboardAnnotation {
 }
 
 export interface Dashboard {
+  /**
+   * Which telemetry the panels read. `project` (absent): the selected
+   * environments of the route's project. `org`: every project's environments.
+   * `platform`: the signals belong to no environment, so none is filtered on.
+   */
+  scope?: "project" | "org" | "platform";
   sections?: { id: string; title: string }[];
   id: string;
   title: string;
