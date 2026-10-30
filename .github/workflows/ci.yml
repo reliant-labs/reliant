@@ -222,6 +222,33 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      # The Temporal dev-server tests (internal/triggers, workflow/runtime,
+      # e2e/stories, ...) use a `temporal` on PATH, and otherwise each test
+      # process downloads the SDK's pinned CLI into one shared /tmp path on
+      # first use. Several packages doing that at once on one runner failed
+      # 16 tests with "start Temporal dev server: unexpected EOF" (release
+      # gate go 3/3, 2026-10-30). One cached, retried install per runner.
+      - name: Temporal CLI (cached)
+        if: ${{ matrix.part == 'go' || matrix.part == 'web' }}
+        id: temporal-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/temporal-cli
+          key: temporal-cli-${{ runner.os }}-${{ runner.arch }}-1.9.1
+      - name: Install the Temporal CLI on PATH
+        if: ${{ matrix.part == 'go' || matrix.part == 'web' }}
+        env:
+          # The CLI go.temporal.io/sdk v1.50.0's testsuite downloads itself.
+          TEMPORAL_CLI_URL: https://temporal.download/assets/temporalio/cli/releases/download/v1.9.1/temporal_cli_1.9.1_linux_amd64.tar.gz
+        run: |
+          set -euo pipefail
+          dir="$HOME/.local/temporal-cli"
+          if [ ! -x "$dir/temporal" ]; then
+            mkdir -p "$dir"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 "$TEMPORAL_CLI_URL" | tar -xz -C "$dir" temporal
+          fi
+          "$dir/temporal" --version
+          echo "$dir" >> "$GITHUB_PATH"
       - name: task release:gate (part ${{ matrix.label }})
         env:
           PART: ${{ matrix.part }}
