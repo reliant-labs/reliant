@@ -100,7 +100,7 @@ import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
 import { OrgEnvPicker } from "./OrgEnvPicker";
-import { orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
+import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 
@@ -133,7 +133,7 @@ const NO_MARKERS: readonly ChartMarker[] = [];
 
 const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
 
-export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, search, onSearch, onEnvChange, hrefs, navigateTo }: DashboardViewProps) {
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
@@ -141,7 +141,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
-  const exploreLink = useExploreHref();
+  const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
@@ -157,6 +157,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const envId = orgScoped ? (orgPick.ids.length === 1 ? orgPick.ids[0] : null) : env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = !orgScoped && env !== ENV_ALL && !envId;
   const envLabel = orgScoped ? orgScopeLabel(orgPick) : env === ENV_ALL ? "All environments" : env;
+  // Its drill-downs and explorers read the same org-wide scope: the org's
+  // pages on the picked environments, not the route project's console.
+  const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
+  const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
   const scope = useMemo<ObsScope | null>(() => {
     if (!orgId || unrecorded || dashRef.kind === "builtin") return null;
     return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
@@ -1108,7 +1112,9 @@ function DrillMenu({
     { label: "View logs", detail: "filtered to this series", href: hrefs.logs(searches.logs), testId: "drill-logs" },
     { label: "View traces", detail: "filtered to this series", href: hrefs.traces(searches.traces), testId: "drill-traces" },
   ];
-  if (searches.service) entries.push({ label: "Open workload", detail: searches.service, href: hrefs.workload(searches.service), testId: "drill-workload" });
+  // "" when no single workload is meant (an org dashboard over several environments).
+  const workload = searches.service ? hrefs.workload(searches.service) : "";
+  if (searches.service && workload) entries.push({ label: "Open workload", detail: searches.service, href: workload, testId: "drill-workload" });
   return (
     <PointMenu
       at={drill.at}

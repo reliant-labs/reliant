@@ -345,6 +345,22 @@ describe("an org-scoped dashboard", () => {
     for (const req of scopes(onCall)) expect(req.envIds).toEqual(["env-landing-staging"]);
   });
 
+  it("links its explorers to the picked project/env on the org's pages, not the route project's", async () => {
+    render("org", { orgEnvs: ["landing/prod"] });
+    await screen.findByTestId("dashboard-grid");
+    await userEvent.click(await screen.findByTestId("dashboard-panel-menu-orders"));
+    const traces = await screen.findByRole("menuitem", { name: /Explore in Traces/ });
+    const href = new URL(traces.getAttribute("href")!, "http://x");
+    expect(href.pathname).toBe("/forge/observability/traces");
+    expect(href.searchParams.get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    const explore = screen.queryByTestId("dashboard-panel-explore-orders");
+    if (explore) {
+      const metrics = new URL(explore.getAttribute("href")!, "http://x");
+      expect(metrics.pathname).toBe("/forge/observability/metrics");
+      expect(metrics.searchParams.get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    }
+  });
+
   it("leaves an ordinary dashboard on its project: the route's project and environment, no org picker", async () => {
     const onCall = render(undefined);
     await screen.findByTestId("dashboard-grid");

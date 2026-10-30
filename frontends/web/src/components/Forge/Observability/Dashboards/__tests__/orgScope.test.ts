@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { ENV_ALL } from "../../../Console/envScope";
 import { orgPlaceOf } from "../../obsPlace";
-import { orgQueryScope, orgScopeLabel, orgSelection } from "../orgScope";
+import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection, orgWorkloadHref } from "../orgScope";
+import type { DashboardHrefs } from "../DashboardView";
+import { workloadPivot } from "../../Metrics/pivots";
 
 const { environments } = orgPlaceOf([
   { id: "e-cp", name: "prod", project: "control-plane", kind: "persistent" },
@@ -19,7 +21,7 @@ describe("an org dashboard's scope", () => {
 
   it("with nothing picked reads every environment of the org, and names no project", () => {
     const pick = orgSelection(environments, undefined);
-    expect(pick).toEqual({ names: [], ids: [], env: ENV_ALL });
+    expect(pick).toEqual({ names: [], picked: [], ids: [], env: ENV_ALL });
     const scope = orgQueryScope("org-1", pick);
     expect(scope).toEqual({ orgId: "org-1", envIds: [], filters: [] });
     expect("projectId" in scope).toBe(false);
@@ -43,5 +45,49 @@ describe("an org dashboard's scope", () => {
     const pick = orgSelection(environments, ["landing/torn-down-preview"]);
     expect(pick.ids).toEqual([]);
     expect(orgScopeLabel(orgSelection(environments, environments.map((e) => e.name)))).toBe("4 environments");
+  });
+});
+
+describe("an org dashboard's links", () => {
+  const consoleHrefs: DashboardHrefs = {
+    logs: () => "/forge/p/control-plane/observability/logs",
+    traces: () => "/forge/p/control-plane/observability/traces",
+    workload: () => "/forge/p/control-plane/overview",
+    list: "/forge/p/control-plane/observability/dashboards",
+    release: (v) => `/forge/p/control-plane/releases/${v}`,
+    trace: () => "/forge/p/control-plane/observability/traces",
+    dashboard: () => "/forge/p/control-plane/dashboards/x",
+  };
+  const params = (href: string) => new URL(href, "http://x").searchParams;
+
+  it("open the org's explorers on the picked project/env, not the route project's console", () => {
+    const hrefs = orgDashboardHrefs(consoleHrefs, orgSelection(environments, ["landing/prod"]));
+    const logs = hrefs.logs({ service: "web", range: "1h" });
+    expect(logs.startsWith("/forge/observability/logs?")).toBe(true);
+    expect(params(logs).get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    expect(params(logs).get("service")).toBe("web");
+    expect(hrefs.traces({}).startsWith("/forge/observability/traces")).toBe(true);
+    expect(hrefs.trace("t1")).toContain("/forge/observability/traces");
+    // The dashboard's own pages stay the console's.
+    expect(hrefs.list).toBe(consoleHrefs.list);
+  });
+
+  it("read every environment when none is picked", () => {
+    const logs = orgDashboardHrefs(consoleHrefs, orgSelection(environments, undefined)).logs({});
+    expect(logs).toBe("/forge/observability/logs");
+  });
+
+  it("open a workload in its own project under the bare environment name, only when one environment is picked", () => {
+    expect(orgWorkloadHref(orgSelection(environments, ["landing/staging"]), "web")).toBe("/forge/p/landing/workloads/staging/web");
+    expect(orgWorkloadHref(orgSelection(environments, ["landing/prod", "control-plane/prod"]), "web")).toBe("");
+    expect(orgWorkloadHref(orgSelection(environments, undefined), "web")).toBe("");
+  });
+
+  it("explore in the org's Metrics on the picked environments", () => {
+    const explore = orgExploreHref(orgSelection(environments, ["landing/prod"]));
+    const href = explore(workloadPivot("web", "cpu"))!;
+    expect(href.startsWith("/forge/observability/metrics")).toBe(true);
+    expect(params(href).get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    expect(params(href).get("env")).toBeNull();
   });
 });
