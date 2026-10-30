@@ -513,6 +513,12 @@ func BrokenHealth(err *DeclarationError) *reliantv1.TriggerHealth {
 type CachedWorkflows struct {
 	inner WorkflowResolver
 	cache map[[4]string]cachedWorkflow
+	defs  map[[4]string]cachedDefinition
+}
+
+type cachedDefinition struct {
+	def *core.TriggerEventDefinition
+	err error
 }
 
 var _ MachineWorkflowResolver = (*CachedWorkflows)(nil)
@@ -524,7 +530,7 @@ type cachedWorkflow struct {
 
 // NewCachedWorkflows wraps inner for the life of one request.
 func NewCachedWorkflows(inner WorkflowResolver) *CachedWorkflows {
-	return &CachedWorkflows{inner: inner, cache: map[[4]string]cachedWorkflow{}}
+	return &CachedWorkflows{inner: inner, cache: map[[4]string]cachedWorkflow{}, defs: map[[4]string]cachedDefinition{}}
 }
 
 // ResolveRunWorkflow implements WorkflowResolver.

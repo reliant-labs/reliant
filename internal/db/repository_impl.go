@@ -3218,6 +3218,12 @@ func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload 
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
 }
 
+// SetTriggerEventDefinition records which workflow definition a firing
+// resolved (store.SetTriggerEventDefinition).
+func (r *Repo) SetTriggerEventDefinition(ctx context.Context, id string, def *core.TriggerEventDefinition) error {
+	return store.SetTriggerEventDefinition(ctx, r.ORM(), id, def)
+}
+
 func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
 	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
 }

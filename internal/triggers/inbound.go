@@ -143,11 +143,20 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	}
 
 	outcome, detail := core.TriggerEventPending, ""
+	// Which definition the event resolves is recorded on its row; a broken
+	// one refuses it before any filter, so a broken file never reads as
+	// "did not match".
+	def, err := definitionOf(ctx, in.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
 	decl, err := activationFor(ctx, in.workflows, trigger)
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
 	origin := in.enrich(ctx, trigger, &ev)
 	switch {
+	case def.Broken():
+		outcome, detail = core.TriggerEventFailed, RefusalDetail(def)
 	case err != nil && isVerdict(err):
 		// Recorded, not dropped: "why did my trigger stop firing?" must have
 		// an answer, and this is it.
@@ -186,6 +195,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		Origin:        origin,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
+		Definition:    def,
 		CreatedAt:     in.now().UTC(),
 	}
 	ev.DedupeKey = dedupeKey

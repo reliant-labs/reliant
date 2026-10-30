@@ -111,6 +111,13 @@ func (t *Triggers) ListTriggerEvents(ctx context.Context, userID, triggerID stri
 		if ev.GetRun() != nil {
 			s.RunState = strings.TrimPrefix(ev.GetRun().GetDisplayState().String(), "RUN_DISPLAY_STATE_")
 		}
+		if d := ev.GetDefinition(); d != nil {
+			s.Definition = &tools.TriggerEventDefinition{
+				Summary: d.GetSummary(), Workflow: d.GetWorkflow(), Source: d.GetSource(), Path: d.GetPath(),
+				Machine: d.GetDaemonName(), DaemonID: d.GetDaemonId(), Repo: d.GetRepo(), Branch: d.GetBranch(),
+				Commit: d.GetCommit(), Dirty: d.GetDirty(), ContentHash: d.GetContentHash(), Error: d.GetError(),
+			}
+		}
 		page.Events = append(page.Events, s)
 	}
 	return page, nil

@@ -37,6 +37,9 @@ type Repo interface {
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	// SetTriggerEventDefinition records which workflow definition a firing
+	// resolved, on a row written before the fire decided.
+	SetTriggerEventDefinition(ctx context.Context, id string, def *core.TriggerEventDefinition) error
 
 	// GetDaemon reports a missing row as sql.ErrNoRows.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
@@ -57,6 +60,9 @@ type EventRepo interface {
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (settled bool, err error)
+	// SetTriggerEventDefinition records which workflow definition an event's
+	// fire resolved.
+	SetTriggerEventDefinition(ctx context.Context, id string, def *core.TriggerEventDefinition) error
 	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error)
 }
 

@@ -47,12 +47,16 @@ const (
 	inboxStoragePrefix           = "storage:"
 	inboxNeedsSetupPrefix        = "automation_needs_setup:"
 	inboxRecoveryPrefix          = "recovery:"
+	// A broken definition's id is its version's identity (project, machine,
+	// file, content hash): another firing of it is the same item, a new
+	// broken version is a new one.
+	inboxDefinitionBrokenPrefix = "automation_definition_broken:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
-	inboxNeedsSetupPrefix, inboxRecoveryPrefix,
+	inboxNeedsSetupPrefix, inboxRecoveryPrefix, inboxDefinitionBrokenPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -507,8 +511,19 @@ func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, s
 func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	var out []*reliantv1.InboxItem
+	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
-		if !t.Enabled || t.WorkflowTrigger == nil {
+		if !t.Enabled {
+			continue
+		}
+		// A broken version of a workflow file is ONE item however many
+		// automations (declared or hand-made) it refuses, and it replaces
+		// their own broken items: they all restate its one cause.
+		if def, err := triggers.BrokenDefinition(ctx, workflows, t); err == nil && def != nil {
+			broken.add(t, def)
+			continue
+		}
+		if t.WorkflowTrigger == nil {
 			continue
 		}
 		decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
@@ -544,7 +559,43 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 			Payload:      &reliantv1.InboxItem_AutomationNeedsSetup{AutomationNeedsSetup: &reliantv1.InboxAutomationNeedsSetup{Issues: wire}},
 		})
 	}
-	return out
+	return append(out, broken.items...)
+}
+
+// brokenDefinitions gathers one AUTOMATION_DEFINITION_BROKEN item per broken
+// version of a workflow file, in the order first seen.
+type brokenDefinitions struct {
+	byKey map[string]*reliantv1.InboxItem
+	items []*reliantv1.InboxItem
+}
+
+func (b *brokenDefinitions) add(t *core.Trigger, def *core.TriggerEventDefinition) {
+	key := sha256.Sum256([]byte(strings.Join([]string{t.ProjectID, def.DaemonID, def.Path, def.ContentHash}, "\x00")))
+	id := inboxDefinitionBrokenPrefix + hex.EncodeToString(key[:12])
+	since := t.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	refused := &reliantv1.InboxRefusedAutomation{TriggerId: t.ID, TriggerName: t.Name}
+	if it := b.byKey[id]; it != nil {
+		payload := it.GetAutomationDefinitionBroken()
+		payload.Automations = append(payload.Automations, refused)
+		if since < it.WaitingSince {
+			it.WaitingSince = since
+		}
+		return
+	}
+	it := &reliantv1.InboxItem{
+		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN,
+		ItemId:       id,
+		ProjectId:    t.ProjectID,
+		ProjectName:  t.ProjectName,
+		WorkflowName: t.Workflow,
+		WaitingSince: since,
+		Payload: &reliantv1.InboxItem_AutomationDefinitionBroken{AutomationDefinitionBroken: &reliantv1.InboxAutomationDefinitionBroken{
+			Definition:  triggers.DefinitionToProto(def),
+			Automations: []*reliantv1.InboxRefusedAutomation{refused},
+		}},
+	}
+	b.byKey[id] = it
+	b.items = append(b.items, it)
 }
 
 // brokenAutomationItem is the item for an enabled activation whose
@@ -580,12 +631,16 @@ func dropSupersededByBroken(items []*reliantv1.InboxItem) []*reliantv1.InboxItem
 		if strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
 			broken[it.TriggerId] = true
 		}
+		// A broken definition supersedes every automation it refuses.
+		for _, a := range it.GetAutomationDefinitionBroken().GetAutomations() {
+			broken[a.TriggerId] = true
+		}
 	}
 	if len(broken) == 0 {
 		return items
 	}
 	return slices.DeleteFunc(items, func(it *reliantv1.InboxItem) bool {
-		if !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
+		if it.TriggerId == "" || !broken[it.TriggerId] || strings.HasPrefix(it.ItemId, inboxFailingPrefix+brokenItemInfix) {
 			return false
 		}
 		return it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING ||

@@ -192,6 +192,17 @@ func (r *fakeRepo) SettlePendingTriggerEvent(_ context.Context, id string, outco
 	return false, nil
 }
 
+func (r *fakeRepo) SetTriggerEventDefinition(_ context.Context, id string, def *core.TriggerEventDefinition) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, ev := range r.events {
+		if ev.ID == id {
+			ev.Definition = def
+		}
+	}
+	return nil
+}
+
 func (r *fakeRepo) ListStalePendingTriggerEvents(_ context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -14487,6 +14487,19 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.InboxAutomationDefinitionBroken": [
+            {
+              "name": "definition",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventDefinition"
+            },
+            {
+              "name": "automations",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxRefusedAutomation",
+              "repeated": true
+            }
+          ],
           "reliant.v1.InboxAutomationFailing": [
             {
               "name": "health",
@@ -14620,6 +14633,12 @@
               "kind": "message",
               "type_name": "reliant.v1.RecoveryInboxItem",
               "oneof": "payload"
+            },
+            {
+              "name": "automation_definition_broken",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxAutomationDefinitionBroken",
+              "oneof": "payload"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -14643,6 +14662,16 @@
             {
               "name": "async",
               "kind": "bool"
+            }
+          ],
+          "reliant.v1.InboxRefusedAutomation": [
+            {
+              "name": "trigger_id",
+              "kind": "string"
+            },
+            {
+              "name": "trigger_name",
+              "kind": "string"
             }
           ],
           "reliant.v1.InboxRunFinished": [],
@@ -14780,6 +14809,56 @@
             }
           ],
           "reliant.v1.RestoreInboxItemResponse": [],
+          "reliant.v1.TriggerEventDefinition": [
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "dirty",
+              "kind": "bool"
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
+            },
+            {
+              "name": "error",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.TriggerHealth": [
             {
               "name": "status",
@@ -14826,11 +14905,13 @@
           "reliant.v1.DismissInboxItemResponse": "reliant/v1/inbox.proto",
           "reliant.v1.HeldWorktree": "reliant/v1/inbox.proto",
           "reliant.v1.InboxApproval": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxAutomationDefinitionBroken": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
           "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
           "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
@@ -14839,6 +14920,7 @@
           "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
           "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
+          "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
         },
@@ -14867,7 +14949,8 @@
             "INBOX_ITEM_KIND_RUN_FINISHED",
             "INBOX_ITEM_KIND_STORAGE",
             "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
-            "INBOX_ITEM_KIND_RECOVERY"
+            "INBOX_ITEM_KIND_RECOVERY",
+            "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -14904,7 +14987,8 @@
             6,
             7,
             8,
-            9
+            9,
+            10
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -36041,6 +36125,62 @@
             {
               "name": "fire_workflow_id",
               "kind": "string"
+            },
+            {
+              "name": "definition",
+              "kind": "message",
+              "type_name": "reliant.v1.TriggerEventDefinition",
+              "optional": true
+            }
+          ],
+          "reliant.v1.TriggerEventDefinition": [
+            {
+              "name": "workflow",
+              "kind": "string"
+            },
+            {
+              "name": "source",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "dirty",
+              "kind": "bool"
+            },
+            {
+              "name": "content_hash",
+              "kind": "string"
+            },
+            {
+              "name": "error",
+              "kind": "string"
+            },
+            {
+              "name": "summary",
+              "kind": "string"
             }
           ],
           "reliant.v1.TriggerEventRun": [
@@ -36311,6 +36451,7 @@
           "reliant.v1.TriggerDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerDefinitionSource": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEvent": "reliant/v1/trigger.proto",
+          "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerEventRun": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
@@ -53670,6 +53811,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetTriggerEnabled"
+          }
+        },
+        {
+          "id": "method1:0425e8fd15dafa68c109ee83e16d0c2893426801f5dda976191c76f941339882",
+          "name": "SetTriggerEventDefinition",
+          "signature": "func(ctx context.Context, id string, def *github.com/reliant-labs/reliant/internal/db/core.TriggerEventDefinition) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetTriggerEventDefinition",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetTriggerEventDefinition"
           }
         },
         {

@@ -691,6 +691,9 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 		if chatID := ev.GetChatId(); chatID != "" {
 			fmt.Fprintf(out, "  Chat: %s\n", chatID)
 		}
+		if def := ev.GetDefinition(); def != nil {
+			fmt.Fprintf(out, "  Definition: %s\n", def.GetSummary())
+		}
 	}
 }
 
@@ -700,12 +703,13 @@ func printTriggerEventTable(out io.Writer, events []*reliantv1.TriggerEvent) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "OCCURRED AT\tOUTCOME\tCHAT\tDETAIL")
+	fmt.Fprintln(w, "OCCURRED AT\tOUTCOME\tCHAT\tDEFINITION\tDETAIL")
 	for _, ev := range events {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			ev.GetOccurredAt(),
 			outcomeLabel(ev.GetOutcome()),
 			orDash(ev.GetChatId()),
+			orDash(ev.GetDefinition().GetSummary()),
 			orDash(ev.GetOutcomeDetail()),
 		)
 	}

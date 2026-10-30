@@ -1072,6 +1072,7 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 		Payload:    payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
+		Definition: ev.Definition,
 		Outcome:    core.TriggerEventLaunched,
 		ChatID:     &chatID,
 	}

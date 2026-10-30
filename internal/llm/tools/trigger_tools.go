@@ -42,6 +42,26 @@ type TriggerEventSummary struct {
 	Detail         string `json:"detail,omitempty"`
 	ChatID         string `json:"chat_id,omitempty"`
 	RunState       string `json:"run_state,omitempty"`
+	// Definition is which workflow definition the firing resolved.
+	Definition *TriggerEventDefinition `json:"definition,omitempty"`
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved: the
+// file and its version, the machine and git commit it was synced from, and
+// why it could not run when the firing was refused.
+type TriggerEventDefinition struct {
+	Summary     string `json:"summary"`
+	Workflow    string `json:"workflow"`
+	Source      string `json:"source,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Machine     string `json:"machine,omitempty"`
+	DaemonID    string `json:"daemon_id,omitempty"`
+	Repo        string `json:"repo,omitempty"`
+	Branch      string `json:"branch,omitempty"`
+	Commit      string `json:"commit,omitempty"`
+	Dirty       bool   `json:"dirty,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type TriggerEventPage struct {

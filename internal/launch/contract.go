@@ -57,6 +57,9 @@ type Event struct {
 	// Origin is trigger.origin, resolved at intake. nil for a source with no
 	// attribution.
 	Origin *core.TriggerOrigin
+	// Definition is which workflow definition the firing resolved, recorded
+	// on its event row. nil for a start that records none.
+	Definition *core.TriggerEventDefinition
 }
 
 // SeedMessage is one message written to the root thread before the run starts.

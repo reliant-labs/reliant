@@ -141,6 +141,22 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return f.settle(ctx, ev, core.TriggerEventFailed, detail, err)
 	}
 
+	// Which definition this fire resolves, recorded on the event whatever the
+	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
+	// trusted from intake, like the declaration below.
+	def, err := definitionOf(ctx, f.workflows, trigger)
+	if err != nil {
+		return nil, err
+	}
+	if def != nil {
+		if err := f.repo.SetTriggerEventDefinition(ctx, ev.ID, def); err != nil {
+			return nil, err
+		}
+	}
+	if def.Broken() && !resuming {
+		return f.settle(ctx, ev, core.TriggerEventFailed, RefusalDetail(def), errors.New(def.Error))
+	}
+
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
 	decl, err := activationFor(ctx, f.workflows, trigger)
@@ -189,6 +205,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		Payload:    ev.Payload,
 		Sender:     ev.Sender,
 		Origin:     ev.Origin,
+		Definition: def,
 	}, spec)
 
 	switch {

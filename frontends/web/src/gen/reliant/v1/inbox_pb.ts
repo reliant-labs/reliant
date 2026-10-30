@@ -12,7 +12,7 @@ import type { ApprovalType } from "./approval_pb";
 import { file_reliant_v1_approval } from "./approval_pb";
 import type { DiskVolume } from "./tools_daemon_pb";
 import { file_reliant_v1_tools_daemon } from "./tools_daemon_pb";
-import type { TriggerHealth, TriggerSetupIssue } from "./trigger_pb";
+import type { TriggerEventDefinition, TriggerHealth, TriggerSetupIssue } from "./trigger_pb";
 import { file_reliant_v1_trigger } from "./trigger_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSKWBgoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAQgkKB3BheWxvYWQiiwIKEVJlY292ZXJ5SW5ib3hJdGVtEhMKC3JlY292ZXJ5X2lkGAEgASgJEhoKEnNvdXJjZV93b3JrdHJlZV9pZBgCIAEoCRIcChRzb3VyY2Vfd29ya3RyZWVfbmFtZRgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJEhQKDHByb2plY3RfbmFtZRgFIAEoCRINCgVwaGFzZRgGIAEoCRIWCg5jaGVja291dF9jb3VudBgHIAEoBRISCgpsYXN0X2Vycm9yGAggASgJEhEKCW9wZXJhdGlvbhgJIAEoCRIVCg1vcGVyYXRpb25fa2V5GAogASgJEhgKEHRhcmdldF9kYWVtb25faWQYCyABKAkioQEKDUluYm94QXBwcm92YWwSEwoLYXBwcm92YWxfaWQYASABKAkSLwoNYXBwcm92YWxfdHlwZRgCIAEoDjIYLnJlbGlhbnQudjEuQXBwcm92YWxUeXBlEg0KBXRpdGxlGAMgASgJSgQIBBAFSgQIBRAGSgQIBhAHUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIQYXJndW1lbnRfc3VtbWFyeSJ6Cg1JbmJveFF1ZXN0aW9uEhMKC3F1ZXN0aW9uX2lkGAEgASgJEhEKCXRocmVhZF9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkSFQoIbWV0YWRhdGEYBCABKAlIAIgBARINCgVhc3luYxgFIAEoCEILCglfbWV0YWRhdGEiQAoWSW5ib3hXYWl0aW5nRm9yTWFjaGluZRIRCglkYWVtb25faWQYASABKAkSEwoLZGFlbW9uX25hbWUYAiABKAkidwoWSW5ib3hBdXRvbWF0aW9uRmFpbGluZxIpCgZoZWFsdGgYASABKAsyGS5yZWxpYW50LnYxLlRyaWdnZXJIZWFsdGgSHQoQbGFzdF9ydW5fY2hhdF9pZBgCIAEoCUgAiAEBQhMKEV9sYXN0X3J1bl9jaGF0X2lkIkoKGUluYm94QXV0b21hdGlvbk5lZWRzU2V0dXASLQoGaXNzdWVzGAEgAygLMh0ucmVsaWFudC52MS5UcmlnZ2VyU2V0dXBJc3N1ZSJdChtJbmJveEF1dG9tYXRpb25MYXVuY2hGYWlsZWQSDgoGcmVhc29uGAEgASgJEhAKCGV2ZW50X2lkGAIgASgJEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAMgASgFIhIKEEluYm94UnVuRmluaXNoZWQiKwoXRGlzbWlzc0luYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYAiADKAkiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIisKF1Jlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0EhAKCGl0ZW1faWRzGAEgAygJIhoKGFJlc3RvcmVJbmJveEl0ZW1SZXNwb25zZSLtAQoMSW5ib3hTdG9yYWdlEhEKCWRhZW1vbl9pZBgBIAEoCRITCgtkYWVtb25fbmFtZRgCIAEoCRIQCghkaXNrX2xvdxgFIAEoCBITCgtyZXBvcnRlZF9hdBgGIAEoCRImCgRoZWxkGAcgAygLMhgucmVsaWFudC52MS5IZWxkV29ya3RyZWUSDgoGb25saW5lGAggASgIEicKB3ZvbHVtZXMYCSADKAsyFi5yZWxpYW50LnYxLkRpc2tWb2x1bWVKBAgDEARKBAgEEAVSD2Rpc2tfZnJlZV9ieXRlc1IQZGlza190b3RhbF9ieXRlcyKuAQoMSGVsZFdvcmt0cmVlEhMKC3dvcmt0cmVlX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcHJvamVjdF9uYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSDgoGcmVhc29uGAUgASgJEg4KBmRldGFpbBgGIAEoCRISCgpzaXplX2J5dGVzGAcgASgDEhEKCXJlbW92YWJsZRgIIAEoCBIQCghjbGVhbmluZxgJIAEoCCJAChVDbGVhbnVwU3RvcmFnZVJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhQKDHdvcmt0cmVlX2lkcxgCIAMoCSJLChZDbGVhbnVwU3RvcmFnZVJlc3BvbnNlEjEKB3Jlc3VsdHMYASADKAsyIC5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzdWx0InAKFENsZWFudXBTdG9yYWdlUmVzdWx0EhMKC3dvcmt0cmVlX2lkGAEgASgJEjIKB291dGNvbWUYAiABKA4yIS5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlT3V0Y29tZRIPCgdtZXNzYWdlGAMgASgJKvQCCg1JbmJveEl0ZW1LaW5kEh8KG0lOQk9YX0lURU1fS0lORF9VTlNQRUNJRklFRBAAEhwKGElOQk9YX0lURU1fS0lORF9BUFBST1ZBTBABEhwKGElOQk9YX0lURU1fS0lORF9RVUVTVElPThACEicKI0lOQk9YX0lURU1fS0lORF9XQUlUSU5HX0ZPUl9NQUNISU5FEAMSJgoiSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fRkFJTElORxAEEiwKKElOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0xBVU5DSF9GQUlMRUQQBRIgChxJTkJPWF9JVEVNX0tJTkRfUlVOX0ZJTklTSEVEEAYSGwoXSU5CT1hfSVRFTV9LSU5EX1NUT1JBR0UQBxIqCiZJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9ORUVEU19TRVRVUBAIEhwKGElOQk9YX0lURU1fS0lORF9SRUNPVkVSWRAJKosBChVDbGVhbnVwU3RvcmFnZU91dGNvbWUSJwojQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfVU5TUEVDSUZJRUQQABIkCiBDTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9BQ0NFUFRFRBABEiMKH0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1NLSVBQRUQQAjKeBAoMSW5ib3hTZXJ2aWNlEkoKCUxpc3RJbmJveBIcLnJlbGlhbnQudjEuTGlzdEluYm94UmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdEluYm94UmVzcG9uc2UiABKFAQoOQ2xlYW51cFN0b3JhZ2USIS5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVxdWVzdBoiLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXNwb25zZSIsorsYKDomCg9jbGVhbnVwX3N0b3JhZ2USEwoGZGFlbW9uEglkYWVtb25faWQSpAEKEERpc21pc3NJbmJveEl0ZW0SIy5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiRaK7GEE6Pzo9cGVyLXVzZXIgaW5ib3ggcmVhZCBzdGF0ZTogaGlkZXMgaXRlbXMgd2l0aG91dCByZXNvbHZpbmcgdGhlbRKSAQoQUmVzdG9yZUluYm94SXRlbRIjLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLlJlc3RvcmVJbmJveEl0ZW1SZXNwb25zZSIzorsYLzotOitwZXItdXNlciBpbmJveCByZWFkIHN0YXRlOiB1bmRvZXMgYSBkaXNtaXNzQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLrBgoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSAASRwoWYXV0b21hdGlvbl9uZWVkc19zZXR1cBgbIAEoCzIlLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cEgAEjEKCHJlY292ZXJ5GBwgASgLMh0ucmVsaWFudC52MS5SZWNvdmVyeUluYm94SXRlbUgAElMKHGF1dG9tYXRpb25fZGVmaW5pdGlvbl9icm9rZW4YHSABKAsyKy5yZWxpYW50LnYxLkluYm94QXV0b21hdGlvbkRlZmluaXRpb25Ccm9rZW5IAEIJCgdwYXlsb2FkIosCChFSZWNvdmVyeUluYm94SXRlbRITCgtyZWNvdmVyeV9pZBgBIAEoCRIaChJzb3VyY2Vfd29ya3RyZWVfaWQYAiABKAkSHAoUc291cmNlX3dvcmt0cmVlX25hbWUYAyABKAkSEgoKcHJvamVjdF9pZBgEIAEoCRIUCgxwcm9qZWN0X25hbWUYBSABKAkSDQoFcGhhc2UYBiABKAkSFgoOY2hlY2tvdXRfY291bnQYByABKAUSEgoKbGFzdF9lcnJvchgIIAEoCRIRCglvcGVyYXRpb24YCSABKAkSFQoNb3BlcmF0aW9uX2tleRgKIAEoCRIYChB0YXJnZXRfZGFlbW9uX2lkGAsgASgJIqEBCg1JbmJveEFwcHJvdmFsEhMKC2FwcHJvdmFsX2lkGAEgASgJEi8KDWFwcHJvdmFsX3R5cGUYAiABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRINCgV0aXRsZRgDIAEoCUoECAQQBUoECAUQBkoECAYQB1IJdG9vbF9uYW1lUgx0b29sX2NhbGxfaWRSEGFyZ3VtZW50X3N1bW1hcnkiegoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQESDQoFYXN5bmMYBSABKAhCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCKSAQofSW5ib3hBdXRvbWF0aW9uRGVmaW5pdGlvbkJyb2tlbhI2CgpkZWZpbml0aW9uGAEgASgLMiIucmVsaWFudC52MS5UcmlnZ2VyRXZlbnREZWZpbml0aW9uEjcKC2F1dG9tYXRpb25zGAIgAygLMiIucmVsaWFudC52MS5JbmJveFJlZnVzZWRBdXRvbWF0aW9uIkIKFkluYm94UmVmdXNlZEF1dG9tYXRpb24SEgoKdHJpZ2dlcl9pZBgBIAEoCRIUCgx0cmlnZ2VyX25hbWUYAiABKAkiSgoZSW5ib3hBdXRvbWF0aW9uTmVlZHNTZXR1cBItCgZpc3N1ZXMYASADKAsyHS5yZWxpYW50LnYxLlRyaWdnZXJTZXR1cElzc3VlIl0KG0luYm94QXV0b21hdGlvbkxhdW5jaEZhaWxlZBIOCgZyZWFzb24YASABKAkSEAoIZXZlbnRfaWQYAiABKAkSHAoUY29uc2VjdXRpdmVfZmFpbHVyZXMYAyABKAUiEgoQSW5ib3hSdW5GaW5pc2hlZCIrChdEaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBIQCghpdGVtX2lkcxgCIAMoCSIaChhEaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiKwoXUmVzdG9yZUluYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYASADKAkiGgoYUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIu0BCgxJbmJveFN0b3JhZ2USEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhAKCGRpc2tfbG93GAUgASgIEhMKC3JlcG9ydGVkX2F0GAYgASgJEiYKBGhlbGQYByADKAsyGC5yZWxpYW50LnYxLkhlbGRXb3JrdHJlZRIOCgZvbmxpbmUYCCABKAgSJwoHdm9sdW1lcxgJIAMoCzIWLnJlbGlhbnQudjEuRGlza1ZvbHVtZUoECAMQBEoECAQQBVIPZGlza19mcmVlX2J5dGVzUhBkaXNrX3RvdGFsX2J5dGVzIq4BCgxIZWxkV29ya3RyZWUSEwoLd29ya3RyZWVfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgxwcm9qZWN0X25hbWUYAyABKAkSDAoEcGF0aBgEIAEoCRIOCgZyZWFzb24YBSABKAkSDgoGZGV0YWlsGAYgASgJEhIKCnNpemVfYnl0ZXMYByABKAMSEQoJcmVtb3ZhYmxlGAggASgIEhAKCGNsZWFuaW5nGAkgASgIIkAKFUNsZWFudXBTdG9yYWdlUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSFAoMd29ya3RyZWVfaWRzGAIgAygJIksKFkNsZWFudXBTdG9yYWdlUmVzcG9uc2USMQoHcmVzdWx0cxgBIAMoCzIgLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXN1bHQicAoUQ2xlYW51cFN0b3JhZ2VSZXN1bHQSEwoLd29ya3RyZWVfaWQYASABKAkSMgoHb3V0Y29tZRgCIAEoDjIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VPdXRjb21lEg8KB21lc3NhZ2UYAyABKAkqpgMKDUluYm94SXRlbUtpbmQSHwobSU5CT1hfSVRFTV9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYSU5CT1hfSVRFTV9LSU5EX0FQUFJPVkFMEAESHAoYSU5CT1hfSVRFTV9LSU5EX1FVRVNUSU9OEAISJwojSU5CT1hfSVRFTV9LSU5EX1dBSVRJTkdfRk9SX01BQ0hJTkUQAxImCiJJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9GQUlMSU5HEAQSLAooSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTEFVTkNIX0ZBSUxFRBAFEiAKHElOQk9YX0lURU1fS0lORF9SVU5fRklOSVNIRUQQBhIbChdJTkJPWF9JVEVNX0tJTkRfU1RPUkFHRRAHEioKJklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX05FRURTX1NFVFVQEAgSHAoYSU5CT1hfSVRFTV9LSU5EX1JFQ09WRVJZEAkSMAosSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fREVGSU5JVElPTl9CUk9LRU4QCiqLAQoVQ2xlYW51cFN0b3JhZ2VPdXRjb21lEicKI0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1VOU1BFQ0lGSUVEEAASJAogQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfQUNDRVBURUQQARIjCh9DTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9TS0lQUEVEEAIyngQKDEluYm94U2VydmljZRJKCglMaXN0SW5ib3gSHC5yZWxpYW50LnYxLkxpc3RJbmJveFJlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RJbmJveFJlc3BvbnNlIgAShQEKDkNsZWFudXBTdG9yYWdlEiEucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNsZWFudXBTdG9yYWdlUmVzcG9uc2UiLKK7GCg6JgoPY2xlYW51cF9zdG9yYWdlEhMKBmRhZW1vbhIJZGFlbW9uX2lkEqQBChBEaXNtaXNzSW5ib3hJdGVtEiMucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIkWiuxhBOj86PXBlci11c2VyIGluYm94IHJlYWQgc3RhdGU6IGhpZGVzIGl0ZW1zIHdpdGhvdXQgcmVzb2x2aW5nIHRoZW0SkgEKEFJlc3RvcmVJbmJveEl0ZW0SIy5yZWxpYW50LnYxLlJlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVzcG9uc2UiM6K7GC86LTorcGVyLXVzZXIgaW5ib3ggcmVhZCBzdGF0ZTogdW5kb2VzIGEgZGlzbWlzc0I6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_reliant_v1_approval, file_reliant_v1_tools_daemon, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -240,6 +240,12 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
      */
     value: RecoveryInboxItem;
     case: "recovery";
+  } | {
+    /**
+     * @generated from field: reliant.v1.InboxAutomationDefinitionBroken automation_definition_broken = 29;
+     */
+    value: InboxAutomationDefinitionBroken;
+    case: "automationDefinitionBroken";
   } | { case: undefined; value?: undefined };
 };
 
@@ -447,7 +453,60 @@ export const InboxAutomationFailingSchema: GenMessage<InboxAutomationFailing> = 
  * InboxAutomationNeedsSetup is an automation waiting for its owner to finish
  * setting it up. The item's workflow_name and project_id locate the workflow
  * page's automation.
+ * InboxAutomationDefinitionBroken is one broken version of one workflow file
+ * and the enabled automations it refuses.
  *
+ * @generated from message reliant.v1.InboxAutomationDefinitionBroken
+ */
+export type InboxAutomationDefinitionBroken = Message<"reliant.v1.InboxAutomationDefinitionBroken"> & {
+  /**
+   * The broken version: path, machine, branch, commit, content hash and the
+   * error.
+   *
+   * @generated from field: reliant.v1.TriggerEventDefinition definition = 1;
+   */
+  definition?: TriggerEventDefinition | undefined;
+
+  /**
+   * The enabled automations whose firings it refuses, by name.
+   *
+   * @generated from field: repeated reliant.v1.InboxRefusedAutomation automations = 2;
+   */
+  automations: InboxRefusedAutomation[];
+};
+
+/**
+ * Describes the message reliant.v1.InboxAutomationDefinitionBroken.
+ * Use `create(InboxAutomationDefinitionBrokenSchema)` to create a new message.
+ */
+export const InboxAutomationDefinitionBrokenSchema: GenMessage<InboxAutomationDefinitionBroken> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 8);
+
+/**
+ * InboxRefusedAutomation is one automation a broken definition refuses.
+ *
+ * @generated from message reliant.v1.InboxRefusedAutomation
+ */
+export type InboxRefusedAutomation = Message<"reliant.v1.InboxRefusedAutomation"> & {
+  /**
+   * @generated from field: string trigger_id = 1;
+   */
+  triggerId: string;
+
+  /**
+   * @generated from field: string trigger_name = 2;
+   */
+  triggerName: string;
+};
+
+/**
+ * Describes the message reliant.v1.InboxRefusedAutomation.
+ * Use `create(InboxRefusedAutomationSchema)` to create a new message.
+ */
+export const InboxRefusedAutomationSchema: GenMessage<InboxRefusedAutomation> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 9);
+
+/**
  * @generated from message reliant.v1.InboxAutomationNeedsSetup
  */
 export type InboxAutomationNeedsSetup = Message<"reliant.v1.InboxAutomationNeedsSetup"> & {
@@ -464,7 +523,7 @@ export type InboxAutomationNeedsSetup = Message<"reliant.v1.InboxAutomationNeeds
  * Use `create(InboxAutomationNeedsSetupSchema)` to create a new message.
  */
 export const InboxAutomationNeedsSetupSchema: GenMessage<InboxAutomationNeedsSetup> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 8);
+  messageDesc(file_reliant_v1_inbox, 10);
 
 /**
  * @generated from message reliant.v1.InboxAutomationLaunchFailed
@@ -498,7 +557,7 @@ export type InboxAutomationLaunchFailed = Message<"reliant.v1.InboxAutomationLau
  * Use `create(InboxAutomationLaunchFailedSchema)` to create a new message.
  */
 export const InboxAutomationLaunchFailedSchema: GenMessage<InboxAutomationLaunchFailed> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 9);
+  messageDesc(file_reliant_v1_inbox, 11);
 
 /**
  * InboxRunFinished is a completed run of an automation that opted in to
@@ -515,7 +574,7 @@ export type InboxRunFinished = Message<"reliant.v1.InboxRunFinished"> & {
  * Use `create(InboxRunFinishedSchema)` to create a new message.
  */
 export const InboxRunFinishedSchema: GenMessage<InboxRunFinished> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 10);
+  messageDesc(file_reliant_v1_inbox, 12);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemRequest
@@ -534,7 +593,7 @@ export type DismissInboxItemRequest = Message<"reliant.v1.DismissInboxItemReques
  * Use `create(DismissInboxItemRequestSchema)` to create a new message.
  */
 export const DismissInboxItemRequestSchema: GenMessage<DismissInboxItemRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 11);
+  messageDesc(file_reliant_v1_inbox, 13);
 
 /**
  * @generated from message reliant.v1.DismissInboxItemResponse
@@ -547,7 +606,7 @@ export type DismissInboxItemResponse = Message<"reliant.v1.DismissInboxItemRespo
  * Use `create(DismissInboxItemResponseSchema)` to create a new message.
  */
 export const DismissInboxItemResponseSchema: GenMessage<DismissInboxItemResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 12);
+  messageDesc(file_reliant_v1_inbox, 14);
 
 /**
  * @generated from message reliant.v1.RestoreInboxItemRequest
@@ -564,7 +623,7 @@ export type RestoreInboxItemRequest = Message<"reliant.v1.RestoreInboxItemReques
  * Use `create(RestoreInboxItemRequestSchema)` to create a new message.
  */
 export const RestoreInboxItemRequestSchema: GenMessage<RestoreInboxItemRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 13);
+  messageDesc(file_reliant_v1_inbox, 15);
 
 /**
  * @generated from message reliant.v1.RestoreInboxItemResponse
@@ -577,7 +636,7 @@ export type RestoreInboxItemResponse = Message<"reliant.v1.RestoreInboxItemRespo
  * Use `create(RestoreInboxItemResponseSchema)` to create a new message.
  */
 export const RestoreInboxItemResponseSchema: GenMessage<RestoreInboxItemResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 14);
+  messageDesc(file_reliant_v1_inbox, 16);
 
 /**
  * InboxStorage describes one machine's disk and the archived worktrees it is
@@ -644,7 +703,7 @@ export type InboxStorage = Message<"reliant.v1.InboxStorage"> & {
  * Use `create(InboxStorageSchema)` to create a new message.
  */
 export const InboxStorageSchema: GenMessage<InboxStorage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 15);
+  messageDesc(file_reliant_v1_inbox, 17);
 
 /**
  * HeldWorktree is one archived workspace kept on a machine, and why.
@@ -720,7 +779,7 @@ export type HeldWorktree = Message<"reliant.v1.HeldWorktree"> & {
  * Use `create(HeldWorktreeSchema)` to create a new message.
  */
 export const HeldWorktreeSchema: GenMessage<HeldWorktree> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 16);
+  messageDesc(file_reliant_v1_inbox, 18);
 
 /**
  * @generated from message reliant.v1.CleanupStorageRequest
@@ -749,7 +808,7 @@ export type CleanupStorageRequest = Message<"reliant.v1.CleanupStorageRequest"> 
  * Use `create(CleanupStorageRequestSchema)` to create a new message.
  */
 export const CleanupStorageRequestSchema: GenMessage<CleanupStorageRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 17);
+  messageDesc(file_reliant_v1_inbox, 19);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResponse
@@ -769,7 +828,7 @@ export type CleanupStorageResponse = Message<"reliant.v1.CleanupStorageResponse"
  * Use `create(CleanupStorageResponseSchema)` to create a new message.
  */
 export const CleanupStorageResponseSchema: GenMessage<CleanupStorageResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 18);
+  messageDesc(file_reliant_v1_inbox, 20);
 
 /**
  * @generated from message reliant.v1.CleanupStorageResult
@@ -798,7 +857,7 @@ export type CleanupStorageResult = Message<"reliant.v1.CleanupStorageResult"> & 
  * Use `create(CleanupStorageResultSchema)` to create a new message.
  */
 export const CleanupStorageResultSchema: GenMessage<CleanupStorageResult> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_inbox, 19);
+  messageDesc(file_reliant_v1_inbox, 21);
 
 /**
  * InboxItemKind is declared in priority order: lower values sort first. The
@@ -882,6 +941,19 @@ export enum InboxItemKind {
    * @generated from enum value: INBOX_ITEM_KIND_RECOVERY = 9;
    */
   RECOVERY = 9,
+
+  /**
+   * The newest version of a workflow file that enabled automations run does
+   * not parse or validate, so every firing of them is refused until a valid
+   * version is synced. ONE item per broken version (machine, file, content
+   * hash), however many automations and firings it refuses; it names the
+   * file, the error and the branch and commit, and leaves the list when a
+   * valid version lands. It replaces those automations' own failing items.
+   * Informational.
+   *
+   * @generated from enum value: INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 10;
+   */
+  AUTOMATION_DEFINITION_BROKEN = 10,
 }
 
 /**

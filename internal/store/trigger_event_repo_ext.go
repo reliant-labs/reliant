@@ -321,6 +321,24 @@ func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, o
 	return oneRowTouched(res)
 }
 
+// SetTriggerEventDefinition records which workflow definition a firing
+// resolved. A fire re-reads the definition when it decides, so an inbound
+// event recorded at intake is stamped again with what its fire launched (or
+// refused) against.
+func SetTriggerEventDefinition(ctx context.Context, db orm.Context, id string, def *core.TriggerEventDefinition) error {
+	encoded, err := triggerEventDefinitionJSON(def)
+	if err != nil {
+		return err
+	}
+	if _, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
+		Set("definition = ?", encoded).
+		Where("id = ?", id).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to record trigger event definition: %w", err)
+	}
+	return nil
+}
+
 func oneRowTouched(res sql.Result) (bool, error) {
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -604,6 +622,10 @@ func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {
 			return nil, fmt.Errorf("marshal trigger event origin: %w", err)
 		}
 	}
+	definition, err := triggerEventDefinitionJSON(ev.Definition)
+	if err != nil {
+		return nil, err
+	}
 	return &TriggerEvent{
 		ID:            ev.ID,
 		TriggerID:     ev.TriggerID,
@@ -618,7 +640,20 @@ func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {
 		CreatedAt:     ev.CreatedAt,
 		Sender:        sender,
 		Origin:        origin,
+		Definition:    definition,
 	}, nil
+}
+
+// triggerEventDefinitionJSON is a firing's definition as stored: NULL for none.
+func triggerEventDefinitionJSON(def *core.TriggerEventDefinition) (json.RawMessage, error) {
+	if def == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(def)
+	if err != nil {
+		return nil, fmt.Errorf("marshal trigger event definition: %w", err)
+	}
+	return encoded, nil
 }
 
 func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
@@ -640,6 +675,13 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 			return nil, fmt.Errorf("unmarshal trigger event origin (event %s): %w", row.ID, err)
 		}
 	}
+	var definition *core.TriggerEventDefinition
+	if len(row.Definition) > 0 {
+		definition = &core.TriggerEventDefinition{}
+		if err := json.Unmarshal(row.Definition, definition); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event definition (event %s): %w", row.ID, err)
+		}
+	}
 	ev := &core.TriggerEvent{
 		ID:                  row.ID,
 		TriggerID:           row.TriggerID,
@@ -654,6 +696,7 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		CreatedAt:           row.CreatedAt,
 		Sender:              sender,
 		Origin:              origin,
+		Definition:          definition,
 		CapacityOrder:       row.CapacityOrder,
 		CapacityProjectID:   row.CapacityProjectID,
 		CapacityWorkflowRef: row.CapacityWorkflowRef,

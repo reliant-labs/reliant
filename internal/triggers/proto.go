@@ -136,7 +136,21 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 		ChatId:         ev.ChatID,
 		Payload:        payload,
 		Sender:         senderToProto(ev.Sender),
+		Definition:     DefinitionToProto(ev.Definition),
 	}, nil
+}
+
+// DefinitionToProto renders the definition a firing resolved; nil stays unset.
+func DefinitionToProto(d *core.TriggerEventDefinition) *reliantv1.TriggerEventDefinition {
+	if d == nil {
+		return nil
+	}
+	return &reliantv1.TriggerEventDefinition{
+		Workflow: d.Workflow, Source: d.Source, Path: d.Path,
+		DaemonId: d.DaemonID, DaemonName: d.Machine,
+		Repo: d.Repo, Branch: d.Branch, Commit: d.Commit, Dirty: d.Dirty,
+		ContentHash: d.ContentHash, Error: d.Error, Summary: d.Describe(),
+	}
 }
 
 // senderToProto renders trigger.sender; nil stays unset.

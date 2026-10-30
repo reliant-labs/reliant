@@ -225,6 +225,14 @@ export function TriggerCard({
           <dd className="text-foreground">
             <KeyValues entries={flattenInputs(start.params)} />
           </dd>
+          {event?.definition && (
+            <>
+              <dt>Definition</dt>
+              <dd className="break-words font-mono text-foreground" data-testid="trigger-card-definition">
+                {event.definition}
+              </dd>
+            </>
+          )}
         </dl>
       )}
     </CardInset>
