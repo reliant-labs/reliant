@@ -204,6 +204,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`reliant forge obs dashboards add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
+| [`reliant forge obs dashboards audit`](#reliant-forge-obs-dashboards-audit) | Why is a dashboard empty? Replay each panel as the console asks and probe the empty ones |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
@@ -8184,6 +8185,7 @@ reliant forge obs dashboards [flags]
 | Command | Description |
 |---------|-------------|
 | [`add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
+| [`audit`](#reliant-forge-obs-dashboards-audit) | Why is a dashboard empty? Replay each panel as the console asks and probe the empty ones |
 | [`check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 
 **Flags:**
@@ -8229,6 +8231,183 @@ reliant forge obs dashboards add-panel <slug> [flags]
 | `--panel` | `string` | - | file holding one panel object, or "-" for stdin (required) |
 | `--replace` | `bool` | - | replace the panel that has the same id instead of failing |
 | `--title` | `string` | - | title of a dashboard being created; default: the slug |
+
+---
+
+#### reliant forge obs dashboards audit
+
+Why is a dashboard empty? Replay each panel as the console asks and probe the empty ones
+
+Run every panel of [env]'s dashboards (default dev) through the control plane's
+QueryPanel, exactly as the console does, and say for each one whether it has
+data, and if not, why not.
+
+What is replayed: the dashboards the console lists for the env, each panel sent
+as the console sends it (no viewer filters), over the last --since (default 1h,
+the console's default range) with the step left to the control plane. The
+control plane's own warnings (metric_absent, step_raised, ...) and the step it
+chose are reported as returned. No panel SQL is rebuilt here.
+
+Each panel is one of:
+
+  ok              it returned data the console can draw
+  partial         data came back, but not all of it: an answer the control
+                  plane cut off, a series whose metric is absent, a metric
+                  stored as another kind, or one bucket where a line needs two
+                  (a day-wide bucket under a short window)
+  empty           nothing came back; the probe says whether the data exists
+  error           the read failed; the class says auth, quota, in flight,
+                  storage, ...: a failed read is never reported as no data
+  not_applicable  not a query the console runs (search panels, typed views)
+
+An empty panel is probed (--no-probe skips it): the same panel over --probe-window
+(default 168h), over every environment of the project, and without its filters, and
+a metrics panel is looked up in the metric catalog. The verdict is one of
+data_outside_window, data_in_other_env, data_excluded_by_filters,
+data_in_other_env_without_filters, metric_never_seen or no_data_anywhere. A
+dashboard is replayed in its own scope: an org dashboard names no project, a
+platform one drops the env predicate (and has no other env to probe).
+
+Failures are listed first. EXIT: 0 every panel ok; 2 any panel empty or partial;
+1 any panel could not be read. The env's telemetry must be stored by the control
+plane (a local ClickStack has no dashboards to replay).
+
+  cli forge obs dashboards audit prod
+  cli forge obs dashboards audit prod --dashboard product-usage --since 24h
+  cli forge obs dashboards audit prod --dashboard product-usage --panel workflows-by-outcome --json
+
+JSON schema forge.obs.dashboards_audit/v1. --fields takes dotted paths of:
+  dashboards
+  dashboards.default_range
+  dashboards.error
+  dashboards.error.class
+  dashboards.error.code
+  dashboards.error.http_status
+  dashboards.error.message
+  dashboards.error.missing_scope
+  dashboards.error.reason
+  dashboards.error.resets_at
+  dashboards.error.retry_after_seconds
+  dashboards.id
+  dashboards.panels
+  dashboards.panels.attempts
+  dashboards.panels.bucket_seconds
+  dashboards.panels.bucket_timezone
+  dashboards.panels.buckets
+  dashboards.panels.error
+  dashboards.panels.error.class
+  dashboards.panels.error.code
+  dashboards.panels.error.http_status
+  dashboards.panels.error.message
+  dashboards.panels.error.missing_scope
+  dashboards.panels.error.reason
+  dashboards.panels.error.resets_at
+  dashboards.panels.error.retry_after_seconds
+  dashboards.panels.from
+  dashboards.panels.id
+  dashboards.panels.items
+  dashboards.panels.kind
+  dashboards.panels.last_data_at
+  dashboards.panels.metrics
+  dashboards.panels.min_step
+  dashboards.panels.non_null_points
+  dashboards.panels.non_zero_points
+  dashboards.panels.note
+  dashboards.panels.points
+  dashboards.panels.probable_cause
+  dashboards.panels.probe
+  dashboards.panels.probe.catalog
+  dashboards.panels.probe.catalog.declared_type
+  dashboards.panels.probe.catalog.error
+  dashboards.panels.probe.catalog.last_seen
+  dashboards.panels.probe.catalog.metric
+  dashboards.panels.probe.catalog.seen
+  dashboards.panels.probe.catalog.services
+  dashboards.panels.probe.catalog.type
+  dashboards.panels.probe.from
+  dashboards.panels.probe.steps
+  dashboards.panels.probe.steps.error
+  dashboards.panels.probe.steps.error.class
+  dashboards.panels.probe.steps.error.code
+  dashboards.panels.probe.steps.error.http_status
+  dashboards.panels.probe.steps.error.message
+  dashboards.panels.probe.steps.error.missing_scope
+  dashboards.panels.probe.steps.error.reason
+  dashboards.panels.probe.steps.error.resets_at
+  dashboards.panels.probe.steps.error.retry_after_seconds
+  dashboards.panels.probe.steps.has_data
+  dashboards.panels.probe.steps.last_data_at
+  dashboards.panels.probe.steps.name
+  dashboards.panels.probe.steps.non_zero_points
+  dashboards.panels.probe.to
+  dashboards.panels.probe.verdict
+  dashboards.panels.reason
+  dashboards.panels.rows
+  dashboards.panels.series
+  dashboards.panels.series_total
+  dashboards.panels.signal
+  dashboards.panels.status
+  dashboards.panels.step_seconds
+  dashboards.panels.title
+  dashboards.panels.to
+  dashboards.panels.truncated
+  dashboards.panels.warnings
+  dashboards.panels.widened
+  dashboards.panels.widened_from
+  dashboards.panels.window_source
+  dashboards.range
+  dashboards.release_version
+  dashboards.source
+  dashboards.status
+  dashboards.title
+  notes
+  project
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  suggested
+  summary
+  summary.all_zero
+  summary.dashboards
+  summary.dashboards_unread
+  summary.empty
+  summary.error
+  summary.not_applicable
+  summary.ok
+  summary.panels
+  summary.partial
+  window
+  window.from
+  window.probe_since
+  window.since
+  window.source
+  window.to
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs dashboards audit [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--all` | `bool` | - | list the ok panels too (text output; --json always lists every panel) |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--dashboard` | `string` | - | only this dashboard (its id) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--no-probe` | `bool` | - | do not probe empty panels |
+| `--panel` | `string` | - | only this panel (its id) |
+| `--probe-window` | `duration` | `168h0m0s` | the wider window an empty panel is probed over (widened to 4x the panel's window when that is not wider) |
+| `--since` | `duration` | `0s` | run every panel over this window, as a viewer who picked a range (default: each dashboard's own defaultRange, else 1h, as the console opens it) |
 
 ---
 

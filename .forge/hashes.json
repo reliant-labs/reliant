@@ -38,8 +38,7 @@
     "deploy/observability/spec/alert-service-trigger_gen.json": "f7313befa54d1362548bc498cb28b3b9bc2f249203627a0f446daed4de520f5a",
     "deploy/observability/spec/alert-service-workflow_gen.json": "46c17239abb1b1bcc46fb75779d0e3524f0a27448a4e97b98aed8a8e54aba07e",
     "deploy/observability/spec/alert-service-worktree_gen.json": "bca3edcc2da6f7b4141a2220119dea4a71230d4b1f9b85407cf99f6d8646a54d",
-    "deploy/observability/spec/project_gen.json": "a317ee44390f5a3263e830665b6ea196d3c6943907d29d70057da8afc74f6e99",
-    "frontends/web/src/lib/config_schema_gen.json": "b040a94a409ce84f2d8203e0ce41ba891bfdbf7089061c38285aa5d3ad1ea57d",
-    "gen/forge_service_catalog.json": "b25c8ef8c5ce4c6a319c4a0ed837267bff5bb18db8d0740c0c624db259e5e0e1"
+    "deploy/observability/spec/project_gen.json": "8582fa57773a46508f63dad6ed16ad29dcf8559fc4fb97c2a17569c50512adf1",
+    "frontends/web/src/lib/config_schema_gen.json": "b040a94a409ce84f2d8203e0ce41ba891bfdbf7089061c38285aa5d3ad1ea57d"
   }
 }
