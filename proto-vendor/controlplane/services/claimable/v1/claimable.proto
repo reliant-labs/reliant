@@ -250,6 +250,44 @@ message GetClaimableAvailabilityResponse {
   bool compute_available = 3;
   // Why not, when compute_available is false, beyond causes.
   repeated ClaimableUnavailableCause compute_causes = 4;
+  // The anonymous plan's caps: the numbers admission and the operators
+  // enforce. forge reads them here rather than compiling its own copy, so
+  // its checks and the platform's cannot disagree. Set whether or not a
+  // deploy is available.
+  ClaimableLimits limits = 5;
+}
+
+// ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
+// cap and zero means none allowed. "Per workload" holds for the service and,
+// separately, its migration job: each runs with request = limit (no burst).
+message ClaimableLimits {
+  // Static sites, and what the site may store (live copy and archives).
+  int32 max_static_sites = 1;
+  int32 max_static_stored_mib = 2;
+
+  // Services (one replica each, no autoscaling) and pre-rollout migration
+  // jobs. No other workload kind is admitted.
+  int32 max_services = 3;
+  int32 max_replicas = 4;
+  int32 max_migration_jobs = 5;
+  // Per workload: CPU and memory request = limit, and scratch disk.
+  int32 workload_cpu_millicores = 6;
+  int32 workload_memory_mib = 7;
+  int32 workload_ephemeral_storage_mib = 8;
+
+  // Managed Postgres: how many, and each one's own server (it is not a
+  // database on a shared server): instances, CPU and memory request = limit,
+  // provisioned storage (WAL included) and max_connections. No backups.
+  int32 max_databases = 9;
+  int32 database_instances = 10;
+  int32 database_cpu_millicores = 11;
+  int32 database_memory_mib = 12;
+  int32 database_storage_mib = 13;
+  int32 database_max_connections = 14;
+  // The largest storage_gib a ManagedDatabase may declare (its spec counts
+  // whole GiB); the platform provisions database_storage_mib whatever it
+  // declares.
+  int32 database_declared_storage_gib = 15;
 }
 
 // ClaimableUnavailableCause is one reason claimable deploys, or their compute,
