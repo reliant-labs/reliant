@@ -44,6 +44,9 @@ type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
+	// LockChatRunControl takes the chat's run-control lock (runs.Service.LockRunControl):
+	// archiving a chat holds it so no delivery starts a run around the archive.
+	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
 
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 
