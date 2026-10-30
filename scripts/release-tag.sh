@@ -268,8 +268,10 @@ fi
 # and the release workflow cannot both tag (release-lock.sh; the workflow coalesces into
 # a live lock). Then re-check origin: a holder that just finished released the lock
 # after pushing the tag.
-release_lock_acquire "$RELEASE_TAG" || exit 1
+# The release is registered before the lock is taken, so no exit between the two
+# leaves a held lock behind (release_lock_release is a no-op when none is held).
 trap release_lock_release EXIT
+release_lock_acquire "$RELEASE_TAG" || exit 1
 if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
     echo -e "${RED}Error: tag $RELEASE_TAG reached origin while waiting (another cut released it)${NC}" >&2
     exit 1
@@ -279,7 +281,14 @@ echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"
 # Publish only while this release provably still holds the lock (release-lock.sh).
 release_lock_assert || exit 1
 git tag "$RELEASE_TAG" "$RELEASE_COMMIT"
-git push origin "$RELEASE_TAG"
+# A refused push deletes the local tag this run just made: every worktree of a
+# checkout shares refs/tags/, and a loser's leftover tag makes every later
+# `git fetch --tags` there fail with "would clobber existing tag" (forge#1524).
+if ! git push origin "$RELEASE_TAG"; then
+    git tag -d "$RELEASE_TAG" >/dev/null
+    echo -e "${RED}Error: the push of $RELEASE_TAG was refused, so nothing was released; deleted the local tag${NC}" >&2
+    exit 1
+fi
 
 echo ""
 echo -e "${GREEN}🎉 ${RELEASE_TAG} published on main at ${RELEASE_COMMIT:0:9}${NC}"

@@ -763,6 +763,10 @@ func outcomeLabel(o reliantv1.TriggerEventOutcome) string {
 		return "skipped"
 	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED:
 		return "failed"
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING:
+		// Received and past its filter, not launched yet: typically queued
+		// behind the workflow's concurrency cap. It settles on its own.
+		return "pending"
 	default:
 		return "unknown"
 	}

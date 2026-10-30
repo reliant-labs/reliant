@@ -10846,6 +10846,11 @@
             "Name": "acting_identity",
             "ProtoType": "enum",
             "IsOptional": false
+          },
+          {
+            "Name": "triggers",
+            "ProtoType": "[]string",
+            "IsOptional": false
           }
         ],
         "EnableWorkflowResponse": [
@@ -11273,6 +11278,11 @@
             "name": "acting_identity",
             "kind": "enum",
             "type_name": "reliant.v1.ActingIdentity"
+          },
+          {
+            "name": "triggers",
+            "kind": "string",
+            "repeated": true
           }
         ],
         "reliant.v1.EnableWorkflowResponse": [
@@ -15601,11 +15611,6 @@
           {
             "name": "guard_since_ms",
             "kind": "int64"
-          },
-          {
-            "name": "processes",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -16044,52 +16049,6 @@
         "reliant.v1.ProcessOutputUnsubscribeMessage": [
           {
             "name": "process_id",
-            "kind": "string"
-          }
-        ],
-        "reliant.v1.ProcessReport": [
-          {
-            "name": "count",
-            "kind": "uint64"
-          },
-          {
-            "name": "limit",
-            "kind": "uint64"
-          },
-          {
-            "name": "refusing_heavy",
-            "kind": "bool"
-          },
-          {
-            "name": "refusing_since_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "top",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessTree",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.ProcessTree": [
-          {
-            "name": "chat_id",
-            "kind": "string"
-          },
-          {
-            "name": "command",
-            "kind": "string"
-          },
-          {
-            "name": "tasks",
-            "kind": "uint64"
-          },
-          {
-            "name": "tracked",
-            "kind": "bool"
-          },
-          {
-            "name": "chat_title",
             "kind": "string"
           }
         ],
@@ -16646,8 +16605,6 @@
         "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectConfigDelta": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectConfigSnapshot": "reliant/v1/tools_daemon.proto",
         "reliant.v1.ProjectDiscovery": "reliant/v1/tools_daemon.proto",
@@ -17234,11 +17191,6 @@
           {
             "name": "guard_since_ms",
             "kind": "int64"
-          },
-          {
-            "name": "processes",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -17404,52 +17356,6 @@
             "kind": "string"
           }
         ],
-        "reliant.v1.ProcessReport": [
-          {
-            "name": "count",
-            "kind": "uint64"
-          },
-          {
-            "name": "limit",
-            "kind": "uint64"
-          },
-          {
-            "name": "refusing_heavy",
-            "kind": "bool"
-          },
-          {
-            "name": "refusing_since_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "top",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessTree",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.ProcessTree": [
-          {
-            "name": "chat_id",
-            "kind": "string"
-          },
-          {
-            "name": "command",
-            "kind": "string"
-          },
-          {
-            "name": "tasks",
-            "kind": "uint64"
-          },
-          {
-            "name": "tracked",
-            "kind": "bool"
-          },
-          {
-            "name": "chat_title",
-            "kind": "string"
-          }
-        ],
         "reliant.v1.RefreshLocalModelsRequest": [
           {
             "name": "daemon_id",
@@ -17545,8 +17451,6 @@
         "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -20835,11 +20739,6 @@
             "kind": "message",
             "type_name": "reliant.v1.DiskVolume",
             "repeated": true
-          },
-          {
-            "name": "processes",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessReport"
           }
         ],
         "reliant.v1.InboxWaitingForMachine": [
@@ -20886,52 +20785,6 @@
           {
             "name": "other_projects_count",
             "kind": "int32"
-          }
-        ],
-        "reliant.v1.ProcessReport": [
-          {
-            "name": "count",
-            "kind": "uint64"
-          },
-          {
-            "name": "limit",
-            "kind": "uint64"
-          },
-          {
-            "name": "refusing_heavy",
-            "kind": "bool"
-          },
-          {
-            "name": "refusing_since_ms",
-            "kind": "int64"
-          },
-          {
-            "name": "top",
-            "kind": "message",
-            "type_name": "reliant.v1.ProcessTree",
-            "repeated": true
-          }
-        ],
-        "reliant.v1.ProcessTree": [
-          {
-            "name": "chat_id",
-            "kind": "string"
-          },
-          {
-            "name": "command",
-            "kind": "string"
-          },
-          {
-            "name": "tasks",
-            "kind": "uint64"
-          },
-          {
-            "name": "tracked",
-            "kind": "bool"
-          },
-          {
-            "name": "chat_title",
-            "kind": "string"
           }
         ],
         "reliant.v1.RecoveryInboxItem": [
@@ -21044,8 +20897,6 @@
         "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
         "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
-        "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
-        "reliant.v1.ProcessTree": "reliant/v1/tools_daemon.proto",
         "reliant.v1.RecoveryInboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
@@ -42499,7 +42350,7 @@
     "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
-    "reliant/v1/inbox.proto": "12d1c69ebb3051e1734e66e0cd5a7d1ca72a31acd512fab1528f921097a2e0e5",
+    "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -42520,8 +42371,8 @@
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "28ac36fad9a13b423b4eb10e38ca5d580eda72a11e39597d94858e6703660b91",
-    "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
+    "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
+    "reliant/v1/trigger.proto": "08dcf065e359e91ba3977a071480dadf947c6a252b1c20abd772d3bdc87b8120",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "e147f09969abaec0d629efccfce0964975cd97a169b0553bf1600a0b9a4ecf2a",
     "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"

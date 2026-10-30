@@ -214,10 +214,13 @@ func newSwitchHarness(t *testing.T, env *testsuite.TestWorkflowEnvironment, root
 	ok := func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}
-	register("ActivityLoadWorkflow", func(_ context.Context, _ map[string]string) (v2.LoadedWorkflow, error) {
+	register("ActivityLoadWorkflow", func(_ context.Context, _ types.LoadWorkflowInput) (v2.LoadedWorkflow, error) {
 		return v2.LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	})
-	for _, name := range []string{"WorkflowCheckpoint", "ThreadStatus", "Cleanup", "WorkflowError", "EmitToolCallStatus"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	for _, name := range []string{"ThreadStatus", "Cleanup", "WorkflowError", "EmitToolCallStatus"} {
 		register(name, ok)
 	}
 	register("EmitStreamFinalized", func(_ context.Context, _ types.EmitStreamFinalizedInput) (types.EmitStreamFinalizedOutput, error) {
@@ -266,9 +269,9 @@ func newSwitchHarness(t *testing.T, env *testsuite.TestWorkflowEnvironment, root
 	})
 	// The presets own their selector, as production's preset YAMLs do: a
 	// global model update must not be able to overwrite it.
-	register("LoadPresetParams", func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+	register("LoadPresetParams", func(_ context.Context, input types.LoadPresetParamsInput) (map[string]interface{}, error) {
 		tag := "flagship"
-		if input["preset_name"] == "fast" {
+		if input.PresetName == "fast" {
 			tag = "fast"
 		}
 		return map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{tag}}}, nil

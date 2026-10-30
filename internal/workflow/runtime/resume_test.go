@@ -241,7 +241,7 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -254,13 +254,8 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 		activity.RegisterOptions{Name: "WorkflowStatus"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
-			nodeID, _ := input["node_id"].(string)
-			iter := 0
-			if f, ok := input["loop_iteration"].(float64); ok {
-				iter = int(f)
-			}
-			rec.checkpoints = append(rec.checkpoints, capturedCheckpoint{nodeID: nodeID, iteration: iter})
+		func(_ context.Context, input types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+			rec.checkpoints = append(rec.checkpoints, capturedCheckpoint{nodeID: input.NodeID, iteration: int(input.LoopIteration)})
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowCheckpoint"},

@@ -22,9 +22,7 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, isInFlightLimit, issuesRetry, obsRetry, releaseHealthRetry, retryAfterMs } from "@/services/controlPlane/observability/errors";
-import { panelSchedulerFor } from "@/services/controlPlane/observability/panelScheduler";
-import { isPollRead, runAsPoll } from "@/services/controlPlane/observability/quotaStore";
+import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -49,7 +47,6 @@ import type {
   ObsScope,
   ListTracesResult,
   Panel,
-  PanelResult,
   SearchLogsResult,
   Severity,
   TimeWindow,
@@ -71,7 +68,7 @@ function panelRequestKey(panel: Panel) {
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
-    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? []] as const,
+    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
   overview: (scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) =>
     [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
@@ -158,7 +155,7 @@ export function useObservabilityOrg() {
     queryKey: obsKeys.org(),
     queryFn: () => api.currentOrgId(),
     staleTime: 5 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
   return { orgId: org.data ?? null, isLoading: org.isLoading, error: org.error, refetch: org.refetch };
 }
@@ -170,10 +167,10 @@ export function useServiceOverview(scope: ObsScope | null, range: RangePreset, s
   const queryKey = obsKeys.overview(scope, range, services, groupBy);
   const query = useQuery({
     queryKey,
-    queryFn: () => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }),
+    queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, 60_000, !!scope);
   return query;
@@ -199,7 +196,7 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
   const queryKey = obsKeys.logs(scope, filters);
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: async ({ pageParam }): Promise<SearchLogsResult & { window: TimeWindow }> => {
+    queryFn: async ({ pageParam, signal }): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.searchLogs({
         ...(scope as ObsScope),
@@ -211,7 +208,7 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
         spanId: filters.spanId,
         limit: LOG_PAGE_SIZE,
         cursor: pageParam?.cursor,
-      });
+      }, { signal });
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -220,7 +217,7 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
     // While tailing, older pages would be re-fetched on every tick; keep just the newest.
     maxPages: live ? 1 : undefined,
     staleTime: 10_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, live ? LIVE_TAIL_MS : false, !!scope);
   return query;
@@ -243,7 +240,7 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: obsKeys.traces(scope, filters),
-    queryFn: async ({ pageParam }): Promise<ListTracesResult & { window: TimeWindow }> => {
+    queryFn: async ({ pageParam, signal }): Promise<ListTracesResult & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.listTraces({
         ...(scope as ObsScope),
@@ -255,14 +252,14 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         groupBy: filters.groupBy,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
-      });
+      }, { signal });
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
     enabled: !!scope,
     staleTime: 15_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -276,10 +273,10 @@ export function useTrace(scope: ObsScope | null, traceId: string | null, range: 
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.trace(scope, traceId ?? "", range),
-    queryFn: () => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(range) }),
+    queryFn: ({ signal }) => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(range) }, { signal }),
     enabled: !!scope && !!traceId,
     staleTime: 15_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -303,45 +300,16 @@ export interface PanelQueryOptions {
   enabled?: boolean;
 }
 
-/** How many times a panel the server refused for its concurrent-read cap asks again before it shows an error with Retry. */
-export const PANEL_BUSY_RETRIES = 5;
-const PANEL_BUSY_BASE_MS = 1_000;
-const PANEL_BUSY_CAP_MS = 16_000;
-
-/**
- * How long a refused panel waits before asking again: never less than the
- * server's own Retry-After, plus a random share of an exponentially growing
- * window, so a dashboard's refused panels spread out instead of returning
- * together. `random` is injectable for tests.
- */
-export function panelBusyDelayMs(failureCount: number, error: unknown, random: () => number = Math.random): number {
-  const floor = retryAfterMs(error) ?? 0;
-  const window = Math.min(PANEL_BUSY_BASE_MS * 2 ** failureCount, PANEL_BUSY_CAP_MS);
-  return Math.round(floor + random() * window);
-}
-
-/**
- * Retry policy of a panel read. The concurrent-read cap is expected on a busy
- * console and clears by itself, so it is retried (bounded); every other answer
- * keeps obsRetry's rule. A retry re-enters the panel scheduler's queue.
- */
-export function panelRetry(failureCount: number, error: unknown): boolean {
-  return isInFlightLimit(error) ? failureCount < PANEL_BUSY_RETRIES : obsRetry(failureCount, error);
-}
-
-function panelRetryDelay(failureCount: number, error: unknown): number {
-  return isInFlightLimit(error) ? panelBusyDelayMs(failureCount, error) : Math.min(1_000 * 2 ** failureCount, 30_000);
-}
-
 /**
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
  * service filter rides as `services`; search panels are never run here.
  *
- * Every read goes through the query client's panel scheduler (a few at a time,
- * oldest first), well under control-plane's cap of six concurrent reads per
- * user. Leaving the page or changing the range cancels a queued or running read.
- * While a refused read waits to be retried the result has `failureCount > 0`
- * and the cap error as `failureReason`; the views say "Waiting for capacity".
+ * Like every observability read it waits its turn in the page's read scheduler
+ * (obsClient), and a refusal for the server's concurrent-read cap is retried
+ * with backoff for as long as the panel is mounted: the result stays loading
+ * with `failureCount > 0` and the cap error as `failureReason`, which the views
+ * draw as "Waiting for capacity…", never as an error. Leaving the page or
+ * changing the range cancels a queued or running read.
  */
 export function usePanelQuery(
   scope: ObsScope | null,
@@ -352,30 +320,18 @@ export function usePanelQuery(
   options: PanelQueryOptions = {}
 ) {
   const api = useObsReadApi();
-  const client = useQueryClient();
   const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
   const enabled = !!scope && panel.kind !== "search" && (options.enabled ?? true);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
-      // The scheduler may start the read later than the poll that asked for it:
-      // carry the poll mark across the wait.
-      const poll = isPollRead();
-      return panelSchedulerFor(client).run((cancel) => {
-        let read!: Promise<PanelResult>;
-        const start = () => {
-          const offset = options.offsetMs?.() ?? 0;
-          read = api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal: cancel });
-        };
-        if (poll) runAsPoll(start);
-        else start();
-        return read;
-      }, signal);
+      const offset = options.offsetMs?.() ?? 0;
+      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal });
     },
     enabled,
     staleTime: 30_000,
-    retry: panelRetry,
-    retryDelay: panelRetryDelay,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, options.refetchInterval ?? false, enabled);
   return query;
@@ -394,17 +350,17 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.flamegraph(scope, filters),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       api.getFlamegraph({
         ...(scope as ObsScope),
         window: resolveWindow(filters.range),
         service: filters.service,
         profileType: filters.profileType,
         traceId: filters.traceId,
-      }),
+      }, { signal }),
     enabled: !!scope && !!filters.service && !!filters.profileType,
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -423,10 +379,10 @@ export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
   const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
   return useQuery({
     queryKey: obsKeys.serviceSignals(unfiltered, range),
-    queryFn: () => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(range) }),
+    queryFn: ({ signal }) => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(range) }, { signal }),
     enabled: !!unfiltered,
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -446,7 +402,7 @@ export function useObservabilityUsage(orgId: string | null) {
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -466,13 +422,13 @@ export function useAttributeValues(
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
-    queryFn: () =>
+    queryFn: ({ signal: abortSignal }) =>
       // Value lookups are capped at 7 days server-side, which is the widest preset.
-      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }),
+      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }, { signal: abortSignal }),
     enabled: !!scope && !!key,
     staleTime: 60_000,
     placeholderData: (previous) => previous,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -511,11 +467,11 @@ export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, nam
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.catalog(scope, window, name, limit),
-    queryFn: () => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }),
+    queryFn: ({ signal }) => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }, { signal }),
     enabled: !!scope,
     staleTime: 60_000,
     placeholderData: (previous) => previous,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -525,11 +481,12 @@ export function useMetric(scope: ObsScope | null, range: RangePreset, name: stri
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
-    queryFn: () => api.getMetric({ ...(scope as ObsScope), window: resolveWindow(window), name: name as string, kind }),
+    queryFn: ({ signal }) => api.getMetric({ ...(scope as ObsScope), window: resolveWindow(window), name: name as string, kind }, { signal }),
     enabled: !!scope && !!name,
     staleTime: 60_000,
     // NotFound is the answer "no data for this metric in this window": a state to show, not a fault to retry.
     retry: (failureCount, error) => !(error instanceof ConnectError && error.code === Code.NotFound) && obsRetry(failureCount, error),
+    retryDelay: obsRetryDelay,
   });
 }
 
@@ -541,10 +498,10 @@ export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, r
   const api = useObsReadApi();
   return useQuery({
     queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
-    queryFn: () => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }),
+    queryFn: ({ signal }) => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }, { signal }),
     enabled: !!scope && !!request?.name && (options.enabled ?? true),
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -555,10 +512,10 @@ export function useWorkloads(scope: ObsScope | null, range: RangePreset, service
   const queryKey = obsKeys.workloads(scope, range, services);
   const query = useQuery({
     queryKey,
-    queryFn: () => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }),
+    queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, 60_000, !!scope);
   return query;
@@ -568,11 +525,11 @@ export function useWorkload(scope: ObsScope | null, range: RangePreset, workload
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
-    queryFn: () =>
-      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }),
+    queryFn: ({ signal }) =>
+      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }, { signal }),
     enabled: !!scope && !!workload,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -698,7 +655,7 @@ export function useReleases(
     queryFn: () => api.listReleases({ ...(scope as DeliveryScope), window: window(), limit: options.limit }),
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -713,7 +670,7 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
     },
     enabled: !!scope,
     staleTime: 60_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -729,10 +686,10 @@ export function useReleaseHealth(scope: DeliveryScope | null, promotionId: strin
   const enabled = !!scope && !!promotionId;
   const query = useQuery({
     queryKey,
-    queryFn: () => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }),
+    queryFn: ({ signal }) => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }, { signal }),
     enabled,
     staleTime: 30_000,
-    retry: releaseHealthRetry,
+    retry: releaseHealthRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, query.data && !query.data.afterComplete ? 60_000 : false, enabled);
   return query;
@@ -809,7 +766,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
   const api = useObsReadApi();
   return useInfiniteQuery({
     queryKey: issueKeys.list(scope, filters),
-    queryFn: async ({ pageParam }): Promise<IssueList & { window: TimeWindow }> => {
+    queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
       const result = await api.listIssues({
         ...(scope as IssueScope),
@@ -822,14 +779,14 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
-      });
+      }, { signal });
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextPageToken ? { cursor: last.nextPageToken, window: last.window } : undefined),
     enabled: !!scope,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -840,10 +797,10 @@ export function useIssue(issueId: string | undefined, range: RangePreset) {
   const key = issueKeys.detail(issueId ?? "", range);
   return useQuery({
     queryKey: key,
-    queryFn: () => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) })),
+    queryFn: ({ signal }) => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }, { signal })),
     enabled: !!issueId,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -856,13 +813,13 @@ export function useIssueEvents(issueId: string | undefined) {
   const key = issueKeys.events(issueId ?? "");
   return useInfiniteQuery({
     queryKey: key,
-    queryFn: ({ pageParam }): Promise<IssueEventList> =>
-      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined })),
+    queryFn: ({ pageParam, signal }): Promise<IssueEventList> =>
+      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }, { signal })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,
     staleTime: 30_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -900,7 +857,7 @@ export function useIssueTimeline(issueId: string | undefined) {
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,
     staleTime: 15_000,
-    retry: issuesRetry,
+    retry: issuesRetry, retryDelay: obsRetryDelay,
   });
 }
 
@@ -1011,6 +968,6 @@ export function useActivity(scope: DeliveryScope | null, target: { kind?: string
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
