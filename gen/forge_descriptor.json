@@ -16818,6 +16818,7 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
           "InputTypeFQ": "reliant.v1.SetDefaultDaemonRequest",
           "OutputTypeFQ": "reliant.v1.SetDefaultDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
