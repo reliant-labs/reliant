@@ -172,6 +172,17 @@ message UpdateDaemonRequest {
   // resources are derived from its size; change the size with ResizeDaemon.
   reserved 3, 4;
   reserved "image", "resources";
+  // env, when present, REPLACES the machine's environment variables (an
+  // empty one clears them); absent leaves them as they are. Names Reliant
+  // sets on every machine (DAEMON_*, RELIANT_*, WORKSPACE_*, PATH, HOME, the
+  // proxy variables, ...) are refused. A running machine picks the new set
+  // up the next time its pod is built: resume, resize or re-create.
+  MachineEnv env = 5;
+}
+
+// MachineEnv is a managed machine's declared environment.
+message MachineEnv {
+  map<string, string> vars = 1;
 }
 
 message UpdateDaemonResponse {

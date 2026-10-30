@@ -128,13 +128,21 @@ func UpdateChatState(ctx context.Context, db orm.Context, chatID string, state c
 		return err
 	}
 	return withChatWorktreeAdmission(ctx, db, chatID, worktreeID, func(ctx context.Context) error {
+		// Archiving drops what the chat was holding for its machine: a
+		// message queued for it, a breaker pause awaiting its reconnect, the
+		// waiting-for-machine marker. The delivery sweep skips archived chats
+		// already, but a marker left set comes back to life the moment the
+		// chat is unarchived, starting a run nobody asked for.
 		_, err := db.Bun().NewRaw(`
 UPDATE chats
 SET state = ?0,
     archived_worktree_name = COALESCE(archived_worktree_name, ?1),
     updated_at = ?2,
-    last_active = ?2
-WHERE id = ?3`, state, archivedWorktreeName, now, chatID).Exec(ctx)
+    last_active = ?2,
+    queued_for_machine_at = CASE WHEN ?0 = ?4 THEN NULL ELSE queued_for_machine_at END,
+    paused_for_machine_at = CASE WHEN ?0 = ?4 THEN NULL ELSE paused_for_machine_at END,
+    daemon_blocked_at = CASE WHEN ?0 = ?4 THEN NULL ELSE daemon_blocked_at END
+WHERE id = ?3`, state, archivedWorktreeName, now, chatID, core.ChatStateArchived).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to update chat state: %w", recoveryAdmissionError(err))
 		}
