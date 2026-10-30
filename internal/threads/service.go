@@ -78,7 +78,10 @@ type Repository interface {
 	// Tool call operations. A live message update carries each tool-call
 	// block's durable status and, for a spawn, the thread it started — see
 	// db.ContentBlockPayloadsWithToolCalls.
-	ListToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
+	// ListLiveToolCallsByChat is what interrupt and pause cancel: a chat's
+	// non-terminal calls only, read through the partial live-calls index
+	// rather than the chat's whole tool-call history.
+	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
 	// durably at the moment the user asks for it -- see cancelToolCalls.

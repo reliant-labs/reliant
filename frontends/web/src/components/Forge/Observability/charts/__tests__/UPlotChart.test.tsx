@@ -32,6 +32,11 @@ const PLOT = { left: 64, top: 8, width: 400, height: 200 };
 vi.mock("uplot", () => {
   class FakeUPlot {
     static pxRatio = 1;
+    /** uPlot's own UTC branch: the local fields of the result read as the UTC fields of the date. */
+    static tzDate(date: Date, tz: string) {
+      if (tz !== "UTC") throw new Error(`the fake only knows UTC, not ${tz}`);
+      return new Date(+date + date.getTimezoneOffset() * 6e4);
+    }
     width = 0;
     bbox = PLOT;
     scales: Record<string, { min: number; max: number }>;
@@ -287,5 +292,68 @@ describe("exemplars on the chart", () => {
     render(<UPlotChart timestamps={TIMES} series={line} height={220} label="latency" area="fill" exemplars={[{ timeSec: 1120, value: 1.65, label: "mid" }]} />);
     // area y axis is [0, 3.3]: 1.65 is exactly the middle.
     expect(screen.getByTestId("chart-exemplar-dot")).toHaveStyle({ top: "100px" });
+  });
+});
+
+describe("a day bucket in a short window (the empty-dashboards audit's workflow panel)", () => {
+  // 2026-10-29 00:00Z is the Date bucket; the dashboard opened on the last hour, 18:11Z to 19:11Z.
+  const day = Date.UTC(2026, 9, 29) / 1000;
+  const hour = { startSec: Date.UTC(2026, 9, 29, 18, 11, 39) / 1000, endSec: Date.UTC(2026, 9, 29, 19, 11, 39) / 1000 };
+  const week = { startSec: Date.UTC(2026, 9, 22, 19, 11, 39) / 1000, endSec: Date.UTC(2026, 9, 29, 19, 11, 39) / 1000 };
+
+  it("spans the window that was asked for, not a viewport around the one bucket", () => {
+    // Without a window the axis is the one-minute box the audit's screenshot shows.
+    expect(timeExtent([day])).toEqual([day - 30, day + 30]);
+    // With it, the axis is the window, extended back to the bucket's start (a day begins before the hour does).
+    expect(timeExtent([day], [], hour)).toEqual([day, hour.endSec]);
+    // Seven days of buckets sit inside the seven-day window; the window sets the axis ends.
+    const days = Array.from({ length: 8 }, (_, i) => day - (7 - i) * 86_400);
+    expect(timeExtent(days, [], week)).toEqual([days[0], week.endSec]);
+    expect(timeExtent([], [], hour)).toEqual([hour.startSec, hour.endSec]);
+  });
+
+  it("hands uPlot the window as the x range", () => {
+    render(<UPlotChart timestamps={[day]} series={[series("success", [53])]} height={120} label="runs" window={hour} />);
+    expect(last().opts.scales.x.range({}, day, day)).toEqual([day, hour.endSec]);
+  });
+
+  it("marks a series with a single point, larger than an isolated glyph, and still marks nothing across gaps", () => {
+    render(<UPlotChart timestamps={[day]} series={[series("success", [53]), series("failed", [null])]} height={120} label="runs" window={hour} />);
+    const [success] = last().opts.series.slice(1);
+    expect(success.points.filter({ data: last().data }, 1)).toEqual([0]);
+    expect(success.points.size).toBe(9);
+    expect(success.points.fill).toBe(success.stroke);
+
+    render(<UPlotChart timestamps={TIMES.slice(0, 3)} series={[series("many", [7, 8, 9])]} height={120} label="runs" />);
+    expect(last().opts.series[1].points.size).toBe(6);
+    expect(last().opts.series[1].points.filter({ data: last().data }, 1)).toEqual([]);
+  });
+
+  it.each(["America/Los_Angeles", "Pacific/Auckland", "UTC"])("labels a UTC calendar-day bucket as that date when the browser is in %s", (zone) => {
+    const was = process.env.TZ;
+    process.env.TZ = zone;
+    try {
+      calendarDayLabel();
+    } finally {
+      if (was === undefined) delete process.env.TZ;
+      else process.env.TZ = was;
+    }
+  });
+
+  function calendarDayLabel() {
+    render(<UPlotChart timestamps={[day]} series={[series("success", [53])]} height={120} label="runs" calendar={{ timezone: "UTC", bucketSeconds: 86_400 }} />);
+    const { opts } = last();
+    // uPlot reads local fields of what tzDate returns: for 00:00Z the UTC date must be 29 October in every zone.
+    const shifted = opts.tzDate(day) as Date;
+    expect([shifted.getFullYear(), shifted.getMonth(), shifted.getDate(), shifted.getHours()]).toEqual([2026, 9, 29, 0]);
+    expect(opts.series[0].value).toBe("{YYYY}-{MM}-{DD}");
+    expect(screen.getByTestId("chart-bucket-note")).toHaveTextContent("1-day buckets: UTC calendar dates");
+    expect(screen.getByRole("group", { name: "runs" }).querySelector("figcaption")).toHaveTextContent("1-day buckets: UTC calendar dates.");
+  }
+
+  it("leaves instants on the browser's zone and draws no bucket note", () => {
+    render(<UPlotChart timestamps={TIMES.slice(0, 3)} series={[series("many", [7, 8, 9])]} height={120} label="plain" />);
+    expect(last().opts.tzDate).toBeUndefined();
+    expect(screen.queryByTestId("chart-bucket-note")).toBeNull();
   });
 });
