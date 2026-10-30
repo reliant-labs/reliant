@@ -89,6 +89,14 @@ type InlineWorkflowExecutor struct {
 	// seedNodeOutputs pre-populates the body's `nodes`. Only an on_failure
 	// handler sets it: it reads the outputs of the run it is handling.
 	seedNodeOutputs map[string]interface{}
+
+	// childFailure is armed for a ref'd child that declares on_failure
+	// (child_on_failure.go); nil otherwise.
+	childFailure *childFailureScope
+	// bodyInputs and bodyNodeOutputs are the child's own inputs and node
+	// outputs as its graph ran, which its on_failure handler reads.
+	bodyInputs      map[string]interface{}
+	bodyNodeOutputs map[string]interface{}
 }
 
 // threadForError is the thread this inline workflow's failures belong to, or ""
@@ -597,8 +605,11 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load sub-workflow %s: %w", e.subWorkflowName, err)
 	}
 
-	// Execute sub-workflow
+	// Execute sub-workflow. A ref'd child with its own on_failure runs it
+	// when it fails, before the failure reaches the parent.
+	failureScope := e.beginChildFailureScope()
 	outputs, err := e.executeSubWorkflow()
+	e.finishChildFailureScope(failureScope, err)
 	if err != nil {
 		return nil, fmt.Errorf("sub-workflow %s failed: %w", e.subWorkflowName, err)
 	}
@@ -729,6 +740,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	if _, ok := subInputs["mode"]; !ok {
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
 	}
+	e.bodyInputs, e.bodyNodeOutputs = subInputs, subNodeOutputs
 	// What the user set on this thread alone wins over everything the thread
 	// started with — the model they switched a stopped agent to, above all.
 	// Only for a body with inputs of its own: an inline body's map IS its
@@ -868,6 +880,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				events = append(events, skipEvt)
 				continue
 			}
+			e.childFailure.noteOutcome(node)
 
 			// Handle loop nodes
 			if node.GetType() == model.NodeTypeLoop {
@@ -908,6 +921,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				loopOutput, err := loopExecutor.Execute()
 				if err != nil {
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
 					return nil, fmt.Errorf("loop %s failed: %w", node.GetId(), err)
 				}
 
@@ -940,6 +954,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					inlineOutput, err = e.executeNestedWorkflow(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
 				}
 				if err != nil {
+					// The deepest scope records first; the recorder keeps the
+					// first, so this names the nested node only when nothing
+					// inside it did (its config would not evaluate).
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
 					return nil, err
 				}
 				nid := node.GetId()
