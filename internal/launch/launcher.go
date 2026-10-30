@@ -292,7 +292,11 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat
 		// list) or a run (Runs), for the life of the chat.
-		Origin:          core.ChatOriginOf(ev.Kind),
+		Origin: core.ChatOriginOf(ev.Kind),
+		// Not a column (the chat view derives it from the launch event): set
+		// here so this launch's admission reads the workflow the run will
+		// (chatScope), before that event exists.
+		LaunchKind:      string(ev.Kind),
 		WorkflowID:      &workflowID,
 		SelectedPresets: spec.Presets,
 		CreatedAt:       now,
@@ -692,6 +696,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it and ends no-machine. Every admission read below is scoped by it, so
 	// the tree, the presets and the input schema all come from that machine.
 	checked := *chat
+	if checked.LaunchKind == "" {
+		// The launch this start records: it decides, as for the run, whether
+		// the workflow may be read from an unfinished draft (chatScope).
+		checked.LaunchKind = string(ev.Kind)
+	}
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
@@ -1120,6 +1129,11 @@ func (l *Launcher) buildInputs(
 				// Could not read the user's provider settings: a store
 				// problem, not a verdict on the inputs.
 				return nil, &InternalError{Reason: "failed to read provider settings", Err: e}
+			}
+			var lookupErr *WorkflowLookupError
+			if errors.As(e, &lookupErr) {
+				// Could not read the workflow: retryable, not a verdict.
+				return nil, &InternalError{Reason: "failed to look up workflow", Err: e}
 			}
 			errMsgs[i] = e.Error()
 		}

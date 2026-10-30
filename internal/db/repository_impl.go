@@ -2716,6 +2716,11 @@ func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string
 	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
+// SetWorkflowFailureDetail records why a run failed, on the run.
+func (r *Repo) SetWorkflowFailureDetail(ctx context.Context, id, detail string) error {
+	return store.SetWorkflowFailureDetail(ctx, r.ORM(), id, detail)
+}
+
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
 // Designed to be called from the activity wrapper so that any Temporal activity

@@ -47,6 +47,12 @@ type Workflow struct {
 	// judgement. nil means the workflow declared no outcome, which is NOT a
 	// failure — most workflows declare nothing.
 	Outcome *string `json:"outcome,omitempty"`
+
+	// FailureDetail is why the run FAILED: the error it ended with, written
+	// with the failed status and cleared when the row goes live again. It is
+	// the only record of a run that failed before any node ran, which has no
+	// node attempt to carry its error. nil when the run did not fail.
+	FailureDetail *string `json:"failure_detail,omitempty"`
 }
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last

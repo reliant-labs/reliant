@@ -24093,6 +24093,10 @@
             {
               "name": "archived",
               "kind": "bool"
+            },
+            {
+              "name": "failure_detail",
+              "kind": "string"
             }
           ],
           "reliant.v1.RunNodeExecution": [
@@ -54054,6 +54058,17 @@
           "source": {
             "path": "internal/db/repository_impl.go",
             "symbol": "Repo.SetWorkflowDraftStatus"
+          }
+        },
+        {
+          "id": "method1:71e9926f7713d4a5bb7d7bdbc8979727349cd039d810ae279fedda72353975cd",
+          "name": "SetWorkflowFailureDetail",
+          "signature": "func(ctx context.Context, id string, detail string) error",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.SetWorkflowFailureDetail",
+          "source": {
+            "path": "internal/db/repository_impl.go",
+            "symbol": "Repo.SetWorkflowFailureDetail"
           }
         },
         {
