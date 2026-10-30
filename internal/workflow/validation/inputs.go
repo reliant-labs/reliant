@@ -638,15 +638,14 @@ func coerceInteger(value any) (int64, bool) {
 	case int64:
 		return typedValue, true
 	case float64:
-		if math.Trunc(typedValue) != typedValue {
+		// float64(MaxInt64) rounds to 2^63, so the upper bound must be
+		// exclusive. Check before converting: overflow is not a valid input.
+		if math.IsNaN(typedValue) || math.IsInf(typedValue, 0) || typedValue < -0x1p63 || typedValue >= 0x1p63 || math.Trunc(typedValue) != typedValue {
 			return 0, false
 		}
 		return int64(typedValue), true
 	case float32:
-		if math.Trunc(float64(typedValue)) != float64(typedValue) {
-			return 0, false
-		}
-		return int64(typedValue), true
+		return coerceInteger(float64(typedValue))
 	default:
 		return 0, false
 	}

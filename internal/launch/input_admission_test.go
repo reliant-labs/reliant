@@ -3,6 +3,7 @@ package launch
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +67,28 @@ func TestLaunchRefusesTextForABooleanInputBeforeCreatingARun(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, starter.calls, 1)
+}
+
+func TestLaunchRefusesOverflowingIntegerAfterDefaults(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	yaml := strings.Replace(releaseWorkflowYAML, "type: boolean\n    default: true", "type: integer\n    default: 1", 1)
+	seedCompleteWorkflow(t, ctx, repo, "release-forge", yaml)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	params := mockModelParams(t)
+	params["asap"] = structpb.NewNumberValue(0x1p63)
+	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindAgentStartRun, DedupeKey: "overflow", OccurredAt: time.Now().UTC()}, Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "release-forge",
+		Params: params, Messages: userSeed("release now"),
+	})
+	var validation *ValidationError
+	require.ErrorAs(t, err, &validation)
+	require.Contains(t, validation.Error(), "expects integer")
+	require.Equal(t, float64(0x1p63), params["asap"].GetNumberValue())
+	require.Empty(t, starter.calls)
+	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	require.NoError(t, err)
+	require.Empty(t, chats)
 }
 
 // Input validation that cannot read the workflow it validates against fails,
