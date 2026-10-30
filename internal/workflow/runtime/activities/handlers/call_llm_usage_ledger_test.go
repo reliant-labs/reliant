@@ -20,9 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
-// usageDriver fails its first stream with a network error and answers the
+// ledgerUsageDriver fails its first stream with a network error and answers the
 // later ones with a known token split, under a configurable provider name.
-type usageDriver struct {
+type ledgerUsageDriver struct {
 	mu       sync.Mutex
 	name     string
 	streams  int
@@ -36,15 +36,15 @@ type usageDriver struct {
 	usageAfterError bool
 }
 
-func (d *usageDriver) Name() string                          { return d.name }
-func (d *usageDriver) Model() models.Model                   { return models.Model{ID: "mock-model"} }
-func (d *usageDriver) ValidateKey(ctx context.Context) error { return nil }
+func (d *ledgerUsageDriver) Name() string                          { return d.name }
+func (d *ledgerUsageDriver) Model() models.Model                   { return models.Model{ID: "mock-model"} }
+func (d *ledgerUsageDriver) ValidateKey(ctx context.Context) error { return nil }
 
-func (d *usageDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, availableTools []tools.Tool) (*llm.DriverResponse, error) {
+func (d *ledgerUsageDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, availableTools []tools.Tool) (*llm.DriverResponse, error) {
 	return &llm.DriverResponse{Content: "ok", FinishReason: message.FinishReasonEndTurn}, nil
 }
 
-func (d *usageDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, availableTools []tools.Tool) <-chan llm.DriverEvent {
+func (d *ledgerUsageDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, availableTools []tools.Tool) <-chan llm.DriverEvent {
 	d.mu.Lock()
 	d.streams++
 	fail := d.streams <= d.failures
@@ -129,7 +129,7 @@ func TestCallLLM_UsageLedgerCountsEveryAttemptOfARetriedActivity(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-ledger", project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	driver := &usageDriver{name: "anthropic", failures: 1}
+	driver := &ledgerUsageDriver{name: "anthropic", failures: 1}
 	runCallLLMWithRetries(t, h, driver, chat.ID)
 	require.Equal(t, 2, driver.streams, "the test must really run the activity twice")
 
@@ -183,7 +183,7 @@ func callLLMKeepsFailedAttemptUsage(t *testing.T, usageAfterError bool) {
 	chat := h.CreateTestChat(ctx, "chat-ledger-billed-"+fmt.Sprint(usageAfterError), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	driver := &usageDriver{name: "anthropic", failures: 1, failWithUsage: true, usageAfterError: usageAfterError}
+	driver := &ledgerUsageDriver{name: "anthropic", failures: 1, failWithUsage: true, usageAfterError: usageAfterError}
 	runCallLLMWithRetries(t, h, driver, chat.ID)
 	require.Equal(t, 2, driver.streams)
 
@@ -223,7 +223,7 @@ func TestCallLLM_UsageLedgerRecordsFailureAsClassOnly(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-ledger-fail", project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	driver := &usageDriver{name: "claude", failures: 99}
+	driver := &ledgerUsageDriver{name: "claude", failures: 99}
 	callLLM := NewCallLLMActivity(h.Repo(), nil, nil, &staticConfigProvider{},
 		func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 			return driver, nil
