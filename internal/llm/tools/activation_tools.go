@@ -42,7 +42,7 @@ type ActivationParams struct {
 	Params          map[string]any    `json:"params,omitempty" jsonschema:"description=Typed workflow inputs; replaces the params map when supplied."`
 	Presets         map[string]string `json:"presets,omitempty" jsonschema:"description=Workflow preset assignments."`
 	Message         *string           `json:"message,omitempty" jsonschema:"description=Seed prompt; omitted uses declaration prompt on create."`
-	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=owner or app. Defaults to owner on create."`
+	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=Who GitHub writes speak as: app (the Reliant GitHub bot) or owner. Defaults to app on create and to unchanged on update; choose owner only to write under the owner's own account."`
 }
 
 // ActivationPreview is a validated, immutable approval description, never a grant.

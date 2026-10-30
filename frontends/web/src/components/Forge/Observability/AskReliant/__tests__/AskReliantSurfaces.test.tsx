@@ -156,13 +156,13 @@ describe("Ask Reliant on a dashboard panel", () => {
     dashboard: (ref) => `/d/${ref.kind}/${ref.key}`,
   };
 
-  function renderDashboard(env: string) {
+  function renderDashboard(env: string, dayGrained = false) {
     function Stateful() {
-      const [search, setSearch] = useState<DashboardSearch>({ range: "6h" });
+      const [search, setSearch] = useState<DashboardSearch>({ range: dayGrained ? "1h" : "6h" });
       return (
         <DashboardView
           project={FIXTURE_PROJECT}
-          dashRef={{ kind: "workspace", projectId: FIXTURE_PROJECT, key: "checkout-latency" }}
+          dashRef={{ kind: dayGrained ? "release" : "workspace", projectId: FIXTURE_PROJECT, key: dayGrained ? "product-usage" : "checkout-latency" }}
           env={env}
           environments={FIXTURE_ENVS}
           search={search}
@@ -173,13 +173,24 @@ describe("Ask Reliant on a dashboard panel", () => {
         />
       );
     }
-    renderWithApi(createFixtureApi(), <Stateful />);
+    renderWithApi(createFixtureApi({ dashboardsDayGrained: dayGrained }), <Stateful />);
   }
 
   beforeEach(() => {
     startAskReliantChat.mockReset().mockResolvedValue({ worktreeId: "w1" });
     projectList.projects = [project];
     useProjectStore.setState({ currentProject: project });
+  });
+
+  it("investigates a day-grained panel over its widened seven days, not the dashboard hour", async () => {
+    const user = userEvent.setup();
+    renderDashboard("prod", true);
+    await user.click(await screen.findByTestId("dashboard-panel-menu-workflows-by-outcome"));
+    await user.click(await screen.findByTestId("dashboard-panel-ask-workflows-by-outcome"));
+    const { prompt } = await startedWith();
+    expect(prompt).toContain("last 7d");
+    expect(prompt).toContain("--since 168h");
+    expect(prompt).not.toContain("--since 1h");
   });
 
   it("a panel menu entry: the panel's title and query, over the dashboard's window, in its environment", async () => {

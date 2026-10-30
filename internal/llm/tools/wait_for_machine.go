@@ -42,6 +42,16 @@ const (
 	// server-side, so this costs no model round-trips.
 	waitForMachinePollInterval = 2 * time.Second
 
+	// waitForMachineFailedSettle is how long a failed-to-start report must
+	// hold, the machine never connecting meanwhile, before the wait believes
+	// it. The control plane reports Failed for moments it recovers from by
+	// itself: on 2026-10-30 a resumed machine read Failed for 17s while its
+	// previous pod finished terminating, and a VM that crashed and was
+	// re-created read Failed for ~40s before its daemon reconnected. Every
+	// run waiting on those machines was told to stop, and the machine came
+	// back on its own seconds later.
+	waitForMachineFailedSettle = 2 * time.Minute
+
 	waitForMachineDescription = `Wait for this run's machine to reconnect, then return so you can retry.
 
 WHEN TO USE:
@@ -54,7 +64,7 @@ WHEN NOT TO USE:
 HOW IT WORKS:
 It checks every couple of seconds and returns the moment the machine is connected. If the budget elapses first it returns normally, saying what state the machine is in; that is not an error, and calling again keeps waiting.
 
-If it reports that the machine was removed or failed to start, waiting will not help: tell the user what happened and stop.
+If it reports that the machine was removed, or that it failed to start and stayed failed, waiting will not help: tell the user what happened and stop.
 
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.
@@ -71,6 +81,8 @@ type waitForMachineTool struct {
 	// shrinks them; timeoutUnit is what one timeout_seconds is worth.
 	pollInterval time.Duration
 	timeoutUnit  time.Duration
+	// failedSettle is waitForMachineFailedSettle unless a test shrinks it.
+	failedSettle time.Duration
 }
 
 // NewWaitForMachineTool returns wait_for_machine. A nil observer makes it
@@ -84,6 +96,7 @@ func newWaitForMachineTool(observer MachineObserver) *waitForMachineTool {
 		observer:     observer,
 		pollInterval: waitForMachinePollInterval,
 		timeoutUnit:  time.Second,
+		failedSettle: waitForMachineFailedSettle,
 	}
 }
 
@@ -123,6 +136,9 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 	deadline := start.Add(budget)
 	last := "unknown"
 	var lastMessage string
+	// failedSince is when the current unbroken run of Failed looks began;
+	// zero while the machine is not reporting Failed.
+	var failedSince time.Time
 
 	for {
 		status, err := t.observer.MachineStatus(rc.Context, userID)
@@ -130,7 +146,8 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 		if err == nil {
 			last = stateOf(status)
 			lastMessage = status.StatusMessage
-			if resp, done := t.terminalResponse(status, time.Since(start)); done {
+			failedSince = failedRunStart(failedSince, status)
+			if resp, done := t.terminalResponse(status, time.Since(start), sinceOrZero(failedSince)); done {
 				return resp, nil
 			}
 		}
@@ -141,15 +158,37 @@ func (t *waitForMachineTool) Execute(rc *rctx.ToolContext, params WaitForMachine
 
 		select {
 		case <-rc.Done():
-			return t.stoppedEarly(rc, userID, last, lastMessage, time.Since(start)), nil
+			return t.stoppedEarly(rc, userID, last, lastMessage, failedSince, time.Since(start)), nil
 		case <-time.After(t.pollInterval):
 		}
 	}
 }
 
+// failedRunStart carries the start of an unbroken run of Failed looks across
+// one more look: kept while the machine still reports Failed, set on the first
+// Failed look, cleared by anything else.
+func failedRunStart(since time.Time, status MachineStatus) time.Time {
+	switch {
+	case !status.Failed:
+		return time.Time{}
+	case since.IsZero():
+		return time.Now()
+	}
+	return since
+}
+
+func sinceOrZero(t time.Time) time.Duration {
+	if t.IsZero() {
+		return 0
+	}
+	return time.Since(t)
+}
+
 // terminalResponse answers when the look settles the wait: the machine is
-// back, or it is gone for good.
-func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited time.Duration) (ToolResponse, bool) {
+// back, or it is gone for good. A Failed report settles it only once it has
+// held for failedSettle (failedFor), since the control plane reports Failed
+// for moments it recovers from by itself.
+func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited, failedFor time.Duration) (ToolResponse, bool) {
 	switch {
 	case status.Connected:
 		return waitResponse(fmt.Sprintf(
@@ -162,7 +201,7 @@ func (t *waitForMachineTool) terminalResponse(status MachineStatus, waited time.
 				"Tell the user the machine was removed and that they need to connect a machine to continue; then stop.",
 			status.StatusMessage),
 			WaitForMachineResponseMetadata{State: "removed", WaitedMs: waited.Milliseconds()}), true
-	case status.Failed:
+	case status.Failed && failedFor >= t.failedSettle:
 		return waitResponse(withReason(
 			"This run's machine failed to start, so waiting will not bring it back. "+
 				"Tell the user the machine failed to start and that they need to restart it or connect another; then stop.",
@@ -183,14 +222,15 @@ func (t *waitForMachineTool) timedOutResponse(state, message string, waited time
 // detached, bounded context — the call's own is the one that just died — since
 // the machine may have come back in the instant before, and "it is back" is the
 // answer the agent was waiting for.
-func (t *waitForMachineTool) stoppedEarly(rc *rctx.ToolContext, userID, last, lastMessage string, waited time.Duration) ToolResponse {
+func (t *waitForMachineTool) stoppedEarly(rc *rctx.ToolContext, userID, last, lastMessage string, failedSince time.Time, waited time.Duration) ToolResponse {
 	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(rc.Context), stoppedEarlyCheckTimeout)
 	defer cancel()
 
 	if status, err := t.observer.MachineStatus(checkCtx, userID); err == nil {
 		last = stateOf(status)
 		lastMessage = status.StatusMessage
-		if resp, done := t.terminalResponse(status, waited); done {
+		failedSince = failedRunStart(failedSince, status)
+		if resp, done := t.terminalResponse(status, waited, sinceOrZero(failedSince)); done {
 			return resp
 		}
 	}
@@ -226,6 +266,9 @@ func stillWaitingGuidance(state string) string {
 		return "The machine is on its way up. Call wait_for_machine again to keep waiting."
 	case "disconnected":
 		return "The machine may be restarting or reconnecting. Call wait_for_machine again to keep waiting."
+	case "failed":
+		return "The machine reported that it failed to start, which the control plane often recovers from by itself within a minute or two. " +
+			"Call wait_for_machine again to keep waiting; it says so if the failure holds."
 	}
 	return "Its state could not be read just now. Call wait_for_machine again to keep waiting."
 }

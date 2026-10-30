@@ -258,12 +258,12 @@ An automation with **Notify me when it finishes** keeps its successful runs unar
 
 ## Who an automation acts as
 
-An automation's integration actions, a node's `action` and an agent's integration tools alike, write as the identity chosen in the automation's settings. **New GitHub integration triggers default to Reliant bot** (including triggers declared in a workflow). Other sources, including schedules, webhooks and workflow events, still default to you: a scheduled workflow that writes to GitHub needs an explicit **Reliant bot** choice. Existing activations keep their stored identity, and an explicit **You** choice is never replaced. To change one, open it in **Workflows → Automations** and choose **Edit**. Only GitHub supports the bot identity; other integrations do not: this setting does not provide a Slack, Gmail or Twilio bot.
+An automation's GitHub writes (comments, reviews, labels, pull requests, issues, workflow dispatches and `git_publish` pushes, from a node's `action` and an agent's integration tools alike) are made as the identity chosen in the automation's settings. **Every new automation defaults to Reliant bot**, whatever starts it: a GitHub event, a schedule, a webhook, another integration or a workflow event, including triggers declared in a workflow, `reliant trigger activate` and activations an agent creates. Writing as **You** is an explicit choice. Existing activations keep their stored identity, and an explicit **You** choice is never replaced. To change one, open it in **Workflows → Automations** and choose **Edit**, or run `reliant trigger activate --acting-as owner`. Only GitHub has a bot: Slack, Gmail, Twilio and HTTP writes always go through your own connection.
 
 | Identity | Comments, reviews and pull requests appear as | When to choose it |
 |----------|-----------------------------------------------|-------------------|
 | You (`owner`) | You, through your own GitHub connection | The automation is you acting on a schedule |
-| Reliant bot (`app`, default for new GitHub integration triggers) | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
+| Reliant bot (`app`, the default) | `reliant-labs[bot]` | A reviewer, triager or worker that should read as its own participant: you can approve and merge what it opens, and a branch rule that wants "someone other than the last pusher" works |
 
 Everything a bot writes ends with a footer naming the automation and its owner, so nobody has to guess whose it is:
 
@@ -275,7 +275,7 @@ Three things stay as they are:
 
 - **Reads** use your own access. Only writes carry the bot's name. A write that names a saved connection (`connection:`) cannot also be made as the bot, so it fails instead of using that connection; a read may still name one.
 - **A person typing in the run's chat acts as themselves.** The bot identity belongs to the automation's own run, not to the chat.
-- **A deployment with no control plane to provide the Reliant GitHub App** refuses a new GitHub trigger's default bot identity when you save. Configure the App or explicitly choose **You**; it never silently selects the owner. A hosted deployment whose App key is missing refuses each bot write with an error telling an administrator to configure the App, or you to set the automation to write as you.
+- **A deployment with no control plane to provide the Reliant GitHub App** has no bot. A new GitHub trigger's default bot identity is refused when you save: configure the App or explicitly choose **You**; it never silently selects the owner. Other new automations there default to **You**. A hosted deployment whose App key is missing refuses each bot write with an error telling an administrator to configure the App, or you to set the automation to write as you.
 
 Comments the bot writes never fire a trigger on `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot start itself. Another bot's comments (Dependabot, a CI app) do reach your filters.
 
