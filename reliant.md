@@ -49,15 +49,15 @@ commit that lands is the commit that was tested. **Review first:** a PR push run
 nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
 runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
 main after the merge and gates the release, never the merge. Label a PR `ci:run`
-(then push) to run the merge gate on it before review. Queue a PR with:
+(then push) to run the merge gate on it before review.
 
-```bash
-gh pr merge <pr> --squash --auto --match-head-commit <sha>
-```
-
-The PR pipeline does this for you: label the PR `merge:queue` and stop. The
-`pr-review` workflow reviews the exact head; on `review:passed` it enqueues it.
-`review:changes` means fix, push, and re-add `merge:queue`. Design:
+**Never enqueue a PR yourself: no `gh pr merge`, `--auto` included.** Label
+the PR `merge:queue` and stop. The `pr-review` workflow reviews the exact head;
+on `review:passed` it enqueues it (`gh pr merge --auto --match-head-commit`).
+`CI result` is green on a PR within a minute, so auto-merge armed before the
+review puts the unreviewed head straight into the queue, where the review
+marker check (`scripts/ci-review-marker.sh`) fails it and every group behind
+it. `review:changes` means fix, push, and re-add `merge:queue`. Design:
 control-plane `docs/pr-pipeline.md`. There is no waiver and no local merge
 script any more (`merge_queue3.sh` and `merge_gate_waive.sh` are retired).
 
