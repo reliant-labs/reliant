@@ -159,7 +159,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
 			continue
 		}
-		spec, err := d.specOf(ctx, trigger)
+		// A retry of a dispatch that already launched this firing resumes
+		// it against the definition it recorded: its declaration, admission
+		// and run read that snapshot, whatever was pushed since.
+		recorded, err := d.launchedDefinition(ctx, trigger, ev)
+		if err != nil {
+			retryable = append(retryable, err)
+			continue
+		}
+		spec, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, recorded), trigger)
 		if err != nil {
 			var declErr *triggers.DeclarationError
 			switch {
@@ -203,7 +211,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			}
 			chainLoaded = true
 		}
-		res, err := d.fire(ctx, trigger, spec, ev, chain)
+		res, err := d.fire(ctx, trigger, spec, ev, chain, recorded)
 		results, retryable = appendResult(results, retryable, res, err)
 	}
 	return results, errors.Join(retryable...)
@@ -221,7 +229,24 @@ func appendResult(results []Result, errs []error, res *Result, err error) ([]Res
 
 // fire applies the loop guards and the filter to one matching trigger, then
 // launches.
-func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage) (*Result, error) {
+//
+// recorded is the definition an earlier attempt of this firing launched
+// against (launchedDefinition), nil for a first attempt.
+func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage, recorded *core.TriggerEventDefinition) (*Result, error) {
+	if recorded != nil {
+		// Resuming a recorded launch: spec was read in its snapshot, and the
+		// launcher restarts it on the same one (launch.Launcher.startRecorded).
+		next := chain.Extend(trigger.ID, ev.ChatID)
+		launchEv := d.buildEvent(trigger, ev, next)
+		launchEv.Definition = recorded
+		scope := triggers.ActivationScope(ctx, d.repo, trigger, spec.Declaration, triggerRoot(launchEv))
+		launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild the recorded launch of trigger %s: %w", trigger.ID, err)
+		}
+		launchSpec.CatalogPin = recorded.CatalogPin
+		return d.launch(ctx, trigger, ev, chain, recorded, launchEv, launchSpec)
+	}
 	// Which definition this firing resolves rides on its event row; a broken
 	// one refuses it before any guard or filter (triggers.Firer.Fire).
 	def, err := triggers.DefinitionOf(ctx, d.workflows, trigger)
@@ -283,7 +308,27 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	if def != nil {
 		launchSpec.CatalogPin = def.CatalogPin
 	}
+	return d.launch(ctx, trigger, ev, chain, def, launchEv, launchSpec)
+}
 
+// launchedDefinition is the definition an earlier attempt of t's firing for
+// ev recorded when it already launched (its chat committed), nil otherwise.
+func (d *Dispatcher) launchedDefinition(ctx context.Context, t *core.Trigger, ev *core.RunEvent) (*core.TriggerEventDefinition, error) {
+	prior, err := d.repo.GetTriggerEventByDedupe(ctx, runevents.TriggerEventKind, dedupeKey(t.ID, ev.ID))
+	switch {
+	case errors.Is(err, core.ErrTriggerEventNotFound):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("load trigger %s's earlier firing for run event %s: %w", t.ID, ev.ID, err)
+	case prior.Outcome != core.TriggerEventLaunched:
+		return nil, nil
+	}
+	return prior.Definition, nil
+}
+
+// launch starts launchSpec and turns the launcher's answer into the firing's
+// result, recording a verdict that can never launch.
+func (d *Dispatcher) launch(ctx context.Context, trigger *core.Trigger, ev *core.RunEvent, chain lineage.Lineage, def *core.TriggerEventDefinition, launchEv launch.Event, launchSpec launch.Spec) (*Result, error) {
 	res, launchErr := d.launcher.Launch(ctx, launchEv, launchSpec)
 	switch {
 	case launchErr == nil:

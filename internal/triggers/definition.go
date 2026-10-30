@@ -161,6 +161,18 @@ func DefinitionOf(ctx context.Context, workflows WorkflowResolver, t *core.Trigg
 	return def, nil
 }
 
+// firingDefinition is the definition a fire decides against: the one its
+// event already recorded when the fire is resuming a launch (a retry after the
+// chat committed but the run did not start), so the retry reads, admits and
+// starts the snapshot the event names rather than whatever was pushed since;
+// else the definition as it is now (DefinitionOf).
+func firingDefinition(ctx context.Context, workflows WorkflowResolver, t *core.Trigger, recorded *core.TriggerEvent, resuming bool) (*core.TriggerEventDefinition, error) {
+	if resuming && recorded != nil && recorded.Definition != nil {
+		return recorded.Definition, nil
+	}
+	return DefinitionOf(ctx, workflows, t)
+}
+
 // RefusalDetail is the recorded outcome of a firing refused because its
 // definition is broken: which version of which file, from where, and why.
 func RefusalDetail(def *core.TriggerEventDefinition) string {
@@ -192,7 +204,7 @@ func describeDefinition(ctx context.Context, store launch.WorkflowResolver, vali
 			def.Source = string(workflowref.SourceProject)
 			def.Path = fileErr.Path
 			def.ContentHash = config.DefinitionHash(fileErr.Content)
-			attributeMachine(ctx, store, t, def, false)
+			attributeMachine(ctx, store, t, def, pin)
 		}
 		return def, nil
 	}
@@ -200,7 +212,7 @@ func describeDefinition(ctx context.Context, store launch.WorkflowResolver, vali
 	def.ContentHash = config.DefinitionHash(desc.YAML)
 	if desc.Source == workflowref.SourceProject {
 		def.Path = workflowref.ProjectRelative(desc.Path)
-		attributeMachine(ctx, store, t, def, desc.MachineCatalog)
+		attributeMachine(ctx, store, t, def, pin)
 	}
 	// What resolves must also validate, children included: the same gate
 	// the launch applies, so a definition that parses but cannot run is
@@ -222,14 +234,24 @@ func retryableRead(err error) bool {
 }
 
 // attributeMachine fills in which machine's copy of def.Path was read and the
-// git state it was synced at. fromMachine says the resolution read t's
-// machine's own catalog; otherwise it read the union of every machine's, and
-// the copy is the one whose content is the version that resolved. A machine
-// that cannot be named leaves the fields empty: provenance is evidence, and a
-// failure to read it never decides a firing.
-func attributeMachine(ctx context.Context, store any, t *core.Trigger, def *core.TriggerEventDefinition, fromMachine bool) {
+// git state it was synced at.
+//
+// A pinned definition (pin set) is attributed from its snapshot alone: the
+// machine whose catalog was pinned and the git state read with it in one row
+// (db.PinnedCatalog), so a push after the pin can never re-stamp it. A union
+// snapshot names no machine. A live definition is attributed only to t's own
+// machine's copy, and only when that copy is the version that resolved: it is
+// never another machine's copy of the same bytes.
+//
+// A machine that cannot be named leaves the fields empty: provenance is
+// evidence, and a failure to read it never decides a firing.
+func attributeMachine(ctx context.Context, store any, t *core.Trigger, def *core.TriggerEventDefinition, pin string) {
+	if pin != "" {
+		attributePinned(ctx, store, t, def, pin)
+		return
+	}
 	provenance, ok := store.(workflowProvenanceStore)
-	if !ok || t.ProjectID == "" {
+	if !ok || t.ProjectID == "" || t.DaemonID == "" {
 		return
 	}
 	copies, err := provenance.ProjectWorkflowProvenance(ctx, t.ProjectID)
@@ -238,28 +260,49 @@ func attributeMachine(ctx context.Context, store any, t *core.Trigger, def *core
 			"trigger_id", t.ID, "path", def.Path, "error", err)
 		return
 	}
-	var match *config.WorkflowProvenance
 	for i := range copies {
 		c := &copies[i]
-		if c.RelativePath != def.Path || c.ContentHash != def.ContentHash {
+		if c.DaemonID != t.DaemonID || c.RelativePath != def.Path || c.ContentHash != def.ContentHash {
 			continue
 		}
-		if c.DaemonID == t.DaemonID {
-			match = c
-			break
+		def.DaemonID, def.Machine = c.DaemonID, c.Machine
+		if def.Machine == "" {
+			def.Machine = c.DaemonID
 		}
-		if !fromMachine && match == nil {
-			match = c
+		if c.Repo != nil {
+			def.Repo, def.Branch, def.Commit, def.Dirty = c.Repo.Repo, c.Repo.Branch, c.Repo.Commit, c.Repo.Dirty
 		}
-	}
-	if match == nil {
 		return
 	}
-	def.DaemonID, def.Machine = match.DaemonID, match.Machine
-	if def.Machine == "" {
-		def.Machine = match.DaemonID
+}
+
+// machineNamer names a machine for display (db.Repo.MachineDisplayName).
+type machineNamer interface {
+	MachineDisplayName(ctx context.Context, daemonID string) string
+}
+
+// attributePinned is attributeMachine for a definition read in snapshot pin.
+func attributePinned(ctx context.Context, store any, t *core.Trigger, def *core.TriggerEventDefinition, pin string) {
+	pinned, ok := store.(workflowsource.PinnedStore)
+	if !ok {
+		return
 	}
-	if match.Repo != nil {
-		def.Repo, def.Branch, def.Commit, def.Dirty = match.Repo.Repo, match.Repo.Branch, match.Repo.Commit, match.Repo.Dirty
+	catalog, found, err := pinned.GetPinnedProjectCatalog(ctx, pin)
+	if err != nil || !found {
+		logging.WarnContext(ctx, "Could not read the pinned catalog a trigger fired against; recording the definition without its machine",
+			"trigger_id", t.ID, "catalog_pin", pin, "error", err)
+		return
+	}
+	if catalog.DaemonID == "" {
+		return
+	}
+	def.DaemonID, def.Machine = catalog.DaemonID, catalog.DaemonID
+	if namer, ok := store.(machineNamer); ok {
+		if name := namer.MachineDisplayName(ctx, catalog.DaemonID); name != "" {
+			def.Machine = name
+		}
+	}
+	if s := config.RepoStateFor(catalog.RepoStates, def.Path); s != nil {
+		def.Repo, def.Branch, def.Commit, def.Dirty = s.Repo, s.Branch, s.Commit, s.Dirty
 	}
 }

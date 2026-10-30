@@ -103,7 +103,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	// whatever the outcome. A definition that is broken — the newest version
 	// of the file does not parse or validate — refuses the fire: it is never
 	// skipped quietly, and never run from an older version.
-	def, err := DefinitionOf(ctx, f.workflows, trigger)
+	def, err := firingDefinition(ctx, f.workflows, trigger, existing, resuming)
 	if err != nil {
 		return nil, err
 	}

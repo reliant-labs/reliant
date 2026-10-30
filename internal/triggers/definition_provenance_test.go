@@ -86,11 +86,17 @@ func newProvenanceProject(t *testing.T) *provenanceProject {
 // push syncs release.yaml (as content) from cicd's control-plane checkout.
 func (p *provenanceProject) push(t *testing.T, at int64, content string) {
 	t.Helper()
+	p.pushOn(t, at, content, "main")
+}
+
+// pushOn is push from a checkout of branch.
+func (p *provenanceProject) pushOn(t *testing.T, at int64, content, branch string) {
+	t.Helper()
 	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "release", Name: "release", RelativePath: provenancePath, YAMLContent: content}})
 	require.NoError(t, err)
 	sj, err := config.EncodeCatalogJSON([]config.SyncedRepoState{
 		{Repo: "", Branch: "main", Commit: provenanceCommit, DefaultBranch: "main"},
-		{Repo: "control-plane", Branch: "main", Commit: provenanceCommit, DefaultBranch: "main"},
+		{Repo: "control-plane", Branch: branch, Commit: provenanceCommit, DefaultBranch: "main"},
 	})
 	require.NoError(t, err)
 	_, err = p.repo.SyncProjectConfigSnapshot(p.ctx, &db.ProjectConfigRecord{
@@ -248,4 +254,52 @@ func TestInboundEventAgainstABrokenDefinitionIsRefused(t *testing.T) {
 	assert.Equal(t, core.TriggerEventFailed, settled.Outcome)
 	assert.True(t, strings.HasPrefix(settled.OutcomeDetail, "refused: "), settled.OutcomeDetail)
 	p.assertProvenance(t, settled.Definition, broken)
+}
+
+// The machine pushes the same bytes from another branch after the fire pinned
+// its catalog: the definition is attributed from the snapshot (the branch it
+// was pinned at), never from the machine's later push.
+func TestPinnedDefinitionIsAttributedFromItsSnapshot(t *testing.T) {
+	p := newProvenanceProject(t)
+	pin, err := p.repo.PinProjectCatalog(p.ctx, db.CatalogPinScope{ProjectID: p.projectID, DaemonID: p.daemonID, UserID: p.userID})
+	require.NoError(t, err)
+	p.pushOn(t, 2000, provenanceWorkflow, "feat/x")
+
+	def, err := LaunchWorkflows{Repo: p.repo, CatalogPin: pin}.TriggerDefinition(p.ctx, p.schedule)
+	require.NoError(t, err)
+	p.assertProvenance(t, def, provenanceWorkflow)
+	assert.Equal(t, "main", def.Branch, "the snapshot's branch, not the later push's")
+	assert.Equal(t, pin, def.CatalogPin)
+}
+
+// A fire launched against snapshot A (its chat committed, the start failed).
+// The file is then pushed broken. The retry resumes the recorded launch: it
+// reads its declaration in A and relaunches on A, instead of resolving the
+// broken push and failing the run that was already admitted.
+func TestResumedFireRelaunchesOnTheRecordedSnapshot(t *testing.T) {
+	p := newProvenanceProject(t)
+	first := &fakeLauncher{}
+	req := FireRequest{TriggerID: p.schedule.ID, FireWorkflowID: "fire-" + uuid.NewString(), ScheduledAt: time.Now().UTC().Truncate(time.Second)}
+	_, err := NewFirer(p.repo, first).WithWorkflows(p.workflows()).Fire(p.ctx, req)
+	require.NoError(t, err)
+	recorded := first.snapshot()[0].Event
+	require.NotEmpty(t, recorded.Definition.CatalogPin)
+	// What the launcher committed before its Temporal start failed.
+	row := &core.TriggerEvent{
+		ID: uuid.NewString(), TriggerID: &p.schedule.ID, UserID: p.userID, Kind: core.TriggerEventKindSchedule,
+		DedupeKey: req.FireWorkflowID, OccurredAt: req.ScheduledAt, Payload: recorded.Payload,
+		Outcome: core.TriggerEventLaunched, Definition: recorded.Definition,
+	}
+	created, err := p.repo.CreateTriggerEvent(p.ctx, row)
+	require.NoError(t, err)
+	require.True(t, created)
+
+	p.push(t, 2000, "name: release\nentry: [a\n")
+	retry := &fakeLauncher{}
+	_, err = NewFirer(p.repo, retry).WithWorkflows(p.workflows()).Fire(p.ctx, req)
+	require.NoError(t, err, "the resumed fire reads its recorded snapshot, not the broken push")
+	calls := retry.snapshot()
+	require.Len(t, calls, 1)
+	assert.Equal(t, recorded.Definition.CatalogPin, calls[0].Spec.CatalogPin, "relaunched on the recorded snapshot")
+	assert.Equal(t, recorded.Definition, calls[0].Event.Definition)
 }

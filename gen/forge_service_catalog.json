@@ -52975,6 +52975,17 @@
           }
         },
         {
+          "id": "method1:3ccf9748917fa47bd97b1ef4cecbd612c1432bdf33baee7c3647feaef925b31b",
+          "name": "MachineDisplayName",
+          "signature": "func(ctx context.Context, daemonID string) string",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.MachineDisplayName",
+          "source": {
+            "path": "internal/db/workflow_source_diagnostic.go",
+            "symbol": "Repo.MachineDisplayName"
+          }
+        },
+        {
           "id": "method1:436e55c11b80c286436a1722f7938f824125c8d9899f971d47ec99bfeb6a295c",
           "name": "MarkAgentMessagesDelivered",
           "signature": "func(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)",

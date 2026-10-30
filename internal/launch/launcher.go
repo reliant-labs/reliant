@@ -876,6 +876,10 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 	if err != nil {
 		return nil, &InternalError{Reason: "failed to read the recorded start", Err: err}
 	}
+	// The recorded start ran against the catalog snapshot its event names,
+	// not whatever this retry's caller resolved: a push since must not change
+	// what an already-recorded launch starts.
+	spec.CatalogPin = recordedCatalogPin(recorded)
 
 	// Pin an unpinned chat before its inputs are built: they are read from
 	// its machine's catalog, the one the run's own loads resolve against.
@@ -917,6 +921,15 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		generateTitle: spec.GenerateTitle && chat.Title == "",
 		attemptAt:     attemptAt,
 	})
+}
+
+// recordedCatalogPin is the catalog snapshot a recorded launch was decided
+// against (its definition's pin), "" for one decided against the live catalog.
+func recordedCatalogPin(recorded *core.TriggerEvent) string {
+	if recorded == nil || recorded.Definition == nil {
+		return ""
+	}
+	return recorded.Definition.CatalogPin
 }
 
 // finishExisting handles a Launch whose (kind, dedupe key) already has an

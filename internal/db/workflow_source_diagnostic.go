@@ -120,6 +120,12 @@ func (r *Repo) machineNames(ctx context.Context, catalogs []config.MachineCatalo
 	return names
 }
 
+// MachineDisplayName is a machine's name, then hostname, then id, for
+// display: a failed read names it by id.
+func (r *Repo) MachineDisplayName(ctx context.Context, daemonID string) string {
+	return r.machineName(ctx, nil, daemonID)
+}
+
 // machineName is a machine's name, then hostname, then id. A diagnostic is
 // best effort: a failed read names the machine by id rather than failing.
 func (r *Repo) machineName(ctx context.Context, known map[string]string, daemonID string) string {

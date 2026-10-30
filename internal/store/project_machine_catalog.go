@@ -27,6 +27,9 @@ type ProjectMachineCatalog struct {
 	RemovedJSON   *string   `bun:"removed_json"`
 	PushedAt      time.Time `bun:"pushed_at"`
 	UpdatedAt     time.Time `bun:"updated_at"`
+	// RepoStatesJSON is read by GetProjectMachineCatalog only, in the same
+	// row read as the catalog (SetProjectMachineRepoStates writes it).
+	RepoStatesJSON *string `bun:"repo_states_json"`
 }
 
 // LockProjectCatalog takes the transaction-scoped advisory lock that makes
@@ -43,11 +46,12 @@ func LockProjectCatalog(ctx context.Context, db orm.Context, projectID string) e
 
 const projectMachineCatalogColumns = `project_id, daemon_id, workflows_json, presets_json, removed_json, pushed_at, updated_at`
 
-// GetProjectMachineCatalog reads one machine's catalog of a project, nil with
-// no error when that machine has synced none.
+// GetProjectMachineCatalog reads one machine's catalog of a project, with the
+// git state it was synced from, nil with no error when that machine has
+// synced none.
 func GetProjectMachineCatalog(ctx context.Context, db orm.Context, projectID, daemonID string) (*ProjectMachineCatalog, error) {
 	var row ProjectMachineCatalog
-	err := db.Bun().NewRaw(`SELECT `+projectMachineCatalogColumns+` FROM project_machine_catalogs WHERE project_id = ? AND daemon_id = ?`,
+	err := db.Bun().NewRaw(`SELECT `+projectMachineCatalogColumns+`, repo_states_json FROM project_machine_catalogs WHERE project_id = ? AND daemon_id = ?`,
 		projectID, daemonID).Scan(ctx, &row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
