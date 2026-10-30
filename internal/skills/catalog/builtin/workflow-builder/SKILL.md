@@ -829,6 +829,7 @@ Scenario defines a complete test case for a workflow.
 | `events` | SimulatedEvent[] | Yes | Events lists the simulated events in execution order. Required. |
 | `expect` | Expectation | No | Expect defines the expected outcome and assertions. Optional. |
 | `inputs` | object | No | Inputs overrides workflow inputs for this scenario. Optional. |
+| `trigger` | TriggerFiring | No | Trigger starts the run the way one of the workflow's declared triggers |
 | `start_at` | string | No | StartAt begins execution at a specific node instead of the entry point. Optional. |
 | `state` | map[string]object | No | State pre-populates node outputs before execution. Optional. |
 

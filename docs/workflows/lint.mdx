@@ -1,0 +1,117 @@
+---
+title: "Workflow lint"
+description: "Rules that catch a workflow that validates but misbehaves when nobody is watching"
+---
+
+Validation answers "can this workflow run?", and it is enforced wherever a definition is saved or started. Lint answers a second question: **will it behave when nobody is watching?** Does every run end, does a failure reach someone, can one run hold a capacity slot forever, do two steps write the same checkout, is a secret pasted into the file, and do the scenarios start the workflow every way it can start and end it every way it can end.
+
+```bash
+reliant workflow lint                 # every workflow in .reliant/workflows
+reliant workflow lint pr-review.yaml  # one file
+reliant workflow lint --json          # for CI
+reliant workflow lint --rules         # the rule table
+```
+
+`reliant workflow validate` runs the same rules, so a repository whose gate validates its workflows (`reliant workflow validate --base origin/main`) lints them too. An **error** fails the command; a **warning** is printed and does not. Lint never runs when a workflow is saved or started: a rule added in a later release cannot make an existing automation refuse to fire.
+
+## Allowing a finding
+
+When you have judged a finding and it is fine, say so next to the node, with the reason:
+
+```yaml
+nodes:
+# lint:allow action-error-unread — best effort: GitHub answers 404 when the label is already gone
+- id: clear_label
+  type: action
+  uses: github/issue.labels.remove@1
+```
+
+A comment on (or inside) a node's mapping covers that node. A comment on a top-level key (`name:`, `triggers:`, …) covers the whole workflow. Name several rules with commas. The reason is required, and a `lint:allow` that names an unknown rule or gives no reason is itself an error ([lint-allow-invalid](#lint-allow-invalid)).
+
+## Rules
+
+### run-no-timeout
+
+**Warning.** A `run` node with no `timeout:` runs for the 30-day activity default, so a hung command (a prompt for input, a network call that never returns) looks like a slow one for a month. Set `timeout:` to the longest the command may take. In a workflow with `concurrency.max_running` this is [slot-unbounded-wait](#slot-unbounded-wait), an error.
+
+### run-exit-code-unread
+
+**Warning.** A non-zero exit does not fail a `run` node: it is an output, `exit_code`. If nothing reads it (an edge case, a condition, a template), a failed command routes exactly like a successful one. Branch on `nodes.<id>.exit_code`. A fixed `sleep` (a backoff) is exempt.
+
+### exit-code-unhandled
+
+**Error.** An edge branches on a `run` node's `exit_code` and has no `default:`. A script that can `exit 4` (a conflict) when the cases name only 0 and 1 ends the run at that edge, silently, and the run reports success. Add a `default:` that reports the unexpected code.
+
+### edge-no-default
+
+**Warning.** An edge with `cases:` and no `default:`: when no case matches, that branch of the run simply ends. Add a `default:`, even one that only saves a message saying nothing matched.
+
+### action-error-unread
+
+**Warning.** An `action` node that fails (a 4xx, a revoked credential, a rate limit) does not fail the run: it sets `is_error`. If nothing reads `nodes.<id>.is_error`, the failure routes like a success. Branch on it, or allow the finding with the reason the failure does not matter (a best-effort label removal).
+
+### no-failure-path
+
+**Warning.** A workflow that triggers start (an unattended run) has no `on_failure:` handler, so a run that fails tells nobody. Add one with a step that reaches a person: a PR comment, a message, an issue.
+
+### agent-turn-budget-default
+
+**Warning.** An agent node (a `workflow` or `loop` node whose child declares a `max_turns` input, such as `builtin://autopilot-agent`) does not set `max_turns`, so it runs on the child's default. An agent that runs out of turns submits nothing. Set the budget the task needs, and say it in the prompt ("submit by turn 50").
+
+### loop-unbounded
+
+**Warning.** A loop with no `items:` whose `while:` never reads `iter.iteration` has nothing that ends it except the condition itself. Add `&& iter.iteration < N`.
+
+### agent-decode-free-text
+
+**Error.** An expression `json.decode()`s (or `parseJson()`s) the free text of an agent: a `call_llm` node with no `response_tool`, or a ref'd agent given no `response_schema`. The model's prose has no contract; the run breaks the first time it adds a sentence. Give the agent a `response_schema` (and `response_tool_name`) and read `nodes.<id>.response.<field>`.
+
+### slot-unbounded-wait
+
+**Error.** A workflow with `concurrency.max_running` holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` or `workflow` node with no `timeout:`, an `approval` or `ask_question` with no timeout, a loop with no bound. One stuck run then queues every later firing behind it. Give every such step a timeout (or a bound), or move the human gate out of the slot-bounded workflow.
+
+### shared-checkout-fetch
+
+**Error** when the step evidently runs in the project checkout; **warning** when it changes directory first and lint cannot tell. A `git fetch` or `git pull` into the checkout the project's chats and every other run share updates its remote-tracking refs and tags underneath them: two writers race (`cannot lock ref … is at X but expected Y`), and a tag that moved upstream fails every later fetch (`would clobber existing tag`). Fetch into this run's private refs instead, which reads the shared objects without writing shared refs:
+
+```bash
+ns="refs/pipeline/<workflow>-{{ workflow.id }}"
+git fetch -q --no-tags --refmap= origin "+refs/heads/main:$ns/main"
+```
+
+or work in a private clone. The one step designated to update the shared checkout allows the finding, with that reason.
+
+### secret-literal
+
+**Error.** A token, key or password is written into the definition: a GitHub, Slack, AWS or API key, a private key, a bearer token, or a secret-named `env:` set to a literal. Remove it, revoke it, and read it through a credential: `credentials: inherit` on a `run` node, an action's `connection:`, or a hosted secret.
+
+### automation-only-untriggered
+
+**Warning.** `automation_only: true` turns off starting the workflow from a chat. With no `triggers:` either, nothing will start it. Declare its triggers, or drop `automation_only`.
+
+### scenario-none
+
+**Warning.** The workflow has no scenarios under `.reliant/workflows/<name>/scenarios/`, so none of its triggers or endings is tested. See [Testing workflows](/workflows/testing).
+
+### scenario-trigger-uncovered
+
+**Warning.** No scenario starts the workflow through this trigger. A scenario fires a trigger with `trigger:`; the trigger's filter must pass the payload and its `inputs:` mapping supplies the run's inputs, evaluated by the code a real firing uses:
+
+```yaml
+name: queued_pr_is_reviewed
+trigger:
+  name: queued
+  payload: {data: {label: 'merge:queue', pull_request: {number: 42}}}
+events: [...]
+expect: {...}
+```
+
+For an integration trigger the payload is merged over a sample of the event's declared payload, so give only the fields the trigger reads. `inputs:`, when also set, apply over the mapped inputs.
+
+### scenario-terminal-uncovered
+
+**Warning.** No scenario expects a run to end at this terminal node (a node with no outgoing edge). Coverage is read from what scenarios assert: a terminal named in `expect.completed`, `reached`, `node_outputs`, `messages` or `error_node`.
+
+### lint-allow-invalid
+
+**Error.** A `lint:allow` comment names a rule that does not exist (a typo silences nothing) or gives no reason. Use an ID from `reliant workflow lint --rules`, and say why after it.

@@ -734,6 +734,15 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	// what ChatService.buildWorkflowInputs injects, and preset loading fails
 	// terminally without it. A scenario may override it like any other input.
 	inputs := map[string]interface{}{"project_path": scenarioProjectPath}
+	if sc.Trigger != nil {
+		fired, err := triggerInputs(r.workflow, sc.Trigger)
+		if err != nil {
+			return errorResult(sc, err, start)
+		}
+		for k, v := range fired {
+			inputs[k] = v
+		}
+	}
 	for k, v := range sc.Inputs {
 		inputs[k] = v
 	}

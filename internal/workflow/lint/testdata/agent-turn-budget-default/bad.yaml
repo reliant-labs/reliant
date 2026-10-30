@@ -1,0 +1,9 @@
+name: fixture
+entry: [review]
+nodes:
+- id: review
+  type: workflow
+  ref: builtin://autopilot-agent
+  timeout: 45m
+  args:
+    system_prompt: Review the diff.
