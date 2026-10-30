@@ -16,7 +16,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
-	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -104,7 +103,7 @@ func (s *Service) DeleteWorktree(
 	// knowingly. A permanent delete and a branch delete still reach the machine
 	// from here, so wake an asleep one first; the client retries.
 	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
-		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: daemonplacement.WorktreeOwner(worktree)}, project.Path); err != nil {
+		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: s.owner(ctx, userID, worktree)}, project.Path); err != nil {
 			return nil, err
 		}
 	}
@@ -129,7 +128,7 @@ func (s *Service) DeleteWorktree(
 		}
 		deletedBranch := false
 		if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), project.Path, worktree.Branch)
+			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, s.owner(ctx, userID, worktree), project.Path, worktree.Branch)
 		}
 		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete worktree"))
@@ -465,7 +464,7 @@ func (s *Service) RecreateWorktree(
 	if worktree.CleanupMetadata != nil {
 		savedRefs = worktree.CleanupMetadata.SnapshotRefs
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.recreate", map[string]any{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, s.owner(ctx, userID, worktree), "worktree.recreate", map[string]any{
 		"project_path":  project.Path,
 		"worktree_path": worktree.Path,
 		"branch":        worktree.Branch,
@@ -565,7 +564,7 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 		FallbackPath: project.Path,
 	}
 	var resp toolexec.WorkspaceEnsureResponse
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, s.owner(ctx, userID, worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}

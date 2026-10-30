@@ -1,0 +1,270 @@
+// Copyright (c) 2025 Reliant Labs
+package daemonplacement
+
+import (
+	"context"
+	"encoding/json"
+	"sync"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec"
+)
+
+// OwnerStore is what the Resolver reads and writes: the user's machines, the
+// workspace row, and the owner it records. Installs rides along for the
+// callers that also place by install (ProjectDefaultDaemonID); the Resolver
+// does not narrow its probes by install records.
+type OwnerStore interface {
+	Installs
+	// GetWorktree re-reads a row before its machines are asked about it: a
+	// caller may hold a copy read before another call recorded the owner.
+	WorktreeReader
+	// GetProject confirms the workspace is the caller's: only its owner's
+	// machines are asked, and only its owner's row is written.
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+	// AdoptWorktreeDaemon records daemonID as the owner of a row that names
+	// none; a row that already names one is left alone. It returns the owner
+	// the row records afterwards: daemonID only when this call won.
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) (string, error)
+}
+
+// OwnerProbe is what the Resolver asks the machines: whether one is
+// connected right now, and a stat on it. *toolexec.NATSDaemonRouter
+// implements it.
+type OwnerProbe interface {
+	IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error)
+	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+}
+
+// Package variables, not constants, so a test can shrink them.
+var (
+	// ownerProbeTimeout bounds one machine's stat. A connected machine
+	// answers a stat in milliseconds; one that does not is not waited for.
+	ownerProbeTimeout = 3 * time.Second
+	// ownerRetryAfter is how long a row the machines could not settle is left
+	// alone before it is asked about again, so a page that routes ten requests
+	// for one unattributed workspace probes once.
+	ownerRetryAfter = 2 * time.Minute
+)
+
+// Resolver finds the machine that holds a workspace's checkout.
+//
+// A row records its owner (worktrees.daemon_id) from creation, but rows made
+// before that was recorded name none, and every request about one went to the
+// user's default machine — the wrong disk for a workspace on another machine.
+// The Resolver settles such a row the first time it is used: it asks each of
+// the user's connected machines whether the workspace's directory exists
+// there (one stat each, in parallel, bounded by
+// ownerProbeTimeout), and records the owner when exactly one has it.
+//
+// It never wakes a machine and never waits for one: a machine that is asleep
+// or starting is not asked, so a workspace that lives on one stays unattributed
+// until the periodic sweep (worktreesweep) or a later use finds it. Any
+// connected machine whose answer is unknown (an error, a timeout) also leaves
+// the row unattributed, since that machine might be the one. A nil Resolver
+// answers with the recorded owner only.
+type Resolver struct {
+	store OwnerStore
+	probe OwnerProbe
+	now   func() time.Time
+
+	mu      sync.Mutex
+	retryAt map[string]time.Time
+	// inflight dedupes concurrent resolutions of one row: the others wait for
+	// the first's answer instead of probing again.
+	inflight map[string]*ownerCall
+}
+
+type ownerCall struct {
+	done  chan struct{}
+	owner string
+}
+
+// NewResolver builds a Resolver. A nil probe (a router that cannot report
+// liveness) leaves every unattributed row unattributed.
+func NewResolver(store OwnerStore, probe OwnerProbe) *Resolver {
+	return &Resolver{
+		store:    store,
+		probe:    probe,
+		now:      time.Now,
+		retryAt:  map[string]time.Time{},
+		inflight: map[string]*ownerCall{},
+	}
+}
+
+// Owner returns the machine holding worktree's checkout, or "" when that is
+// not known: the main checkout (every machine with the project has it), or a
+// row no connected machine could settle. A row that records its owner answers
+// at once; an unattributed branch workspace is resolved as the type describes.
+func (r *Resolver) Owner(ctx context.Context, userID string, worktree *db.Worktree) string {
+	if owner := WorktreeOwner(worktree); owner != "" || worktree == nil {
+		return owner
+	}
+	if r == nil || r.probe == nil || r.store == nil || worktree.IsMain || worktree.DeletedAt != nil || worktree.Path == "" || userID == "" {
+		return ""
+	}
+	// The caller's copy may predate the owner being recorded: one request
+	// validates (and settles) a workspace and then routes with the same row,
+	// or a concurrent request or the sweep settled it. Once recorded, the
+	// owner is the answer; probing again could find it disconnected and
+	// route to the default machine, a different disk.
+	if fresh, err := r.store.GetWorktree(ctx, worktree.ID); err == nil {
+		if owner := WorktreeOwner(fresh); owner != "" {
+			return owner
+		}
+	}
+
+	r.mu.Lock()
+	if call, ok := r.inflight[worktree.ID]; ok {
+		r.mu.Unlock()
+		select {
+		case <-call.done:
+			return call.owner
+		case <-ctx.Done():
+			return ""
+		}
+	}
+	if until, ok := r.retryAt[worktree.ID]; ok && r.now().Before(until) {
+		r.mu.Unlock()
+		return ""
+	}
+	call := &ownerCall{done: make(chan struct{})}
+	r.inflight[worktree.ID] = call
+	r.mu.Unlock()
+
+	owner := r.resolve(ctx, userID, worktree)
+
+	r.mu.Lock()
+	delete(r.inflight, worktree.ID)
+	if owner == "" {
+		r.retryAt[worktree.ID] = r.now().Add(ownerRetryAfter)
+	} else {
+		delete(r.retryAt, worktree.ID)
+	}
+	r.mu.Unlock()
+	call.owner = owner
+	close(call.done)
+	return owner
+}
+
+// probeOutcome is one machine's answer about a directory.
+type probeOutcome int
+
+const (
+	probeAbsent probeOutcome = iota
+	probePresent
+	probeUnknown
+)
+
+func (r *Resolver) resolve(ctx context.Context, userID string, worktree *db.Worktree) string {
+	// Someone else's workspace is never settled by the caller's machines.
+	project, err := r.store.GetProject(ctx, worktree.ProjectID)
+	if err != nil || project == nil || project.UserID != userID {
+		return ""
+	}
+	candidates, err := r.candidates(ctx, userID)
+	if err != nil {
+		logging.WarnContext(ctx, "[daemonplacement] could not list the machines that may hold a workspace",
+			"worktreeID", worktree.ID, "error", err)
+		return ""
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	outcomes := make([]probeOutcome, len(candidates))
+	var wg sync.WaitGroup
+	for i, daemonID := range candidates {
+		wg.Add(1)
+		go func(i int, daemonID string) {
+			defer wg.Done()
+			outcomes[i] = r.probeOne(ctx, userID, daemonID, worktree.Path)
+		}(i, daemonID)
+	}
+	wg.Wait()
+
+	owner := ""
+	for i, outcome := range outcomes {
+		switch outcome {
+		case probeUnknown:
+			// A connected machine that did not answer may be the owner.
+			return ""
+		case probePresent:
+			if owner != "" {
+				// Two machines have the path: neither is provably the owner.
+				return ""
+			}
+			owner = candidates[i]
+		}
+	}
+	if owner == "" {
+		return ""
+	}
+	// Route only to the owner the row records: another resolver (a replica,
+	// another service) may have settled it first, possibly on a machine this
+	// one's probes did not see.
+	recorded, err := r.store.AdoptWorktreeDaemon(ctx, worktree.ID, owner)
+	if err != nil {
+		logging.WarnContext(ctx, "[daemonplacement] could not record the machine holding a workspace",
+			"worktreeID", worktree.ID, "daemonID", owner, "error", err)
+		return ""
+	}
+	if recorded != owner {
+		logging.InfoContext(ctx, "[daemonplacement] another resolver recorded a workspace's machine first",
+			"worktreeID", worktree.ID, "probed", owner, "recorded", recorded)
+		return recorded
+	}
+	logging.InfoContext(ctx, "[daemonplacement] recorded the machine holding an unattributed workspace",
+		"worktreeID", worktree.ID, "daemonID", owner)
+	return owner
+}
+
+// candidates lists the user's machines that are connected now. Every one is
+// asked, not only those the project is recorded as installed on: an install
+// row can be removed while a branch workspace made on that machine survives
+// there, so install records prove nothing about where a checkout is.
+func (r *Resolver) candidates(ctx context.Context, userID string) ([]string, error) {
+	daemons, err := r.store.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	var connected []string
+	for _, d := range daemons {
+		if d == nil || d.UserID != userID {
+			continue
+		}
+		online, err := r.probe.IsDaemonOnline(ctx, userID, &toolexec.DaemonSelector{ID: d.ID})
+		if err == nil && online {
+			connected = append(connected, d.ID)
+		}
+	}
+	return connected, nil
+}
+
+// probeOne asks one connected machine whether path is a directory on it.
+func (r *Resolver) probeOne(ctx context.Context, userID, daemonID, path string) probeOutcome {
+	ctx, cancel := context.WithTimeout(ctx, ownerProbeTimeout)
+	defer cancel()
+	payload, err := json.Marshal(map[string]string{"path": path})
+	if err != nil {
+		return probeUnknown
+	}
+	raw, err := r.probe.SendDaemonCommandToDaemon(ctx, userID, daemonID, "fs.stat", payload, int32(ownerProbeTimeout/time.Millisecond))
+	if err != nil {
+		return probeUnknown
+	}
+	var stat struct {
+		Exists bool `json:"exists"`
+		IsDir  bool `json:"is_dir"`
+	}
+	if err := json.Unmarshal(raw, &stat); err != nil {
+		return probeUnknown
+	}
+	if stat.Exists && stat.IsDir {
+		return probePresent
+	}
+	return probeAbsent
+}

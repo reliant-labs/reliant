@@ -3749,10 +3749,21 @@ func celStringValuePtr(c *reliantv1.CelString) *string {
 // toolDaemonSelector mirrors the daemon routing priority ExecuteTools applies:
 // an explicit node/workflow selector beats the worktree's owning daemon, and
 // neither means default resolution (nil).
+//
+// Except the chat's pin (a Session selector) when it names ANOTHER machine
+// than a branch workspace's owner: that checkout exists on its owner alone,
+// so the pinned machine has no directory to run in (or to repair). The pin
+// is stale — a run launched before its chat moved to the workspace's machine
+// carries the old one as session_daemon_id for its whole life — and the
+// owner wins. A selector the workflow or node configures is deliberate
+// routing and keeps its precedence, whatever it names.
 func toolDaemonSelector(worktreeDaemonID string, explicit *activitytypes.DaemonSelector) *toolexec.DaemonSelector {
 	selector := (*toolexec.DaemonSelector)(nil)
 	if worktreeDaemonID != "" {
 		selector = &toolexec.DaemonSelector{ID: worktreeDaemonID}
+	}
+	if explicit != nil && explicit.Session && worktreeDaemonID != "" && explicit.ID != worktreeDaemonID {
+		return selector
 	}
 	if explicit != nil {
 		selector = &toolexec.DaemonSelector{ID: explicit.ID, Name: explicit.Name, Type: explicit.Type, Labels: explicit.Labels}

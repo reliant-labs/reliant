@@ -161,6 +161,11 @@ type DaemonSelector struct {
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Session marks the chat's pin (session_daemon_id, or the chat's
+	// active_daemon_id read at activity time) rather than a selector the
+	// workflow or node configures. Only a session pin yields to a branch
+	// workspace's owner (toolDaemonSelector).
+	Session bool `json:"session,omitempty"`
 }
 
 // SpawnConfig holds the configuration for spawning child workflows.
