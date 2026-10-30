@@ -18,7 +18,39 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/daemon_registry.proto.
  */
 export const file_reliant_v1_daemon_registry: GenFile = /*@__PURE__*/
-  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSI9ChlDbGVhck1hY2hpbmVDYWNoZXNSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRINCgVraW5kcxgCIAMoCSJiChpDbGVhck1hY2hpbmVDYWNoZXNSZXNwb25zZRIPCgdzdGFydGVkGAEgAygJEjMKB3NraXBwZWQYAiADKAsyIi5yZWxpYW50LnYxLkNsZWFyTWFjaGluZUNhY2hlc1NraXAiNgoWQ2xlYXJNYWNoaW5lQ2FjaGVzU2tpcBIMCgRraW5kGAEgASgJEg4KBnJlYXNvbhgCIAEoCSIUChJMaXN0RGFlbW9uc1JlcXVlc3QiPgoTTGlzdERhZW1vbnNSZXNwb25zZRInCgdkYWVtb25zGAEgAygLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIiUKEEdldERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIjsKEUdldERhZW1vblJlc3BvbnNlEiYKBmRhZW1vbhgBIAEoCzIWLnJlbGlhbnQudjEuRGFlbW9uSW5mbyLAAQoUUmVzb2x2ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJEhMKC2RhZW1vbl90eXBlGAMgASgJEjwKBmxhYmVscxgEIAMoCzIsLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJOChVSZXNvbHZlRGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvEg0KBWZvdW5kGAIgASgIIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj4KFFJlc3VtZURhZW1vblJlc3BvbnNlEg8KB3Jlc3VtZWQYASABKAgSFQoNZXJyb3JfbWVzc2FnZRgCIAEoCSIhCgxEYWVtb25XYWtpbmcSEQoJZGFlbW9uX2lkGAEgASgJIi4KGVJlZnJlc2hMb2NhbE1vZGVsc1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIlMKGlJlZnJlc2hMb2NhbE1vZGVsc1Jlc3BvbnNlEjUKDGxvY2FsX21vZGVscxgBIAEoCzIfLnJlbGlhbnQudjEuTG9jYWxNb2RlbEludmVudG9yeSJFCh1TZXRMb2NhbE1vZGVsRW5kcG9pbnRzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSEQoJYmFzZV91cmxzGAIgAygJIlcKHlNldExvY2FsTW9kZWxFbmRwb2ludHNSZXNwb25zZRI1Cgxsb2NhbF9tb2RlbHMYASABKAsyHy5yZWxpYW50LnYxLkxvY2FsTW9kZWxJbnZlbnRvcnki8QYKCkRhZW1vbkluZm8SEQoJZGFlbW9uX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSEAoIaG9zdG5hbWUYAyABKAkSEAoIcGxhdGZvcm0YBCABKAkSKAoGc3RhdHVzGAUgASgOMhgucmVsaWFudC52MS5EYWVtb25TdGF0dXMSLwoIcHJvamVjdHMYBiADKAsyHS5yZWxpYW50LnYxLkRpc2NvdmVyZWRQcm9qZWN0EjAKDGNvbm5lY3RlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoObGFzdF9oZWFydGJlYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2RhZW1vbl90eXBlGAkgASgJEhkKEW1lbW9yeV91c2VkX2J5dGVzGAogASgEEhoKEm1lbW9yeV9saW1pdF9ieXRlcxgLIAEoBBIXCg9tZW1vcnlfcHJlc3N1cmUYDCABKAgSFgoOZGV0ZWN0ZWRfcG9ydHMYDSADKA0SOQoPbGlmZWN5Y2xlX3BoYXNlGA4gASgOMiAucmVsaWFudC52MS5EYWVtb25MaWZlY3ljbGVQaGFzZRIMCgRzaXplGA8gASgJEhsKE2xhc3Rfc3RhdHVzX21lc3NhZ2UYECABKAkSOgoWbGFzdF9zdGF0dXNfY2hhbmdlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNgoSbGFzdF9vb21fa2lsbGVkX2F0GBIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIWCg5vb21fa2lsbF9jb3VudBgTIAEoBRIuCgpjcmVhdGVkX2F0GBQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI1Cgxsb2NhbF9tb2RlbHMYFSABKAsyHy5yZWxpYW50LnYxLkxvY2FsTW9kZWxJbnZlbnRvcnkSDAoEbmFtZRgWIAEoCRIkCgRkaXNrGBcgASgLMhYucmVsaWFudC52MS5EaXNrUmVwb3J0Eg8KB3ZlcnNpb24YGCABKAkSDgoGY29tbWl0GBkgASgJEhgKEGNvbW1pdF90aW1lX3VuaXgYGiABKAMSFQoNZm9yZ2VfdmVyc2lvbhgbIAEoCSrRAQoMRGFlbW9uU3RhdHVzEh0KGURBRU1PTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIYChREQUVNT05fU1RBVFVTX0FDVElWRRABEhYKEkRBRU1PTl9TVEFUVVNfSURMRRACEh4KGkRBRU1PTl9TVEFUVVNfRElTQ09OTkVDVEVEEAMSGQoVREFFTU9OX1NUQVRVU19QRU5ESU5HEAQSGwoXREFFTU9OX1NUQVRVU19TVVNQRU5ERUQQBRIYChREQUVNT05fU1RBVFVTX0ZBSUxFRBAGKp0CChREYWVtb25MaWZlY3ljbGVQaGFzZRImCiJEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1VOU1BFQ0lGSUVEEAASJwojREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9QUk9WSVNJT05JTkcQARIiCh5EQUVNT05fTElGRUNZQ0xFX1BIQVNFX0NMT05JTkcQAhIgChxEQUVNT05fTElGRUNZQ0xFX1BIQVNFX1JFQURZEAMSJQohREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9TVVNQRU5ESU5HEAQSJAogREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9TVVNQRU5ERUQQBRIhCh1EQUVNT05fTElGRUNZQ0xFX1BIQVNFX0ZBSUxFRBAGMugHChVEYWVtb25SZWdpc3RyeVNlcnZpY2USUAoLTGlzdERhZW1vbnMSHi5yZWxpYW50LnYxLkxpc3REYWVtb25zUmVxdWVzdBofLnJlbGlhbnQudjEuTGlzdERhZW1vbnNSZXNwb25zZSIAEkoKCUdldERhZW1vbhIcLnJlbGlhbnQudjEuR2V0RGFlbW9uUmVxdWVzdBodLnJlbGlhbnQudjEuR2V0RGFlbW9uUmVzcG9uc2UiABJZCg1SZXNvbHZlRGFlbW9uEiAucmVsaWFudC52MS5SZXNvbHZlRGFlbW9uUmVxdWVzdBohLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlc3BvbnNlIgOQAgESxwEKDFJlc3VtZURhZW1vbhIfLnJlbGlhbnQudjEuUmVzdW1lRGFlbW9uUmVxdWVzdBogLnJlbGlhbnQudjEuUmVzdW1lRGFlbW9uUmVzcG9uc2UidKK7GHA6bjpscmVwb3J0cyB3aGV0aGVyIHRoZSBkYWVtb24gaXMgcm91dGFibGU6IHRoaXMgc2VydmVyIGNhbm5vdCB3YWtlIGEgbWFjaGluZSwgY29udHJvbC1wbGFuZSdzIFJlc3VtZURhZW1vbiBkb2VzEtABChJSZWZyZXNoTG9jYWxNb2RlbHMSJS5yZWxpYW50LnYxLlJlZnJlc2hMb2NhbE1vZGVsc1JlcXVlc3QaJi5yZWxpYW50LnYxLlJlZnJlc2hMb2NhbE1vZGVsc1Jlc3BvbnNlImuiuxhnOmU6Y3JlLXByb2JlcyB0aGUgbWFjaGluZSdzIGxvY2FsIG1vZGVsIHNlcnZlcnM6IHJlZnJlc2hlcyBhbiBvYnNlcnZlZCBpbnZlbnRvcnkgYW5kIGNvbmZpZ3VyZXMgbm90aGluZxKnAQoWU2V0TG9jYWxNb2RlbEVuZHBvaW50cxIpLnJlbGlhbnQudjEuU2V0TG9jYWxNb2RlbEVuZHBvaW50c1JlcXVlc3QaKi5yZWxpYW50LnYxLlNldExvY2FsTW9kZWxFbmRwb2ludHNSZXNwb25zZSI2orsYMjowChlzZXRfbG9jYWxfbW9kZWxfZW5kcG9pbnRzEhMKBmRhZW1vbhIJZGFlbW9uX2lkEo4BChJDbGVhck1hY2hpbmVDYWNoZXMSJS5yZWxpYW50LnYxLkNsZWFyTWFjaGluZUNhY2hlc1JlcXVlc3QaJi5yZWxpYW50LnYxLkNsZWFyTWFjaGluZUNhY2hlc1Jlc3BvbnNlIimiuxglOiMKDGNsZWFyX2NhY2hlcxITCgZkYWVtb24SCWRhZW1vbl9pZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
+  fileDesc("CiByZWxpYW50L3YxL2RhZW1vbl9yZWdpc3RyeS5wcm90bxIKcmVsaWFudC52MSIsChdTZXREZWZhdWx0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiGgoYU2V0RGVmYXVsdERhZW1vblJlc3BvbnNlIj0KGUNsZWFyTWFjaGluZUNhY2hlc1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEg0KBWtpbmRzGAIgAygJImIKGkNsZWFyTWFjaGluZUNhY2hlc1Jlc3BvbnNlEg8KB3N0YXJ0ZWQYASADKAkSMwoHc2tpcHBlZBgCIAMoCzIiLnJlbGlhbnQudjEuQ2xlYXJNYWNoaW5lQ2FjaGVzU2tpcCI2ChZDbGVhck1hY2hpbmVDYWNoZXNTa2lwEgwKBGtpbmQYASABKAkSDgoGcmVhc29uGAIgASgJIhQKEkxpc3REYWVtb25zUmVxdWVzdCI+ChNMaXN0RGFlbW9uc1Jlc3BvbnNlEicKB2RhZW1vbnMYASADKAsyFi5yZWxpYW50LnYxLkRhZW1vbkluZm8iJQoQR2V0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiOwoRR2V0RGFlbW9uUmVzcG9uc2USJgoGZGFlbW9uGAEgASgLMhYucmVsaWFudC52MS5EYWVtb25JbmZvIsABChRSZXNvbHZlRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSEwoLZGFlbW9uX25hbWUYAiABKAkSEwoLZGFlbW9uX3R5cGUYAyABKAkSPAoGbGFiZWxzGAQgAygLMiwucmVsaWFudC52MS5SZXNvbHZlRGFlbW9uUmVxdWVzdC5MYWJlbHNFbnRyeRotCgtMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIk4KFVJlc29sdmVEYWVtb25SZXNwb25zZRImCgZkYWVtb24YASABKAsyFi5yZWxpYW50LnYxLkRhZW1vbkluZm8SDQoFZm91bmQYAiABKAgiKAoTUmVzdW1lRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiPgoUUmVzdW1lRGFlbW9uUmVzcG9uc2USDwoHcmVzdW1lZBgBIAEoCBIVCg1lcnJvcl9tZXNzYWdlGAIgASgJIiEKDERhZW1vbldha2luZxIRCglkYWVtb25faWQYASABKAkiLgoZUmVmcmVzaExvY2FsTW9kZWxzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiUwoaUmVmcmVzaExvY2FsTW9kZWxzUmVzcG9uc2USNQoMbG9jYWxfbW9kZWxzGAEgASgLMh8ucmVsaWFudC52MS5Mb2NhbE1vZGVsSW52ZW50b3J5IkUKHVNldExvY2FsTW9kZWxFbmRwb2ludHNSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIRCgliYXNlX3VybHMYAiADKAkiVwoeU2V0TG9jYWxNb2RlbEVuZHBvaW50c1Jlc3BvbnNlEjUKDGxvY2FsX21vZGVscxgBIAEoCzIfLnJlbGlhbnQudjEuTG9jYWxNb2RlbEludmVudG9yeSKFBwoKRGFlbW9uSW5mbxIRCglkYWVtb25faWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIQCghob3N0bmFtZRgDIAEoCRIQCghwbGF0Zm9ybRgEIAEoCRIoCgZzdGF0dXMYBSABKA4yGC5yZWxpYW50LnYxLkRhZW1vblN0YXR1cxIvCghwcm9qZWN0cxgGIAMoCzIdLnJlbGlhbnQudjEuRGlzY292ZXJlZFByb2plY3QSMAoMY29ubmVjdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIyCg5sYXN0X2hlYXJ0YmVhdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGFlbW9uX3R5cGUYCSABKAkSGQoRbWVtb3J5X3VzZWRfYnl0ZXMYCiABKAQSGgoSbWVtb3J5X2xpbWl0X2J5dGVzGAsgASgEEhcKD21lbW9yeV9wcmVzc3VyZRgMIAEoCBIWCg5kZXRlY3RlZF9wb3J0cxgNIAMoDRI5Cg9saWZlY3ljbGVfcGhhc2UYDiABKA4yIC5yZWxpYW50LnYxLkRhZW1vbkxpZmVjeWNsZVBoYXNlEgwKBHNpemUYDyABKAkSGwoTbGFzdF9zdGF0dXNfbWVzc2FnZRgQIAEoCRI6ChZsYXN0X3N0YXR1c19jaGFuZ2VkX2F0GBEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2ChJsYXN0X29vbV9raWxsZWRfYXQYEiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhYKDm9vbV9raWxsX2NvdW50GBMgASgFEi4KCmNyZWF0ZWRfYXQYFCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjUKDGxvY2FsX21vZGVscxgVIAEoCzIfLnJlbGlhbnQudjEuTG9jYWxNb2RlbEludmVudG9yeRIMCgRuYW1lGBYgASgJEiQKBGRpc2sYFyABKAsyFi5yZWxpYW50LnYxLkRpc2tSZXBvcnQSDwoHdmVyc2lvbhgYIAEoCRIOCgZjb21taXQYGSABKAkSGAoQY29tbWl0X3RpbWVfdW5peBgaIAEoAxIVCg1mb3JnZV92ZXJzaW9uGBsgASgJEhIKCmlzX2RlZmF1bHQYHCABKAgq0QEKDERhZW1vblN0YXR1cxIdChlEQUVNT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASGAoUREFFTU9OX1NUQVRVU19BQ1RJVkUQARIWChJEQUVNT05fU1RBVFVTX0lETEUQAhIeChpEQUVNT05fU1RBVFVTX0RJU0NPTk5FQ1RFRBADEhkKFURBRU1PTl9TVEFUVVNfUEVORElORxAEEhsKF0RBRU1PTl9TVEFUVVNfU1VTUEVOREVEEAUSGAoUREFFTU9OX1NUQVRVU19GQUlMRUQQBiqdAgoURGFlbW9uTGlmZWN5Y2xlUGhhc2USJgoiREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9VTlNQRUNJRklFRBAAEicKI0RBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfUFJPVklTSU9OSU5HEAESIgoeREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9DTE9OSU5HEAISIAocREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9SRUFEWRADEiUKIURBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfU1VTUEVORElORxAEEiQKIERBRU1PTl9MSUZFQ1lDTEVfUEhBU0VfU1VTUEVOREVEEAUSIQodREFFTU9OX0xJRkVDWUNMRV9QSEFTRV9GQUlMRUQQBjLyCAoVRGFlbW9uUmVnaXN0cnlTZXJ2aWNlElAKC0xpc3REYWVtb25zEh4ucmVsaWFudC52MS5MaXN0RGFlbW9uc1JlcXVlc3QaHy5yZWxpYW50LnYxLkxpc3REYWVtb25zUmVzcG9uc2UiABJKCglHZXREYWVtb24SHC5yZWxpYW50LnYxLkdldERhZW1vblJlcXVlc3QaHS5yZWxpYW50LnYxLkdldERhZW1vblJlc3BvbnNlIgASWQoNUmVzb2x2ZURhZW1vbhIgLnJlbGlhbnQudjEuUmVzb2x2ZURhZW1vblJlcXVlc3QaIS5yZWxpYW50LnYxLlJlc29sdmVEYWVtb25SZXNwb25zZSIDkAIBEscBCgxSZXN1bWVEYWVtb24SHy5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlcXVlc3QaIC5yZWxpYW50LnYxLlJlc3VtZURhZW1vblJlc3BvbnNlInSiuxhwOm46bHJlcG9ydHMgd2hldGhlciB0aGUgZGFlbW9uIGlzIHJvdXRhYmxlOiB0aGlzIHNlcnZlciBjYW5ub3Qgd2FrZSBhIG1hY2hpbmUsIGNvbnRyb2wtcGxhbmUncyBSZXN1bWVEYWVtb24gZG9lcxLQAQoSUmVmcmVzaExvY2FsTW9kZWxzEiUucmVsaWFudC52MS5SZWZyZXNoTG9jYWxNb2RlbHNSZXF1ZXN0GiYucmVsaWFudC52MS5SZWZyZXNoTG9jYWxNb2RlbHNSZXNwb25zZSJrorsYZzplOmNyZS1wcm9iZXMgdGhlIG1hY2hpbmUncyBsb2NhbCBtb2RlbCBzZXJ2ZXJzOiByZWZyZXNoZXMgYW4gb2JzZXJ2ZWQgaW52ZW50b3J5IGFuZCBjb25maWd1cmVzIG5vdGhpbmcSpwEKFlNldExvY2FsTW9kZWxFbmRwb2ludHMSKS5yZWxpYW50LnYxLlNldExvY2FsTW9kZWxFbmRwb2ludHNSZXF1ZXN0GioucmVsaWFudC52MS5TZXRMb2NhbE1vZGVsRW5kcG9pbnRzUmVzcG9uc2UiNqK7GDI6MAoZc2V0X2xvY2FsX21vZGVsX2VuZHBvaW50cxITCgZkYWVtb24SCWRhZW1vbl9pZBKOAQoSQ2xlYXJNYWNoaW5lQ2FjaGVzEiUucmVsaWFudC52MS5DbGVhck1hY2hpbmVDYWNoZXNSZXF1ZXN0GiYucmVsaWFudC52MS5DbGVhck1hY2hpbmVDYWNoZXNSZXNwb25zZSIporsYJTojCgxjbGVhcl9jYWNoZXMSEwoGZGFlbW9uEglkYWVtb25faWQShwEKEFNldERlZmF1bHREYWVtb24SIy5yZWxpYW50LnYxLlNldERlZmF1bHREYWVtb25SZXF1ZXN0GiQucmVsaWFudC52MS5TZXREZWZhdWx0RGFlbW9uUmVzcG9uc2UiKKK7GCQ6IgoLc2V0X2RlZmF1bHQSEwoGZGFlbW9uEglkYWVtb25faWRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_timestamp, file_reliant_v1_tools_daemon]);
+
+/**
+ * @generated from message reliant.v1.SetDefaultDaemonRequest
+ */
+export type SetDefaultDaemonRequest = Message<"reliant.v1.SetDefaultDaemonRequest"> & {
+  /**
+   * The machine to make the default; "" clears the default.
+   *
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.SetDefaultDaemonRequest.
+ * Use `create(SetDefaultDaemonRequestSchema)` to create a new message.
+ */
+export const SetDefaultDaemonRequestSchema: GenMessage<SetDefaultDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 0);
+
+/**
+ * @generated from message reliant.v1.SetDefaultDaemonResponse
+ */
+export type SetDefaultDaemonResponse = Message<"reliant.v1.SetDefaultDaemonResponse"> & {
+};
+
+/**
+ * Describes the message reliant.v1.SetDefaultDaemonResponse.
+ * Use `create(SetDefaultDaemonResponseSchema)` to create a new message.
+ */
+export const SetDefaultDaemonResponseSchema: GenMessage<SetDefaultDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon_registry, 1);
 
 /**
  * @generated from message reliant.v1.ClearMachineCachesRequest
@@ -42,7 +74,7 @@ export type ClearMachineCachesRequest = Message<"reliant.v1.ClearMachineCachesRe
  * Use `create(ClearMachineCachesRequestSchema)` to create a new message.
  */
 export const ClearMachineCachesRequestSchema: GenMessage<ClearMachineCachesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 0);
+  messageDesc(file_reliant_v1_daemon_registry, 2);
 
 /**
  * @generated from message reliant.v1.ClearMachineCachesResponse
@@ -69,7 +101,7 @@ export type ClearMachineCachesResponse = Message<"reliant.v1.ClearMachineCachesR
  * Use `create(ClearMachineCachesResponseSchema)` to create a new message.
  */
 export const ClearMachineCachesResponseSchema: GenMessage<ClearMachineCachesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 1);
+  messageDesc(file_reliant_v1_daemon_registry, 3);
 
 /**
  * @generated from message reliant.v1.ClearMachineCachesSkip
@@ -91,7 +123,7 @@ export type ClearMachineCachesSkip = Message<"reliant.v1.ClearMachineCachesSkip"
  * Use `create(ClearMachineCachesSkipSchema)` to create a new message.
  */
 export const ClearMachineCachesSkipSchema: GenMessage<ClearMachineCachesSkip> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 2);
+  messageDesc(file_reliant_v1_daemon_registry, 4);
 
 /**
  * @generated from message reliant.v1.ListDaemonsRequest
@@ -104,7 +136,7 @@ export type ListDaemonsRequest = Message<"reliant.v1.ListDaemonsRequest"> & {
  * Use `create(ListDaemonsRequestSchema)` to create a new message.
  */
 export const ListDaemonsRequestSchema: GenMessage<ListDaemonsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 3);
+  messageDesc(file_reliant_v1_daemon_registry, 5);
 
 /**
  * @generated from message reliant.v1.ListDaemonsResponse
@@ -121,7 +153,7 @@ export type ListDaemonsResponse = Message<"reliant.v1.ListDaemonsResponse"> & {
  * Use `create(ListDaemonsResponseSchema)` to create a new message.
  */
 export const ListDaemonsResponseSchema: GenMessage<ListDaemonsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 4);
+  messageDesc(file_reliant_v1_daemon_registry, 6);
 
 /**
  * @generated from message reliant.v1.GetDaemonRequest
@@ -138,7 +170,7 @@ export type GetDaemonRequest = Message<"reliant.v1.GetDaemonRequest"> & {
  * Use `create(GetDaemonRequestSchema)` to create a new message.
  */
 export const GetDaemonRequestSchema: GenMessage<GetDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 5);
+  messageDesc(file_reliant_v1_daemon_registry, 7);
 
 /**
  * @generated from message reliant.v1.GetDaemonResponse
@@ -155,7 +187,7 @@ export type GetDaemonResponse = Message<"reliant.v1.GetDaemonResponse"> & {
  * Use `create(GetDaemonResponseSchema)` to create a new message.
  */
 export const GetDaemonResponseSchema: GenMessage<GetDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 6);
+  messageDesc(file_reliant_v1_daemon_registry, 8);
 
 /**
  * @generated from message reliant.v1.ResolveDaemonRequest
@@ -195,7 +227,7 @@ export type ResolveDaemonRequest = Message<"reliant.v1.ResolveDaemonRequest"> & 
  * Use `create(ResolveDaemonRequestSchema)` to create a new message.
  */
 export const ResolveDaemonRequestSchema: GenMessage<ResolveDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 7);
+  messageDesc(file_reliant_v1_daemon_registry, 9);
 
 /**
  * @generated from message reliant.v1.ResolveDaemonResponse
@@ -217,7 +249,7 @@ export type ResolveDaemonResponse = Message<"reliant.v1.ResolveDaemonResponse"> 
  * Use `create(ResolveDaemonResponseSchema)` to create a new message.
  */
 export const ResolveDaemonResponseSchema: GenMessage<ResolveDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 8);
+  messageDesc(file_reliant_v1_daemon_registry, 10);
 
 /**
  * @generated from message reliant.v1.ResumeDaemonRequest
@@ -234,7 +266,7 @@ export type ResumeDaemonRequest = Message<"reliant.v1.ResumeDaemonRequest"> & {
  * Use `create(ResumeDaemonRequestSchema)` to create a new message.
  */
 export const ResumeDaemonRequestSchema: GenMessage<ResumeDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 9);
+  messageDesc(file_reliant_v1_daemon_registry, 11);
 
 /**
  * @generated from message reliant.v1.ResumeDaemonResponse
@@ -258,7 +290,7 @@ export type ResumeDaemonResponse = Message<"reliant.v1.ResumeDaemonResponse"> & 
  * Use `create(ResumeDaemonResponseSchema)` to create a new message.
  */
 export const ResumeDaemonResponseSchema: GenMessage<ResumeDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 10);
+  messageDesc(file_reliant_v1_daemon_registry, 12);
 
 /**
  * DaemonWaking says a request found the machine it needed asleep, and woke it.
@@ -285,7 +317,7 @@ export type DaemonWaking = Message<"reliant.v1.DaemonWaking"> & {
  * Use `create(DaemonWakingSchema)` to create a new message.
  */
 export const DaemonWakingSchema: GenMessage<DaemonWaking> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 11);
+  messageDesc(file_reliant_v1_daemon_registry, 13);
 
 /**
  * @generated from message reliant.v1.RefreshLocalModelsRequest
@@ -302,7 +334,7 @@ export type RefreshLocalModelsRequest = Message<"reliant.v1.RefreshLocalModelsRe
  * Use `create(RefreshLocalModelsRequestSchema)` to create a new message.
  */
 export const RefreshLocalModelsRequestSchema: GenMessage<RefreshLocalModelsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 12);
+  messageDesc(file_reliant_v1_daemon_registry, 14);
 
 /**
  * @generated from message reliant.v1.RefreshLocalModelsResponse
@@ -319,7 +351,7 @@ export type RefreshLocalModelsResponse = Message<"reliant.v1.RefreshLocalModelsR
  * Use `create(RefreshLocalModelsResponseSchema)` to create a new message.
  */
 export const RefreshLocalModelsResponseSchema: GenMessage<RefreshLocalModelsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 13);
+  messageDesc(file_reliant_v1_daemon_registry, 15);
 
 /**
  * @generated from message reliant.v1.SetLocalModelEndpointsRequest
@@ -345,7 +377,7 @@ export type SetLocalModelEndpointsRequest = Message<"reliant.v1.SetLocalModelEnd
  * Use `create(SetLocalModelEndpointsRequestSchema)` to create a new message.
  */
 export const SetLocalModelEndpointsRequestSchema: GenMessage<SetLocalModelEndpointsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 14);
+  messageDesc(file_reliant_v1_daemon_registry, 16);
 
 /**
  * @generated from message reliant.v1.SetLocalModelEndpointsResponse
@@ -362,7 +394,7 @@ export type SetLocalModelEndpointsResponse = Message<"reliant.v1.SetLocalModelEn
  * Use `create(SetLocalModelEndpointsResponseSchema)` to create a new message.
  */
 export const SetLocalModelEndpointsResponseSchema: GenMessage<SetLocalModelEndpointsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 15);
+  messageDesc(file_reliant_v1_daemon_registry, 17);
 
 /**
  * @generated from message reliant.v1.DaemonInfo
@@ -593,6 +625,17 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
    * @generated from field: string forge_version = 27;
    */
   forgeVersion: string;
+
+  /**
+   * The machine the owner made their default (SetDefaultDaemon): where work
+   * that names no machine runs — a new chat on "Default", a worktree, a tool
+   * call with no selector — whatever state it is in. At most one of a user's
+   * machines carries it; with none, default resolution falls back to its
+   * machine-state rule (a connected machine, a self-hosted one first).
+   *
+   * @generated from field: bool is_default = 28;
+   */
+  isDefault: boolean;
 };
 
 /**
@@ -600,7 +643,7 @@ export type DaemonInfo = Message<"reliant.v1.DaemonInfo"> & {
  * Use `create(DaemonInfoSchema)` to create a new message.
  */
 export const DaemonInfoSchema: GenMessage<DaemonInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon_registry, 16);
+  messageDesc(file_reliant_v1_daemon_registry, 18);
 
 /**
  * DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.
@@ -819,6 +862,20 @@ export const DaemonRegistryService: GenService<{
     methodKind: "unary";
     input: typeof ClearMachineCachesRequestSchema;
     output: typeof ClearMachineCachesResponseSchema;
+  },
+  /**
+   * SetDefaultDaemon makes one of the caller's machines their default
+   * (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
+   * clears it. Work that names a machine — a pinned chat, an automation's
+   * chosen machine — is unaffected. NotFound for a machine the caller does
+   * not own.
+   *
+   * @generated from rpc reliant.v1.DaemonRegistryService.SetDefaultDaemon
+   */
+  setDefaultDaemon: {
+    methodKind: "unary";
+    input: typeof SetDefaultDaemonRequestSchema;
+    output: typeof SetDefaultDaemonResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_daemon_registry, 0);

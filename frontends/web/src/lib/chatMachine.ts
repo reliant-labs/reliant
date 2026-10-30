@@ -92,22 +92,23 @@ export function installedDaemonIds(
  * there before its first run (daemonplacement.ProjectDefaultDaemonID, research/
  * CHAT_MACHINE_PLACEMENT.md): among the machines the project is installed on
  * (`installedOn`, when it is installed anywhere) the one default resolution
- * picks — a connected machine, a self-hosted one first; else one starting or
- * asleep; else any. The web uses it to NAME that machine, so what the picker
- * shows is where the chat actually runs.
+ * picks — the machine the user made their default (`isDefault`, Settings →
+ * Machines), in whatever state; else a connected machine, a self-hosted one
+ * first; else one starting or asleep; else any. The web uses it to NAME that
+ * machine, so what the picker shows is where the chat actually runs.
  *
  * The server breaks a tie between installed machines it cannot rank by oldest
  * install; this ranks by the same default order and cannot see install age,
  * so the two can differ only between machines the default order treats alike.
  */
-export function defaultMachineDaemon<T extends Pick<DaemonInfo, "status" | "daemonId"> & Partial<Pick<DaemonInfo, "daemonType">>>(
-  daemons: ReadonlyArray<T>,
-  installedOn?: ReadonlySet<string>,
-): T | undefined {
+export function defaultMachineDaemon<
+  T extends Pick<DaemonInfo, "status" | "daemonId"> & Partial<Pick<DaemonInfo, "daemonType" | "isDefault">>,
+>(daemons: ReadonlyArray<T>, installedOn?: ReadonlySet<string>): T | undefined {
   const narrowed = installedOn ? daemons.filter((d) => installedOn.has(d.daemonId)) : daemons;
   const candidates = narrowed.length > 0 ? narrowed : daemons;
   const connected = candidates.filter(isAwakeMachine);
   return (
+    candidates.find((d) => d.isDefault) ??
     connected.find((d) => d.daemonType === "self_hosted") ??
     connected[0] ??
     candidates.find((d) => isStartingMachine(d) || d.status === DaemonStatus.SUSPENDED) ??

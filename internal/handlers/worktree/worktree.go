@@ -235,6 +235,12 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 		proto.ChatId = w.ChatID
 	}
 
+	// The machine holding the checkout, so the new-chat composer can run a
+	// chat in this workspace on that machine and nowhere else.
+	if owner := daemonplacement.WorktreeOwner(w); owner != "" {
+		proto.DaemonId = &owner
+	}
+
 	if w.DeletedAt != nil {
 		deletedAt := w.DeletedAt.Format(time.RFC3339)
 		proto.DeletedAt = &deletedAt

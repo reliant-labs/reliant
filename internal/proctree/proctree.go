@@ -109,12 +109,23 @@ func (l *Limiter) String() string {
 	return s
 }
 
+// Owner is who a command runs for, so a machine running out of processes can
+// say whose processes they are.
+type Owner struct {
+	// ChatID is the agent (chat or sub-agent thread) whose tool call started
+	// the command; "" when the caller did not say.
+	ChatID string
+	// Command is the command line as the caller gave it.
+	Command string
+}
+
 // Tree is one command's process tree. Its methods are safe on a nil *Tree.
 type Tree struct {
-	l   *Limiter
-	dir string // the command's cgroup, "" when it has none
-	fd  int    // the cgroup directory, open until the command starts; -1 when none
-	pid int
+	l     *Limiter
+	owner Owner
+	dir   string // the command's cgroup, "" when it has none
+	fd    int    // the cgroup directory, open until the command starts; -1 when none
+	pid   int
 }
 
 // Prepare readies cmd, which must not have been started, to run as a bounded
@@ -122,8 +133,8 @@ type Tree struct {
 // one. Call Started once cmd.Start returns, and Release once the command is
 // done with. A failure to set up the cgroup leaves the command unbounded
 // rather than failing it.
-func (l *Limiter) Prepare(cmd *exec.Cmd) *Tree {
-	t := &Tree{l: l, fd: -1}
+func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
+	t := &Tree{l: l, owner: owner, fd: -1}
 	setProcessGroup(cmd)
 	if l == nil || l.root == "" {
 		return t
@@ -152,6 +163,7 @@ func (t *Tree) Started(pid int) {
 	if t.l != nil && t.l.nproc > 0 {
 		t.limitNproc()
 	}
+	register(t)
 }
 
 // Cgroup is the tree's cgroup directory, "" when it has none.
@@ -160,4 +172,54 @@ func (t *Tree) Cgroup() string {
 		return ""
 	}
 	return t.dir
+}
+
+// Info describes a live tree: its process group (the leader's pid), cgroup
+// and owner.
+type Info struct {
+	Pgid   int
+	Cgroup string
+	Owner  Owner
+}
+
+// The trees started and not yet forgotten, by process group. A tree stays
+// here after its command exits for as long as anything it left is alive:
+// those processes are still its owner's. Forget drops it.
+var (
+	liveMu sync.Mutex
+	live   = map[int]*Tree{}
+)
+
+func register(t *Tree) {
+	// Only where a capacity guard scans /proc and prunes the list
+	// (internal/procguard); elsewhere nothing would ever take entries out.
+	if !trackLive {
+		return
+	}
+	liveMu.Lock()
+	live[t.pid] = t
+	liveMu.Unlock()
+}
+
+// Live lists the trees started and not forgotten.
+func Live() []Info {
+	liveMu.Lock()
+	defer liveMu.Unlock()
+	out := make([]Info, 0, len(live))
+	for pgid, t := range live {
+		out = append(out, Info{Pgid: pgid, Cgroup: t.dir, Owner: t.owner})
+	}
+	return out
+}
+
+// Prune forgets every tree whose process group alive reports gone and whose
+// cgroup, if it has one, is empty: nothing of the command is left to own.
+func Prune(alive func(pgid int) bool) {
+	liveMu.Lock()
+	defer liveMu.Unlock()
+	for pgid, t := range live {
+		if !alive(pgid) && !t.Populated() {
+			delete(live, pgid)
+		}
+	}
 }

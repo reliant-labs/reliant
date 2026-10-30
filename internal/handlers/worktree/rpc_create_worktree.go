@@ -101,7 +101,7 @@ func (s *Service) CreateWorktree(
 	// back to (a branch chat's worktree exists on disk only here). Fail fast
 	// if no daemon is reachable — creating a worktree row that points at a
 	// directory on no daemon is worse than a clear up-front error.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, req.Msg.DaemonId, "create")
 	if err != nil {
 		return nil, err
 	}

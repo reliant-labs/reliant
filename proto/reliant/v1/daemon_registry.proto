@@ -78,7 +78,31 @@ service DaemonRegistryService {
       }
     };
   }
+
+  // SetDefaultDaemon makes one of the caller's machines their default
+  // (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
+  // clears it. Work that names a machine — a pinned chat, an automation's
+  // chosen machine — is unaffected. NotFound for a machine the caller does
+  // not own.
+  rpc SetDefaultDaemon(SetDefaultDaemonRequest) returns (SetDefaultDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_default"
+        target: {
+          kind: "daemon"
+          id: "daemon_id"
+        }
+      }
+    };
+  }
 }
+
+message SetDefaultDaemonRequest {
+  // The machine to make the default; "" clears the default.
+  string daemon_id = 1;
+}
+
+message SetDefaultDaemonResponse {}
 
 message ClearMachineCachesRequest {
   string daemon_id = 1;
@@ -289,6 +313,13 @@ message DaemonInfo {
   string commit = 25;
   int64 commit_time_unix = 26;
   string forge_version = 27;
+
+  // The machine the owner made their default (SetDefaultDaemon): where work
+  // that names no machine runs — a new chat on "Default", a worktree, a tool
+  // call with no selector — whatever state it is in. At most one of a user's
+  // machines carries it; with none, default resolution falls back to its
+  // machine-state rule (a connected machine, a self-hosted one first).
+  bool is_default = 28;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

@@ -217,7 +217,7 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -236,7 +236,7 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		activity.RegisterOptions{Name: "WorkflowStatus"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowCheckpoint"},
@@ -319,7 +319,7 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		activity.RegisterOptions{Name: "ValidateThreadOwnership"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "LoadPresetParams"},

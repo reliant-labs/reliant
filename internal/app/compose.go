@@ -356,6 +356,7 @@ func (g *Graph) newTemporalClient() (*TemporalClient, error) {
 		Ctx:          g.Ctx,
 		Temporal:     g.ServerProcessConfig.GetTemporal(),
 		PayloadStore: g.PayloadStore(),
+		NATS:         g.NATSConn(),
 	})
 }
 
@@ -555,6 +556,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
 		Worker:              g.WorkerConfig,
+		NATS:                g.NATSConn(),
 	})
 }
 
@@ -1270,7 +1272,8 @@ func (g *Graph) newToken() (*token.Service, error) {
 		ControlPlane: token.TokenControlPlane{
 			Issuer: g.APISettings().AuthorizationServer,
 		},
-		GitTokens: git,
+		GitTokens:    git,
+		GitBotTokens: git,
 	})
 }
 

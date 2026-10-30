@@ -357,27 +357,41 @@ jobs:
 
   # ── The lanes no gate covers ──────────────────────────────────────────────
 
-  # proto-vendor/controlplane/ must be exactly what control-plane main exports.
+  # proto-vendor/controlplane/ must be exactly what the control-plane commit
+  # its SOURCE declares exports, and that commit must be on control-plane main.
+  # It judges the change under review against its OWN declaration: it used to
+  # compare against control-plane main, so every control-plane proto merge
+  # turned every PR reaching this lane red until someone re-vendored. Lag behind
+  # control-plane main is cp-contract-drift.yml's report, never this gate.
   # control-plane is private, so this reads it with CONTROL_PLANE_DEPLOY_KEY (a
-  # read-only deploy key) and FAILS without one: a drift gate that skips cannot
-  # be told from one that passes. Fork PRs get no secrets; control-plane's own
-  # gate judges the tree once it reaches main.
+  # read-only deploy key) and FAILS without one: a gate that skips cannot be
+  # told from one that passes. Fork PRs get no secrets.
   cp-contract:
-    name: Vendored control-plane contract matches control-plane main
+    name: Vendored control-plane contract is its SOURCE commit's export
     needs: lanes
     if: needs.lanes.outputs.cp_contract == 'true' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - name: Check out control-plane main (private, read-only)
+      - name: The control-plane commit proto-vendor/controlplane/SOURCE declares
+        id: source
+        run: |
+          set -euo pipefail
+          sha=$(sed -n 's/^control-plane \([0-9a-f]\{40\}\)$/\1/p' proto-vendor/controlplane/SOURCE 2>/dev/null | head -1)
+          [ -n "${sha}" ] || { echo "::error::proto-vendor/controlplane/SOURCE names no control-plane commit; re-vendor with task contract:controlplane:sync"; exit 1; }
+          echo "sha=${sha}" | tee -a "$GITHUB_OUTPUT"
+      # At SOURCE, with main's history (commits and trees only: blob:none) so
+      # the check can prove SOURCE is on control-plane main.
+      - name: Check out control-plane at SOURCE (private, read-only)
         uses: actions/checkout@v6
         with:
           repository: reliant-labs/control-plane
-          ref: main
+          ref: ${{ steps.source.outputs.sha }}
           path: control-plane-sibling
           ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
-          fetch-depth: 1
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
