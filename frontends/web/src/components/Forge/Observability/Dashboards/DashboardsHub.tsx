@@ -29,6 +29,7 @@ import { useAlerts, useIssues, useObservabilityOrg, useReleases, useWorkloads } 
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { DeliveryScope, Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { IssueScope } from "@/services/controlPlane/observability/issuesTypes";
 import type { ObsScope, WorkloadJob } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
@@ -213,6 +214,15 @@ function Pending() {
   return <div className="h-5 w-32 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label="Loading" />;
 }
 
+/** The last result, kept while the query quota refills: said so, never passed off as current. */
+function PausedNote() {
+  return (
+    <span className="block text-xs text-ink-muted" data-testid="hub-jobs-paused">
+      Paused: the last result, until the query quota refills.
+    </span>
+  );
+}
+
 /** A source that could not answer, said as such: never a zero. */
 function Unavailable({ what, error }: { what: string; error: unknown }) {
   const kind = obsErrorKind(error);
@@ -244,7 +254,7 @@ interface Query<T> {
   error: unknown;
 }
 
-function FailingJobs({
+export function FailingJobs({
   listed,
   env,
   all,
@@ -256,7 +266,11 @@ function FailingJobs({
   workloadHref: (name: string, env: string | null) => string;
 }) {
   if (listed.isLoading) return <Pending />;
-  if (listed.error && !listed.data) return <Unavailable what="Job runs" error={listed.error} />;
+  // A failed refetch keeps React Query's last data. Only a quota refusal may go
+  // on showing it (marked paused): a denial after access was revoked, or any
+  // other failure, must not leave stale job names and reasons on a health view.
+  if (listed.error && !keepsLastResult(listed.error, listed.data)) return <Unavailable what="Job runs" error={listed.error} />;
+  const paused = !!listed.error;
   const jobs = listed.data?.jobs ?? [];
   const failing = failingJobs(jobs, env);
   if (failing.length === 0) {
@@ -274,11 +288,17 @@ function FailingJobs({
     return (
       <p className="text-ink-muted" data-testid="hub-jobs-none">
         {none}
+        {paused && <PausedNote />}
       </p>
     );
   }
   return (
     <ul className="space-y-1.5" data-testid="hub-jobs-failing">
+      {paused && (
+        <li>
+          <PausedNote />
+        </li>
+      )}
       {failing.slice(0, HUB_ROWS).map((job) => (
         <li key={`${job.envName}/${job.workload}`} className="flex min-w-0 items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2">
