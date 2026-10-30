@@ -182,6 +182,11 @@ export const authSearchSchema = z.object({
 // dropped once the page has shown it.
 export const appsSearchSchema = z.object({
   claimed: z.string().optional(),
+  // A claim paused one of the person's two free static sites (they chose which):
+  // the name of the paused site, and which one they kept live. The page says what
+  // happened and that subscribing undoes it.
+  pausedSite: z.string().optional(),
+  kept: z.enum(["claimed", "existing"]).optional(),
 });
 
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
@@ -403,7 +408,7 @@ export const settingsSearchSchema = z.object({
   // Every other value is a surface that sent the user to billing
   // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
   from: z
-    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade"])
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade", "claim"])
     .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
