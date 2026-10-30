@@ -50812,6 +50812,17 @@
           }
         },
         {
+          "id": "method1:f8cb4e8a0112b9244117898ffc98399ae9c8bf01b12b211353e94c963a1ef8dd",
+          "name": "GetProjectMachineConfigRecord",
+          "signature": "func(ctx context.Context, projectID string, daemonID string) (*github.com/reliant-labs/reliant/internal/db.ProjectConfigRecord, bool, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.GetProjectMachineConfigRecord",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "symbol": "Repo.GetProjectMachineConfigRecord"
+          }
+        },
+        {
           "id": "method1:f002cf91b612e15799b5441b3c205025102b091c39339bf55aedd3e1213ad4e6",
           "name": "GetProjectMachinePresetsJSON",
           "signature": "func(ctx context.Context, projectID string, daemonID string) (*string, bool, error)",
@@ -54549,6 +54560,17 @@
           "source": {
             "path": "internal/db/workflow_source_diagnostic.go",
             "symbol": "Repo.machineNames"
+          }
+        },
+        {
+          "id": "method1:b504e5b207704236d775cddabb98688703718993f0bc006913939637ba60913c",
+          "name": "projectFilesUnion",
+          "signature": "func(ctx context.Context, projectID string) (github.com/reliant-labs/reliant/internal/store.ProjectConfigUnion, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/db",
+          "legacy_name": "db.projectFilesUnion",
+          "source": {
+            "path": "internal/db/project_machine_catalog.go",
+            "symbol": "Repo.projectFilesUnion"
           }
         },
         {
@@ -60498,12 +60520,34 @@
         {
           "id": "method1:006c5b8bd77097c66e078d8c5ea7b5260640d86e7ba1889d042f3103607bcffc",
           "name": "load",
-          "signature": "func(ctx context.Context, projectID string) (cfg *github.com/reliant-labs/reliant/internal/config.Config, size int64, err error)",
+          "signature": "func(ctx context.Context, ref github.com/reliant-labs/reliant/internal/config.ProjectRef) (cfg *github.com/reliant-labs/reliant/internal/config.Config, size int64, err error)",
           "scope": "github.com/reliant-labs/reliant/internal/config",
           "legacy_name": "config.load",
           "source": {
             "path": "internal/config/provider.go",
             "symbol": "StoredConfigProvider.load"
+          }
+        },
+        {
+          "id": "method1:a06a0c03058ceb6855b38aa8cee7b661d68f02c4c49dbb9c2760cc1173d48852",
+          "name": "machineScoped",
+          "signature": "func(ref github.com/reliant-labs/reliant/internal/config.ProjectRef) bool",
+          "scope": "github.com/reliant-labs/reliant/internal/config",
+          "legacy_name": "config.machineScoped",
+          "source": {
+            "path": "internal/config/provider.go",
+            "symbol": "StoredConfigProvider.machineScoped"
+          }
+        },
+        {
+          "id": "method1:99fec7122a6d138f770070065049de75277affeea6a3ccbca408e7c8071ef293",
+          "name": "readRecord",
+          "signature": "func(ctx context.Context, ref github.com/reliant-labs/reliant/internal/config.ProjectRef) (*github.com/reliant-labs/reliant/internal/config.StoredProjectConfigRecord, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/config",
+          "legacy_name": "config.readRecord",
+          "source": {
+            "path": "internal/config/provider.go",
+            "symbol": "StoredConfigProvider.readRecord"
           }
         }
       ],
