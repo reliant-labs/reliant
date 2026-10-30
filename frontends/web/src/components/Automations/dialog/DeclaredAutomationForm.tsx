@@ -673,7 +673,7 @@ export function DeclaredAutomationForm({
             </ErrorSummary>
           )}
 
-          {plan.integrations.map((integration, index) => (
+          {plan.integrations.map((integration) => (
             <SetupSection key={integration} number={++section} title={integrationName(integration)}>
               <div id={fid(`connection-${integration}`)} tabIndex={-1} className="focus:outline-none">
                 <IntegrationConnection
@@ -684,17 +684,23 @@ export function DeclaredAutomationForm({
                   onConnect={() => setConnectTarget(integration)}
                 />
               </div>
-              {index === 0 && <ActingIdentityField
-                value={actingIdentity}
-                onChange={setChosenIdentity}
-                defaultHint={chosenIdentity ? undefined : existing.length > 0
-                  ? "Each existing trigger keeps its stored identity unless you choose a shared identity here."
-                  : reliantBotAvailable()
-                    ? "New automations write to GitHub as Reliant bot unless you choose yourself. Bot writes never fall back to your account."
-                    : "New GitHub triggers default to Reliant bot; other triggers write as you. Bot writes never fall back to your account."}
-              />}
             </SetupSection>
           ))}
+
+          {/* Once, whatever starts it: a workflow started by a schedule, a webhook or
+              another workflow still writes to GitHub, and its author must be able to
+              choose (and later change) whose identity it writes as. */}
+          <SetupSection number={++section} title="GitHub identity" testId="section-identity">
+            <ActingIdentityField
+              value={actingIdentity}
+              onChange={setChosenIdentity}
+              defaultHint={chosenIdentity ? undefined : existing.length > 0
+                ? "Each existing trigger keeps its stored identity unless you choose a shared identity here."
+                : reliantBotAvailable()
+                  ? "New automations write to GitHub as Reliant bot unless you choose yourself. Bot writes never fall back to your account."
+                  : "New GitHub triggers default to Reliant bot; other triggers write as you. Bot writes never fall back to your account."}
+            />
+          </SetupSection>
 
           {inputs.watches.length > 0 && (
             <SetupSection number={++section} title="What it watches" testId="section-watches">
