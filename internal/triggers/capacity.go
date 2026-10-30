@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -19,6 +21,16 @@ import (
 const capacityWaiting = "waiting for workflow capacity"
 
 var errCapacityScopeChanged = errors.New("queued workflow capacity scope changed")
+
+// errCapacitySuperseded is a waiting event a newer one of its key already
+// replaced (`waiting: latest`). Its row is settled; the fire reports it.
+var errCapacitySuperseded = errors.New(store.TriggerCapacitySuperseded)
+
+// capacitySettled reports a prepareCapacity error that ends the fire with the
+// event's stored (or a skipped) record rather than a retry.
+func capacitySettled(err error) bool {
+	return errors.Is(err, errCapacityScopeChanged) || errors.Is(err, errCapacitySuperseded)
+}
 
 type capacityRepository interface {
 	EnqueueTriggerCapacity(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) error
@@ -35,16 +47,34 @@ type capacityDescriptions interface {
 	DescribeWorkflowExecution(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
 }
 
-// capacityPolicy remains trigger-agnostic: no provider identity or subject revision.
-func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trigger) (uint32, error) {
+// capacityPolicy remains trigger-agnostic: no provider identity or subject
+// revision. Nil (or a zero max_running) is no policy.
+func capacityPolicy(ctx context.Context, resolver WorkflowResolver, t *core.Trigger) (*reliantv1.WorkflowConcurrency, error) {
 	if resolver == nil {
-		return 0, nil
+		return nil, nil
 	}
 	wf, err := resolveTriggerWorkflow(ctx, resolver, t)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return wf.GetConcurrency().GetMaxRunning(), nil
+	return wf.GetConcurrency(), nil
+}
+
+// capacityKey is the key a not-yet-enrolled event supersedes by under
+// `waiting: latest`, rendered against the same `trigger` root the run sees;
+// nil under FIFO. A key that cannot be rendered is logged and leaves the
+// event FIFO: losing the coalescing is safe, dropping an event is not.
+func capacityKey(ctx context.Context, policy *reliantv1.WorkflowConcurrency, event *core.TriggerEvent, scope func() triggerspec.Scope) *string {
+	if policy.GetWaiting() != reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST || event.CapacityOrder != nil {
+		return nil
+	}
+	key, err := triggerspec.RenderConcurrencyKey(policy.GetKey(), scope())
+	if err != nil {
+		slog.WarnContext(ctx, "workflow capacity: concurrency key did not render; the event waits FIFO and is never superseded",
+			"event_id", event.ID, "error", err)
+		return nil
+	}
+	return &key
 }
 
 func prepareCapacity(ctx context.Context, repository any, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, n uint32, spec *launch.Spec) error {
@@ -72,6 +102,9 @@ func prepareCapacity(ctx context.Context, repository any, descriptions capacityD
 	enrolled, err := repo.GetTriggerEventByDedupe(ctx, event.Kind, event.DedupeKey)
 	if err != nil {
 		return err
+	}
+	if enrolled.Outcome == core.TriggerEventSkipped {
+		return errCapacitySuperseded
 	}
 	// Reconcile only immutable chains in this scope. A missing, mismatched or
 	// unavailable description holds its slot; chat status is never release evidence.
