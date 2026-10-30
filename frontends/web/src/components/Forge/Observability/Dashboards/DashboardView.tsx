@@ -70,6 +70,7 @@ import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
 import { OrganizationCostsView } from "./OrganizationCostsView";
+import { useNearViewport } from "./useNearViewport";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -98,6 +99,8 @@ import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
+import { OrgEnvPicker } from "./OrgEnvPicker";
+import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSelection } from "./orgScope";
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 
@@ -117,6 +120,11 @@ export interface DashboardViewProps {
   env: string;
   /** The project's recorded environments (id ↔ name). */
   environments: readonly ObsEnvironment[];
+  /** Every environment of the org, named `project/env`: what a `scope: "org"` dashboard reads and offers. */
+  orgEnvironments?: readonly ObsEnvironment[];
+  orgEnvironmentsLoading?: boolean;
+  orgEnvironmentsError?: Error | null;
+  onRetryOrgEnvironments?: () => void;
   search: DashboardSearch;
   onSearch: (next: Partial<DashboardSearch>) => void;
   onEnvChange: (env: string) => void;
@@ -126,7 +134,9 @@ export interface DashboardViewProps {
 
 const NO_MARKERS: readonly ChartMarker[] = [];
 
-export function DashboardView({ project, dashRef, env, environments, search, onSearch, onEnvChange, hrefs, navigateTo }: DashboardViewProps) {
+const NO_ORG_ENVS: readonly ObsEnvironment[] = [];
+
+export function DashboardView({ project, dashRef, env: consoleEnv, environments: projectEnvironments, orgEnvironments = NO_ORG_ENVS, orgEnvironmentsLoading = false, orgEnvironmentsError = null, onRetryOrgEnvironments, search, onSearch, onEnvChange, hrefs: consoleHrefs, navigateTo }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const api = useObservabilityApi();
@@ -134,18 +144,31 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
-  const exploreLink = useExploreHref();
-
-  const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
-  const unrecorded = env !== ENV_ALL && !envId;
-  const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded && dashRef.kind !== "builtin" ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, project, envId, unrecorded, dashRef.kind]
-  );
+  const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
+
+  // An org dashboard reads every project's environments: it names no project,
+  // lists the org's environments as project/env, and narrows by its own picker
+  // (the top bar's control is the route project's).
+  const orgScoped = spec?.scope === "org";
+  const orgRosterBlocked = orgScoped && (orgEnvironmentsLoading || !!orgEnvironmentsError);
+  const orgPick = useMemo(() => orgSelection(orgEnvironments, search.orgEnvs), [orgEnvironments, search.orgEnvs]);
+  const env = orgScoped ? orgPick.env : consoleEnv;
+  const environments = orgScoped ? orgEnvironments : projectEnvironments;
+  const envId = orgScoped ? (orgPick.ids.length === 1 ? orgPick.ids[0] : null) : env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
+  const unrecorded = !orgScoped && env !== ENV_ALL && !envId;
+  const envLabel = orgScoped ? orgScopeLabel(orgPick) : env === ENV_ALL ? "All environments" : env;
+  // Its drill-downs and explorers read the same org-wide scope: the org's
+  // pages on the picked environments, not the route project's console.
+  const hrefs = useMemo(() => (orgScoped ? orgDashboardHrefs(consoleHrefs, orgPick) : consoleHrefs), [orgScoped, consoleHrefs, orgPick]);
+  const exploreLink = useMemo(() => (orgScoped ? orgExploreHref(orgPick) : consoleExplore), [orgScoped, orgPick, consoleExplore]);
+  const scope = useMemo<ObsScope | null>(() => {
+    if (!orgId || unrecorded || orgRosterBlocked || dashRef.kind === "builtin") return null;
+    return orgScoped ? orgQueryScope(orgId, orgPick) : { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] };
+  }, [orgId, project, envId, unrecorded, orgRosterBlocked, orgScoped, orgPick, dashRef.kind]);
 
   // Recently viewed: once per dashboard opened, and quietly — a view that
   // could not be recorded changes nothing the reader can see.
@@ -168,9 +191,12 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const marks = !!spec && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
-  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
-  const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && !orgRosterBlocked && dashRef.kind !== "builtin" });
+  const history = useAlertHistory(dashRef.kind === "builtin" || orgRosterBlocked ? null : orgId, range, envId ?? undefined);
+  const scopeEnvIds = useMemo(
+    () => (envId ? [envId] : orgScoped && orgPick.ids.length ? orgPick.ids : environments.map((candidate) => candidate.id)),
+    [envId, environments, orgScoped, orgPick.ids]
+  );
   const bands = useMemo(
     () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
     [history.data, scopeEnvIds, search.service, search.alerts]
@@ -214,7 +240,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const exitTv = useCallback(() => onSearch({ tv: undefined }), [onSearch]);
   const tvLayer = useEscapeLayer(tv, exitTv);
 
-  if (doc.isLoading || org.isLoading) return <DashboardSkeleton />;
+  if (doc.isLoading || org.isLoading || (orgScoped && orgEnvironmentsLoading)) return <DashboardSkeleton />;
+  if (orgScoped && orgEnvironmentsError) return <ObsError error={orgEnvironmentsError} subject="organization environments" onRetry={onRetryOrgEnvironments} />;
   if (!orgId && org.error) return <ObsError error={org.error} subject={project} onRetry={() => void org.refetch()} />;
   if (doc.error || !spec || !summary) {
     const missing = doc.error instanceof ConnectError && doc.error.code === Code.NotFound;
@@ -345,6 +372,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       onEnvChange={onEnvChange}
       onSearch={onSearch}
       tv={tv}
+      orgPicker={orgScoped ? <OrgEnvPicker environments={orgEnvironments} selection={orgPick} onChange={(names) => onSearch({ orgEnvs: names.length ? names : undefined })} /> : undefined}
     />
   );
 
@@ -361,7 +389,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           <div className="min-w-0">
             <h1 className="truncate text-xl font-semibold tracking-tight text-ink">{summary.title}</h1>
             <p className="text-sm text-ink-muted">
-              {env === ENV_ALL ? "All environments" : env} · {RANGE_LABELS[range].toLowerCase()}
+              {envLabel} · {RANGE_LABELS[range].toLowerCase()}
               {refreshEvery ? ` · refreshes every ${refresh}` : ""}
             </p>
           </div>
@@ -584,7 +612,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           services={services}
           environments={environments}
           env={env}
-          scopeLabel={`${env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
+          scopeLabel={`${orgScoped ? envLabel : env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
           version={currentVersion}
           envScope={workspaceScope}
           saving={save.isPending}
@@ -802,6 +830,7 @@ function VariablesBar({
   onEnvChange,
   onSearch,
   tv,
+  orgPicker,
 }: {
   scope: ObsScope | null;
   env: string;
@@ -816,6 +845,8 @@ function VariablesBar({
   onEnvChange: (env: string) => void;
   onSearch: (next: Partial<DashboardSearch>) => void;
   tv: boolean;
+  /** An org dashboard's own environment picker; it replaces the console's one. */
+  orgPicker?: ReactNode;
 }) {
   const overview = useServiceOverview(scope, range);
   const names = useMemo(() => {
@@ -839,7 +870,8 @@ function VariablesBar({
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
       {/* The console's top bar is the one environment selector. Full screen
           hides the top bar, so only there does the dashboard offer its own. */}
-      {tv && (
+      {orgPicker}
+      {tv && !orgPicker && (
         <VariableSelect
           id="dashboard-var-env"
           label="env"
@@ -967,7 +999,11 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
-  const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
+  // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
+  const [bodyRef, near] = useNearViewport();
+  const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near });
+  // Not yet near is "not loaded yet", not "no data".
+  const query = near || queryPanel.kind === "search" ? rawQuery : { ...rawQuery, isLoading: true };
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
@@ -975,7 +1011,7 @@ function DashboardPanelCard({
     offsetMs:
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
     refetchInterval: refreshEvery,
-    enabled: comparable,
+    enabled: comparable && near,
   });
   const span = spanOf(panel);
   const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
@@ -1048,7 +1084,7 @@ function DashboardPanelCard({
           />
         )}
       </div>
-      <div className="px-4 pb-4 pt-2">
+      <div ref={bodyRef} className="px-4 pb-4 pt-2">
         <PanelBody
           panel={queryPanel}
           query={query}
@@ -1081,7 +1117,9 @@ function DrillMenu({
     { label: "View logs", detail: "filtered to this series", href: hrefs.logs(searches.logs), testId: "drill-logs" },
     { label: "View traces", detail: "filtered to this series", href: hrefs.traces(searches.traces), testId: "drill-traces" },
   ];
-  if (searches.service) entries.push({ label: "Open workload", detail: searches.service, href: hrefs.workload(searches.service), testId: "drill-workload" });
+  // "" when no single workload is meant (an org dashboard over several environments).
+  const workload = searches.service ? hrefs.workload(searches.service) : "";
+  if (searches.service && workload) entries.push({ label: "Open workload", detail: searches.service, href: workload, testId: "drill-workload" });
   return (
     <PointMenu
       at={drill.at}

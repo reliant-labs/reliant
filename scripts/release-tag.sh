@@ -264,9 +264,10 @@ if [[ "$DRY_RUN" == "true" ]]; then
     exit 0
 fi
 
-# One release of a version at a time, across machines: a hand cut and the release
-# workflow cannot both tag it (release-lock.sh). Then re-check origin: a holder that
-# just finished released the lock after pushing the tag.
+# One release of this repository at a time, across machines and pipelines: a hand cut
+# and the release workflow cannot both tag (release-lock.sh; the workflow coalesces into
+# a live lock). Then re-check origin: a holder that just finished released the lock
+# after pushing the tag.
 release_lock_acquire "$RELEASE_TAG" || exit 1
 trap release_lock_release EXIT
 if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
@@ -275,6 +276,8 @@ if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2
 fi
 
 echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"
+# Publish only while this release provably still holds the lock (release-lock.sh).
+release_lock_assert || exit 1
 git tag "$RELEASE_TAG" "$RELEASE_COMMIT"
 git push origin "$RELEASE_TAG"
 

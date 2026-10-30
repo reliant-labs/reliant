@@ -7608,9 +7608,20 @@ type QueryPanelResponse struct {
 	// mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds,
 	// metric_kind_mismatch, and metric_absent (a series' metric has no data in
 	// the scope and range: its series is empty, never an error). Metrics panels.
-	Warnings      []string `protobuf:"bytes,17,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Warnings []string `protobuf:"bytes,17,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// sql panels drawn as a time series: the width of one bucket in seconds, so a
+	// client need not guess it from the points. A Date or Date32 first column is
+	// a calendar day (86400). A DateTime column is the {step} the statement was
+	// bound to when it uses {step}; a statement that buckets by its own rule
+	// reports 0 (unknown). 0 for every other panel kind (see step_seconds).
+	BucketSeconds int32 `protobuf:"varint,18,opt,name=bucket_seconds,json=bucketSeconds,proto3" json:"bucket_seconds,omitempty"`
+	// sql panels drawn as a time series: the zone the bucket dates are in. "UTC"
+	// when the first column is a Date or Date32: each point's time is that date's
+	// midnight UTC and a client labels it as that calendar date, never converts it
+	// to its own zone. Empty when the first column is a DateTime (instants).
+	BucketTimezone string `protobuf:"bytes,19,opt,name=bucket_timezone,json=bucketTimezone,proto3" json:"bucket_timezone,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *QueryPanelResponse) Reset() {
@@ -7760,6 +7771,20 @@ func (x *QueryPanelResponse) GetWarnings() []string {
 		return x.Warnings
 	}
 	return nil
+}
+
+func (x *QueryPanelResponse) GetBucketSeconds() int32 {
+	if x != nil {
+		return x.BucketSeconds
+	}
+	return 0
+}
+
+func (x *QueryPanelResponse) GetBucketTimezone() string {
+	if x != nil {
+		return x.BucketTimezone
+	}
+	return ""
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -8554,8 +8579,15 @@ type Dashboard struct {
 	// owns (deploy/observability/dashboards/<name>.json, which replaces a generated
 	// one of the same name). Empty for a synthesized dashboard. Set by the server
 	// from the recorded row, never read from the dashboard's own JSON.
-	Source        string              `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
-	Sections      []*DashboardSection `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	Source   string              `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
+	Sections []*DashboardSection `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	// Which telemetry the panels read, forge's dashspec scope: "" or "project"
+	// (the route's project, the default), "org" (every project of the
+	// organization) or "platform" (infrastructure telemetry that belongs to no
+	// environment). Carried through from the recorded dashboard as authored, so a
+	// console can drop project scoping (org) or the environment predicate
+	// (platform). An unrecognized value is passed through untouched.
+	Scope         string `protobuf:"bytes,9,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8644,6 +8676,13 @@ func (x *Dashboard) GetSections() []*DashboardSection {
 		return x.Sections
 	}
 	return nil
+}
+
+func (x *Dashboard) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type DashboardSection struct {
@@ -11351,7 +11390,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
 	"\anumeric\x18\x03 \x01(\bR\anumeric\x12\x12\n" +
-	"\x04time\x18\x04 \x01(\bR\x04time\"\x96\x06\n" +
+	"\x04time\x18\x04 \x01(\bR\x04time\"\xe6\x06\n" +
 	"\x12QueryPanelResponse\x12\x19\n" +
 	"\bpanel_id\x18\x01 \x01(\tR\apanelId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -11372,7 +11411,9 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\vseries_meta\x18\x0f \x03(\v2 .controlplane.v1.PanelSeriesMetaR\n" +
 	"seriesMeta\x12!\n" +
 	"\fseries_total\x18\x10 \x01(\x05R\vseriesTotal\x12\x1a\n" +
-	"\bwarnings\x18\x11 \x03(\tR\bwarnings\"\xbe\x02\n" +
+	"\bwarnings\x18\x11 \x03(\tR\bwarnings\x12%\n" +
+	"\x0ebucket_seconds\x18\x12 \x01(\x05R\rbucketSeconds\x12'\n" +
+	"\x0fbucket_timezone\x18\x13 \x01(\tR\x0ebucketTimezone\"\xbe\x02\n" +
 	"\x0fPanelSeriesMeta\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
 	"\x06metric\x18\x02 \x01(\tR\x06metric\x12<\n" +
@@ -11453,7 +11494,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"dashboards\x18\x03 \x03(\v2\x1a.controlplane.v1.DashboardR\n" +
 	"dashboards\x12C\n" +
 	"\x0esaved_searches\x18\x04 \x03(\v2\x1c.controlplane.v1.SavedSearchR\rsavedSearches\x127\n" +
-	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\xde\x02\n" +
+	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\xf4\x02\n" +
 	"\tDashboard\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -11462,7 +11503,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x06panels\x18\x05 \x03(\v2\x16.controlplane.v1.PanelR\x06panels\x12F\n" +
 	"\vannotations\x18\x06 \x03(\v2$.controlplane.v1.DashboardAnnotationR\vannotations\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12=\n" +
-	"\bsections\x18\b \x03(\v2!.controlplane.v1.DashboardSectionR\bsections\"8\n" +
+	"\bsections\x18\b \x03(\v2!.controlplane.v1.DashboardSectionR\bsections\x12\x14\n" +
+	"\x05scope\x18\t \x01(\tR\x05scope\"8\n" +
 	"\x10DashboardSection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\"\x82\x01\n" +
