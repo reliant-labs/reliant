@@ -4,31 +4,50 @@ name: CI
 # Every job is setup, then `task <name>`: what a check does lives once, in
 # Taskfile.yml and the scripts it runs, so CI and a laptop cannot disagree.
 #
-#   pull_request                      task ci:merge   the merge tier: what the
-#                                                     diff can affect, ~5 min
-#   push to main, schedule, dispatch  task release:gate  the whole suite,
-#                                                     recorded per sha
+# REVIEW FIRST (owner, 2026-10-30): no CI minutes on a head nobody has
+# reviewed. pr-review (control-plane docs/pr-pipeline.md) reads the diff, not
+# CI results, and a pull request is pushed about twice before it merges.
 #
-# The merge gate is the merge path: the merge queue (.fm-tools/merge_queue3.sh)
-# runs `scripts/merge-gate.sh` on the squash it lands and posts the required
-# `merge-gate` commit status. This workflow is a second signal on the same
-# commands, never a different opinion. The release gate here records its
-# verdict as a git note (refs/notes/release-gate), the same record a local
-# `task release:gate` writes, so `task release:tag` accepts a green from
-# either.
+#   pull_request                      nothing heavy: the review-marker notice
+#                                     and "CI result", green in about a minute,
+#                                     which is what lets GitHub enqueue the PR
+#                                     once pr-review passes it
+#   merge_group                       task ci:merge   the merge tier: what the
+#                                     diff can affect, -short, ~10 min, plus
+#                                     the path lanes; the run that decides
+#                                     the merge
+#   push to main, schedule, dispatch  task release:gate  the whole suite plus
+#                                     every lane, recorded per sha; never
+#                                     blocks a merge, gates every release
+#
+# A pull request labelled `ci:run` gets the merge tier and the lanes its paths
+# reach, read on the next push (see `pull_request:` for why not on `labeled`).
+#
+# A red main does not block merges: pipeline-health files a fix
+# (`pipeline:slo`), and `task release:tag` refuses a sha without a green
+# release-gate record, so it is fixed before the next release. The release
+# gate here records its verdict as a git note (refs/notes/release-gate), the
+# same record a local `task release:gate` writes, so `task release:tag`
+# accepts a green from either.
 #
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
-# control-plane contract. A pull request runs those its paths reach; main runs
-# all of them.
+# control-plane contract. The merge queue (and a `ci:run` pull request) runs
+# those its paths reach; main runs all of them. They stay in the queue because
+# the release-gate record does not include them.
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
 on:
+  # Default activity types only (opened, synchronize, reopened), NOT
+  # `labeled`: every pipeline label (merge:queue, review:passed, ...) would
+  # start a run, and a run on an unchanged head REPLACES that head's
+  # "CI result". `ci:run` is read on the next push (an empty commit will do).
   pull_request:
     branches: [main]
-  # GitHub's native merge queue: each queued PR is gated again, as the merge
-  # tier, over main plus the entries ahead of it. "CI result" is the required check.
+  # GitHub's native merge queue: each queued PR is gated, as the merge tier,
+  # over main plus the entries ahead of it. "CI result" is the required check,
+  # and this is the run of it that decides the merge.
   merge_group:
   push:
     branches: [main]
@@ -65,6 +84,8 @@ jobs:
   # merged onto, so HEAD^1..HEAD is exactly what merging brings in.
   lanes:
     name: Lanes
+    # Not on an unlabelled pull request (REVIEW FIRST): every lane needs it.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:run')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -114,11 +135,11 @@ jobs:
             *) task ci:lanes -- --full ;;
           esac | tee -a "$GITHUB_OUTPUT"
 
-  # ── The merge tier (pull requests) ────────────────────────────────────────
+  # ── The merge tier (the merge queue; a ci:run pull request) ───────────────
   merge-gate:
     name: Merge gate
     needs: lanes
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run'))
     runs-on: ubuntu-latest
     # The slowest green run was 25 min (a 208-file proto change). A runner that
     # dies holds the job, and the merge queue's entry, until this fires.
@@ -375,8 +396,8 @@ jobs:
   # (scripts/ci-review-marker.sh; control-plane docs/pr-pipeline.md).
   # pr-disarm reacts to a push only after the webhook, so a head pushed after
   # a pass, with its checks already green, could otherwise ride the armed
-  # auto-merge in. On a PR it only reports: the review comes after CI, and a
-  # red here would keep the PR out of the queue it guards.
+  # auto-merge in. On a PR it only reports: the review comes after this run,
+  # and a red here would keep the PR out of the queue it guards.
   review-marker:
     name: Review marker
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -404,13 +425,16 @@ jobs:
           fi
 
   # ── One verdict ───────────────────────────────────────────────────────────
-  # Green only when every job that ran passed. On a PR a lane the change does
-  # not reach is skipped, which is fine, but the merge gate must have run. Off
-  # a PR every lane runs (scripts/ci-lanes.sh --full), so a skip there is a
-  # broken `if:`, never a pass: everything but the merge gate and the review
-  # marker (merge tier only), go-cache (only a push runs it) and cp-contract
-  # (only a change to the vendored contract does) must have succeeded. In the
-  # merge queue the review marker must have passed.
+  # Green only when every job that ran passed. On an unlabelled PR only the
+  # review marker runs (REVIEW FIRST), so this is green within a minute and
+  # GitHub can enqueue the PR once pr-review passes it. In the merge queue and
+  # on a ci:run PR a lane the change does not reach is skipped, which is fine,
+  # but the merge gate must have run; in the queue the review marker must have
+  # passed too. Off a PR every lane runs (scripts/ci-lanes.sh --full), so a
+  # skip there is a broken `if:`, never a pass: everything but the merge gate
+  # and the review marker (merge tier only), go-cache (only a push runs it)
+  # and cp-contract (only a change to the vendored contract does) must have
+  # succeeded.
   ci-result:
     name: CI result
     needs: [lanes, merge-gate, release-gate, go-cache, cp-contract, web-bundle, playwright, electron-package, review-marker]
@@ -422,9 +446,16 @@ jobs:
         env:
           RESULTS: ${{ toJSON(needs) }}
           EVENT_NAME: ${{ github.event_name }}
+          CI_RUN: ${{ contains(github.event.pull_request.labels.*.name, 'ci:run') }}
         run: |
           set -euo pipefail
           bad=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
+          if [ "${EVENT_NAME}" = pull_request ] && [ "${CI_RUN}" != true ]; then
+            # REVIEW FIRST: the merge tier runs in the merge queue.
+            if [ -n "${bad}" ]; then echo "::error::jobs that did not pass:"; echo "${bad}"; exit 1; fi
+            echo "review first: the merge tier runs in the merge queue (label ci:run and push to run it here)"
+            exit 0
+          fi
           merge_tier=$([ "${EVENT_NAME}" = pull_request ] || [ "${EVENT_NAME}" = merge_group ] && echo true || echo false)
           gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-gate)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"

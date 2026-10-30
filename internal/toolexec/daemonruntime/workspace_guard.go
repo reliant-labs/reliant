@@ -72,6 +72,14 @@ var (
 	workspaceGuardPollInterval = rootwatch.DefaultInterval
 	// workspaceGuardExit ends the process when shutdown wedges.
 	workspaceGuardExit = os.Exit
+	// workspaceGuardTerminationLog is where a managed daemon's lost-volume
+	// exit leaves its reason for kubelet. A test of Start must point it
+	// elsewhere: run inside a workspace pod, where /dev/termination-log is the
+	// pod's real file, it otherwise writes its temp-dir fault there, and the
+	// pod's next exit reports that (prod 2026-10-30: a suspended machine's
+	// failure read "/tmp/TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost…
+	// is no longer the disk this machine started with").
+	workspaceGuardTerminationLog = terminationMessagePath
 )
 
 // WorkspaceVolumeLostError is what Start returns when a managed daemon stops
@@ -141,7 +149,7 @@ func newWorkspaceGuard(home string, managed bool, opts rootwatch.Options) (*work
 		exit:           workspaceGuardExit,
 		flushDelay:     volumeLostFlushDelay,
 		exitBackstop:   volumeLostExitBackstop,
-		terminationLog: terminationMessagePath,
+		terminationLog: workspaceGuardTerminationLog,
 	}
 	opts.OnFault = g.handleFault
 	opts.OnRestored = g.handleRestored

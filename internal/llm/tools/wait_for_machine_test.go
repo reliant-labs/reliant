@@ -60,11 +60,13 @@ func withUser(ctx context.Context) context.Context {
 }
 
 // fastWaitTool polls every millisecond and counts timeout_seconds in
-// milliseconds, so a "budget" of 30 is 30ms.
+// milliseconds, so a "budget" of 30 is 30ms. A Failed report settles after
+// 10ms.
 func fastWaitTool(o MachineObserver) *waitForMachineTool {
 	tool := newWaitForMachineTool(o)
 	tool.pollInterval = time.Millisecond
 	tool.timeoutUnit = time.Millisecond
+	tool.failedSettle = 10 * time.Millisecond
 	return tool
 }
 
@@ -113,17 +115,20 @@ func TestWaitForMachine_ConnectsAfterSomePolls(t *testing.T) {
 	assert.False(t, md.TimedOut)
 }
 
-// Removed and Failed are terminal: waiting cannot help, so the call returns at
-// once with guidance to tell the user and the control plane's own reason.
-func TestWaitForMachine_TerminalStatesReturnAtOnce(t *testing.T) {
+// Removed is terminal at once and Failed once it has held for the settle
+// window: waiting cannot help, so the call returns with guidance to tell the
+// user and the control plane's own reason.
+func TestWaitForMachine_TerminalStatesReturn(t *testing.T) {
 	tests := []struct {
-		name   string
-		status MachineStatus
-		state  string
-		guide  string
+		name      string
+		status    MachineStatus
+		state     string
+		guide     string
+		atOnce    bool
+		minWaited time.Duration
 	}{
-		{"removed", MachineStatus{Removed: true, StatusMessage: "machine deleted by owner"}, "removed", "no longer exists"},
-		{"failed", MachineStatus{Failed: true, StatusMessage: "out of capacity"}, "failed", "failed to start"},
+		{"removed", MachineStatus{Removed: true, StatusMessage: "machine deleted by owner"}, "removed", "no longer exists", true, 0},
+		{"failed", MachineStatus{Failed: true, StatusMessage: "out of capacity"}, "failed", "failed to start", false, 10 * time.Millisecond},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,7 +137,12 @@ func TestWaitForMachine_TerminalStatesReturnAtOnce(t *testing.T) {
 				WaitForMachineParams{TimeoutSeconds: 60000})
 			require.NoError(t, err)
 			assert.False(t, resp.IsError)
-			assert.Equal(t, 1, obs.callCount())
+			if tc.atOnce {
+				assert.Equal(t, 1, obs.callCount())
+			} else {
+				assert.Greater(t, obs.callCount(), 1, "a Failed report is believed only once it holds")
+				assert.GreaterOrEqual(t, waitMetadata(t, resp).WaitedMs, tc.minWaited.Milliseconds())
+			}
 			assert.Contains(t, resp.Content, tc.guide)
 			assert.Contains(t, resp.Content, "Tell the user")
 			assert.Contains(t, resp.Content, tc.status.StatusMessage)
@@ -181,6 +191,50 @@ func TestWaitForMachine_BudgetElapsedGuidanceByState(t *testing.T) {
 		})
 	}
 	assert.Len(t, seen, len(tests), "each state gets its own guidance")
+}
+
+// A Failed report that the control plane recovers from is not the end of the
+// wait. Prod 2026-10-30 18:21: a resumed machine read Failed for 17s while its
+// previous pod finished terminating, every waiting run was told it had failed
+// to start and stopped, and the machine connected 44s later on its own.
+func TestWaitForMachine_TransientFailedKeepsWaiting(t *testing.T) {
+	obs := &scriptedObserver{steps: steps(
+		MachineStatus{Failed: true, StatusMessage: "tools-daemon exited with code 1"},
+		MachineStatus{Failed: true, StatusMessage: "tools-daemon exited with code 1"},
+		MachineStatus{Starting: true},
+		MachineStatus{Connected: true},
+	)}
+	tool := fastWaitTool(obs)
+	tool.failedSettle = time.Hour
+	resp, err := tool.Execute(waitForMachineCtx(withUser(context.Background())), WaitForMachineParams{TimeoutSeconds: 60000})
+	require.NoError(t, err)
+	assert.True(t, waitMetadata(t, resp).Connected)
+	assert.NotContains(t, resp.Content, "failed to start")
+}
+
+// The settle window counts an UNBROKEN run of Failed looks: a machine that
+// left Failed and came back to it starts over.
+func TestWaitForMachine_FailedSettleRestartsWhenFailedClears(t *testing.T) {
+	since := failedRunStart(time.Time{}, MachineStatus{Failed: true})
+	require.False(t, since.IsZero())
+	assert.Equal(t, since, failedRunStart(since, MachineStatus{Failed: true}), "an unbroken run keeps its start")
+	assert.True(t, failedRunStart(since, MachineStatus{Starting: true}).IsZero(), "any other state clears it")
+}
+
+// A budget that ends inside the settle window answers like any other timeout:
+// the machine is still not connected, it reported failed, call again.
+func TestWaitForMachine_BudgetElapsedWhileFailedSaysCallAgain(t *testing.T) {
+	obs := &scriptedObserver{steps: steps(MachineStatus{Failed: true, StatusMessage: "tools-daemon exited with code 1"})}
+	tool := fastWaitTool(obs)
+	tool.failedSettle = time.Hour
+	resp, err := tool.Execute(waitForMachineCtx(withUser(context.Background())), WaitForMachineParams{TimeoutSeconds: 20})
+	require.NoError(t, err)
+	md := waitMetadata(t, resp)
+	assert.True(t, md.TimedOut)
+	assert.Equal(t, "failed", md.State)
+	assert.Contains(t, resp.Content, "wait_for_machine again")
+	assert.Contains(t, resp.Content, "tools-daemon exited with code 1")
+	assert.NotContains(t, resp.Content, "Tell the user the machine failed to start")
 }
 
 func TestWaitForMachine_SuspendedGuidanceSaysTheRunCannotWakeIt(t *testing.T) {
