@@ -251,6 +251,11 @@ var purgeSteps = []step{
 	{"settings", `DELETE FROM settings WHERE user_id = $1`},
 	{"attachments", `DELETE FROM attachments WHERE user_id = $1`},
 
+	// The LLM usage ledger and its daily rollup: counts keyed by the user. Both
+	// go with the account; the privacy page says so.
+	{"llm_call_usage", `DELETE FROM llm_call_usage WHERE user_id = $1`},
+	{"llm_call_usage_daily", `DELETE FROM llm_call_usage_daily WHERE user_id = $1`},
+
 	// --- Depth 6: credentials, deleted last. ---
 	//
 	// Deliberately the final step. These are live third-party OAuth refresh

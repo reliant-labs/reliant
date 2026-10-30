@@ -54,6 +54,7 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
 | Your Reliant sign-in tokens (desktop) | Yes, in storage encrypted by your OS | No | No |
 | Analytics and crash reports | No | Yes, in our own telemetry store (both on by default; see [Telemetry](#telemetry)) | No |
+| Counts of each text model request (tokens, model, provider, time) | No | Yes, as a [usage record](#model-usage-records), whichever key or login you use | No |
 
 <Warning>
 Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/features/secrets). If a key has been exposed, rotate it.
@@ -105,6 +106,29 @@ If you use the optional Reliant AI provider:
 
 Whichever provider you use, the conversation is also stored in your chat history on our servers.
 
+## Model usage records
+
+Every model request is made by our servers, so we keep a **usage record** of each text request, whether it used Reliant AI, your own API key, a Claude, Codex or GitHub Copilot login, or a local model. That covers your chat turns and the requests Reliant makes for you in the background: summarizing a long conversation to free up context, titling a chat, and drafting an automation from a description.
+
+Two kinds of request are not recorded: image and video generation (the generation APIs report no token counts), and the tiny test request made when you add an API key to check that it works. This is a service record, separate from the analytics switch in [Telemetry](#telemetry): it stays on when you turn analytics off.
+
+**What a record contains, exactly:**
+
+- which of your chats and runs the call belonged to, and your account ID
+- the provider (for example `anthropic` or `claude`) and the model
+- how the call was paid for: Reliant AI, your own API key, a subscription login, or a local model
+- the number of input, output, cache-read and cache-write tokens
+- whether it succeeded, was cancelled or failed, and for a failure one of a fixed set of categories (rate limit, usage limit, context length, sign-in, timeout, stalled, network or unknown)
+- how long it took, which attempt it was, and when it happened
+
+**What it never contains:** your prompt, the model's reply, tool inputs or outputs, file names or paths, the text of an error message, or your API key. The database tables have no column that could hold any of these, and a test fails if one is added.
+
+**Why we keep it:** to show you your own usage (tokens, models, error rates) and to run the service: spotting a runaway loop, diagnosing a provider outage, and planning capacity.
+
+**Who can see it:** only you, and only your own. Organization admins can't see usage on your own API keys or logins. Usage on Reliant AI is also part of your billing records.
+
+**How long we keep it:** each call's record is deleted **90 days** after the call. We keep a daily total per model, provider and payment type, with no chat or run IDs, until you delete your account. Deleting your account deletes both.
+
 ## Telemetry
 
 Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.
@@ -126,7 +150,8 @@ Turning off analytics also stops the analytics events our servers record about y
 
 - **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs and metrics are kept for 30 days.
 - **Server-side error reports**, which go to our own telemetry store with the same shortening and credential redaction.
-- **Billing usage records:** the model, token count and cost of each request, which we need to bill you.
+- **Billing usage records:** the model, token count and cost of each request, which we need to bill you. These cover Reliant AI. Usage on your own keys and logins is covered by [Model usage records](#model-usage-records).
+- **Model usage records:** the counts described under [Model usage records](#model-usage-records).
 - **Update checks:** the desktop app checks `downloads.reliantlabs.io` for updates, which sends your IP address and app version. Updates download only after you agree.
 
 This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
@@ -151,7 +176,7 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 
 - **Before you can delete:** deletion is blocked while a paid subscription is active, so cancel it in the billing settings first. A wallet balance doesn't block deletion.
 - **Your wallet balance:** Wallet top-ups include a 5% service fee; coupon credits carry none. Reliant AI usage is billed at the provider's price. When you delete your account, we refund the face value of your unused paid credit to the card you paid with (the service fee isn't refunded), and promotional credit, such as credit from coupons, is forfeited. Promotional credit counts as spent before paid credit, so a coupon can't be turned into cash. The confirmation screen shows both amounts before you confirm. Card refunds usually take 5–10 business days to appear. If a refund can't go back to your card automatically, our support team refunds it for you.
-- **What's deleted:** your sign-in identity, chats and everything in them, projects, workflows, settings, credentials and cloud machines. If you host apps with us, delete them first, or ask support to remove them.
+- **What's deleted:** your sign-in identity, chats and everything in them, projects, workflows, settings, credentials, model usage records and cloud machines. If you host apps with us, delete them first, or ask support to remove them.
 - **What we keep:** invoices, usage records, subscription and wallet history, records of any refund made at deletion, and records at Stripe, as the law requires. We remove or replace your account identifiers in them where we can.
 
 ### How long we keep things
@@ -166,6 +191,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Hosted app databases | Until you delete them. **They are not backed up** |
 | Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
 | Server logs and metrics | 30 days |
+| Model usage records, per call | 90 days |
+| Model usage daily totals | Until you delete your account |
 | Analytics events | Up to 14 days |
 | Crash and error data in our telemetry store | 30 days |
 | Web session replays in our telemetry store | 14 days |

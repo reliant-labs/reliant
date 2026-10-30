@@ -114,6 +114,11 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
+
+	exec(`INSERT INTO llm_call_usage (id, user_id, chat_id, provider, model, auth_mode, purpose, outcome, attempt, created_at)
+	      VALUES ($1,$2,$3,'anthropic','m','byok','chat','success',1,$4)`, id("llm"), userID, id("chat"), now)
+	exec(`INSERT INTO llm_call_usage_daily (user_id, day, provider, model, auth_mode, calls)
+	      VALUES ($1,$2,'anthropic','m','byok',1)`, userID, now)
 }
 
 // ownershipCount maps a table to the query that counts one user's rows in it.
@@ -124,6 +129,8 @@ var ownershipCount = map[string]string{
 	"projects":                `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
 	"chats":                   `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
 	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
+	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
+	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
 	"claude_auth_tokens":      `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
 	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
 	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
@@ -178,7 +185,7 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	// Includes the join-reached tables (messages, threads, tool_calls,
 	// worktrees) — the ones a user_id-only purge would silently orphan.
 	for _, table := range append([]string{
-		"projects", "chats", "worktrees", "settings",
+		"projects", "chats", "worktrees", "settings", "llm_call_usage", "llm_call_usage_daily",
 		"messages", "threads", "tool_calls",
 		"provider_account_limits", "thread_provider_accounts",
 	}, credentialTables...) {

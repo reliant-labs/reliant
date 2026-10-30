@@ -1844,6 +1844,7 @@ streamLoop:
 	if streamInterrupted {
 		usageErr = nil
 	}
+	a.recordLLMCallUsage(ctx, chat, usageProvider(resolved, driver), resolvedModelID, llmLatencyMs, streamState.usage, streamErr, streamInterrupted)
 	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
