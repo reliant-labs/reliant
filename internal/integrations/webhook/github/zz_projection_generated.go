@@ -40,7 +40,9 @@ var mappings = map[string]mapping{
 	"issues.opened":                       {data: issuesOpenedData},
 	"issues.reopened":                     {data: issuesReopenedData},
 	"issues.unlabeled":                    {attrs: issuesUnlabeledAttrs, data: issuesUnlabeledData},
+	"pull_request.auto_merge_disabled":    {attrs: pullRequestAutoMergeDisabledAttrs, data: pullRequestAutoMergeDisabledData},
 	"pull_request.closed":                 {attrs: pullRequestClosedAttrs, data: pullRequestClosedData},
+	"pull_request.dequeued":               {attrs: pullRequestDequeuedAttrs, data: pullRequestDequeuedData},
 	"pull_request.labeled":                {attrs: pullRequestLabeledAttrs, data: pullRequestLabeledData},
 	"pull_request.opened":                 {attrs: pullRequestOpenedAttrs, data: pullRequestOpenedData},
 	"pull_request.ready_for_review":       {attrs: pullRequestReadyForReviewAttrs, data: pullRequestReadyForReviewData},
@@ -364,6 +366,23 @@ func prObject(v any) map[string]any {
 	return out
 }
 
+func pullRequestAutoMergeDisabledAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
+	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
+}
+
+func pullRequestAutoMergeDisabledData(v any) map[string]any {
+	out := map[string]any{
+		"action":       text(dig(v, "action")),
+		"number":       num(dig(v, "number")),
+		"reason":       text(dig(v, "reason")),
+		"pull_request": prObject(dig(v, "pull_request")),
+		"repository":   repositoryObject(dig(v, "repository")),
+		"sender":       userObject(dig(v, "sender")),
+	}
+	return out
+}
+
 func pullRequestClosedAttrs(raw any, attrs map[string]string) {
 	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
 	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
@@ -374,6 +393,23 @@ func pullRequestClosedData(v any) map[string]any {
 	out := map[string]any{
 		"action":       text(dig(v, "action")),
 		"number":       num(dig(v, "number")),
+		"pull_request": prObject(dig(v, "pull_request")),
+		"repository":   repositoryObject(dig(v, "repository")),
+		"sender":       userObject(dig(v, "sender")),
+	}
+	return out
+}
+
+func pullRequestDequeuedAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
+	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
+}
+
+func pullRequestDequeuedData(v any) map[string]any {
+	out := map[string]any{
+		"action":       text(dig(v, "action")),
+		"number":       num(dig(v, "number")),
+		"reason":       text(dig(v, "reason")),
 		"pull_request": prObject(dig(v, "pull_request")),
 		"repository":   repositoryObject(dig(v, "repository")),
 		"sender":       userObject(dig(v, "sender")),
