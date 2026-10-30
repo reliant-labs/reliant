@@ -102,6 +102,8 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 		"pr.review.create":        {"pull_requests": "write"},
 		"pr.review_comment.reply": {"pull_requests": "write"},
 		"pr.create":               {"pull_requests": "write", "contents": "read"},
+		"check_run.create":        {"checks": "write"},
+		"check_run.update":        {"checks": "write"},
 		"workflow.dispatch":       nil, // not in the table: control-plane's default cap
 	} {
 		t.Run(action, func(t *testing.T) {
@@ -113,6 +115,16 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 			assert.Equal(t, want, inst.asked[0].Permissions)
 		})
 	}
+}
+
+// A check run is the one write GitHub lets only an App make, and it touches
+// nothing but checks: the bot's token for it carries checks and no other area.
+// The DB-free half of PermissionsFollowTheAction, so the -short tier pins it.
+func TestCheckRunWritesAskForChecksAlone(t *testing.T) {
+	for _, action := range []string{"check_run.create", "check_run.update"} {
+		assert.Equal(t, map[string]string{"checks": "write"}, permissionsFor(action), action)
+	}
+	assert.Nil(t, permissionsFor("check_run.list"), "a read is the owner's: never a bot token")
 }
 
 // A mint that cannot be done must FAIL the write. It never falls through to the

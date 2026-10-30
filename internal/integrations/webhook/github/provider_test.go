@@ -352,6 +352,7 @@ func TestEmittedEventsMatchTheManifest(t *testing.T) {
 		"pull_request_review_comment.created": "pull_request_review_comment",
 		"check_run.completed":                 "check_run",
 		"check_suite.completed":               "check_suite",
+		"check_suite.requested":               "check_suite",
 		"pull_request.opened":                 "pull_request",
 		"pull_request.synchronize":            "pull_request",
 		"pull_request.closed":                 "pull_request",
@@ -489,13 +490,30 @@ func TestCheckSuiteCompleted(t *testing.T) {
 	assert.Equal(t, []any{int64(7)}, s["pull_requests"])
 }
 
+// A merge group asks every App with checks for them: this is how the PR
+// pipeline learns of a gh-readonly-queue commit it must report a required check
+// on. Nothing else names the merge group's commit to an App.
+func TestCheckSuiteRequested(t *testing.T) {
+	ev := one(t, parseFixture(t, "check_suite", "check_suite.requested"))
+	assertRepoEvent(t, ev, "check_suite.requested")
+	assert.Equal(t, "gh-readonly-queue/main/pr-7-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ev.Attributes["branch"])
+	assert.Equal(t, "reliant-labs", ev.Attributes["app"])
+	_, hasConclusion := ev.Attributes["conclusion"]
+	assert.False(t, hasConclusion, "a requested suite has not concluded")
+	s := ev.Data["check_suite"].(map[string]any)
+	assert.EqualValues(t, 7007, s["id"])
+	assert.Equal(t, "dddddddddddddddddddddddddddddddddddddddd", s["head_sha"])
+	assert.Equal(t, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", s["before"])
+	assert.Equal(t, "queued", s["status"])
+}
+
 func TestUnmappedActionsOfNewEventsYieldNothing(t *testing.T) {
 	for _, tc := range []struct{ event, name, action string }{
 		{"issues", "issues.opened", "pinned"},
 		{"pull_request", "pull_request.opened", "converted_to_draft"},
 		{"pull_request_review_comment", "pull_request_review_comment.created", "edited"},
 		{"check_run", "check_run.completed", "created"},
-		{"check_suite", "check_suite.completed", "requested"},
+		{"check_suite", "check_suite.completed", "rerequested"},
 	} {
 		var m map[string]any
 		require.NoError(t, json.Unmarshal(fixture(t, tc.name), &m))
@@ -529,6 +547,7 @@ func TestEmittedDataKeysAreDeclaredAndSchemasAreClosed(t *testing.T) {
 		"workflow_run.completed":              "workflow_run",
 		"check_run.completed":                 "check_run",
 		"check_suite.completed":               "check_suite",
+		"check_suite.requested":               "check_suite",
 	} {
 		ev := one(t, parseFixture(t, header, name))
 		assert.True(t, closed[ev.Type], "%s: data schema must be closed", ev.Type)
