@@ -379,6 +379,9 @@
     "internal/handlers/daemon_registry/handlers_scaffold_put_machine_pool_test.go": {
       "scaffolded_at": "2026-10-30T17:25:04Z"
     },
+    "internal/handlers/daemon_registry/handlers_scaffold_set_default_daemon_test.go": {
+      "scaffolded_at": "2026-10-29T17:39:34Z"
+    },
     "internal/handlers/daemon_registry/handlers_scaffold_set_machine_labels_test.go": {
       "scaffolded_at": "2026-10-30T17:25:04Z"
     },

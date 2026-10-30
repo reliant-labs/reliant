@@ -27,6 +27,7 @@ type Repository interface {
 	PutMachinePool(ctx context.Context, p *core.MachinePool) (*core.MachinePool, error)
 	DeleteMachinePoolByName(ctx context.Context, userID, name string) error
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
+	SetDefaultDaemon(ctx context.Context, userID, daemonID string) error
 }
 
 // Router is the slice of toolexec.DaemonRouter the daemon_registry handlers

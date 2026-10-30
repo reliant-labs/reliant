@@ -27,6 +27,7 @@ interface CreateWorktreeModalProps {
   title?: string; // Optional custom title
   sourceWorktreeId?: string; // Source worktree to copy files from (for branch to workspace)
   chatId?: string; // Chat the workspace is created for; the server places it on that chat's machine
+  daemonId?: string; // Machine to create it on (the new-chat composer's "Runs on"); unset lets the server place it
   sourceWorktreeBranch?: string; // Branch of source worktree to use as default base branch
   additionalCopyFiles?: string[]; // Additional files to copy (e.g., modified/untracked files from source)
   lockBaseBranch?: boolean; // If true, prevent changing the base branch (used when branching to workspace)
@@ -41,6 +42,7 @@ export function CreateWorktreeModal({
   title = "Create New Workspace", // Default title
   sourceWorktreeId,
   chatId,
+  daemonId,
   sourceWorktreeBranch,
   additionalCopyFiles = [],
   lockBaseBranch = false,
@@ -249,6 +251,7 @@ export function CreateWorktreeModal({
         force: formData.force,
         source_worktree_id: sourceWorktreeId,
         chat_id: chatId,
+        daemon_id: daemonId,
       });
 
       await onWorktreeCreated(worktree.id);

@@ -47,6 +47,11 @@ type Daemon struct {
 	// machine-pool membership (dev-docs/design/machine-pools.md) and, unlike
 	// the labels a daemon reports when it connects, hold while it sleeps.
 	Labels map[string]string
+
+	// IsDefault: the owner chose this machine as their default
+	// (SetDefaultDaemon). Work that names no machine runs here first; at most
+	// one of a user's daemons carries it.
+	IsDefault bool
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied
