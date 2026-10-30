@@ -1770,6 +1770,13 @@ message Dashboard {
   // from the recorded row, never read from the dashboard's own JSON.
   string source = 7;
   repeated DashboardSection sections = 8;
+  // Which telemetry the panels read, forge's dashspec scope: "" or "project"
+  // (the route's project, the default), "org" (every project of the
+  // organization) or "platform" (infrastructure telemetry that belongs to no
+  // environment). Carried through from the recorded dashboard as authored, so a
+  // console can drop project scoping (org) or the environment predicate
+  // (platform). An unrecognized value is passed through untouched.
+  string scope = 9;
 }
 
 message DashboardSection {

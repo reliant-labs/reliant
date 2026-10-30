@@ -8579,8 +8579,15 @@ type Dashboard struct {
 	// owns (deploy/observability/dashboards/<name>.json, which replaces a generated
 	// one of the same name). Empty for a synthesized dashboard. Set by the server
 	// from the recorded row, never read from the dashboard's own JSON.
-	Source        string              `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
-	Sections      []*DashboardSection `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	Source   string              `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
+	Sections []*DashboardSection `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	// Which telemetry the panels read, forge's dashspec scope: "" or "project"
+	// (the route's project, the default), "org" (every project of the
+	// organization) or "platform" (infrastructure telemetry that belongs to no
+	// environment). Carried through from the recorded dashboard as authored, so a
+	// console can drop project scoping (org) or the environment predicate
+	// (platform). An unrecognized value is passed through untouched.
+	Scope         string `protobuf:"bytes,9,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8669,6 +8676,13 @@ func (x *Dashboard) GetSections() []*DashboardSection {
 		return x.Sections
 	}
 	return nil
+}
+
+func (x *Dashboard) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
 }
 
 type DashboardSection struct {
@@ -11480,7 +11494,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"dashboards\x18\x03 \x03(\v2\x1a.controlplane.v1.DashboardR\n" +
 	"dashboards\x12C\n" +
 	"\x0esaved_searches\x18\x04 \x03(\v2\x1c.controlplane.v1.SavedSearchR\rsavedSearches\x127\n" +
-	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\xde\x02\n" +
+	"\x06alerts\x18\x05 \x03(\v2\x1f.controlplane.v1.DashboardAlertR\x06alerts\"\xf4\x02\n" +
 	"\tDashboard\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -11489,7 +11503,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x06panels\x18\x05 \x03(\v2\x16.controlplane.v1.PanelR\x06panels\x12F\n" +
 	"\vannotations\x18\x06 \x03(\v2$.controlplane.v1.DashboardAnnotationR\vannotations\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12=\n" +
-	"\bsections\x18\b \x03(\v2!.controlplane.v1.DashboardSectionR\bsections\"8\n" +
+	"\bsections\x18\b \x03(\v2!.controlplane.v1.DashboardSectionR\bsections\x12\x14\n" +
+	"\x05scope\x18\t \x01(\tR\x05scope\"8\n" +
 	"\x10DashboardSection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\"\x82\x01\n" +
