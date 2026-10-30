@@ -1148,7 +1148,7 @@ message EnableWorkflowRequest {
   // TriggerDefinition, or machine_pool_id. Exactly one is required.
   string daemon_id = 4;
   bool no_machine = 5;
-  string machine_pool_id = 14;
+  string machine_pool_id = 15;
 
   // The connection each integration trigger listens through, keyed by
   // integration id (e.g. "github"). One entry serves every trigger of that
