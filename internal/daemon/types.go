@@ -243,6 +243,11 @@ type RunCommandRequest struct {
 	// reports it as a package command whether or not it names a workspace
 	// (a path-only RunCommand has none). An agent's commands never set it.
 	PackageCommand bool `json:"package_command,omitempty"`
+	// ChatID is the agent (chat or sub-agent thread) whose tool call runs the
+	// command. The daemon attributes the command's processes to it, so a
+	// machine near its process limit can say whose they are
+	// (internal/procguard). Informational only: it grants nothing.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // CommandResult is the result of a synchronous command execution.

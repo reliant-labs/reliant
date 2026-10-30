@@ -85,8 +85,18 @@ type Intake struct {
 	starter   WorkflowStarter
 	taskQueue string
 	workflows WorkflowResolver
+	pools     PoolCatalogs
 	enrichers []Enricher
 	now       func() time.Time
+}
+
+// WithPoolCatalogs lets the intake read a pool-bound trigger's declaration
+// from its pool's agreed catalog. Without it, Accept refuses such a
+// trigger's events with an error (a wiring bug) rather than filtering them
+// against the union.
+func (in *Intake) WithPoolCatalogs(pools PoolCatalogs) *Intake {
+	in.pools = pools
+	return in
 }
 
 // WithWorkflows lets the intake read an activation's declaration, whose
@@ -143,7 +153,23 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	}
 
 	outcome, detail := core.TriggerEventPending, ""
-	decl, err := activationFor(ctx, in.workflows, trigger)
+	// A pool-bound trigger's filter and dedupe key are its pool's agreed
+	// catalog's, the one its run is placed on. With no member synced there is
+	// nothing to filter against, which is recorded like any unusable
+	// declaration rather than guessed from the union.
+	bound, _, wait, err := bindPoolCatalog(ctx, in.pools, trigger)
+	if err != nil && !isVerdict(err) {
+		return nil, fmt.Errorf("resolve trigger %s's pool catalog: %w", trigger.ID, err)
+	}
+	var decl *Declaration
+	switch {
+	case err != nil:
+	case wait != "":
+		err = &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
+	default:
+		trigger = bound
+		decl, err = activationFor(ctx, in.workflows, trigger)
+	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
 	origin := in.enrich(ctx, trigger, &ev)

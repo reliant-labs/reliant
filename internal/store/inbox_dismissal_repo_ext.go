@@ -294,12 +294,51 @@ SELECT * FROM (
       AND COALESCE(rw.outcome, '') <> 'failure'
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
+
+    UNION ALL
+
+    -- A paused run of an automation (display_state 4: the root run is
+    -- stopped with reason paused). While it is paused it holds its
+    -- automation's capacity slot, so the owner is told what paused it: the
+    -- newest failed step of the chat's runs. The key is the chat and when
+    -- that failure happened, so a later pause is a new item.
+    SELECT
+        10,
+        c.id || '@' || to_char(COALESCE(f.created_at, c.last_active) AT TIME ZONE 'UTC', 'YYYYMMDD"T"HH24MISS.US'),
+        c.id,
+        COALESCE(c.workflow_id, c.id),
+        t.id,
+        c.project_id,
+        COALESCE(p.name, ''),
+        COALESCE(c.workflow_name, ''),
+        c.title,
+        t.name,
+        COALESCE(f.created_at, c.last_active),
+        COALESCE(f.error_message, ''),
+        '',
+        0
+    FROM chats_with_activity c
+    JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
+    LEFT JOIN LATERAL (
+        SELECT se.created_at, se.error_message
+        FROM workflows w
+        JOIN step_executions se ON se.workflow_id = w.id
+        WHERE w.chat_id = c.id
+          AND se.error_message IS NOT NULL
+        ORDER BY se.created_at DESC
+        LIMIT 1
+    ) f ON true
+    WHERE c.launch_kind = ANY($2::text[])
+      AND c.display_state = 4
+      AND c.user_id = $1::text
+      AND c.state IS DISTINCT FROM 3
 ) inbox
 ORDER BY kind, waiting_since, item_key`
 
 // ListInboxPending returns the user's pending approvals, questions,
-// waiting-for-machine runs, launch-failed automations and finished
-// opted-in runs, ordered by kind, then waiting time.
+// waiting-for-machine runs, launch-failed automations, finished opted-in runs
+// and paused automation runs, ordered by kind, then waiting time.
 func ListInboxPending(ctx context.Context, db orm.Context, userID string) ([]*core.InboxPending, error) {
 	// "Run finished" items follow the same rule as the unread write.
 	rows, err := db.Query(ctx, listInboxPendingSQL, userID, core.UnattendedEventKinds())

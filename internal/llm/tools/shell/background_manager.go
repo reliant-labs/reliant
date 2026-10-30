@@ -10,6 +10,7 @@ package shell
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // ErrPersistenceSkipped is returned by OnCreate when the process was intentionally
@@ -106,10 +108,18 @@ type BackgroundProcess struct {
 	outputSeq      int64               // Current sequence number for output lines
 	outputMu       sync.RWMutex
 	cancelFunc     context.CancelFunc
-	done           chan struct{}
+	// survivors are the live members of the command's process group when its
+	// leader was reaped: what it left running. Recorded so a later kill can
+	// prove the group id is still the command's before signalling it
+	// (osutil.GroupMember). Guarded by outputMu.
+	survivors []osutil.GroupMember
+	done      chan struct{}
 	// oomSnap captures the workspace cgroup's oom_kill counter at spawn so a
 	// SIGKILLed process can be attributed to the kernel OOM killer on exit.
 	oomSnap cgroupmem.OOMSnapshot
+	// tree bounds the command's processes and reaches all of them on a kill
+	// (internal/proctree). Nil for a process recovered from the database.
+	tree *proctree.Tree
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -350,6 +360,10 @@ type StartProcessOptions struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
+	// AgentID is the agent whose tool call started the command, for
+	// attributing its processes only (internal/procguard). Unlike ChatID it
+	// scopes nothing.
+	AgentID string
 	// GrantID scopes the process to a connector grant. Empty for first-party
 	// callers; see BackgroundProcess.GrantID.
 	GrantID string
@@ -410,10 +424,6 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	}
 	cmd.Dir = opts.WorkingDir
 
-	// Set up process group so we can kill all child processes
-	// This is critical for commands that spawn subprocesses (e.g., npm run dev)
-	setProcessGroup(cmd)
-
 	// Set up environment variables.
 	// RELIANT_SPAWNED=1 allows scripts to detect they're running from Reliant.
 	//
@@ -429,7 +439,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		env[key] = value
 	}
 	cmd.Env = daemonpolicy.ChildEnv(ctx, env, opts.Credentials)
-	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy}); err != nil {
+	if _, err := opts.HeavyGate.Prepare(cmd, heavyjob.Job{Command: opts.Command, Argv: opts.Argv, Declared: opts.Heavy, Background: true}); err != nil {
 		// Refused (a nearly full disk): it never starts, and says why.
 		cancel()
 		return nil, err
@@ -482,11 +492,19 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	cmd.Stderr = stderrLines
 	cmd.WaitDelay = BackgroundWaitDelay
 
+	// Its own process group, so a kill reaches every child (e.g. npm run dev),
+	// and — where the machine allows — its own cgroup with a process limit,
+	// so a runaway command fails alone (internal/proctree). Last before
+	// Start: everything above may still rewrite what cmd execs.
+	process.tree = proctree.Default().Prepare(cmd, proctree.Owner{ChatID: cmp.Or(opts.AgentID, opts.ChatID), Command: opts.Command})
+
 	// Start the command
 	if err := cmd.Start(); err != nil {
+		process.tree.Started(0)
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
+	process.tree.Started(cmd.Process.Pid)
 
 	// Steer the kernel OOM killer toward the workload (and its descendants,
 	// which inherit the score) rather than the daemon. No-op outside Linux;
@@ -624,6 +642,8 @@ func (w *outputLineWriter) emit(raw []byte) {
 // so flushing them first puts every line in place before the status changes.
 func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs ...*outputLineWriter) {
 	err := process.cmd.Wait()
+	process.recordSurvivors()
+	process.tree.Release()
 	for _, output := range outputs {
 		output.flush()
 	}
@@ -641,6 +661,8 @@ func (m *BackgroundManager) waitForProcess(process *BackgroundProcess, outputs .
 // Used by AdoptRunningProcess to avoid calling cmd.Wait() twice.
 func (m *BackgroundManager) waitForProcessWithChannel(process *BackgroundProcess, waitErrCh <-chan error) {
 	err := <-waitErrCh
+	process.recordSurvivors()
+	process.tree.Release()
 	m.handleProcessCompletion(process, err)
 }
 
@@ -1032,8 +1054,136 @@ func (m *BackgroundManager) GetCombinedOutputWithSeq(processID string, afterSeq 
 }
 
 // KillGraceTimeout is how long a kill waits for a process group to go down on
-// SIGTERM before escalating to SIGKILL.
-const KillGraceTimeout = 3 * time.Second
+// SIGTERM before escalating to SIGKILL. A var only so tests can shorten it.
+var KillGraceTimeout = 3 * time.Second
+
+// killSettleTimeout is how long a SIGKILLed group gets to disappear: the
+// kernel delivers SIGKILL at once, but each member must still be scheduled to
+// exit and be reaped.
+const killSettleTimeout = 2 * time.Second
+
+// groupPollInterval is how often a kill looks whether the group is empty.
+const groupPollInterval = 100 * time.Millisecond
+
+// stopProcessGroup stops a command's whole process group: SIGTERM to every
+// member, then onTerm (the context cancel, when there is one), then — if any
+// member is still alive after KillGraceTimeout — SIGKILL to the group. It
+// returns whether the group is gone. leaderDone closes once the leader has
+// been reaped (until then it is a zombie member of its own group).
+func stopProcessGroup(w *groupWatch, leaderDone <-chan struct{}, onTerm func()) bool {
+	pgid := w.pgid
+	if err := terminateProcessGroup(pgid); err != nil {
+		logging.Warn("Failed to terminate process group gracefully", "pgid", pgid, "error", err)
+	}
+	if onTerm != nil {
+		onTerm()
+	}
+	if waitProcessGroupGone(w, leaderDone, KillGraceTimeout) {
+		logging.Debug("Process group terminated gracefully", "pgid", pgid)
+		return true
+	}
+	// alive() just proved the id is still the command's.
+	logging.Warn("Process group did not terminate gracefully, force killing", "pgid", pgid)
+	if err := forceKillProcessGroup(pgid); err != nil {
+		logging.Error("Failed to force kill process group", "pgid", pgid, "error", err)
+	}
+	return waitProcessGroupGone(w, leaderDone, killSettleTimeout)
+}
+
+// groupWatch follows a command's process group while it is being stopped.
+//
+// Liveness is the group's live members — zombies excluded, since a zombie
+// runs nothing and one whose reaper never comes would otherwise read as a
+// survivor of SIGKILL forever — and only members that are provably the
+// command's: some member recorded while the id was known to be the command's
+// must still be in the group (osutil.GroupOwned), and then everyone now in it
+// is recorded in turn, so ownership carries forward as members come and go.
+// Where the process table cannot be read (macOS) it falls back to "does the
+// group id answer a signal".
+type groupWatch struct {
+	pgid     int
+	members  []osutil.GroupMember
+	listable bool
+}
+
+// watchGroup records the group's members now. Call it only while the group
+// id is known to be the command's: its leader not yet reaped.
+func watchGroup(pgid int) *groupWatch {
+	members, ok := osutil.GroupMembers(pgid)
+	return &groupWatch{pgid: pgid, members: members, listable: ok}
+}
+
+// alive reports whether the group still has live members that are the
+// command's.
+func (w *groupWatch) alive() bool {
+	if !w.listable {
+		return processGroupAlive(w.pgid)
+	}
+	if !osutil.GroupOwned(w.pgid, w.members) {
+		w.members = nil
+		return false
+	}
+	w.members, _ = osutil.GroupMembers(w.pgid)
+	return len(w.members) > 0
+}
+
+// recordSurvivors records what the command left running in its group, right
+// after its leader was reaped.
+func (p *BackgroundProcess) recordSurvivors() {
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+	members, _ := osutil.GroupMembers(p.cmd.Process.Pid)
+	p.outputMu.Lock()
+	p.survivors = members
+	p.outputMu.Unlock()
+}
+
+// stopTree is stopProcessGroup, then — when the command has a cgroup of its
+// own — a cgroup.kill for anything left in it: a member that left the process
+// group with setsid is out of the group's reach but not the cgroup's.
+func stopTree(w *groupWatch, tree *proctree.Tree, leaderDone <-chan struct{}, onTerm func()) bool {
+	// The group is signalled only while it is provably the command's (a
+	// running command's leader, or a member it left); an exited command whose
+	// group is gone but whose cgroup is not is reached through the cgroup
+	// alone.
+	gone := true
+	if onTerm != nil || w.alive() {
+		gone = stopProcessGroup(w, leaderDone, onTerm)
+	}
+	if tree.Populated() && tree.Kill() {
+		deadline := time.Now().Add(killSettleTimeout)
+		for tree.Populated() && time.Now().Before(deadline) {
+			time.Sleep(groupPollInterval)
+		}
+		return gone && !tree.Populated()
+	}
+	return gone
+}
+
+// waitProcessGroupGone waits up to d for the leader to be reaped and every
+// other member of the group to exit.
+func waitProcessGroupGone(w *groupWatch, leaderDone <-chan struct{}, d time.Duration) bool {
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+	if leaderDone != nil {
+		select {
+		case <-leaderDone:
+		case <-deadline.C:
+			return false
+		}
+	}
+	tick := time.NewTicker(groupPollInterval)
+	defer tick.Stop()
+	for w.alive() {
+		select {
+		case <-tick.C:
+		case <-deadline.C:
+			return !w.alive()
+		}
+	}
+	return true
+}
 
 // KillProcess terminates a background process and all its child processes
 func (m *BackgroundManager) KillProcess(processID string) error {
@@ -1042,7 +1192,33 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return err
 	}
 
+	// The leader's pid is the process group's id (proctree.Prepare).
+	var pid int
+	if process.cmd != nil && process.cmd.Process != nil {
+		pid = process.cmd.Process.Pid
+	}
+
 	if status := process.StatusSafe(); status != "running" {
+		// The command's shell exited, but what it started may not have: a
+		// `task ci &`, a `nohup server &`, a child that trapped SIGTERM when
+		// the shell was killed. They are still in its process group, still
+		// this command's, and a kill reaches them — otherwise they run on,
+		// orphaned, where nothing can see or stop them.
+		// Only while a process it left is provably still in the group: once
+		// they have all exited the group id may belong to someone else.
+		process.outputMu.RLock()
+		w := &groupWatch{pgid: pid, members: process.survivors, listable: true}
+		process.outputMu.RUnlock()
+		// Its own cgroup is unambiguous (named per daemon and command, never
+		// reused), so what is still in it is the command's.
+		if process.cmd != nil && (w.alive() || process.tree.Populated()) {
+			logging.Info("Killing what an exited background command left running in its process group",
+				"id", processID, "pgid", pid, "status", status)
+			if !stopTree(w, process.tree, process.done, nil) {
+				return fmt.Errorf("process %s (%s) left processes in its group %d that did not die on SIGKILL", processID, status, pid)
+			}
+			return nil
+		}
 		return fmt.Errorf("process %s is not running (status: %s)", processID, status)
 	}
 
@@ -1053,49 +1229,33 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return m.killRecoveredProcessByPID(processID)
 	}
 
-	// Get the PID before we do anything
-	var pid int
-	if process.cmd != nil && process.cmd.Process != nil {
-		pid = process.cmd.Process.Pid
-	}
-
 	logging.Info("Killing background process and process group",
 		"id", processID,
 		"pid", pid)
 
-	// First, try to gracefully terminate the process group
-	// This sends SIGTERM to all processes in the group
+	// SIGTERM to the whole group, cancel the context (CommandContext's own
+	// kill of the leader), then wait until the GROUP is empty — not just the
+	// leader. A leader that dies at once used to end the wait while children
+	// that trapped or ignored SIGTERM ran on with nothing left to kill them.
 	if pid > 0 {
-		if err := terminateProcessGroup(pid); err != nil {
-			logging.Warn("Failed to terminate process group gracefully",
-				"pid", pid,
-				"error", err)
+		// Recorded now, while the leader is unreaped and the group id is
+		// therefore certainly this command's.
+		if !stopTree(watchGroup(pid), process.tree, process.done, process.cancelFunc) {
+			logging.Error("Process group survived SIGKILL", "id", processID, "pgid", pid)
+		}
+	} else {
+		process.cancelFunc()
+		select {
+		case <-process.done:
+		case <-time.After(KillGraceTimeout):
 		}
 	}
-
-	// Cancel the context as well (this triggers CommandContext cancellation)
-	process.cancelFunc()
-
-	// Wait for process to finish with timeout
+	// The leader itself, if the group could not be signalled at all.
 	select {
 	case <-process.done:
-		// Process finished
-		logging.Debug("Process group terminated gracefully", "id", processID)
-	case <-time.After(KillGraceTimeout):
-		// Force kill the entire process group if it doesn't stop gracefully
-		logging.Warn("Process group did not terminate gracefully, force killing",
-			"id", processID,
-			"pid", pid)
-		if pid > 0 {
-			if err := forceKillProcessGroup(pid); err != nil {
-				logging.Error("Failed to force kill process group",
-					"pid", pid,
-					"error", err)
-			}
-		}
-		// Also try direct process kill as last resort
-		if process.cmd != nil && process.cmd.Process != nil {
-			process.cmd.Process.Kill()
+	default:
+		if process.cmd.Process != nil {
+			_ = process.cmd.Process.Kill()
 		}
 	}
 
@@ -1179,22 +1339,11 @@ func (m *BackgroundManager) killRecoveredProcessByPID(processID string) error {
 		"id", processID,
 		"pid", pid)
 
-	// Try graceful termination first.
-	if err := terminateProcessGroup(pid); err != nil {
-		logging.Warn("Failed to terminate recovered process group gracefully",
-			"pid", pid,
-			"error", err)
-	}
-
-	// Give it a brief moment then force kill.
-	time.Sleep(3 * time.Second)
-	if osutil.IsProcessRunning(pid) {
-		if err := forceKillProcessGroup(pid); err != nil {
-			logging.Error("Failed to force kill recovered process group",
-				"pid", pid,
-				"error", err)
-			return err
-		}
+	// The whole group, SIGTERM then SIGKILL, until it is empty. The leader
+	// is alive and its signature matched, so the group id is its: recorded
+	// now. This daemon did not start it, so no reap is waited for.
+	if !stopProcessGroup(watchGroup(pid), nil, nil) {
+		return fmt.Errorf("recovered process %s: process group %d survived SIGKILL", processID, pid)
 	}
 
 	now := time.Now()
@@ -1255,6 +1404,9 @@ type AdoptRunningProcessOptions struct {
 	StdoutBuf  *bytes.Buffer // Existing stdout buffer
 	StderrBuf  *bytes.Buffer // Existing stderr buffer
 	WaitErrCh  <-chan error  // Channel that receives cmd.Wait() result from caller (REQUIRED to avoid double-wait)
+	// Tree is the command's process tree (proctree), which the background
+	// manager takes over: it releases it, and a kill reaches all of it.
+	Tree *proctree.Tree
 }
 
 // AdoptRunningProcess adopts an already-running command into the background manager.
@@ -1310,6 +1462,7 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
 		cmd:            opts.Cmd,
+		tree:           opts.Tree,
 		stdout:         stdout,
 		stderr:         stderr,
 		combinedOutput: make([]OutputLineWithSeq, 0),

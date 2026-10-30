@@ -110,6 +110,7 @@ actions:
   - $ref: actions/pr.review.create.yaml
   - $ref: actions/pr.create.yaml
   - $ref: actions/pr.update.yaml
+  - $ref: actions/pr.merge.yaml
   - $ref: actions/pr.reviews.list.yaml
   - $ref: actions/pr.review_comments.list.yaml
   - $ref: actions/pr.review_comment.reply.yaml

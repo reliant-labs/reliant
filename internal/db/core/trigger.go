@@ -239,6 +239,17 @@ type Trigger struct {
 	// workflow that needs a machine is refused when the trigger is written.
 	// See research/DAEMONLESS_RUNS.md.
 	NoMachine bool
+	// MachinePoolID is the machine pool whose members each launched run is
+	// placed on (dev-docs/design/machine-pools.md). Exactly one of DaemonID,
+	// NoMachine and MachinePoolID is set.
+	MachinePoolID string
+	// MachinePoolName is MachinePoolID's name, joined in by reads.
+	MachinePoolName string
+	// CatalogDaemonID is not stored. For a pool-bound trigger the fire paths
+	// set it to a member on the pool's agreed catalog, so the declaration,
+	// filter, inputs and concurrency are read from the catalog its runs are
+	// placed on (CatalogMachine), not the union of every machine's.
+	CatalogDaemonID string
 	// NotifyOnComplete opts the owner in to being told when a run of this
 	// trigger completes (unread + OS notification + a Run finished Inbox
 	// item). Unattended completions are otherwise silent.
@@ -436,6 +447,11 @@ type TriggerEvent struct {
 	CapacityOrder       *int64
 	CapacityProjectID   *string
 	CapacityWorkflowRef *string
+	// CapacityKey is the rendered concurrency key under `waiting: latest`:
+	// enrolling an event with one supersedes the older waiting events of the
+	// same key. Nil is FIFO (or a key that could not be rendered): the event
+	// supersedes nothing and nothing supersedes it.
+	CapacityKey *string
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for

@@ -4,8 +4,9 @@
 # That directory is NOT authored here. It is a verbatim `buf export` of the
 # control-plane repo's public proto contract (the `export` lines of
 # control-plane/proto/public-api.txt), written by
-# .github/scripts/sync-controlplane-proto.mjs and drift-gated from
-# control-plane's CI. No *Admin or internal-service API is in it.
+# .github/scripts/sync-controlplane-proto.mjs, pinned to the control-plane commit
+# its SOURCE names (task contract:controlplane:check). No *Admin or
+# internal-service API is in it.
 #
 # Output mirrors the proto paths under a `controlplane/` root, e.g.
 #   services/deploy/v1/deploy.proto -> frontends/web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts

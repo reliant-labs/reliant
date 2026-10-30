@@ -475,8 +475,11 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 			ErrorCode:     ErrorCodeDaemonUnreached,
 			DaemonPending: IsDaemonPending(err),
 			NotDispatched: errors.Is(err, ErrNotDispatched),
-			StartTime:     startTime,
-			EndTime:       time.Now(),
+			// The machine it was addressed to: no daemon answered, so this
+			// names the one a caller would wait for.
+			DaemonID:  NotDispatchedDaemonID(err),
+			StartTime: startTime,
+			EndTime:   time.Now(),
 		}, nil
 	}
 

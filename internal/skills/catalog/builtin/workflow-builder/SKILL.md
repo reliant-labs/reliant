@@ -351,8 +351,9 @@ event: evaluation does not require enabling the trigger or waiting for a real ev
 dry-runs every declared trigger (filter, inputs, prompt, dedupe key) against a sample event, with `--activation-params` and `--owner-github-id` for the sample activation.
 
 **Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
-`triggers:` should start: chat pickers stop offering it and starting it from a chat is refused
-(a builder test run still works). Leave it unset for anything a person starts by chatting. A helper that only
+`triggers:` should start: chat pickers stop offering it and starting it from a chat is refused.
+A deliberate start by hand still works: Run now, `reliant workflow run`, an agent's `start_run` and a
+builder test run. Leave it unset for anything a person starts by chatting. A helper that only
 other workflows `ref:` sets `hidden: true` as well: hidden keeps it out of every picker and listing, and
 the pair marks it as an automation's internal step.
 
@@ -783,9 +784,10 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
-| `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.* |
-| `concurrency` | WorkflowConcurrency | No | - |
+| `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
+| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
+| `requires` | WorkflowRequirements | No | - |
 
 ## Edge
 
@@ -829,6 +831,7 @@ Scenario defines a complete test case for a workflow.
 | `events` | SimulatedEvent[] | Yes | Events lists the simulated events in execution order. Required. |
 | `expect` | Expectation | No | Expect defines the expected outcome and assertions. Optional. |
 | `inputs` | object | No | Inputs overrides workflow inputs for this scenario. Optional. |
+| `trigger` | TriggerFiring | No | Trigger starts the run the way one of the workflow's declared triggers |
 | `start_at` | string | No | StartAt begins execution at a specific node instead of the entry point. Optional. |
 | `state` | map[string]object | No | State pre-populates node outputs before execution. Optional. |
 

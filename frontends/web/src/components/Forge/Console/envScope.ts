@@ -20,6 +20,8 @@
 import type { RosterEnv } from "@/services/forge/roster";
 
 export const ENV_ALL = "all";
+/** What the scope control says on a dashboard whose signals belong to no environment. */
+export const PLATFORM_SCOPE_LABEL = "platform-wide (not per environment)";
 export const DEFAULT_ENV = "prod";
 
 const storageKey = (project: string) => `forge.console.env.${project}`;

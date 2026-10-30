@@ -143,6 +143,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 				Command:       command,
 				Detail:        result.Content,
 				NotDispatched: result.NotDispatched,
+				DaemonID:      result.DaemonID,
 			}
 		}
 		// The tool itself reported an error (bad input, tool not found, …):

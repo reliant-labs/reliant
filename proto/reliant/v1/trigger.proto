@@ -670,6 +670,12 @@ message Trigger {
   // Launched runs have no machine; see TriggerDefinition.no_machine.
   bool no_machine = 27;
 
+  // Launched runs are placed on a member of this machine pool; see
+  // TriggerDefinition.machine_pool_id.
+  string machine_pool_id = 33;
+  // Read-only: that pool's name.
+  string machine_pool_name = 34;
+
   // Read-only: how this trigger's recent firings went.
   TriggerHealth health = 15;
 
@@ -910,6 +916,13 @@ message TriggerDefinition {
   // set it to e.g. ["tag:web"]). See research/DAEMONLESS_RUNS.md.
   bool no_machine = 14;
 
+  // Launched runs execute on one member of this machine pool of the
+  // caller's, chosen at launch (the connected member with the most free
+  // room; a suspended one is woken; with none free the run waits) and fixed
+  // for the run's life. Exactly one of daemon_id, no_machine and
+  // machine_pool_id is set. See dev-docs/design/machine-pools.md.
+  string machine_pool_id = 26;
+
   // Notify the owner when a run completes. Replaced on update, like every
   // other field here, so a client editing a trigger must send the current
   // value back.
@@ -1076,9 +1089,10 @@ message EnableWorkflowRequest {
   optional string worktree_id = 3;
 
   // The machine the runs execute on: daemon_id, or no_machine, exactly as in
-  // TriggerDefinition. One of the two is required.
+  // TriggerDefinition, or machine_pool_id. Exactly one is required.
   string daemon_id = 4;
   bool no_machine = 5;
+  string machine_pool_id = 14;
 
   // The connection each integration trigger listens through, keyed by
   // integration id (e.g. "github"). One entry serves every trigger of that
@@ -1114,6 +1128,13 @@ message EnableWorkflowRequest {
   // TriggerDefinition.acting_identity. Unspecified means APP for each new
   // activation and preserves an existing activation's stored identity.
   ActingIdentity acting_identity = 13;
+
+  // Only these declared triggers (WorkflowTrigger.name). Empty means every
+  // trigger the workflow declares. Each named trigger is created or brought
+  // to the request exactly as in the whole-workflow case, all or nothing
+  // within the selection; the others are left as they are. A name the
+  // workflow does not declare refuses the request.
+  repeated string triggers = 14;
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -1125,9 +1146,11 @@ message WorkflowTriggerOverride {
   // Replaces the activation's name.
   optional string name = 2;
 
-  // Replaces the shared machine for this trigger: a daemon, or no machine.
+  // Replaces the shared machine for this trigger: a daemon, no machine, or a
+  // machine pool.
   optional string daemon_id = 3;
   optional bool no_machine = 4;
+  optional string machine_pool_id = 8;
 
   // Replaces the shared connection for this integration trigger.
   optional string connection_id = 5;

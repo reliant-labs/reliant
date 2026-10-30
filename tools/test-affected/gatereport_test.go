@@ -132,7 +132,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 			t.Errorf("merge missing %s", s)
 		}
 	}
-	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test ;", "task test:integration", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "missing_steps"} {
+	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test -- $pkgs", "task test:web", "task test:electron", "task test:integration", "cmd_assemble", "PARTS=(static lint go web)", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "missing_steps"} {
 		if !strings.Contains(release, s) {
 			t.Errorf("release missing %s", s)
 		}

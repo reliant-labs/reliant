@@ -332,7 +332,7 @@ export function UpgradeAccount() {
 
         {/* An email or provider that already belongs to a Reliant user cannot be
             linked here; for a claim that person is told what to do instead. */}
-        {forClaim && <ExistingAccount />}
+        {forClaim && <ExistingAccount leavesTemporaryAccount />}
 
       </div>
     </AuthLayout>

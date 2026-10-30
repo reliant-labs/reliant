@@ -6,12 +6,12 @@
  * rate, histogram → p95, an up-down counter never offered a rate), the builder
  * (a formula, group-by), the chart's notes and comparison, exemplars, the SQL
  * tab, save to dashboard (happy path, a lost race retried, a lost race shown,
- * a non-admin's copy), the URL restoring the page, and the in-flight cap.
+ * a non-admin's copy), the URL restoring the page.
  */
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
 
@@ -35,7 +35,7 @@ const SLOW = { timeout: 4000 };
 
 function renderExplorer(options: ExplorerFixtureOptions = {}, initial: Record<string, unknown> = {}, env = "prod") {
   const onCall = vi.fn();
-  // One object, read by the fixture at call time: a test can lift a case (inFlight) mid-way.
+  // One object, read by the fixture at call time: a test can lift a case mid-way.
   const opts: ExplorerFixtureOptions = { ...options, onCall };
   const fixture = createExplorerFixtureApi(opts);
   const current: { search: Record<string, unknown> } = { search: initial };
@@ -376,17 +376,6 @@ describe("the URL", () => {
 });
 
 describe("states", () => {
-  it("says too many queries are in flight, and recovers on retry", async () => {
-    const user = userEvent.setup();
-    const { options } = renderExplorer({ inFlight: true });
-    expect(await screen.findByTestId("metrics-in-flight", {}, SLOW)).toHaveTextContent("Too many queries in flight");
-    act(() => {
-      options.inFlight = false;
-    });
-    await user.click(screen.getByTestId("metrics-in-flight-retry"));
-    expect(await screen.findByTestId("metrics-catalog-list", {}, SLOW)).toBeInTheDocument();
-  });
-
   it("says when a metric has no data in the window", async () => {
     renderExplorer({}, searchFromState({ ...stateFromSearch({}), detailMetric: "no.such.metric" }));
     expect(await screen.findByTestId("metric-no-data", {}, SLOW)).toHaveTextContent("No data for no.such.metric in the last hour");

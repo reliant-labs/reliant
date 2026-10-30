@@ -12,7 +12,7 @@
 
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { queryClient } from "@/lib/query-client";
-import { useActiveOrgStore } from "@/store/activeOrgStore";
+import { chooseActiveOrg, useActiveOrgStore } from "@/store/activeOrgStore";
 import { getControlPlaneClient } from "./client";
 
 export const orgKeys = {
@@ -81,4 +81,15 @@ export function resolveActiveOrg(orgs: MyOrgs, chosenId: string | null): string 
 export async function currentOrgId(): Promise<string | null> {
   const mine = await queryClient.fetchQuery({ queryKey: orgKeys.mine, queryFn: listMyOrganizations, staleTime: 60_000 });
   return resolveActiveOrg(mine, useActiveOrgStore.getState().chosenId);
+}
+
+/**
+ * Act in an org the person has just joined (a claimed site's org). The
+ * membership list is read afresh FIRST: the binding forgets a choice that is
+ * not in the list it holds, so choosing before the refetch would be undone.
+ * View-level only, like the switcher: the server-side default is untouched.
+ */
+export async function switchToJoinedOrg(orgId: string): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: orgKeys.mine });
+  chooseActiveOrg(orgId);
 }

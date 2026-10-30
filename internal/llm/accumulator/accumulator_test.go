@@ -3,6 +3,7 @@ package accumulator
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,4 +103,53 @@ func TestStreamAndAccumulate_AccumulatesContent(t *testing.T) {
 	resp, err := StreamAndAccumulate(context.Background(), d, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Hello, world", resp.Content)
+}
+
+// A failed stream hands back what it produced, so the caller can account for
+// the tokens a billed-then-dropped request consumed. The error is still the
+// result; the response is partial.
+func TestStreamAndAccumulate_FailedStreamKeepsReportedUsageAndPartialOutput(t *testing.T) {
+	billed := llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{
+		Usage: llm.TokenUsage{InputTokens: 500, OutputTokens: 120, CacheReadInputTokens: 100},
+	}}
+	failure := llm.DriverEvent{Type: llm.EventError, Error: errors.New("connection reset")}
+	delta := llm.DriverEvent{Type: llm.EventContentDelta, Content: "half an ans"}
+	stop := llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: &message.ToolCall{ID: "t1", Name: "x"}}
+
+	for name, events := range map[string][]llm.DriverEvent{
+		"usage then error": {delta, stop, billed, failure},
+		"error then usage": {delta, stop, failure, billed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp, err := StreamAndAccumulate(context.Background(), &scriptedDriver{events: events}, nil, nil, nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "connection reset")
+			require.NotNil(t, resp, "the usage the stream reported is not discarded")
+			assert.EqualValues(t, 500, resp.Usage.InputTokens)
+			assert.EqualValues(t, 120, resp.Usage.OutputTokens)
+			assert.EqualValues(t, 100, resp.Usage.CacheReadInputTokens)
+			assert.Equal(t, "half an ans", resp.Content)
+			require.Len(t, resp.ToolCalls, 1)
+		})
+	}
+
+	t.Run("error with no usage and no output has no response", func(t *testing.T) {
+		resp, err := StreamAndAccumulate(context.Background(), &scriptedDriver{events: []llm.DriverEvent{failure}}, nil, nil, nil)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+	})
+	t.Run("a stream that ends with no final event keeps its output", func(t *testing.T) {
+		resp, err := StreamAndAccumulate(context.Background(), &scriptedDriver{events: []llm.DriverEvent{delta}}, nil, nil, nil)
+		require.Error(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, "half an ans", resp.Content)
+		assert.Zero(t, resp.Usage.InputTokens)
+	})
+	t.Run("the driver's own response is not mutated", func(t *testing.T) {
+		own := &llm.DriverResponse{Usage: llm.TokenUsage{InputTokens: 7}}
+		_, err := StreamAndAccumulate(context.Background(), &scriptedDriver{events: []llm.DriverEvent{
+			delta, {Type: llm.EventComplete, Response: own}, failure}}, nil, nil, nil)
+		require.Error(t, err)
+		assert.Empty(t, own.Content, "the partial copy carries the content, the driver's value is untouched")
+	})
 }

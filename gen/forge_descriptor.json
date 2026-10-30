@@ -10862,6 +10862,11 @@
             "IsOptional": false
           },
           {
+            "Name": "machine_pool_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
             "Name": "connection_ids",
             "ProtoType": "message",
             "IsOptional": false
@@ -11286,6 +11291,10 @@
           {
             "name": "no_machine",
             "kind": "bool"
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string"
           },
           {
             "name": "connection_ids",
@@ -11734,6 +11743,14 @@
             "kind": "bool"
           },
           {
+            "name": "machine_pool_id",
+            "kind": "string"
+          },
+          {
+            "name": "machine_pool_name",
+            "kind": "string"
+          },
+          {
             "name": "health",
             "kind": "message",
             "type_name": "reliant.v1.TriggerHealth"
@@ -11897,6 +11914,10 @@
           {
             "name": "no_machine",
             "kind": "bool"
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string"
           },
           {
             "name": "notify_on_complete",
@@ -12208,6 +12229,11 @@
           {
             "name": "no_machine",
             "kind": "bool",
+            "optional": true
+          },
+          {
+            "name": "machine_pool_id",
+            "kind": "string",
             "optional": true
           },
           {
@@ -16864,6 +16890,89 @@
             "TargetKind": "daemon",
             "Writer": "INTERCEPTOR"
           }
+        },
+        {
+          "Name": "SetMachineLabels",
+          "InputType": "SetMachineLabelsRequest",
+          "OutputType": "SetMachineLabelsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.SetMachineLabelsRequest",
+          "OutputTypeFQ": "reliant.v1.SetMachineLabelsResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_machine_labels",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
+          "Name": "ListMachinePools",
+          "InputType": "ListMachinePoolsRequest",
+          "OutputType": "ListMachinePoolsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "NoSideEffects": true,
+          "Idempotency": "NO_SIDE_EFFECTS",
+          "InputTypeFQ": "reliant.v1.ListMachinePoolsRequest",
+          "OutputTypeFQ": "reliant.v1.ListMachinePoolsResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": false
+          }
+        },
+        {
+          "Name": "PutMachinePool",
+          "InputType": "PutMachinePoolRequest",
+          "OutputType": "PutMachinePoolResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.PutMachinePoolRequest",
+          "OutputTypeFQ": "reliant.v1.PutMachinePoolResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "put_machine_pool",
+            "TargetKind": "machine_pool",
+            "Writer": "INTERCEPTOR"
+          }
+        },
+        {
+          "Name": "DeleteMachinePool",
+          "InputType": "DeleteMachinePoolRequest",
+          "OutputType": "DeleteMachinePoolResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Custom": true,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.DeleteMachinePoolRequest",
+          "OutputTypeFQ": "reliant.v1.DeleteMachinePoolResponse",
+          "InputProtoFile": "reliant/v1/daemon_registry.proto",
+          "OutputProtoFile": "reliant/v1/daemon_registry.proto",
+          "Activity": {
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete_machine_pool",
+            "TargetKind": "machine_pool",
+            "Writer": "INTERCEPTOR"
+          }
         }
       ],
       "ProtoFile": "reliant/v1/daemon_registry.proto",
@@ -16894,6 +17003,14 @@
             "MessageType": "reliant.v1.ClearMachineCachesSkip"
           }
         ],
+        "DeleteMachinePoolRequest": [
+          {
+            "Name": "name",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DeleteMachinePoolResponse": null,
         "GetDaemonRequest": [
           {
             "Name": "daemon_id",
@@ -16916,6 +17033,31 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.DaemonInfo"
+          }
+        ],
+        "ListMachinePoolsRequest": null,
+        "ListMachinePoolsResponse": [
+          {
+            "Name": "pools",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePool"
+          }
+        ],
+        "PutMachinePoolRequest": [
+          {
+            "Name": "pool",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePoolSpec"
+          }
+        ],
+        "PutMachinePoolResponse": [
+          {
+            "Name": "pool",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.MachinePool"
           }
         ],
         "RefreshLocalModelsRequest": [
@@ -17005,6 +17147,26 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.LocalModelInventory"
+          }
+        ],
+        "SetMachineLabelsRequest": [
+          {
+            "Name": "daemon_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "labels",
+            "ProtoType": "message",
+            "IsOptional": false
+          }
+        ],
+        "SetMachineLabelsResponse": [
+          {
+            "Name": "daemon",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.DaemonInfo"
           }
         ]
       },
@@ -17164,8 +17326,26 @@
           {
             "name": "forge_version",
             "kind": "string"
+          },
+          {
+            "name": "labels",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "pools",
+            "kind": "string",
+            "repeated": true
           }
         ],
+        "reliant.v1.DeleteMachinePoolRequest": [
+          {
+            "name": "name",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DeleteMachinePoolResponse": [],
         "reliant.v1.DiscoveredProject": [
           {
             "name": "path",
@@ -17327,6 +17507,15 @@
             "repeated": true
           }
         ],
+        "reliant.v1.ListMachinePoolsRequest": [],
+        "reliant.v1.ListMachinePoolsResponse": [
+          {
+            "name": "pools",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePool",
+            "repeated": true
+          }
+        ],
         "reliant.v1.LocalModelEndpoint": [
           {
             "name": "id",
@@ -17399,6 +17588,106 @@
           {
             "name": "probed_at",
             "kind": "string"
+          }
+        ],
+        "reliant.v1.MachinePool": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "spec",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolSpec"
+          },
+          {
+            "name": "members",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolMember",
+            "repeated": true
+          },
+          {
+            "name": "warnings",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "created_at",
+            "kind": "message",
+            "type_name": "google.protobuf.Timestamp"
+          },
+          {
+            "name": "updated_at",
+            "kind": "message",
+            "type_name": "google.protobuf.Timestamp"
+          }
+        ],
+        "reliant.v1.MachinePoolMember": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "state",
+            "kind": "string"
+          },
+          {
+            "name": "live_runs",
+            "kind": "uint32"
+          },
+          {
+            "name": "size",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.MachinePoolSpec": [
+          {
+            "name": "name",
+            "kind": "string"
+          },
+          {
+            "name": "selector",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "min_members",
+            "kind": "uint32"
+          },
+          {
+            "name": "max_members",
+            "kind": "uint32"
+          },
+          {
+            "name": "member_size",
+            "kind": "string"
+          },
+          {
+            "name": "max_runs_per_member",
+            "kind": "uint32"
+          },
+          {
+            "name": "member_idle_timeout",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.PutMachinePoolRequest": [
+          {
+            "name": "pool",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePoolSpec"
+          }
+        ],
+        "reliant.v1.PutMachinePoolResponse": [
+          {
+            "name": "pool",
+            "kind": "message",
+            "type_name": "reliant.v1.MachinePool"
           }
         ],
         "reliant.v1.RefreshLocalModelsRequest": [
@@ -17478,6 +17767,25 @@
             "kind": "message",
             "type_name": "reliant.v1.LocalModelInventory"
           }
+        ],
+        "reliant.v1.SetMachineLabelsRequest": [
+          {
+            "name": "daemon_id",
+            "kind": "string"
+          },
+          {
+            "name": "labels",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          }
+        ],
+        "reliant.v1.SetMachineLabelsResponse": [
+          {
+            "name": "daemon",
+            "kind": "message",
+            "type_name": "reliant.v1.DaemonInfo"
+          }
         ]
       },
       "SchemaFiles": {
@@ -17485,6 +17793,8 @@
         "reliant.v1.ClearMachineCachesResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ClearMachineCachesSkip": "reliant/v1/daemon_registry.proto",
         "reliant.v1.DaemonInfo": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.DeleteMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.DeleteMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
         "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -17493,9 +17803,16 @@
         "reliant.v1.GetDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ListDaemonsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ListDaemonsResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.ListMachinePoolsRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.ListMachinePoolsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.LocalModelEndpoint": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInfo": "reliant/v1/tools_daemon.proto",
         "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
+        "reliant.v1.MachinePool": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.MachinePoolMember": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.MachinePoolSpec": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.PutMachinePoolRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.PutMachinePoolResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.RefreshLocalModelsResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResolveDaemonRequest": "reliant/v1/daemon_registry.proto",
@@ -17503,7 +17820,9 @@
         "reliant.v1.ResumeDaemonRequest": "reliant/v1/daemon_registry.proto",
         "reliant.v1.ResumeDaemonResponse": "reliant/v1/daemon_registry.proto",
         "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
-        "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto"
+        "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
+        "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto"
       },
       "Enums": {
         "reliant.v1.DaemonLifecyclePhase": [
@@ -34953,6 +35272,23 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "GetGitHubBotToken",
+          "InputType": "GetGitHubBotTokenRequest",
+          "OutputType": "GetGitHubBotTokenResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": false,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.GetGitHubBotTokenRequest",
+          "OutputTypeFQ": "reliant.v1.GetGitHubBotTokenResponse",
+          "InputProtoFile": "reliant/v1/token.proto",
+          "OutputProtoFile": "reliant/v1/token.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/token.proto",
@@ -35028,6 +35364,50 @@
           },
           {
             "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenRequest": [
+          {
+            "Name": "owner",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repo",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "permissions",
+            "ProtoType": "message",
+            "IsOptional": false
+          }
+        ],
+        "GetGitHubBotTokenResponse": [
+          {
+            "Name": "token",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "expires_at",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "bot_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "acting_for_login",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "repository",
             "ProtoType": "string",
             "IsOptional": false
           }
@@ -35168,6 +35548,44 @@
             "kind": "string"
           }
         ],
+        "reliant.v1.GetGitHubBotTokenRequest": [
+          {
+            "name": "owner",
+            "kind": "string"
+          },
+          {
+            "name": "repo",
+            "kind": "string"
+          },
+          {
+            "name": "permissions",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          }
+        ],
+        "reliant.v1.GetGitHubBotTokenResponse": [
+          {
+            "name": "token",
+            "kind": "string"
+          },
+          {
+            "name": "expires_at",
+            "kind": "string"
+          },
+          {
+            "name": "bot_login",
+            "kind": "string"
+          },
+          {
+            "name": "acting_for_login",
+            "kind": "string"
+          },
+          {
+            "name": "repository",
+            "kind": "string"
+          }
+        ],
         "reliant.v1.GetGitTokenRequest": [
           {
             "name": "provider",
@@ -35288,6 +35706,8 @@
         "reliant.v1.CreateTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.ExchangeTokenResponse": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenRequest": "reliant/v1/token.proto",
+        "reliant.v1.GetGitHubBotTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenRequest": "reliant/v1/token.proto",
         "reliant.v1.GetGitTokenResponse": "reliant/v1/token.proto",
         "reliant.v1.ListTokensRequest": "reliant/v1/token.proto",
@@ -35510,6 +35930,313 @@
         "reliant.v1.CancelToolCallResponse": "reliant/v1/tool_call.proto",
         "reliant.v1.ConvertToBackgroundRequest": "reliant/v1/tool_call.proto",
         "reliant.v1.ConvertToBackgroundResponse": "reliant/v1/tool_call.proto"
+      }
+    },
+    {
+      "Name": "UsageService",
+      "Package": "reliant.v1",
+      "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+      "PkgName": "reliantv1",
+      "Methods": [
+        {
+          "Name": "GetLLMUsage",
+          "InputType": "GetLLMUsageRequest",
+          "OutputType": "GetLLMUsageResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "Idempotency": "IDEMPOTENCY_UNKNOWN",
+          "InputTypeFQ": "reliant.v1.GetLLMUsageRequest",
+          "OutputTypeFQ": "reliant.v1.GetLLMUsageResponse",
+          "InputProtoFile": "reliant/v1/usage.proto",
+          "OutputProtoFile": "reliant/v1/usage.proto",
+          "Activity": {
+            "Mutating": false,
+            "Declared": true,
+            "None": "read-only: the caller's own usage totals; changes nothing"
+          }
+        }
+      ],
+      "ProtoFile": "reliant/v1/usage.proto",
+      "ModulePath": "",
+      "Messages": {
+        "GetLLMUsageRequest": [
+          {
+            "Name": "start_date",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "end_date",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "group_by",
+            "ProtoType": "enum",
+            "IsOptional": false
+          },
+          {
+            "Name": "provider",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "auth_mode",
+            "ProtoType": "enum",
+            "IsOptional": true
+          },
+          {
+            "Name": "model",
+            "ProtoType": "string",
+            "IsOptional": true
+          },
+          {
+            "Name": "purpose",
+            "ProtoType": "enum",
+            "IsOptional": true
+          }
+        ],
+        "GetLLMUsageResponse": [
+          {
+            "Name": "group_by",
+            "ProtoType": "enum",
+            "IsOptional": false
+          },
+          {
+            "Name": "buckets",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.LLMUsageBucket"
+          },
+          {
+            "Name": "totals",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.LLMUsageBucket"
+          },
+          {
+            "Name": "completeness",
+            "ProtoType": "enum",
+            "IsOptional": false
+          },
+          {
+            "Name": "as_of",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "detail_available_from",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "note",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ]
+      },
+      "Audience": "user",
+      "Schemas": {
+        "reliant.v1.GetLLMUsageRequest": [
+          {
+            "name": "start_date",
+            "kind": "string",
+            "validate": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "end_date",
+            "kind": "string",
+            "validate": {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "group_by",
+            "kind": "enum",
+            "type_name": "reliant.v1.LLMUsageGroupBy"
+          },
+          {
+            "name": "provider",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "auth_mode",
+            "kind": "enum",
+            "type_name": "reliant.v1.LLMAuthMode",
+            "optional": true
+          },
+          {
+            "name": "model",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "purpose",
+            "kind": "enum",
+            "type_name": "reliant.v1.LLMPurpose",
+            "optional": true
+          }
+        ],
+        "reliant.v1.GetLLMUsageResponse": [
+          {
+            "name": "group_by",
+            "kind": "enum",
+            "type_name": "reliant.v1.LLMUsageGroupBy"
+          },
+          {
+            "name": "buckets",
+            "kind": "message",
+            "type_name": "reliant.v1.LLMUsageBucket",
+            "repeated": true
+          },
+          {
+            "name": "totals",
+            "kind": "message",
+            "type_name": "reliant.v1.LLMUsageBucket"
+          },
+          {
+            "name": "completeness",
+            "kind": "enum",
+            "type_name": "reliant.v1.LLMUsageCompleteness"
+          },
+          {
+            "name": "as_of",
+            "kind": "string"
+          },
+          {
+            "name": "detail_available_from",
+            "kind": "string"
+          },
+          {
+            "name": "note",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.LLMUsageBucket": [
+          {
+            "name": "key",
+            "kind": "string"
+          },
+          {
+            "name": "calls",
+            "kind": "int64"
+          },
+          {
+            "name": "error_calls",
+            "kind": "int64"
+          },
+          {
+            "name": "input_tokens",
+            "kind": "int64"
+          },
+          {
+            "name": "output_tokens",
+            "kind": "int64"
+          },
+          {
+            "name": "cache_read_tokens",
+            "kind": "int64"
+          },
+          {
+            "name": "cache_write_tokens",
+            "kind": "int64"
+          },
+          {
+            "name": "latency_ms_total",
+            "kind": "int64"
+          },
+          {
+            "name": "avg_latency_ms",
+            "kind": "double"
+          }
+        ]
+      },
+      "SchemaFiles": {
+        "reliant.v1.GetLLMUsageRequest": "reliant/v1/usage.proto",
+        "reliant.v1.GetLLMUsageResponse": "reliant/v1/usage.proto",
+        "reliant.v1.LLMUsageBucket": "reliant/v1/usage.proto"
+      },
+      "Enums": {
+        "reliant.v1.LLMAuthMode": [
+          "LLM_AUTH_MODE_UNSPECIFIED",
+          "LLM_AUTH_MODE_MANAGED",
+          "LLM_AUTH_MODE_BYOK",
+          "LLM_AUTH_MODE_SUBSCRIPTION",
+          "LLM_AUTH_MODE_LOCAL"
+        ],
+        "reliant.v1.LLMPurpose": [
+          "LLM_PURPOSE_UNSPECIFIED",
+          "LLM_PURPOSE_CHAT",
+          "LLM_PURPOSE_COMPACTION",
+          "LLM_PURPOSE_TITLE",
+          "LLM_PURPOSE_DRAFT_AUTOMATION"
+        ],
+        "reliant.v1.LLMUsageCompleteness": [
+          "LLM_USAGE_COMPLETENESS_UNSPECIFIED",
+          "LLM_USAGE_COMPLETENESS_COMPLETE",
+          "LLM_USAGE_COMPLETENESS_PARTIAL"
+        ],
+        "reliant.v1.LLMUsageGroupBy": [
+          "LLM_USAGE_GROUP_BY_UNSPECIFIED",
+          "LLM_USAGE_GROUP_BY_DAY",
+          "LLM_USAGE_GROUP_BY_MODEL",
+          "LLM_USAGE_GROUP_BY_PROVIDER",
+          "LLM_USAGE_GROUP_BY_AUTH_MODE",
+          "LLM_USAGE_GROUP_BY_PURPOSE"
+        ]
+      },
+      "EnumNumbers": {
+        "reliant.v1.LLMAuthMode": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.LLMPurpose": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "reliant.v1.LLMUsageCompleteness": [
+          0,
+          1,
+          2
+        ],
+        "reliant.v1.LLMUsageGroupBy": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      },
+      "EnumGoRefs": {
+        "reliant.v1.LLMAuthMode": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "LLMAuthMode"
+        },
+        "reliant.v1.LLMPurpose": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "LLMPurpose"
+        },
+        "reliant.v1.LLMUsageCompleteness": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "LLMUsageCompleteness"
+        },
+        "reliant.v1.LLMUsageGroupBy": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "LLMUsageGroupBy"
+        }
       }
     },
     {
@@ -38834,15 +39561,21 @@
             "name": "on_failure",
             "kind": "message",
             "type_name": "reliant.v1.Workflow"
+          },
+          {
+            "name": "requires",
+            "kind": "message",
+            "type_name": "reliant.v1.WorkflowRequirements"
           }
         ],
         "reliant.v1.WorkflowConcurrency": [
           {
             "name": "max_running",
-            "kind": "uint32",
-            "validate": {
-              "gt": "0"
-            }
+            "kind": "uint32"
+          },
+          {
+            "name": "per_member",
+            "kind": "uint32"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -38949,6 +39682,23 @@
             "name": "triggers",
             "kind": "message",
             "type_name": "reliant.v1.WorkflowTrigger",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.WorkflowRequirements": [
+          {
+            "name": "tools",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "integrations",
+            "kind": "string",
+            "repeated": true
+          },
+          {
+            "name": "repos",
+            "kind": "string",
             "repeated": true
           }
         ],
@@ -39136,6 +39886,7 @@
         "reliant.v1.WorkflowConcurrency": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowEventSource": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowListItem": "reliant/v1/workflow.proto",
+        "reliant.v1.WorkflowRequirements": "reliant/v1/workflow_v2.proto",
         "reliant.v1.WorkflowTrigger": "reliant/v1/trigger.proto",
         "reliant.v1.WorkflowUI": "reliant/v1/workflow_v2.proto"
       },
@@ -42243,7 +42994,7 @@
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
-    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/daemon_registry.proto": "97f5ddf2875fe45d286ae5c1a4ddd62dd0b006f0fd4fc45471c396012ca202a7",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
     "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
@@ -42265,12 +43016,13 @@
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "37fc0d8a7a78dd8b08da87948e12fe5e573b9c3062b7f769f4dbbd416eea4f26",
-    "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
+    "reliant/v1/token.proto": "4817e691d2716f164c1b939d53f7f6fe0865646915a5e1147310ceaf8a983de5",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "ab1861144eb3ca5432b99fa14bc7258b8a6249252884d3bc5ebf941a5211525b",
-    "reliant/v1/trigger.proto": "ca45732592978bf7c4c2c45bfb62b54e629bafc0fbd1879c01a09ffac93ef190",
+    "reliant/v1/trigger.proto": "274269fe6cd1ef8a8b4ccb2d66b6b3ea8e24cd32a2e665ba44a03ea9c200d73a",
+    "reliant/v1/usage.proto": "a8c257eb1735b4f4c13771b0bbfadd583bf39516d10cdd4f3a1d384bec662385",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "3c73ffbf83de0cc4b5f5a7b044da11615d5b0a1e6574ff73cbc35ed423faa08c",
+    "reliant/v1/workflow_v2.proto": "7b526749d1271075d9ff47331d684dd5b3715f1658254fda0ab58ebeda378ed8",
     "reliant/v1/worktree.proto": "144d94015caf9ac29971f98cd781aa57a5d04f992894cd5dfd42f8572ebee37e"
   }
 }

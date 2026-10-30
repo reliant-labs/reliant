@@ -1,0 +1,131 @@
+# Reports when proto-vendor/controlplane/ is behind control-plane main.
+#
+# WHY THIS IS NOT IN ci.yml
+# =========================
+#
+# ci.yml is a GATE. Its cp-contract job judges a change against the
+# control-plane commit the vendored tree DECLARES (proto-vendor/controlplane/
+# SOURCE): the tree must be that commit's export, and the commit must be on
+# control-plane main. Whether control-plane has merged more proto since is not
+# a property of the change under review, so it must never turn a pull request
+# red. It used to: the gate compared against control-plane main, and every
+# control-plane proto merge kept every reliant PR reaching the lane out of the
+# merge queue until someone re-vendored.
+#
+# Being behind is a lag, not a break. control-plane's own gate
+# (scripts/check-vendored-proto.sh) fails a control-plane change that reliant's
+# vendored client could not survive, and the pin bot re-vendors a lag
+# (`upgrade.vendored_contracts` in forge.yaml). This workflow is the alert in
+# between: ONE issue, labelled `cp-contract:drift`, open exactly while main's
+# copy is behind control-plane main, closed by the run that finds it caught up.
+#
+# WHY NO AUTOMATIC RE-VENDOR PULL REQUEST FROM HERE
+# =================================================
+#
+# A pull request opened with this workflow's GITHUB_TOKEN triggers no workflow,
+# so it would never get the `CI result` check the merge queue requires, and
+# this repository holds no other token that may push. The re-vendor belongs to
+# the pin bot, which runs the repo's real gate and the review pipeline.
+#
+# It never fails on drift. It fails only when it could not decide (no deploy
+# key, no buf, a broken export), because an alert that silently cannot run is
+# indistinguishable from one reporting all clear.
+name: Control-plane contract drift
+
+on:
+  # Every push to main: a re-vendor landing closes the issue at once.
+  push:
+    branches: [main]
+    paths:
+      - "proto-vendor/controlplane/**"
+      - ".github/scripts/sync-controlplane-proto.mjs"
+      - ".github/workflows/cp-contract-drift.yml"
+  # Daily: drift is caused by control-plane moving, which lands no event here.
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cp-contract-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Vendored control-plane contract vs control-plane main
+    if: github.repository == 'reliant-labs/reliant'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The one write: the `cp-contract:drift` issue.
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Check out control-plane main (private, read-only)
+        uses: actions/checkout@v6
+        with:
+          repository: reliant-labs/control-plane
+          ref: main
+          path: control-plane-sibling
+          ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          go: "false"
+          node: "true"
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: "1.57.0"
+          github_token: ${{ github.token }}
+
+      # Exit 0 in sync, 3 behind; anything else means it could not decide and
+      # must not touch the issue. The script itself, not `task
+      # contract:controlplane:drift`: Task reports every failing command as
+      # exit 201, which would turn "behind" (3) into "could not decide".
+      - name: sync-controlplane-proto.mjs --upstream (task contract:controlplane:drift)
+        id: drift
+        env:
+          CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
+        run: |
+          set +e
+          node .github/scripts/sync-controlplane-proto.mjs --upstream --require --report "${RUNNER_TEMP}/drift.md"
+          rc=$?
+          case "${rc}" in
+            0) echo "verdict=in-sync" >> "$GITHUB_OUTPUT" ;;
+            3) echo "verdict=behind" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::the drift check could not decide (exit ${rc})"; exit "${rc}" ;;
+          esac
+          echo "cp_sha=$(git -C "${CONTROL_PLANE_DIR}" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Open, update or close the cp-contract:drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERDICT: ${{ steps.drift.outputs.verdict }}
+          CP_SHA: ${{ steps.drift.outputs.cp_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          label="cp-contract:drift"
+          gh label create "${label}" --force --color FBCA04 \
+            --description "proto-vendor/controlplane/ is behind control-plane main; opened and closed by cp-contract-drift.yml" >/dev/null
+          open="$(gh issue list --label "${label}" --state open --limit 1 --json number --jq '.[0].number // empty')"
+          report="${RUNNER_TEMP}/drift.md"
+          if [ "${VERDICT}" = behind ]; then
+            printf '\n\ncontrol-plane main: `%s`. Run: %s\n' "${CP_SHA}" "${RUN_URL}" >> "${report}"
+            if [ -z "${open}" ]; then
+              gh issue create --title "Vendored control-plane contract is behind control-plane main" \
+                --label "${label}" --body-file "${report}"
+            # Say each control-plane commit once, not once a day.
+            elif ! gh issue view "${open}" --json comments,body --jq '[.body, .comments[].body] | join("\n")' | grep -qF "${CP_SHA}"; then
+              gh issue comment "${open}" --body-file "${report}"
+            fi
+          elif [ -n "${open}" ]; then
+            gh issue close "${open}" --comment "proto-vendor/controlplane/ matches control-plane main (\`${CP_SHA}\`): ${RUN_URL}"
+          fi

@@ -165,6 +165,29 @@ func TestAdmissionRefusesHeavyCommandsOnly(t *testing.T) {
 	}
 }
 
+// The process guard (BackgroundAdmission) refuses only heavy commands started
+// in the background: those are what piled up when a machine ran out of
+// processes (2026-10-30). A foreground heavy command, which its agent waits
+// on, and a light one still run.
+func TestBackgroundAdmissionRefusesOnlyBackgroundHeavyCommands(t *testing.T) {
+	g, err := New(Config{Env: []string{"FORGE_HEAVY_SLOTS=2"}, Self: testSelf(t), BackgroundAdmission: refuseAll("near the process limit")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bg := exec.Command("sh", "-c", "go test ./...")
+	_, err = g.Prepare(bg, Job{Command: "go test ./...", Background: true})
+	var refused *RefusedError
+	if !errors.As(err, &refused) || !strings.Contains(err.Error(), "near the process limit") {
+		t.Fatalf("background heavy: err = %v, want a refusal", err)
+	}
+	if heavy, err := g.Prepare(exec.Command("sh", "-c", "go test ./..."), Job{Command: "go test ./..."}); !heavy || err != nil {
+		t.Fatalf("foreground heavy: %v, %v; want it queued, not refused", heavy, err)
+	}
+	if heavy, err := g.Prepare(exec.Command("sh", "-c", "ls"), Job{Command: "ls", Background: true}); heavy || err != nil {
+		t.Fatalf("background light: %v, %v", heavy, err)
+	}
+}
+
 func TestPrepareRewritesOnlyHeavyCommands(t *testing.T) {
 	dir := t.TempDir()
 	g, err := New(Config{Env: []string{"FORGE_SLOTS_DIR=" + dir, "FORGE_HEAVY_SLOTS=3"}, Self: testSelf(t)})

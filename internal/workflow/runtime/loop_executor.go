@@ -775,7 +775,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 // loadPresetParams loads a preset by name and returns its params.
 // Uses the V2_LoadPresetParams activity to avoid import cycles.
 func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName string) (map[string]interface{}, error) {
-	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -783,16 +783,16 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 			MaximumInterval:    10 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	var params map[string]interface{}
 	// chat_id scopes a project preset to the run's project and machine,
 	// the catalog the run was admitted against (LoadPresetParamsActivity).
-	err := workflow.ExecuteActivity(activityCtx, "LoadPresetParams", map[string]interface{}{
-		"project_path": e.projectPath,
-		"chat_id":      e.chatID,
-		"preset_name":  presetName,
-		"catalog_pin":  catalogPinFrom(ctx),
+	err := executeBookkeeping(ctx, activityOpts, "LoadPresetParams", types.LoadPresetParamsInput{
+		ProjectPath: e.projectPath,
+		ChatID:      e.chatID,
+		PresetName:  presetName,
+		CatalogPin:  catalogPinFrom(ctx),
 	}).Get(ctx, &params)
 
 	if err != nil {
@@ -1160,7 +1160,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 	}
 
 	// Use an activity to load the workflow (same as main workflow loading)
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -1168,7 +1168,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	workflowRef := e.workflowIdentity()
 	if e.invocationContract != nil && e.invocationContract.WorkflowRef != "" && !strings.Contains(e.invocationContract.WorkflowRef, "{{") {
@@ -1176,14 +1176,14 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 	}
 
 	// Pass ChatID to allow the activity to resolve project-relative workflow paths
-	loadInput := map[string]string{
-		"chat_id":       e.chatID,
-		"workflow_name": workflowRef,
-		"catalog_pin":   catalogPinFrom(e.ctx),
+	loadInput := types.LoadWorkflowInput{
+		ChatID:       e.chatID,
+		WorkflowName: workflowRef,
+		CatalogPin:   catalogPinFrom(e.ctx),
 	}
 	// LoadedWorkflow matches the output of ActivityLoadWorkflow (LoadWorkflowOutput in handlers)
 	var loadedWf LoadedWorkflow
-	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
+	if err := executeBookkeeping(e.ctx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
 		return fmt.Errorf("activity load failed: %w", err)
 	}
 
@@ -2062,6 +2062,13 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						return nil, endSubAgent(e.ctx, exhaustion, running.StepID)
 					}
 
+					// Unless pausing would only hold the run for nothing: see
+					// endsRunInsteadOfPausing.
+					if endErr := e.pauseCtrl.endsRunInsteadOfPausing(running.StepID, stepEvent.Error); endErr != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), e.iteration+1)
+						return nil, endErr
+					}
+
 					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
@@ -2097,6 +2104,12 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					// Self-pause and block until resume
 					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
 					e.pauseCtrl.DoCheckPause(e.ctx)
+					// An unattended run whose pause outlived its self-resume
+					// ladder ends here, with the cause (pause_coordinator.go).
+					if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), e.iteration+1)
+						return nil, gaveUp
+					}
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running

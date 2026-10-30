@@ -125,6 +125,7 @@ type ApprovalResolveStore interface {
 // to the local-model directory, threads.Service, the tool bindings, the mailbox
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
@@ -172,6 +173,7 @@ type CleanupStore interface {
 // CompactStore is what CompactActivity reads and writes; the summary goes
 // through threads.Service and the history through LoadMessagesForLLM.
 type CompactStore interface {
+	LLMUsageRecorder
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID string, messageID string) (*db.ContextWindow, error)
@@ -276,6 +278,7 @@ type ExecuteToolsStore interface {
 
 // GenerateTitleStore is what GenerateTitleActivity reads and writes.
 type GenerateTitleStore interface {
+	LLMUsageRecorder
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
@@ -330,6 +333,7 @@ type PreflightDaemonCheckStore interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	QueueChatForMachine(ctx context.Context, chatID string, machine *db.QueuedMachine) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 }
@@ -404,6 +408,7 @@ type WorkflowStatusStore interface {
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
+	SetWorkflowFailureDetail(ctx context.Context, id, detail string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
