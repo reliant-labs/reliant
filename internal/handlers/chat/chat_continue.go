@@ -279,7 +279,6 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
-	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	// The ended run left its thread terminal, and a terminal thread with a
@@ -331,7 +330,11 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 // Temporal answers a query on a closed run by replaying its entire history on
 // a worker, and on 2026-10-23 those replays (up to 37k events each, 13-17
 // minutes of two cores) starved the worker pool (rtemporal.QueryOpenRun).
+//
+// It pins an unpinned chat first: the inputs are read from its machine's
+// catalog, the one the restarted run's loads resolve against.
 func (s *Service) inputsAfterClosedRun(ctx context.Context, chat *db.Chat, workflowName string) (map[string]interface{}, error) {
+	s.chatPinner().Pin(ctx, chat)
 	presets := make(map[string]string, len(chat.SelectedPresets))
 	for group, name := range chat.SelectedPresets {
 		if name != "" {

@@ -209,6 +209,12 @@ func (s *Service) resurrectGhostWorkflow(
 		}
 	}
 
+	// Place the chat on its machine before its inputs are built: they are
+	// read from that machine's catalog (presets, input schema), the same one
+	// the run's own loads resolve against once it is pinned. Building first
+	// read the union for a chat with no pin yet, then ran another machine's
+	// definition.
+	s.chatPinner().Pin(ctx, chat)
 	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
@@ -251,8 +257,7 @@ func (s *Service) resurrectGhostWorkflow(
 
 	// Note: Message was already saved above before ghost recovery
 
-	// Inject session daemon if set on chat
-	s.chatPinner().Pin(ctx, chat)
+	// Inject the session daemon the chat was pinned to above.
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{

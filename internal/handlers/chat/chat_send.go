@@ -883,6 +883,13 @@ func (s *Service) SendMessage(
 		}
 	}
 
+	// Place the chat on its machine before its inputs are built: they are
+	// read from that machine's catalog (presets, input schema), the same one
+	// the run's own loads resolve against once it is pinned. Building first
+	// read the union for a chat with no pin yet, then ran another machine's
+	// definition.
+	s.chatPinner().Pin(ctx, chat)
+
 	// Build workflow inputs: presets, then the chat's stored selection, then
 	// this send's params. A send that carries no params still runs the model
 	// and mode the chat was set to, from any device.
@@ -966,8 +973,7 @@ func (s *Service) SendMessage(
 	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
-	// Inject session daemon if set on chat
-	s.chatPinner().Pin(ctx, chat)
+	// Inject the session daemon the chat was pinned to above.
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	// A message queued to a run that closed before its wake is still in the

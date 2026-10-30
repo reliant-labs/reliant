@@ -670,6 +670,12 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if spec.DaemonID != "" {
 		checked.ActiveDaemonID = &spec.DaemonID
 		checked.NoMachine = false
+	} else if RunMachine(&checked) == "" && !checked.NoMachine && l.pinner != nil {
+		// An unpinned pending chat is pinned when it starts (start); admit it
+		// against the machine that pin will choose, not the union.
+		if target := l.pinner.Target(ctx, &checked); target != "" {
+			checked.ActiveDaemonID = &target
+		}
 	}
 	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, RunMachine(&checked), ev); err != nil {
 		return nil, err
@@ -855,6 +861,11 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		return nil, &InternalError{Reason: "failed to read the recorded start", Err: err}
 	}
 
+	// Pin an unpinned chat before its inputs are built: they are read from
+	// its machine's catalog, the one the run's own loads resolve against.
+	if l.pinner != nil {
+		l.pinner.Pin(ctx, chat)
+	}
 	initialData, err := l.buildInputs(ctx, spec.OwnerUserID, chat, workflowName, chat.SelectedPresets, params)
 	if err != nil {
 		return nil, err

@@ -2,6 +2,7 @@
 package launch
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -170,6 +172,66 @@ func TestResolveProviderPolicyKeepsTheRunsPolicyWhenAPresetIsGone(t *testing.T) 
 	chat.SelectedPresets = map[string]string{"default": "guarded", "reviewer": "gone"}
 	assert.Equal(t, held, launcher.ResolveProviderPolicy(ctx, launchTestUserID, chat, inputs),
 		"a preset that no longer resolves must not hand the run to the Settings default's fallback")
+}
+
+// fixedPinner places every unpinned chat on one machine.
+type fixedPinner struct {
+	repo *db.Repo
+	id   string
+}
+
+func (p fixedPinner) Target(context.Context, *db.Chat) string { return p.id }
+
+func (p fixedPinner) Pin(ctx context.Context, chat *db.Chat) {
+	if chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
+		return
+	}
+	if stored, err := p.repo.PinChatDaemonIfUnset(ctx, chat.ID, p.id); err == nil && stored != "" {
+		chat.ActiveDaemonID = &stored
+	}
+}
+
+// An unpinned pending chat started without a daemon is pinned when it starts,
+// so it is admitted, defaulted and validated against the machine that pin
+// chooses, not the union.
+func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) {
+	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
+	cicd, laptop := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{cicd, laptop} {
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: launchTestUserID}))
+	}
+	now := time.Now().UTC()
+	for daemonID, push := range map[string]struct {
+		at     time.Time
+		inputs string
+	}{
+		cicd:   {now.Add(-time.Hour), "  env: {type: string, default: prod}\n"},
+		laptop: {now, "  env: {type: string, required: true}\n  region: {type: string, default: eu}\n"},
+	} {
+		wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "deploy", Name: "deploy", RelativePath: ".reliant/workflows/deploy.yaml",
+			YAMLContent: "name: deploy\napiVersion: v2\ninputs:\n" + push.inputs + "entry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"}})
+		require.NoError(t, err)
+		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: wj, PushedAt: push.at,
+		}, true)
+		require.NoError(t, err)
+	}
+	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
+
+	starter := &fakeStarter{}
+	launcher := NewLauncher(repo, threads.NewService(repo), starter, &recordingRunRecorder{repo: repo}, "test-task-queue",
+		WithChatPinner(fixedPinner{repo: repo, id: cicd}))
+	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
+		OwnerUserID: launchTestUserID, ChatID: chatID, Workflow: "deploy", Messages: userSeed("go"),
+	})
+	require.NoError(t, err, "the laptop's required env must not reject a start the pin puts on cicd")
+	inputs := starter.lastRootInput(t).Inputs
+	assert.Equal(t, "prod", inputs["env"])
+	assert.NotContains(t, inputs, "region")
+	chat, err := repo.GetChat(ctx, chatID)
+	require.NoError(t, err)
+	require.NotNil(t, chat.ActiveDaemonID)
+	assert.Equal(t, cicd, *chat.ActiveDaemonID)
 }
 
 // A pending no-machine branch started with a daemon named at its first send

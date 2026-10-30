@@ -218,6 +218,13 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	workflowName := *chat.WorkflowName
 	workflowID := chat.MainThreadID()
 
+	// Place the chat on its machine before its inputs are built: they are
+	// read from that machine's catalog (presets, input schema), the same one
+	// the run's own loads resolve against once it is pinned. Building first
+	// read the union for a chat with no pin yet, then ran another machine's
+	// definition.
+	s.chatPinner().Pin(ctx, chat)
+
 	// The run continues the chat's last one, so it runs on that run's inputs
 	// while that run is still open to say them. A closed run is never asked
 	// (Temporal would replay its whole history to answer; rtemporal.
@@ -253,7 +260,6 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	}
 	s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, workflowID, inputs, nil)
 	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
-	s.chatPinner().Pin(ctx, chat)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	resume := v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)
