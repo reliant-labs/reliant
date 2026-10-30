@@ -22,7 +22,9 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import { alertingRetry, isInFlightLimit, issuesRetry, obsRetry, releaseHealthRetry, retryAfterMs } from "@/services/controlPlane/observability/errors";
+import { panelSchedulerFor } from "@/services/controlPlane/observability/panelScheduler";
+import { isPollRead, runAsPoll } from "@/services/controlPlane/observability/quotaStore";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -47,6 +49,7 @@ import type {
   ObsScope,
   ListTracesResult,
   Panel,
+  PanelResult,
   SearchLogsResult,
   Severity,
   TimeWindow,
@@ -300,9 +303,45 @@ export interface PanelQueryOptions {
   enabled?: boolean;
 }
 
+/** How many times a panel the server refused for its concurrent-read cap asks again before it shows an error with Retry. */
+export const PANEL_BUSY_RETRIES = 5;
+const PANEL_BUSY_BASE_MS = 1_000;
+const PANEL_BUSY_CAP_MS = 16_000;
+
+/**
+ * How long a refused panel waits before asking again: never less than the
+ * server's own Retry-After, plus a random share of an exponentially growing
+ * window, so a dashboard's refused panels spread out instead of returning
+ * together. `random` is injectable for tests.
+ */
+export function panelBusyDelayMs(failureCount: number, error: unknown, random: () => number = Math.random): number {
+  const floor = retryAfterMs(error) ?? 0;
+  const window = Math.min(PANEL_BUSY_BASE_MS * 2 ** failureCount, PANEL_BUSY_CAP_MS);
+  return Math.round(floor + random() * window);
+}
+
+/**
+ * Retry policy of a panel read. The concurrent-read cap is expected on a busy
+ * console and clears by itself, so it is retried (bounded); every other answer
+ * keeps obsRetry's rule. A retry re-enters the panel scheduler's queue.
+ */
+export function panelRetry(failureCount: number, error: unknown): boolean {
+  return isInFlightLimit(error) ? failureCount < PANEL_BUSY_RETRIES : obsRetry(failureCount, error);
+}
+
+function panelRetryDelay(failureCount: number, error: unknown): number {
+  return isInFlightLimit(error) ? panelBusyDelayMs(failureCount, error) : Math.min(1_000 * 2 ** failureCount, 30_000);
+}
+
 /**
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
  * service filter rides as `services`; search panels are never run here.
+ *
+ * Every read goes through the query client's panel scheduler (a few at a time,
+ * oldest first), well under control-plane's cap of six concurrent reads per
+ * user. Leaving the page or changing the range cancels a queued or running read.
+ * While a refused read waits to be retried the result has `failureCount > 0`
+ * and the cap error as `failureReason`; the views say "Waiting for capacity".
  */
 export function usePanelQuery(
   scope: ObsScope | null,
@@ -313,17 +352,30 @@ export function usePanelQuery(
   options: PanelQueryOptions = {}
 ) {
   const api = useObsReadApi();
+  const client = useQueryClient();
   const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
   const enabled = !!scope && panel.kind !== "search" && (options.enabled ?? true);
   const query = useQuery({
     queryKey,
-    queryFn: () => {
-      const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy });
+    queryFn: ({ signal }) => {
+      // The scheduler may start the read later than the poll that asked for it:
+      // carry the poll mark across the wait.
+      const poll = isPollRead();
+      return panelSchedulerFor(client).run((cancel) => {
+        let read!: Promise<PanelResult>;
+        const start = () => {
+          const offset = options.offsetMs?.() ?? 0;
+          read = api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal: cancel });
+        };
+        if (poll) runAsPoll(start);
+        else start();
+        return read;
+      }, signal);
     },
     enabled,
     staleTime: 30_000,
-    retry: obsRetry,
+    retry: panelRetry,
+    retryDelay: panelRetryDelay,
   });
   usePolled(queryKey, options.refetchInterval ?? false, enabled);
   return query;

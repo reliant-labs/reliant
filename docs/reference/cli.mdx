@@ -2859,6 +2859,20 @@ reliant forge db migrate status [flags]
 
 Apply pending migrations
 
+Apply pending migrations.
+
+Every migration runs under a lock_timeout (default 5s) and a statement_timeout
+(default 30m): a migration that cannot get its lock fails fast instead of
+queueing every query on the table behind it. A timed-out migration is rolled
+back and tried again with a growing wait, up to --lock-attempts times (default
+5), then fails the run with the schema unchanged. One migration overrides the
+timeouts for itself with a header comment:
+
+  -- forge:lock-timeout 30s
+  -- forge:statement-timeout 2h
+
+A duration is 500ms, 30s, 5m, 1h; "off" disables the timeout.
+
 ```
 reliant forge db migrate up [flags]
 ```
@@ -2869,6 +2883,9 @@ reliant forge db migrate up [flags]
 |------|------|---------|-------------|
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 | `--dsn` | `string` | - | Database connection string (falls back to $DATABASE_URL) |
+| `--lock-attempts` | `int` | `0` | Attempts at a migration whose lock times out, the first included (default 5; 1 never retries) |
+| `--lock-timeout` | `string` | - | How long one attempt at a migration waits for a lock, e.g. 5s, 30s, off (default 5s; a migration's own -- forge:lock-timeout wins) |
+| `--statement-timeout` | `string` | - | Longest one statement may run, e.g. 30m, 2h, off (default 30m; a migration's own -- forge:statement-timeout wins) |
 
 ---
 
