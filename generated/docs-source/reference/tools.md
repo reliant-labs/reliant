@@ -3047,7 +3047,7 @@ WHEN NOT TO USE:
 HOW IT WORKS:
 It checks every couple of seconds and returns the moment the machine is connected. If the budget elapses first it returns normally, saying what state the machine is in; that is not an error, and calling again keeps waiting.
 
-If it reports that the machine was removed or failed to start, waiting will not help: tell the user what happened and stop.
+If it reports that the machine was removed, or that it failed to start and stayed failed, waiting will not help: tell the user what happened and stop.
 
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.

@@ -225,16 +225,6 @@ export function warningText(code: string): string {
   return WARNING_COPY[code] ?? code.replace(/_/g, " ");
 }
 
-/**
- * The console's in-flight cap (MX-C3): ResourceExhausted "too many queries in
- * flight". It clears as soon as one of the reader's own queries finishes, so it
- * gets its own words and a retry — unlike the org's hourly quota, which shares
- * the code.
- */
-export function isInFlightLimit(error: unknown): boolean {
-  return error instanceof ConnectError && error.code === Code.ResourceExhausted && /in flight/i.test(error.rawMessage || error.message);
-}
-
 /** NotFound from GetMetric: the metric has no data in the window, a state to show rather than a failure. */
 export function isNoDataInWindow(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.NotFound;

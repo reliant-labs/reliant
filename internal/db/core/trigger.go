@@ -447,6 +447,11 @@ type TriggerEvent struct {
 	CapacityOrder       *int64
 	CapacityProjectID   *string
 	CapacityWorkflowRef *string
+	// CapacityKey is the rendered concurrency key under `waiting: latest`:
+	// enrolling an event with one supersedes the older waiting events of the
+	// same key. Nil is FIFO (or a key that could not be rendered): the event
+	// supersedes nothing and nothing supersedes it.
+	CapacityKey *string
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for

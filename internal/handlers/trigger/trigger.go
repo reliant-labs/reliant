@@ -559,6 +559,8 @@ func triggerOutcomeFromProto(o reliantv1.TriggerEventOutcome) (core.TriggerEvent
 		return core.TriggerEventSkipped, true
 	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED:
 		return core.TriggerEventFailed, true
+	case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING:
+		return core.TriggerEventPending, true
 	}
 	return "", false
 }

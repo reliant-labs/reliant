@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -20,6 +20,7 @@ import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } 
 import { renderWithApi } from "../../__tests__/obsTestUtils";
 import type { DashboardSearch } from "../dashboardModel";
 import { DashboardView, type DashboardHrefs } from "../DashboardView";
+import { ForgeConsoleContext, type ForgeConsole } from "../../../Console/consoleContext";
 
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
@@ -35,7 +36,7 @@ const hrefs: DashboardHrefs = {
 
 const ref = (kind: "release" | "workspace", key: string): DashboardRef => ({ kind, projectId: FIXTURE_PROJECT, key });
 
-function renderDashboard(dashRef: DashboardRef, initial: DashboardSearch = {}, options: FixtureOptions = {}, env = "prod") {
+function renderDashboard(dashRef: DashboardRef, initial: DashboardSearch = {}, options: FixtureOptions = {}, env = "prod", inConsole = false) {
   const onCall = vi.fn();
   const navigateTo = vi.fn();
   const api = createFixtureApi({ ...options, onCall });
@@ -61,7 +62,17 @@ function renderDashboard(dashRef: DashboardRef, initial: DashboardSearch = {}, o
       />
     );
   }
-  renderWithApi(api, <Stateful />);
+  const console = { forgeProject: "shop", projectId: "proj-1", env, setEnv: vi.fn(), page: { kind: "observability" }, href: () => "/" } as unknown as ForgeConsole;
+  renderWithApi(
+    api,
+    inConsole ? (
+      <ForgeConsoleContext.Provider value={console}>
+        <Stateful />
+      </ForgeConsoleContext.Provider>
+    ) : (
+      <Stateful />
+    )
+  );
   return { onCall, navigateTo, current: () => latest };
 }
 
@@ -96,6 +107,77 @@ describe("a release dashboard", () => {
     expect(await screen.findByTestId("obs-panel-funnel")).toBeInTheDocument();
     expect(await screen.findByTestId("obs-panel-issues")).toBeInTheDocument();
     expect(await screen.findByTestId("obs-panel-sessions")).toBeInTheDocument();
+  });
+});
+
+describe("a platform dashboard", () => {
+  function platformApi(scope: "platform" | undefined) {
+    const base = createFixtureApi();
+    return {
+      ...base,
+      getDashboard: async (req: Parameters<typeof base.getDashboard>[0]) => {
+        const doc = await base.getDashboard(req);
+        return { ...doc, spec: { ...doc.spec, scope } };
+      },
+    };
+  }
+
+  function render(scope: "platform" | undefined, env: string) {
+    const onCall = vi.fn();
+    const api = platformApi(scope);
+    const wrapped = { ...api, queryPanel: (req: Parameters<typeof api.queryPanel>[0]) => (onCall(req), api.queryPanel(req)) };
+    renderWithApi(
+      wrapped,
+      <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env={env} environments={FIXTURE_ENVS} search={{}} onSearch={vi.fn()}
+        onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+    );
+    return onCall;
+  }
+
+  it("reads platform-wide, whatever environment the top bar names, and says so", async () => {
+    const onCall = render("platform", "prod");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    for (const [req] of onCall.mock.calls) {
+      expect(req).toMatchObject({ platformScope: true, envIds: [] });
+      expect(req.projectId).toBeUndefined();
+    }
+  });
+
+  it("still reads platform-wide for an environment this project has no record of", async () => {
+    const onCall = render("platform", "a-preview-that-is-gone");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    expect(onCall.mock.calls[0][0]).toMatchObject({ platformScope: true, envIds: [] });
+  });
+
+  it("borrows no environment's alert bands or release to compare with, whatever environment is selected", async () => {
+    for (const env of ["prod", "staging"]) {
+      const api = platformApi("platform");
+      const history = vi.fn(api.listAlertHistory);
+      const releases = vi.fn(api.listReleases);
+      const queried = vi.fn();
+      renderWithApi(
+        { ...api, listAlertHistory: history, listReleases: releases, queryPanel: (req: Parameters<typeof api.queryPanel>[0]) => (queried(req), api.queryPanel(req)) },
+        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env={env} environments={FIXTURE_ENVS} search={{ compare: "release" }} onSearch={vi.fn()}
+          onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+      );
+      await screen.findByTestId("dashboard-grid");
+      await waitFor(() => expect(queried).toHaveBeenCalled());
+      expect(history).not.toHaveBeenCalled();
+      expect(releases).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it("is unchanged for an ordinary dashboard: scoped to the environment, never platform-wide", async () => {
+    const onCall = render(undefined, "prod");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(onCall).toHaveBeenCalled());
+    for (const [req] of onCall.mock.calls) {
+      expect(req.envIds).toEqual(["env-prod"]);
+      expect(req.platformScope).toBeUndefined();
+    }
   });
 });
 
@@ -232,6 +314,59 @@ describe("variables, compare, refresh, share, full screen", () => {
     expect(within(menu).getByTestId("drill-traces")).toHaveAttribute("href", expect.stringContaining("q=orders.v1.OrdersService%2FCreateOrder"));
     expect(within(menu).getByTestId("drill-logs")).toHaveAttribute("href", expect.stringContaining("range=1h"));
     expect(within(menu).queryByTestId("drill-workload")).not.toBeInTheDocument();
+  });
+});
+
+describe("a day-grained dashboard (the empty-dashboards audit)", () => {
+  const usage = () => ref("release", "product-usage");
+  const grained: FixtureOptions = { dashboardsDayGrained: true };
+  const queried = (onCall: ReturnType<typeof vi.fn>, id: string) => calls(onCall, "QueryPanel").filter((req) => req.panel.id === id);
+
+  it("opens on the range the spec declares, not the console's hour, and sends the 7 day window", async () => {
+    const { onCall } = renderDashboard(usage(), {}, grained);
+    expect(await screen.findByRole("heading", { level: 1, name: "Product: usage" })).toBeInTheDocument();
+    await waitFor(() => expect(queried(onCall, "workflows-by-outcome").length).toBeGreaterThan(0));
+    expect(screen.getByRole("combobox", { name: /time/i })).toHaveValue("7d");
+    const { window } = queried(onCall, "workflows-by-outcome")[0];
+    expect(window.endMs - window.startMs).toBe(7 * 24 * 3_600_000);
+    expect(screen.queryByTestId("dashboard-panel-widened-workflows-by-outcome")).not.toBeInTheDocument();
+  });
+
+  it("draws a day per date: eight buckets, a UTC calendar note, no single stray point", async () => {
+    renderDashboard(usage(), {}, grained);
+    const panel = await screen.findByTestId("dashboard-panel-workflows-by-outcome");
+    await waitFor(() => expect(within(panel).getByTestId("chart-bucket-note")).toHaveTextContent("1-day buckets: UTC calendar dates"));
+  });
+
+  it("widens a day panel opened on a shorter range to hold two buckets, and says so, while a step panel keeps the range", async () => {
+    const { onCall } = renderDashboard(usage(), { range: "1h" }, grained);
+    const note = await screen.findByTestId("dashboard-panel-widened-workflows-by-outcome");
+    expect(note).toHaveTextContent("Window smaller than this panel's 1-day bucket: showing last 7 days");
+    await waitFor(() => expect(queried(onCall, "workflows-by-outcome").length).toBeGreaterThan(0));
+    const day = queried(onCall, "workflows-by-outcome")[0].window;
+    expect(day.endMs - day.startMs).toBe(7 * 24 * 3_600_000);
+    await waitFor(() => expect(queried(onCall, "events-by-step").length).toBeGreaterThan(0));
+    const step = queried(onCall, "events-by-step")[0].window;
+    expect(step.endMs - step.startMs).toBe(3_600_000);
+    expect(screen.queryByTestId("dashboard-panel-widened-events-by-step")).not.toBeInTheDocument();
+  });
+
+  it("opens Explore on the dashboard's own range when the URL names none", async () => {
+    const user = userEvent.setup();
+    renderDashboard(usage(), {}, grained, "prod", true);
+    await user.click(await screen.findByTestId("dashboard-panel-menu-goroutines"));
+    const explore = await screen.findByTestId("dashboard-panel-explore-goroutines");
+    expect(new URL(explore.getAttribute("href")!, "http://x").searchParams.get("range")).toBe("7d");
+  });
+
+  it("keeps a range the viewer picked, and offers the dashboard's own as the unmarked choice", async () => {
+    const user = userEvent.setup();
+    const { current } = renderDashboard(usage(), {}, grained);
+    const time = await screen.findByRole("combobox", { name: /time/i });
+    await user.selectOptions(time, "24h");
+    expect(current().range).toBe("24h");
+    await user.selectOptions(time, "7d");
+    expect(current().range).toBeUndefined();
   });
 });
 

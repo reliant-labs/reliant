@@ -57,3 +57,42 @@ func TestWireShapeUnchanged(t *testing.T) {
 		t.Errorf("last_stream_seq must be omitted when zero, got %v", finNoSeq)
 	}
 }
+
+// The bookkeeping inputs (bookkeeping.go) were maps too. Their JSON is not
+// byte-for-byte the old map's — an empty catalog_pin and a zero
+// loop_iteration are now omitted, an empty project_id is now sent — so what
+// is pinned is what the handler sees: the old map and the new struct decode
+// to the same value.
+func TestBookkeepingInputsDecodeAsBefore(t *testing.T) {
+	decode := func(t *testing.T, v, into interface{}) {
+		t.Helper()
+		b, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if err := json.Unmarshal(b, into); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+	}
+	same := func(t *testing.T, name string, old, now interface{}) {
+		t.Helper()
+		if !reflect.DeepEqual(old, now) {
+			t.Errorf("%s decodes differently:\n old=%+v\n new=%+v", name, old, now)
+		}
+	}
+
+	var loadOld, loadNew LoadWorkflowInput
+	decode(t, map[string]string{"chat_id": "c1", "workflow_name": "builtin://agent", "catalog_pin": ""}, &loadOld)
+	decode(t, LoadWorkflowInput{ChatID: "c1", WorkflowName: "builtin://agent"}, &loadNew)
+	same(t, "LoadWorkflowInput", loadOld, loadNew)
+
+	var presetOld, presetNew LoadPresetParamsInput
+	decode(t, map[string]interface{}{"project_path": "/p", "chat_id": "c1", "preset_name": "fast", "catalog_pin": "pin"}, &presetOld)
+	decode(t, LoadPresetParamsInput{ProjectPath: "/p", ChatID: "c1", PresetName: "fast", CatalogPin: "pin"}, &presetNew)
+	same(t, "LoadPresetParamsInput", presetOld, presetNew)
+
+	var cpOld, cpNew WorkflowCheckpointInput
+	decode(t, map[string]interface{}{"chat_id": "c1", "workflow_id": "w1", "node_id": "loop", "loop_iteration": 0}, &cpOld)
+	decode(t, WorkflowCheckpointInput{ChatID: "c1", WorkflowID: "w1", NodeID: "loop"}, &cpNew)
+	same(t, "WorkflowCheckpointInput", cpOld, cpNew)
+}

@@ -3,6 +3,8 @@ package wfyaml
 import (
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +37,7 @@ func TestWorkflowConcurrencyPerMemberRoundTrip(t *testing.T) {
 }
 
 func TestWorkflowConcurrencyRejectsInvalidPolicy(t *testing.T) {
-	for _, policy := range []string{"{}", "{max_running: 0}", "{max_running: -1}", "{max_running: 1.5}", "{max_running: 4294967296}", "{max_running: 2, key: x}", "{max_running: 2, supersede: latest}", "{max_running: 2, max_running: 3}", "{per_member: 0}", "{per_member: pool}", "{per_member: 2, per_member: 3}"} {
+	for _, policy := range []string{"{}", "{max_running: 0}", "{max_running: -1}", "{max_running: 1.5}", "{max_running: 4294967296}", "{max_running: 2, key: x}", "{max_running: 2, supersede: latest}", "{max_running: 2, max_running: 3}", "{max_running: 2, waiting: newest}", "{max_running: 2, waiting: fifo, key: '{{ trigger.kind }}'}", "{max_running: 2, waiting: latest, key: ''}", "{waiting: latest}", "{per_member: 0}", "{per_member: pool}", "{per_member: 2, per_member: 3}"} {
 		t.Run(policy, func(t *testing.T) {
 			_, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
 			require.Error(t, err)
@@ -49,4 +51,26 @@ func TestWorkflowConcurrencyAbsentRemainsAbsent(t *testing.T) {
 	encoded, err := MarshalWorkflow(wf)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "concurrency")
+}
+
+func TestWorkflowConcurrencyWaitingLatestRoundTrip(t *testing.T) {
+	for _, policy := range []string{
+		"{max_running: 1, waiting: latest, key: '{{ trigger.payload.attributes.repository }}'}",
+		"{max_running: 1, waiting: latest}",
+		"{max_running: 2, waiting: fifo}",
+	} {
+		t.Run(policy, func(t *testing.T) {
+			wf, err := ParseWorkflow([]byte("name: bounded\nconcurrency: " + policy + "\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+			require.NoError(t, err)
+			encoded, err := MarshalWorkflow(wf)
+			require.NoError(t, err)
+			again, err := ParseWorkflow(encoded)
+			require.NoError(t, err)
+			require.Equal(t, wf, again)
+		})
+	}
+	wf, err := ParseWorkflow([]byte("name: bounded\nconcurrency: {max_running: 1, waiting: latest, key: '{{ trigger.payload.attributes.repository }}'}\nentry: [a]\nnodes: [{id: a, type: compact}]\n"))
+	require.NoError(t, err)
+	require.Equal(t, reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST, wf.GetConcurrency().GetWaiting())
+	require.Equal(t, "{{ trigger.payload.attributes.repository }}", wf.GetConcurrency().GetKey())
 }

@@ -84,12 +84,15 @@ func newCancelE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, paren
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
-	for _, name := range []string{"WorkflowCheckpoint", "WorkflowError", "ThreadStatus"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	for _, name := range []string{"WorkflowError", "ThreadStatus"} {
 		env.RegisterActivityWithOptions(
 			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 				return map[string]interface{}{"success": true}, nil
@@ -172,7 +175,7 @@ func newCancelE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, paren
 		activity.RegisterOptions{Name: "ValidateThreadOwnership"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "LoadPresetParams"},

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nats-io/nats.go"
+
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -40,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -614,6 +617,8 @@ type TemporalWorkerDeps struct {
 	// Worker carries the hosted-action controller's endpoint and trust
 	// bundle (hosted_actions_url, hosted_actions_ca_file); see HostedActions.
 	Worker *configv1.WorkerConfig
+	// NATS delivers the stop nudges the activities on this worker watch.
+	NATS *NATSConn
 }
 
 // HostedActions is the worker's hosted HTTP action executor: a separate
@@ -663,7 +668,16 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
 	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
+	// Stop nudges reach this worker's activities over NATS (stopnudge). If
+	// the subscription cannot be made, stops still arrive on the regular
+	// heartbeat, one throttle window later: degrade, never refuse to run.
+	nudges := stopnudge.NewHub()
+	if _, err := d.NATS.Conn.Subscribe(stopnudge.Subject, func(m *nats.Msg) { nudges.HandleMessage(m.Data) }); err != nil {
+		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
+			"subject", stopnudge.Subject, "error", err)
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
+		StopNudges:             nudges,
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
 		Database:               d.DB,

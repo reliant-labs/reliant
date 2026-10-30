@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 // Names registered with Temporal for the inbound fire.
@@ -188,8 +189,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
 	if capped {
+		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
+			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
+		})
 		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
-			if errors.Is(err, errCapacityScopeChanged) {
+			if capacitySettled(err) {
 				return f.settle(ctx, ev, core.TriggerEventSkipped, err.Error(), nil)
 			}
 			return nil, err
