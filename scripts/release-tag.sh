@@ -276,6 +276,8 @@ if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2
 fi
 
 echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"
+# Publish only while this release provably still holds the lock (release-lock.sh).
+release_lock_assert || exit 1
 git tag "$RELEASE_TAG" "$RELEASE_COMMIT"
 git push origin "$RELEASE_TAG"
 

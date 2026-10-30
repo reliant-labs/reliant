@@ -104,4 +104,64 @@ holder a 'RELEASE_EVERY=10; release_lock_acquire v1.0.4
   git commit -q --allow-empty -m "another" && git push -q origin HEAD:main
   release_lock_release'
 grep -q 'pr edit' "$GH_CALLS" && fail "a not-due main was labelled"
+# 5. release_lock_assert proves ownership on origin at the moment of publication: ours ->
+#    0; replaced by another cutter (before our heartbeat has noticed) -> refused.
+holder a 'RELEASE_LOCK_RECHECK=off RELEASE_LOCK_HEARTBEAT_SECS=3600; release_lock_acquire v2.0.0
+  release_lock_assert || exit 51
+  (cd '"$fx"'/b && unset RELEASE_LOCK_HELD && source '"$src"' && RELEASE_LOCK_STALE_MINUTES=0 RELEASE_LOCK_RECHECK=off release_lock_acquire v2.0.1 2> /dev/null) || exit 52
+  ! release_lock_assert 2> '"$fx"'/assert || exit 53
+  release_lock_release 2> /dev/null' || fail "assert did not fail closed on a replaced lock (exit $?)"
+grep -qF 'is no longer ours' "$fx/assert" || fail "the assert refusal does not say why"
+case "$(holder a release_lock_status)" in "live "*"v2.0.1"*) ;; *) fail "the replaced holder's release dropped the new holder's lock" ;; esac
+git -C "$fx/a" push -q origin :refs/release-lock/release
+
+# A release that holds the lock with a 1s heartbeat and then "works" for 15 min (it is
+# expected to be stopped long before), as a separate process; prints its pid. Its output
+# is in $fx/run.out. Timeouts are generous: a loaded CI host is slow, never wrong.
+start_release() { # <clone> [extra env assignments]
+  # cd on its own: `cd && cmd &` would background the whole list, in a subshell that
+  # holds this command substitution's pipe until the release ends.
+  (
+    cd "$fx/$1" || exit 1
+    # shellcheck disable=SC2086 # $2 is a list of assignments
+    env -u RELEASE_LOCK_HELD ${2:-} RELEASE_LOCK_RECHECK=off RELEASE_LOCK_HEARTBEAT_SECS=1 \
+      bash -c 'source "$0"; trap release_lock_release EXIT; release_lock_acquire v3.0.0 || exit 9; echo acquired; sleep 900; echo FINISHED' "$src" \
+      < /dev/null > "$fx/run.out" 2>&1 &
+    echo $!
+  )
+}
+wait_gone() { # <pid> -> 0 once it exited within 3 min
+  local end=$(($(date +%s) + 180))
+  while [ "$(date +%s)" -lt "$end" ]; do kill -0 "$1" 2> /dev/null || return 0; sleep 0.5; done; return 1
+}
+wait_acquired() {
+  local end=$(($(date +%s) + 180))
+  while [ "$(date +%s)" -lt "$end" ]; do grep -q acquired "$fx/run.out" 2> /dev/null && return 0; sleep 0.5; done; return 1
+}
+
+# 6. A live holder whose lock is replaced (as by a cutter that judged it stale across a
+#    partition; its heartbeat CAS is then refused) is LOST: the heartbeat stops the
+#    release at once and the new holder's lock is left alone. (A replacing CUTTER would
+#    lose its CAS to a holder renewing every second, so the replacement is forced.)
+pid="$(start_release a)"
+wait_acquired || { cat "$fx/run.out" >&2; fail "the release did not take the lock"; }
+new="$(echo 'release lock: v3.0.1 by other@box pid 3 cut-release.sh' | git -C "$fx/b" commit-tree "$tree")"
+for _ in $(seq 1 20); do git -C "$fx/b" push -q -f origin "$new:refs/release-lock/release" 2> /dev/null && break; sleep 0.3; done
+[ "$(lock_sha)" = "$new" ] || fail "could not replace the lock"
+wait_gone "$pid" || { pkill -P "$pid" 2> /dev/null; kill "$pid" 2> /dev/null; fail "a release that lost its lock kept running"; }
+grep -q FINISHED "$fx/run.out" && { cat "$fx/run.out" >&2; fail "a release that lost its lock finished its work"; }
+grep -qF 'LOST refs/release-lock/release (the lock on origin is no longer ours' "$fx/run.out" || { cat "$fx/run.out" >&2; fail "the stop does not say the lock was lost"; }
+[ "$(lock_sha)" = "$new" ] || fail "the stopped release touched the new holder's lock"
+git -C "$fx/a" push -q origin :refs/release-lock/release
+
+# 7. A live holder whose heartbeat cannot reach origin stops before the lock could go
+#    stale (here a 3s renewal deadline), so nobody can replace a lock it still acts on.
+pid="$(start_release a RELEASE_LOCK_RENEW_DEADLINE_SECS=3)"
+wait_acquired || { cat "$fx/run.out" >&2; fail "the release did not take the lock"; }
+git -C "$fx/a" remote set-url origin "$fx/unreachable.git"
+wait_gone "$pid" || { pkill -P "$pid" 2> /dev/null; kill "$pid" 2> /dev/null; git -C "$fx/a" remote set-url origin "$fx/origin.git"; fail "a release that could not renew its lock kept running"; }
+git -C "$fx/a" remote set-url origin "$fx/origin.git"
+grep -q FINISHED "$fx/run.out" && fail "a release that could not renew finished its work"
+grep -qF 'could not be renewed for 3s' "$fx/run.out" || { cat "$fx/run.out" >&2; fail "the stop does not say renewal failed"; }
+git -C "$fx/a" push -q origin :refs/release-lock/release 2> /dev/null || true
 echo "release-lock self-test: PASS"
