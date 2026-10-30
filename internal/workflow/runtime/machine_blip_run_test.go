@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -137,6 +138,43 @@ func (s *MachineBlipRunSuite) TestUnattended_MachineUnavailableEndsTheRun() {
 	s.Contains(err.Error(), "the command never ran")
 	s.Empty(e.pausedStatuses(), "the run never paused")
 	s.Equal(1, calls.count(), "the wait already happened inside the step; nothing re-dispatches it")
+}
+
+// The same failure through the production activity boundary (wrapActivity's
+// classifyError), carrying text the classifier's terminal rules match: a
+// machine status "not found" and a transport's "permission denied". It must
+// keep its type, so the run still ends rather than pausing.
+func (s *MachineBlipRunSuite) TestUnattended_MachineUnavailableSurvivesTheActivityWrapper() {
+	env := s.NewTestWorkflowEnvironment()
+	env.SetTestTimeout(30 * time.Second)
+	input := spawnE2EWorkflowInput("chat-blip-wrapped")
+	input.Inputs[InputKeyUnattended] = true
+	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
+	e.workflowYAMLs = map[string]string{"agent": machineBlipRunYAML}
+	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		return map[string]interface{}{"daemon_available": true}, nil
+	}, activity.RegisterOptions{Name: "PreflightDaemonCheck"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		return map[string]interface{}{"ready": true}, nil
+	}, activity.RegisterOptions{Name: "MachineResumeWake"})
+	calls := 0
+	gate := func(context.Context, map[string]interface{}) (map[string]interface{}, error) {
+		calls++
+		return nil, temporal.NewNonRetryableApplicationError(
+			"failed to execute command: machine e164d47d no longer exists (daemon not found); the command never ran (last error: permission denied)",
+			types.RunStepMachineUnavailableErrType, nil)
+	}
+	env.RegisterActivityWithOptions(wrapActivity(NewActivityRegistry(&wrapperTestRepo{}), "ExecuteRunStep", gate, lifecycle.AgentWork, false),
+		activity.RegisterOptions{Name: "ExecuteRunStep"})
+
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().True(env.IsWorkflowCompleted(), "the run must end, not park holding its automation's slot")
+	err := env.GetWorkflowError()
+	s.Require().Error(err)
+	s.Contains(err.Error(), "machine e164d47d no longer exists")
+	s.Empty(e.pausedStatuses(), "the run never paused")
+	s.Equal(1, calls)
 }
 
 // The same for an attended chat: the wait was the retry, so the run fails

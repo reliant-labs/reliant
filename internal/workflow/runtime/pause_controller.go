@@ -126,11 +126,19 @@ func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) err
 	if gaveUp := pc.gaveUp(); gaveUp != nil {
 		return gaveUp
 	}
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) && appErr.Type() == types.RunStepMachineUnavailableErrType {
-		return temporal.NewNonRetryableApplicationError(
-			fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
-			types.RunStepMachineUnavailableErrType, nil)
+	// Any application error on the chain, not only the outermost: a wrapper
+	// may have re-typed the outer one.
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		var appErr *temporal.ApplicationError
+		if !errors.As(e, &appErr) {
+			break
+		}
+		if appErr.Type() == types.RunStepMachineUnavailableErrType {
+			return temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
+				types.RunStepMachineUnavailableErrType, nil)
+		}
+		e = appErr
 	}
 	return nil
 }
