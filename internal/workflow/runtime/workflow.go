@@ -1468,7 +1468,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// cancel in-flight activities: anything still running either fails
 		// with the same daemon-offline condition or proves the daemon is back.
 		pauser.Arm()
-		pauser.noteSelfPauseCause(errors.New(DaemonOfflinePauseMessage))
+		pauser.noteSelfPauseCause(errors.New(strings.TrimSuffix(DaemonOfflinePauseMessage, ".")))
 		checkPause(callerCtx)
 		// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 		_ = workflow.Sleep(callerCtx, 0)
