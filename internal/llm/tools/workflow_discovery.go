@@ -2,12 +2,14 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -224,6 +226,8 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		}
 		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | %s |\n", wf.name, id, wf.source, wf.status, valid, desc)
 	}
+
+	t.writeProvenance(ctx, &sb)
 
 	// The Workflow column holds whatever handle that source has — a draft slug,
 	// a project slug, or a builtin name — and get_workflow's `id` accepts all
@@ -653,5 +657,41 @@ func writeValidationSection(sb *strings.Builder, check workflowToolCheck) {
 	}
 	if w := check.warningsText(); w != "" {
 		sb.WriteString("\n" + w)
+	}
+}
+
+// workflowProvenanceReader says which machine and commit each synced copy of
+// a project workflow comes from (db.Repo.ProjectWorkflowProvenance). A store
+// without it lists no provenance.
+type workflowProvenanceReader interface {
+	ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error)
+}
+
+// writeProvenance lists where each project workflow is defined: every machine
+// that syncs it, the file, and the branch, commit and state it was synced at
+// ("machine cicd at control-plane/.reliant/workflows/release.yaml @ main
+// 1a2b3c4, clean"), flagging a copy on a feature branch or with uncommitted
+// changes. A run executes its own machine's copy, so two machines can run
+// different definitions of one name; this is where that shows.
+func (t *listWorkflowsTool) writeProvenance(ctx *rctx.ToolContext, sb *strings.Builder) {
+	reader, ok := t.repo.(workflowProvenanceReader)
+	if !ok || ctx.Project == nil || ctx.Project.ID == "" {
+		return
+	}
+	provenance, err := reader.ProjectWorkflowProvenance(ctx, ctx.Project.ID)
+	if err != nil || len(provenance) == 0 {
+		return
+	}
+	sb.WriteString("\n## Where project workflows are defined\n\n")
+	sb.WriteString("A run reads the copy on the machine it runs on.\n\n")
+	for _, p := range provenance {
+		name := p.Name
+		if name == "" {
+			name = p.RelativePath
+		}
+		fmt.Fprintf(sb, "- `%s`: %s\n", name, p.Describe())
+		for _, w := range p.Warnings() {
+			fmt.Fprintf(sb, "  - ⚠ %s\n", w)
+		}
 	}
 }

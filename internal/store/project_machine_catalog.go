@@ -86,6 +86,37 @@ ON CONFLICT (project_id, daemon_id) DO UPDATE SET
 	return nil
 }
 
+// SetProjectMachineRepoStates stores the git state one machine's snapshot
+// was read from on its row, which UpsertProjectMachineCatalog wrote in the
+// same transaction.
+func SetProjectMachineRepoStates(ctx context.Context, db orm.Context, projectID, daemonID string, repoStatesJSON *string) error {
+	_, err := db.Exec(ctx, `UPDATE project_machine_catalogs SET repo_states_json = $3 WHERE project_id = $1 AND daemon_id = $2`,
+		projectID, daemonID, repoStatesJSON)
+	if err != nil {
+		return fmt.Errorf("failed to store machine %s's repo states of project %s: %w", daemonID, projectID, err)
+	}
+	return nil
+}
+
+// MachineRepoStates is one machine's reported git state of a project.
+type MachineRepoStates struct {
+	DaemonID       string    `bun:"daemon_id"`
+	RepoStatesJSON *string   `bun:"repo_states_json"`
+	PushedAt       time.Time `bun:"pushed_at"`
+}
+
+// ListProjectMachineRepoStates reads every machine's reported git state of a
+// project, ordered by daemon id.
+func ListProjectMachineRepoStates(ctx context.Context, db orm.Context, projectID string) ([]*MachineRepoStates, error) {
+	var rows []*MachineRepoStates
+	err := db.Bun().NewRaw(`SELECT daemon_id, repo_states_json, pushed_at FROM project_machine_catalogs WHERE project_id = ? ORDER BY daemon_id`,
+		projectID).Scan(ctx, &rows)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to list machine repo states of project %s: %w", projectID, err)
+	}
+	return rows, nil
+}
+
 // SetProjectConfigCatalogUnion rewrites the union columns of a project's
 // config record alone, for a snapshot whose other content is older than the
 // record's (see db.Repo.SyncProjectConfigSnapshot). updated_at moves, so

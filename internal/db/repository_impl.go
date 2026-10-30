@@ -41,6 +41,29 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 	return store.GetChat(ctx, r.ORM(), id)
 }
 
+// GetChatRow reads a chat's own row from the chats table — no activity view —
+// for a caller that needs none of the activity-derived fields (ChatRow).
+func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	return store.GetChatRow(ctx, r.ORM(), id)
+}
+
+// GetChatRowWithUserCheck is an ownership check that reads only the chats
+// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
+// another user's. GetChatWithUserCheck is the same check over the activity
+// view, for a caller that needs a derived field.
+func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
+	if id == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
 	if id == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")

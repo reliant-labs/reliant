@@ -31,7 +31,7 @@ func (s *Service) GetToolResult(
 		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
 
-	if _, err := s.getChatForUser(ctx, req.Msg.ChatId, userID); err != nil {
+	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
@@ -98,7 +98,7 @@ func (s *Service) chatToolResultBlock(ctx context.Context, chatID, userID, toolC
 		// A branch is always its source chat's user's, so this holds for
 		// every real inheritance; it is checked anyway, because what
 		// another user wrote must never be readable here.
-		if _, err := s.getChatForUser(ctx, c.msg.ChatID, userID); err != nil {
+		if err := s.requireChatOwner(ctx, c.msg.ChatID, userID); err != nil {
 			continue
 		}
 		return c.block, nil

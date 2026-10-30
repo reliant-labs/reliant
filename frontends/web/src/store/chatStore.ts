@@ -514,7 +514,8 @@ const applyNodeExecutionUpdates = (
   isSnapshot: boolean,
 ): NodeExecutionUpdate[] =>
   applyLogSlice(existing, updates, isSnapshot, {
-    key: (n) => `${n.node_id}:${n.event_type}`,
+    // Per run: two runs of one workflow share every node id.
+    key: (n) => `${n.workflow_id}:${n.node_id}:${n.event_type}`,
     sort: bySequenceNumber,
   });
 
@@ -3396,6 +3397,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             );
             get().clearStreamingState(chatId);
           }
+          // A snapshot carries no node state and replaced the live node
+          // events: an open run-status view re-reads where its run stands,
+          // or the events the snapshot skipped past would be missing.
+          void queryClient.invalidateQueries({
+            queryKey: chatServiceKeys.getWorkflowNodeExecutions({ chatId }),
+          });
         }
 
         // Keep any open thread-scoped reader (a spawn preview, a selected

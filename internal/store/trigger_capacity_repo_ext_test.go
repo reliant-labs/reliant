@@ -257,6 +257,40 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 	require.True(t, claimed, "a 48-hour queue head was not lost to delivery expiry")
 }
 
+// A chain Temporal reported closed frees its slot at once, start attempt fresh
+// or not; only the exact observed chain can, and the absence path still waits.
+func TestTriggerCapacityClosedChainReleaseNeedsNoAgedAttempt(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	scope := capacityScope()
+	holder, next := capacityEvent("closed-holder"), capacityEvent("closed-next")
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, holder, scope))
+	require.NoError(t, store.EnqueueTriggerCapacity(ctx, env.ORM, next, scope))
+	claimed, err := claimCapacity(ctx, env, holder.ID, scope, 1)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	require.NoError(t, env.ORM.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		return store.PrepareTriggerCapacityExecution(ctx, env.ORM, holder.ID, "closed-workflow")
+	}))
+	require.NoError(t, store.BindTriggerCapacityExecution(ctx, env.ORM, holder.ID, "closed-workflow", "closed-first-run"))
+	observed := capacitySnapshot(t, env, holder.ID)
+	require.False(t, observed.StartAttemptAged, "the holder launched moments ago")
+
+	require.NoError(t, store.ReleaseTriggerCapacityExecution(ctx, env.ORM, observed))
+	require.False(t, releasedFlag(t, env, holder.ID), "absence of history is not evidence while a start may be in flight")
+
+	wrongChain := observed
+	wrongChain.FirstRunID = "wrong-run"
+	require.NoError(t, store.ReleaseClosedTriggerCapacityExecution(ctx, env.ORM, wrongChain))
+	require.False(t, releasedFlag(t, env, holder.ID), "another chain's closure cannot release this slot")
+
+	require.NoError(t, store.ReleaseClosedTriggerCapacityExecution(ctx, env.ORM, observed))
+	require.True(t, releasedFlag(t, env, holder.ID))
+	claimed, err = claimCapacity(ctx, env, next.ID, scope, 1)
+	require.NoError(t, err)
+	require.True(t, claimed, "the queued head launches without waiting out core.StartAttemptBound")
+}
+
 func TestTriggerCapacityConcurrentWorkers(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()

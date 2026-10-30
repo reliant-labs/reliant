@@ -59,8 +59,8 @@ func (r *snapshotGateRepo) GetLatestUserUpdateSequence(context.Context, string) 
 	return 0, nil
 }
 
-func (r *snapshotGateRepo) GetChat(context.Context, string) (*db.Chat, error) {
-	return &db.Chat{ID: raceTestChatID, UserID: raceTestUserID}, nil
+func (r *snapshotGateRepo) GetChatRow(context.Context, string) (*db.ChatRow, error) {
+	return &db.ChatRow{ID: raceTestChatID, UserID: raceTestUserID}, nil
 }
 
 // GetLatestUpdateSequence stands in for the whole snapshot build. It reports
