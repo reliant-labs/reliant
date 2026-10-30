@@ -31633,6 +31633,16 @@
           "auth_required": false
         },
         {
+          "id": "reliant.v1.TokenService/GetGitHubBotToken",
+          "name": "GetGitHubBotToken",
+          "input": "reliant.v1.GetGitHubBotTokenRequest",
+          "output": "reliant.v1.GetGitHubBotTokenResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": false
+        },
+        {
           "id": "reliant.v1.TokenService/GetGitToken",
           "name": "GetGitToken",
           "input": "reliant.v1.GetGitTokenRequest",
@@ -31794,6 +31804,23 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "GetGitHubBotToken",
+            "InputType": "GetGitHubBotTokenRequest",
+            "OutputType": "GetGitHubBotTokenResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": false,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetGitHubBotTokenRequest",
+            "OutputTypeFQ": "reliant.v1.GetGitHubBotTokenResponse",
+            "InputProtoFile": "reliant/v1/token.proto",
+            "OutputProtoFile": "reliant/v1/token.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/token.proto",
@@ -31869,6 +31896,50 @@
             },
             {
               "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetGitHubBotTokenRequest": [
+            {
+              "Name": "owner",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repo",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "permissions",
+              "ProtoType": "message",
+              "IsOptional": false
+            }
+          ],
+          "GetGitHubBotTokenResponse": [
+            {
+              "Name": "token",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expires_at",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "bot_login",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "acting_for_login",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "repository",
               "ProtoType": "string",
               "IsOptional": false
             }
@@ -32009,6 +32080,44 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.GetGitHubBotTokenRequest": [
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "permissions",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            }
+          ],
+          "reliant.v1.GetGitHubBotTokenResponse": [
+            {
+              "name": "token",
+              "kind": "string"
+            },
+            {
+              "name": "expires_at",
+              "kind": "string"
+            },
+            {
+              "name": "bot_login",
+              "kind": "string"
+            },
+            {
+              "name": "acting_for_login",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.GetGitTokenRequest": [
             {
               "name": "provider",
@@ -32129,6 +32238,8 @@
           "reliant.v1.CreateTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.ExchangeTokenRequest": "reliant/v1/token.proto",
           "reliant.v1.ExchangeTokenResponse": "reliant/v1/token.proto",
+          "reliant.v1.GetGitHubBotTokenRequest": "reliant/v1/token.proto",
+          "reliant.v1.GetGitHubBotTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.GetGitTokenRequest": "reliant/v1/token.proto",
           "reliant.v1.GetGitTokenResponse": "reliant/v1/token.proto",
           "reliant.v1.ListTokensRequest": "reliant/v1/token.proto",
@@ -61427,6 +61538,17 @@
           }
         },
         {
+          "id": "method1:ee28a23340e5e466ce8bf5b019a86af0d41a7fe88c5e7ccbda8ec64b46123878",
+          "name": "GetGitHubBotToken",
+          "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitHubBotTokenRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitHubBotTokenResponse], error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/token",
+          "legacy_name": "token.GetGitHubBotToken",
+          "source": {
+            "path": "internal/handlers/token/token_github_bot.go",
+            "symbol": "Service.GetGitHubBotToken"
+          }
+        },
+        {
           "id": "method1:4d95b07aa7e2906c7f93445495eec0529d9758e86b009d5700fe58e1fe7dee6e",
           "name": "GetGitToken",
           "signature": "func(ctx context.Context, req *connectrpc.com/connect.Request[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitTokenRequest]) (*connectrpc.com/connect.Response[github.com/reliant-labs/reliant/gen/reliant/v1.GetGitTokenResponse], error)",
@@ -77918,6 +78040,27 @@
     },
     {
       "consumer": "Token",
+      "field": "GitBotTokens",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/token.GitBotTokenSource",
+      "methods": [
+        {
+          "id": "method1:368403021b0dbb37984dc0999ed93badba331111bd2719127adc2d02ea7a3426",
+          "name": "MintInstallationToken",
+          "signature": "func(ctx context.Context, req github.com/reliant-labs/reliant/internal/gitcredentialclient.InstallationRequest) (github.com/reliant-labs/reliant/internal/gitcredentialclient.InstallationToken, error)",
+          "scope": "github.com/reliant-labs/reliant/internal/handlers/token",
+          "legacy_name": "token.MintInstallationToken",
+          "source": {
+            "path": "internal/handlers/token/service.go",
+            "symbol": "GitBotTokenSource.MintInstallationToken"
+          }
+        }
+      ],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Token",
       "field": "GitTokens",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/token.GitTokenSource",
       "methods": [
@@ -81630,6 +81773,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewTemporalClient"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Token.GitBotTokens",
+      "source": {
+        "path": "internal/handlers/token/service.go",
+        "symbol": "New"
       }
     },
     {
