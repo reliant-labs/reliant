@@ -42,6 +42,9 @@ const (
 	// BillingServiceGetOrganizationCostSummaryProcedure is the fully-qualified name of the
 	// BillingService's GetOrganizationCostSummary RPC.
 	BillingServiceGetOrganizationCostSummaryProcedure = "/controlplane.v1.BillingService/GetOrganizationCostSummary"
+	// BillingServiceListOrganizationUsageProcedure is the fully-qualified name of the BillingService's
+	// ListOrganizationUsage RPC.
+	BillingServiceListOrganizationUsageProcedure = "/controlplane.v1.BillingService/ListOrganizationUsage"
 	// BillingServiceListPlansProcedure is the fully-qualified name of the BillingService's ListPlans
 	// RPC.
 	BillingServiceListPlansProcedure = "/controlplane.v1.BillingService/ListPlans"
@@ -144,6 +147,10 @@ type BillingServiceClient interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// History of the organization's usage and spend, built from durable
+	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
+	// and is scoped to the caller's organization. Range is at most 400 days.
+	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
 	// Read-only catalog.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
@@ -295,6 +302,12 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+BillingServiceGetOrganizationCostSummaryProcedure,
 			connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrganizationUsage: connect.NewClient[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse](
+			httpClient,
+			baseURL+BillingServiceListOrganizationUsageProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
 			connect.WithClientOptions(opts...),
 		),
 		listPlans: connect.NewClient[v1.ListPlansRequest, v1.ListPlansResponse](
@@ -495,6 +508,7 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 // billingServiceClient implements BillingServiceClient.
 type billingServiceClient struct {
 	getOrganizationCostSummary                 *connect.Client[v1.GetOrganizationCostSummaryRequest, v1.GetOrganizationCostSummaryResponse]
+	listOrganizationUsage                      *connect.Client[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse]
 	listPlans                                  *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
 	getPlan                                    *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
 	getCurrentUserSubscription                 *connect.Client[v1.GetCurrentUserSubscriptionRequest, v1.GetCurrentUserSubscriptionResponse]
@@ -532,6 +546,11 @@ type billingServiceClient struct {
 // GetOrganizationCostSummary calls controlplane.v1.BillingService.GetOrganizationCostSummary.
 func (c *billingServiceClient) GetOrganizationCostSummary(ctx context.Context, req *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return c.getOrganizationCostSummary.CallUnary(ctx, req)
+}
+
+// ListOrganizationUsage calls controlplane.v1.BillingService.ListOrganizationUsage.
+func (c *billingServiceClient) ListOrganizationUsage(ctx context.Context, req *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
+	return c.listOrganizationUsage.CallUnary(ctx, req)
 }
 
 // ListPlans calls controlplane.v1.BillingService.ListPlans.
@@ -713,6 +732,10 @@ type BillingServiceHandler interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
 	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	// History of the organization's usage and spend, built from durable
+	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
+	// and is scoped to the caller's organization. Range is at most 400 days.
+	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
 	// Read-only catalog.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
@@ -860,6 +883,12 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		BillingServiceGetOrganizationCostSummaryProcedure,
 		svc.GetOrganizationCostSummary,
 		connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	billingServiceListOrganizationUsageHandler := connect.NewUnaryHandler(
+		BillingServiceListOrganizationUsageProcedure,
+		svc.ListOrganizationUsage,
+		connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	billingServiceListPlansHandler := connect.NewUnaryHandler(
@@ -1058,6 +1087,8 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		switch r.URL.Path {
 		case BillingServiceGetOrganizationCostSummaryProcedure:
 			billingServiceGetOrganizationCostSummaryHandler.ServeHTTP(w, r)
+		case BillingServiceListOrganizationUsageProcedure:
+			billingServiceListOrganizationUsageHandler.ServeHTTP(w, r)
 		case BillingServiceListPlansProcedure:
 			billingServiceListPlansHandler.ServeHTTP(w, r)
 		case BillingServiceGetPlanProcedure:
@@ -1133,6 +1164,10 @@ type UnimplementedBillingServiceHandler struct{}
 
 func (UnimplementedBillingServiceHandler) GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetOrganizationCostSummary is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListOrganizationUsage is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error) {
