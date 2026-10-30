@@ -13,6 +13,16 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.14" description="October 30, 2026">
+### Faster chat lists, steadier workflow streams
+
+- **Read chat and inbox lists more efficiently** Chat and inbox reads probe activity per chat instead of hashing every user's rows, reducing database work.
+- **Keep streaming through a slow heartbeat** A slow workflow heartbeat RPC no longer kills a running model stream.
+- **Archive chats without leaving queued work behind** Archiving a chat drops its queued delivery and stops its run under the run-control lock.
+- **Share filesystem watchers across worktrees** Worktree activity observers share one inotify instance and release deleted worktrees.
+- **Distinguish expected errors from product issues** Expected conditions are reported as user errors rather than being filed as issues.
+</Update>
+
 <Update label="v1.8.13" description="October 30, 2026">
 ### Dashboards together, workflows on the right machine
 
