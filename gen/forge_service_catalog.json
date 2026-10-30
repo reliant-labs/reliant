@@ -5251,11 +5251,6 @@
               "Name": "limit",
               "ProtoType": "int32",
               "IsOptional": true
-            },
-            {
-              "Name": "sidebar_only",
-              "ProtoType": "bool",
-              "IsOptional": true
             }
           ],
           "ListChatsResponse": [
@@ -5801,6 +5796,11 @@
               "IsOptional": true
             },
             {
+              "Name": "cli_run",
+              "ProtoType": "bool",
+              "IsOptional": true
+            },
+            {
               "Name": "client_message_id",
               "ProtoType": "string",
               "IsOptional": true
@@ -6258,6 +6258,11 @@
             {
               "name": "working_threads",
               "kind": "int32"
+            },
+            {
+              "name": "origin",
+              "kind": "enum",
+              "type_name": "reliant.v1.ChatOrigin"
             }
           ],
           "reliant.v1.ChatPlan": [
@@ -6741,11 +6746,6 @@
             {
               "name": "limit",
               "kind": "int32",
-              "optional": true
-            },
-            {
-              "name": "sidebar_only",
-              "kind": "bool",
               "optional": true
             }
           ],
@@ -7432,6 +7432,11 @@
               "optional": true
             },
             {
+              "name": "cli_run",
+              "kind": "bool",
+              "optional": true
+            },
+            {
               "name": "client_message_id",
               "kind": "string",
               "optional": true
@@ -7929,6 +7934,15 @@
             "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
             "CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT"
           ],
+          "reliant.v1.ChatOrigin": [
+            "CHAT_ORIGIN_UNSPECIFIED",
+            "CHAT_ORIGIN_USER",
+            "CHAT_ORIGIN_AUTOMATION",
+            "CHAT_ORIGIN_AGENT",
+            "CHAT_ORIGIN_MANUAL_RUN",
+            "CHAT_ORIGIN_BUILDER_TEST",
+            "CHAT_ORIGIN_CLI"
+          ],
           "reliant.v1.ChatState": [
             "CHAT_STATE_UNSPECIFIED",
             "CHAT_STATE_IDLE",
@@ -8037,6 +8051,15 @@
             6,
             7
           ],
+          "reliant.v1.ChatOrigin": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
           "reliant.v1.ChatState": [
             0,
             2,
@@ -8134,6 +8157,10 @@
           "reliant.v1.ChatActivity": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ChatActivity"
+          },
+          "reliant.v1.ChatOrigin": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ChatOrigin"
           },
           "reliant.v1.ChatState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -36291,7 +36318,8 @@
             "TRIGGER_EVENT_KIND_WEBHOOK",
             "TRIGGER_EVENT_KIND_INTEGRATION",
             "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
-            "TRIGGER_EVENT_KIND_MANUAL_RUN"
+            "TRIGGER_EVENT_KIND_MANUAL_RUN",
+            "TRIGGER_EVENT_KIND_CLI_RUN"
           ],
           "reliant.v1.TriggerEventOutcome": [
             "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -36364,7 +36392,8 @@
             5,
             6,
             7,
-            8
+            8,
+            9
           ],
           "reliant.v1.TriggerEventOutcome": [
             0,
