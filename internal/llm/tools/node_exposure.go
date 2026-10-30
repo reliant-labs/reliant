@@ -46,6 +46,16 @@ var nodeExposedTools = []NodeExposure{
 	// hero image, then write it into the page" is a graph, and its output
 	// (attachment_id, saved_to) is exactly what the next node needs.
 	{Tool: ToolGenerateImage, OutputType: reflect.TypeOf(GenerateImageOutput{})},
+	// get_run and send_to_run: "ask the chat that owns this work whether it is
+	// still going, and if it is, hand it the news" is a step an automation
+	// draws (control-plane's pr-fix hands a review to the chat that opened the
+	// pull request before it starts anyone else). Both act as the run's owner
+	// on the owner's own runs only, exactly as the tools do in a chat, and
+	// send_to_run never starts or restarts a run (delivered: false). Naming
+	// one in an invoke_tool node is the author's explicit opt-in, the same
+	// opt-in an unattended agent's `tools:` list is.
+	{Tool: ToolGetRun, OutputType: reflect.TypeOf(RunDetail{})},
+	{Tool: ToolSendToRun, OutputType: reflect.TypeOf(SendToRunResponseMetadata{})},
 }
 
 // NodeExposedTools returns every tool that opted in to node exposure, ordered

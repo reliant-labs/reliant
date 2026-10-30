@@ -434,29 +434,42 @@ func triggerOutcomeColumns(alias string) string {
 // their runs, in ONE query, selecting cols as the event's columns. This is
 // what health and last_event are computed from, so listing N triggers costs
 // one extra query rather than N.
-func recentTriggerFiringsSQL(cols string) string {
-	return `WITH ranked AS (
-	SELECT
-		e.id,
-		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
-	FROM trigger_events e
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-)
-SELECT ` + cols + `,
+//
+// Each trigger's firings are read newest first from
+// idx_trigger_events_trigger_occurred_id and stop at ?2: the cost is the
+// rows returned. Ranking the whole history with row_number() instead read
+// every firing the triggers ever had, and joined each to its run before
+// keeping ten: 280ms for an automation with 20,000 runs, against 7ms.
+//
+// cols names the event's columns under an alias: the lateral read selects
+// them as x's, and the outer select as e's.
+func recentTriggerFiringsSQL(cols func(alias string) string) string {
+	return `SELECT ` + cols("e") + `,
 	` + triggerFiringRunColumns + `
-FROM ranked r
-JOIN trigger_events e ON e.id = r.id
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+CROSS JOIN LATERAL (
+	SELECT ` + cols("x") + ` FROM trigger_events x
+	WHERE x.trigger_id = t.id AND x.user_id = ?0::text
+	ORDER BY x.occurred_at DESC, x.id DESC
+	LIMIT ?2::integer
+) e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
 var (
-	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent]("e"))
-	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns("e"))
+	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent])
+	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns)
 )
+
+// InboxTriggerFiringsSQL returns the statements of RecentTriggerOutcomes and
+// FiringsSinceLastSuccess, with bun's ?0 (user), ?1 (trigger ids) and ?2 (per
+// trigger) placeholders, so a plan test runs the exact statements the Inbox
+// does.
+func InboxTriggerFiringsSQL() (recentOutcomes, sinceLastSuccess string) {
+	return recentTriggerFiringsOutcomesSQL, firingsSinceLastSuccessSQL
+}
 
 // RecentTriggerFirings returns each named trigger's newest perTrigger firings
 // (newest first, with their runs), keyed by trigger id. A trigger with no
@@ -482,32 +495,36 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // "Completed" is the run the trigger fired (run_status), not whatever turn the
 // chat is on now — the same rule triggers.resolveFiring applies — so a
 // person's later reply in the chat neither ends nor extends the episode.
-var firingsSinceLastSuccessSQL = `WITH last_success AS (
-	SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
-	FROM trigger_events e
-	LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-		AND e.outcome = 'launched'
-		AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
-	ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
-), ranked AS (
-	SELECT
-		e.id,
-		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
-	FROM trigger_events e
-	LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
-)
-SELECT ` + triggerOutcomeColumns("e") + `,
+//
+// Per trigger, both halves walk idx_trigger_events_trigger_occurred_id newest
+// first: the newest success stops at the first one found, and the episode at
+// it or at ?2 rows. Finding them with DISTINCT ON and row_number() over the
+// whole history judged every firing the triggers ever had (each joined to its
+// run's display state) on every Inbox read.
+var firingsSinceLastSuccessSQL = `SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
-FROM ranked r
-JOIN trigger_events e ON e.id = r.id
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+LEFT JOIN LATERAL (
+	SELECT s.occurred_at, s.id
+	FROM trigger_events s
+	LEFT JOIN chats_with_activity sc ON sc.id = s.chat_id AND sc.user_id = s.user_id
+	WHERE s.trigger_id = t.id
+		AND s.user_id = ?0::text
+		AND s.outcome = 'launched'
+		AND (s.run_status = 'completed' OR (s.run_status IS NULL AND sc.display_state = 5))
+	ORDER BY s.occurred_at DESC, s.id DESC
+	LIMIT 1
+) ls ON true
+CROSS JOIN LATERAL (
+	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
+	WHERE x.trigger_id = t.id
+		AND x.user_id = ?0::text
+		AND (ls.id IS NULL OR (x.occurred_at, x.id) > (ls.occurred_at, ls.id))
+	ORDER BY x.occurred_at DESC, x.id DESC
+	LIMIT ?2::integer
+) e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
@@ -640,6 +657,7 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 		CapacityOrder:       row.CapacityOrder,
 		CapacityProjectID:   row.CapacityProjectID,
 		CapacityWorkflowRef: row.CapacityWorkflowRef,
+		CapacityKey:         row.CapacityKey,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus

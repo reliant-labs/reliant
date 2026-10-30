@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/claimable/v1/claimable.proto.
  */
 export const file_services_claimable_v1_claimable: GenFile = /*@__PURE__*/
-  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0ItABCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZSJNChlDbGFpbWFibGVVbmF2YWlsYWJsZUNhdXNlEgwKBGNvZGUYASABKAkSEQoJY29tcG9uZW50GAIgASgJEg8KB21lc3NhZ2UYAyABKAkiewodR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVzcG9uc2USEQoJY2hhbGxlbmdlGAEgASgJEhcKD2RpZmZpY3VsdHlfYml0cxgCIAEoDRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCImCg9HZXRDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkilwIKEEdldENsYWltUmVzcG9uc2USLgoFc3RhdGUYASABKA4yHy5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlU3RhdGUSEQoJY2xhaW1hYmxlGAIgASgIEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEhEKCWhvc3RuYW1lcxgFIAMoCRIuCgpleHBpcmVzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY2xhaW1lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiLgoXT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkiWwoYT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMiagoIRnJlZVNpdGUSFQoNZGVwbG95bWVudF9pZBgBIAEoCRIOCgZvcmdfaWQYAiABKAkSDwoHcHJvamVjdBgDIAEoCRILCgNlbnYYBCABKAkSDAoEbmFtZRgFIAEoCRILCgN1cmwYBiABKAkiewoWRnJlZVNpdGVDaG9pY2VSZXF1aXJlZBIwCg1leGlzdGluZ19zaXRlGAEgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlEi8KDGNsYWltZWRfc2l0ZRgCIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZSJfChRDb21wbGV0ZUNsYWltUmVxdWVzdBITCgtjbGFpbV90b2tlbhgBIAEoCRIyCglmcmVlX3NpdGUYAiABKA4yHy5jb250cm9scGxhbmUudjEuRnJlZVNpdGVDaG9pY2UiLgoXR2V0Q2xhaW1GcmVlU2l0ZVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkilgEKGEdldENsYWltRnJlZVNpdGVSZXNwb25zZRIXCg9jaG9pY2VfcmVxdWlyZWQYASABKAgSMAoNZXhpc3Rpbmdfc2l0ZRgCIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZRIvCgxjbGFpbWVkX3NpdGUYAyABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUi5wEKFUNvbXBsZXRlQ2xhaW1SZXNwb25zZRIOCgZvcmdfaWQYASABKAkSEgoKY2xhaW1fcGF0aBgCIAEoCRIRCglob3N0bmFtZXMYAyADKAkSKgoFaG9sZHMYBCADKAsyGy5jb250cm9scGxhbmUudjEuRGVwbG95SG9sZBI7ChFmcmVlX3NpdGVfb3V0Y29tZRgFIAEoDjIgLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZU91dGNvbWUSLgoLcGF1c2VkX3NpdGUYBiABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUqxAEKDkNsYWltYWJsZVN0YXRlEh8KG0NMQUlNQUJMRV9TVEFURV9VTlNQRUNJRklFRBAAEhgKFENMQUlNQUJMRV9TVEFURV9MSVZFEAESHQoZQ0xBSU1BQkxFX1NUQVRFX1NVU1BFTkRFRBACEhsKF0NMQUlNQUJMRV9TVEFURV9DTEFJTUVEEAMSHgoaQ0xBSU1BQkxFX1NUQVRFX1RBS0VOX0RPV04QBBIbChdDTEFJTUFCTEVfU1RBVEVfRVhQSVJFRBAFKm8KDkZyZWVTaXRlQ2hvaWNlEiAKHEZSRUVfU0lURV9DSE9JQ0VfVU5TUEVDSUZJRUQQABIcChhGUkVFX1NJVEVfQ0hPSUNFX0NMQUlNRUQQARIdChlGUkVFX1NJVEVfQ0hPSUNFX0VYSVNUSU5HEAIqqgEKD0ZyZWVTaXRlT3V0Y29tZRIhCh1GUkVFX1NJVEVfT1VUQ09NRV9VTlNQRUNJRklFRBAAEiEKHUZSRUVfU0lURV9PVVRDT01FX05PX0NPTkZMSUNUEAESJwojRlJFRV9TSVRFX09VVENPTUVfQ0xBSU1FRF9TSVRFX0xJVkUQAhIoCiRGUkVFX1NJVEVfT1VUQ09NRV9FWElTVElOR19TSVRFX0xJVkUQAzL6CQoQQ2xhaW1hYmxlU2VydmljZRLeAQoUU3RhcnRDbGFpbWFibGVEZXBsb3kSLC5jb250cm9scGxhbmUudjEuU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLlN0YXJ0Q2xhaW1hYmxlRGVwbG95UmVzcG9uc2UiaaK7GGUIADphOl90aGUgY2FsbGVyIGlzIGFuIGFub255bW91cyBtYWNoaW5lIHdpdGggbm8gYWNjb3VudCB5ZXQ7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBJ+ChVHZXRDbGFpbWFibGVDaGFsbGVuZ2USLS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdBouLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVDaGFsbGVuZ2VSZXNwb25zZSIGorsYAggAEocBChhHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHkSMC5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5UmVxdWVzdBoxLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZSIGorsYAggAElcKCEdldENsYWltEiAuY29udHJvbHBsYW5lLnYxLkdldENsYWltUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbVJlc3BvbnNlIgaiuxgCCAAS1wEKEE9wZW5DbGFpbVNlc3Npb24SKC5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuT3BlbkNsYWltU2Vzc2lvblJlc3BvbnNlIm6iuxhqCAA6ZjpkdGhlIGNhbGxlciBob2xkcyBvbmx5IHRoZSBjbGFpbSB0b2tlbiBhbmQgaXMgbm90IHlldCBhIHVzZXI7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBKYAQoNQ29tcGxldGVDbGFpbRIlLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5Db21wbGV0ZUNsYWltUmVzcG9uc2UiOKK7GDQIATowCgVjbGFpbRIWCgNvcmcSD3Jlc3BvbnNlLm9yZ19pZCIPcmVzcG9uc2Uub3JnX2lkEtABChBHZXRDbGFpbUZyZWVTaXRlEiguY29udHJvbHBsYW5lLnYxLkdldENsYWltRnJlZVNpdGVSZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkdldENsYWltRnJlZVNpdGVSZXNwb25zZSJnorsYYwgBOl86XWEgcmVhZCBvZiB0aGUgY2xhaW0gcHJldmlldyBmb3IgdGhlIHNpZ25lZC1pbiBjYWxsZXI7IHRoZSBjbGFpbWFibGVfZGVwbG95cyByb3cgaXMgdGhlIHJlY29yZBpagrUYVgoQQ2xhaW1hYmxlU2VydmljZRIFMS4wLjAaO05vLXNpZ251cCBkZXBsb3lzIHRoYXQgYSBodW1hbiBjYW4gY2xhaW0gYmVmb3JlIHRoZXkgZXhwaXJlQtkBChNjb20uY29udHJvbHBsYW5lLnYxQg5DbGFpbWFibGVQcm90b1ABWlVnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvY2xhaW1hYmxlL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiVzZXJ2aWNlcy9jbGFpbWFibGUvdjEvY2xhaW1hYmxlLnByb3RvEg9jb250cm9scGxhbmUudjEieAobU3RhcnRDbGFpbWFibGVEZXBsb3lSZXF1ZXN0Eg8KB3Byb2plY3QYASABKAkSCwoDZW52GAIgASgJEhEKCWRldmljZV9pZBgDIAEoCRIVCg1wb3dfY2hhbGxlbmdlGAQgASgJEhEKCXBvd19ub25jZRgFIAEoCSLIAQocU3RhcnRDbGFpbWFibGVEZXBsb3lSZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSDgoGb3JnX2lkGAIgASgJEhEKCWNsYWltX3VybBgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtwdXJnZV9hZnRlchgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDgoGcmV1c2VkGAYgASgIIj8KEUNsYWltYWJsZVRocm90dGxlEhsKE3JldHJ5X2FmdGVyX3NlY29uZHMYASABKAMSDQoFc2NvcGUYAiABKAkiHgocR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVxdWVzdCIhCh9HZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXF1ZXN0IoICCiBHZXRDbGFpbWFibGVBdmFpbGFiaWxpdHlSZXNwb25zZRIRCglhdmFpbGFibGUYASABKAgSOgoGY2F1c2VzGAIgAygLMiouY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVVuYXZhaWxhYmxlQ2F1c2USGQoRY29tcHV0ZV9hdmFpbGFibGUYAyABKAgSQgoOY29tcHV0ZV9jYXVzZXMYBCADKAsyKi5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIwCgZsaW1pdHMYBSABKAsyIC5jb250cm9scGxhbmUudjEuQ2xhaW1hYmxlTGltaXRzItADCg9DbGFpbWFibGVMaW1pdHMSGAoQbWF4X3N0YXRpY19zaXRlcxgBIAEoBRIdChVtYXhfc3RhdGljX3N0b3JlZF9taWIYAiABKAUSFAoMbWF4X3NlcnZpY2VzGAMgASgFEhQKDG1heF9yZXBsaWNhcxgEIAEoBRIaChJtYXhfbWlncmF0aW9uX2pvYnMYBSABKAUSHwoXd29ya2xvYWRfY3B1X21pbGxpY29yZXMYBiABKAUSGwoTd29ya2xvYWRfbWVtb3J5X21pYhgHIAEoBRImCh53b3JrbG9hZF9lcGhlbWVyYWxfc3RvcmFnZV9taWIYCCABKAUSFQoNbWF4X2RhdGFiYXNlcxgJIAEoBRIaChJkYXRhYmFzZV9pbnN0YW5jZXMYCiABKAUSHwoXZGF0YWJhc2VfY3B1X21pbGxpY29yZXMYCyABKAUSGwoTZGF0YWJhc2VfbWVtb3J5X21pYhgMIAEoBRIcChRkYXRhYmFzZV9zdG9yYWdlX21pYhgNIAEoBRIgChhkYXRhYmFzZV9tYXhfY29ubmVjdGlvbnMYDiABKAUSJQodZGF0YWJhc2VfZGVjbGFyZWRfc3RvcmFnZV9naWIYDyABKAUiTQoZQ2xhaW1hYmxlVW5hdmFpbGFibGVDYXVzZRIMCgRjb2RlGAEgASgJEhEKCWNvbXBvbmVudBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJInsKHUdldENsYWltYWJsZUNoYWxsZW5nZVJlc3BvbnNlEhEKCWNoYWxsZW5nZRgBIAEoCRIXCg9kaWZmaWN1bHR5X2JpdHMYAiABKA0SLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiJgoPR2V0Q2xhaW1SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpcCChBHZXRDbGFpbVJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8uY29udHJvbHBsYW5lLnYxLkNsYWltYWJsZVN0YXRlEhEKCWNsYWltYWJsZRgCIAEoCBIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIRCglob3N0bmFtZXMYBSADKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLcHVyZ2VfYWZ0ZXIYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNsYWltZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIi4KF09wZW5DbGFpbVNlc3Npb25SZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIlsKGE9wZW5DbGFpbVNlc3Npb25SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDImoKCEZyZWVTaXRlEhUKDWRlcGxveW1lbnRfaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEgwKBG5hbWUYBSABKAkSCwoDdXJsGAYgASgJInsKFkZyZWVTaXRlQ2hvaWNlUmVxdWlyZWQSMAoNZXhpc3Rpbmdfc2l0ZRgBIAEoCzIZLmNvbnRyb2xwbGFuZS52MS5GcmVlU2l0ZRIvCgxjbGFpbWVkX3NpdGUYAiABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUiXwoUQ29tcGxldGVDbGFpbVJlcXVlc3QSEwoLY2xhaW1fdG9rZW4YASABKAkSMgoJZnJlZV9zaXRlGAIgASgOMh8uY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlQ2hvaWNlIi4KF0dldENsYWltRnJlZVNpdGVSZXF1ZXN0EhMKC2NsYWltX3Rva2VuGAEgASgJIpYBChhHZXRDbGFpbUZyZWVTaXRlUmVzcG9uc2USFwoPY2hvaWNlX3JlcXVpcmVkGAEgASgIEjAKDWV4aXN0aW5nX3NpdGUYAiABKAsyGS5jb250cm9scGxhbmUudjEuRnJlZVNpdGUSLwoMY2xhaW1lZF9zaXRlGAMgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlIucBChVDb21wbGV0ZUNsYWltUmVzcG9uc2USDgoGb3JnX2lkGAEgASgJEhIKCmNsYWltX3BhdGgYAiABKAkSEQoJaG9zdG5hbWVzGAMgAygJEioKBWhvbGRzGAQgAygLMhsuY29udHJvbHBsYW5lLnYxLkRlcGxveUhvbGQSOwoRZnJlZV9zaXRlX291dGNvbWUYBSABKA4yIC5jb250cm9scGxhbmUudjEuRnJlZVNpdGVPdXRjb21lEi4KC3BhdXNlZF9zaXRlGAYgASgLMhkuY29udHJvbHBsYW5lLnYxLkZyZWVTaXRlKsQBCg5DbGFpbWFibGVTdGF0ZRIfChtDTEFJTUFCTEVfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRDTEFJTUFCTEVfU1RBVEVfTElWRRABEh0KGUNMQUlNQUJMRV9TVEFURV9TVVNQRU5ERUQQAhIbChdDTEFJTUFCTEVfU1RBVEVfQ0xBSU1FRBADEh4KGkNMQUlNQUJMRV9TVEFURV9UQUtFTl9ET1dOEAQSGwoXQ0xBSU1BQkxFX1NUQVRFX0VYUElSRUQQBSpvCg5GcmVlU2l0ZUNob2ljZRIgChxGUkVFX1NJVEVfQ0hPSUNFX1VOU1BFQ0lGSUVEEAASHAoYRlJFRV9TSVRFX0NIT0lDRV9DTEFJTUVEEAESHQoZRlJFRV9TSVRFX0NIT0lDRV9FWElTVElORxACKqoBCg9GcmVlU2l0ZU91dGNvbWUSIQodRlJFRV9TSVRFX09VVENPTUVfVU5TUEVDSUZJRUQQABIhCh1GUkVFX1NJVEVfT1VUQ09NRV9OT19DT05GTElDVBABEicKI0ZSRUVfU0lURV9PVVRDT01FX0NMQUlNRURfU0lURV9MSVZFEAISKAokRlJFRV9TSVRFX09VVENPTUVfRVhJU1RJTkdfU0lURV9MSVZFEAMy+gkKEENsYWltYWJsZVNlcnZpY2US3gEKFFN0YXJ0Q2xhaW1hYmxlRGVwbG95EiwuY29udHJvbHBsYW5lLnYxLlN0YXJ0Q2xhaW1hYmxlRGVwbG95UmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5TdGFydENsYWltYWJsZURlcGxveVJlc3BvbnNlImmiuxhlCAA6YTpfdGhlIGNhbGxlciBpcyBhbiBhbm9ueW1vdXMgbWFjaGluZSB3aXRoIG5vIGFjY291bnQgeWV0OyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQSfgoVR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlEi0uY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUNoYWxsZW5nZVJlcXVlc3QaLi5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQ2hhbGxlbmdlUmVzcG9uc2UiBqK7GAIIABKHAQoYR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5EjAuY29udHJvbHBsYW5lLnYxLkdldENsYWltYWJsZUF2YWlsYWJpbGl0eVJlcXVlc3QaMS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1hYmxlQXZhaWxhYmlsaXR5UmVzcG9uc2UiBqK7GAIIABJXCghHZXRDbGFpbRIgLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbVJlcXVlc3QaIS5jb250cm9scGxhbmUudjEuR2V0Q2xhaW1SZXNwb25zZSIGorsYAggAEtcBChBPcGVuQ2xhaW1TZXNzaW9uEiguY29udHJvbHBsYW5lLnYxLk9wZW5DbGFpbVNlc3Npb25SZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLk9wZW5DbGFpbVNlc3Npb25SZXNwb25zZSJuorsYaggAOmY6ZHRoZSBjYWxsZXIgaG9sZHMgb25seSB0aGUgY2xhaW0gdG9rZW4gYW5kIGlzIG5vdCB5ZXQgYSB1c2VyOyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQSmAEKDUNvbXBsZXRlQ2xhaW0SJS5jb250cm9scGxhbmUudjEuQ29tcGxldGVDbGFpbVJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuQ29tcGxldGVDbGFpbVJlc3BvbnNlIjiiuxg0CAE6MAoFY2xhaW0SFgoDb3JnEg9yZXNwb25zZS5vcmdfaWQiD3Jlc3BvbnNlLm9yZ19pZBLQAQoQR2V0Q2xhaW1GcmVlU2l0ZRIoLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbUZyZWVTaXRlUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5HZXRDbGFpbUZyZWVTaXRlUmVzcG9uc2UiZ6K7GGMIATpfOl1hIHJlYWQgb2YgdGhlIGNsYWltIHByZXZpZXcgZm9yIHRoZSBzaWduZWQtaW4gY2FsbGVyOyB0aGUgY2xhaW1hYmxlX2RlcGxveXMgcm93IGlzIHRoZSByZWNvcmQaWoK1GFYKEENsYWltYWJsZVNlcnZpY2USBTEuMC4wGjtOby1zaWdudXAgZGVwbG95cyB0aGF0IGEgaHVtYW4gY2FuIGNsYWltIGJlZm9yZSB0aGV5IGV4cGlyZULZAQoTY29tLmNvbnRyb2xwbGFuZS52MUIOQ2xhaW1hYmxlUHJvdG9QAVpVZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsYWltYWJsZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_controlplane_v1_deploy, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.StartClaimableDeployRequest
@@ -226,6 +226,16 @@ export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaim
    * @generated from field: repeated controlplane.v1.ClaimableUnavailableCause compute_causes = 4;
    */
   computeCauses: ClaimableUnavailableCause[];
+
+  /**
+   * The anonymous plan's caps: the numbers admission and the operators
+   * enforce. forge reads them here rather than compiling its own copy, so
+   * its checks and the platform's cannot disagree. Set whether or not a
+   * deploy is available.
+   *
+   * @generated from field: controlplane.v1.ClaimableLimits limits = 5;
+   */
+  limits?: ClaimableLimits | undefined;
 };
 
 /**
@@ -234,6 +244,112 @@ export type GetClaimableAvailabilityResponse = Message<"controlplane.v1.GetClaim
  */
 export const GetClaimableAvailabilityResponseSchema: GenMessage<GetClaimableAvailabilityResponse> = /*@__PURE__*/
   messageDesc(file_services_claimable_v1_claimable, 5);
+
+/**
+ * ClaimableLimits is what one unclaimed deploy may run. Every value is a hard
+ * cap and zero means none allowed. "Per workload" holds for the service and,
+ * separately, its migration job: each runs with request = limit (no burst).
+ *
+ * @generated from message controlplane.v1.ClaimableLimits
+ */
+export type ClaimableLimits = Message<"controlplane.v1.ClaimableLimits"> & {
+  /**
+   * Static sites, and what the site may store (live copy and archives).
+   *
+   * @generated from field: int32 max_static_sites = 1;
+   */
+  maxStaticSites: number;
+
+  /**
+   * @generated from field: int32 max_static_stored_mib = 2;
+   */
+  maxStaticStoredMib: number;
+
+  /**
+   * Services (one replica each, no autoscaling) and pre-rollout migration
+   * jobs. No other workload kind is admitted.
+   *
+   * @generated from field: int32 max_services = 3;
+   */
+  maxServices: number;
+
+  /**
+   * @generated from field: int32 max_replicas = 4;
+   */
+  maxReplicas: number;
+
+  /**
+   * @generated from field: int32 max_migration_jobs = 5;
+   */
+  maxMigrationJobs: number;
+
+  /**
+   * Per workload: CPU and memory request = limit, and scratch disk.
+   *
+   * @generated from field: int32 workload_cpu_millicores = 6;
+   */
+  workloadCpuMillicores: number;
+
+  /**
+   * @generated from field: int32 workload_memory_mib = 7;
+   */
+  workloadMemoryMib: number;
+
+  /**
+   * @generated from field: int32 workload_ephemeral_storage_mib = 8;
+   */
+  workloadEphemeralStorageMib: number;
+
+  /**
+   * Managed Postgres: how many, and each one's own server (it is not a
+   * database on a shared server): instances, CPU and memory request = limit,
+   * provisioned storage (WAL included) and max_connections. No backups.
+   *
+   * @generated from field: int32 max_databases = 9;
+   */
+  maxDatabases: number;
+
+  /**
+   * @generated from field: int32 database_instances = 10;
+   */
+  databaseInstances: number;
+
+  /**
+   * @generated from field: int32 database_cpu_millicores = 11;
+   */
+  databaseCpuMillicores: number;
+
+  /**
+   * @generated from field: int32 database_memory_mib = 12;
+   */
+  databaseMemoryMib: number;
+
+  /**
+   * @generated from field: int32 database_storage_mib = 13;
+   */
+  databaseStorageMib: number;
+
+  /**
+   * @generated from field: int32 database_max_connections = 14;
+   */
+  databaseMaxConnections: number;
+
+  /**
+   * The largest storage_gib a ManagedDatabase may declare (its spec counts
+   * whole GiB); the platform provisions database_storage_mib whatever it
+   * declares.
+   *
+   * @generated from field: int32 database_declared_storage_gib = 15;
+   */
+  databaseDeclaredStorageGib: number;
+};
+
+/**
+ * Describes the message controlplane.v1.ClaimableLimits.
+ * Use `create(ClaimableLimitsSchema)` to create a new message.
+ */
+export const ClaimableLimitsSchema: GenMessage<ClaimableLimits> = /*@__PURE__*/
+  messageDesc(file_services_claimable_v1_claimable, 6);
 
 /**
  * ClaimableUnavailableCause is one reason claimable deploys, or their compute,
@@ -273,7 +389,7 @@ export type ClaimableUnavailableCause = Message<"controlplane.v1.ClaimableUnavai
  * Use `create(ClaimableUnavailableCauseSchema)` to create a new message.
  */
 export const ClaimableUnavailableCauseSchema: GenMessage<ClaimableUnavailableCause> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 6);
+  messageDesc(file_services_claimable_v1_claimable, 7);
 
 /**
  * GetClaimableChallengeResponse is the proof-of-work puzzle. The rule, which
@@ -318,7 +434,7 @@ export type GetClaimableChallengeResponse = Message<"controlplane.v1.GetClaimabl
  * Use `create(GetClaimableChallengeResponseSchema)` to create a new message.
  */
 export const GetClaimableChallengeResponseSchema: GenMessage<GetClaimableChallengeResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 7);
+  messageDesc(file_services_claimable_v1_claimable, 8);
 
 /**
  * @generated from message controlplane.v1.GetClaimRequest
@@ -335,7 +451,7 @@ export type GetClaimRequest = Message<"controlplane.v1.GetClaimRequest"> & {
  * Use `create(GetClaimRequestSchema)` to create a new message.
  */
 export const GetClaimRequestSchema: GenMessage<GetClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 8);
+  messageDesc(file_services_claimable_v1_claimable, 9);
 
 /**
  * GetClaimResponse is preview metadata for the claim page. It carries no
@@ -397,7 +513,7 @@ export type GetClaimResponse = Message<"controlplane.v1.GetClaimResponse"> & {
  * Use `create(GetClaimResponseSchema)` to create a new message.
  */
 export const GetClaimResponseSchema: GenMessage<GetClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 9);
+  messageDesc(file_services_claimable_v1_claimable, 10);
 
 /**
  * @generated from message controlplane.v1.OpenClaimSessionRequest
@@ -414,7 +530,7 @@ export type OpenClaimSessionRequest = Message<"controlplane.v1.OpenClaimSessionR
  * Use `create(OpenClaimSessionRequestSchema)` to create a new message.
  */
 export const OpenClaimSessionRequestSchema: GenMessage<OpenClaimSessionRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 10);
+  messageDesc(file_services_claimable_v1_claimable, 11);
 
 /**
  * OpenClaimSessionResponse is a Supabase GoTrue session for the anonymous
@@ -446,7 +562,7 @@ export type OpenClaimSessionResponse = Message<"controlplane.v1.OpenClaimSession
  * Use `create(OpenClaimSessionResponseSchema)` to create a new message.
  */
 export const OpenClaimSessionResponseSchema: GenMessage<OpenClaimSessionResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 11);
+  messageDesc(file_services_claimable_v1_claimable, 12);
 
 /**
  * One static site, named for a person deciding which to keep.
@@ -494,7 +610,7 @@ export type FreeSite = Message<"controlplane.v1.FreeSite"> & {
  * Use `create(FreeSiteSchema)` to create a new message.
  */
 export const FreeSiteSchema: GenMessage<FreeSite> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 12);
+  messageDesc(file_services_claimable_v1_claimable, 13);
 
 /**
  * FreeSiteChoiceRequired is the error detail (svcerr.WithDetail) on a
@@ -523,7 +639,7 @@ export type FreeSiteChoiceRequired = Message<"controlplane.v1.FreeSiteChoiceRequ
  * Use `create(FreeSiteChoiceRequiredSchema)` to create a new message.
  */
 export const FreeSiteChoiceRequiredSchema: GenMessage<FreeSiteChoiceRequired> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 13);
+  messageDesc(file_services_claimable_v1_claimable, 14);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimRequest
@@ -548,7 +664,7 @@ export type CompleteClaimRequest = Message<"controlplane.v1.CompleteClaimRequest
  * Use `create(CompleteClaimRequestSchema)` to create a new message.
  */
 export const CompleteClaimRequestSchema: GenMessage<CompleteClaimRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 14);
+  messageDesc(file_services_claimable_v1_claimable, 15);
 
 /**
  * @generated from message controlplane.v1.GetClaimFreeSiteRequest
@@ -565,7 +681,7 @@ export type GetClaimFreeSiteRequest = Message<"controlplane.v1.GetClaimFreeSiteR
  * Use `create(GetClaimFreeSiteRequestSchema)` to create a new message.
  */
 export const GetClaimFreeSiteRequestSchema: GenMessage<GetClaimFreeSiteRequest> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 15);
+  messageDesc(file_services_claimable_v1_claimable, 16);
 
 /**
  * @generated from message controlplane.v1.GetClaimFreeSiteResponse
@@ -596,7 +712,7 @@ export type GetClaimFreeSiteResponse = Message<"controlplane.v1.GetClaimFreeSite
  * Use `create(GetClaimFreeSiteResponseSchema)` to create a new message.
  */
 export const GetClaimFreeSiteResponseSchema: GenMessage<GetClaimFreeSiteResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 16);
+  messageDesc(file_services_claimable_v1_claimable, 17);
 
 /**
  * @generated from message controlplane.v1.CompleteClaimResponse
@@ -655,7 +771,7 @@ export type CompleteClaimResponse = Message<"controlplane.v1.CompleteClaimRespon
  * Use `create(CompleteClaimResponseSchema)` to create a new message.
  */
 export const CompleteClaimResponseSchema: GenMessage<CompleteClaimResponse> = /*@__PURE__*/
-  messageDesc(file_services_claimable_v1_claimable, 17);
+  messageDesc(file_services_claimable_v1_claimable, 18);
 
 /**
  * ClaimableState is the lifecycle of one claimable deploy

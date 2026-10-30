@@ -43,9 +43,13 @@ Every log — backend, browser console, Electron — is under `.forge/logs/dev/`
 Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed), before you ask for a merge; the **release gate**, `task release:gate`, before every release.
 
 `main` merges only through GitHub's merge queue (ruleset "main: CI result +
-merge queue", **no bypass actors**). It requires the `CI result` check, which
-CI (`.github/workflows/ci.yml`) runs on the queue's own merge group, so the
-commit that lands is the commit that was tested. Queue a PR with:
+merge queue"; never bypass it, no `--admin`). It requires the `CI result` check,
+which CI (`.github/workflows/ci.yml`) runs on the queue's own merge group, so the
+commit that lands is the commit that was tested. **Review first:** a PR push runs
+nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
+runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
+main after the merge and gates the release, never the merge. Label a PR `ci:run`
+(then push) to run the merge gate on it before review. Queue a PR with:
 
 ```bash
 gh pr merge <pr> --squash --auto --match-head-commit <sha>
@@ -87,7 +91,7 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   `task test -- ./internal/<pkg>/...` (no `-short`, `-race`) once at the end;
   never the unscoped `task test` as a quick check (the whole module, web and
   electron).
-- **Two gate tiers.** The merge gate (and a PR's CI) runs only what the diff
+- **Two gate tiers.** The merge gate (and the merge queue's CI) runs only what the diff
   reaches, `-short`, direct importers only. The release gate on main runs
   everything in full: `-race`, every slow test, integration, e2e. So a slow
   test, or a package two imports away from your change, runs only there: when
