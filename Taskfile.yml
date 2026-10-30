@@ -912,6 +912,11 @@ tasks:
     cmds:
       - ./scripts/release-tag.sh --dry-run
 
+  flake:report:test:
+    desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
+    cmds:
+      - ./scripts/test-flake-report.sh
+
   release:lock:test:
     desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote
     cmds:
