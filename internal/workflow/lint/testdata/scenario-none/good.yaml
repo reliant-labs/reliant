@@ -1,0 +1,6 @@
+name: fixture
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: done}
