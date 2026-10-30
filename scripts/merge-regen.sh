@@ -19,8 +19,9 @@
 # Without --push or --out it reports what it would do and changes nothing.
 # --out <ref> builds the commit and points <ref> (in the caller's repository)
 # at it instead of pushing, for a caller that pushes as someone else (the PR
-# pipeline's git_publish node, as the GitHub App). Either way the base and head
-# the run used are left in refs/merge-regen/base and refs/merge-regen/head.
+# pipeline's git_publish node, as the GitHub App). The `ready` line names the
+# head and base this run captured; the caller's push leases against THAT head,
+# never a shared ref another run could have moved.
 #
 # CONTRACT (stable; callers branch on the exit code, and the last stdout line)
 #   exit 0  `merge-regen: no-drift <head-sha>`   head merges with base cleanly and
@@ -29,10 +30,10 @@
 #   exit 0  `merge-regen: pushed <new-sha>`      (--push) a "chore: regenerate on
 #                                                 merge" merge commit was pushed to
 #                                                 the branch; the PR's head moved.
-#   exit 0  `merge-regen: ready <new-sha>`       (--out) the same commit, not pushed:
-#                                                 <ref> points at it; push it with
-#                                                 --force-with-lease against
-#                                                 refs/merge-regen/head.
+#   exit 0  `merge-regen: ready <new-sha> head=<head-sha> base=<base-sha>`
+#                                                 (--out) the same commit, not pushed:
+#                                                 <ref> points at it. Push it with
+#                                                 --force-with-lease=refs/heads/<b>:<head-sha>.
 #   exit 0  `merge-regen: would-push <tree-sha>` (neither) the same, not kept.
 #   exit 2  `merge-regen: refused-conflict <paths>`  a hand-written file conflicts;
 #                                                 the author must merge main.
@@ -102,13 +103,20 @@ driver_install=${MERGE_REGEN_DRIVER_INSTALL:-"$forge_cmd merge-driver install"}
 gen_re=${MERGE_REGEN_GEN_RE:-'^gen/|^generated/|^frontends/[^/]+/src/gen/|^\.forge/(scaffolded|hashes|disowned)\.json$|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|_gen(_test)?\.[a-z]+$|\.pb\.go$|_pb\.ts$|_connect\.ts$|\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'}
 
 # ── fetch, and a throwaway worktree on the PR head ───────────────────────────
-git -C "$repo" fetch -q "$remote" "+refs/heads/$base:refs/merge-regen/base" "+refs/heads/$branch:refs/merge-regen/head" ||
-  die "cannot fetch $base and $branch from $remote"
-base_sha=$(git -C "$repo" rev-parse refs/merge-regen/base)
-head_sha=$(git -C "$repo" rev-parse refs/merge-regen/head)
+# Fetch into refs of this invocation alone: a concurrent run's fetch can never
+# move the inputs this one captured (and leases against).
 wt=$(mktemp -d "${TMPDIR:-/tmp}/merge-regen.XXXXXX")
-cleanup() { git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"; }
+inputs="refs/merge-regen/run/$(basename "$wt")"
+cleanup() {
+  git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
+  git -C "$repo" update-ref -d "$inputs/base" >/dev/null 2>&1 || true
+  git -C "$repo" update-ref -d "$inputs/head" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
+git -C "$repo" fetch -q "$remote" "+refs/heads/$base:$inputs/base" "+refs/heads/$branch:$inputs/head" ||
+  die "cannot fetch $base and $branch from $remote"
+base_sha=$(git -C "$repo" rev-parse "$inputs/base")
+head_sha=$(git -C "$repo" rev-parse "$inputs/head")
 git -C "$repo" worktree add -q --detach "$wt" "$head_sha"
 cd "$wt"
 git config user.name >/dev/null || git config user.name "merge-regen"
@@ -208,7 +216,7 @@ if [ "$server_clean" = 1 ] && [ "$merged_clean" = 1 ] && [ "$before" = "$after" 
 fi
 if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   git commit -q --no-verify -m "chore: regenerate on merge with $base ($(git rev-parse --short "$base_sha"))" \
-    -m "merge-regen: merged $base into $branch and regenerated with the pinned forge;${conflicts:+ generated conflicts resolved: $(echo $conflicts)}"
+    -m "merge-regen: merged $base into $branch and regenerated with the pinned forge;${conflicts:+ generated conflicts resolved: ${conflicts//$'\n'/ }}"
 else
   # base was already merged: only the regenerate is new.
   git commit -q --no-verify -m "chore: regenerate on merge with $base ($(git rev-parse --short "$base_sha"))"
@@ -218,11 +226,11 @@ if [ -n "$out" ]; then
   # The worktree shares the repository's object store, so the commit outlives
   # the worktree once a ref in the caller's repository names it.
   git -C "$repo" update-ref "$out" "$new" || die "cannot update $out"
-  say "ready $new"
+  say "ready $new head=$head_sha base=$base_sha"
   exit 0
 fi
 if [ "$push" = 0 ]; then
-  say "would-push $(git rev-parse HEAD^{tree})"
+  say "would-push $(git rev-parse 'HEAD^{tree}')"
   exit 0
 fi
 if ! git push -q "$remote" "HEAD:refs/heads/$branch" --force-with-lease="refs/heads/$branch:$head_sha" 2>"$wt/.mr-push.err"; then

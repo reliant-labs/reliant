@@ -53,7 +53,7 @@ echo "$out" | tail -1 | grep -q '^merge-regen: pushed ' || fail "expected pushed
 git fetch -q origin
 git checkout -q --detach origin/pr
 git merge-base --is-ancestor origin/main origin/pr || fail "pr does not contain main"
-grep -q '^A2$' in/a.txt && grep -q '^B3$' in/b.txt || fail "merged inputs lost"
+{ grep -q '^A2$' in/a.txt && grep -q '^B3$' in/b.txt; } || fail "merged inputs lost"
 want=$(sh gen.sh && cat gen/out_gen.txt); git checkout -q -- gen
 [ "$(git show origin/pr:gen/out_gen.txt)" = "$want" ] || fail "gen/out_gen.txt is not the render of the merged inputs"
 git grep -q '^<<<<<<<' origin/pr && fail "conflict markers pushed"
@@ -110,20 +110,38 @@ edit pr in/b.txt b3 B3
 edit main in/a.txt a2 A2
 before=$(git rev-parse origin/pr)
 out=$(run --branch pr --out refs/merge-regen/out 2>&1) || fail "--out exited $?: $out"
-new=$(echo "$out" | tail -1 | sed -n 's/^merge-regen: ready //p')
+new=$(echo "$out" | tail -1 | sed -n 's/^merge-regen: ready \([0-9a-f]*\) head=.*/\1/p')
+lease=$(echo "$out" | tail -1 | sed -n 's/.* head=\([0-9a-f]*\) base=.*/\1/p')
 [ -n "$new" ] || fail "--out should print ready: $out"
 [ "$(git rev-parse refs/merge-regen/out)" = "$new" ] || fail "--out ref does not name the commit"
 git cat-file -e "$new^{commit}" || fail "the commit did not survive the worktree"
 git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$before" ] || fail "--out pushed"
-[ "$(git rev-parse refs/merge-regen/head)" = "$before" ] || fail "refs/merge-regen/head is not the head used"
-[ "$(git rev-parse refs/merge-regen/base)" = "$(git rev-parse origin/main)" ] || fail "refs/merge-regen/base is not the base used"
+[ "$lease" = "$before" ] || fail "ready names head=$lease, not the head used ($before)"
+echo "$out" | tail -1 | grep -q " base=$(git rev-parse origin/main)\$" || fail "ready does not name the base used: $out"
+git for-each-ref refs/merge-regen/run | grep -q . && fail "a run left its input refs behind"
 git show "$new":in/a.txt | grep -q '^A2$' || fail "--out commit lacks main"
-git push -q origin "$new:refs/heads/pr" --force-with-lease="refs/heads/pr:$(git rev-parse refs/merge-regen/head)" || fail "caller push of the --out commit"
+git push -q origin "$new:refs/heads/pr" --force-with-lease="refs/heads/pr:$lease" || fail "caller push of the --out commit"
 out=$(run --branch pr --out refs/merge-regen/out 2>&1) || fail "--out rerun: $out"
 echo "$out" | tail -1 | grep -q '^merge-regen: no-drift ' || fail "--out rerun after the caller pushed should be no-drift: $out"
 set +e; (cd "$tmp/w" && "$script" --branch pr --push --out refs/x) >/dev/null 2>&1; rc=$?; set -e
 [ $rc = 1 ] || fail "--push with --out should be refused, exit $rc"
 echo "ok   --out leaves the commit in a ref for the caller to push"
+
+# 7b. Overlapping runs: A builds from H, the branch moves to H2, B runs. A's
+#     caller leases against the head A captured, so its push is refused and
+#     the newer commit survives.
+setup
+edit pr in/b.txt b3 B3
+edit main in/a.txt a2 A2
+outA=$(run --branch pr --out refs/merge-regen/a 2>&1) || fail "run A: $outA"
+newA=$(echo "$outA" | tail -1 | sed -n 's/^merge-regen: ready \([0-9a-f]*\) head=.*/\1/p')
+leaseA=$(echo "$outA" | tail -1 | sed -n 's/.* head=\([0-9a-f]*\) base=.*/\1/p')
+git checkout -q -B pr origin/pr; echo late >late.txt; git add late.txt; git commit -qm late; git push -q origin pr
+h2=$(git rev-parse HEAD)
+run --branch pr --out refs/merge-regen/b >/dev/null 2>&1 || fail "run B"
+git push -q origin "$newA:refs/heads/pr" --force-with-lease="refs/heads/pr:$leaseA" 2>/dev/null && fail "A's stale commit overwrote the newer branch"
+git fetch -q origin; [ "$(git rev-parse origin/pr)" = "$h2" ] || fail "the newer commit was lost"
+echo "ok   overlapping runs: a stale run's lease is refused"
 
 # 8. forge's driver makes the LOCAL merge clean and generate is a no-op, but
 #    GitHub's merge (no driver) still conflicts: the merge is pushed anyway.
