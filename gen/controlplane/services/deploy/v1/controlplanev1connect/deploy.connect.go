@@ -187,14 +187,15 @@ type DeployServiceClient interface {
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
-	// DeleteEnvironment tears down the environment and its namespace. Refuses
-	// with FailedPrecondition while the environment still has deployments,
-	// unless force is set — deleting a namespace out from under running
-	// workloads is the kind of thing a user should have to say twice.
+	// DeleteEnvironment tears down the environment: its deployments, workloads,
+	// URLs, namespaces and (unless keep_data) its managed databases' data.
+	// Refuses with FailedPrecondition while the environment still has
+	// deployments, unless force is set — deleting a namespace out from under
+	// running workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
 	// ListRetainedDatabases lists the caller's org's databases that outlived a
-	// deleted environment (DeleteEnvironment without delete_data). Their data
-	// still exists and still bills as storage.
+	// deleted environment (DeleteEnvironment with keep_data). Their data still
+	// exists and still bills as storage.
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.
@@ -1122,14 +1123,15 @@ type DeployServiceHandler interface {
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
-	// DeleteEnvironment tears down the environment and its namespace. Refuses
-	// with FailedPrecondition while the environment still has deployments,
-	// unless force is set — deleting a namespace out from under running
-	// workloads is the kind of thing a user should have to say twice.
+	// DeleteEnvironment tears down the environment: its deployments, workloads,
+	// URLs, namespaces and (unless keep_data) its managed databases' data.
+	// Refuses with FailedPrecondition while the environment still has
+	// deployments, unless force is set — deleting a namespace out from under
+	// running workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
 	// ListRetainedDatabases lists the caller's org's databases that outlived a
-	// deleted environment (DeleteEnvironment without delete_data). Their data
-	// still exists and still bills as storage.
+	// deleted environment (DeleteEnvironment with keep_data). Their data still
+	// exists and still bills as storage.
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.

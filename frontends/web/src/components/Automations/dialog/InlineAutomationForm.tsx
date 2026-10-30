@@ -41,17 +41,19 @@ import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../../workflow/run/runFormStyles";
 import { countRunInputs, type RunWorkflowValue } from "../../workflow/run/runWorkflowValues";
-import { ActingIdentityField } from "../ActingIdentityField";
+import { ActingIdentityField, defaultActingIdentity } from "../ActingIdentityField";
 import { buildDaemonChoices, NO_MACHINE, noMachineBlockerFor } from "../daemonChoices";
 import { scheduleFromForm, serverErrorField, validateScheduleForm } from "../scheduleForm";
 import { validateTimezone } from "../timezone";
 import { autoName, uniqueName } from "./autoName";
 import { DescribeIt } from "./DescribeIt";
 import { Disclosure } from "./Disclosure";
-import { defaultMachine, lastUsedDaemon } from "./machineDefault";
+import { defaultMachine } from "./machineDefault";
+import { useRecentMachine } from "./useRecentMachine";
 import type { AutomationPrefill } from "./openAutomationDialog";
 import { WebhookCredentialPanel } from "./WebhookCredentialPanel";
 import { WhenField } from "./WhenField";
+import { TestEventPreview } from "./TestEventPreview";
 import { WhereSummary } from "./WhereSummary";
 import { defaultWhen, filterOfWhen, sourceFromWhen, whenError, whenFromSource, type WhenState } from "./whenModel";
 
@@ -136,13 +138,16 @@ export function InlineAutomationForm({
   const whenTouched = useRef(false);
   const [connectionId, setConnectionId] = useState(trigger?.connectionId ?? "");
   const [notify, setNotify] = useState(trigger?.notifyOnComplete ?? initialPrefill?.notifyOnComplete ?? false);
-  // Keep a stored or explicit actor; only an untouched new GitHub source defaults to the bot.
+  // Keep a stored or explicit actor; an untouched new automation defaults to the bot.
   const [chosenIdentity, setActingIdentity] = useState<ActingIdentityKey | undefined>(trigger?.actingIdentity);
-  const actingIdentity = chosenIdentity ?? (when.kind === "integration" && when.event && integrationOf(when.event)?.integration === "github" ? "app" : "owner");
+  const actingIdentity = chosenIdentity ?? defaultActingIdentity(when.kind === "integration" && !!when.event && integrationOf(when.event)?.integration === "github");
   const [assumptions, setAssumptions] = useState(initialPrefill?.assumptions ?? []);
   const [inputsOpen, setInputsOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || trigger?.actingIdentity === "app");
-  const [errors, setErrors] = useState<FieldErrors>({});
+  // Open when a stored identity differs from what a new automation would get.
+  const [advancedOpen, setAdvancedOpen] = useState(when.overlap === "allow" || (!!trigger?.actingIdentity && trigger.actingIdentity !== defaultActingIdentity(false)));
+  const [serverErrors, setErrors] = useState<FieldErrors>({});
+  const [blurred, setBlurred] = useState<Partial<Record<keyof FieldErrors, boolean>>>({});
+  const blurField = (key: keyof FieldErrors) => setBlurred((prev) => ({ ...prev, [key]: true }));
   const [attempted, setAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -161,16 +166,11 @@ export function InlineAutomationForm({
   const noMachineBlocker = useMemo(() => noMachineBlockerFor(listed, workflow), [listed, workflow]);
 
   const projectTriggers = useTriggers(projectId || undefined, { enabled: !!projectId });
-  const { daemons, loading: daemonsLoading, activeDaemon } = useDaemonStatus();
+  const { daemons, loading: daemonsLoading } = useDaemonStatus();
   const installs = useProjectDaemonInstalls();
   const choices = useMemo(() => buildDaemonChoices(daemons, installs.data ?? [], projectId), [daemons, installs.data, projectId]);
-  const lastUsed = useMemo(
-    () =>
-      activeDaemon?.daemonId ??
-      lastUsedDaemon((projectTriggers.data ?? []).filter((t) => t.projectId === projectId).map((t) => ({ daemonId: t.daemonId, at: t.updatedAt }))),
-    [activeDaemon, projectTriggers.data, projectId],
-  );
-  const machineDataReady = !daemonsLoading && !installs.isLoading && (!workflow || library.isSuccess);
+  const { lastUsed, loading: historyLoading } = useRecentMachine(projectId, projectTriggers.data ?? [], choices);
+  const machineDataReady = !daemonsLoading && !installs.isLoading && !historyLoading && (!workflow || library.isSuccess);
   useEffect(() => {
     if (!machineDataReady || machineChosen.current) return;
     const next = defaultMachine({ choices, needsNoMachine: !!workflow && !noMachineBlocker, lastUsed });
@@ -248,6 +248,8 @@ export function InlineAutomationForm({
       next.machine = daemons.length === 0 ? "Connect a machine first, or choose No machine." : "Choose where it runs.";
     } else if (machine === NO_MACHINE && noMachineBlocker && !trigger?.noMachine) {
       next.machine = `No machine isn't available: ${noMachineBlocker}. Choose a machine.`;
+    } else if (machine !== NO_MACHINE && machineDataReady && !choices.some((c) => c.daemonId === machine && c.eligible && c.statusLabel !== "failed")) {
+      next.machine = "This machine is no longer available for this project. Choose another.";
     }
     if (!message.trim()) next.message = "Say what each run should do.";
     if (pendingWorkflow !== null) next.inputs = "Confirm or cancel the workflow change first.";
@@ -260,6 +262,15 @@ export function InlineAutomationForm({
     }
     return next;
   };
+
+  // Compute client errors from current values so fixing a field clears it immediately.
+  const currentErrors = validate();
+  const errors: FieldErrors = { ...serverErrors };
+  for (const key of ["when", "message", "inputs", "project", "machine"] as const) {
+    if (attempted || blurred[key]) errors[key] = currentErrors[key] ?? serverErrors[key];
+  }
+  const requiredLeft = Object.keys(currentErrors).filter((key) => key !== "form" && key !== "inputs").length +
+    (inputsStatus?.missingRequired.length || (currentErrors.inputs ? 1 : 0));
 
   const buildDefinition = (): TriggerDefinitionInput => {
     // An edit whose WHEN was not touched sends back the stored arm itself, so
@@ -290,7 +301,7 @@ export function InlineAutomationForm({
     event.preventDefault();
     setAttempted(true);
     const next = validate();
-    setErrors(next);
+    setErrors({});
     if (Object.keys(next).length > 0) {
       const first = (["when", "message", "inputs", "project", "machine"] as const).find((k) => next[k]);
       if (first === "inputs") setInputsOpen(true);
@@ -309,7 +320,7 @@ export function InlineAutomationForm({
       }
       const result = await createTrigger.mutateAsync(definition);
       onSaved?.([result.trigger]);
-      if (result.webhook || when.kind === "webhook") {
+      if (result.webhook || when.kind === "webhook" || when.kind === "integration" || when.kind === "workflowEvent") {
         setCreated(result);
       } else {
         toast.success(`${result.trigger.name} is on`);
@@ -348,10 +359,13 @@ export function InlineAutomationForm({
     return (
       <Modal open onClose={onClose} size="lg" title={`${created.trigger.name} is on`}>
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Point the sender at this URL. Each request starts a run, and the request body is attached to it.
-          </p>
-          <WebhookCredentialPanel trigger={created.trigger} credential={created.webhook} />
+          {when.kind === "webhook" ? <>
+            <p className="text-sm text-muted-foreground">Point the sender at this URL. Each request starts a run, and the request body is attached to it.</p>
+            <WebhookCredentialPanel trigger={created.trigger} credential={created.webhook} />
+          </> : <>
+            <p className="text-sm text-muted-foreground">The next matching event starts a run. Preview a sample without starting anything.</p>
+            <TestEventPreview trigger={created.trigger} />
+          </>}
           <div className="flex justify-end border-t border-border pt-4">
             <Button variant="primary" onClick={onClose}>
               Done
@@ -363,12 +377,12 @@ export function InlineAutomationForm({
   }
 
   const title = isEdit ? "Edit automation" : "New automation";
-  const showWritesAsInAdvanced = when.kind !== "integration" && (!!workflow || actingIdentity === "app");
+  const showWritesAsInAdvanced = when.kind !== "integration";
   const primaryLabel = isEdit ? "Save changes" : when.kind === "webhook" ? "Create and show URL" : "Create";
 
   return (
     <Modal open onClose={requestClose} title={title} size="lg">
-      <form onSubmit={onSubmit} onChange={touch} noValidate className="space-y-6" aria-label={title}>
+      <form onSubmit={onSubmit} onChange={() => { touch(); setErrors({}); }} noValidate className="space-y-6" aria-label={title}>
         <div className="-mt-2 flex min-w-0 items-center gap-2 text-sm">
           {editingName ? (
             <>
@@ -424,7 +438,7 @@ export function InlineAutomationForm({
           </div>
         )}
 
-        <section className="space-y-2" aria-labelledby={fid("when-heading")}>
+        <section className="space-y-2" aria-labelledby={fid("when-heading")} onBlur={() => blurField("when")}>
           <h3 id={fid("when-heading")} className="text-sm font-semibold text-foreground">
             When
           </h3>
@@ -444,7 +458,7 @@ export function InlineAutomationForm({
                 touch();
                 setWhen(next);
               }}
-              error={attempted ? errors.when : undefined}
+              error={errors.when}
               connectionId={connectionId}
               onConnectionChange={(id) => {
                 touch();
@@ -551,15 +565,16 @@ export function InlineAutomationForm({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Summarise yesterday's failed CI runs and open an issue for each new failure."
-              aria-invalid={!!(attempted && errors.message)}
-              aria-describedby={fid("message-hint")}
+              onBlur={() => blurField("message")}
+              aria-invalid={!!errors.message}
+              aria-describedby={`${fid("message-hint")}${errors.message ? ` ${fid("message-error")}` : ""}`}
             />
             <p id={fid("message-hint")} className={hintClass}>
               {when.kind === "webhook"
                 ? "Each run starts from this message, with the request body attached. Nobody will be watching, so say everything the agent needs."
                 : "Each run starts from this message. Nobody will be watching, so say everything the agent needs."}
             </p>
-            {attempted && errors.message && <p className={errorTextClass}>{errors.message}</p>}
+            {errors.message && <p id={fid("message-error")} className={errorTextClass} role="alert">{errors.message}</p>}
           </div>
 
           {workflow && projectId && (
@@ -567,6 +582,7 @@ export function InlineAutomationForm({
               id={fid("inputs")}
               tabIndex={-1}
               className="focus:outline-none"
+              onBlur={() => blurField("inputs")}
             >
               <Disclosure
                 open={inputsOpen || (attempted && !!errors.inputs)}
@@ -590,7 +606,7 @@ export function InlineAutomationForm({
                     // Required inputs with no default block saving: show them.
                     if (status.missingRequired.length > 0 && !isEdit) setInputsOpen(true);
                   }}
-                  showValidation={attempted}
+                  showValidation={attempted || !!blurred.inputs}
                   applyDefaultPresets={!isEdit && !initialPrefill?.presets && !initialPrefill?.params}
                   hideWorktree
                   hideInputsLabel
@@ -632,8 +648,9 @@ export function InlineAutomationForm({
           needsMachine={!!listing?.needsMachine?.length}
           worktreeId={inputs.worktreeId}
           onWorktreeChange={(worktreeId) => setInputs((prev) => ({ ...prev, worktreeId }))}
-          projectError={attempted ? errors.project : undefined}
-          machineError={attempted ? errors.machine : undefined}
+          projectError={errors.project}
+          machineError={errors.machine}
+          onBlurField={blurField}
         />
 
         <div>
@@ -705,7 +722,8 @@ export function InlineAutomationForm({
             </div>
           </div>
         ) : (
-          <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-4">
+            <p className="mr-auto text-xs text-muted-foreground" role="status">{requiredLeft ? `${requiredLeft} required ${requiredLeft === 1 ? "field" : "fields"} left` : "Ready to save"}</p>
             <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
               Cancel
             </Button>

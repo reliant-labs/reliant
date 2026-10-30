@@ -25,6 +25,21 @@ const (
 	ChatStateArchived    ChatState = reliantv1.ChatState_CHAT_STATE_ARCHIVED
 )
 
+// ChatOrigin is who started a chat (chats.origin). It is the chat list's
+// policy key: a USER chat lists in the sidebar, any other origin is a run that
+// lists only once adopted (chats_with_activity.list_in_sidebar).
+type ChatOrigin = reliantv1.ChatOrigin
+
+const (
+	ChatOriginUnspecified ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_UNSPECIFIED
+	ChatOriginUser        ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_USER
+	ChatOriginAutomation  ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_AUTOMATION
+	ChatOriginAgent       ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_AGENT
+	ChatOriginManualRun   ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_MANUAL_RUN
+	ChatOriginBuilderTest ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_BUILDER_TEST
+	ChatOriginCLI         ChatOrigin = reliantv1.ChatOrigin_CHAT_ORIGIN_CLI
+)
+
 // WorkflowState is where a run IS; WorkflowStopReason is why a stopped run
 // stopped. They are always read together — see WorkflowStatus below, which is
 // the pair, and the Live/Resumable predicates, which are what callers should
@@ -198,10 +213,20 @@ type Chat struct {
 	// daemon is asleep and gets woken). Every run in the chat is offered only
 	// tools that run without the user's machine. See research/DAEMONLESS_RUNS.md.
 	NoMachine bool `json:"no_machine,omitempty"`
+	// MachinePoolID is the machine pool that placed this chat's run on
+	// ActiveDaemonID (one of its members); nil when no pool placed it.
+	// Written at launch, where the pool counts its members' live runs from
+	// it; reads through chats_with_activity do not carry it yet.
+	MachinePoolID *string `json:"machine_pool_id,omitempty"`
 	// AdoptedAt is when the user adopted this run into their chats; nil if not.
 	AdoptedAt *time.Time `json:"adopted_at,omitempty"`
-	// ListInSidebar is the view's sidebar policy for this chat.
+	// ListInSidebar is the view's sidebar policy for this chat: Origin is USER,
+	// or the user adopted the run.
 	ListInSidebar bool `json:"list_in_sidebar"`
+	// Origin is who started the chat, written once at launch (ChatOriginOf the
+	// launch event's kind; USER for a branch). Unspecified on insert stores
+	// USER, the column's default.
+	Origin ChatOrigin `json:"origin,omitempty"`
 
 	// UsageLimitResumesAt is when the chat's root run retries, while it is parked
 	// until a provider's usage limit resets (activity 7); nil otherwise.
@@ -248,6 +273,40 @@ func (c *Chat) MainThreadID() string {
 	return ""
 }
 
+// ChatRow is a chat's own row, the chats table alone: who it belongs to, its
+// lifecycle, root workflow, workspace and machine flags. It is what an
+// ownership check reads. Chat is read from the chats_with_activity view, whose
+// activity, last-message, root-workflow-state, working-thread, usage-limit and
+// launch columns are subqueries over the chat's messages, workflows, threads
+// and trigger events — a cost every RPC that only authorizes paid; such a
+// caller reads this instead, and one that needs a derived field reads Chat.
+type ChatRow struct {
+	ID             string
+	Title          string
+	ProjectID      string
+	UserID         string
+	State          ChatState
+	WorkflowID     *string
+	WorkflowName   *string
+	RunID          *string
+	WorktreeID     *string
+	ActiveDaemonID *string
+	Unread         bool
+	NoMachine      bool
+	AdoptedAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	LastActive     time.Time
+}
+
+// MainThreadID is Chat.MainThreadID for the row's root workflow.
+func (c *ChatRow) MainThreadID() string {
+	if c.WorkflowID != nil && *c.WorkflowID != "" {
+		return *c.WorkflowID
+	}
+	return ""
+}
+
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo struct {
 	Chat
@@ -262,7 +321,9 @@ type ChatFilters struct {
 	State           *ChatState
 	ExcludeArchived bool
 	// SidebarOnly keeps only chats the sidebar lists: the view's
-	// list_in_sidebar column is the single definition of that policy.
+	// list_in_sidebar column is the single definition of that policy. The
+	// ListChats rpc always sets it; internal sweeps (a worktree's chats) do
+	// not, because they act on runs too.
 	SidebarOnly bool
 	Limit       int
 	Offset      int
@@ -300,7 +361,21 @@ type QueuedForMachineChat struct {
 	// ActiveDaemonID is the machine the chat is pinned to; nil means the
 	// user's default machine.
 	ActiveDaemonID *string
-	QueuedAt       time.Time
+	// Machine is the machine the run that queued the message was waiting
+	// for (chats.queued_for_machine_selector). It wins over ActiveDaemonID:
+	// a workflow-level daemon selector targets a machine the chat's pin does
+	// not name. Nil when the run named none.
+	Machine  *QueuedMachine
+	QueuedAt time.Time
+}
+
+// QueuedMachine is the machine a queued message waits for, as the run that
+// queued it selected it: the fields of its daemon selector.
+type QueuedMachine struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"`
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // PausedForMachineChat is a chat whose root run the daemon-offline circuit

@@ -22,6 +22,7 @@
  *   unavailable  everything else: the stack is down, a network blip.
  */
 
+import { BinaryReader, WireType } from "@bufbuild/protobuf/wire";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { hasErrorReason } from "@/lib/errorReasons";
@@ -56,8 +57,104 @@ export function obsErrorMessage(error: unknown): string {
   return "";
 }
 
-/** A not-set-up answer is a fact about the org, not a fault: never retry it, nor any other answer the server gave on purpose. */
+/**
+ * The console's concurrent-read cap (control-plane obsratelimit.InFlight): a
+ * ResourceExhausted with reason `in_flight_limit`. Not the hourly quota, which
+ * shares the code, and not a fault: a slot frees as soon as one of the user's
+ * own reads finishes, so the answer is "wait and ask again", never "give up".
+ */
+export function isInFlightLimit(error: unknown): boolean {
+  return error instanceof ConnectError && error.code === Code.ResourceExhausted && !quotaOf(error) && hasErrorReason(error, "in_flight_limit");
+}
+
+const IN_FLIGHT_BASE_MS = 1_000;
+const IN_FLIGHT_CAP_MS = 16_000;
+const DEFAULT_BASE_MS = 1_000;
+const DEFAULT_CAP_MS = 30_000;
+
+/**
+ * How long a read the server refused for its concurrent-read cap waits before
+ * asking again: never less than the server's own RetryInfo / Retry-After, plus
+ * a random share of an exponentially growing window, so refused reads spread
+ * out instead of returning together. `random` is injectable for tests.
+ */
+export function inFlightRetryDelayMs(failureCount: number, error: unknown, random: () => number = Math.random): number {
+  const floor = retryAfterMs(error) ?? 0;
+  const window = Math.min(IN_FLIGHT_BASE_MS * 2 ** failureCount, IN_FLIGHT_CAP_MS);
+  return Math.round(floor + random() * window);
+}
+
+/** The retryDelay of every query: React Query's own ladder, except for the in-flight refusal, which is paced by the server's answer. */
+export function obsRetryDelay(failureCount: number, error: unknown): number {
+  return isInFlightLimit(error) ? inFlightRetryDelayMs(failureCount, error) : Math.min(DEFAULT_BASE_MS * 2 ** failureCount, DEFAULT_CAP_MS);
+}
+
+const RETRY_INFO_TYPE = "google.rpc.RetryInfo";
+/** A server asking for a longer pause than this is a bad clock or a bad header. */
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/** google.rpc.RetryInfo { Duration retry_delay = 1 } → milliseconds, or null when it carries none. */
+function retryInfoMs(bytes: Uint8Array): number | null {
+  try {
+    const info = new BinaryReader(bytes);
+    while (info.pos < info.len) {
+      const [field, wire] = info.tag();
+      if (field !== 1 || wire !== WireType.LengthDelimited) {
+        info.skip(wire, field);
+        continue;
+      }
+      const duration = new BinaryReader(info.bytes());
+      let seconds = 0;
+      let nanos = 0;
+      while (duration.pos < duration.len) {
+        const [f, w] = duration.tag();
+        if (f === 1 && w === WireType.Varint) seconds = Number(duration.int64());
+        else if (f === 2 && w === WireType.Varint) nanos = duration.int32();
+        else duration.skip(w, f);
+      }
+      return seconds * 1000 + nanos / 1e6;
+    }
+  } catch {
+    // A detail that does not decode is no detail.
+  }
+  return null;
+}
+
+/**
+ * How long the server asked the caller to wait, in ms, or null when it did not
+ * say. The typed RetryInfo detail travels in the error body, so any origin can
+ * read it; the `Retry-After` header is the fallback (a browser reads it only
+ * same-origin or when the server exposes it).
+ */
+export function retryAfterMs(error: unknown): number | null {
+  if (!(error instanceof ConnectError)) return null;
+  let ms: number | null = null;
+  for (const detail of error.details) {
+    if ("type" in detail && detail.type === RETRY_INFO_TYPE) {
+      ms = retryInfoMs(detail.value);
+      if (ms !== null) break;
+    }
+  }
+  if (ms === null) {
+    const header = Number(error.metadata.get("retry-after"));
+    if (error.metadata.has("retry-after") && Number.isFinite(header) && header >= 0) ms = header * 1000;
+  }
+  return ms === null ? null : Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS);
+}
+
+/**
+ * A not-set-up answer is a fact about the org, not a fault: never retry it, nor
+ * any other answer the server gave on purpose.
+ *
+ * The one exception is the concurrent-read cap (`in_flight_limit`): it is not
+ * an answer about the read but about how many are running, it clears by
+ * itself, and it is retried WITHOUT a count limit. React Query bounds the
+ * wait: it stops retrying the moment the last observer unmounts, and pauses
+ * retries while the tab is hidden. The hourly quota is a different
+ * ResourceExhausted (isInFlightLimit excludes it) and is never retried.
+ */
 export function obsRetry(failureCount: number, error: unknown): boolean {
+  if (isInFlightLimit(error)) return true;
   const kind = obsErrorKind(error);
   if (kind !== "unavailable") return false;
   return failureCount < 1;
@@ -151,6 +248,7 @@ export function issuesErrorKind(error: unknown): IssuesErrorKind {
 }
 
 export function issuesRetry(failureCount: number, error: unknown): boolean {
+  if (isInFlightLimit(error)) return true;
   if (issuesErrorKind(error) !== "unavailable") return false;
   return failureCount < 1;
 }
@@ -174,6 +272,7 @@ export function releaseHealthErrorKind(error: unknown): ReleaseHealthErrorKind {
 }
 
 export function releaseHealthRetry(failureCount: number, error: unknown): boolean {
+  if (isInFlightLimit(error)) return true;
   if (releaseHealthErrorKind(error) !== "unavailable") return false;
   return failureCount < 1;
 }
@@ -199,6 +298,7 @@ export function rumErrorKind(error: unknown): RumErrorKind {
 }
 
 export function rumRetry(failureCount: number, error: unknown): boolean {
+  if (isInFlightLimit(error)) return true;
   if (rumErrorKind(error) !== "unavailable") return false;
   return failureCount < 1;
 }

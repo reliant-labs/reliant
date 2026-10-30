@@ -19,8 +19,10 @@ import {
   DeployGateSchema,
   DeployPromotionSchema,
   DeployReleaseSchema,
+  DeployRolloutPhase,
   DeployRolloutSchema,
   DeploySourceProvenanceSchema,
+  DeployWorkloadRolloutSchema,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import {
   CompareDeployReleasesResponseSchema,
@@ -105,5 +107,28 @@ describe("toReleaseComparison", () => {
 describe("toReleaseRollout", () => {
   it("never reads a phase it does not know as success", () => {
     expect(toReleaseRollout(create(DeployRolloutSchema, { phase: 99 as never })).phase).toBe("unknown");
+  });
+
+  it("keeps forge-applied slots apart, with their reason and no phase", () => {
+    const rollout = toReleaseRollout(
+      create(DeployRolloutSchema, {
+        phase: DeployRolloutPhase.SUCCEEDED,
+        workloads: [create(DeployWorkloadRolloutSchema, { name: "api", phase: DeployRolloutPhase.SUCCEEDED, reason: "at the bundle" })],
+        forgeApplied: [
+          create(DeployWorkloadRolloutSchema, {
+            name: "edge/web/api",
+            artifact: "web",
+            pinnedDigest: "sha256:abc",
+            phase: DeployRolloutPhase.UNSPECIFIED,
+            reason: "applied by forge (not observed by the control plane)",
+          }),
+        ],
+      })
+    );
+    expect(rollout.workloads.map((w) => w.reason)).toEqual(["at the bundle"]);
+    // Not routed through the phase mapping: UNSPECIFIED is "not judged here", never "unknown".
+    expect(rollout.forgeApplied).toEqual([
+      { name: "edge/web/api", artifact: "web", pinnedDigest: "sha256:abc", reason: "applied by forge (not observed by the control plane)" },
+    ]);
   });
 });

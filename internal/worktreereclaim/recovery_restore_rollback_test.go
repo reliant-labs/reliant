@@ -18,7 +18,7 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"own-partial", "no-index-yet", "untracked", "modified", "staged", "empty-directory", "unregistered"} {
+	for _, mutation := range []string{"own-partial", "no-index-yet", "refs-dir", "refs-content", "untracked", "modified", "staged", "empty-directory", "unregistered"} {
 		t.Run(mutation, func(t *testing.T) {
 			branch := "recovered-" + mutation
 			dest := filepath.Join(t.TempDir(), "stage")
@@ -36,6 +36,21 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 					index := strings.TrimSpace(string(recoveryTestGit(t, dest, "rev-parse", "--path-format=absolute", "--git-path", "index")))
 					if err := os.Remove(index); err != nil {
 						t.Fatal(err)
+					}
+				case "refs-dir", "refs-content":
+					// git 2.48+ creates an empty per-worktree refs/ at `worktree
+					// add`; older git does not. Make it exist on every host.
+					admin := strings.TrimSpace(string(recoveryTestGit(t, dest, "rev-parse", "--absolute-git-dir")))
+					if err := os.MkdirAll(filepath.Join(admin, "refs"), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if mutation == "refs-content" {
+						// A directory, not a ref file: git 2.48+ reads per-worktree
+						// refs, and a bogus one would break the shared source repo's
+						// object closure for every later case.
+						if err := os.Mkdir(filepath.Join(admin, "refs", "stray"), 0o755); err != nil {
+							t.Fatal(err)
+						}
 					}
 				case "own-partial":
 					if err := os.Remove(filepath.Join(dest, "second")); err != nil {
@@ -67,7 +82,7 @@ func TestRecoveryInterruptedRollbackInventory(t *testing.T) {
 			if !result[0].IsNil() {
 				err = result[0].Interface().(error)
 			}
-			if mutation == "own-partial" || mutation == "no-index-yet" {
+			if mutation == "own-partial" || mutation == "no-index-yet" || mutation == "refs-dir" {
 				if err != nil {
 					t.Fatal(err)
 				}

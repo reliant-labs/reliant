@@ -15,9 +15,17 @@ var secretPatterns = []struct {
 }{
 	// URL userinfo: postgres://user:password@host
 	{regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://)[^\s/@:]+:[^\s/@]+@`), "${1}" + redactedMarker + "@"},
+	// A PEM private key block, whole. It goes first so a JSON "private_key"
+	// value is not cut at its first space. An unterminated block (truncated
+	// evidence) is redacted to the end of the text.
+	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----(?:.*?-----END [A-Z ]*PRIVATE KEY-----|.*)`), redactedMarker},
+	// --flag value / --flag=value for a credential-named flag.
+	{regexp.MustCompile(`(?i)(--[A-Za-z0-9_-]*(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)(?:[_-]?key)?)(=|[ \t]+)(["']?)[^\s"'&,;-][^\s"'&,;]*`), "${1}${2}${3}" + redactedMarker},
 	// key=value / "key": "value" for credential-named keys, including an
-	// Authorization header's scheme so the whole credential goes at once.
-	{regexp.MustCompile(`(?i)\b(authorization|x-api-key|api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|secret|password|passwd|token)(["']?\s*[:=]\s*["']?)(?:(?:bearer|basic|token)\s+)?[^\s"'&,;]+`), "${1}${2}" + redactedMarker},
+	// Authorization header's scheme so the whole credential goes at once. The
+	// keyword may sit inside an identifier (DATABASE_PASSWORD, MY_API_TOKEN,
+	// STRIPE_SECRET_KEY); the value runs to whitespace, so '/', '+' and '=' stay in it.
+	{regexp.MustCompile(`(?i)([A-Za-z0-9_]*(?:authorization|password|passwd|secret|token|api[_-]?key|private[_-]?key|access[_-]?key)[A-Za-z0-9_]*)(["']?\s*[:=]\s*["']?)(?:(?:bearer|basic|token)\s+)?[^\s"'&,;]+`), "${1}${2}" + redactedMarker},
 	// A bare authorization scheme outside a key=value pair.
 	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]+`), "${1} " + redactedMarker},
 	// JWTs.

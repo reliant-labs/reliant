@@ -84,7 +84,7 @@ func TestActingAsApp_MintsAScopedTokenForTheRunOwner(t *testing.T) {
 	assert.Equal(t, "idp|alice", got.ExternalUserID, "the owner comes from the run record, by external id")
 	assert.Equal(t, "acme", got.Owner)
 	assert.Equal(t, "widgets", got.Repo)
-	assert.Equal(t, map[string]string{"issues": "write"}, got.Permissions, "a comment needs issues, not contents")
+	assert.Equal(t, map[string]string{"issues": "write", "pull_requests": "write"}, got.Permissions, "a comment needs issues and (its number may be a pull request) pull_requests, not contents")
 	assert.Empty(t, e.cp.asked, "the owner's own token is never fetched for the bot's write")
 
 	assert.Equal(t, "Bearer ghs_bot_token_5d8e", applied(t, cred, "https://api.github.com/repos/acme/widgets/issues/7/comments"))
@@ -97,11 +97,13 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 	t.Parallel()
 	for action, want := range map[string]map[string]string{
 		"issue.create":            {"issues": "write"},
-		"issue.labels.add":        {"issues": "write"},
+		"issue.labels.add":        {"issues": "write", "pull_requests": "write"},
+		"issue.labels.remove":     {"issues": "write", "pull_requests": "write"},
 		"pr.review.create":        {"pull_requests": "write"},
 		"pr.review_comment.reply": {"pull_requests": "write"},
 		"pr.create":               {"pull_requests": "write", "contents": "read"},
-		"pr.enqueue":              {"pull_requests": "write"},
+		"check_run.create":        {"checks": "write"},
+		"check_run.update":        {"checks": "write"},
 		"workflow.dispatch":       nil, // not in the table: control-plane's default cap
 	} {
 		t.Run(action, func(t *testing.T) {
@@ -113,6 +115,16 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 			assert.Equal(t, want, inst.asked[0].Permissions)
 		})
 	}
+}
+
+// A check run is the one write GitHub lets only an App make, and it touches
+// nothing but checks: the bot's token for it carries checks and no other area.
+// The DB-free half of PermissionsFollowTheAction, so the -short tier pins it.
+func TestCheckRunWritesAskForChecksAlone(t *testing.T) {
+	for _, action := range []string{"check_run.create", "check_run.update"} {
+		assert.Equal(t, map[string]string{"checks": "write"}, permissionsFor(action), action)
+	}
+	assert.Nil(t, permissionsFor("check_run.list"), "a read is the owner's: never a bot token")
 }
 
 // A mint that cannot be done must FAIL the write. It never falls through to the
@@ -138,7 +150,7 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 			e := newEnv(t)
 			inst := &fakeInstallations{err: tc.err}
 			cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
-				botReq(t, e.newRun("idp|alice"), "pr.enqueue", true, repoParams))
+				botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
 			require.Error(t, err)
 			assert.Nil(t, cred)
 			var ce *httpaction.CredentialError

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/orm"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -125,6 +126,11 @@ type Reconciler struct {
 	// because the server builds the daemon router after the poll loop has
 	// started, so the set and the loop's read are on different goroutines.
 	bgDaemons atomic.Pointer[backgroundProcessDaemonsHolder]
+
+	// heldRunActivity is where reassertHeldRunWork says a held run's
+	// background work keeps its machine awake. Unset disables it. Atomic for
+	// the same reason as bgDaemons.
+	heldRunActivity atomic.Pointer[heldRunActivityHolder]
 
 	// queued starts the runs that deliver undelivered messages: a wedged
 	// run's, and those queued for a machine that is back. Unset disables
@@ -3248,10 +3254,17 @@ func (r *Reconciler) StartBackgroundReconciliation(ctx context.Context) {
 				logging.InfoContext(ctx, "[Reconciler] Stop signal received, stopping background reconciliation")
 				return
 			case <-ticker.C:
-				// Run reconciliation with a timeout
-				reconcileCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				reconciled, errors := r.ReconcileRunningWorkflows(reconcileCtx)
-				cancel()
+				// Run reconciliation with a timeout, as one trace: without a
+				// root span every query and Temporal call of the pass is an
+				// orphan root of its own.
+				var reconciled int
+				var errors []error
+				_ = observe.RunRoot(context.WithoutCancel(ctx), "worker.reconcile.running_workflows", func(ctx context.Context) error {
+					reconcileCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					defer cancel()
+					reconciled, errors = r.ReconcileRunningWorkflows(reconcileCtx)
+					return nil
+				})
 
 				if len(errors) > 0 {
 					logging.WarnContext(ctx, "[Reconciler] Background reconciliation had errors",

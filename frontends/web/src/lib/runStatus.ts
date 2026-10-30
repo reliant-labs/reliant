@@ -290,14 +290,20 @@ export function runStatusFromDisplayState(
   }
 }
 
-/** Whether a status still has work ahead of it, so a view of it goes stale. */
+/**
+ * Whether a status still has work ahead of it, so a view of it goes stale and
+ * the run can still be paused or stopped. A run held for a usage-limit reset
+ * is live: it retries by itself, so leaving it out hid the only Stop button on
+ * the run page while it waited.
+ */
 export function isLiveRunStatus(status: RunStatusDisplay): boolean {
   return (
     status.key === "queued" ||
     status.key === "running" ||
     status.key === "needs_you" ||
     status.key === "paused" ||
-    status.key === "waiting_for_machine"
+    status.key === "waiting_for_machine" ||
+    status.key === "waiting_for_usage_limit"
   );
 }
 
@@ -338,7 +344,8 @@ export type LaunchKind =
   | "webhook"
   | "integration"
   | "workflow_event"
-  | "manual.run";
+  | "manual.run"
+  | "cli.run";
 
 /** What the "Started by" line can name. Every field is optional. */
 export interface LaunchContext {
@@ -459,6 +466,9 @@ export function launchKindDisplay(
       };
     case "builder.test":
       return { kind, shortLabel: "Test", startedByLine: "Test run from the builder" };
+    case "cli.run":
+      // `reliant workflow run`: a script, or an agent shelling out.
+      return { kind, shortLabel: "CLI", startedByLine: "Started from the command line" };
     case "manual.run":
       return {
         kind,

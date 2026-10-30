@@ -1,13 +1,25 @@
 # The merge gate and the release gate
 
-**Owner contract (supersedes historical measurements/policies below): ≤300s on an idle 16-CPU host.**
-Merge runs affected compile, vet/forge lint, `go test -short` (no race), and proto lint.
-Web typecheck + affected vitest run only for a web change; migration checks only for changed migrations.
-Full test fallbacks, docs, Electron, production renderer builds, full lint, integration and e2e run at release.
-`--regen` runs only for changed generator inputs; generated-output-only diffs do not force generation.
-`scripts/merge-gate-budgets.json` pins step budgets; overruns say **GATE-HEALTH / requirement NOT MET**, not PR blame.
-Summary starts with exact failing Go tests + packages and vitest files + test names, never a log tail.
-The historical 236s warm run is not proof of the idle-host requirement or cold/broad batches.
+**Review first (owner, 2026-10-30).** No CI minutes are spent on a head nobody
+has reviewed. A pull request push runs nothing heavy; `pr-review` reads the
+diff, not CI results; a passed PR enters GitHub's merge queue, where the merge
+gate runs **once**, on main plus the entry, and decides the merge. The whole
+suite runs on main after the merge and never blocks one: a red main is filed
+and fixed by pipeline-health (`pipeline:slo`), and `task release:tag` refuses a
+commit without a green release-gate record, so it is fixed before the next
+release. Details: [CI](#ci).
+
+**Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
+2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
+scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
+whole Go `-short` lane and electron's tests (5m13s and 40s measured on a loaded
+host), and for a full web fallback `tsc -b` over every web source; the whole vitest
+suite (1033 files, ~22 min loaded) is the one lane left to the release gate's
+`task test`, noted in the summary. It also runs electron's tests when electron reads
+a changed file, and the docs-generate no-op check when a docs input changed. A
+deleted Go package compiles the module instead of forcing every lane.
+`scripts/merge-gate-budgets.json` pins step budgets; an overrun prints
+**GATE-HEALTH** (a gate-speed regression to fix, not PR blame).
 
 reliant has two local gates. The **merge gate** runs before every merge and
 judges only what the change can affect. The **release gate** runs on main
@@ -24,8 +36,8 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b --force` (checkout-local state) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration changed; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
-| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b` (incremental on state this checkout wrote; `--force` on a first run or copied state) when a web lane is selected or a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration or forge.yaml changed; electron's tests when electron reads a changed file; the whole lane when the rules cannot scope a change; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` as three steps (Go `-race -count=1` without `-short`, so every slow test runs, then web and electron in full), `task test:integration` and `task test:e2e`. CI runs them as parallel parts (below) | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
 
@@ -169,8 +181,8 @@ the gate and is named: `FAILED: docs never completed (no result row; ...)`.
 The verdict is also written to `$MG_LOGDIR/verdict`. A missing `jq` or an
 unparsable `plan.json` aborts the gate, because every lane would otherwise read
 as "not selected". reliant#1393 merged with docs-generate still queued; this is
-the check that stops that. The merge queue posts `merge-gate` SUCCESS only when
-the verdict is `OK`, and posts a FAILURE status carrying it otherwise.
+the check that stops that. CI's `Merge gate` job, and so `CI result`, fails
+unless the verdict is `OK`.
 
 ### The CPU budget
 
@@ -185,6 +197,16 @@ floor of twice a slot's share, 8, starved lint's contract lane), as
 generator running beside the others a quarter each. A generator that runs
 first and alone (a dirty tree) gets all of it. `MG_CPUS=<n>` overrides the
 budget.
+
+Memory is budgeted too. `forge generate` peaks at ~7.5 GB RSS on its own, and
+beside `tsc -b` (~2.3 GB) and the test links (~2.7 GB each) the gate reached
+13 GB in its first five minutes on reliant#1772. The merge queue's hosted
+`ubuntu-latest` runner has 16 GiB: it ran out, its agent died ("The runner has
+received a shutdown signal") and the job sat until its timeout, three times.
+So on a host under `MG_GEN_ALONE_GIB` (32) GiB, the smaller of physical memory
+and the cgroup's `memory.max`, `forge generate` runs first and alone with the
+whole CPU budget, and the other phases start when it is done. `MG_MEM_GIB=<n>`
+overrides the detected size.
 
 ### Direct importers only
 
@@ -348,63 +370,32 @@ Say so in the release notes. There is no waiver for a red run: fix it.
 
 ## The merge queue
 
-The fleet's merge queue (`.fm-tools/merge_queue3.sh`, outside this repo) is a
-thin orchestrator over `scripts/merge-gate.sh`. Branches gate in parallel, one
-per pool checkout. There are three pools. The host's heavy slots are the
-limit, not the number of checkouts, so more pools would only add gates that
-queue for a slot.
+`main` merges only through GitHub's native merge queue. The ruleset
+"main: CI result + merge queue" requires the `CI result` check, squash-merges,
+and lists one bypass actor, the `reliant-01` account the pipeline acts as
+(never use it to bypass: no `--admin`). `ci.yml` runs on `merge_group`, so each
+queued PR is tested on main plus the entries ahead of it, and lands only if that
+run is green. That `merge_group` run is the only run of the merge gate an
+unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
+first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
+required checks are green on its head. Only the `pr-review` workflow enqueues,
+with `gh pr merge <pr> --squash --auto --match-head-commit <sha>` when a review
+passes (control-plane `docs/pr-pipeline.md`); an author labels the PR
+`merge:queue` and never runs `gh pr merge` (`--auto` included). In the queue,
+`CI result` also requires `pr-review`'s pass marker on every PR head in the
+group (`scripts/ci-review-marker.sh`). Because the PR's own `CI result` is
+green within a minute, auto-merge an author arms before the review enqueues
+the unreviewed head at once: its group fails the review marker
+(`latest: none`), and so does every group behind it. A queue failure dequeues
+the PR, which the pipeline's fixer picks up.
 
-Pools are granted **first come, first served** (`.fm-tools/mq3/sched.sh`). A
-branch takes a ticket when it arrives. It gets a pool once every earlier ticket
-has one. While it waits it prints its place in line and an estimated wait, from
-the median time recent runs held a pool. It prints this at the start and every
-3 minutes. `merge_queue3.sh --status` prints every queue. A run that dies loses
-its place, and the run behind it moves up at once. A rerun gets its old place
-back when the last run failed for a reason that was not the branch's:
+Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
+`Merge gate` job runs, and a red queue run costs every PR behind yours a retry
+(the queue builds up to five entries at once; a failure rebuilds those behind
+it).
 
-- a host flake (an OOM kill or a build-cache trim);
-- a test timeout;
-- main moving into its files until its gates ran out;
-- any other gate failure, if you rerun it with `--flake-retry`.
-
-A run keeps its old place for up to 6 hours and 3 reruns.
-`.fm-tools/mq3/sched_test.sh` tests the scheduler.
-
-On its pool checkout, each branch's run:
-
-1. merges main in (never a rebase);
-2. re-versions the branch's migrations above main's;
-3. squashes onto main;
-4. runs `scripts/merge-gate.sh --base <main> --amend` in one heavy slot.
-
-Only the land step is serialized under one lock: fetch, push, post the
-`merge-gate` commit status on the verified commit, and squash-merge. If main moved, the queue carries the verified commit onto the new
-main and re-checks only that it builds, as long as main's new commits are
-disjoint from the branch's files and from the project-wide inputs. Otherwise it
-runs the gate again. The queue's summary, posted into each merge PR's body,
-separates the time queued for a heavy slot from the time spent running.
-
-### The required status, and the audited waiver
-
-`main` accepts a merge only when the commit carries a SUCCESS `merge-gate`
-commit status: the ruleset "main: merge-gate required" requires it, requires the
-head to be up to date with `main`, and has **no bypass actors**, so `gh pr merge
---admin` is refused too. The queue posts that status on the exact squashed
-commit its gate verified:
-
-```sh
-.fm-tools/merge_queue3.sh <remote-branch>
-```
-
-The only other way in is an audited waiver, for a hotfix that cannot wait or a
-gate failure that reproduces identically on `main`. It posts
-`WAIVED: <reason>` as the status, comments on the PR and appends to the
-waiver log:
-
-```sh
-.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
-gh pr merge <pr> --squash
-```
+The fleet's old local queue (`.fm-tools/merge_queue3.sh`), the `merge-gate`
+commit status and its audited waiver (`merge_gate_waive.sh`) are retired.
 
 There is no waiver for the release gate: a red release-gate run is fixed, not
 waived (`scripts/release-tag.sh --skip-release-gate` is the hotfix escape for
@@ -417,15 +408,44 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 
 | Event | Job | Runs |
 |---|---|---|
-| `pull_request` | `Merge gate` | `task ci:merge -- --base <the PR's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks` |
-| push to `main`, nightly, `workflow_dispatch` | `Release gate` | `task release:gate -- <sha>`, then `task ci:repo-checks`. On `main` it publishes its record as the git note above, so a CI green counts for `task release:tag` |
+| `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
+| `merge_group` | `Merge gate`, `Review marker` | `task ci:merge -- --base <the group's base>`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, and the path lanes below that the diff reaches; the review marker must pass |
+| push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed |
 
-Beside them run the lanes neither gate covers, selected by path
-(`scripts/ci-lanes.sh`, `task ci:lanes`) on a pull request and all of them off
-one (the contract only when a push changed what it checks): the renderer's release build (`task build:web:verify`), Playwright
-(`task test:web:e2e`), the electron package (`task build:electron:smoke`) and
-the vendored control-plane contract (`task contract:controlplane:check`, which
-reads private control-plane with a deploy key). `CI result` is the one verdict.
+### Why the release gate runs as parts in CI
+
+Run in one job, step after step, the gate took 45-70 minutes on a CI runner
+(2026-10-30: `test` 1345-2112s, `integration` 591-897s, `lint` 365-549s,
+`generate` 201-396s), and every release waited on it. In CI each part is its
+own runner, so the gate's wall time is the slowest part's (target ~20 min, plus
+the runner queue). The Go suite is split three ways by package, balanced on
+the recorded `-race` package times in `scripts/release-gate-go-timings.json`;
+refresh it from a run's `test-go.log` when the shards drift apart. Locally
+`task release:gate` still runs every step in one process, and records the same
+way.
+
+`task test:integration` runs only the packages that have integration-tagged
+test files (`scripts/integration-packages.sh`). There are none today: it used to
+run `go test -race -tags=integration ./...`, which re-ran the whole unit suite
+a second time (the 591-897s above) for no test the unit step had not run.
+
+Beside them run the lanes neither gate covers (`scripts/ci-lanes.sh`,
+`task ci:lanes`): the renderer's release build (`task build:web:verify`),
+Playwright (`task test:web:e2e`), the electron package
+(`task build:electron:smoke`) and the vendored control-plane contract
+(`task contract:controlplane:check`, which reads private control-plane with a
+deploy key and judges the tree against the control-plane commit its `SOURCE`
+declares, never against control-plane's moving main; lag behind main is
+`cp-contract-drift.yml`'s issue, not a gate). Main runs all of them (the
+contract only when a push changed what it checks). The merge queue runs those
+the diff reaches: the release-gate record does not include them, so the queue
+is still where they protect a release. A `ci:run` pull request runs those its
+paths reach. `CI result` is the one verdict.
+
+`license-gate.yml`, `pin-drift.yml` and `release-tag-guard.yml` still run on a
+pull request that touches their inputs (dependency manifests, the forge pin,
+the release scripts): they are path-filtered, informational (not required), and
+take seconds to about three minutes.
 DB-backed tests boot forge pgtest's embedded Postgres on the runner: there is
 no Postgres service container and no `DATABASE_URL`.
 

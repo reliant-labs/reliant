@@ -48,7 +48,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -242,11 +241,33 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit
 	}
-	rows, err := ListTriggerEvent(ctx, db,
-		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
-		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
-		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
-		orm.WithLimit(limit))
+	// Ordinary delivery recovery has its own budget. Capacity recovery rotates
+	// one head per scope by last-attempt time, so a large blocked pool cannot
+	// monopolize every tenant's redrive or expiry sweep. An unbound launch is a
+	// candidate only while it still holds its slot: a released one has nothing
+	// left to recover, and redriving it forever would starve the heads.
+	var rows []*TriggerEvent
+	err := db.Bun().NewRaw(`WITH ordinary AS (
+ SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
+ ORDER BY created_at,id LIMIT ?1
+), heads AS (
+ SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
+ FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
+ AND outcome = 'pending'
+ ORDER BY user_id,capacity_project_id,capacity_workflow_ref,capacity_order
+), candidates AS (
+ SELECT id,capacity_redriven_at,created_at FROM heads
+ UNION ALL
+ SELECT id,capacity_redriven_at,created_at FROM trigger_events
+ WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND NOT capacity_released
+ AND created_at < ?0
+), selected AS (
+ SELECT id FROM candidates ORDER BY capacity_redriven_at NULLS FIRST,created_at,id LIMIT ?1
+), touched AS (
+ UPDATE trigger_events SET capacity_redriven_at = now() WHERE id IN (SELECT id FROM selected) RETURNING id
+)
+SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event WHERE event.id IN (SELECT id FROM ordinary UNION ALL SELECT id FROM touched)
+ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
 	}
@@ -266,15 +287,24 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 // transaction) and takes the launch's start record as its payload. The
 // outcome predicate is what makes two concurrent fires of one event launch it
 // once: the loser updates zero rows, and reports claimed=false.
-func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, payload map[string]any) (bool, error) {
+//
+// def is the workflow definition the claiming fire resolved. It is written in
+// the same guarded statement, so only the fire that wins the claim records
+// what it launched against; nil keeps the definition recorded at intake.
+func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	encoded, err := triggerJSONObject(payload)
 	if err != nil {
 		return false, fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	definition, err := triggerEventDefinitionJSON(def)
+	if err != nil {
+		return false, err
 	}
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = 'launched'").
 		Set("outcome_detail = ''").
 		Set("payload = ?", string(encoded)).
+		Set("definition = COALESCE(?::jsonb, definition)", definition).
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
@@ -287,10 +317,19 @@ func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, pa
 // SettlePendingTriggerEvent records the verdict on an inbound event that did
 // NOT launch. Conditional on pending, so it can never overwrite a launch that
 // won a race; settled=false means it did not apply.
-func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+//
+// def is the workflow definition the settling fire resolved, written under
+// the same guard so a fire that lost the race never rewrites the winner's;
+// nil keeps the definition already recorded.
+func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, def *core.TriggerEventDefinition) (bool, error) {
+	definition, err := triggerEventDefinitionJSON(def)
+	if err != nil {
+		return false, err
+	}
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
 		Set("outcome = ?", outcome).
 		Set("outcome_detail = ?", detail).
+		Set("definition = COALESCE(?::jsonb, definition)", definition).
 		Where("id = ?", id).
 		Where("outcome = 'pending'").
 		Exec(ctx)
@@ -413,29 +452,42 @@ func triggerOutcomeColumns(alias string) string {
 // their runs, in ONE query, selecting cols as the event's columns. This is
 // what health and last_event are computed from, so listing N triggers costs
 // one extra query rather than N.
-func recentTriggerFiringsSQL(cols string) string {
-	return `WITH ranked AS (
-	SELECT
-		e.id,
-		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
-	FROM trigger_events e
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-)
-SELECT ` + cols + `,
+//
+// Each trigger's firings are read newest first from
+// idx_trigger_events_trigger_occurred_id and stop at ?2: the cost is the
+// rows returned. Ranking the whole history with row_number() instead read
+// every firing the triggers ever had, and joined each to its run before
+// keeping ten: 280ms for an automation with 20,000 runs, against 7ms.
+//
+// cols names the event's columns under an alias: the lateral read selects
+// them as x's, and the outer select as e's.
+func recentTriggerFiringsSQL(cols func(alias string) string) string {
+	return `SELECT ` + cols("e") + `,
 	` + triggerFiringRunColumns + `
-FROM ranked r
-JOIN trigger_events e ON e.id = r.id
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+CROSS JOIN LATERAL (
+	SELECT ` + cols("x") + ` FROM trigger_events x
+	WHERE x.trigger_id = t.id AND x.user_id = ?0::text
+	ORDER BY x.occurred_at DESC, x.id DESC
+	LIMIT ?2::integer
+) e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 }
 
 var (
-	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent]("e"))
-	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns("e"))
+	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent])
+	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns)
 )
+
+// InboxTriggerFiringsSQL returns the statements of RecentTriggerOutcomes and
+// FiringsSinceLastSuccess, with bun's ?0 (user), ?1 (trigger ids) and ?2 (per
+// trigger) placeholders, so a plan test runs the exact statements the Inbox
+// does.
+func InboxTriggerFiringsSQL() (recentOutcomes, sinceLastSuccess string) {
+	return recentTriggerFiringsOutcomesSQL, firingsSinceLastSuccessSQL
+}
 
 // RecentTriggerFirings returns each named trigger's newest perTrigger firings
 // (newest first, with their runs), keyed by trigger id. A trigger with no
@@ -461,32 +513,36 @@ func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, t
 // "Completed" is the run the trigger fired (run_status), not whatever turn the
 // chat is on now — the same rule triggers.resolveFiring applies — so a
 // person's later reply in the chat neither ends nor extends the episode.
-var firingsSinceLastSuccessSQL = `WITH last_success AS (
-	SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
-	FROM trigger_events e
-	LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-		AND e.outcome = 'launched'
-		AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
-	ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
-), ranked AS (
-	SELECT
-		e.id,
-		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
-	FROM trigger_events e
-	LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
-	WHERE e.user_id = ?0::text
-		AND e.trigger_id = ANY(?1::text[])
-		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
-)
-SELECT ` + triggerOutcomeColumns("e") + `,
+//
+// Per trigger, both halves walk idx_trigger_events_trigger_occurred_id newest
+// first: the newest success stops at the first one found, and the episode at
+// it or at ?2 rows. Finding them with DISTINCT ON and row_number() over the
+// whole history judged every firing the triggers ever had (each joined to its
+// run's display state) on every Inbox read.
+var firingsSinceLastSuccessSQL = `SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
-FROM ranked r
-JOIN trigger_events e ON e.id = r.id
+FROM (SELECT DISTINCT unnest(?1::text[]) AS id) t
+LEFT JOIN LATERAL (
+	SELECT s.occurred_at, s.id
+	FROM trigger_events s
+	LEFT JOIN chats_with_activity sc ON sc.id = s.chat_id AND sc.user_id = s.user_id
+	WHERE s.trigger_id = t.id
+		AND s.user_id = ?0::text
+		AND s.outcome = 'launched'
+		AND (s.run_status = 'completed' OR (s.run_status IS NULL AND sc.display_state = 5))
+	ORDER BY s.occurred_at DESC, s.id DESC
+	LIMIT 1
+) ls ON true
+CROSS JOIN LATERAL (
+	SELECT ` + triggerOutcomeColumns("x") + ` FROM trigger_events x
+	WHERE x.trigger_id = t.id
+		AND x.user_id = ?0::text
+		AND (ls.id IS NULL OR (x.occurred_at, x.id) > (ls.occurred_at, ls.id))
+	ORDER BY x.occurred_at DESC, x.id DESC
+	LIMIT ?2::integer
+) e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
@@ -566,6 +622,10 @@ func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {
 			return nil, fmt.Errorf("marshal trigger event origin: %w", err)
 		}
 	}
+	definition, err := triggerEventDefinitionJSON(ev.Definition)
+	if err != nil {
+		return nil, err
+	}
 	return &TriggerEvent{
 		ID:            ev.ID,
 		TriggerID:     ev.TriggerID,
@@ -580,7 +640,20 @@ func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {
 		CreatedAt:     ev.CreatedAt,
 		Sender:        sender,
 		Origin:        origin,
+		Definition:    definition,
 	}, nil
+}
+
+// triggerEventDefinitionJSON is a firing's definition as stored: NULL for none.
+func triggerEventDefinitionJSON(def *core.TriggerEventDefinition) (json.RawMessage, error) {
+	if def == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(def)
+	if err != nil {
+		return nil, fmt.Errorf("marshal trigger event definition: %w", err)
+	}
+	return encoded, nil
 }
 
 func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
@@ -602,20 +675,32 @@ func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
 			return nil, fmt.Errorf("unmarshal trigger event origin (event %s): %w", row.ID, err)
 		}
 	}
+	var definition *core.TriggerEventDefinition
+	if len(row.Definition) > 0 {
+		definition = &core.TriggerEventDefinition{}
+		if err := json.Unmarshal(row.Definition, definition); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event definition (event %s): %w", row.ID, err)
+		}
+	}
 	ev := &core.TriggerEvent{
-		ID:            row.ID,
-		TriggerID:     row.TriggerID,
-		UserID:        row.UserID,
-		Kind:          row.Kind,
-		DedupeKey:     row.DedupeKey,
-		OccurredAt:    row.OccurredAt,
-		Payload:       payload,
-		Outcome:       row.Outcome,
-		OutcomeDetail: row.OutcomeDetail,
-		ChatID:        row.ChatID,
-		CreatedAt:     row.CreatedAt,
-		Sender:        sender,
-		Origin:        origin,
+		ID:                  row.ID,
+		TriggerID:           row.TriggerID,
+		UserID:              row.UserID,
+		Kind:                row.Kind,
+		DedupeKey:           row.DedupeKey,
+		OccurredAt:          row.OccurredAt,
+		Payload:             payload,
+		Outcome:             row.Outcome,
+		OutcomeDetail:       row.OutcomeDetail,
+		ChatID:              row.ChatID,
+		CreatedAt:           row.CreatedAt,
+		Sender:              sender,
+		Origin:              origin,
+		Definition:          definition,
+		CapacityOrder:       row.CapacityOrder,
+		CapacityProjectID:   row.CapacityProjectID,
+		CapacityWorkflowRef: row.CapacityWorkflowRef,
+		CapacityKey:         row.CapacityKey,
 	}
 	if row.RunStatus != nil {
 		ev.RunStatus = *row.RunStatus

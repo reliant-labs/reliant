@@ -26,7 +26,7 @@ export interface AutomationStateNoticeProps {
 }
 
 const HEADLINE: Partial<Record<AutomationHealthDisplay["key"], string>> = {
-  broken: "can't run: its workflow no longer declares this trigger.",
+  broken: "is broken: nothing it receives can start a run.",
   needs_setup: "is not running yet: it needs a setting.",
   cant_start: "can't start its runs.",
   failing: "keeps failing.",

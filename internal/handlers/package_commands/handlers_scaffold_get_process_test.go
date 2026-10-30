@@ -8,17 +8,18 @@ import (
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	package_commands "github.com/reliant-labs/reliant/internal/handlers/package_commands"
 )
 
-// Processes is the real process manager, which knows no such process. The
-// harness's stub would answer (nil, nil): a process that is not there.
+// The machine routing itself is covered in package_commands_processes_test.go.
+// A machine the caller does not own is refused before anything is sent: the
+// harness's repository knows no machine.
 func TestGetProcess_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Processes: pkgmgr.NewService()}))
+	svc := package_commands.NewTestPackageCommands(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPackageProcessRequest, pb.GetPackageProcessResponse]{
 		{
@@ -28,8 +29,8 @@ func TestGetProcess_Generated(t *testing.T) {
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
-			Name:    "unknown process is not found",
-			Req:     connect.NewRequest(&pb.GetPackageProcessRequest{ProcessId: "no-such-process"}),
+			Name:    "a machine that is not the caller's is not found",
+			Req:     connect.NewRequest(&pb.GetPackageProcessRequest{ProcessId: "p1", DaemonId: ptr.Of("someone-elses-machine")}),
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

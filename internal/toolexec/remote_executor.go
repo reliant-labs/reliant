@@ -4,6 +4,7 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 	"unicode/utf8"
@@ -473,8 +474,12 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 			ErrorMessage:  err.Error(),
 			ErrorCode:     ErrorCodeDaemonUnreached,
 			DaemonPending: IsDaemonPending(err),
-			StartTime:     startTime,
-			EndTime:       time.Now(),
+			NotDispatched: errors.Is(err, ErrNotDispatched),
+			// The machine it was addressed to: no daemon answered, so this
+			// names the one a caller would wait for.
+			DaemonID:  NotDispatchedDaemonID(err),
+			StartTime: startTime,
+			EndTime:   time.Now(),
 		}, nil
 	}
 

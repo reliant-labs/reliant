@@ -1,18 +1,18 @@
 /**
- * Which RPC failures the transport reports to Sentry, run through the real
- * interceptor chain. Each case is a prod Sentry issue (2026-10-07/08) that was
- * reported as a crash but was not a defect in the request that failed.
+ * Which RPC failures the transport reports (lib/errorReporting), run through
+ * the real interceptor chain. Each case is a prod Sentry issue (2026-10-07/08)
+ * that was reported as a crash but was not a defect in the request that failed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import type { Interceptor } from "@connectrpc/connect";
 
-const sentry = vi.hoisted(() => ({
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
+const reporting = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportFailure: vi.fn(),
 }));
-vi.mock("@sentry/react", () => sentry);
+vi.mock("@/lib/errorReporting", () => reporting);
 
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -59,18 +59,18 @@ describe("the machine is still starting (ELECTRON-AV)", () => {
     await expect(call("reliant.v1.FileSystemService", "GetFileTree")).rejects.toMatchObject({
       code: Code.Unavailable,
     });
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 
   it("still reports an Unavailable that is not a machine wait", async () => {
     const call = await chainFailingWith(() => new ConnectError("upstream connect error", Code.Unavailable));
     await expect(call("reliant.v1.ChatService", "ListChats")).rejects.toBeInstanceOf(ConnectError);
-    expect(sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(reporting.reportError).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("an anonymous account asked for a cloud machine", () => {
-  it("is not reported to Sentry", async () => {
+  it("is not reported as an error", async () => {
     const call = await chainFailingWith(
       () =>
         new ConnectError(
@@ -82,7 +82,7 @@ describe("an anonymous account asked for a cloud machine", () => {
     await expect(call("controlplane.v1.DaemonService", "CreateDaemon")).rejects.toMatchObject({
       code: Code.FailedPrecondition,
     });
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
 
@@ -102,7 +102,7 @@ describe("a request its owner aborted (ELECTRON-8X, ELECTRON-74)", () => {
     expect(error).toBeInstanceOf(ConnectError);
     expect((error as ConnectError).code).toBe(Code.DeadlineExceeded);
     expect((error as ConnectError).cause).toBe(timeout);
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 
   it("does not report connect-web's bare 'missing request message' string, and surfaces a ConnectError", async () => {
@@ -116,7 +116,7 @@ describe("a request its owner aborted (ELECTRON-8X, ELECTRON-74)", () => {
     );
     expect(error).toBeInstanceOf(ConnectError);
     expect((error as ConnectError).code).toBe(Code.Canceled);
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
 
@@ -134,10 +134,10 @@ describe("an app older than the server (ELECTRON-B3)", () => {
       code: Code.Unimplemented,
     });
 
-    expect(sentry.captureException).not.toHaveBeenCalled();
-    expect(sentry.captureMessage).toHaveBeenCalledWith(
+    expect(reporting.reportError).not.toHaveBeenCalled();
+    expect(reporting.reportFailure).toHaveBeenCalledWith(
       "version-skew: reliant.v1.ChatService/CreateChat is not served",
-      expect.objectContaining({ level: "warning" }),
+      expect.objectContaining({ grpc_method: "CreateChat" }),
     );
     const { useModalStore } = await import("../../store/modalStore");
     await vi.waitFor(() => expect(useModalStore.getState().activeModal).toBe("app-out-of-date"));
@@ -148,7 +148,7 @@ describe("an app older than the server (ELECTRON-B3)", () => {
     // forge surfaces render that as "not configured".
     const call = await chainFailingWith(() => new ConnectError("HTTP 404", Code.Unimplemented));
     await expect(call("controlplane.v1.DeployService", "GetLiveView")).rejects.toBeInstanceOf(ConnectError);
-    expect(sentry.captureMessage).not.toHaveBeenCalledWith(
+    expect(reporting.reportFailure).not.toHaveBeenCalledWith(
       expect.stringContaining("version-skew"),
       expect.anything(),
     );
@@ -192,6 +192,6 @@ describe("ELECTRON-74 end to end through connect-web", () => {
     expect(error).toBeInstanceOf(ConnectError);
     expect((error as ConnectError).code).toBe(Code.Canceled);
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });

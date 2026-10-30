@@ -89,6 +89,14 @@ type InlineWorkflowExecutor struct {
 	// seedNodeOutputs pre-populates the body's `nodes`. Only an on_failure
 	// handler sets it: it reads the outputs of the run it is handling.
 	seedNodeOutputs map[string]interface{}
+
+	// childFailure is armed for a ref'd child that declares on_failure
+	// (child_on_failure.go); nil otherwise.
+	childFailure *childFailureScope
+	// bodyInputs and bodyNodeOutputs are the child's own inputs and node
+	// outputs as its graph ran, which its on_failure handler reads.
+	bodyInputs      map[string]interface{}
+	bodyNodeOutputs map[string]interface{}
 }
 
 // threadForError is the thread this inline workflow's failures belong to, or ""
@@ -396,7 +404,7 @@ func mergePresetParams(subInputs map[string]interface{}, groupName string, param
 // loadPresetParams loads a preset by name and returns its params.
 // Uses the V2_LoadPresetParams activity to avoid import cycles.
 func (e *InlineWorkflowExecutor) loadPresetParams(presetName string) (map[string]interface{}, error) {
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -404,12 +412,16 @@ func (e *InlineWorkflowExecutor) loadPresetParams(presetName string) (map[string
 			MaximumInterval:    10 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	var params map[string]interface{}
-	err := workflow.ExecuteActivity(activityCtx, "LoadPresetParams", map[string]interface{}{
-		"project_path": e.projectPath,
-		"preset_name":  presetName,
+	// chat_id scopes a project preset to the run's project and machine,
+	// the catalog the run was admitted against (LoadPresetParamsActivity).
+	err := executeBookkeeping(e.ctx, activityOpts, "LoadPresetParams", types.LoadPresetParamsInput{
+		ProjectPath: e.projectPath,
+		ChatID:      e.chatID,
+		PresetName:  presetName,
+		CatalogPin:  catalogPinFrom(e.ctx),
 	}).Get(e.ctx, &params)
 
 	if err != nil {
@@ -593,8 +605,11 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load sub-workflow %s: %w", e.subWorkflowName, err)
 	}
 
-	// Execute sub-workflow
+	// Execute sub-workflow. A ref'd child with its own on_failure runs it
+	// when it fails, before the failure reaches the parent.
+	failureScope := e.beginChildFailureScope()
 	outputs, err := e.executeSubWorkflow()
+	e.finishChildFailureScope(failureScope, err)
 	if err != nil {
 		return nil, fmt.Errorf("sub-workflow %s failed: %w", e.subWorkflowName, err)
 	}
@@ -650,7 +665,7 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 		return e.compileSubWorkflowSemantics()
 	}
 
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -658,19 +673,20 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	workflowRef := e.subWorkflowName
 	if e.invocationContract != nil && e.invocationContract.WorkflowRef != "" && !strings.Contains(e.invocationContract.WorkflowRef, "{{") {
 		workflowRef = e.invocationContract.WorkflowRef
 	}
-	loadInput := map[string]string{
-		"chat_id":       e.chatID,
-		"workflow_name": workflowRef,
+	loadInput := types.LoadWorkflowInput{
+		ChatID:       e.chatID,
+		WorkflowName: workflowRef,
+		CatalogPin:   catalogPinFrom(e.ctx),
 	}
 	// LoadedWorkflow matches the output of ActivityLoadWorkflow (LoadWorkflowOutput in handlers)
 	var loadedWf LoadedWorkflow
-	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
+	if err := executeBookkeeping(e.ctx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(e.ctx, &loadedWf); err != nil {
 		return fmt.Errorf("activity load failed: %w", err)
 	}
 
@@ -724,6 +740,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	if _, ok := subInputs["mode"]; !ok {
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
 	}
+	e.bodyInputs, e.bodyNodeOutputs = subInputs, subNodeOutputs
 	// What the user set on this thread alone wins over everything the thread
 	// started with — the model they switched a stopped agent to, above all.
 	// Only for a body with inputs of its own: an inline body's map IS its
@@ -863,6 +880,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				events = append(events, skipEvt)
 				continue
 			}
+			e.childFailure.noteOutcome(node)
 
 			// Handle loop nodes
 			if node.GetType() == model.NodeTypeLoop {
@@ -903,6 +921,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				loopOutput, err := loopExecutor.Execute()
 				if err != nil {
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
 					return nil, fmt.Errorf("loop %s failed: %w", node.GetId(), err)
 				}
 
@@ -935,6 +954,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					inlineOutput, err = e.executeNestedWorkflow(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
 				}
 				if err != nil {
+					// The deepest scope records first; the recorder keeps the
+					// first, so this names the nested node only when nothing
+					// inside it did (its config would not evaluate).
+					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), node.GetId()), 1)
 					return nil, err
 				}
 				nid := node.GetId()
@@ -1168,6 +1191,13 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						return nil, endSubAgent(e.ctx, exhaustion, running.StepID)
 					}
 
+					// Unless pausing would only hold the run for nothing: see
+					// endsRunInsteadOfPausing.
+					if endErr := e.pauseCtrl.endsRunInsteadOfPausing(running.StepID, stepEvent.Error); endErr != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), 1)
+						return nil, endErr
+					}
+
 					e.logger.Warn("[InlineWorkflow] Activity exhausted retries; pausing until resume",
 						"nodeID", e.nodeID,
 						"subWorkflow", e.subWorkflowName,
@@ -1203,6 +1233,12 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					// Self-pause and block until resume
 					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
 					e.pauseCtrl.DoCheckPause(e.ctx)
+					// An unattended run whose pause outlived its self-resume
+					// ladder ends here, with the cause (pause_coordinator.go).
+					if gaveUp := e.pauseCtrl.gaveUp(); gaveUp != nil {
+						recordFailedNode(e.ctx, joinNodePath(e.nodePath(), running.StepID), 1)
+						return nil, gaveUp
+					}
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running

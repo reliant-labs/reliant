@@ -13,25 +13,27 @@ To trigger a release manually, use the `release-electron` workflow dispatch in t
 
 ## Who cuts a release: the release train
 
-**Nobody cuts reliant by hand.** The release train in control-plane
-(`control-plane/scripts/release-train.sh`, run by the Reliant workflow `release-train`
-weekdays at 18:00 UTC, on a merged PR labelled `release:asap`, and on demand) does
-both steps below:
+**Nobody cuts reliant by hand.** The `release` workflow in control-plane
+(`.reliant/workflows/release-reliant.yaml`, on every merge to main: after 10 merges
+since the last tag, or at once for a PR labelled `release:asap`) does both steps
+below:
 
-1. When main has commits since the last tag and a green release-gate record past it,
-   it writes the release notes (`docs/data/releases/vX.Y.Z.yaml`, drafted by the
-   workflow's notes agent from the PRs since the last tag) and runs
-   `./scripts/release.sh patch` from a private checkout of the green commit. The bump
-   PR is labelled `merge:queue` and `merge:priority`; the merge steward lands it.
-2. When that bump has merged, it runs `./scripts/release-tag.sh`, which tags it once
-   its release-gate record is green. The train's tick runs `scripts/release-gate.sh
-   run` on the bump commit (or main's tip) every few hours, so no chat runs the
-   40-70-minute gate itself.
+1. When main still declares a version that is already tagged, a script step
+   (`control-plane/scripts/release-chain/reliant-bump.sh`, no model) opens the bump
+   PR from a private clone of `origin/main`:
+   `task generate:docs:changelog:draft VERSION=vX.Y.Z SINCE_TAG=<last tag>` writes
+   `docs/data/releases/vX.Y.Z.yaml` from the PR titles merged since the last tag
+   (feat → Added, fix → Fixed, anything else → Changed, `!` or `BREAKING CHANGE:` →
+   Breaking changes), then `./scripts/release.sh patch`. The PR is labelled
+   `merge:queue` and `release:asap`. An open bump PR is never duplicated. Edit its
+   notes in the PR if you want better prose.
+2. When that bump has merged (its `release:asap` starts the next run), the release
+   captain tags the newest green-recorded main commit that contains it with
+   `./scripts/release-tag.sh --commit …` and verifies the published artifacts.
 
-**To get a change released sooner, label its PR `release:asap`.** Both scripts take
-the machine-wide release lock (`scripts/lib/release-lock.sh`, in
-`~/fm-logs/release-locks/reliant.lock`): a second release fails at once, naming who
-holds the lock. The commands below are what the train runs, documented for whoever
+**To get a change released sooner, label its PR `release:asap`.** There is no release
+lock: the tag push decides a race (the remote refuses a second push of the same tag).
+The commands below are what the train runs, documented for whoever
 fixes it or cuts by hand in a prod incident (and says so to the owner).
 
 ## Quick Release Commands
@@ -125,8 +127,11 @@ raising the baseline.
 
 ## Changelog
 
-Before creating a published stable release tag, write the version's entry in
+Before creating a published stable release tag, the version's entry must exist in
 `docs/data/releases/vX.Y.Z.yaml`: step 1 (`scripts/release.sh`) validates it.
+`task generate:docs:changelog:draft VERSION=vX.Y.Z SINCE_TAG=vA.B.C` drafts it from
+the merged PR titles (`tools/releasenotes`), grouped under `sections`; it
+never replaces an existing file unless `FORCE=1`.
 
 The YAML files under `docs/data/releases/` are the source of truth for two
 separate consumers:

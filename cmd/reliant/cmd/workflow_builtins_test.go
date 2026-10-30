@@ -78,7 +78,7 @@ func TestWorkflowValidateIncludesEmbeddedBuiltinsOutsideTheSourceCheckout(t *tes
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".reliant", "workflows"), 0o755))
 
 	out := captureStdout(t, func() {
-		_ = runWorkflowValidate(nil, nil, ".reliant/workflows", false, false, true, true, nil)
+		_ = runWorkflowValidate(nil, nil, ".reliant/workflows", false, false, true, true, nil, "")
 	})
 
 	var results []validateResult

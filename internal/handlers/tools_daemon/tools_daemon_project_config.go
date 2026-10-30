@@ -285,7 +285,7 @@ func (s *Service) handleProjectConfigDelta(ctx context.Context, conn *daemonConn
 		return err
 	}
 
-	applyUpdate, err := s.shouldApplyProjectConfigUpdate(ctx, project.ID, delta.DaemonTimestampUnixMs)
+	applyUpdate, err := s.shouldApplyProjectConfigUpdate(ctx, project.ID, conn.daemonID, delta.DaemonTimestampUnixMs)
 	if err != nil {
 		return err
 	}
@@ -341,16 +341,6 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 		return err
 	}
 
-	if !force {
-		applyUpdate, err := s.shouldApplyProjectConfigUpdate(ctx, project.ID, snapshot.DaemonTimestampUnixMs)
-		if err != nil {
-			return err
-		}
-		if !applyUpdate {
-			return nil
-		}
-	}
-
 	record := &db.ProjectConfigRecord{
 		ProjectID:            project.ID,
 		DaemonID:             conn.daemonID,
@@ -366,14 +356,17 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 		ProjectSkillsJSON:    flattenIndexedSkills(snapshot.Skills),
 		RepoMemoriesJSON:     flattenRepoMemories(snapshot.RepoMemoriesMd),
 		RuntimeType:          daemonRuntimeTypeFromLabels(conn.labels),
+		RepoStatesJSON:       flattenRepoStates(snapshot.RepoStates),
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 
-	if err := s.deps.Repo.UpsertProjectConfigRecord(ctx, record); err != nil {
-		return err
-	}
-
-	return nil
+	// The workflows and presets replace this machine's catalog only; the
+	// record carries their union over every machine (SyncProjectConfigSnapshot),
+	// so a machine without a checkout cannot erase another machine's. Unless
+	// forced, a snapshot no newer than this machine's last push is dropped
+	// there, under the same lock that writes it.
+	_, err = s.deps.Repo.SyncProjectConfigSnapshot(ctx, record, force)
+	return err
 }
 
 // ensureOwnedProjectForPath resolves the connected daemon's project row for a
@@ -468,17 +461,18 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	return project, nil
 }
 
-// shouldApplyProjectConfigUpdate drops a snapshot or delta older than the one
-// already stored. It runs on every push a daemon sends, and it needs only the
-// stored pushed_at: the whole record it used to read for that one timestamp
-// carries every skill body and repo memory the daemon indexed — 18 MB in
-// prod — so it reads the one column instead.
-func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID string, daemonTSUnixMs int64) (bool, error) {
+// shouldApplyProjectConfigUpdate drops a delta older than the last push from
+// the SAME machine. It is judged per machine because each machine's watcher
+// sends only when its own content changes: another machine's later push (or
+// clock) must not drop this one's. It reads the one timestamp, never the
+// whole record, which carries every skill body the daemon indexed — 18 MB in
+// prod.
+func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID, daemonID string, daemonTSUnixMs int64) (bool, error) {
 	if daemonTSUnixMs <= 0 {
 		return true, nil
 	}
 
-	pushedAt, err := s.deps.Repo.GetProjectConfigPushedAt(ctx, projectID)
+	pushedAt, err := s.deps.Repo.GetProjectMachineCatalogPushedAt(ctx, projectID, daemonID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
@@ -535,9 +529,10 @@ type storedWorkflowJSON struct {
 }
 
 type storedPresetJSON struct {
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	Name         string `json:"name"`
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
 }
 
 type storedScenarioJSON struct {
@@ -576,9 +571,10 @@ func flattenIndexedPresets(presets []*reliantv1.IndexedPreset) *string {
 	items := make([]storedPresetJSON, 0, len(presets))
 	for _, p := range presets {
 		items = append(items, storedPresetJSON{
-			Name:        p.Name,
-			YAMLContent: string(p.YamlContent),
-			ContentHash: p.ContentHash,
+			Name:         p.Name,
+			RelativePath: p.RelativePath,
+			YAMLContent:  string(p.YamlContent),
+			ContentHash:  p.ContentHash,
 		})
 	}
 	encoded, err := json.Marshal(items)
@@ -749,4 +745,29 @@ func bytesToStringPtr(value []byte) *string {
 	}
 	v := string(value)
 	return &v
+}
+
+// flattenRepoStates is the snapshot's git state per repo as stored on the
+// machine's catalog row (config.SyncedRepoState); nil from a daemon that does
+// not report it.
+func flattenRepoStates(states []*reliantv1.SyncedRepoState) *string {
+	items := make([]cfgpkg.SyncedRepoState, 0, len(states))
+	for _, s := range states {
+		if s == nil {
+			continue
+		}
+		items = append(items, cfgpkg.SyncedRepoState{
+			Repo:          s.GetRepo(),
+			Branch:        s.GetBranch(),
+			Commit:        s.GetCommitSha(),
+			Dirty:         s.GetDirty(),
+			DefaultBranch: s.GetDefaultBranch(),
+			Error:         s.GetError(),
+		})
+	}
+	encoded, err := cfgpkg.EncodeCatalogJSON(items)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }

@@ -32,7 +32,7 @@ import { AlertTriangle, Check, CircleDashed, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { DnsRecordCheck, DomainDnsRecord } from "@/services/forge/domains";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -132,6 +132,68 @@ function RecordStatus({ check }: { check?: DnsRecordCheck }) {
   );
 }
 
+type RecordRow = { key: string; record: DomainDnsRecord };
+
+/** Records are long and wrap: cells top-align, and a value never truncates. */
+const WRAP = "whitespace-normal py-2 align-top";
+
+const RECORD_COLUMNS: DataTableColumn<RecordRow>[] = [
+  {
+    key: "type",
+    header: "Type",
+    className: cn(WRAP, "font-mono font-medium"),
+    render: (_, { record }) => record.type,
+  },
+  {
+    key: "name",
+    header: "Name",
+    className: WRAP,
+    render: (_, { record }) => (
+      <div className="flex items-start gap-1">
+        {/* break-all, not truncate: an ellipsis would be copied as literal
+            dots by anyone selecting the text. */}
+        <span className="break-all font-mono text-xs">{record.name}</span>
+        <CopyButton value={record.name} label={`${record.type} record name`} />
+      </div>
+    ),
+  },
+  {
+    key: "value",
+    header: "Value",
+    className: WRAP,
+    render: (_, { record }) => {
+      const purpose = purposeOf(record.type);
+      return (
+        <>
+          <div className="flex items-start gap-1">
+            <span className="break-all font-mono text-xs">{record.value}</span>
+            <CopyButton value={record.value} label={`${record.type} record value`} />
+          </div>
+          {purpose && <p className="mt-1 max-w-prose text-2xs text-ink-muted">{purpose}</p>}
+        </>
+      );
+    },
+  },
+  {
+    key: "status",
+    header: "Status",
+    className: cn(WRAP, "text-xs"),
+    render: (_, { record }) => (
+      <>
+        <RecordStatus check={record.check} />
+        {/* The checker's own sentence — what it saw versus what it wanted.
+            Shown only on a failure, where it is the thing that turns a cross
+            into an action. */}
+        {record.detail && (
+          <p className="mt-1 max-w-prose text-2xs text-danger-ink" data-testid={`dns-record-detail-${record.type.toLowerCase()}`}>
+            {record.detail}
+          </p>
+        )}
+      </>
+    ),
+  },
+];
+
 export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
   if (records.length === 0) {
     return (
@@ -144,70 +206,17 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-surface-sunken">
-      <StackedTable className="w-full text-left text-xs" data-testid="dns-records-table">
-        <caption className="sr-only">DNS records to publish for this domain</caption>
-        <thead>
-          <tr className="border-b border-border/60 text-2xs uppercase tracking-wide text-ink-muted">
-            <th scope="col" className="px-3 py-2 font-medium">
-              Type
-            </th>
-            <th scope="col" className="px-3 py-2 font-medium">
-              Name
-            </th>
-            <th scope="col" className="px-3 py-2 font-medium">
-              Value
-            </th>
-            <th scope="col" className="px-3 py-2 font-medium">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((record, index) => {
-            const purpose = purposeOf(record.type);
-            return (
-              <tr
-                key={`${record.type}-${record.name}-${index}`}
-                className={cn(index > 0 && "border-t border-border/60")}
-                data-testid={`dns-record-${record.type.toLowerCase()}`}
-              >
-                <td className="px-3 py-2 align-top font-mono font-medium text-ink">
-                  {record.type}
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <div className="flex items-start gap-1">
-                    {/* break-all, not truncate: an ellipsis would be copied
-                        as literal dots by anyone selecting the text. */}
-                    <span className="break-all font-mono text-ink">{record.name}</span>
-                    <CopyButton value={record.name} label={`${record.type} record name`} />
-                  </div>
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <div className="flex items-start gap-1">
-                    <span className="break-all font-mono text-ink">{record.value}</span>
-                    <CopyButton value={record.value} label={`${record.type} record value`} />
-                  </div>
-                  {purpose && <p className="mt-1 max-w-prose text-2xs text-ink-muted">{purpose}</p>}
-                </td>
-                <td className="px-3 py-2 align-top">
-                  <RecordStatus check={record.check} />
-                  {/* The checker's own sentence — what it saw versus what
-                      it wanted. Shown only on a failure, where it is the
-                      thing that turns a cross into an action. */}
-                  {record.detail && (
-                    <p
-                      className="mt-1 max-w-prose text-2xs text-danger-ink"
-                      data-testid={`dns-record-detail-${record.type.toLowerCase()}`}
-                    >
-                      {record.detail}
-                    </p>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </StackedTable>
+      <div data-testid="dns-records-table">
+        <DataTable<RecordRow>
+          flush
+          stacked
+          ariaLabel="DNS records to publish for this domain"
+          columns={RECORD_COLUMNS}
+          data={records.map((record, index) => ({ key: `${record.type}-${record.name}-${index}`, record }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ record }) => ({ "data-testid": `dns-record-${record.type.toLowerCase()}` })}
+        />
+      </div>
     </div>
   );
 }

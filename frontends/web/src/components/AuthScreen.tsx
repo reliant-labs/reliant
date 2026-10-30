@@ -147,14 +147,18 @@ export function AuthScreen() {
     setError(null)
 
     try {
+      // linkState carries a mid-flow `redirect` (the device-code approval
+      // page, a CLI login's consent) through the provider and back via
+      // /auth/callback; without it the person lands on the home page and
+      // the approval they came to make is lost.
       if (provider === 'google') {
-        await signInWithGoogle()
+        await signInWithGoogle(linkState)
         // For web, OAuth will redirect. For Electron, window will open.
         // Don't navigate here - let the OAuth callback handle it
       } else if (provider === 'github') {
-        await signInWithGithub()
+        await signInWithGithub(linkState)
       } else if (provider === 'apple') {
-        await signInWithApple()
+        await signInWithApple(linkState)
       }
     } catch (err: unknown) {
       let errorMessage = `Failed to sign in with ${provider}`

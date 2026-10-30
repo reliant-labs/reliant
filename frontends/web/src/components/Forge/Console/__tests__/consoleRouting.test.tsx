@@ -133,7 +133,9 @@ vi.mock("@/hooks/apps-queries", () => ({
   useApps: () => ({ apps: [], loading: false, availability: "available", detail: "" }),
 }));
 
+vi.mock("@/hooks/observability-session-queries", () => ({ useSessions: () => ({ isSuccess: false }) }));
 vi.mock("@/hooks/observability-queries", () => ({
+  useServiceSignals: () => ({ isSuccess: false }),
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
     data: [
@@ -147,6 +149,8 @@ vi.mock("@/hooks/observability-queries", () => ({
 
 // The index the nav reads its starred dashboards from (the Dashboards page shares it).
 vi.mock("@/hooks/dashboard-queries", () => ({
+  // The open dashboard's own document, which the layout reads for its scope.
+  useDashboard: () => ({ data: undefined }),
   useDashboardIndex: () => ({
     data: {
       canWrite: true,
@@ -369,7 +373,7 @@ describe("redirects from the retired URLs", () => {
 
   it("lands a view that is not a nav entry on the first view", async () => {
     const router = renderAt("/forge/p/alpha/observability/heatmaps?env=e2e");
-    await landsOn(router, "/forge/p/alpha/observability/errors", { env: "e2e" });
+    await landsOn(router, "/forge/p/alpha/observability/graph", { env: "e2e" });
   });
 
   it("lands the retired Observability home on the Overview, which carries its strip", async () => {
@@ -432,6 +436,16 @@ describe("the environment scope", () => {
 });
 
 describe("the nav", () => {
+  it("clears every graph-only search key when leaving Observability while preserving the environment scope", async () => {
+    const user = userEvent.setup();
+    const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
+    await screen.findByTestId("page");
+    expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
+    await user.click(screen.getByRole("link", { name: "Secrets" }));
+    await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
+    expect(router.state.location.search).toEqual({ env: "e2e" });
+  });
+
   it("opens an environment's page from Configure › Environments", async () => {
     const user = userEvent.setup();
     const router = renderAt("/forge/p/alpha/environments?env=prod");

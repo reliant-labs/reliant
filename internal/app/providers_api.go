@@ -17,10 +17,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -39,9 +42,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/readguard"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -772,6 +777,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithConnectionSecrets(d.Connections.Tokens)
@@ -1089,6 +1095,9 @@ type WorkflowReconcilerDeps struct {
 	ResetGuard *v2workflow.ResetAttemptGuard
 	Queued     queueddelivery.Service
 	Router     *APIDaemonRouter
+	// Activity is where a held run's still-running background work is
+	// published as machine activity, so a suspend does not kill it.
+	Activity *daemonstate.Publisher
 }
 
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
@@ -1105,6 +1114,9 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	if d.Activity != nil {
+		r.SetHeldRunActivity(d.Activity)
+	}
 	return &WorkflowReconciler{r}, nil
 }
 
@@ -1173,6 +1185,48 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 	return nil
 }
 
+// llmUsageRetentionInterval is how often the retention job runs. Each pass
+// deletes only what has aged out, so an hour keeps the backlog small.
+const llmUsageRetentionInterval = time.Hour
+
+// LLMUsageRetention deletes per-call LLM usage rows older than
+// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// the delete is idempotent and skips rows another replica is deleting.
+type LLMUsageRetention struct{ repo *db.Repo }
+
+// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+type LLMUsageRetentionDeps struct {
+	DB *db.Repo
+}
+
+// NewLLMUsageRetention is the retention loop.
+//
+//forge:root-only api
+func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
+	return &LLMUsageRetention{repo: d.DB}, nil
+}
+
+// Run prunes until ctx ends.
+func (l *LLMUsageRetention) Run(ctx context.Context) error {
+	ticker := time.NewTicker(llmUsageRetentionInterval)
+	defer ticker.Stop()
+	for {
+		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 // apiMountOptions is each user-audience service's mount options on top of the
 // user chain. The services whose requests wake an asleep machine
 // (machinewake: the worktree and filesystem services) report the wake as
@@ -1181,11 +1235,26 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 // version skew — and when the operator turned the forge API off
 // (RELIANT_DISABLE_FORGE_API) it answers every rpc FailedPrecondition, after
 // auth, before the handler runs.
+//
+// The list reads the user-update stream makes a client refetch (the chat list,
+// the archived list, a chat's approvals) go through one readguard: one user's
+// identical concurrent reads share a read, and at most readguard.DefaultPerUser
+// distinct ones run at once, so a client that storms them (desktop builds
+// before #1865) cannot take the database pool from everyone else.
 func apiMountOptions(disableForgeAPI bool) MountOptions {
 	machineWake := mountkit.WithHandlerOptions(connect.WithInterceptors(machinewake.NewInterceptor()))
+	listReads := mountkit.WithHandlerOptions(connect.WithInterceptors(readguard.NewInstrumented(readguard.Deps{
+		Procedures: []readguard.Procedure{
+			readguard.Read[reliantv1.ListChatsResponse](reliantv1connect.ChatServiceListChatsProcedure),
+			readguard.Read[reliantv1.ListArchivedChatsResponse](reliantv1connect.ChatServiceListArchivedChatsProcedure),
+			readguard.Read[reliantv1.ListApprovalsByChatResponse](reliantv1connect.ApprovalServiceListApprovalsByChatProcedure),
+		},
+	})))
 	opts := MountOptions{
 		Worktree:   []mountkit.Option{machineWake},
 		FileSystem: []mountkit.Option{machineWake},
+		Chat:       []mountkit.Option{listReads},
+		Approval:   []mountkit.Option{listReads},
 	}
 	if disableForgeAPI {
 		logging.Info("forge API disabled in this deployment (RELIANT_DISABLE_FORGE_API): ForgeService answers FailedPrecondition")

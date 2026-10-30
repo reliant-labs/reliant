@@ -85,7 +85,8 @@ func setupWorkspaceRecoveryFixture(t *testing.T) *workspaceRecoveryFixture {
 	h.CreateTestProjectWithPath(ctx, projectID, userID, projectPath)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 	wt := h.CreateTestWorktree(ctx, projectID, chatID, workspace)
-	require.NoError(t, h.Repo().AdoptWorktreeDaemon(ctx, wt.ID, "daemon-owner"))
+	_, err := h.Repo().AdoptWorktreeDaemon(ctx, wt.ID, "daemon-owner")
+	require.NoError(t, err)
 
 	return &workspaceRecoveryFixture{h: h, chatID: chatID, projectPath: projectPath, workspace: workspace, worktreeID: wt.ID}
 }

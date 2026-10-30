@@ -34,15 +34,24 @@ import (
 type countingStarter struct {
 	mu     sync.Mutex
 	starts int
+	last   v2.WorkflowInput
 }
 
 func (s *countingStarter) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, _ interface{}, args ...interface{}) (client.WorkflowRun, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, isRoot := args[0].(v2.WorkflowInput); isRoot {
+	if root, isRoot := args[0].(v2.WorkflowInput); isRoot {
 		s.starts++
+		s.last = root
 	}
 	return &stubRun{id: options.ID, runID: "run-" + options.ID}, nil
+}
+
+// lastRoot is the input of the newest root start.
+func (s *countingStarter) lastRoot() v2.WorkflowInput {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.last
 }
 
 func (s *countingStarter) count() int {

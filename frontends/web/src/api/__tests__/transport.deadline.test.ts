@@ -12,11 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { Interceptor } from "@connectrpc/connect";
 
-const sentry = vi.hoisted(() => ({
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
+const reporting = vi.hoisted(() => ({
+  reportError: vi.fn(),
+  reportFailure: vi.fn(),
 }));
-vi.mock("@sentry/react", () => sentry);
+vi.mock("@/lib/errorReporting", () => reporting);
 
 vi.mock("@/lib/constants", () => ({
   DEFAULT_GRPC_TIMEOUT_MS: 10000,
@@ -139,8 +139,8 @@ describe("a read stranded across a suspension (ELECTRON-B2)", () => {
     calls[1].resolve({ chats: [] });
     await flush();
     expect(settled).toMatchObject({ message: { chats: [] } });
-    expect(sentry.captureMessage).not.toHaveBeenCalled();
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportFailure).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
 
@@ -170,10 +170,10 @@ describe("the budget is active time", () => {
 
     // One report for the incident, with the active age AND the wall age, so
     // a frozen tab is never again read as a slow server.
-    expect(sentry.captureMessage).toHaveBeenCalledTimes(1);
-    expect(sentry.captureMessage.mock.calls[0][0]).toContain("UpdateSetting:10s (70s wall)");
+    expect(reporting.reportFailure).toHaveBeenCalledTimes(1);
+    expect(reporting.reportFailure.mock.calls[0][0]).toContain("UpdateSetting:10s (70s wall)");
     // The timed-out call is not ALSO an exception report (ELECTRON-8X).
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
 
@@ -247,6 +247,6 @@ describe("caller cancellation", () => {
     controller.abort(new ConnectError("navigated away", Code.Canceled));
     await expect(result).rejects.toMatchObject({ code: Code.Canceled });
     expect(calls[0].req.signal.aborted).toBe(true);
-    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });

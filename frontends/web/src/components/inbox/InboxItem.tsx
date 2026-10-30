@@ -33,16 +33,23 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, PauseCircle, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
+import {
+  InboxItemKind,
+  type InboxAutomationDefinitionBroken,
+  type InboxItem as InboxItemData,
+  type InboxStorage as InboxStorageData,
+} from "@/gen/reliant/v1/inbox_pb";
 import { useApprove, useDeny } from "@/hooks/approval-service-hooks_gen";
 import { answerQuestion } from "@/hooks/question-queries";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { useDeleteTrigger, useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
+import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/workflowsArea";
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
@@ -231,8 +238,12 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
     case InboxItemKind.AUTOMATION_NEEDS_SETUP:
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
+    case InboxItemKind.AUTOMATION_DEFINITION_BROKEN:
+      return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Workflow definition broken" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.AUTOMATION_RUN_PAUSED:
+      return <PauseCircle className={cn(className, "text-warning-ink")} aria-label="Automation run paused" />;
     case InboxItemKind.RECOVERY:
       return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
@@ -246,7 +257,11 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 export function subjectName(item: InboxItemData): string {
   if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
-    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
+    const what = item.payload.value.processes ? "processes" : "storage";
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} ${what}`;
+  }
+  if (item.payload.case === "automationDefinitionBroken") {
+    return item.payload.value.definition?.path || item.workflowName || "Workflow definition";
   }
   return item.chatTitle || item.triggerName || "Untitled run";
 }
@@ -400,12 +415,22 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
       const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "automationDefinitionBroken": {
+      const text = definitionBrokenDetail(payload.value);
+      return text ? { node: text, title: text } : null;
+    }
     case "automationLaunchFailed": {
       const { reason, consecutiveFailures } = payload.value;
       const text = [consecutiveFailures > 1 ? `${consecutiveFailures} in a row` : "", reason ? sentenceCase(reason) : ""]
         .filter(Boolean)
         .join(" · ");
       return text ? { node: text, title: text } : null;
+    }
+    case "automationRunPaused": {
+      // Why it paused; while it waits it holds its automation's slot.
+      const reason = payload.value.reason;
+      const text = reason ? `Paused: ${reason}` : "Paused";
+      return { node: text, title: `${text} — later runs of this automation wait until it resumes or ends.` };
     }
     default:
       return null;
@@ -420,6 +445,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
  * nothing about why every build was failing.
  */
 export function storageDetail(storage: InboxStorageData): string {
+  if (storage.processes) return processesDetail(storage);
   const parts: string[] = [];
   const full = pressuredVolume(storage);
   if (full) {
@@ -433,6 +459,51 @@ export function storageDetail(storage: InboxStorageData): string {
     const size = totalHeldBytes(storage.held);
     const noun = storage.held.length === 1 ? "workspace" : "workspaces";
     parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
+  }
+  if (!storage.online) parts.push("offline");
+  return parts.join(" · ");
+}
+
+/**
+ * "Does not parse: … · main 1a2b3c4 on cicd · refuses nightly, deploy": the
+ * error first (it is what to fix), then where the broken version came from,
+ * then what it stops.
+ */
+export function definitionBrokenDetail(broken: InboxAutomationDefinitionBroken): string {
+  const def = broken.definition;
+  const parts: string[] = [];
+  if (def?.error) parts.push(sentenceCase(def.error));
+  if (def?.commit || def?.branch) {
+    const at = [def.branch || "detached HEAD", def.commit.slice(0, 7)].filter(Boolean).join(" ");
+    parts.push(def.daemonName ? `${at} on ${def.daemonName}` : at);
+  }
+  if (def?.dirty) parts.push("uncommitted changes");
+  const names = broken.automations.map((a) => a.triggerName).filter(Boolean);
+  if (names.length > 0) parts.push(`refuses ${names.join(", ")}`);
+  return parts.join(" · ");
+}
+
+/**
+ * "7,120 of 7,650 processes (93%) · heavy background commands paused · Fix the
+ * gate: `bash scripts/ci-gate.sh all` 4,950 · …". The machine is near its
+ * process limit; the item names the largest process trees by the agent that
+ * started each, so the person can stop the one at fault.
+ */
+export function processesDetail(storage: InboxStorageData): string {
+  const procs = storage.processes;
+  if (!procs) return "";
+  const parts: string[] = [];
+  const count = Number(procs.count);
+  const limit = Number(procs.limit);
+  parts.push(
+    limit > 0
+      ? `${count.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} processes (${Math.round((100 * count) / limit)}%)`
+      : `${count.toLocaleString("en-US")} processes`,
+  );
+  if (procs.refusingHeavy) parts.push("heavy background commands paused");
+  for (const tree of procs.top.slice(0, 3)) {
+    const who = tree.chatTitle || (tree.chatId ? `agent ${tree.chatId.slice(0, 8)}` : "untracked");
+    parts.push(`${who}: \`${tree.command}\` ${Number(tree.tasks).toLocaleString("en-US")}`);
   }
   if (!storage.online) parts.push("offline");
   return parts.join(" · ");
@@ -478,7 +549,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
     case "waitingForMachine":
       return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
     case "automationFailing":
-      return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
+      return (
+        <FailingAutomationAction
+          triggerId={item.triggerId}
+          triggerName={item.triggerName}
+          lastRunChatId={payload.value.lastRunChatId}
+          broken={payload.value.health?.status === TriggerHealthStatus.BROKEN}
+        />
+      );
     case "automationLaunchFailed":
       return <LaunchFailedAction triggerId={item.triggerId} />;
     case "automationNeedsSetup":
@@ -491,6 +569,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
           Finish setup
         </a>
       );
+    case "automationDefinitionBroken":
+      // The fix is an edit to the file; its workflow page shows the error.
+      if (mobile) return <OnDesktopNote>Fix on desktop</OnDesktopNote>;
+      return (
+        <a href={workflowPageHref(item.workflowName, item.projectId)} className={actionButtonClass}>
+          Open workflow
+        </a>
+      );
     case "recovery":
       // The full-width action lives below the row, not inside its nonwrapping controls.
       return null;
@@ -499,6 +585,7 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
     case "runFinished":
+    case "automationRunPaused":
       return item.chatId ? (
         <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open
@@ -655,12 +742,62 @@ export function WakeMachineAction({
   );
 }
 
-function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: string; lastRunChatId?: string }) {
+/**
+ * Pause for a failing automation, after Open last run. A BROKEN one (its
+ * workflow changed so that it cannot fire: gone, unparseable, the trigger
+ * renamed) has no run worth opening; it gets Remove beside Pause, since
+ * fixing the workflow file is the only other way out.
+ */
+function FailingAutomationAction({
+  triggerId,
+  triggerName,
+  lastRunChatId,
+  broken,
+}: {
+  triggerId: string;
+  triggerName: string;
+  lastRunChatId?: string;
+  broken: boolean;
+}) {
   const setEnabled = useSetTriggerEnabled();
+  const remove = useDeleteTrigger();
   const queryClient = useQueryClient();
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const name = triggerName || "this automation";
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      {lastRunChatId && (
+      {broken && (
+        <>
+          <button type="button" className={actionButtonClass} disabled={remove.isPending} onClick={() => setConfirmingRemove(true)}>
+            Remove
+          </button>
+          <ConfirmationDialog
+            open={confirmingRemove}
+            title={`Remove ${name}?`}
+            description="It stops listening for this trigger. The workflow and the chats it already started are kept."
+            confirmLabel="Remove trigger"
+            loading={remove.isPending}
+            onConfirm={() =>
+              remove.mutate(
+                { id: triggerId },
+                {
+                  onSuccess: () => {
+                    setConfirmingRemove(false);
+                    toast.success(`Removed ${name}`);
+                    void queryClient.invalidateQueries({ queryKey: inboxServiceKeys.all });
+                  },
+                  onError: (error) => {
+                    setConfirmingRemove(false);
+                    toast.error(`Could not remove ${name}`, { description: errorText(error) });
+                  },
+                },
+              )
+            }
+            onCancel={() => setConfirmingRemove(false)}
+          />
+        </>
+      )}
+      {!broken && lastRunChatId && (
         <RunLink chatId={lastRunChatId} className={actionButtonClass}>
           Open last run
         </RunLink>

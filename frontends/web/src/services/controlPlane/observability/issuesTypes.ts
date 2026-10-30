@@ -64,8 +64,20 @@ export interface Issue {
   mergedInto: string;
   /** False when a browser stack could not be mapped back to source. */
   symbolicated: boolean;
-  /** The row version, echoed back as `expectedVersion` so a triage only applies to the state read. */
+  /** The row version, echoed back as `expectedVersion` so a triage or an assignment only applies to the state read. */
   version: number;
+  /** The person it is assigned to; null when unassigned. */
+  assignee: IssueUser | null;
+  /** Shared by the issues of one incident (one dead dependency failing every caller); empty when part of none. */
+  incidentKey: string;
+  /** How many OTHER issues carry the same incidentKey. */
+  relatedCount: number;
+}
+
+/** A person as an issue shows them: an assignee, a comment's author. `name` is their display name, or their email. */
+export interface IssueUser {
+  id: string;
+  name: string;
 }
 
 export interface IssueEvent {
@@ -118,6 +130,8 @@ export interface IssueDetail {
   coOccurringIssueIds: string[];
   /** Null when the first version is not a release the ledger knows. */
   firstRelease: IssueReleaseRef | null;
+  /** The other issues of this issue's incident; empty when it is part of none. */
+  incidentIssueIds: string[];
 }
 
 export interface IssueList {
@@ -147,6 +161,8 @@ export interface ListIssuesRequest extends IssueScope {
   statuses: IssueStatus[];
   platform?: IssuePlatform;
   text?: string;
+  /** Only the issues assigned to this user id. Unset: every issue (the server has no "unassigned" filter). */
+  assignee?: string;
   sort: IssueSort;
   pageSize?: number;
   pageToken?: string;
@@ -167,4 +183,94 @@ export interface UpdateIssueStatusRequest {
   change: IssueStatusChange;
   /** The Issue.version the caller read. A stale one is refused (Aborted), never silently overwritten. */
   expectedVersion: number;
+}
+
+// ── Discussion: comments, the assignee, linked chats, the timeline ─────────────
+
+export interface IssueComment {
+  id: string;
+  issueId: string;
+  /** Null when the account no longer exists. */
+  author: IssueUser | null;
+  /** Plain text or markdown, verbatim. Rendered safely (Errors/CommentBody). */
+  body: string;
+  createdMs: number;
+  /** Later than createdMs once the comment was edited. */
+  updatedMs: number;
+}
+
+export interface IssueChatLink {
+  issueId: string;
+  chatId: string;
+  chatTitle: string;
+  linkedBy: IssueUser | null;
+  linkedAtMs: number;
+}
+
+/** Who did something: a person, a machine credential, or the system (the issues worker). */
+export interface IssueActor {
+  kind: "user" | "machine" | "system";
+  id: string;
+  /** A person's display name (their email when they have none); empty for a machine or the system. */
+  name: string;
+}
+
+export type IssueTimelineBody =
+  | { kind: "status"; from: IssueStatus | null; to: IssueStatus | null; version: string; ignoredUntilMs: number }
+  | { kind: "comment"; comment: IssueComment }
+  | { kind: "assignment"; from: IssueUser | null; to: IssueUser | null }
+  | { kind: "chat"; link: IssueChatLink };
+
+/** One thing that happened to an issue. `issueId` is the issue it happened on: the requested one, or one merged into it. */
+export interface IssueTimelineEntry {
+  id: string;
+  timeMs: number;
+  issueId: string;
+  actor: IssueActor | null;
+  body: IssueTimelineBody;
+}
+
+export interface IssueTimelineList {
+  /** Oldest first. */
+  entries: IssueTimelineEntry[];
+  nextPageToken: string;
+  /** The issue the timeline is of: the one asked for, or the one it was merged into. */
+  issueId: string;
+}
+
+export interface AddIssueCommentRequest {
+  issueId: string;
+  body: string;
+}
+
+export interface UpdateIssueCommentRequest {
+  issueId: string;
+  commentId: string;
+  body: string;
+}
+
+export interface DeleteIssueCommentRequest {
+  issueId: string;
+  commentId: string;
+}
+
+export interface AssignIssueRequest {
+  issueId: string;
+  /** Empty clears the assignee. */
+  assigneeUserId: string;
+  /** The Issue.version the caller read. A stale one is refused (Aborted), never silently overwritten. */
+  expectedVersion: number;
+}
+
+export interface LinkIssueChatRequest {
+  issueId: string;
+  chatId: string;
+  /** The chat's title when it was linked; optional. */
+  chatTitle?: string;
+}
+
+export interface LinkIssueChatResult {
+  link: IssueChatLink;
+  /** False when the chat was already linked. */
+  created: boolean;
 }

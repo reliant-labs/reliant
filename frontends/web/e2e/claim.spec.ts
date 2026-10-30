@@ -131,18 +131,18 @@ for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } },
       expect(page.url()).not.toContain('rcl_');
     });
 
-    test('an existing signed-in user is told to run forge login, and cannot claim', async ({ page }) => {
+    test('an existing signed-in user is offered to claim into their account, not sent to /upgrade', async ({ page }) => {
       await arrive(page, { signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false } });
-      const block = page.getByTestId('claim-existing-account');
+      const block = page.getByTestId('claim-into-account');
       await expect(block).toBeVisible(LOADED);
-      await expect(block).toContainText('Already on Reliant?');
-      await expect(block).toContainText('forge login');
-      await expect(block).toContainText(/deploy again under your account/i);
-      await expect(page.getByTestId('claim-existing-account-button')).toBeDisabled();
+      await expect(page.getByTestId('claim-signed-in-as')).toContainText('me@example.com');
+      await expect(block).toContainText(/you'll own it/i);
+      await expect(block).toContainText(/one static site/i);
+      await expect(page.getByTestId('claim-into-account-button')).toBeEnabled();
       await expect(page.getByTestId('claim-submit')).toHaveCount(0);
       await expect(page.getByTestId('claim-site')).toBeVisible();
       await noSidewaysScroll(page);
-      await shot(page, 'existing-account');
+      await shot(page, 'claim-into-account');
     });
 
     test('a different anonymous account is warned about before it is replaced', async ({ page }) => {
@@ -175,7 +175,7 @@ test.describe('the whole new-human flow', () => {
     //    with the claim's returnTo. The page is claim-aware, not a second form.
     await expect(page).toHaveURL(/\/upgrade\?returnTo=%2Fclaim$/, LOADED);
     await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible(LOADED);
-    await expect(page.getByTestId('claim-existing-account')).toBeVisible();
+    await expect(page.getByTestId('claim-existing-account')).toContainText(/signs out of the site's temporary account/i);
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession']);
     await shot(page, 'upgrade');
 
@@ -192,9 +192,9 @@ test.describe('the whole new-human flow', () => {
     expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim']);
     expect(mock.calls[2].body).toEqual({ claimToken: CLAIM_TOKEN });
 
-    const card = page.getByTestId('app-card-storefront');
-    await expect(card).toBeVisible(LOADED);
-    await expect(card).toHaveAttribute('data-highlighted', 'true');
+    const row = page.getByTestId('app-row-storefront');
+    await expect(row).toBeVisible(LOADED);
+    await expect(row).toHaveAttribute('data-highlighted', 'true');
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
     // The highlight is shown once: the param is dropped from the URL.
     await expect(page).toHaveURL(/\/apps$/);
@@ -265,17 +265,29 @@ test.describe('the whole new-human flow', () => {
     await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
   });
 
-  test('claimable_existing_account shows the existing-account block beside the site', async ({ page }) => {
-    await arrive(page, { completeError: { code: 'permission_denied', reason: 'claimable_existing_account' } });
-    await page.getByTestId('claim-submit').click();
-    await expect(page).toHaveURL(/\/upgrade/, LOADED);
-    await upgradeWithEmail(page);
+  test('an existing user claims into their account: CompleteClaim as themselves, then /apps with the app highlighted', async ({ page }) => {
+    const errors = collectErrors(page);
+    const mock = await arrive(page, {
+      signedInAs: { id: 'real-user', email: 'me@example.com', anonymous: false },
+      completeClaimPath: 'membership',
+    });
 
-    await expect(page.getByTestId('claim-existing-account')).toBeVisible(LOADED);
-    await expect(page.getByTestId('claim-existing-account')).toContainText('forge login');
-    await expect(page.getByTestId('claim-site')).toBeVisible();
-    await expect(page.getByTestId('claim-submit')).toHaveCount(0);
-    await shot(page, 'complete-existing-account');
+    await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    // No session was released, nothing was signed out, and the account was never upgraded.
+    expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'GetClaimFreeSite', 'CompleteClaim']);
+    expect(mock.gotrue.some((g) => g.includes('/logout'))).toBe(false);
+    await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+    expect(errors).toEqual([]);
+  });
+
+  test('"Sign in to claim" for someone not signed in goes to /auth and keeps the link good', async ({ page }) => {
+    const mock = await arrive(page);
+    await page.getByTestId('claim-existing-account-button').click({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/auth\?redirect=%2Fclaim$/, LOADED);
+    // No session was released for this, so the link still works for anyone.
+    expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim']);
   });
 
   test('a reason the page does not know gets a generic screen with a retry', async ({ page }) => {
@@ -289,5 +301,199 @@ test.describe('the whole new-human flow', () => {
     await page.getByRole('button', { name: /try again/i }).click();
     await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
     expect(mock.calls.filter((c) => c.rpc === 'CompleteClaim')).toHaveLength(2);
+  });
+});
+
+// ── the free static site: which one stays live ────────────────────────────
+
+const SIGNED_IN = { id: 'real-user', email: 'me@example.com', anonymous: false } as const;
+
+async function arriveWithConflict(page: Page, extra: Partial<ClaimMockOptions> = {}) {
+  return arrive(page, { signedInAs: SIGNED_IN, completeClaimPath: 'membership', freeSiteConflict: true, ...extra });
+}
+
+async function openChoice(page: Page) {
+  await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+  await expect(page.getByRole('dialog')).toBeVisible(LOADED);
+}
+
+for (const viewport of [{ name: 'desktop', size: { width: 1280, height: 800 } }, { name: 'phone', size: PHONE.viewport }]) {
+  test.describe(`the free-site choice at ${viewport.name} width`, () => {
+    test.use({ viewport: viewport.size, ...(viewport.name === 'phone' ? { isMobile: true, hasTouch: true } : {}) });
+
+    test('asks before claiming, names both sites with their addresses, and preselects nothing', async ({ page }) => {
+      const errors = collectErrors(page);
+      const mock = await arriveWithConflict(page);
+      await openChoice(page);
+
+      const dialog = page.getByRole('dialog', { name: /already have a free site/i });
+      await expect(dialog).toBeVisible();
+      await expect(page.getByTestId('free-site-existing')).toContainText('quiet-heron.sites.reliantlabs.dev');
+      await expect(page.getByTestId('free-site-claimed')).toContainText('amber-quokka.reliantpreview.dev');
+      for (const v of ['claimed', 'existing', 'subscribe']) await expect(page.getByTestId(`free-site-option-${v}`)).not.toBeChecked();
+      await expect(page.getByTestId('free-site-continue')).toBeDisabled();
+      // Nothing was claimed by asking.
+      expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'GetClaimFreeSite']);
+      // The dialog fits the screen and its Continue is reachable without sideways scroll.
+      await noSidewaysScroll(page);
+      await expect(page.getByTestId('free-site-continue')).toBeInViewport();
+      await shot(page, 'free-site-choice');
+      expect(errors).toEqual([]);
+    });
+
+    test('1. keep the new site live: claims with that choice and lands on /apps saying what was paused', async ({ page }) => {
+      const mock = await arriveWithConflict(page);
+      await openChoice(page);
+      await page.getByTestId('free-site-option-claimed').check();
+      await shot(page, 'free-site-picked-new');
+      await page.getByTestId('free-site-continue').click();
+
+      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      expect(mock.choices).toEqual(['FREE_SITE_CHOICE_CLAIMED']);
+      await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept this site live/i);
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/subscribe/i);
+      await shot(page, 'apps-after-keep-new');
+    });
+
+    test('2. keep my existing site live: claims with that choice; the claimed site is the one paused', async ({ page }) => {
+      const mock = await arriveWithConflict(page);
+      await openChoice(page);
+      await page.getByTestId('free-site-option-existing').check();
+      await page.getByTestId('free-site-continue').click();
+
+      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      expect(mock.choices).toEqual(['FREE_SITE_CHOICE_EXISTING']);
+      await expect(page.getByTestId('apps-claimed-paused')).toContainText(/you kept your existing site live/i);
+      await shot(page, 'apps-after-keep-existing');
+    });
+
+    test('3. subscribe to keep both: goes to billing with a way back to /claim, and claims nothing', async ({ page }) => {
+      const mock = await arriveWithConflict(page);
+      await openChoice(page);
+      await page.getByTestId('free-site-option-subscribe').check();
+      // The claim waits, and the dialog says until when.
+      await expect(page.getByTestId('free-site-waits')).toContainText(/claim link works until/i);
+      await shot(page, 'free-site-picked-subscribe');
+      await page.getByTestId('free-site-continue').click();
+
+      // Billing is /settings/billing on a desktop and a screen inside /m/settings on a
+      // phone; either way it knows the way back to the claim.
+      const phone = (page.viewportSize()?.width ?? 1280) < 600;
+      await expect(page).toHaveURL(phone ? /\/m\/settings\?section=billing/ : /\/settings\/billing/, LOADED);
+      expect(new URL(page.url()).searchParams.get('returnTo')).toBe('/claim');
+      if (!phone) expect(new URL(page.url()).searchParams.get('from')).toBe('claim');
+      expect(mock.choices).toEqual([]);
+
+      // They subscribe in billing, then come back: from here there is no conflict.
+      mock.subscribe();
+      if (phone) {
+        await expect(page.getByRole('button', { name: 'Back to your claim' })).toBeVisible(LOADED);
+        await shot(page, 'billing-with-way-back');
+        await page.getByRole('button', { name: 'Back to your claim' }).click();
+        await expect(page).toHaveURL(/\/claim/, LOADED);
+      }
+
+      // Back to the claim: still claimable, the token is still there, and with a
+      // plan there is nothing to choose, so it claims straight through.
+      if (!phone) await page.goto('/claim');
+      await expect(page.getByTestId('claim-site')).toBeVisible(LOADED);
+      await page.getByTestId('claim-into-account-button').click();
+      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      expect(mock.choices).toEqual(['']);
+      await expect(page.getByTestId('apps-claimed-paused')).toHaveCount(0);
+    });
+
+    test('cancel changes nothing and leaves the claim as it was', async ({ page }) => {
+      const mock = await arriveWithConflict(page);
+      await openChoice(page);
+      await page.getByTestId('free-site-option-claimed').check();
+      await page.getByTestId('free-site-cancel').click();
+
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByTestId('claim-site')).toBeVisible();
+      await expect(page.getByTestId('claim-into-account-button')).toBeEnabled();
+      expect(mock.choices).toEqual([]);
+      expect(page.url()).toContain('/claim');
+      // Asking again starts clean.
+      await openChoice(page);
+      await expect(page.getByTestId('free-site-option-claimed')).not.toBeChecked();
+    });
+
+    test('a site that appears between the preview and the claim: the server asks, the page asks, nothing was claimed', async ({ page }) => {
+      const mock = await arriveWithConflict(page, { conflictAppearsAtClaim: true });
+      await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+      await expect(page.getByRole('dialog')).toBeVisible(LOADED);
+      await expect(page.getByTestId('free-site-existing')).toContainText('quiet-heron');
+      expect(mock.choices).toEqual(['']);
+      // The preview is reloaded under the dialog; wait for it to settle before answering.
+      await expect.poll(() => mock.calls.filter((c) => c.rpc === 'GetClaim').length).toBeGreaterThanOrEqual(2);
+      await page.getByTestId('free-site-option-existing').check();
+      await page.getByTestId('free-site-continue').click();
+      await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+      expect(mock.choices).toEqual(['', 'FREE_SITE_CHOICE_EXISTING']);
+    });
+  });
+}
+
+test.describe('the free-site choice, by keyboard', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test('focus goes in, stays in, arrows move the choice, Escape cancels and focus comes back', async ({ page }) => {
+    await arriveWithConflict(page);
+    const opener = page.getByTestId('claim-into-account-button');
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible(LOADED);
+
+    // Focus lands on the first option, never on a button that dismisses or confirms.
+    const first = page.getByTestId('free-site-option-claimed');
+    await expect(first).toBeFocused();
+    await expect(page.getByTestId('free-site-continue')).toBeDisabled();
+
+    // Space picks it; the arrow keys move through the group, picking as they go.
+    await page.keyboard.press('Space');
+    await expect(first).toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByTestId('free-site-option-existing')).toBeChecked();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByTestId('free-site-option-subscribe')).toBeChecked();
+    await expect(page.getByTestId('free-site-continue')).toBeEnabled();
+
+    // Tab cycles inside the dialog and never reaches the page behind it.
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Tab');
+      expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+    }
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
+    }
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
+
+  test('Enter on Continue confirms the picked option', async ({ page }) => {
+    const mock = await arriveWithConflict(page);
+    await openChoice(page);
+    await page.getByTestId('free-site-option-existing').focus();
+    await page.keyboard.press('Space');
+    await page.getByTestId('free-site-continue').focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    expect(mock.choices).toEqual(['FREE_SITE_CHOICE_EXISTING']);
+  });
+});
+
+test.describe('no free site in use', () => {
+  test('no dialog: an existing user with no other site claims straight through', async ({ page }) => {
+    const mock = await arrive(page, { signedInAs: SIGNED_IN, completeClaimPath: 'membership' });
+    await page.getByTestId('claim-into-account-button').click({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    expect(mock.choices).toEqual(['']);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

@@ -18,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Interceptor } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
 
-vi.mock("@sentry/react", () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 vi.mock("@/lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

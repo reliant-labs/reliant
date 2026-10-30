@@ -50,12 +50,6 @@ inputs:
         description: Model override for implementer agents
         default:
           tags: ["flagship"]
-      max_turns:
-        type: integer
-        default: 200
-        min: 1
-        max: 500
-        description: Maximum agent loop iterations
       tools:
         type: tools
         default: ["tag:coding:default"]
@@ -164,7 +158,11 @@ nodes:
           args:
             mode: "{{inputs.mode}}"
             model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
-            max_turns: "{{inputs.implementer.max_turns}}"
+            # No max_turns here: builtin://agent does not declare one (its loop
+            # runs until the model stops asking for tools), so passing it was
+            # silently dropped at run time. A turn cap needs a body workflow
+            # that declares max_turns (structured-agent), not an arg the
+            # callee never reads.
             tools: "{{inputs.implementer.tools}}"
             system_prompt: "{{inputs.implementer.system_prompt}}"
             spawn_presets: "{{inputs.implementer.spawn_presets}}"

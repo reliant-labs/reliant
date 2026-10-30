@@ -4,7 +4,9 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -13,8 +15,13 @@ import (
 
 type SpawnSendParams struct {
 	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) to send a message to: one of your sub-agents, or your own parent"`
-	Message string `json:"message" jsonschema:"required,description=The message to deliver"`
+	Subject string `json:"subject" jsonschema:"required,description=A one-line summary of the message (at most 100 characters\\, no line breaks). The transcript shows the message collapsed to this line\\, so say what it is about: 'Auth refactor done: 3 files changed' or 'Blocked: need the staging DB URL'"`
+	Message string `json:"message" jsonschema:"required,description=The full message to deliver"`
 }
+
+// spawnSendMaxSubjectRunes caps spawn_send's subject: it is rendered as one
+// line in the transcript, so anything longer belongs in the message.
+const spawnSendMaxSubjectRunes = 100
 
 const (
 	SpawnSendToolName    = "spawn_send"
@@ -36,7 +43,14 @@ resumes it where it stopped, and it reads the message at its first turn.
 
 If the target has finished (completed, or stopped by the user), this FAILS
 rather than silently doing nothing — use spawn(agent_id=...) to resume it
-instead.`
+instead.
+
+SUBJECT AND MESSAGE:
+Every message needs a short one-line subject (at most 100 characters) as well
+as the message itself. The chat shows agent-to-agent messages collapsed to
+their subject, so make it say what the message is about ("Tests pass; PR
+ready for review", "Blocked: need the staging DB URL"); put the detail in
+message.`
 )
 
 // AgentMessageNotifier wakes the workflow that owns a thread after a message
@@ -86,6 +100,10 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	}
 	if params.AgentID == "" {
 		return NewTextErrorResponse("agent_id is required"), nil
+	}
+	subject, problem := normalizeSpawnSendSubject(params.Subject)
+	if problem != "" {
+		return NewTextErrorResponse(problem), nil
 	}
 	if params.Message == "" {
 		return NewTextErrorResponse("message is required"), nil
@@ -138,6 +156,7 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		FromThreadID: threadID,
 		ToThreadID:   params.AgentID,
 		Kind:         core.AgentMessageKindMessage,
+		Subject:      subject,
 		Body:         params.Message,
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
@@ -169,6 +188,24 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		"Queued for delivery to %q (%s). It will be read at that agent's next turn. "+
 			"It has NOT been read yet — do not assume it has acted on this.",
 		title, params.AgentID)), nil
+}
+
+// normalizeSpawnSendSubject trims subject and checks it is one short line,
+// returning the reason it is not as the tool error. A subject is refused
+// rather than silently cut: a truncated subject can say something the sender
+// never meant, and the model can always restate it.
+func normalizeSpawnSendSubject(subject string) (string, string) {
+	subject = strings.TrimSpace(subject)
+	switch {
+	case subject == "":
+		return "", "subject is required: a one-line summary of the message (at most 100 characters)"
+	case strings.ContainsAny(subject, "\r\n"):
+		return "", "subject must be a single line; put the detail in message"
+	case utf8.RuneCountInString(subject) > spawnSendMaxSubjectRunes:
+		return "", fmt.Sprintf("subject is %d characters; keep it to at most %d and put the detail in message",
+			utf8.RuneCountInString(subject), spawnSendMaxSubjectRunes)
+	}
+	return subject, ""
 }
 
 type spawnRelationship int

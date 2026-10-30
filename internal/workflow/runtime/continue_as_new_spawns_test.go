@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
@@ -47,6 +48,10 @@ type canSpawnEnv struct {
 	llmIterations map[string][]int
 	// llmGrants[thread] records the load_tool grants each call was handed.
 	llmGrants map[string][][]string
+	// llmPins[thread] records the catalog pin each call was handed.
+	llmPins map[string][]string
+	// loadPin is the catalog pin ActivityLoadWorkflow reports pinning.
+	loadPin string
 	// onLLM, when set, runs inside CallLLM (after counting) — used to flip
 	// the pressure seam at a precise point in a thread's progress.
 	onLLM func(thread string, n int)
@@ -64,6 +69,7 @@ func newCANSpawnEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment) *canSp
 		llmCalls:      map[string]int{},
 		llmIterations: map[string][]int{},
 		llmGrants:     map[string][][]string{},
+		llmPins:       map[string][]string{},
 	}
 	wf, err := wfyaml.ParseWorkflow([]byte(spawnBackgroundE2EYAML))
 	require.NoError(t, err)
@@ -73,19 +79,23 @@ func newCANSpawnEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment) *canSp
 	ok := func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
-		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return LoadedWorkflow{WorkflowJSON: wfJSON, CatalogPin: e.loadPin}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
-	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "Cleanup", "EmitThreadEvent", "WorkflowError", "ValidateThreadOwnership", "LoadPresetParams", "SaveMessage"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
+		return map[string]interface{}{}, nil
+	}, activity.RegisterOptions{Name: "LoadPresetParams"})
+	for _, name := range []string{"WorkflowStatus", "Cleanup", "EmitThreadEvent", "WorkflowError", "ValidateThreadOwnership", "SaveMessage"} {
 		name := name
 		switch name {
 		case "ValidateThreadOwnership":
 			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 				return map[string]interface{}{"valid": true}, nil
-			}, activity.RegisterOptions{Name: name})
-		case "LoadPresetParams":
-			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
-				return map[string]interface{}{}, nil
 			}, activity.RegisterOptions{Name: name})
 		case "SaveMessage":
 			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
@@ -135,6 +145,7 @@ func (e *canSpawnEnv) callLLM(input types.ActivityInput) (map[string]interface{}
 	n := e.llmCalls[thread]
 	e.llmIterations[thread] = append(e.llmIterations[thread], input.Runtime.LoopIteration)
 	e.llmGrants[thread] = append(e.llmGrants[thread], input.Runtime.ToolGrants)
+	e.llmPins[thread] = append(e.llmPins[thread], input.Runtime.CatalogPin)
 	var resp scriptedToolCallsResponse
 	if script := e.scripts[thread]; len(script) > 0 {
 		resp = script[0]
@@ -572,5 +583,38 @@ func TestContinueAsNew_MultiSpawnChatPastLoweredThresholdHandsOff(t *testing.T) 
 			"%s resumes at the iteration it parked at", tc)
 		require.Equal(t, 1, e2.enqueuedFor(tc), "the parent receives exactly one completion for %s", tc)
 		require.Contains(t, e2.toolStatusesFor(tc), "completed", "%s ends completed, not stranded at backgrounded", tc)
+	}
+}
+
+// Every call_llm turn of a pinned run, the root's and a spawned sub-agent's,
+// carries the run's catalog pin: the spawn tool describes the presets from
+// it, the same catalog the spawn then loads its preset from.
+func TestCallLLMTurnsCarryTheRunsCatalogPin(t *testing.T) {
+	t.Parallel()
+	const chatID = "chat-llm-catalog-pin"
+	child := canChildThread("tc-spawn")
+	parent := "thread-" + chatID
+
+	var suite temporaltest.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	e := newCANSpawnEnv(t, env)
+	e.loadPin = "pin-v1"
+	e.scripts[parent] = []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc-spawn", "research")}},
+	}
+	e.scripts[child] = repeatTurns("c", 1)
+
+	env.ExecuteWorkflow(DynamicWorkflow, spawnE2EWorkflowInput(chatID))
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	require.NotEmpty(t, e.llmPins[parent])
+	require.NotEmpty(t, e.llmPins[child], "the spawned sub-agent takes a turn")
+	for thread, pins := range map[string][]string{"root": e.llmPins[parent], "sub-agent": e.llmPins[child]} {
+		for _, pin := range pins {
+			assert.Equal(t, "pin-v1", pin, "%s turn carries the run's pin", thread)
+		}
 	}
 }

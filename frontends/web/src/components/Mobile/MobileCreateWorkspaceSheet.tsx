@@ -100,10 +100,13 @@ function StaticRow({ label, value }: { label: string; value: string }) {
 
 export function MobileCreateWorkspaceSheet({
   projectId,
+  daemonId,
   onClose,
   onCreated,
 }: {
   projectId: string;
+  /** The machine to create it on ("Runs on"); unset lets the server place it. */
+  daemonId?: string;
   onClose: () => void;
   onCreated: (worktree: Worktree) => void;
 }) {
@@ -157,6 +160,7 @@ export function MobileCreateWorkspaceSheet({
         copy_files: [...DEFAULT_COPY_PATHS],
         status: WorktreeStatus.ACTIVE,
         force: false,
+        daemon_id: daemonId,
       });
       onCreated(worktree);
     } catch (err) {

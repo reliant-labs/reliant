@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (26 tools)
+- [Workflow Management](#workflow-management) (27 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (69 tools)
+- [Other Tools](#other-tools) (72 tools)
 
 ---
 
@@ -1338,6 +1338,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`create_trigger_activation`](#create_trigger_activation) | workflow | Manage a declared workflow trigger activation (create_trigger_activation). Uses the app's validat... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
+| [`draft_automation`](#draft_automation) | workflow, readonly | Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull... |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
 | [`enable_trigger`](#enable_trigger) | workflow | Manage a declared workflow trigger activation (enable_trigger). Uses the app's validation. Intera... |
@@ -1436,6 +1437,18 @@ Permanently removes the scenario from the workflow.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### draft_automation
+
+**Tags:** `workflow`, `readonly`
+
+Draft an automation for the user to review: a schedule, webhook, integration event (a GitHub pull request, a Slack message, an email) or workflow outcome that starts a run by itself.
+
+Use it when the user asks for something to happen on its own — "every weekday at 9, summarise failed CI", "when a PR is opened, review it", "when my deploy workflow fails, open an issue". Fill in when it runs and the prompt each run starts from; leave the workflow empty to use their default agent unless one clearly fits (list_workflows).
+
+It creates NOTHING. The user sees the draft as a card with "Review & create", which opens the automation dialog prefilled: there they choose the project, the machine it runs on and the account it writes as, and press Create. Never tell the user the automation is running or turned on; say it is drafted and ready for them to review. This tool never turns it on. Separate activation tools require interactive owner approval; a draft is not that approval.
 
 ---
 
@@ -1702,7 +1715,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
-Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).
+Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; every firing is refused and recorded as failed until the workflow is fixed, and pause_trigger turns it off). A DEGRADED detail that ends "N later run(s) succeeded" is a past failure the trigger has recovered from.
 
 ---
 
@@ -2118,6 +2131,7 @@ _Miscellaneous tools and utilities._
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
+| [`github__check_run_list`](#github__check_run_list) | integration | List the check runs on a commit, newest first, with name, status, conclusion, the App that wrote ... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
 | [`github__issue_comment_list`](#github__issue_comment_list) | integration | List the comments on an issue, or on a pull request's conversation tab (pass the PR number as iss... |
@@ -2149,9 +2163,11 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
+| [`manage_machine`](#manage_machine) | - | Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings ->... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
 | [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
@@ -2354,7 +2370,7 @@ NOTES:
 
 Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
 
@@ -2365,6 +2381,14 @@ Only runs the user owns can be inspected. To check on a sub-agent you spawned, u
 **Tags:** `integration`
 
 Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protected (branch protection or a ruleset). A branch that does not exist answers exists false, not an error. Publishing steps read this before pushing, to refuse a protected branch.
+
+---
+
+### github__check_run_list
+
+**Tags:** `integration`
+
+List the check runs on a commit, newest first, with name, status, conclusion, the App that wrote each run (app_slug and app_id), and output.title. Filter by check_name (exact) and app_id. Only the latest run of each name is listed unless filter is all. Use it to find a run to update, or to read whether a commit already passed a required check: a ruleset counts only the named App's run, so match app_id (or app_slug) too. Follows GitHub's pagination up to 1000 runs.
 
 ---
 
@@ -2484,7 +2508,7 @@ Return one pull request: title, body, state, draft and merged flags, the head an
 
 **Tags:** `integration`
 
-List the files a pull request changes: filename, status (added, modified, removed, renamed, ...), line counts and the unified diff hunk (patch). patch is null for binary files and very large diffs. Follows GitHub's pagination up to 1000 files; GitHub itself caps the list at 3000.
+List the files a pull request changes: filename, status (added, modified, removed, renamed, ...), line counts and the unified diff hunk (patch). patch is null for binary files and very large diffs. Follows GitHub's pagination up to 1000 files; GitHub itself caps the list at 3000. For a large pull request, list it with include_patch false (names and line counts only), then fetch diffs a directory at a time with path_prefix.
 
 ---
 
@@ -2540,7 +2564,7 @@ Return one repository: full name, description, visibility, default branch, prima
 
 **Tags:** `integration`
 
-Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). Omit path for the repository root and ref for the default branch. Results longer than about 30,000 characters are cut short.
+Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). A path that does not exist at ref answers type missing, not an error: a file a pull request deletes exists only at its base, one it adds only at its head. Omit path for the repository root and ref for the default branch. A text file is served one window of lines at a time: the result gives start_line, end_line and total_lines, and when more follows, next names the exact call that continues. A file that fits arrives whole; a larger one arrives as its first ~24,000 characters of whole lines. To read around a diff hunk "@@ -a,b +c,d @@", pass start_line c-40 and line_count d+80.
 
 ---
 
@@ -2616,6 +2640,14 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_machines
+
+**Tags:** `readonly`
+
+List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected), state and size. The machine this run executes on is marked. Use the id with manage_machine to start, stop or resize one.
+
+---
+
 ### list_pending_questions
 
 **Tags:** `readonly`
@@ -2657,6 +2689,18 @@ Use this when you need a tool that isn't currently loaded. You can:
 - Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.
+
+---
+
+### manage_machine
+
+Start, stop or resize one of the user's own machines (from list_machines), exactly as Settings -> Machines does.
+
+- start: wake a suspended machine. Compute is billed while it runs, so an interactive call raises an approval card and runs only once the user approves it.
+- stop: suspend a running machine. No card. Never the machine this run executes on.
+- resize: change a SUSPENDED machine's size (small, medium, large, xl, 2xl); it takes effect when it next starts. Needs an approval card. To resize a running machine: stop, resize, then start.
+
+Unattended runs may only start the machine their trigger activation targets.
 
 ---
 
@@ -2863,6 +2907,13 @@ If the target has finished (completed, or stopped by the user), this FAILS
 rather than silently doing nothing — use spawn(agent_id=...) to resume it
 instead.
 
+SUBJECT AND MESSAGE:
+Every message needs a short one-line subject (at most 100 characters) as well
+as the message itself. The chat shows agent-to-agent messages collapsed to
+their subject, so make it say what the message is about ("Tests pass; PR
+ready for review", "Blocked: need the staging DB URL"); put the detail in
+message.
+
 ---
 
 ### spawn_status
@@ -3005,7 +3056,7 @@ WHEN NOT TO USE:
 HOW IT WORKS:
 It checks every couple of seconds and returns the moment the machine is connected. If the budget elapses first it returns normally, saying what state the machine is in; that is not an error, and calling again keeps waiting.
 
-If it reports that the machine was removed or failed to start, waiting will not help: tell the user what happened and stop.
+If it reports that the machine was removed, or that it failed to start and stayed failed, waiting will not help: tell the user what happened and stop.
 
 RETURNS EARLY WHEN A MESSAGE ARRIVES:
 If a message arrives for you while you wait — from the user, your parent, or a sub-agent — the wait ends early so you can read it. Nothing is lost; call wait_for_machine again if you still need the machine.

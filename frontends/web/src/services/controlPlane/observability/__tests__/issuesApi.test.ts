@@ -14,14 +14,36 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { ActivityActorKind, ActivityEventSchema } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import { IssuePlatform, IssueSchema, IssueStatus } from "@/gen/controlplane/controlplane/v1/issues_pb";
-import { GetIssueResponseSchema, IssueResolveKind, IssueSort, IssueStatusChange } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { GetIssueResponseSchema, IssueResolveKind, IssueSort, IssueStatusChange, ListIssueTimelineResponseSchema } from "@/gen/controlplane/services/issues/v1/issues_pb";
 
 import { listActivity, mapActivityEvent } from "../activityApi";
 import { msOf } from "../api";
 import { issuesErrorKind, releaseHealthErrorKind } from "../errors";
-import { countOf, getIssue, listIssues, mapIssue, mapIssueDetail, updateIssueStatus, wireStatusUpdate } from "../issuesApi";
+import {
+  addIssueComment,
+  assignIssue,
+  countOf,
+  getIssue,
+  linkIssueChat,
+  listIssues,
+  listIssueTimeline,
+  mapIssue,
+  mapIssueDetail,
+  updateIssueStatus,
+  wireStatusUpdate,
+} from "../issuesApi";
 
-const client = { listIssues: vi.fn(), getIssue: vi.fn(), listIssueEvents: vi.fn(), updateIssueStatus: vi.fn(), listActivity: vi.fn() };
+const client = {
+  listIssues: vi.fn(),
+  getIssue: vi.fn(),
+  listIssueEvents: vi.fn(),
+  updateIssueStatus: vi.fn(),
+  listActivity: vi.fn(),
+  listIssueTimeline: vi.fn(),
+  addIssueComment: vi.fn(),
+  assignIssue: vi.fn(),
+  linkIssueChat: vi.fn(),
+};
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
 
 const T = Date.UTC(2026, 9, 22, 12);
@@ -231,5 +253,84 @@ describe("activity", () => {
       targetId: "iss-1",
       verb: undefined,
     });
+  });
+});
+
+describe("assignee, incident and the discussion", () => {
+  it("maps the assignee, the incident key and the related count — and an unassigned issue as null", () => {
+    const assigned = mapIssue(
+      fromJson(IssueSchema, { ...ISSUE_JSON, assignee: { id: "user-ada", name: "ada@example.com" }, incidentKey: "sqlstate:53300", relatedCount: 3 })
+    );
+    expect(assigned).toMatchObject({ assignee: { id: "user-ada", name: "ada@example.com" }, incidentKey: "sqlstate:53300", relatedCount: 3 });
+    expect(mapIssue(fromJson(IssueSchema, ISSUE_JSON))).toMatchObject({ assignee: null, incidentKey: "", relatedCount: 0 });
+    expect(mapIssueDetail(fromJson(GetIssueResponseSchema, { issue: ISSUE_JSON, incidentIssueIds: ["iss-2"] })).incidentIssueIds).toEqual(["iss-2"]);
+  });
+
+  it("sends the assignee filter only when one is set", async () => {
+    client.listIssues.mockResolvedValue({ issues: [], nextPageToken: "" });
+    const base = { orgId: "org-1", envIds: [], window: { startMs: 0, endMs: T }, statuses: [], sort: "last" as const };
+    await listIssues({ ...base, assignee: "user-ada" });
+    await listIssues(base);
+    expect(client.listIssues.mock.calls[0][0].assignee).toBe("user-ada");
+    expect(client.listIssues.mock.calls[1][0].assignee).toBeUndefined();
+  });
+
+  it("maps every kind of timeline entry, keeps each entry's own issue, and drops one it cannot read", async () => {
+    client.listIssueTimeline.mockResolvedValue(
+      fromJson(ListIssueTimelineResponseSchema, {
+        issueId: "iss-target",
+        nextPageToken: "p2",
+        entries: [
+          { id: "e1", time: new Date(T).toISOString(), issueId: "iss-target", actor: { kind: "KIND_SYSTEM" }, status: { to: "ISSUE_STATUS_NEW" } },
+          {
+            id: "e2",
+            time: new Date(T + 1000).toISOString(),
+            issueId: "iss-old",
+            actor: { kind: "KIND_USER", id: "u1", name: "ada" },
+            comment: { comment: { id: "c1", issueId: "iss-old", author: { id: "u1", name: "ada" }, body: "hi", createdAt: new Date(T + 1000).toISOString(), updatedAt: new Date(T + 5000).toISOString() } },
+          },
+          { id: "e3", time: new Date(T + 2000).toISOString(), issueId: "iss-target", assignment: { to: { id: "u2", name: "grace" } } },
+          {
+            id: "e4",
+            time: new Date(T + 3000).toISOString(),
+            issueId: "iss-target",
+            chat: { link: { issueId: "iss-target", chatId: "chat-1", chatTitle: "Look into it", linkedBy: { id: "u1", name: "ada" }, linkedAt: new Date(T + 3000).toISOString() } },
+          },
+          { id: "e5", time: new Date(T + 4000).toISOString(), issueId: "iss-target" },
+        ],
+      })
+    );
+    const out = await listIssueTimeline({ issueId: "iss-old", pageSize: 100 });
+    expect(client.listIssueTimeline.mock.calls[0][0]).toEqual({ issueId: "iss-old", pageSize: 100, pageToken: "" });
+    expect(out.issueId).toBe("iss-target");
+    expect(out.nextPageToken).toBe("p2");
+    expect(out.entries.map((e) => [e.id, e.issueId, e.body.kind])).toEqual([
+      ["e1", "iss-target", "status"],
+      ["e2", "iss-old", "comment"],
+      ["e3", "iss-target", "assignment"],
+      ["e4", "iss-target", "chat"],
+    ]);
+    expect(out.entries[0].actor).toEqual({ kind: "system", id: "", name: "" });
+    expect(out.entries[1].body).toMatchObject({ comment: { body: "hi", createdMs: T + 1000, updatedMs: T + 5000, author: { id: "u1" } } });
+    expect(out.entries[3].body).toMatchObject({ link: { chatId: "chat-1", chatTitle: "Look into it", linkedAtMs: T + 3000 } });
+  });
+
+  it("adds a comment, assigns with the version echoed, and links a chat without a title", async () => {
+    client.addIssueComment.mockResolvedValue({ comment: { id: "c1", issueId: "iss-1", body: "hi" } });
+    expect(await addIssueComment({ issueId: "iss-1", body: "hi" })).toMatchObject({ id: "c1", body: "hi" });
+    expect(client.addIssueComment).toHaveBeenCalledWith({ issueId: "iss-1", body: "hi" }, undefined);
+
+    client.assignIssue.mockResolvedValue({ issue: create(IssueSchema, { id: "iss-1", version: 8 }) });
+    expect((await assignIssue({ issueId: "iss-1", assigneeUserId: "u1", expectedVersion: 7 })).version).toBe(8);
+    expect(client.assignIssue).toHaveBeenCalledWith({ issueId: "iss-1", assigneeUserId: "u1", expectedVersion: 7 }, undefined);
+
+    client.linkIssueChat.mockResolvedValue({ link: { issueId: "iss-1", chatId: "chat-1", chatTitle: "" }, created: true });
+    expect(await linkIssueChat({ issueId: "iss-1", chatId: "chat-1" })).toMatchObject({ created: true, link: { chatId: "chat-1", chatTitle: "" } });
+    expect(client.linkIssueChat).toHaveBeenCalledWith({ issueId: "iss-1", chatId: "chat-1", chatTitle: "" }, undefined);
+  });
+
+  it("reads Aborted from an assignment as a conflict, and a write on a merged issue as a refusal naming the target", () => {
+    expect(issuesErrorKind(new ConnectError("stale", Code.Aborted))).toBe("conflict");
+    expect(issuesErrorKind(new ConnectError("this issue was merged into iss-2; change that one", Code.FailedPrecondition))).toBe("not-set-up");
   });
 });

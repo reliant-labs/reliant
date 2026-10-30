@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -129,6 +130,23 @@ func runStateLabel(chat *db.Chat) string {
 		return "pending"
 	}
 	return chat.RootStatus.Label()
+}
+
+// runWaitLabel names what a live run is blocked on, from its chat's derived
+// activity (chats_with_activity), or "" when it is not blocked on anything
+// outside itself. The root state alone reads "running" for a run parked on a
+// usage limit for hours, which is not what an agent deciding whether to cancel
+// it needs to know.
+func runWaitLabel(activity int) string {
+	switch pb.ChatActivity(activity) {
+	case pb.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT:
+		return "waiting for usage limit"
+	case pb.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON:
+		return "waiting for machine"
+	case pb.ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT:
+		return "needs input"
+	}
+	return ""
 }
 
 func formatRunTime(t time.Time) string {

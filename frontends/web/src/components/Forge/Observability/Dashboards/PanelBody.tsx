@@ -26,13 +26,14 @@
 
 import type React from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, Info, RefreshCw } from "lucide-react";
 
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { isInFlightLimit, obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import { ObsWillLoad } from "../ObsStates";
 import type { Panel, PanelResult, Series, Unit } from "@/services/controlPlane/observability/types";
@@ -43,7 +44,6 @@ import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
 import { sessionTitle } from "../Sessions/sessionModel";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 /** The way out of a panel into the explorers: what a series or row is, as a filter. */
 export interface DrillTarget {
@@ -71,6 +71,34 @@ export interface PanelQuery {
   data: PanelResult | undefined;
   isLoading: boolean;
   error: unknown;
+  /** The failures of the current fetch so far: above zero while it waits to retry. */
+  failureCount?: number;
+  /** The failure being retried. */
+  failureReason?: unknown;
+  isFetching?: boolean;
+  /** Reads this panel again, and only this panel. Given, every failure offers it. */
+  refetch?: () => unknown;
+}
+
+/** The server refused the read for its concurrent-read cap and the panel is waiting its turn to ask again. */
+function waitingForCapacity(query: PanelQuery): boolean {
+  return query.isLoading && !query.error && (query.failureCount ?? 0) > 0 && isInFlightLimit(query.failureReason);
+}
+
+function RetryButton({ query }: { query: PanelQuery }) {
+  if (!query.refetch) return null;
+  return (
+    <button
+      type="button"
+      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => void query.refetch?.()}
+      disabled={query.isFetching}
+      data-testid="obs-panel-retry"
+    >
+      <RefreshCw className="h-3 w-3" aria-hidden="true" />
+      Retry
+    </button>
+  );
 }
 
 export interface PanelBodyProps {
@@ -97,6 +125,15 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       </PanelNote>
     );
   }
+  if (waitingForCapacity(query)) {
+    if (compact) return <p className="text-xs text-ink-muted" title="Queued…">…</p>;
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-panel-waiting">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        Queued…
+      </p>
+    );
+  }
   if (query.isLoading) {
     return <div className={cn("animate-pulse rounded bg-ink/5 motion-reduce:animate-none", compact ? "h-7" : "h-16")} aria-busy="true" aria-label="Loading" />;
   }
@@ -111,9 +148,10 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       );
     }
     return (
-      <p className="text-xs text-danger-ink" role="alert" data-testid="obs-panel-error">
-        This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}
-      </p>
+      <div role="alert" data-testid="obs-panel-error">
+        <p className="text-xs text-danger-ink">This panel couldn&apos;t be loaded. {obsErrorMessage(query.error)}</p>
+        <RetryButton query={query} />
+      </div>
     );
   }
   const data = query.data;
@@ -376,6 +414,8 @@ function LineChart({
         label={panel.title}
         compact={compact}
         bands={bands}
+        window={data.window && { startSec: data.window.startMs / 1000, endSec: data.window.endMs / 1000 }}
+        calendar={data.bucketTimezone === "UTC" ? { timezone: "UTC", bucketSeconds: data.bucketSeconds } : undefined}
         // The drill-down legend below names the series; uPlot's would repeat them.
         legend={!compact && !onDrill}
       />
@@ -452,6 +492,8 @@ function NumberFigures({
 }
 
 /** One row per group, one column per series. A latency column is milliseconds whatever the panel's unit. */
+type PanelTableRow = { row: PanelResult["rows"][number]; index: number };
+
 function PanelTable({
   panel,
   result,
@@ -473,65 +515,42 @@ function PanelTable({
     return panel.unit ?? "";
   };
   const rows = compact ? result.rows.slice(0, 3) : result.rows;
+  const columns: DataTableColumn<PanelTableRow>[] = [
+    ...groupFields.map(
+      (field, fieldIndex): DataTableColumn<PanelTableRow> => ({
+        key: `group:${field}`,
+        header: attributeLabel(field),
+        className: "max-w-[24rem] truncate",
+        render: (_, { row }) => <span className={cn("text-xs", fieldIndex > 0 && "text-ink-muted")}>{row.group[field] || "—"}</span>,
+      })
+    ),
+    ...result.columns.map(
+      (label, index): DataTableColumn<PanelTableRow> => ({
+        key: `value:${index}`,
+        header: label,
+        numeric: true,
+        render: (_, { row }) => <span className="text-xs">{formatValue(row.values[index], columnUnit(index))}</span>,
+      })
+    ),
+  ];
   return (
-    <div className={cn(!compact && "max-h-80 overflow-auto")}>
-      <StackedTable className="w-full text-xs" data-testid="obs-panel-table">
-        <caption className="sr-only">{panel.title}</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-ink-muted">
-            {groupFields.map((field) => (
-              <th key={field} scope="col" className="h-8 pr-3 font-medium" title={field}>
-                {attributeLabel(field)}
-              </th>
-            ))}
-            {result.columns.map((label) => (
-              <th key={label} scope="col" className="h-8 pr-3 text-right font-medium">
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr
-              key={rowIndex}
-              className={cn("border-b border-border/70 last:border-b-0", onDrill && "cursor-pointer hover:bg-ink/5")}
-              tabIndex={onDrill ? 0 : undefined}
-              onKeyDown={
-                onDrill
-                  ? (event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      onDrill({ panel: panel.title, label: groupLabel(row.group, groupFields), group: row.group, signal: panel.signal }, pointOf(event));
-                    }
-                  : undefined
-              }
-              onClick={
-                onDrill
-                  ? (event) => onDrill({ panel: panel.title, label: groupLabel(row.group, groupFields), group: row.group, signal: panel.signal }, pointOf(event))
-                  : undefined
-              }
-            >
-              {groupFields.map((field, fieldIndex) =>
-                fieldIndex === 0 ? (
-                  <th key={field} scope="row" className="h-8 max-w-[24rem] truncate pr-3 text-left font-normal text-ink">
-                    {row.group[field] || "—"}
-                  </th>
-                ) : (
-                  <td key={field} className="h-8 max-w-[24rem] truncate pr-3 text-ink-muted">
-                    {row.group[field] || "—"}
-                  </td>
-                )
-              )}
-              {row.values.map((value, index) => (
-                <td key={index} className="h-8 pr-3 text-right tabular-nums text-ink">
-                  {formatValue(value, columnUnit(index))}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
+    <div className={cn(!compact && "max-h-80 overflow-auto")} data-testid="obs-panel-table">
+      <DataTable<PanelTableRow>
+        flush
+        stacked
+        compact
+        ariaLabel={panel.title}
+        columns={columns}
+        data={rows.map((row, index) => ({ row, index }))}
+        getRowKey={({ index }) => index}
+        getRowAction={
+          onDrill
+            ? ({ row }) =>
+                (event) =>
+                  onDrill({ panel: panel.title, label: groupLabel(row.group, groupFields), group: row.group, signal: panel.signal }, pointOf(event))
+            : undefined
+        }
+      />
     </div>
   );
 }
@@ -606,155 +625,155 @@ function FunnelSteps({ data, compact }: { data: PanelResult; compact: boolean })
 }
 
 /** Issues: one row per distinct stack — what, where, how often, since when, and a sample trace. */
+type PanelIssueRow = { issue: PanelResult["issues"][number] };
+
 function IssuesList({ data, traceHref, compact }: { data: PanelResult; traceHref?: (traceId: string) => string; compact: boolean }) {
   const issues = compact ? data.issues.slice(0, 3) : data.issues;
+  const columns: DataTableColumn<PanelIssueRow>[] = [
+    {
+      key: "issue",
+      header: "Issue",
+      className: "w-full max-w-0",
+      render: (_, { issue }) => (
+        <span className="block text-xs">
+          <span className="block truncate">
+            <span className="font-medium">{issue.exceptionType || "Error"}</span>
+            {issue.message && <span className="text-ink-muted">: {issue.message}</span>}
+          </span>
+          {!compact && (issue.urlPath || issue.serviceVersion) && (
+            <span className="block truncate text-ink-muted">
+              {issue.urlPath && <span className="font-mono">{issue.urlPath}</span>}
+              {issue.urlPath && issue.serviceVersion && " · "}
+              {issue.serviceVersion && <span>build {issue.serviceVersion}</span>}
+            </span>
+          )}
+        </span>
+      ),
+    },
+    ...(compact
+      ? []
+      : [{ key: "service", header: "Service", render: (_: unknown, { issue }: PanelIssueRow) => <span className="text-xs text-ink-muted">{issue.serviceName}</span> }]),
+    { key: "events", header: "Events", numeric: true, render: (_, { issue }) => <span className="text-xs">{formatCount(issue.events)}</span> },
+    ...(compact
+      ? []
+      : ([
+          { key: "sessions", header: "Sessions", numeric: true, render: (_, { issue }) => <span className="text-xs">{formatCount(issue.sessions)}</span> },
+          {
+            key: "lastSeen",
+            header: "Last seen",
+            render: (_, { issue }) => (
+              <time className="text-xs text-ink-muted" dateTime={new Date(issue.lastSeenMs).toISOString()} title={new Date(issue.lastSeenMs).toLocaleString()}>
+                {formatAgo(issue.lastSeenMs)}
+              </time>
+            ),
+          },
+          {
+            key: "sample",
+            header: "Sample",
+            srHeader: true,
+            interactive: true,
+            className: "text-right",
+            render: (_, { issue }) =>
+              issue.sampleTraceId && traceHref ? (
+                <Link href={traceHref(issue.sampleTraceId)} className="no-color text-xs text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink">
+                  Open trace
+                </Link>
+              ) : null,
+          },
+        ] satisfies DataTableColumn<PanelIssueRow>[])),
+  ];
   return (
-    <div className={cn(!compact && "max-h-96 overflow-auto")}>
-      <StackedTable className="w-full text-xs" data-testid="obs-panel-issues">
-        <thead>
-          <tr className="border-b border-border text-left text-ink-muted">
-            <th scope="col" className="h-8 pr-3 font-medium">
-              Issue
-            </th>
-            {!compact && (
-              <th scope="col" className="h-8 pr-3 font-medium">
-                Service
-              </th>
-            )}
-            <th scope="col" className="h-8 pr-3 text-right font-medium">
-              Events
-            </th>
-            {!compact && (
-              <>
-                <th scope="col" className="h-8 pr-3 text-right font-medium">
-                  Sessions
-                </th>
-                <th scope="col" className="h-8 pr-3 font-medium">
-                  Last seen
-                </th>
-                <th scope="col" className="h-8 font-medium">
-                  <span className="sr-only">Sample</span>
-                </th>
-              </>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((issue) => (
-            <tr key={`${issue.serviceName}-${issue.stackHash}`} className="border-b border-border/70 align-top last:border-b-0" data-stack={issue.stackHash}>
-              <td className="max-w-0 py-2 pr-3">
-                <div className="truncate text-ink">
-                  <span className="font-medium">{issue.exceptionType || "Error"}</span>
-                  {issue.message && <span className="text-ink-muted">: {issue.message}</span>}
-                </div>
-                {!compact && (issue.urlPath || issue.serviceVersion) && (
-                  <div className="truncate text-ink-muted">
-                    {issue.urlPath && <span className="font-mono">{issue.urlPath}</span>}
-                    {issue.urlPath && issue.serviceVersion && " · "}
-                    {issue.serviceVersion && <span>build {issue.serviceVersion}</span>}
-                  </div>
-                )}
-              </td>
-              {!compact && <td className="py-2 pr-3 text-ink-muted">{issue.serviceName}</td>}
-              <td className="py-2 pr-3 text-right tabular-nums text-ink">{formatCount(issue.events)}</td>
-              {!compact && (
-                <>
-                  <td className="py-2 pr-3 text-right tabular-nums text-ink">{formatCount(issue.sessions)}</td>
-                  <td className="whitespace-nowrap py-2 pr-3 text-ink-muted">
-                    <time dateTime={new Date(issue.lastSeenMs).toISOString()} title={new Date(issue.lastSeenMs).toLocaleString()}>
-                      {formatAgo(issue.lastSeenMs)}
-                    </time>
-                  </td>
-                  <td className="whitespace-nowrap py-2 text-right">
-                    {issue.sampleTraceId && traceHref ? (
-                      <Link href={traceHref(issue.sampleTraceId)} className="no-color text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink">
-                        Open trace
-                      </Link>
-                    ) : null}
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
+    <div className={cn(!compact && "max-h-96 overflow-auto")} data-testid="obs-panel-issues">
+      <DataTable<PanelIssueRow>
+        flush
+        stacked
+        compact
+        ariaLabel="Issues"
+        columns={columns}
+        data={issues.map((issue) => ({ issue }))}
+        getRowKey={({ issue }) => `${issue.serviceName}-${issue.stackHash}`}
+        getRowProps={({ issue }) => ({ className: "align-top", "data-stack": issue.stackHash })}
+      />
     </div>
   );
 }
 
 /** Sessions: who, where they came in, how long, what they did, and whether it went wrong. */
+type PanelSessionRow = { session: PanelResult["sessions"][number] };
+
 function SessionsList({ data, sessionHref, compact }: { data: PanelResult; sessionHref?: (sessionId: string) => string; compact: boolean }) {
   const sessions = compact ? data.sessions.slice(0, 3) : data.sessions;
   const now = Date.now();
+  const columns: DataTableColumn<PanelSessionRow>[] = [
+    {
+      key: "session",
+      header: "Session",
+      interactive: true,
+      render: (_, { session }) => (
+        <span className="inline-flex items-center gap-1.5 text-xs">
+          {sessionHref ? (
+            <Link
+              href={sessionHref(session.sessionId)}
+              className="no-color text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
+              title={session.hasReplay ? "Open this session and watch its replay" : "Open this session's timeline"}
+              data-testid={`obs-panel-session-${session.sessionId}`}
+            >
+              {sessionTitle(session.serviceName, session.startMs, { now })}
+            </Link>
+          ) : (
+            <span>{sessionTitle(session.serviceName, session.startMs, { now })}</span>
+          )}
+          {!compact && <Mono value={session.sessionId} length={8} />}
+          {session.hasReplay && !compact && <Tag title="This session's replay was recorded">replay</Tag>}
+        </span>
+      ),
+    },
+    ...(compact
+      ? []
+      : ([
+          {
+            key: "user",
+            header: "User",
+            className: "max-w-[10rem] truncate",
+            render: (_, { session }) => <span className="text-xs">{session.userId || <span className="text-ink-muted">anonymous</span>}</span>,
+          },
+          {
+            key: "entry",
+            header: "Entry",
+            className: "max-w-[14rem] truncate",
+            render: (_, { session }) => <span className="font-mono text-xs text-ink-muted">{session.entryPath || "/"}</span>,
+          },
+          {
+            key: "duration",
+            header: "Duration",
+            numeric: true,
+            render: (_, { session }) => <span className="text-xs">{formatDuration(Math.max(0, session.endMs - session.startMs))}</span>,
+          },
+          { key: "pages", header: "Pages", numeric: true, render: (_, { session }) => <span className="text-xs">{formatCount(session.pageViews)}</span> },
+        ] satisfies DataTableColumn<PanelSessionRow>[])),
+    {
+      key: "errors",
+      header: "Errors",
+      render: (_, { session }) =>
+        session.errors > 0 ? (
+          <Status tone="danger" label={`${formatCount(session.errors)} error${session.errors === 1 ? "" : "s"}`} />
+        ) : (
+          <Status tone="neutral" label="none" />
+        ),
+    },
+  ];
   return (
-    <div className={cn(!compact && "max-h-96 overflow-auto")}>
-      <StackedTable className="w-full text-xs" data-testid="obs-panel-sessions">
-        <thead>
-          <tr className="border-b border-border text-left text-ink-muted">
-            <th scope="col" className="h-8 pr-3 font-medium">
-              Session
-            </th>
-            {!compact && (
-              <>
-                <th scope="col" className="h-8 pr-3 font-medium">
-                  User
-                </th>
-                <th scope="col" className="h-8 pr-3 font-medium">
-                  Entry
-                </th>
-                <th scope="col" className="h-8 pr-3 text-right font-medium">
-                  Duration
-                </th>
-                <th scope="col" className="h-8 pr-3 text-right font-medium">
-                  Pages
-                </th>
-              </>
-            )}
-            <th scope="col" className="h-8 pr-3 font-medium">
-              Errors
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sessions.map((session) => (
-            <tr key={session.sessionId} className="border-b border-border/70 last:border-b-0" data-session={session.sessionId}>
-              <td className="h-9 pr-3">
-                <span className="inline-flex items-center gap-1.5">
-                  {sessionHref ? (
-                    <Link
-                      href={sessionHref(session.sessionId)}
-                      className="no-color text-ink underline decoration-ink-muted/50 underline-offset-2 hover:decoration-ink"
-                      title={session.hasReplay ? "Open this session and watch its replay" : "Open this session's timeline"}
-                      data-testid={`obs-panel-session-${session.sessionId}`}
-                    >
-                      {sessionTitle(session.serviceName, session.startMs, { now })}
-                    </Link>
-                  ) : (
-                    <span className="text-ink">{sessionTitle(session.serviceName, session.startMs, { now })}</span>
-                  )}
-                  {!compact && <Mono value={session.sessionId} length={8} />}
-                  {session.hasReplay && !compact && <Tag title="This session's replay was recorded">replay</Tag>}
-                </span>
-              </td>
-              {!compact && (
-                <>
-                  <td className="h-9 max-w-[10rem] truncate pr-3 text-ink">{session.userId || <span className="text-ink-muted">anonymous</span>}</td>
-                  <td className="h-9 max-w-[14rem] truncate pr-3 font-mono text-ink-muted">{session.entryPath || "/"}</td>
-                  <td className="h-9 pr-3 text-right tabular-nums text-ink">{formatDuration(Math.max(0, session.endMs - session.startMs))}</td>
-                  <td className="h-9 pr-3 text-right tabular-nums text-ink">{formatCount(session.pageViews)}</td>
-                </>
-              )}
-              <td className="h-9 pr-3">
-                {session.errors > 0 ? (
-                  <Status tone="danger" label={`${formatCount(session.errors)} error${session.errors === 1 ? "" : "s"}`} />
-                ) : (
-                  <Status tone="neutral" label="none" />
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
+    <div className={cn(!compact && "max-h-96 overflow-auto")} data-testid="obs-panel-sessions">
+      <DataTable<PanelSessionRow>
+        flush
+        stacked
+        compact
+        ariaLabel="Sessions"
+        columns={columns}
+        data={sessions.map((session) => ({ session }))}
+        getRowKey={({ session }) => session.sessionId}
+        getRowProps={({ session }) => ({ "data-session": session.sessionId })}
+      />
     </div>
   );
 }

@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -291,6 +293,20 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 	return item, nil
 }
 
+// storedWorkflowParseWarn admits one "Failed to parse stored project
+// workflow" line per file version per hour. Every ListWorkflows re-parses the
+// project's synced files, so a project carrying files this server cannot
+// parse (22 legacy files in one project, on 2026-10-28) logged each of them
+// on every list, while the same finding was already in every response.
+var storedWorkflowParseWarn = logging.NewThrottle(time.Hour, time.Now)
+
+// storedWorkflowParseKey keys the throttle by the file's content as well as
+// its path, so an edit that leaves it broken in a new way logs again.
+func storedWorkflowParseKey(projectID, path string, content []byte) string {
+	sum := sha256.Sum256(content)
+	return projectID + "\x00" + path + "\x00" + hex.EncodeToString(sum[:8])
+}
+
 // discoverProjectWorkflowsFromDB loads project workflows from the stored config record (synced by daemon).
 // Returns both valid workflows and invalid workflows that failed to parse.
 func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx context.Context, projectID string) ([]*reliantv1.WorkflowListItem, []*reliantv1.InvalidWorkflow) {
@@ -323,7 +339,12 @@ func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx contex
 		}
 		protoWf, err := parseWorkflowYAML(entry.Content)
 		if err != nil {
-			logging.WarnContext(ctx, "Failed to parse stored project workflow", "error", err, "path", entry.Location())
+			// The finding goes back to the caller as an invalid workflow on
+			// every list; the log says it once per version of the file.
+			if suppressed, ok := storedWorkflowParseWarn.Allow(storedWorkflowParseKey(projectID, entry.Location(), entry.Content)); ok {
+				logging.WarnContext(ctx, "Failed to parse stored project workflow", "error", err, "path", entry.Location(),
+					"project_id", projectID, "suppressed_since_last", suppressed)
+			}
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
 				Name:   entry.Address,
 				Source: "project",

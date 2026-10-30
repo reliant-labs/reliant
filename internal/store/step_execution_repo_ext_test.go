@@ -490,3 +490,51 @@ func TestUserFacingStepIndexPredicateMatchesInternalActivities(t *testing.T) {
 	}
 	requireSame(t, "index predicate", split(m[1]), want)
 }
+
+// A save_message NODE is a run node (only "<node>-save" companions are not),
+// and its text is projected; MarkDeclaredFailureNode marks the newest attempt
+// of the top-level node once, never a row that already has an error, and
+// reports false for a node with no attempt.
+func TestRunDiagnosticsSaveMessageNodeAndDeclaredFailure(t *testing.T) {
+	env := storetest.New(t)
+	seedSteps(t, env)
+	ctx := context.Background()
+	for i, id := range []string{"stopped-1", "stopped-2"} {
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO step_executions(id,workflow_id,step_id,activity_name,output_json,success,created_at)
+VALUES($1,'wf-s1','stopped','SaveMessage',$2,1,now() + $3 * interval '1 second')`, id, `{"message":{"text":"why `+id+`"},"message_id":"m"}`, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	marked, err := store.MarkDeclaredFailureNode(ctx, env.ORM, "wf-s1", "stopped")
+	if err != nil || !marked {
+		t.Fatalf("mark: %v %v", marked, err)
+	}
+	if again, err := store.MarkDeclaredFailureNode(ctx, env.ORM, "wf-s1", "stopped"); err != nil || again {
+		t.Fatalf("re-mark must be a no-op: %v %v", again, err)
+	}
+	if none, err := store.MarkDeclaredFailureNode(ctx, env.ORM, "wf-s1", "verdict"); err != nil || none {
+		t.Fatalf("no attempt: %v %v", none, err)
+	}
+	rows, err := store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]*core.StepExecution{}
+	for _, row := range rows {
+		byID[row.ID] = row
+		if strings.HasSuffix(row.StepID, "-save") {
+			t.Fatalf("companion row listed: %+v", row)
+		}
+	}
+	newest, older := byID["stopped-2"], byID["stopped-1"]
+	if newest == nil || older == nil {
+		t.Fatalf("save_message node rows missing: %v", rows)
+	}
+	if newest.Success.Bool || newest.ErrorMessage.String != store.DeclaredFailureError || !strings.Contains(newest.OutputJSON.String, "why stopped-2") {
+		t.Fatalf("newest attempt: %+v", newest)
+	}
+	if !older.Success.Bool || older.ErrorMessage.Valid || strings.Contains(older.OutputJSON.String, "message_id") {
+		t.Fatalf("older attempt must be untouched and keep only the projection: %+v", older)
+	}
+}

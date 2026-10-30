@@ -14,7 +14,8 @@ import (
 
 // Deps holds dependencies for the package_commands service. The composition
 // graph constructs it (internal/app/compose.go); every rpc reaches a daemon
-// through the router, because command discovery runs on the user's machine.
+// through the router, because command discovery and every package-command
+// process run on the machine that holds the workspace.
 // The rpc methods on *Service are where this service's logic lives; see the
 // forge `api` / `services` skill.
 type Deps struct {
@@ -25,9 +26,6 @@ type Deps struct {
 	Router Router
 	// Repo resolves worktrees and stores command favorites.
 	Repo Repository
-	// Processes runs package commands and tracks their processes, on this
-	// server (see RunCommand).
-	Processes Processes
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -44,9 +42,6 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("package_commands: Deps.Repo is required")
-	}
-	if d.Processes == nil {
-		return fmt.Errorf("package_commands: Deps.Processes is required")
 	}
 	return nil
 }

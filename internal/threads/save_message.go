@@ -97,6 +97,9 @@ type SaveMessageOpts struct {
 	// way: the model must see it as a user turn on every provider.
 	SenderThreadID string
 	SenderKind     reliantv1.AgentMessageKind
+	// SenderSubject is the sending agent's one-line subject (spawn_send's
+	// `subject`); empty when it gave none.
+	SenderSubject string
 
 	// Context window control
 	// When true, creates a new context window with incremented sequence.
@@ -274,6 +277,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		ProviderAccountID: ptr.StringIfNotEmpty(opts.ProviderAccountID),
 		SenderThreadID:    ptr.StringIfNotEmpty(opts.SenderThreadID),
 		SenderKind:        senderKindPtrIfNonZero(opts.SenderKind),
+		SenderSubject:     ptr.StringIfNotEmpty(opts.SenderSubject),
 		TokenCount:        ptr.IntIfPositive(opts.TokenCount),
 		Cost:              ptr.Float64IfPositive(opts.Cost),
 		WorkflowID:        opts.WorkflowID,
@@ -918,7 +922,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 		} else if t != nil {
 			title = t.Title
 		}
-		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind)
+		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind, opts.SenderSubject)
 	}
 
 	updateDataJSON, err := json.Marshal(updateData)

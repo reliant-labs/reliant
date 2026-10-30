@@ -965,10 +965,18 @@ function ChatMessageComponent({
             <div
               className={cn(
                 "group/usermsg relative flex flex-col items-start",
-                pinned ? "w-full" : "inline-flex max-w-[85%] sm:max-w-2xl"
+                // The smaller of 85% of the column and 42rem (max-w-2xl), as ONE
+                // max-width. `max-w-[85%] sm:max-w-2xl` replaced the 85% with a
+                // fixed 42rem from `sm` up, so a bubble in a narrow column (the
+                // file and terminal panels open) overflowed the transcript and
+                // scrolled the whole chat sideways.
+                pinned ? "w-full" : "inline-flex max-w-[min(85%,42rem)]"
               )}
             >
-              <div className={cn("relative", pinned && "w-full")}>
+              {/* max-w-full: a cross-axis item of an items-start column sizes
+                  to its content's min-content, which a long URL makes as wide
+                  as the URL; capped here, the text wraps inside the bubble. */}
+              <div className={cn("relative max-w-full", pinned && "w-full")}>
                 <div
                   ref={bubbleRef}
                   className={cn(

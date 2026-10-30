@@ -31,6 +31,7 @@ func isolateCLI(t *testing.T) string {
 	} {
 		t.Setenv(name, "")
 	}
+	presentDesktop(t)
 	path, err := cliauth.CredentialsPath()
 	if err != nil || !strings.HasPrefix(path, home) {
 		t.Fatalf("credentials path %q escaped temp HOME %q — aborting to protect the real file", path, home)

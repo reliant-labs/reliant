@@ -143,6 +143,10 @@ type EnsureKeyRequest struct {
 	EnvironmentId string                 `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
 	Frontend      string                 `protobuf:"bytes,2,opt,name=frontend,proto3" json:"frontend,omitempty"`
 	Origins       []string               `protobuf:"bytes,3,rep,name=origins,proto3" json:"origins,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -196,6 +200,13 @@ func (x *EnsureKeyRequest) GetOrigins() []string {
 		return x.Origins
 	}
 	return nil
+}
+
+func (x *EnsureKeyRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type EnsureKeyResponse struct {
@@ -256,8 +267,12 @@ type ListKeysRequest struct {
 	// Restrict to one environment. Empty lists every environment of the org.
 	EnvironmentId  *string `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3,oneof" json:"environment_id,omitempty"`
 	IncludeRevoked *bool   `protobuf:"varint,2,opt,name=include_revoked,json=includeRevoked,proto3,oneof" json:"include_revoked,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListKeysRequest) Reset() {
@@ -302,6 +317,13 @@ func (x *ListKeysRequest) GetIncludeRevoked() bool {
 		return *x.IncludeRevoked
 	}
 	return false
+}
+
+func (x *ListKeysRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListKeysResponse struct {
@@ -349,8 +371,12 @@ func (x *ListKeysResponse) GetKeys() []*BrowserIngestKey {
 }
 
 type RevokeKeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	KeyId string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -388,6 +414,13 @@ func (*RevokeKeyRequest) Descriptor() ([]byte, []int) {
 func (x *RevokeKeyRequest) GetKeyId() string {
 	if x != nil {
 		return x.KeyId
+	}
+	return ""
+}
+
+func (x *RevokeKeyRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -453,23 +486,29 @@ const file_services_browser_ingest_v1_browser_ingest_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x129\n" +
 	"\n" +
-	"revoked_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"o\n" +
+	"revoked_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\x96\x01\n" +
 	"\x10EnsureKeyRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
 	"\bfrontend\x18\x02 \x01(\tR\bfrontend\x12\x18\n" +
-	"\aorigins\x18\x03 \x03(\tR\aorigins\"b\n" +
+	"\aorigins\x18\x03 \x03(\tR\aorigins\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"b\n" +
 	"\x11EnsureKeyResponse\x123\n" +
 	"\x03key\x18\x01 \x01(\v2!.controlplane.v1.BrowserIngestKeyR\x03key\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\x92\x01\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xb9\x01\n" +
 	"\x0fListKeysRequest\x12*\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tH\x00R\renvironmentId\x88\x01\x01\x12,\n" +
-	"\x0finclude_revoked\x18\x02 \x01(\bH\x01R\x0eincludeRevoked\x88\x01\x01B\x11\n" +
+	"\x0finclude_revoked\x18\x02 \x01(\bH\x01R\x0eincludeRevoked\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\x11\n" +
 	"\x0f_environment_idB\x12\n" +
-	"\x10_include_revoked\"I\n" +
+	"\x10_include_revokedB\t\n" +
+	"\a_org_id\"I\n" +
 	"\x10ListKeysResponse\x125\n" +
-	"\x04keys\x18\x01 \x03(\v2!.controlplane.v1.BrowserIngestKeyR\x04keys\")\n" +
+	"\x04keys\x18\x01 \x03(\v2!.controlplane.v1.BrowserIngestKeyR\x04keys\"P\n" +
 	"\x10RevokeKeyRequest\x12\x15\n" +
-	"\x06key_id\x18\x01 \x01(\tR\x05keyId\"H\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"H\n" +
 	"\x11RevokeKeyResponse\x123\n" +
 	"\x03key\x18\x01 \x01(\v2!.controlplane.v1.BrowserIngestKeyR\x03key2\x8f\x02\n" +
 	"\x14BrowserIngestService\x12R\n" +
@@ -526,7 +565,9 @@ func file_services_browser_ingest_v1_browser_ingest_proto_init() {
 	if File_services_browser_ingest_v1_browser_ingest_proto != nil {
 		return
 	}
+	file_services_browser_ingest_v1_browser_ingest_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_browser_ingest_v1_browser_ingest_proto_msgTypes[3].OneofWrappers = []any{}
+	file_services_browser_ingest_v1_browser_ingest_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

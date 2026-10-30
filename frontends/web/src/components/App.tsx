@@ -2,7 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "../routes";
 import { queryClient } from "../lib/query-client";
-import { SentryErrorBoundary } from "./ErrorBoundary";
+import ErrorBoundary from "./ErrorBoundary";
 import { AuthInitializer } from "./AuthInitializer";
 import { useThemeInitialization } from "../hooks/useThemeInitialization";
 import { useSettingsHydration } from "../hooks/useSettingsHydration";
@@ -22,13 +22,13 @@ export function App() {
   return (
     <EventBusProvider>
       <QueryClientProvider client={queryClient}>
-        <SentryErrorBoundary>
+        <ErrorBoundary>
           <AuthContextProvider provider={authProvider}>
             <AuthInitializer>
               <RouterProvider router={router} />
             </AuthInitializer>
           </AuthContextProvider>
-        </SentryErrorBoundary>
+        </ErrorBoundary>
       </QueryClientProvider>
     </EventBusProvider>
   );

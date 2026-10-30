@@ -1,7 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { SettingsHeader } from "./SettingsHeader";
 import { SettingsViewerTab } from "./SettingsViewerTab";
 import { useSettingsClose } from "@/hooks/useSettingsClose";
 import {
@@ -43,12 +42,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.contentEditable === "true"
+        target.closest("input, textarea, select, [contenteditable='true']") ||
+        document.querySelector('[aria-modal="true"]')
       ) {
         return;
       }
@@ -62,7 +60,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-screen w-full flex-col bg-background">
-      <SettingsHeader onClose={onClose} />
       {search.notFound && (
         <div
           role="status"
@@ -84,7 +81,7 @@ export function SettingsPage() {
         </div>
       )}
       <div className="flex-1 overflow-hidden">
-        <SettingsViewerTab section={section} onSectionChange={onSectionChange} />
+        <SettingsViewerTab section={section} onSectionChange={onSectionChange} onClose={onClose} />
       </div>
     </div>
   );

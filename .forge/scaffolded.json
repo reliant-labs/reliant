@@ -32,6 +32,9 @@
     "deploy/kcl/dev/config.k": {
       "scaffolded_at": "2026-10-22T23:48:18Z"
     },
+    "deploy/observability/dashboards/reliant-overview.json": {
+      "scaffolded_at": "2026-10-29T15:27:48Z"
+    },
     "frontends/web/src/hooks/account-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-25T18:02:36Z"
     },
@@ -127,6 +130,9 @@
     },
     "frontends/web/src/hooks/trigger-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/usage-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-30T08:36:16Z"
     },
     "frontends/web/src/hooks/workflow-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:56Z"
@@ -366,6 +372,21 @@
     },
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go": {
       "scaffolded_at": "2026-10-13T13:00:02Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_delete_machine_pool_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:05Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_list_machine_pools_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_put_machine_pool_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_set_default_daemon_test.go": {
+      "scaffolded_at": "2026-10-29T17:39:34Z"
+    },
+    "internal/handlers/daemon_registry/handlers_scaffold_set_machine_labels_test.go": {
+      "scaffolded_at": "2026-10-30T17:25:04Z"
     },
     "internal/handlers/file_system/handlers_scaffold_copy_file_test.go": {
       "scaffolded_at": "2026-10-13T15:43:35Z"
@@ -1166,6 +1187,15 @@
     "internal/store/legacy_credential_copy_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
+    "internal/store/llm_call_usage_daily_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T02:07:48Z"
+    },
+    "internal/store/llm_call_usage_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T02:07:48Z"
+    },
+    "internal/store/machine_pool_repo_ext.go": {
+      "scaffolded_at": "2026-10-30T17:25:10Z"
+    },
     "internal/store/message_content_block_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:01Z"
     },
@@ -1323,6 +1353,10 @@
     "internal/handlers/connector/handlers_scaffold_list_available_tools_test.go",
     "internal/handlers/connector/handlers_scaffold_list_connectors_test.go",
     "internal/handlers/connector/handlers_scaffold_revoke_connector_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_delete_machine_pool_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_list_machine_pools_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_put_machine_pool_test.go",
+    "internal/handlers/daemon_registry/handlers_scaffold_set_machine_labels_test.go",
     "internal/handlers/file_system/handlers_scaffold_copy_file_test.go",
     "internal/handlers/file_system/handlers_scaffold_create_directory_test.go",
     "internal/handlers/file_system/handlers_scaffold_create_file_or_folder_test.go",

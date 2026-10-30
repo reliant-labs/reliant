@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/workspacecreate"
 )
 
@@ -66,11 +67,6 @@ func (s *Service) CreateWorktree(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
-	repos, err := s.listProjectRepos(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-
 	globalBase := ""
 	if req.Msg.BaseBranch != nil {
 		globalBase = *req.Msg.BaseBranch
@@ -105,7 +101,7 @@ func (s *Service) CreateWorktree(
 	// back to (a branch chat's worktree exists on disk only here). Fail fast
 	// if no daemon is reachable — creating a worktree row that points at a
 	// directory on no daemon is worse than a clear up-front error.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, req.Msg.DaemonId, "create")
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +111,13 @@ func (s *Service) CreateWorktree(
 	// has been recorded yet, so the client's retry creates the worktree, once,
 	// on a machine that is up.
 	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
+		return nil, err
+	}
+
+	// After placement: an empty registry is reconciled against the machine
+	// the checkouts are about to be made on.
+	repos, err := s.listProjectRepos(ctx, userID, project, func() (machinewake.Target, error) { return placement, nil })
+	if err != nil {
 		return nil, err
 	}
 

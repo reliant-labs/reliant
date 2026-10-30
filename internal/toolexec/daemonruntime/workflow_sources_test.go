@@ -67,3 +67,39 @@ func TestWorkflowSourcesNestedRepos(t *testing.T) {
 	remaining, _ := indexWorkflows(remainingSources)
 	require.Len(t, remaining, 1)
 }
+
+// Presets are discovered like workflows: the project root's .reliant/presets
+// and every nested repository's, each synced with its project-relative path,
+// so control-plane's presets need no hand-copied root duplicate.
+func TestIndexPresetsNestedRepos(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	repoSourcesMu.Lock()
+	repoSourcesCache[root] = repoSourcesEntry{sources: []string{"control-plane", "forge"}, expires: time.Now().Add(repoSourcesTTL)}
+	repoSourcesMu.Unlock()
+	t.Cleanup(func() { repoSourcesMu.Lock(); delete(repoSourcesCache, root); repoSourcesMu.Unlock() })
+	writeRepoFile(t, filepath.Join(root, ".reliant/presets"), "local.yaml", "params: {}\n")
+	writeRepoFile(t, filepath.Join(root, "control-plane/.reliant/presets"), "implementer.yaml", "params: {}\n")
+	writeRepoFile(t, filepath.Join(root, "control-plane/.reliant/presets"), "code_reviewer.yaml", "params: {}\n")
+	writeRepoFile(t, filepath.Join(root, "forge/.reliant/presets"), "implementer.yaml", "params: {}\n")
+
+	sources, err := readWorkflowSources(context.Background(), root)
+	require.NoError(t, err)
+	indexed, version := indexPresets(root, sources)
+	var paths []string
+	for _, p := range indexed {
+		paths = append(paths, p.Name+"@"+p.RelativePath)
+	}
+	require.Equal(t, []string{
+		"local@.reliant/presets/local.yaml",
+		"code_reviewer@control-plane/.reliant/presets/code_reviewer.yaml",
+		"implementer@control-plane/.reliant/presets/implementer.yaml",
+		"implementer@forge/.reliant/presets/implementer.yaml",
+	}, paths)
+	require.Contains(t, string(version), "forge/.reliant/presets/implementer.yaml:", "a nested preset's change changes the snapshot's version")
+
+	stored, err := config.ParseStoredPresets(flattenPresets(indexed))
+	require.NoError(t, err)
+	require.Equal(t, "control-plane/.reliant/presets/implementer.yaml", config.FindStoredPresetByName(stored, "implementer").RelativePath)
+	require.Equal(t, "forge/.reliant/presets/implementer.yaml", config.FindStoredPresetByName(stored, "forge/implementer").RelativePath)
+}

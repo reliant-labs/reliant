@@ -375,17 +375,17 @@ nodes:
     type: workflow
     ref: builtin://agent
     args:
-      # Fall back to workflow default if group model is empty
-      model: "{{inputs.Implementer.model != '' ? inputs.Implementer.model : inputs.model}}"
-      temperature: "{{inputs.Implementer.temperature}}"
+      # Fall back to workflow default if group model is empty. Temperature is
+      # a setting OF the model, not an arg of its own: pin it onto the model
+      # value with merge(), and a null model side merges as an empty map.
+      model: "{{merge(inputs.Implementer.model != '' ? inputs.Implementer.model : inputs.model, {'temperature': inputs.Implementer.temperature})}}"
       system_prompt: "{{inputs.Implementer.system_prompt}}"
 
   - id: review
     type: workflow
     ref: builtin://agent
     args:
-      model: "{{inputs.Reviewer.model != '' ? inputs.Reviewer.model : inputs.model}}"
-      temperature: "{{inputs.Reviewer.temperature}}"
+      model: "{{merge(inputs.Reviewer.model != '' ? inputs.Reviewer.model : inputs.model, {'temperature': inputs.Reviewer.temperature})}}"
       system_prompt: "{{inputs.Reviewer.system_prompt}}"
 
 edges:

@@ -110,7 +110,7 @@ function SessionBody({
   const [live] = useState(() => isLive(session));
   const now = Date.now();
 
-  const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined });
+  const openIssue = (issueId: string) => navigate({ ...LEAVE_SESSIONS, view: "errors", issue: issueId, istatus: undefined, platform: undefined, isort: undefined, assignee: undefined });
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
 
   return (
@@ -147,9 +147,11 @@ function SessionBody({
         </p>
       </header>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]">
-        <Card padding="md" data-testid="session-replay">
-          {session.hasReplay ? (
+      {/* No replay: the timeline is the page, at full width, and the missing
+          recording is one line, not a panel. */}
+      <div className={session.hasReplay ? "grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]" : "space-y-2"}>
+        {session.hasReplay ? (
+          <Card padding="md" data-testid="session-replay">
             <ReplayPlayer
               key={session.sessionId}
               scope={scope}
@@ -161,13 +163,13 @@ function SessionBody({
               onTime={setPlayhead}
               loadReplayer={loadReplayer}
             />
-          ) : (
-            <SessionNote icon={<VideoOff className="h-4 w-4" />} title="This session wasn't recorded" testId="session-no-replay">
-              Replay is recorded only where the environment opts in, and then for a sample of sessions. The timeline still shows what the user
-              did and what failed.
-            </SessionNote>
-          )}
-        </Card>
+          </Card>
+        ) : (
+          <p role="status" data-testid="session-no-replay" className="flex items-center gap-1.5 text-xs text-ink-muted">
+            <VideoOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            No replay was recorded for this session.
+          </p>
+        )}
         <Card padding="md" data-testid="session-timeline-card">
           <h4 className="mb-2 text-sm font-medium text-ink">Timeline</h4>
           {timeline.isLoading ? (

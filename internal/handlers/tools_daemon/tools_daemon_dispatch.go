@@ -17,6 +17,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
+// toolVerdictGrace is how long past a tool request's own timeout the gateway
+// keeps waiting for the daemon's answer.
+//
+// The daemon enforces that timeout itself and answers with the verdict — a
+// shell command it killed reports exit 124, timed out — after up to
+// ExecGraceDelay (3s) for the process group to exit and ExecWaitDelay (10s)
+// for its pipes to drain. A gateway that gave up at exactly the timeout won
+// that race every time and reported a transport failure instead: every one of
+// the 65 "refusing to re-execute shell command" retries in prod over 14 days
+// (2026-10-29) began as a 5m run step that ran, hit its timeout, and had its
+// verdict dropped here. It stays under the requester's own +30s
+// (toolRequestRoundTrip), so the requester hears this answer, not its own
+// timeout.
+const toolVerdictGrace = 20 * time.Second
+
 // defaultDaemonForUser returns the "best" connected daemon for a user.
 // It prefers local daemons over cloud daemons, then most recently connected.
 // Returns nil if no daemon is connected.
@@ -286,10 +301,17 @@ func (s *Service) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonI
 // correlation logic but targets the passed conn directly rather than resolving
 // the user's default daemon — required when a user has multiple daemons and the
 // caller needs to ask one particular connection about its own disk.
-func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (resp *reliantv1.DaemonCommandResponse, err error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
+	ctx, span := startDaemonCommandSpan(ctx, conn, req)
+	start := time.Now()
+	defer func() { endDaemonCommandSpan(span, resp, err, time.Since(start)) }()
+	// The daemon continues this span's trace (its log lines carry the
+	// trace_id). Set on the request the caller handed us; it is ours to
+	// stamp, like RequestId's correlation below.
+	req.TraceContext = traceContextOf(ctx)
 	// A connection assembled without its correlation map cannot carry a
 	// command: registering the waiter below would panic on a nil map write
 	// and take the whole server down. Refusing is correct and survivable —
@@ -321,6 +343,7 @@ func (s *Service) sendCommandToConn(ctx context.Context, conn *daemonConnection,
 	if err := s.sendToConn(conn, msg); err != nil {
 		return nil, fmt.Errorf("send daemon command: %w", err)
 	}
+	span.AddEvent("daemon.command.queued")
 
 	// Wait for the correlated response.
 	timeout := 30 * time.Second
@@ -358,10 +381,14 @@ func (s *Service) SendToolRequestSync(ctx context.Context, userID, daemonID stri
 // liveness the wait is bound to must all name the same connection — mixing
 // them is how an answer gets delivered to a connection nobody is listening on.
 // Mirrors sendCommandToConn.
-func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (resp *toolexec.ToolExecutionResponse, err error) {
 	if conn == nil {
 		return nil, fmt.Errorf("nil daemon connection")
 	}
+	// Opened before the request is built: its context is the trace_context
+	// the daemon continues.
+	ctx, span := startDaemonToolSpan(ctx, conn, request)
+	defer func() { endDaemonToolSpan(span, resp, err) }()
 
 	// Register a pending response channel.
 	respCh := make(chan *toolexec.ToolExecutionResponse, 1)
@@ -415,17 +442,19 @@ func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnect
 	}
 
 	// Wait for the correlated response.
-	// Default to 10 minutes for bash commands; use request timeout if set.
+	// Default to 10 minutes for bash commands; use request timeout if set,
+	// plus toolVerdictGrace for the daemon's own answer at that timeout.
 	timeout := 600 * time.Second
 	if request.TimeoutMs > 0 {
-		timeout = time.Duration(request.TimeoutMs) * time.Millisecond
+		timeout = time.Duration(request.TimeoutMs)*time.Millisecond + toolVerdictGrace
 	}
 
 	select {
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("tool request %q timed out after %s", request.RequestID, timeout)
+		// The daemon has the request: it may have run it, and may still be.
+		return nil, fmt.Errorf("tool request %q got no answer from the machine in %s; it may have run", request.RequestID, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("%w while waiting for tool request %q response; the request outcome is unknown and the daemon may still complete it after reconnect", toolexec.ErrDaemonConnectionInterrupted, request.RequestID)
 	case <-ctx.Done():

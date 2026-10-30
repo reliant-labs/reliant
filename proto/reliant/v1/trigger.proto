@@ -194,6 +194,11 @@ service TriggerService {
   // trigger's filter and origin_filter are not evaluated, because the person
   // replaying has decided the event is wanted.
   //
+  // With trigger_id, previews an owned inline or declared automation against
+  // a sample payload using the actual event-fire mapping, including the full
+  // seeded user message. Works while paused and never enables it. Neither
+  // preview mode tests delivery, authentication, filters or workflow execution.
+  //
   // It only reads (nothing is fired or recorded), and says so with
   // NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
   rpc PreviewReplay(PreviewReplayRequest) returns (PreviewReplayResponse) {
@@ -207,7 +212,11 @@ service TriggerService {
   // draft is written by the caller's own fast model, with the draft_automation
   // tool's schema as the structured output, and normalized by the same code
   // that tool runs.
-  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {}
+  rpc DraftAutomation(DraftAutomationRequest) returns (DraftAutomationResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "Proposes an automation for review; only CreateTrigger persists it"}
+    };
+  }
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -258,6 +267,11 @@ enum TriggerEventKind {
   // (RunService.RunNow). Attended, with the chat id as its dedupe key. When it
   // replays a past event, its payload names that event.
   TRIGGER_EVENT_KIND_MANUAL_RUN = 8;
+  // CLI_RUN is a run started from the command line (`reliant workflow run`):
+  // by a script, or by an agent shelling out. Attended, with the chat id as
+  // its dedupe key. Like AGENT_START_RUN it lists under Runs and stays out of
+  // the sidebar until adopted.
+  TRIGGER_EVENT_KIND_CLI_RUN = 9;
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -279,22 +293,24 @@ enum TriggerEventOutcome {
 //
 // It is chosen per activation, because the same declared trigger can be
 // activated by an owner who wants their own name on the comments and by an
-// owner who wants a bot's. It applies to every integration action the run
-// takes (a node's `action` and an agent's integration tools alike), and only to
-// a run the trigger fired: a person replying in that chat acts as themselves.
+// owner who wants a bot's. It applies to every GitHub write the run makes (a
+// node's `action`, an agent's integration tools and git_publish alike), and only
+// to a run the trigger fired: a person replying in that chat acts as themselves.
+// Integrations with no bot (Slack, Gmail, Twilio, HTTP) always write through the
+// owner's connection.
 enum ActingIdentity {
   ACTING_IDENTITY_UNSPECIFIED = 0;
-  // OWNER: the activation's owner, through their own GitHub App user token. What
-  // every activation did before identities existed; still the default for
-  // new sources other than GitHub integration triggers.
+  // OWNER: the activation's owner, through their own GitHub App user token. An
+  // explicit opt-in; the default only on a deployment with no control plane,
+  // for a source other than a GitHub integration trigger.
   ACTING_IDENTITY_OWNER = 1;
   // APP: the GitHub App's bot (`reliant-labs[bot]`), through a per-repository
   // installation token. control-plane mints it only when the owner's own token
   // has push access to that repository, scopes it to that one repository and to
   // issues, pull requests and contents, and bot-authored comments, reviews and
-  // pull requests end with a footer naming the automation and its owner. Needs
-  // a hosted deployment: a self-hosted one has no App key to mint from and
-  // refuses this value.
+  // pull requests end with a footer naming the automation and its owner. The
+  // default for every new activation. Needs a hosted deployment: a self-hosted
+  // one has no App key to mint from and refuses this value.
   ACTING_IDENTITY_APP = 2;
 }
 
@@ -654,6 +670,12 @@ message Trigger {
   // Launched runs have no machine; see TriggerDefinition.no_machine.
   bool no_machine = 27;
 
+  // Launched runs are placed on a member of this machine pool; see
+  // TriggerDefinition.machine_pool_id.
+  string machine_pool_id = 33;
+  // Read-only: that pool's name.
+  string machine_pool_name = 34;
+
   // Read-only: how this trigger's recent firings went.
   TriggerHealth health = 15;
 
@@ -728,6 +750,41 @@ message Trigger {
   // the user to configure, and RotateWebhookToken re-provisions rather than
   // returning a token.
   bool webhook_managed = 29;
+
+  // Read-only, activations only: where the definition this activation runs
+  // comes from, as resolved now. Unset when it does not resolve (Health says
+  // why) or for an ad hoc trigger.
+  TriggerDefinitionSource definition_source = 32;
+}
+
+// TriggerDefinitionSource is where an activation's workflow definition is
+// read from when it fires: which kind of workflow, which file on which
+// machine, and anything about that choice the owner should know.
+message TriggerDefinitionSource {
+  // "project" (a synced .reliant/workflows file), "user" (the owner's own
+  // account workflow) or "builtin".
+  string kind = 1;
+
+  // project only: the file, relative to the project root
+  // ("control-plane/.reliant/workflows/release.yaml").
+  string path = 2;
+
+  // project only: the machine whose synced catalog the file was read from;
+  // empty when the catalog was every machine's union (the activation has no
+  // machine, or its machine has never synced the project).
+  string daemon_id = 3;
+
+  // daemon_id's name, for display.
+  string daemon_name = 4;
+
+  // One line for display: "project workflow at
+  // control-plane/.reliant/workflows/release.yaml on machine cicd".
+  string summary = 5;
+
+  // Things about this source the owner should act on, one sentence each:
+  // a same-named account workflow that an automation does not run, a
+  // machine that has never synced the project.
+  repeated string warnings = 6;
 }
 
 // TriggerChange is a configuration audit entry, not a firing.
@@ -789,6 +846,62 @@ message TriggerEvent {
   // Empty for ad hoc launches. An identifier is not proof a workflow started:
   // an inbound event may be rejected before its fire is launched.
   string fire_workflow_id = 11;
+
+  // Read-only: which workflow definition this firing resolved — the file,
+  // its version (content hash), the machine and git commit it was synced
+  // from, and why it could not run when it could not. Unset for a firing
+  // recorded without one (an ad hoc start, or one recorded before firings
+  // carried it).
+  optional TriggerEventDefinition definition = 12;
+}
+
+// TriggerEventDefinition is the workflow definition one firing resolved, so
+// "which version of which file did this run, from which machine and commit?"
+// has an answer after the file has changed again. A firing whose definition
+// has an error and a path was refused: the newest version of that file does
+// not parse or validate, and no older version runs in its place.
+message TriggerEventDefinition {
+  // The workflow ref the trigger names.
+  string workflow = 1;
+
+  // Where it resolved: "builtin", "user" (the owner's account workflow) or
+  // "project" (a synced .reliant/workflows file). Empty when it did not
+  // resolve.
+  string source = 2;
+
+  // The project file, relative to the project root, for a project workflow.
+  string path = 3;
+
+  // The machine whose synced copy of path was read; daemon_name is its
+  // display name. Empty when no one machine's copy can be named.
+  string daemon_id = 4;
+  string daemon_name = 5;
+
+  // The git state of the checkout the file was synced from: the repo's path
+  // relative to the project root ("" for the root), the branch ("" for a
+  // detached HEAD), the HEAD commit, and whether .reliant had uncommitted
+  // changes. Empty when the machine reported none.
+  string repo = 6;
+  string branch = 7;
+  string commit = 8;
+  bool dirty = 9;
+
+  // Hex SHA-256 of the definition's bytes: its version, the value
+  // `sha256sum` prints for the file.
+  string content_hash = 10;
+
+  // Why this definition cannot run (it does not parse, validate or
+  // resolve). Empty when it can.
+  string error = 11;
+
+  // The definition for display: "machine cicd at .reliant/workflows/x.yaml
+  // @ main 1a2b3c4, clean (sha256 9f86d081884c)".
+  string summary = 12;
+
+  // The catalog snapshot the firing read this definition in and launched
+  // its run on: the run loads exactly this version, whatever was synced
+  // after. Empty when the firing read the live catalog.
+  string catalog_pin = 13;
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,
@@ -859,6 +972,13 @@ message TriggerDefinition {
   // set it to e.g. ["tag:web"]). See research/DAEMONLESS_RUNS.md.
   bool no_machine = 14;
 
+  // Launched runs execute on one member of this machine pool of the
+  // caller's, chosen at launch (the connected member with the most free
+  // room; a suspended one is woken; with none free the run waits) and fixed
+  // for the run's life. Exactly one of daemon_id, no_machine and
+  // machine_pool_id is set. See dev-docs/design/machine-pools.md.
+  string machine_pool_id = 26;
+
   // Notify the owner when a run completes. Replaced on update, like every
   // other field here, so a client editing a trigger must send the current
   // value back.
@@ -896,8 +1016,8 @@ message TriggerDefinition {
   }
 
   // Who the integration writes of this trigger's runs speak as. UNSPECIFIED
-  // means APP on create for a resolved GitHub integration source, OWNER for
-  // other new sources, and "unchanged" on update. APP is refused on a
+  // means APP on create, whatever the source (OWNER for a non-GitHub source on
+  // a deployment with no control plane), and "unchanged" on update. APP is refused on a
   // deployment with no control plane to mint installation tokens from, and
   // for a trigger whose owner cannot push to a repository it writes to the
   // write fails when it happens (never silently as the owner).
@@ -1025,9 +1145,10 @@ message EnableWorkflowRequest {
   optional string worktree_id = 3;
 
   // The machine the runs execute on: daemon_id, or no_machine, exactly as in
-  // TriggerDefinition. One of the two is required.
+  // TriggerDefinition, or machine_pool_id. Exactly one is required.
   string daemon_id = 4;
   bool no_machine = 5;
+  string machine_pool_id = 14;
 
   // The connection each integration trigger listens through, keyed by
   // integration id (e.g. "github"). One entry serves every trigger of that
@@ -1060,10 +1181,16 @@ message EnableWorkflowRequest {
   repeated WorkflowTriggerOverride overrides = 12;
 
   // Who the integration writes of every run speak as, as
-  // TriggerDefinition.acting_identity. Unspecified defaults each new source
-  // separately (APP for GitHub integration, OWNER otherwise) and preserves an
-  // existing activation's stored identity.
+  // TriggerDefinition.acting_identity. Unspecified means APP for each new
+  // activation and preserves an existing activation's stored identity.
   ActingIdentity acting_identity = 13;
+
+  // Only these declared triggers (WorkflowTrigger.name). Empty means every
+  // trigger the workflow declares. Each named trigger is created or brought
+  // to the request exactly as in the whole-workflow case, all or nothing
+  // within the selection; the others are left as they are. A name the
+  // workflow does not declare refuses the request.
+  repeated string triggers = 14;
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -1075,9 +1202,11 @@ message WorkflowTriggerOverride {
   // Replaces the activation's name.
   optional string name = 2;
 
-  // Replaces the shared machine for this trigger: a daemon, or no machine.
+  // Replaces the shared machine for this trigger: a daemon, no machine, or a
+  // machine pool.
   optional string daemon_id = 3;
   optional bool no_machine = 4;
+  optional string machine_pool_id = 8;
 
   // Replaces the shared connection for this integration trigger.
   optional string connection_id = 5;
@@ -1286,6 +1415,11 @@ message PreviewReplayRequest {
   // trigger.sender. Carried here rather than on ReplayEvent because
   // trigger.proto imports chat.proto, not the reverse.
   optional TriggerSender sender = 4;
+
+  // Preview this owned automation, inline or declared, instead of a workflow's
+  // declaration. Uses its stored prompt/settings and the supplied sample payload.
+  // Returns the full seeded user message. Never enables, records or fires it.
+  optional string trigger_id = 5;
 }
 
 message PreviewReplayResponse {

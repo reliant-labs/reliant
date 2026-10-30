@@ -13,7 +13,7 @@
  *      projected from control-plane's KCL (reliant_desktop_release_config) and
  *      written into src/release-renderer-config.js by
  *      .github/scripts/generate-build-config.mjs. Same keys as the hosted
- *      SPA's runtime_config; SENTRY_DSN is the desktop project's DSN.
+ *      SPA's runtime_config.
  *   2. the main process's RESOLVED endpoints — what BackendManager points the
  *      daemon at (build-config.js, overridable from the environment). So a
  *      packaged app launched with RELIANT_API_URL=… re-targets its renderer

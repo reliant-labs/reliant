@@ -91,9 +91,7 @@ type lineTail struct {
 func (l *lineTail) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
-		l.lines = append(l.lines, line)
-	}
+	l.lines = append(l.lines, strings.Split(strings.TrimRight(string(p), "\n"), "\n")...)
 	if over := len(l.lines) - l.max; over > 0 {
 		l.lines = append([]string(nil), l.lines[over:]...)
 	}

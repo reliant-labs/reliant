@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -142,7 +143,8 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
-	if _, err := r.repo.GetDaemon(ctx, daemonID); errors.Is(err, sql.ErrNoRows) {
+	row, err := r.repo.GetDaemon(ctx, daemonID)
+	if errors.Is(err, sql.ErrNoRows) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0
 		for _, call := range calls {
@@ -160,9 +162,11 @@ func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats,
 	}
 
 	closed := 0
+	var running []*db.BackgroundedProcessCall
 	for processID, info := range statuses {
 		status, message, ended := outcomeOfProcess(info)
 		if !ended {
+			running = append(running, byProcess[processID]...)
 			continue
 		}
 		for _, call := range byProcess[processID] {
@@ -178,6 +182,11 @@ func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats,
 			}
 		}
 	}
+	daemonType := ""
+	if err == nil && row != nil && row.DaemonType != nil {
+		daemonType = *row.DaemonType
+	}
+	r.reassertHeldRunWork(ctx, userID, daemonID, daemonType, running)
 	// A recorded daemon but no process id: the backgrounding never reported
 	// one. The daemon is reachable, so it is up — but nothing addressable is
 	// left to ask about, and nothing will ever report for this call.
@@ -386,4 +395,79 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ── A held run's background work keeps its machine awake ──────────────
+
+// HeldRunActivity is where a held run's background work is published as
+// machine activity. *daemonstate.Publisher is one; declared here, at the
+// consumer.
+type HeldRunActivity interface {
+	Activity(daemonID, userID, daemonType, reason string)
+}
+
+type heldRunActivityHolder struct{ pub HeldRunActivity }
+
+// SetHeldRunActivity enables reassertHeldRunWork. Safe to call while the poll
+// loop runs.
+func (r *Reconciler) SetHeldRunActivity(pub HeldRunActivity) {
+	if pub == nil {
+		r.heldRunActivity.Store(nil)
+		return
+	}
+	r.heldRunActivity.Store(&heldRunActivityHolder{pub: pub})
+}
+
+const (
+	// heldRunAwakeFor bounds how long one usage-limit hold keeps its
+	// background work's machine awake: a little over the 5-hour window most
+	// holds are. A longer hold (a weekly limit) lets the machine sleep; the
+	// run wakes it when it resumes.
+	heldRunAwakeFor = 6 * time.Hour
+	// heldRunProcessMaxAge bounds the process side: a backgrounded process
+	// older than this (a dev server, a `while true` loop) is not the kind of
+	// finite work a hold should keep alive.
+	heldRunProcessMaxAge = 12 * time.Hour
+)
+
+// reassertHeldRunWork keeps daemonID awake while a process an agent
+// backgrounded on it is still running and the agent's run is held on a
+// provider usage limit (daemonactivity.ReasonHeldRunBackgroundWork).
+//
+// Without it the machine went idle 30 minutes into every hold: a held run
+// sends the machine nothing, and a backgrounded process's own traffic is
+// rightly not activity. On 2026-10-28 that suspended the machine three times
+// in one night and killed a prod deploy mid-apply. running is the calls whose
+// process the daemon just reported running, so this costs one SELECT on a pass
+// that found running processes, and none otherwise.
+func (r *Reconciler) reassertHeldRunWork(ctx context.Context, userID, daemonID, daemonType string, running []*db.BackgroundedProcessCall) {
+	h := r.heldRunActivity.Load()
+	if h == nil || len(running) == 0 {
+		return
+	}
+	now := time.Now().UTC()
+	var chatIDs []string
+	seen := map[string]bool{}
+	for _, call := range running {
+		if call.RequestedAt.Before(now.Add(-heldRunProcessMaxAge)) || seen[call.ChatID] {
+			continue
+		}
+		seen[call.ChatID] = true
+		chatIDs = append(chatIDs, call.ChatID)
+	}
+	if len(chatIDs) == 0 {
+		return
+	}
+	held, err := r.repo.ChatsHeldOnUsageLimit(ctx, chatIDs, now.Add(-heldRunAwakeFor))
+	if err != nil {
+		logging.WarnContext(ctx, "[Reconciler] Could not read usage-limit holds; not keeping a held run's machine awake this pass",
+			"daemonID", daemonID, "error", err)
+		return
+	}
+	if len(held) == 0 {
+		return
+	}
+	h.pub.Activity(daemonID, userID, daemonType, daemonactivity.ReasonHeldRunBackgroundWork)
+	logging.DebugContext(ctx, "[Reconciler] Held run's background work keeps its machine awake",
+		"daemonID", daemonID, "chats", held)
 }

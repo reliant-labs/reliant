@@ -201,6 +201,28 @@ func (s *Shape) CheckExpr(expr string) []*TypeError {
 	return errs
 }
 
+// ExprType names the scalar type expr yields over this shape's `trigger`:
+// "bool", "int", "double" or "string". It is "" when that is not known before
+// the event arrives (a dyn read, a list or map) or when expr does not check,
+// which CheckExpr reports.
+func (s *Shape) ExprType(expr string) string {
+	checked, errs := s.check(expr)
+	if checked == nil || len(errs) > 0 {
+		return ""
+	}
+	switch checked.OutputType().Kind() {
+	case types.BoolKind:
+		return "bool"
+	case types.IntKind:
+		return "int"
+	case types.DoubleKind:
+		return "double"
+	case types.StringKind:
+		return "string"
+	}
+	return ""
+}
+
 func (s *Shape) check(expr string) (*cel.Ast, []*TypeError) {
 	parsed, iss := s.env.Parse(expr)
 	if iss != nil && iss.Err() != nil {

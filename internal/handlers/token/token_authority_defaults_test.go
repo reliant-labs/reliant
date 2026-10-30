@@ -131,7 +131,9 @@ func TestExchangeToken_WriteDoesNotDelegateAnUnheldReadScope(t *testing.T) {
 }
 
 // This fake models CP's ATOMIC mint-time grant clipping, not a mint followed
-// by an update that might fail and leave an over-privileged token behind.
+// by an update that might fail and leave an over-privileged token behind, and
+// its wildcard: a daemon credential (daemon:connect) holds every scope its
+// person is granted.
 type clippingAuthority struct {
 	*tokenauthority.Memory
 	grants fat.Set
@@ -139,9 +141,18 @@ type clippingAuthority struct {
 
 func (a *clippingAuthority) MintForUser(ctx context.Context, req tokenauthority.MintRequest) (tokenauthority.Minted, error) {
 	var scopes []fat.Scope
+	daemon := false
 	for _, s := range req.Scopes {
+		if s == fat.ScopeDaemonConnect {
+			daemon = true
+		}
 		if s == fat.ScopeDaemonConnect || a.grants.Has(s) {
 			scopes = append(scopes, s)
+		}
+	}
+	if daemon {
+		for _, s := range a.grants.Strings() {
+			scopes = append(scopes, fat.Scope(s))
 		}
 	}
 	req.Scopes = scopes
@@ -153,7 +164,7 @@ func (*clippingAuthority) UpdateForUser(context.Context, string, string, *string
 
 func TestCreateAndExchangeToken_ReportCurrentOrgGrants(t *testing.T) {
 	a := &clippingAuthority{Memory: tokenauthority.NewMemory(), grants: fat.SetOf(fat.ScopeObsRead, fat.ScopeObsTriage)}
-	svc := newTokenService(t, a, TokenControlPlane{Issuer: testControlPlane, ClipsGrants: true})
+	svc := newTokenService(t, a, TokenControlPlane{Issuer: testControlPlane})
 	created, err := svc.CreateToken(tokenAuthCtx("user-1"), connect.NewRequest(&reliantv1.CreateTokenRequest{Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
 	if err != nil {
 		t.Fatal(err)
@@ -180,31 +191,20 @@ func TestCreateAndExchangeToken_ReportCurrentOrgGrants(t *testing.T) {
 	}
 }
 
-// TestDaemonAndCLICredentialsNeverRequestTokenScopes: token:read/token:write
-// administer member permissions and tokens, which the control plane reserves to
-// a signed-in person. On a long-lived daemon or CLI credential they are dead
-// authority today and a latent escalation path, so nothing requests them.
-func TestDaemonAndCLICredentialsNeverRequestTokenScopes(t *testing.T) {
+// TestExplicitListsNeverRequestTokenScopes: token:read/token:write administer
+// member permissions and tokens, which the control plane reserves to a
+// signed-in person, so the EXPLICIT lists — a CLI sign-in's ceiling and what a
+// helper may be exchanged for — leave them out. A daemon's wildcard is not a
+// list here at all (TestCreateToken_DaemonAsksForDaemonConnectAlone).
+func TestExplicitListsNeverRequestTokenScopes(t *testing.T) {
 	for _, s := range cliauth.ForgeScopes() {
 		if fat.Scope(s) == fat.ScopeTokenRead || fat.Scope(s) == fat.ScopeTokenWrite {
 			t.Errorf("cliauth.ForgeScopes() requests %s", s)
 		}
 	}
-	for _, s := range daemonCeiling() {
-		if s == fat.ScopeTokenRead || s == fat.ScopeTokenWrite {
-			t.Errorf("daemonCeiling() includes %s", s)
-		}
-	}
 	for _, s := range exchangeableScopes {
 		if s == fat.ScopeTokenRead || s == fat.ScopeTokenWrite {
 			t.Errorf("exchangeableScopes includes %s", s)
-		}
-	}
-	// What the owner chose to keep stays.
-	kept := fat.SetOf(daemonCeiling()...)
-	for _, s := range []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeIdentityManage, fat.ScopeDBQuery, fat.ScopeObsWrite} {
-		if !kept.Has(s) {
-			t.Errorf("daemonCeiling() lost %s, which stays by decision", s)
 		}
 	}
 }

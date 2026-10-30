@@ -37,7 +37,7 @@ export { Terminal } from "./Terminal/Terminal";
 // UI components
 
 // Error Boundaries
-export { SentryErrorBoundary } from "./ErrorBoundary";
+export { default as ErrorBoundary } from "./ErrorBoundary";
 export { SectionErrorBoundary } from "./SectionErrorBoundary";
 
 // App components

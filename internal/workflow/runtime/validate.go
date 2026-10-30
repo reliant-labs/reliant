@@ -29,7 +29,8 @@ func ValidateYAMLResult(yamlData []byte, loader WorkflowLoader) (*validation.Res
 	return ValidateYAMLResultWithOptions(yamlData, loader, nil)
 }
 
-// ValidateYAMLResultWithOptions is ValidateYAMLResult with additional optional
+// ValidateYAMLResultWithOptions validates as an author would
+// (ValidationOptions.Authoring). It is ValidateYAMLResult with additional optional
 // validation capabilities (currently the skill-reference resolver). The loader
 // argument still wins over opts.WorkflowLoader so existing callers keep their
 // behavior; pass nil opts for the default.
@@ -43,6 +44,9 @@ func ValidateYAMLResultWithOptions(yamlData []byte, loader WorkflowLoader, opts 
 	if opts != nil {
 		merged = *opts
 	}
+	// A definition handed over as YAML is being written or checked (save,
+	// `reliant workflow validate`, the workflow tools), not run.
+	merged.Authoring = true
 	if loader != nil {
 		merged.WorkflowLoader = func(ref string) (*reliantv1.Workflow, error) {
 			return loader(ref)

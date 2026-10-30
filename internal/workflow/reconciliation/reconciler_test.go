@@ -234,7 +234,11 @@ type mockRepo struct {
 	// rows that exist (absent = deleted), and the status events emitted.
 	backgroundedProcessCalls []*db.BackgroundedProcessCall
 	daemons                  map[string]bool
-	emittedToolCallUpdates   []db.ToolCallUpdate
+	// heldChats are the chats ChatsHeldOnUsageLimit reports held, and
+	// heldSince the cutoff each call passed.
+	heldChats              map[string]bool
+	heldSince              []time.Time
+	emittedToolCallUpdates []db.ToolCallUpdate
 
 	// Terminal cascades and checkpoint drops a repair performs, and whether
 	// each cascade ran inside RunTx (i.e. in the status write's commit).
@@ -306,6 +310,19 @@ func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.Ba
 			continue
 		}
 		out = append(out, call)
+	}
+	return out, nil
+}
+
+func (m *mockRepo) ChatsHeldOnUsageLimit(_ context.Context, chatIDs []string, since time.Time) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.heldSince = append(m.heldSince, since)
+	var out []string
+	for _, id := range chatIDs {
+		if m.heldChats[id] {
+			out = append(out, id)
+		}
 	}
 	return out, nil
 }

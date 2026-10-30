@@ -10,7 +10,8 @@
  *
  *   Overview                      project home: health, needs attention, workloads
  *   Releases                      releases × environments, and the deploys
- *   Observability ›               Errors · Logs · Traces · Metrics · Profiles · Dashboards · Alerts
+ *   Observability ›               Errors · Logs · Traces · Metrics · Dashboards · Alerts
+ *                                 Sessions / Profiles when data is available (or unknown)
  *                                 (up to three starred dashboards nested under Dashboards)
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
@@ -69,6 +70,8 @@ export interface ConsoleNavInput {
   starred?: ConsoleNavDashboard[];
   /** The open dashboard's title, for the breadcrumb (its key until the index answers). */
   dashboardTitle?: string;
+  /** Omitted/unknown keeps useful views visible; false means a definite empty read. */
+  optionalViews?: { sessions: boolean; profiles: boolean };
 }
 
 export interface ConsoleNavDashboard {
@@ -83,7 +86,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [] }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -109,7 +112,9 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
-        children: OBS_NAV_VIEWS.map((view) => {
+        children: OBS_NAV_VIEWS.filter((view) =>
+          (view !== "sessions" && view !== "profiles") || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
+        ).map((view) => {
           const nested = view === "dashboards" ? starred.slice(0, NAV_STARRED_MAX) : [];
           const openStar = (candidate: ConsoleNavDashboard) =>
             page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
@@ -203,6 +208,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
   /** The brand row on the collapsed rail (a monogram). */
   brandCollapsed?: ReactNode;
   scope: { long: ScopeOption[]; previews: ScopeOption[] };
+  /** The open page reads platform telemetry, which belongs to no environment. */
+  platformWide?: boolean;
   onEnvChange: (env: string) => void;
   user?: SidebarUserInfo;
   collapsed: boolean;
@@ -212,6 +219,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
    * "padded": the forge-ui page gutter (px-8, pt-6).
    */
   contentLayout?: "padded" | "fill";
+  /** Product org switcher; injected to keep preview chrome free of queries. */
+  orgSwitcher?: ReactNode;
   children: ReactNode;
 }
 
@@ -219,11 +228,13 @@ export function ConsoleShell({
   brand,
   brandCollapsed,
   scope,
+  platformWide,
   onEnvChange,
   user,
   collapsed,
   onToggleCollapsed,
   contentLayout,
+  orgSwitcher,
   children,
   ...nav
 }: ConsoleShellProps) {
@@ -273,12 +284,14 @@ export function ConsoleShell({
                 </span>
               ))}
             </nav>
+            {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
               long={scope.long}
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}
+              platformWide={platformWide}
             />
           </>
         }

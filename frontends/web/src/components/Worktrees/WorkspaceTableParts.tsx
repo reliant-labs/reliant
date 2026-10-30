@@ -48,15 +48,7 @@ export function IconAction({ label, hint, icon, onClick, disabled, danger, testI
  * it. "Active" is the default lifecycle and gets no badge; only a status the
  * user deliberately set is worth the space.
  */
-export function WorkspaceNameCell({
-  worktree,
-  isCurrent,
-  onSelect,
-}: {
-  worktree: Worktree;
-  isCurrent?: boolean;
-  onSelect?: () => void;
-}) {
+export function WorkspaceNameCell({ worktree, isCurrent }: { worktree: Worktree; isCurrent?: boolean }) {
   const lifecycle = lifecycleOf(worktree.status);
   const showLifecycle =
     worktree.status !== WorktreeStatus.ACTIVE && worktree.status !== WorktreeStatus.UNSPECIFIED;
@@ -67,25 +59,15 @@ export function WorkspaceNameCell({
         ? "info"
         : "neutral";
 
+  // Spans, not divs: in a list whose rows open, this is the row's button content.
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {onSelect ? (
-          <button
-            type="button"
-            onClick={onSelect}
-            aria-label={`View details for ${worktree.name}`}
-            className="min-w-0 truncate rounded-sm text-left text-sm font-medium text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {worktree.name}
-          </button>
-        ) : (
-          <span className="min-w-0 truncate text-sm font-medium text-foreground">{worktree.name}</span>
-        )}
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="min-w-0 truncate text-sm font-medium text-foreground">{worktree.name}</span>
         {worktree.is_main && <Badge label="Main" size="sm" />}
         {isCurrent && <Badge label="Current" variant="info" size="sm" />}
         {showLifecycle && <Badge label={lifecycle.label} variant={lifecycleVariant} size="sm" />}
-      </div>
+      </span>
       <span
         className={cn(
           "truncate font-mono text-2xs text-muted-foreground",
@@ -94,7 +76,7 @@ export function WorkspaceNameCell({
       >
         {worktree.branch}
       </span>
-    </div>
+    </span>
   );
 }
 

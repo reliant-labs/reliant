@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
@@ -103,6 +104,22 @@ type CredentialError struct {
 
 func (e *CredentialError) Error() string { return e.Message }
 func (e *CredentialError) Unwrap() error { return e.Err }
+
+// ErrorClass implements svcerr.Classed. With a cause the cause decides (the
+// same failed_precondition carries both "GitHub is not connected", the user's
+// to fix, and "the control plane has no App key", ours). Without one, a code
+// the caller acts on is a user error; any other has no opinion.
+func (e *CredentialError) ErrorClass() svcerr.Class {
+	if e.Err != nil {
+		return svcerr.ClassNone
+	}
+	switch e.Code {
+	case CodeFailedPrecondition, CodeNeedsReauth, CodeNotFound, CodeInvalidArgument:
+		return svcerr.ClassUser
+	default:
+		return svcerr.ClassNone
+	}
+}
 
 // CallSite identifies one call for authorization and audit.
 type CallSite struct {

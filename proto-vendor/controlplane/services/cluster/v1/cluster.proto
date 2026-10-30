@@ -156,7 +156,12 @@ message Cluster {
   // ConnectClusterRequest.token.
 }
 
-message ListClustersRequest {}
+message ListClustersRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListClustersResponse {
   // Sorted by name.
@@ -165,6 +170,10 @@ message ListClustersResponse {
 
 message GetClusterRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message GetClusterResponse {
@@ -173,6 +182,10 @@ message GetClusterResponse {
 
 message RemoveClusterRequest {
   string id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RemoveClusterResponse {}
@@ -240,6 +253,10 @@ message ConnectClusterRequest {
   // `cloud_cluster`. Connecting takes the uploaded token only.
   reserved 2, 5;
   reserved "auth", "cloud_cluster";
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 9;
 }
 
 // ClusterIssuerRegistration declares the service-account issuer of a cluster.

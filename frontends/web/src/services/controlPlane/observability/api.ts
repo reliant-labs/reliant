@@ -151,6 +151,7 @@ export function wireScope(s: ObsScope, window: TimeWindow, services: string[] = 
     orgId: s.orgId,
     projectId: s.projectId || undefined,
     envIds: s.envIds,
+    ...(s.platformScope ? { platformScope: true } : {}),
     services,
     filters: wireFilters(s.filters),
     timeRange: { start: timestamp(window.startMs), end: timestamp(window.endMs) },
@@ -213,7 +214,7 @@ function mapLog(record: WireLogRecord, key: string): LogRecord {
   };
 }
 
-export async function searchLogs(req: SearchLogsRequest): Promise<SearchLogsResult> {
+export async function searchLogs(req: SearchLogsRequest, options: { signal?: AbortSignal } = {}): Promise<SearchLogsResult> {
   const res = await client().searchLogs({
     scope: scope(req, req.window, req.services),
     query: composeLogQuery(req.query, req.traceId, req.spanId),
@@ -221,7 +222,7 @@ export async function searchLogs(req: SearchLogsRequest): Promise<SearchLogsResu
     order: SortOrder.NEWEST_FIRST,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
-  });
+  }, options);
   // The cursor is the page's identity; a record's index within it makes the key.
   const page = req.cursor ?? "first";
   return {
@@ -248,7 +249,7 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
   };
 }
 
-export async function listTraces(req: ListTracesRequest): Promise<ListTracesResult> {
+export async function listTraces(req: ListTracesRequest, options: { signal?: AbortSignal } = {}): Promise<ListTracesResult> {
   const res = await client().listTraces({
     scope: scope(req, req.window, req.services),
     errorsOnly: req.errorsOnly || undefined,
@@ -257,7 +258,7 @@ export async function listTraces(req: ListTracesRequest): Promise<ListTracesResu
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
     groupBy: req.groupBy ?? [],
-  });
+  }, options);
   return {
     traces: res.traces.map(mapTraceSummary),
     nextCursor: res.nextPageToken,
@@ -300,15 +301,22 @@ function mapSpan(s: WireSpan): Span {
     attributes: { ...s.attributes },
     resource: { ...s.resourceAttributes },
     events: s.events.map((e) => ({ timeMs: msOf(e.time), name: e.name, attributes: { ...e.attributes } })),
+    links: s.links.map((link) => ({ traceId: link.traceId, spanId: link.spanId })),
     source: s.source,
     operatorData: s.operatorData,
   };
 }
 
 /** Traces are kept 7 days, so a lookup by id searches all of them. */
-export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }): Promise<Trace> {
-  const res = await client().getTrace({ scope: scope(req, req.window), traceId: req.traceId });
-  return { traceId: res.traceId || req.traceId, spans: res.spans.map(mapSpan), truncated: res.truncated };
+export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }, options: { signal?: AbortSignal } = {}): Promise<Trace> {
+  const res = await client().getTrace({ scope: scope(req, req.window), traceId: req.traceId }, options);
+  return {
+    traceId: res.traceId || req.traceId,
+    spans: res.spans.map(mapSpan),
+    truncated: res.truncated,
+    relatedTraces: res.relatedTraces.map((ref) => ({ traceId: ref.traceId, spanId: ref.spanId, linkedSpanId: ref.linkedSpanId })),
+    relatedTracesTruncated: res.relatedTracesTruncated,
+  };
 }
 
 const KIND_OF: Partial<Record<WireMetricType, MetricKind>> = {
@@ -386,18 +394,24 @@ function predicateInit(p: Predicate) {
  * signal, and the browser kinds (funnel, issues, sessions) over the tenant's
  * browser tables. Search panels are not run here.
  */
-export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
-  const res = await client().queryPanel({
-    scope: scope(req, req.window, req.services),
-    panel: panelInit(req.panel),
-    stepSeconds: req.stepSeconds,
-    groupBy: req.groupBy ?? [],
-    explain: req.explain ?? false,
-  });
+export async function queryPanel(req: QueryPanelRequest, options: { signal?: AbortSignal } = {}): Promise<PanelResult> {
+  const res = await client().queryPanel(
+    {
+      scope: scope(req, req.window, req.services),
+      panel: panelInit(req.panel),
+      stepSeconds: req.stepSeconds,
+      groupBy: req.groupBy ?? [],
+      explain: req.explain ?? false,
+    },
+    options.signal ? { signal: options.signal } : undefined
+  );
   return {
     kind: res.kind,
     unit: res.unit,
     stepSeconds: res.stepSeconds,
+    window: req.window,
+    bucketSeconds: res.bucketSeconds,
+    bucketTimezone: res.bucketTimezone || undefined,
     truncated: res.truncated,
     columns: [...res.columns],
     rows: res.rows.map((r) => {
@@ -454,9 +468,10 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
 // ── Service overview ─────────────────────────────────────────────────────────
 
 export async function getServiceOverview(
-  req: ObsScope & { window: TimeWindow; services?: string[]; groupBy?: string[] }
+  req: ObsScope & { window: TimeWindow; services?: string[]; groupBy?: string[] },
+  options: { signal?: AbortSignal } = {}
 ): Promise<ServiceOverview> {
-  const res = await client().getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] });
+  const res = await client().getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] }, options);
   const step = res.trendStepSeconds > 0 ? res.trendStepSeconds : 60;
   const services: ServiceHealth[] = res.services.map((s) => {
     const requests = pointsOf(s.requestTrend);
@@ -487,13 +502,13 @@ export async function getServiceOverview(
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
-export async function getFlamegraph(req: GetFlamegraphRequest): Promise<Flamegraph> {
+export async function getFlamegraph(req: GetFlamegraphRequest, options: { signal?: AbortSignal } = {}): Promise<Flamegraph> {
   const res = await client().getFlamegraph({
     scope: scope(req, req.window),
     service: req.service,
     profileType: req.profileType,
     traceId: req.traceId ?? "",
-  });
+  }, options);
   return {
     speedscopeJson: res.speedscopeJson,
     totalValue: Number(res.totalValue),
@@ -514,8 +529,8 @@ const signalsOf = (values: string[]): ServiceSignal[] =>
  * server-side statement, cached a minute. Attribute filters are not applied
  * (a filter that matches nothing must not hide the view that would show it).
  */
-export async function getServiceSignals(req: GetServiceSignalsRequest): Promise<ServiceSignalsResult> {
-  const res = await client().getServiceSignals({ scope: scope(req, req.window) });
+export async function getServiceSignals(req: GetServiceSignalsRequest, options: { signal?: AbortSignal } = {}): Promise<ServiceSignalsResult> {
+  const res = await client().getServiceSignals({ scope: scope(req, req.window) }, options);
   return {
     services: res.services.map((s) => ({
       service: s.service,
@@ -588,14 +603,14 @@ const WIRE_SIGNAL = { traces: WireSignal.TRACES, logs: WireSignal.LOGS, metrics:
  * filter bar's autocomplete. The server ignores filters on the SAME key, so
  * choosing a second value is never narrowed to the first one.
  */
-export async function listAttributeValues(req: ListAttributeValuesRequest): Promise<ListAttributeValuesResult> {
+export async function listAttributeValues(req: ListAttributeValuesRequest, options: { signal?: AbortSignal } = {}): Promise<ListAttributeValuesResult> {
   const res = await client().listAttributeValues({
     scope: scope(req, req.window),
     key: req.key,
     prefix: req.prefix || undefined,
     signal: req.signal ? WIRE_SIGNAL[req.signal] : undefined,
     limit: req.limit ?? 50,
-  });
+  }, options);
   return { values: res.values.map((v) => ({ value: v.value, count: Number(v.count) })), truncated: res.truncated };
 }
 
@@ -761,8 +776,8 @@ function mapJob(j: WireWorkloadJob): WorkloadJob {
   };
 }
 
-export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }): Promise<ListWorkloadsResult> {
-  const res = await client().listWorkloads({ scope: scope(req, req.window, req.services) });
+export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }, options: { signal?: AbortSignal } = {}): Promise<ListWorkloadsResult> {
+  const res = await client().listWorkloads({ scope: scope(req, req.window, req.services) }, options);
   return {
     truncated: res.truncated,
     workloads: res.workloads.map(mapWorkload),
@@ -781,13 +796,13 @@ const WORKLOAD_METRIC: Partial<Record<WireWorkloadMetric, WorkloadMetric>> = {
   [WireWorkloadMetric.RESTARTS]: "restarts",
 };
 
-export async function getWorkload(req: GetWorkloadRequest): Promise<WorkloadDetail> {
+export async function getWorkload(req: GetWorkloadRequest, options: { signal?: AbortSignal } = {}): Promise<WorkloadDetail> {
   const res = await client().getWorkload({
     scope: scope(req, req.window),
     workload: req.workload,
     container: req.container ?? "",
     stepSeconds: req.stepSeconds ?? 0,
-  });
+  }, options);
   return {
     stepSeconds: res.stepSeconds,
     truncated: res.truncated,

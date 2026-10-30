@@ -83,6 +83,9 @@ func (m *Memory) MintForUser(_ context.Context, req MintRequest) (Minted, error)
 	if strings.TrimSpace(req.UserID) == "" {
 		return Minted{}, fmt.Errorf("%w: user id is required", fat.ErrInvalidGrant)
 	}
+	if req.OrgID != "" && req.OrgID != req.UserID {
+		return Minted{}, fmt.Errorf("%w: a self-hosted server has no organizations to mint in", fat.ErrInvalidGrant)
+	}
 	scopes := fat.SetOf(req.Scopes...)
 	g := fat.Grant{OrgID: req.UserID, Name: strings.TrimSpace(req.Name), Scopes: scopes, ActingUserID: req.UserID,
 		Resource: req.Resource, Ephemeral: req.Ephemeral, ExpiresAt: req.ExpiresAt}

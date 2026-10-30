@@ -1,0 +1,6 @@
+type: string
+enum: [success, failure, neutral, cancelled, skipped, timed_out, action_required]
+title: Conclusion
+description: >-
+  How the check ended; giving one completes the run. A required check passes on
+  success, neutral or skipped, and fails on anything else.

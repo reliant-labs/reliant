@@ -41,9 +41,6 @@ const (
 	// TerminalServiceCloseSessionProcedure is the fully-qualified name of the TerminalService's
 	// CloseSession RPC.
 	TerminalServiceCloseSessionProcedure = "/reliant.v1.TerminalService/CloseSession"
-	// TerminalServiceStreamTerminalProcedure is the fully-qualified name of the TerminalService's
-	// StreamTerminal RPC.
-	TerminalServiceStreamTerminalProcedure = "/reliant.v1.TerminalService/StreamTerminal"
 )
 
 // TerminalServiceClient is a client for the reliant.v1.TerminalService service.
@@ -52,8 +49,6 @@ type TerminalServiceClient interface {
 	ListSessions(context.Context, *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error)
 	// CloseSession closes a specific terminal session
 	CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error)
-	// StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
-	StreamTerminal(context.Context) *connect.BidiStreamForClient[v1.TerminalStreamInput, v1.TerminalStreamOutput]
 }
 
 // NewTerminalServiceClient constructs a client for the reliant.v1.TerminalService service. By
@@ -79,20 +74,13 @@ func NewTerminalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(terminalServiceMethods.ByName("CloseSession")),
 			connect.WithClientOptions(opts...),
 		),
-		streamTerminal: connect.NewClient[v1.TerminalStreamInput, v1.TerminalStreamOutput](
-			httpClient,
-			baseURL+TerminalServiceStreamTerminalProcedure,
-			connect.WithSchema(terminalServiceMethods.ByName("StreamTerminal")),
-			connect.WithClientOptions(opts...),
-		),
 	}
 }
 
 // terminalServiceClient implements TerminalServiceClient.
 type terminalServiceClient struct {
-	listSessions   *connect.Client[v1.ListTerminalSessionsRequest, v1.ListTerminalSessionsResponse]
-	closeSession   *connect.Client[v1.CloseTerminalSessionRequest, v1.CloseTerminalSessionResponse]
-	streamTerminal *connect.Client[v1.TerminalStreamInput, v1.TerminalStreamOutput]
+	listSessions *connect.Client[v1.ListTerminalSessionsRequest, v1.ListTerminalSessionsResponse]
+	closeSession *connect.Client[v1.CloseTerminalSessionRequest, v1.CloseTerminalSessionResponse]
 }
 
 // ListSessions calls reliant.v1.TerminalService.ListSessions.
@@ -105,19 +93,12 @@ func (c *terminalServiceClient) CloseSession(ctx context.Context, req *connect.R
 	return c.closeSession.CallUnary(ctx, req)
 }
 
-// StreamTerminal calls reliant.v1.TerminalService.StreamTerminal.
-func (c *terminalServiceClient) StreamTerminal(ctx context.Context) *connect.BidiStreamForClient[v1.TerminalStreamInput, v1.TerminalStreamOutput] {
-	return c.streamTerminal.CallBidiStream(ctx)
-}
-
 // TerminalServiceHandler is an implementation of the reliant.v1.TerminalService service.
 type TerminalServiceHandler interface {
 	// ListSessions returns all active terminal sessions
 	ListSessions(context.Context, *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error)
 	// CloseSession closes a specific terminal session
 	CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error)
-	// StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
-	StreamTerminal(context.Context, *connect.BidiStream[v1.TerminalStreamInput, v1.TerminalStreamOutput]) error
 }
 
 // NewTerminalServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -139,20 +120,12 @@ func NewTerminalServiceHandler(svc TerminalServiceHandler, opts ...connect.Handl
 		connect.WithSchema(terminalServiceMethods.ByName("CloseSession")),
 		connect.WithHandlerOptions(opts...),
 	)
-	terminalServiceStreamTerminalHandler := connect.NewBidiStreamHandler(
-		TerminalServiceStreamTerminalProcedure,
-		svc.StreamTerminal,
-		connect.WithSchema(terminalServiceMethods.ByName("StreamTerminal")),
-		connect.WithHandlerOptions(opts...),
-	)
 	return "/reliant.v1.TerminalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TerminalServiceListSessionsProcedure:
 			terminalServiceListSessionsHandler.ServeHTTP(w, r)
 		case TerminalServiceCloseSessionProcedure:
 			terminalServiceCloseSessionHandler.ServeHTTP(w, r)
-		case TerminalServiceStreamTerminalProcedure:
-			terminalServiceStreamTerminalHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -168,8 +141,4 @@ func (UnimplementedTerminalServiceHandler) ListSessions(context.Context, *connec
 
 func (UnimplementedTerminalServiceHandler) CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TerminalService.CloseSession is not implemented"))
-}
-
-func (UnimplementedTerminalServiceHandler) StreamTerminal(context.Context, *connect.BidiStream[v1.TerminalStreamInput, v1.TerminalStreamOutput]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TerminalService.StreamTerminal is not implemented"))
 }

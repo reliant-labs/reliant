@@ -392,6 +392,19 @@ function TriggerRow({
           />
         </span>
       </div>
+      {health.key === "broken" && (
+        // Broken is the one state that needs no click to explain: every
+        // firing is refused until it is removed or its workflow is fixed. The
+        // switch beside it pauses it.
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 pl-9">
+          <p role="alert" className="min-w-0 flex-1 text-xs text-danger-ink" data-testid="trigger-broken-reason">
+            {health.detail}
+          </p>
+          {health.cta && (
+            <AutomationCta cta={health.cta} triggers={[trigger]} workflowRef={trigger.workflow} projectId={trigger.projectId} subject={label} />
+          )}
+        </div>
+      )}
       {expanded && (
         <div id={panelId} className="space-y-3 border-t border-border/60 px-3 py-3">
           <TriggerActions trigger={trigger} />

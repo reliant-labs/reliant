@@ -529,9 +529,10 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		}
 
 		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
-		// inside the tx) are expected control flow for callers — log them
-		// quietly so genuine transaction failures stand out.
-		if errors.Is(result.err, sql.ErrNoRows) {
+		// inside the tx, or a TxOutcome such as a declined launch) are
+		// expected control flow for callers — log them quietly so genuine
+		// transaction failures stand out.
+		if isExpectedTxOutcome(result.err) {
 			logging.DebugContext(ctx, "Transaction returned business error (not retryable)",
 				"error", result.err,
 				"attempts", attempt+1,
@@ -556,6 +557,27 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 		return errors.New("transaction failed after retries: " + lastErr.Error())
 	}
 	return errors.New("transaction failed after retries")
+}
+
+// TxOutcome marks an error a RunTx body returns to roll its transaction back ON
+// PURPOSE: a decision the caller acts on, not a failure. launch.DeclinedError
+// is one — a trigger waiting for workflow capacity declines its launch every
+// poll until a slot frees. RunTx logs such an error at DEBUG instead of ERROR
+// (an ERROR here becomes an issue in the error tracker, and the caller, which
+// owns the decision, reports it however it should be reported).
+type TxOutcome interface {
+	error
+	TxOutcome()
+}
+
+// isExpectedTxOutcome reports whether a RunTx body's error is expected
+// control flow rather than a transaction failure.
+func isExpectedTxOutcome(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	var outcome TxOutcome
+	return errors.As(err, &outcome)
 }
 
 // attemptTransaction tries to begin and execute a single transaction
@@ -823,8 +845,8 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// the measured chat and dominated both the sort and the payload; the
 	// snapshot now synthesizes the few it needs from the durable tool_calls
 	// table (see snapshotToolCalls). Excluding them also lets this read use a
-	// skip-scan: types 1, 4 and 19 are excluded by the partial predicate of
-	// idx_chat_updates_snapshot_heads.
+	// skip-scan over idx_chat_updates_snapshot_entity_heads, whose partial
+	// predicate excludes exactly the types this read does not walk.
 	//
 	// Shape: a recursive skip-scan (one index probe per DISTINCT entity_id)
 	// for every type that dedups by entity_id, plus a separate small read of
@@ -844,6 +866,13 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// idx_chat_updates_snapshot_heads holds for the chat (165,843 on chat
 	// 8bb0a875, almost all NODE_EXECUTION) to keep 758: ~350ms of a ~475ms
 	// query. With it, ~3ms.
+	//
+	// WORKFLOW_STATUS and NODE_EXECUTION are excluded: they are workflow state,
+	// keyed per workflow and per workflow node, so every run a chat ever made
+	// added entities to walk (prod: this read at p50 0.2s, p95 2.5s, max 11s),
+	// and nothing a chat open renders reads them. The client only logs workflow
+	// status; node state feeds the run-status views, which read their one
+	// workflow's nodes through GetLatestWorkflowNodeUpdates when they open.
 	//
 	// AGENT_MESSAGES_DRAINED is excluded too. It is a live-only signal: it
 	// tells an open pending-queue strip to retire mailbox rows in the same
@@ -872,6 +901,16 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
 }
 
+// GetLatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of
+// each node of one workflow of a chat, in sequence order: the node state a
+// run-status view starts from before it follows the chat stream. The chat
+// snapshot does not carry node state (GetLatestNonMessageUpdatesPerEntity):
+// a chat accumulates one entity per node of every run it ever made, and only
+// a view of one run reads any of it.
+func (r *Repo) GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]ChatUpdate, error) {
+	return store.LatestWorkflowNodeUpdates(ctx, r.ORM(), chatID, workflowID)
+}
+
 // GetUpdatesSince returns all updates since a given sequence number
 // This is used for polling clients to fetch new updates
 // limit: maximum number of updates to return (defaults to 100 if <= 0)
@@ -889,8 +928,9 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 		update := &updates[i]
 		// Enrich message updates with content blocks
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
-			// Check if this is a minimal message update (not already enriched)
-			var dataMap map[string]interface{}
+			// Check if this is a minimal message update (not already enriched).
+			// Only the top-level keys are needed, so the blocks stay undecoded.
+			var dataMap map[string]json.RawMessage
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
@@ -1058,7 +1098,11 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		if t, err := r.GetThread(ctx, *msg.SenderThreadID); err == nil && t != nil {
 			title = t.Title
 		}
-		enrichedData.Sender = NewMessageSenderPayload(*msg.SenderThreadID, title, *msg.SenderKind)
+		var subject string
+		if msg.SenderSubject != nil {
+			subject = *msg.SenderSubject
+		}
+		enrichedData.Sender = NewMessageSenderPayload(*msg.SenderThreadID, title, *msg.SenderKind, subject)
 	}
 
 	// Marshal back to JSON
@@ -1355,6 +1399,23 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		var err error
 		changed, err = store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, queued)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return changed, err
+}
+
+// QueueChatForMachine records that the chat holds a message queued for the
+// given machine (nil: the chat's pinned machine), and reports whether the
+// stored row changed. Delivery waits for that machine, not just any of the
+// user's. It emits chat_activity_changed only on a change.
+func (r *Repo) QueueChatForMachine(ctx context.Context, chatID string, machine *QueuedMachine) (bool, error) {
+	var changed bool
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		var err error
+		changed, err = store.QueueChatForMachine(txCtx, r.ORM(), chatID, machine)
 		if err != nil || !changed {
 			return err
 		}

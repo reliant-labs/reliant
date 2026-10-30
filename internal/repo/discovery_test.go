@@ -83,6 +83,32 @@ func TestDiscover_EmptyDir(t *testing.T) {
 	require.Empty(t, found)
 }
 
+// A project opened through a symlink (a workspace folder linked into
+// ~/projects, say) is still scanned: WalkDir alone stops at a symlinked root,
+// which found none of a multi-repo project's nested repos.
+func TestDiscover_SymlinkedRootFindsNestedRepos(t *testing.T) {
+	target := t.TempDir()
+	for _, name := range []string{"control-plane", "forge", "reliant"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(target, name, ".git"), 0o755))
+	}
+	link := filepath.Join(t.TempDir(), "reliant-labs")
+	require.NoError(t, os.Symlink(target, link))
+
+	found, err := Discover(context.Background(), link, 2)
+	require.NoError(t, err)
+	require.Equal(t, map[string]bool{"control-plane": true, "forge": true, "reliant": true}, names(found))
+}
+
+// A missing project folder fails with the OS's own "no such file or
+// directory", which the server reads as "not on this machine" rather than as
+// a scan that found nothing.
+func TestDiscover_MissingPathSaysSo(t *testing.T) {
+	_, err := Discover(context.Background(), filepath.Join(t.TempDir(), "gone"), 2)
+	require.Error(t, err)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.Contains(t, err.Error(), "no such file or directory")
+}
+
 // mainCheckout fabricates a main checkout whose .git dir lists a linked worktree.
 func mainCheckout(t *testing.T, dir string, worktrees ...string) {
 	t.Helper()

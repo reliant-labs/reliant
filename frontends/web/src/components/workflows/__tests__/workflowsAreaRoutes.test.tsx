@@ -14,8 +14,8 @@
  *     redirect.
  */
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createMemoryHistory,
@@ -27,13 +27,25 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 
+const chrome = vi.hoisted(() => ({ isElectron: false, trafficLightPadding: "0px" }));
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({
-    isElectron: false,
-    trafficLightPadding: "8px",
-    dragRegionStyle: {},
-    noDragRegionStyle: {},
+    ...chrome,
+    dragRegionStyle: chrome.isElectron ? { WebkitAppRegion: "drag" } : {},
+    noDragRegionStyle: chrome.isElectron ? { WebkitAppRegion: "no-drag" } : {},
   }),
+}));
+
+beforeEach(() => {
+  chrome.isElectron = false;
+  chrome.trafficLightPadding = "0px";
+});
+afterEach(() => vi.unstubAllGlobals());
+
+// Keep these route/chrome tests independent of RPCs and generated query hooks.
+vi.mock("@/hooks/project-queries", () => ({
+  useProjects: () => ({ projects: [{ id: "proj-1", name: "Reliant" }] }),
+  fetchProjects: vi.fn(async () => [{ id: "proj-1", name: "Reliant" }]),
 }));
 
 // The shell resolves a project on mount; here one is already current.
@@ -140,14 +152,14 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     const runs = within(screen.getByRole("navigation", { name: "Workflows" })).getByRole("link", { name: "Runs" });
     expect(runs).toHaveAttribute("aria-current", "page");
     expect(runs).toHaveAttribute("href", "/workflows/runs?project=proj-1");
-    screen.getByRole("button", { name: "Back to app" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "Back to app" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   });
 
   it("Escape on a detail page steps back to its list", async () => {
     const router = renderAt("/workflows/runs/chat-1");
     await screen.findByTestId("page-run-detail");
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs"));
   });
 
@@ -167,21 +179,93 @@ describe("Workflows area routes render inside the shell with the right tab", () 
   it("Escape with a menu open closes only the menu, not the area", async () => {
     const router = renderAt("/workflows/library");
     await screen.findByTestId("page-library");
-    screen.getByTestId("workflows-project-switcher").click();
+    fireEvent.click(screen.getByTestId("workflows-project-switcher"));
     expect(await screen.findByRole("menu", { name: "Projects" })).toBeInTheDocument();
     // As a real keypress does: dispatched at the focused element, bubbling to document and window.
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull());
     expect(router.state.location.pathname).toBe("/workflows/library");
+  });
+
+  it.each([
+    ["library", "Workflows"],
+    ["runs", "Runs"],
+  ])("the %s header shows its section and project scope", async (path, label) => {
+    renderAt(`/workflows/${path}`);
+    await screen.findByTestId(`page-${path}`);
+    const header = screen.getByRole("banner");
+    const breadcrumb = within(header).getByRole("navigation", { name: "Breadcrumb" });
+    expect(breadcrumb).toHaveTextContent(`Workflows›${label}`);
+    expect(within(header).queryByTestId("workflows-close")).not.toBeInTheDocument();
+    const switcher = within(header).getByTestId("workflows-project-switcher");
+    expect(switcher).toHaveTextContent("Reliant");
+    expect(breadcrumb.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it.each([false, true])("keeps the exit in the brand row (collapsed: %s) and leaves the area", async (collapsed) => {
+    const router = renderAt("/workflows/runs/chat-1?project=%22proj-1%22");
+    await screen.findByTestId("page-run-detail");
+    if (collapsed) fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    const brand = screen.getByTestId(collapsed ? "workflows-brand-collapsed" : "workflows-brand");
+    const exit = within(brand).getByRole("button", { name: "Back to app" });
+    expect(exit).toHaveAttribute("data-testid", "workflows-close");
+    expect(exit.textContent).toBe("");
+    expect(brand.closest("aside")).not.toBeNull();
+    expect(screen.getAllByTestId("workflows-close")).toHaveLength(1);
+    const nav = screen.getByRole("navigation", { name: "Workflows" });
+    expect(within(nav).getByRole("link", { name: "Workflows" })).toHaveAttribute("href", "/workflows/library?project=proj-1");
+    fireEvent.click(exit);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(router.state.location.search).toEqual({});
+  });
+
+  it("preserves native traffic-light spacing and non-draggable Electron controls, including on the rail", async () => {
+    chrome.isElectron = true;
+    chrome.trafficLightPadding = "80px";
+    const router = renderAt("/workflows/library");
+    await screen.findByTestId("page-library");
+    const brand = screen.getByTestId("workflows-brand");
+    expect(brand).toHaveStyle({ paddingLeft: "80px" });
+    expect(brand.style.getPropertyValue("-webkit-app-region") || (brand.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("drag");
+    const exit = within(brand).getByRole("button", { name: "Close workflows" });
+    expect((exit.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("no-drag");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("workflows-brand-collapsed")).queryByTestId("workflows-close")).toBeNull();
+    const headerExit = within(screen.getByRole("banner")).getByRole("button", { name: "Close workflows" });
+    expect((headerExit.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("no-drag");
+    fireEvent.click(headerExit);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("offers a leading mobile exit with the drawer closed; Escape dismisses an open drawer only", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const router = renderAt("/workflows/library");
+    await screen.findByTestId("page-library");
+    const header = screen.getByRole("banner");
+    const exit = within(header).getByRole("button", { name: "Back to app" });
+    const breadcrumb = within(header).getByRole("navigation", { name: "Breadcrumb" });
+    expect(exit.compareDocumentPosition(breadcrumb) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.getByRole("dialog", { name: "Workflows" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Workflows" })).toBeNull();
+    expect(router.state.location.pathname).toBe("/workflows/library");
+    fireEvent.click(exit);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   });
 
   it("the project menu is in the header on every page, and offers All projects", async () => {
     const router = renderAt("/workflows/runs");
     const switcher = await screen.findByTestId("workflows-project-switcher");
     expect(switcher).toHaveTextContent("Reliant");
-    switcher.click();
+    fireEvent.click(switcher);
     const menu = await screen.findByRole("menu", { name: "Projects" });
-    within(menu).getByRole("menuitemradio", { name: /All projects/ }).click();
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /All projects/ }));
     await waitFor(() => expect(router.state.location.search).toMatchObject({ allProjects: true }));
     expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("All projects");
   });

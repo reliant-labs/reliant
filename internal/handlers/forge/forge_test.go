@@ -25,6 +25,8 @@ import (
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
+func ptrOrg(s string) *string { return &s }
+
 // authedCtx is a request context signed in as "test-user", the way the API's
 // auth interceptor leaves it.
 func authedCtx() context.Context {
@@ -112,7 +114,7 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 0, report)}
 
 	resp, err := newForgeTestService(router).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1", OrgId: ptrOrg("org-b")}))
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.topology", router.lastCommandType)
@@ -131,8 +133,10 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 	var sent struct {
 		ProjectPath string `json:"project_path"`
 		Verify      bool   `json:"verify"`
+		OrgID       string `json:"org_id"`
 	}
 	require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
+	assert.Equal(t, "org-b", sent.OrgID, "the web's active org must reach forge's credential helper")
 	assert.Equal(t, "/daemon/workspace/control-plane", sent.ProjectPath)
 	assert.False(t, sent.Verify)
 }

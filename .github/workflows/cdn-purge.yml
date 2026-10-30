@@ -1,0 +1,72 @@
+# Purge downloads.reliantlabs.io's Cloudflare cache for one published release.
+#
+# release.yml's Finalize job purges the update feeds itself. This exists for the
+# case where that step failed after the artifacts and feeds were already on R2:
+# origin is correct, but the CDN keeps serving the previous feed for up to its
+# max-age (a day), so no client sees the update. Re-running Finalize from the
+# tag re-runs the tag's (possibly broken) workflow; this runs from main.
+#
+#   gh workflow run cdn-purge.yml -f version=v1.8.6
+name: CDN purge
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published release tag, e.g. v1.8.6"
+        required: true
+        type: string
+      channel:
+        description: "Update channel whose feeds to purge"
+        required: false
+        default: latest
+        type: choice
+        options: [latest, alpha]
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Purge Cloudflare CDN cache
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          VERSION: ${{ inputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::bad version '$VERSION'"; exit 1; }
+          V=${VERSION#v}
+          BASE_URL="https://downloads.reliantlabs.io"
+          if [[ "$CHANNEL" == "latest" ]]; then
+            FILES=("$BASE_URL/latest-mac.yml" "$BASE_URL/latest-linux.yml" "$BASE_URL/latest-linux-arm64.yml" "$BASE_URL/latest.yml")
+          else
+            FILES=("$BASE_URL/alpha-mac.yml" "$BASE_URL/alpha-linux.yml" "$BASE_URL/alpha-linux-arm64.yml" "$BASE_URL/alpha.yml")
+          fi
+          for f in mac-arm64.dmg mac-arm64.zip mac-x64.dmg mac-x64.zip mac-arm64.dmg.blockmap mac-x64.dmg.blockmap \
+                   linux-x86_64.AppImage linux-arm64.AppImage linux-amd64.deb linux-arm64.deb \
+                   win-x64.exe win-arm64.exe win-x64.exe.blockmap; do
+            url="$BASE_URL/Reliant-$V-$f"
+            # Purge only what exists: a platform that failed to publish has no object.
+            code=$(curl -sI -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo 000)
+            if [[ "$code" == "200" ]]; then FILES+=("$url"); else echo "::warning::skipping $url (HTTP $code)"; fi
+          done
+          JSON_ARRAY=$(printf '%s\n' "${FILES[@]}" | jq -R . | jq -s .)
+          RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"files\":${JSON_ARRAY}}")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          if [[ "$HTTP_CODE" != "200" ]]; then
+            echo "::error::purge returned HTTP $HTTP_CODE: $(echo "$RESPONSE" | head -n -1)"
+            exit 1
+          fi
+          echo "purged ${#FILES[@]} URLs"
+          for f in "${FILES[@]:0:3}"; do
+            echo "$f: $(curl -s --max-time 30 "$f" | head -1)"
+          done

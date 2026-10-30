@@ -69,6 +69,87 @@ type Stack struct {
 	Temporal temporalclient.Client
 }
 
+// storyTemporalClient keeps production's shared-queue starts on this story's
+// worker. All other client operations and explicitly different queues pass through.
+// Queue isolation belongs to the fixture, not the production chat handler's Deps.
+type storyTemporalClient struct {
+	temporalclient.Client
+	taskQueue string
+}
+
+func (c storyTemporalClient) ExecuteWorkflow(ctx context.Context, options temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+	if options.TaskQueue == workflow.SharedTaskQueue {
+		options.TaskQueue = c.taskQueue
+	}
+	return c.Client.ExecuteWorkflow(ctx, options, wf, args...)
+}
+
+// forStory copies the stack: parallel stories must never replace the shared
+// client's routing or each other's worker queue.
+func (s *Stack) forStory(taskQueue string) *Stack {
+	story := *s
+	story.Temporal = storyTemporalClient{Client: s.Temporal, taskQueue: taskQueue}
+	return &story
+}
+
+type workflowStartRecorder struct {
+	temporalclient.Client
+	start func(context.Context, temporalclient.StartWorkflowOptions, interface{}, ...interface{}) (temporalclient.WorkflowRun, error)
+}
+
+func (c *workflowStartRecorder) ExecuteWorkflow(ctx context.Context, options temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+	return c.start(ctx, options, wf, args...)
+}
+
+func TestStoryTemporalClientQueueIsolation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	wantRun := &struct{ temporalclient.WorkflowRun }{}
+	wantErr := errors.New("start failed")
+	baseClient := &workflowStartRecorder{}
+	shared := &Stack{Repo: &db.Repo{}, Temporal: baseClient}
+	story := shared.forStory("story-queue")
+	otherStory := shared.forStory("other-story-queue")
+	require.Same(t, baseClient, shared.Temporal, "shared stack must not be mutated")
+	require.Same(t, shared.Repo, story.Repo)
+	require.Same(t, shared.Repo, otherStory.Repo)
+
+	for _, tc := range []struct {
+		name, queue, wantQueue string
+		stack                  *Stack
+	}{
+		{"shared queue", workflow.SharedTaskQueue, "story-queue", story},
+		{"explicit queue", "explicit-queue", "explicit-queue", story},
+		{"empty queue", "", "", story},
+		{"other story", workflow.SharedTaskQueue, "other-story-queue", otherStory},
+		{"shared stack", workflow.SharedTaskQueue, workflow.SharedTaskQueue, shared},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := temporalclient.StartWorkflowOptions{
+				ID: "workflow-id", TaskQueue: tc.queue,
+				WorkflowExecutionTimeout: time.Minute,
+				Memo:                     map[string]interface{}{"story": "memo"},
+			}
+			wantOptions := options
+			wantOptions.TaskQueue = tc.wantQueue
+			called := false
+			baseClient.start = func(gotCtx context.Context, got temporalclient.StartWorkflowOptions, wf interface{}, args ...interface{}) (temporalclient.WorkflowRun, error) {
+				called = true
+				require.Same(t, ctx, gotCtx)
+				require.Equal(t, wantOptions, got, "only the shared queue may change")
+				require.Equal(t, "test-workflow", wf)
+				require.Equal(t, []interface{}{"input", 42}, args)
+				return wantRun, wantErr
+			}
+			run, err := tc.stack.Temporal.ExecuteWorkflow(ctx, options, "test-workflow", "input", 42)
+			require.True(t, called)
+			require.Same(t, wantRun, run)
+			require.ErrorIs(t, err, wantErr)
+			require.Equal(t, tc.queue, options.TaskQueue, "caller options must not be mutated")
+		})
+	}
+}
+
 var (
 	stackOnce sync.Once
 	stack     *Stack
@@ -204,7 +285,10 @@ var noMCPServers = toolexec.MCPContextBinderFunc(func(tc *rctx.ToolContext) *rct
 // is torn down via t.Cleanup.
 func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Harness {
 	t.Helper()
-	s := requireStack(t)
+	taskQueueSuffix := shortID()
+	taskQueue := workersetup.TaskQueueName(taskQueueSuffix)
+	shared := requireStack(t)
+	s := shared.forStory(taskQueue)
 
 	cfg := &harnessConfig{}
 	for _, o := range opts {
@@ -252,8 +336,6 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	}
 
 	hub := noopStreamingHub{}
-	taskQueueSuffix := shortID()
-	taskQueue := workersetup.TaskQueueName(taskQueueSuffix)
 
 	mcpBinder := cfg.mcpBinder
 	if mcpBinder == nil {
@@ -269,7 +351,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 
 	progress := &atomic.Int64{}
 	temporalWorker, _, err := workersetup.NewWorker(&workersetup.Config{
-		TemporalClient:  s.Temporal,
+		// The SDK worker requires the concrete Dial client, not a wrapper.
+		// Its own queue is isolated by TaskQueueSuffix below; handler starts
+		// and the injected trigger launcher use the story-routed client.
+		TemporalClient:  shared.Temporal,
 		Database:        s.Repo,
 		StreamingHub:    hub,
 		ToolsFactory:    toolsFactory,
@@ -306,12 +391,11 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// No Router: these stories run without a daemon, so there is no tool to
 	// cancel on interrupt and no machine to wake for an attended turn.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:    slog.Default(),
-		Config:    &typedconfig.Config{},
-		Repo:      s.Repo,
-		Temporal:  s.Temporal,
-		Pause:     pause,
-		TaskQueue: workersetup.TaskQueueName(taskQueueSuffix),
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Temporal: s.Temporal,
+		Pause:    pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{

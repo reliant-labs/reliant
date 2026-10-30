@@ -12,7 +12,8 @@ import (
 )
 
 // automationGrants keeps one delegated `daemon:resume` token per (user, daemon)
-// that has at least one enabled trigger. A nil client (self-hosted: no control
+// that has at least one enabled trigger naming it, or that is a member of a
+// machine pool an enabled trigger names. A nil client (self-hosted: no control
 // plane, no suspendable workspaces) makes every method a no-op.
 //
 // Minting needs the user's live JWT, so it can only happen while they are
@@ -67,6 +68,12 @@ func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID
 	}
 	for _, t := range all {
 		if t.Enabled && t.DaemonID == daemonID {
+			return
+		}
+		// A pool trigger may wake any member: keep the grant of a machine
+		// that might be one. Over-keeping a token is safe; revoking one a pool
+		// still needs strands its sleeping member.
+		if t.Enabled && t.MachinePoolID != "" {
 			return
 		}
 	}

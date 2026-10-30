@@ -13,17 +13,24 @@ import (
 
 const planSchema = 1
 
-// Hash the actual working input bytes, not mtimes or just the diff's names.
-// Include untracked (non-ignored) inputs and deletions. This deliberately does
-// not hash node_modules or output/log directories ignored by git.
+// checkoutDigest identifies the inputs a plan was made from: HEAD names every
+// committed byte, so only what differs from it is read — the bytes of each
+// modified and untracked (non-ignored) file, and each deletion. Hashing every
+// tracked file instead read the whole checkout (~30 MB) three times per gate.
+// node_modules and output/log directories ignored by git are not inputs.
 func checkoutDigest(ctx context.Context, root string) (string, error) {
-	names, err := git(ctx, root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+	head, err := git(ctx, root, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	names, err := git(ctx, root, "ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		return "", err
 	}
 	paths := strings.Split(strings.TrimSuffix(names, "\x00"), "\x00")
 	slices.Sort(paths)
 	h := sha256.New()
+	fmt.Fprintf(h, "HEAD=%s\x00", strings.TrimSpace(head))
 	for _, name := range slices.Compact(paths) {
 		if name == "" {
 			continue

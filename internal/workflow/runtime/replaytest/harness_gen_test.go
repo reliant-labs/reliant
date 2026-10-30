@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enums "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	temporalclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
@@ -304,7 +305,14 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	}
 
 	hub := noopStreamingHub{}
-	taskQueueSuffix := shortID()
+	// The shared queue, no suffix: chat starts every run on
+	// workflow.SharedTaskQueue (#1676 removed chat.Deps.TaskQueue), so a
+	// suffixed worker would never see the scenario's workflows. Scenarios run
+	// one at a time against the one dev server, and each one's cleanup
+	// terminates whatever it left open before its worker drains
+	// (terminateOpenWorkflows), so the next scenario's worker cannot pick up a
+	// previous scenario's run.
+	const taskQueueSuffix = ""
 
 	// Production worker registration path — the same code the real worker
 	// binary runs. This is what makes the captured histories representative.
@@ -328,6 +336,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	t.Cleanup(func() {
 		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		terminateOpenWorkflows(t, s.Temporal)
 		if err := temporalWorker.Drain(stopCtx); err != nil {
 			t.Logf("worker did not stop: %v", err)
 		}
@@ -344,12 +353,11 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// first turn); the worker above has no router either, so the activity
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc, err := chat.New(chat.Deps{
-		Logger:    slog.Default(),
-		Config:    &typedconfig.Config{},
-		Repo:      s.Repo,
-		Temporal:  s.Temporal,
-		Pause:     pause,
-		TaskQueue: workersetup.TaskQueueName(taskQueueSuffix),
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Temporal: s.Temporal,
+		Pause:    pause,
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
@@ -372,6 +380,26 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		QuestionSvc: questionSvc,
 		Pause:       pause,
 		Ctx:         ctx,
+	}
+}
+
+// terminateOpenWorkflows ends every workflow still running in the harness
+// namespace. Scenarios share one dev server and the shared task queue, so a
+// run a scenario left open (parked on a question, a wait) must not outlive it.
+func terminateOpenWorkflows(t *testing.T, c temporalclient.Client) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	resp, err := c.ListOpenWorkflow(ctx, &workflowservice.ListOpenWorkflowExecutionsRequest{Namespace: temporalNamespace, MaximumPageSize: 1000})
+	if err != nil {
+		t.Logf("list open workflows: %v", err)
+		return
+	}
+	for _, e := range resp.GetExecutions() {
+		ex := e.GetExecution()
+		if err := c.TerminateWorkflow(ctx, ex.GetWorkflowId(), ex.GetRunId(), "replay harness: scenario finished"); err != nil {
+			t.Logf("terminate %s: %v", ex.GetWorkflowId(), err)
+		}
 	}
 }
 

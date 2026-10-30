@@ -9,6 +9,8 @@
  * bound: GetStatus reports it as `observed.url`. That URL is read here, never
  * composed — the scheme and port are the environment's to spell (dev serves
  * plain HTTP). Custom domains come from the org's domain list, by binding.
+ * The address a row OPENS is workloadOpenUrl's — the custom domain once it is
+ * live and healthy — so the console and the Apps page link to the same place.
  *
  * Pure functions over shapes the console already holds, so the environment
  * page and the Overview read one model and the tests build it from literals.
@@ -16,7 +18,7 @@
 
 import { compareEnvNames, hostOf } from "./apps";
 import type { DomainState, ForgeDomain } from "./domains";
-import { hostedVerdictOf, workloadLink, type ForgeHostedWorkload, type HostedVerdict } from "./topology";
+import { hostedVerdictOf, workloadLink, workloadOpenUrl, type ForgeHostedWorkload, type HostedVerdict } from "./topology";
 
 /** A custom domain bound to a frontend, and where it is in acquisition. */
 export interface FrontendDomain {
@@ -29,10 +31,17 @@ export interface FrontendDomain {
 export interface Frontend {
   env: string;
   name: string;
-  /** The default platform URL, "" until the platform has allocated a hostname. */
+  /**
+   * Where the site is opened (workloadOpenUrl): its custom domain once that
+   * is live and healthy, else the platform URL. "" when it has neither.
+   */
   url: string;
   /** `url` without scheme or trailing slash, for display. */
   host: string;
+  /** The default platform URL, "" until the platform has allocated a hostname. Equal to `url` without a live custom domain. */
+  platformUrl: string;
+  /** `platformUrl` without scheme or trailing slash. */
+  platformHost: string;
   /** The release live in this environment — a site is promoted with its environment. */
   release: string;
   verdict: HostedVerdict;
@@ -66,12 +75,15 @@ export function frontendsOf(
     const name = (workload.name ?? "").trim();
     if (name === "" || (workload.tier ?? "").trim().toLowerCase() !== "static") continue;
     if ((workload.observed_state ?? "").trim().toLowerCase() === "deleted") continue;
-    const url = workloadLink(workload);
+    const url = workloadOpenUrl(workload);
+    const platformUrl = workloadLink(workload);
     out.push({
       env: env.name,
       name,
       url,
       host: url === "" ? "" : hostOf(url),
+      platformUrl,
+      platformHost: platformUrl === "" ? "" : hostOf(platformUrl),
       release: env.release,
       verdict: hostedVerdictOf(workload.verdict),
       stopped: workload.observed_state === "suspended" || workload.declared_run_state === "suspended",

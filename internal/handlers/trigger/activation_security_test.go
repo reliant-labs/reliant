@@ -163,3 +163,43 @@ func TestAgentActivationBoundedClosure(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, fmt.Sprint(err), "limit")
 }
+
+// An unbounded event input that reaches a child workflow through a
+// transforming argument still may not choose the child's tools: the child's
+// resolved value ("view") carries no trace of the event.
+func TestAgentActivationRefusesToolsAnEventPicksThroughAChild(t *testing.T) {
+	testkit.Slow(t, "DB-backed activation approval with a child workflow")
+	e := setupTriggerTest(t)
+	e.saveWorkflow(t, "picks-tools", `name: picks-tools
+inputs:
+  level: {type: string, default: low}
+entry: [agent]
+nodes:
+  - id: agent
+    type: call_llm
+    args:
+      model: {tags: [fast]}
+      tools_config:
+        preloaded_tools: "{{ inputs.level == 'high' ? ['shell'] : ['view'] }}"
+        loadable_tools: []
+`)
+	e.saveWorkflow(t, "event-parent", `name: event-parent
+inputs:
+  mode: {type: string, default: safe}
+triggers:
+  - name: hook
+    schedule: {cron: "0 9 * * *"}
+    inputs: {mode: '{{ trigger.payload.scheduled_for }}'}
+    prompt: go
+entry: [child]
+nodes:
+  - id: child
+    type: workflow
+    ref: project://picks-tools
+    args:
+      level: "{{ inputs.mode == 'admin' ? 'high' : 'low' }}"
+`)
+	p := tools.ActivationParams{Name: "event parent", Workflow: "event-parent", WorkflowTrigger: "hook", ProjectID: e.projectID, MachineID: &e.daemonID}
+	_, err := e.svc.PrepareActivation(e.ctx, e.userID, tools.ToolCreateTriggerActivation, p)
+	require.ErrorContains(t, err, "fixed privilege choices")
+}

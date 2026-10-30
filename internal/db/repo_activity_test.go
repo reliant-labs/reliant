@@ -582,6 +582,83 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 	}
 }
 
+// waitingTxn identifies the transaction seen waiting on the counter row. A
+// backend's xact_start is fixed for the life of one transaction, so a writer
+// that was aborted and retried differs even if the pool reuses its connection.
+type waitingTxn struct {
+	pid       int
+	xactStart time.Time
+}
+
+// scanWaitingTransactions consumes one catalog poll. Activity fields can be
+// observed while a backend is between transactions: a lock-wait observation
+// alone does not guarantee a non-NULL xact_start. Only a valid transaction
+// identity can satisfy the writer barrier; otherwise awaitWriter must poll again.
+func scanWaitingTransactions(rows *sql.Rows) ([]waitingTxn, error) {
+	defer rows.Close()
+	var waiters []waitingTxn
+	for rows.Next() {
+		var w waitingTxn
+		var xactStart sql.NullTime
+		if err := rows.Scan(&w.pid, &xactStart); err != nil {
+			return nil, err
+		}
+		if !xactStart.Valid {
+			continue
+		}
+		w.xactStart = xactStart.Time
+		waiters = append(waiters, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return waiters, rows.Close()
+}
+
+func TestScanWaitingTransactions(t *testing.T) {
+	t.Parallel()
+	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	const pid = 42
+	xactStart := time.Date(2026, time.October, 27, 20, 44, 24, 0, time.UTC)
+	poll := func(query string, args ...any) []waitingTxn {
+		t.Helper()
+		rows, err := rawDB.QueryContext(ctx, query, args...)
+		if err != nil {
+			t.Fatalf("query staged catalog observation: %v", err)
+		}
+		waiters, err := scanWaitingTransactions(rows)
+		if err != nil {
+			t.Fatalf("scan staged catalog observation: %v", err)
+		}
+		return waiters
+	}
+
+	// Stage startup before the writer barrier deterministically. A transient
+	// NULL is not an error, nor may it release the rival before a real wait.
+	if waiters := poll(`SELECT $1::int AS pid, NULL::timestamptz AS xact_start`, pid); len(waiters) != 0 {
+		t.Fatalf("NULL transaction identity satisfied the writer barrier: %+v", waiters)
+	}
+	waiters := poll(`SELECT $1::int AS pid, $2::timestamptz AS xact_start`, pid, xactStart)
+	if len(waiters) != 1 || waiters[0].pid != pid || !waiters[0].xactStart.Equal(xactStart) {
+		t.Fatalf("valid transaction identity was not preserved: %+v", waiters)
+	}
+
+	// A NULL row must not hide valid rows in the same poll, nor may filtering
+	// it collapse multiple real waiters and bypass awaitWriter's uniqueness check.
+	waiters = poll(`SELECT * FROM (VALUES
+		($1::int, NULL::timestamptz),
+		($1::int, $2::timestamptz),
+		($1::int, $3::timestamptz)
+	) AS activity(pid, xact_start)`, pid, xactStart, xactStart.Add(time.Second))
+	if len(waiters) != 2 || waiters[0].pid != pid || waiters[1].pid != pid ||
+		!waiters[0].xactStart.Equal(xactStart) || !waiters[1].xactStart.Equal(xactStart.Add(time.Second)) {
+		t.Fatalf("valid waiters or distinct retry identities were lost: %+v", waiters)
+	}
+}
+
 // The deterministic form of the race above: a writer that has to WAIT for a
 // user's counter row must, once the holder commits, take the next number — not
 // be aborted because the holder got there first.
@@ -639,15 +716,6 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 		return tx
 	}
 
-	// waitingTxn identifies the transaction seen waiting on the counter row. A
-	// backend's xact_start is fixed for the life of one transaction, so a
-	// writer that was aborted and retried shows up as a different waitingTxn
-	// even when the pool hands the retry the same connection.
-	type waitingTxn struct {
-		pid       int
-		xactStart time.Time
-	}
-
 	// awaitWriter blocks until the writer is either waiting on a lock or has
 	// returned, and reports which transaction is waiting. pg_stat_activity is
 	// read through the pool, outside any transaction, so each poll sees a
@@ -672,16 +740,9 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("poll pg_stat_activity: %v", err)
 			}
-			var waiters []waitingTxn
-			for rows.Next() {
-				var w waitingTxn
-				if err := rows.Scan(&w.pid, &w.xactStart); err != nil {
-					t.Fatalf("scan pg_stat_activity: %v", err)
-				}
-				waiters = append(waiters, w)
-			}
-			if err := rows.Close(); err != nil {
-				t.Fatalf("close pg_stat_activity rows: %v", err)
+			waiters, err := scanWaitingTransactions(rows)
+			if err != nil {
+				t.Fatalf("scan pg_stat_activity: %v", err)
 			}
 			switch len(waiters) {
 			case 0:

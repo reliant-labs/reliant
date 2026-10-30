@@ -173,7 +173,7 @@ function AddMachineSheetBody({
   // the sheet keeps watching for its caller.
   const wasOpen = useRef(open);
   useEffect(() => {
-    if (open && !wasOpen.current && step.kind !== "provisioning") {
+    if (open && !wasOpen.current && step.kind !== "creating" && step.kind !== "provisioning") {
       setKind(initialKind ?? (cloud ? "cloud" : "self"));
       setSize(undefined);
       setTypedName(null);
@@ -202,7 +202,8 @@ function AddMachineSheetBody({
   );
 
   const provisioning = step.kind === "provisioning" ? step : null;
-  useEffect(() => onWatchingChange(provisioning !== null), [provisioning, onWatchingChange]);
+  const inFlight = step.kind === "creating" || step.kind === "provisioning";
+  useEffect(() => onWatchingChange(inFlight), [inFlight, onWatchingChange]);
   const provisioned = provisioning ? daemons.find((d) => d.daemonId === provisioning.daemonId) : undefined;
   useEffect(() => {
     if (provisioning && provisioned?.status === DaemonStatus.ACTIVE) {

@@ -6,6 +6,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // =============================================================================
@@ -40,6 +41,8 @@ type ExecuteToolsInput struct {
 	// RefusedToolCalls are the calls the workflow refused (a mutating
 	// integration action the user did not approve), by id, with the reason.
 	RefusedToolCalls map[string]string `json:"-"`
+	// DaemonSelector is the node/workflow's explicit machine selector.
+	DaemonSelector *activitytypes.DaemonSelector `json:"-"`
 }
 
 // V3 returns the ActivityInput for Temporal's test framework.
@@ -61,12 +64,13 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 
 	return ActivityInput{
 		Runtime: RuntimeContext{
-			ChatID:        t.ChatID,
-			Thread:        t.Thread,
-			StepID:        t.StepID,
-			LoopNodeID:    t.LoopNodeID,
-			LoopIteration: t.LoopIteration,
-			ProjectPath:   t.ProjectPath,
+			ChatID:         t.ChatID,
+			Thread:         t.Thread,
+			StepID:         t.StepID,
+			LoopNodeID:     t.LoopNodeID,
+			LoopIteration:  t.LoopIteration,
+			ProjectPath:    t.ProjectPath,
+			DaemonSelector: t.DaemonSelector,
 		},
 		Node: &reliantv1.Node{
 			Type: "execute_tools",

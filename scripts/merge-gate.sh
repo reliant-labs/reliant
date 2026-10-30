@@ -11,24 +11,28 @@
 #   --amend       a regenerate that changes only generated paths is amended
 #                 into HEAD instead of failing (the merge queue's mode: the
 #                 merge with main can leave generated files a step behind)
-#   --regen       repair generation after conflict resolution, but only when
-#                 generator inputs changed (full validation is release-only)
+#   --regen       run forge generate even if no forge input changed (the
+#                 merge queue resolved a generated-file conflict)
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
 #   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
-#   docs/Electron/production renderer/full fallbacks: RELEASE ONLY
+#   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      compile (go list -export: no link) every package whose build
 #              contains a change (the plan's go.build), or ./... on a full Go lane
 #   test       tools/test-affected run -plan <the plan> (-short, cached, no
-#              -race): the changed packages and their DIRECT importers, and the
-#              vitest files within two imports of a changed module; deeper
-#              dependents run in the release gate (MG_REACH=all for all). A Go
+#              -race): the changed packages and their DIRECT importers, the
+#              vitest files within two imports of a changed module, and the
+#              electron tests when electron/ changed; deeper dependents run in
+#              the release gate (MG_REACH=all for all). A change the rules cannot
+#              scope (go.mod, package.json, config) runs its whole Go and
+#              electron lane; a full web fallback runs tsc here and the whole
+#              vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
-#              gen, node configs), forcing a check with checkout-local state,
+#              gen, node configs), incremental on state this checkout wrote,
 #              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
@@ -37,7 +41,7 @@
 #              like build and test it starts after the generators in --amend
 #              mode, so it reads the amended tree (lint reads generated files
 #              such as gen/forge_descriptor.json)
-#   migsafety  forge lint --migration-safety, only when a migration changed
+#   migsafety  forge lint --migration-safety, only when a migration or forge.yaml changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
@@ -46,7 +50,8 @@
 # a stale generated file (a mock the merge left a step behind) must never be
 # built and tested before the regenerate that fixes it. On a clean tree without
 # --amend the generators cannot change what is judged, so they run in scratch
-# checkouts beside the other phases.
+# checkouts beside the other phases, except on a host under 32 GiB (a hosted
+# runner), where forge generate runs first and alone (the memory budget below).
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
@@ -62,7 +67,7 @@ while [ $# -gt 0 ]; do
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,57p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -99,6 +104,26 @@ gate_cpus=${MG_CPUS:-$(( free > share ? free : share ))}
 [ "$gate_cpus" -le "$cpus" ] || gate_cpus=$cpus
 half=$(( gate_cpus / 2 )); [ "$half" -ge 2 ] || half=2
 quarter=$(( gate_cpus / 4 )); [ "$quarter" -ge 2 ] || quarter=2
+
+# ── the gate's memory budget ──────────────────────────────────────────────
+# Cores are not the only limit. Measured on reliant#1772 (208 files, a proto
+# change): forge generate alone peaks at 7.5 GB RSS, tsc -b at 2.3 GB, each
+# test link at 2.7 GB, and the phases beside one another reach 13 GB within
+# five minutes. A hosted ubuntu-latest runner has 16 GiB: the merge queue's
+# runner ran out of memory there three times, its agent died ("The runner has
+# received a shutdown signal"), and the job sat until its timeout. So on a
+# host under MG_GEN_ALONE_GIB (default 32) forge generate runs FIRST and alone,
+# with the whole CPU budget, and the other phases start once it is done; on
+# a bigger host it still runs beside them. MG_MEM_GIB=<n> overrides the
+# detected size (the smaller of physical memory and the cgroup's memory.max).
+mem_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null)
+[ -n "$mem_kib" ] || mem_kib=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 ))
+cg_max=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
+case "$cg_max" in ''|max|*[!0-9]*) ;; *) [ $(( cg_max / 1024 )) -lt "$mem_kib" ] && mem_kib=$(( cg_max / 1024 )) ;; esac
+mem_gib=${MG_MEM_GIB:-$(( mem_kib / 1048576 ))}
+gen_alone=0
+# 0 means the size is unknown: keep the concurrent default.
+[ "$mem_gib" -gt 0 ] && [ "$mem_gib" -lt "${MG_GEN_ALONE_GIB:-32}" ] && gen_alone=1
 
 [ -n "$base" ] || base=$(git merge-base HEAD origin/main) || { echo "merge-gate: no merge-base with origin/main (fetch it, or pass --base)" >&2; exit 2; }
 base=$(git rev-parse "$base")
@@ -194,6 +219,9 @@ gen_forge() {
   b=$(cd "$wt" && snapshot)
   if [ "$hooks_only" = true ]; then
     tc=$(sed -n 's/^toolchain //p' go.mod); [ -n "$tc" ] || tc="go$(sed -n 's/^go //p' go.mod)"
+    # controlplane-client runs buf, whose 2m deadline must not cover compiling
+    # its `go tool` plugins (task generate:forge gets this as a dep).
+    case " $hooks " in *" controlplane-client "*) (cd "$wt" && GOMAXPROCS="$gen_procs" task deps:go-protoc-plugins) || return 1 ;; esac
     for h in $hooks; do
       echo "==> generate hook $h: $(jq -r --arg h "$h" '.forge_generate.hook_commands[$h] | join(" ")' "$L/plan.json")"
       (cd "$wt" && jq -r --arg h "$h" '.forge_generate.hook_commands[$h][]' "$L/plan.json" | tr '\n' '\0' | xargs -0 env GOMAXPROCS="$gen_procs" GOWORK=off GOTOOLCHAIN="$tc") || return 1
@@ -205,11 +233,17 @@ gen_forge() {
   judge generate "$b" "$wt" || return 1
   (cd "$wt" && GOMAXPROCS=$gen_procs "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
 }
+gen_docs() {
+  local wt=$1 b
+  b=$(cd "$wt" && snapshot)
+  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:docs) || return 1
+  judge docs "$b" "$wt"
+}
 
 # ── plan ──────────────────────────────────────────────────────────────────
 # The merge tier's Go fan-out: direct importers only (owner, 2026-10-24).
 reach=${MG_REACH:-direct}
-phase plan go run ./tools/test-affected plan -merge -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
+phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 # Fail closed: without jq, or with a plan it cannot parse, every lane would read
 # as "not selected" and be silently skipped.
@@ -222,12 +256,11 @@ load_selection() {
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
   elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
-  # --regen repairs a conflict only when actual generator inputs changed.
-  [ "$regen" = 1 ] && [ "$fgen" = true ] && hooks_only=false
+  [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
   # vitest strips types: every changed web source needs tsc, tested or not.
   typecheck=false
-  if echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
@@ -262,6 +295,7 @@ prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
+  if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' "${need[@]}" | sort -u); do
     npm_install "$d" & npm_pids+=($!)
@@ -290,6 +324,7 @@ gen_procs=$quarter; [ "$inplace" = 1 ] && gen_procs=$gate_cpus
 # Every consumer, including gate-verify, uses the regenerated-tree plan.
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
+  [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
   # --amend: fold what the generators rewrote (judge allowed generated paths
   # only) into HEAD before anything builds or tests it.
   if [ "$amend" = 1 ] && [ "$fail" = 0 ] && [ -n "$(git status --porcelain)" ]; then
@@ -298,7 +333,7 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
   # Dirty-tree generation can expand reach too, even without --amend.
   if [ "$fail" = 0 ]; then
-    phase plan-2 go run ./tools/test-affected plan -merge -json -reach "$reach" -base "$base" || fail=1
+    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
     if [ "$fail" = 0 ]; then
       sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"
       run_plan=$L/plan-2.json
@@ -317,7 +352,16 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   fi
 elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
-    if scratch gen; then phase generate gen_forge "$SCRATCH" & pids+=($!); else fail=1; fi
+    if ! scratch gen; then fail=1
+    elif [ "$gen_alone" = 1 ]; then
+      # A small host (the memory budget above): generate first, alone.
+      notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; forge generate ran alone before the other phases")
+      gen_procs=$gate_cpus; phase generate gen_forge "$SCRATCH" || fail=1; gen_procs=$quarter
+    else phase generate gen_forge "$SCRATCH" & pids+=($!); fi
+  fi
+  # A generate that already failed alone leaves nothing to run docs beside.
+  if [ "$dgen" = true ] && [ "$fail" = 0 ]; then
+    if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
 # build_check: compile, without linking, every package whose build contains a
@@ -346,10 +390,19 @@ build_check() {
 lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-markers
   --create-nullability --computed-fields --read-only-fields --db-grants
   --column-markers --closed-sets --tracing --guarded-fields)
+# The whole vitest suite (1033 files, ~20 min on a loaded host) is a release
+# blocker, not a merge blocker (owner, 2026-10-28: slow suites gate releases;
+# the merge gate aims at five minutes). A full web fallback still type-checks
+# every web source here; its tests run in the release gate's `task test`.
+test_lanes=go,web,electron
+if [ "$webfull" = true ]; then
+  test_lanes=go,electron
+  notes+=("web: FULL fallback; tsc -b runs here, the whole vitest suite in the release gate")
+fi
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes go,web -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
@@ -365,11 +418,13 @@ if [ "$fail" = 0 ]; then
   phase proto task proto:lint & pids+=($!)
   # Build reach includes ordinary production packages with no test binary.
   # Keep test-only changes too: vet checks their tests even when Build is empty.
-  mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
+  if [ "$gofull" = true ]; then vet_pkgs=(./...); else
+    mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
+  fi
   if [ ${#vet_pkgs[@]} -gt 0 ]; then
     phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
   fi
-  if echo "$files" | grep -qE '^db/migrations/'; then
+  if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator
@@ -378,8 +433,10 @@ if [ "$fail" = 0 ]; then
   if echo "$files" | grep -qE '^db/migrations/'; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
-  for p in "${pids[@]}"; do wait "$p" || fail=1; done
 fi
+# Every launched phase is waited for, the generators too when the gate failed
+# before build: cleanup must not remove a checkout a generator still writes.
+for p in "${pids[@]}"; do wait "$p" || fail=1; done
 # --amend: a failed gate leaves no half-regenerated tree behind.
 if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
   git reset -q --hard; git clean -fdq
@@ -406,7 +463,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-tools-protoc-gen-es generate plan-2 build test typecheck lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
@@ -414,7 +471,6 @@ end=$(date +%s)
   echo
   echo "wall: $((end - t0))s in the slot, after ${slot_wait}s queued for it; diff base $(git rev-parse --short "$base")"
   for n in "${notes[@]}"; do echo "- $n"; done
-  jq -r '.release_deferred[]? | "- release-deferred: " + .' "$run_plan"
   echo "head: $(git rev-parse --short HEAD)  logs: $L"
 } >"$L/summary.md"
 cat "$L/summary.md"

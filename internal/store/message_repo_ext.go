@@ -191,17 +191,26 @@ func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, ch
 // ListTranscriptSiblingMessagesInRange is the same sibling set as
 // ListRecentTranscriptSiblingMessages, for a ListMessages page: every such
 // message with seq >= fromSeq and, when toSeq is set, seq < toSeq, ascending.
-// It is not capped, because a page's seq range is already bounded by the
-// main-thread window it accompanies, and capping inside that range would lose
-// siblings no later page returns (the next cursor is the page's oldest seq).
-func ListTranscriptSiblingMessagesInRange(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
+// A page whose main-thread window bounds the range passes limit 0: capping
+// inside that range would lose siblings no later page returns (the next cursor
+// is the page's oldest seq). A page with no main-thread window passes a limit,
+// and gets the newest limit rows of the range.
+func ListTranscriptSiblingMessagesInRange(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*core.Message, error) {
 	var rows []*Message
 	q := transcriptSiblingMessages(db, chatID, mainThreadID, fromSeq, &rows)
 	if toSeq != nil {
 		q = q.Where("seq < ?", *toSeq)
 	}
-	if err := q.OrderExpr("seq ASC").Scan(ctx); err != nil {
+	if limit > 0 {
+		q = q.OrderExpr("seq DESC").Limit(int64(limit))
+	} else {
+		q = q.OrderExpr("seq ASC")
+	}
+	if err := q.Scan(ctx); err != nil {
 		return nil, fmt.Errorf("failed to list transcript sibling messages in range: %w", err)
+	}
+	if limit > 0 {
+		slices.Reverse(rows)
 	}
 	return messagesFromRows(rows), nil
 }
@@ -272,18 +281,26 @@ func ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Cont
 	return messagesFromRows(rows), nil
 }
 
+// CountMessagesOutsideThreadSQL is CountMessagesInChatOutsideThread's
+// statement, exported so the index test
+// (internal/db/messages_chat_thread_index_test.go) plans exactly what runs.
+// It takes the chat id and the thread id.
+//
+// It is an index-only scan of idx_messages_chat_thread: thread_id is in the
+// index, so no heap row is read to test it. Without that index it read every
+// one of the chat's rows from the heap (prod: p50 3.9s on long chats, ~95% of
+// a slow ListMessages).
+const CountMessagesOutsideThreadSQL = `SELECT count(*) FROM messages WHERE chat_id = ? AND thread_id <> ?`
+
 // CountMessagesInChatOutsideThread is how many messages of the chat sit on
 // threads other than threadID: with a thread's own resolved count, the chat's
 // total, in one COUNT instead of a chat-wide count minus a thread count.
 func CountMessagesInChatOutsideThread(ctx context.Context, db orm.Context, chatID, threadID string) (int, error) {
-	n, err := db.Bun().NewSelect().Model((*Message)(nil)).
-		Where("chat_id = ?", chatID).
-		Where("thread_id <> ?", threadID).
-		Count(ctx)
-	if err != nil {
+	var n int
+	if err := db.Bun().NewRaw(CountMessagesOutsideThreadSQL, chatID, threadID).Scan(ctx, &n); err != nil {
 		return 0, fmt.Errorf("failed to count messages outside thread: %w", err)
 	}
-	return int(n), nil
+	return n, nil
 }
 
 // UpdateMessageUsage records what a message cost: the context size the LLM
@@ -374,6 +391,7 @@ func messageRow(msg *core.Message) *Message {
 		ProviderAccountID: msg.ProviderAccountID,
 		SenderThreadID:    msg.SenderThreadID,
 		SenderKind:        msg.SenderKind,
+		SenderSubject:     msg.SenderSubject,
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -401,6 +419,7 @@ func messageFromRow(row *Message) *core.Message {
 		ProviderAccountID: row.ProviderAccountID,
 		SenderThreadID:    row.SenderThreadID,
 		SenderKind:        row.SenderKind,
+		SenderSubject:     row.SenderSubject,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}

@@ -54,6 +54,7 @@ import { AlertTriangle, ArrowLeft, ExternalLink, KeyRound, Lock, LockOpen, Plus 
  */
 const SECRETS_DOCS_URL = "https://docs.reliantlabs.io/features/secrets";
 
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Status from "@/components/forge-ui/status";
 import { cn } from "@/lib/utils";
 import type { ForgeSecretsReport } from "@/services/forge/secrets";
@@ -74,10 +75,10 @@ import {
 
 import { formatCountdown } from "@/services/forge/stepUp";
 
+import { Ago } from "../Releases/releaseParts";
 import { SecretVersionHistory } from "./SecretVersionHistory";
 import { useNow } from "./useStepUpGate";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ManagedSecretsViewProps {
   env: string;
@@ -425,16 +426,52 @@ function Divider() {
 
 // ── List ────────────────────────────────────────────────────────────────────
 
+type SecretListRow = { name: string; row: SecretSurfaceRow };
+
+const SECRET_COLUMNS: DataTableColumn<SecretListRow>[] = [
+  {
+    key: "name",
+    header: "Name",
+    // Mono: a secret name is an identifier.
+    className: "font-mono",
+    render: (_, { row }) => row.name,
+  },
+  {
+    key: "status",
+    header: "Status",
+    render: (_, { row }) => (
+      <Status
+        size="sm"
+        tone={rowStatusVariant(row)}
+        label={<span className="text-xs">{rowStatusLabel(row)}</span>}
+      />
+    ),
+  },
+  {
+    key: "version",
+    header: "Version",
+    className: "font-mono text-xs text-ink-muted",
+    render: (_, { row }) =>
+      row.summary && row.summary.currentVersion > 0 ? `v${row.summary.currentVersion}` : "—",
+  },
+  {
+    key: "updated",
+    header: "Last updated",
+    className: "text-xs text-ink-muted",
+    render: (_, { row }) => (row.summary?.updatedAt ? <Ago at={row.summary.updatedAt} /> : "—"),
+  },
+  {
+    key: "declaredBy",
+    header: "Declared by",
+    className: "text-xs text-ink-muted",
+    render: (_, { row }) => <DeclaredBy row={row} />,
+  },
+];
+
 /**
- * The table.
- *
- * A semantic <table> for the header/row relationship a screen reader needs,
- * with the visual weight of a list: no vertical rules, no zebra striping, no
- * fills. The only chrome is one hairline under the header and one between
- * rows.
- *
- * The whole row is the click target, not a trailing "View" link — the row IS
- * the affordance, which is why the hover tint is on the row.
+ * The table: forge-ui's DataTable, stacked into cards on a phone. The whole
+ * row opens the secret, not a trailing "View" link — the row IS the
+ * affordance. No values are shown or fetched.
  */
 function SecretList({
   rows,
@@ -444,74 +481,15 @@ function SecretList({
   onSelect: (name: string) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
-      <StackedTable className="w-full border-collapse text-sm">
-        <caption className="sr-only">
-          Secrets in this environment, by state and version. No values are shown or fetched.
-        </caption>
-        <thead>
-          <tr className="border-b border-border">
-            <Th>Name</Th>
-            <Th>Status</Th>
-            <Th>Version</Th>
-            <Th>Last updated</Th>
-            <Th>Declared by</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.name}
-              data-testid={`secret-row-${row.name}`}
-              onClick={() => onSelect(row.name)}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelect(row.name);
-                }
-              }}
-              className={cn(
-                "cursor-pointer border-b border-border/60 transition-colors last:border-0",
-                "hover:bg-ink/[0.03] focus:outline-none focus-visible:bg-ink/[0.03]"
-              )}
-            >
-              {/* Mono: a secret name is an identifier. */}
-              <td className="px-4 py-2.5 font-mono text-sm text-ink">{row.name}</td>
-              <td className="px-4 py-2.5">
-                <Status
-                  size="sm"
-                  tone={rowStatusVariant(row)}
-                  label={<span className="text-xs">{rowStatusLabel(row)}</span>}
-                />
-              </td>
-              <td className="px-4 py-2.5 font-mono text-xs text-ink-muted">
-                {row.summary && row.summary.currentVersion > 0 ? `v${row.summary.currentVersion}` : "—"}
-              </td>
-              <td className="px-4 py-2.5 text-xs text-ink-muted">
-                {formatShort(row.summary?.updatedAt)}
-              </td>
-              <td className="px-4 py-2.5 text-xs text-ink-muted">
-                <DeclaredBy row={row} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </StackedTable>
-    </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th
-      scope="col"
-      /* Muted uppercase micro-label — the section-label treatment, used for
-         column heads so they recede behind the data they describe. */
-      className="px-4 py-2 text-left text-2xs font-medium uppercase tracking-wide text-ink-muted"
-    >
-      {children}
-    </th>
+    <DataTable<SecretListRow>
+      stacked
+      ariaLabel="Secrets in this environment"
+      columns={SECRET_COLUMNS}
+      data={rows.map((row) => ({ name: row.name, row }))}
+      getRowKey={(r) => r.name}
+      getRowAction={(r) => () => onSelect(r.name)}
+      getRowProps={(r) => ({ "data-testid": `secret-row-${r.name}` })}
+    />
   );
 }
 
@@ -533,13 +511,6 @@ function DeclaredBy({ row }: { row: SecretSurfaceRow }) {
       {names.length > 2 && ` +${names.length - 2}`}
     </span>
   );
-}
-
-function formatShort(iso: string | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 // ── Detail ──────────────────────────────────────────────────────────────────

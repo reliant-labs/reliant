@@ -81,6 +81,9 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 	if run.Outcome != nil {
 		out.Outcome = *run.Outcome
 	}
+	if run.FailureDetail != nil {
+		out.FailureDetail = *run.FailureDetail
+	}
 	if run.CompletedAt != nil {
 		out.CompletedAtMs = run.CompletedAt.UnixMilli()
 	}
@@ -345,7 +348,7 @@ func (s *Service) ListRuns(
 		return connect.NewResponse(filterRunsToProto(children, req.Msg)), nil
 
 	case req.Msg.GetSessionId() != "":
-		chat, err := s.deps.Repo.GetChat(ctx, req.Msg.GetSessionId())
+		chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 		}

@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: check_run.update
+display_name: Update check run
+summary: Move a check run on (queued to in_progress to completed), or change what it reports.
+description: >-
+  Update a check run that check_run.create made, by its id. Send only what
+  changes. A conclusion completes the run. A completed run can be given a new
+  conclusion, but its commit cannot change: for a new head, create a new
+  run. Like check_run.create, this works only when acting as the Reliant
+  App, which created the run (GitHub answers 403 otherwise).
+keywords: [check, check run, status, ci, complete, conclusion]
+placement: server
+mutates: true
+# Workflow-only, like check_run.create.
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, check_run_id]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    check_run_id:
+      type: integer
+      minimum: 1
+      title: Check run id
+      description: The id check_run.create (or check_run.list) returned.
+      examples: [4242]
+    name: { $ref: ../schemas/check_run_name.yaml }
+    status: { $ref: ../schemas/check_run_status.yaml }
+    conclusion: { $ref: ../schemas/check_run_conclusion.yaml }
+    details_url: { $ref: ../schemas/check_run_details_url.yaml }
+    external_id: { $ref: ../schemas/check_run_external_id.yaml }
+    started_at: { $ref: ../schemas/check_run_started_at.yaml }
+    completed_at: { $ref: ../schemas/check_run_completed_at.yaml }
+    output: { $ref: ../schemas/check_run_output.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: PATCH
+  path: /repos/{{ params.owner }}/{{ params.repo }}/check-runs/{{ params.check_run_id }}
+  body_expr: >-
+    {?"name": params.?name,
+     ?"status": params.?status,
+     ?"conclusion": params.?conclusion,
+     ?"details_url": params.?details_url,
+     ?"external_id": params.?external_id,
+     ?"started_at": params.?started_at,
+     ?"completed_at": params.?completed_at,
+     ?"output": params.?output}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: { $ref: ../schemas/check_run_select.yaml }
+  schema: { $ref: ../schemas/check_run_output_schema.yaml }

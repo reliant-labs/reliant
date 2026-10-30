@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -64,7 +65,8 @@ type IntegrationAccess interface {
 
 // inboundUnavailable reports a kind this deployment cannot serve.
 func inboundUnavailable(what string) error {
-	return svcerr.Unavailable(fmt.Sprintf("%s triggers are not available on this server", what))
+	msg := fmt.Sprintf("%s triggers are not available on this server", what)
+	return tools.RefuseActivation(msg, svcerr.Unavailable(msg))
 }
 
 // applyInboundDefinition fills the kind-specific fields of an inbound
@@ -147,7 +149,8 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 	}
 	if err != nil || conn == nil || conn.UserID != userID {
 		if requested == nil || *requested == "" {
-			return "", svcerr.FailedPrecondition(fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration))
+			msg := fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration)
+			return "", tools.RefuseActivation(msg, svcerr.FailedPrecondition(msg))
 		}
 		return "", svcerr.NotFound("connection")
 	}

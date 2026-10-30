@@ -92,11 +92,12 @@ import {
   type RunWorkflowValue,
 } from "../../workflow/run/runWorkflowValues";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
-import { ActingIdentityField } from "../ActingIdentityField";
+import { ActingIdentityField, defaultActingIdentity, reliantBotAvailable } from "../ActingIdentityField";
 import { buildDaemonChoices, NO_MACHINE } from "../daemonChoices";
 import { uniqueName } from "./autoName";
 import { Disclosure } from "./Disclosure";
-import { defaultMachine, lastUsedDaemon } from "./machineDefault";
+import { defaultMachine } from "./machineDefault";
+import { useRecentMachine } from "./useRecentMachine";
 import type { AutomationDialogMode } from "./openAutomationDialog";
 import { MachineSelect, WhereSummary } from "./WhereSummary";
 import { outcomeLabel, planEnable, refusalHeadline, summarizeEnable, triggersNeedingPrompt, type EnableVerdict } from "../enableWorkflow";
@@ -251,13 +252,14 @@ export function DeclaredAutomationForm({
   const [connections, setConnections] = useState<Record<string, string>>({});
   const [chosenIdentity, setChosenIdentity] = useState<ActingIdentityKey>();
   const allGitHub = declared.length > 0 && declared.every((d) => integrationOf(d)?.integration === "github");
-  const hasOtherIntegration = declared.some((d) => {
-    const integration = integrationOf(d)?.integration;
-    return integration && integration !== "github";
-  });
+  const anyGitHub = declared.some((d) => integrationOf(d)?.integration === "github");
   const storedIdentity = existing[0]?.actingIdentity;
   const uniformStoredIdentity = existing.length > 0 && existing.every((t) => t.actingIdentity === storedIdentity) ? storedIdentity : undefined;
-  const actingIdentity = chosenIdentity ?? (existing.length > 0 ? uniformStoredIdentity : allGitHub ? "app" : declared.some((d) => integrationOf(d)?.integration === "github") ? undefined : "owner");
+  // New activations: the bot. Without a control plane the server refuses a
+  // GitHub source's bot default and defaults others to the owner, so a mix
+  // shows no single default and asks for a choice.
+  const newDefault: ActingIdentityKey | undefined = reliantBotAvailable() || allGitHub ? defaultActingIdentity(allGitHub) : anyGitHub ? undefined : "owner";
+  const actingIdentity = chosenIdentity ?? (existing.length > 0 ? uniformStoredIdentity : newDefault);
   const [value, setValue] = useState<RunWorkflowValue>({ presets: {}, params: {} });
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -297,21 +299,16 @@ export function DeclaredAutomationForm({
     if (p.message) setPromptOpen(true);
   }, [triggersQuery.isSuccess, existing, declared, projectId]);
 
-  const { daemons, loading: daemonsLoading, activeDaemon } = useDaemonStatus();
+  const { daemons, loading: daemonsLoading } = useDaemonStatus();
   const installs = useProjectDaemonInstalls();
   const choices = useMemo(() => buildDaemonChoices(daemons, installs.data ?? [], projectId), [daemons, installs.data, projectId]);
-  const lastUsed = useMemo(
-    () =>
-      activeDaemon?.daemonId ??
-      lastUsedDaemon((triggersQuery.data ?? []).filter((t) => t.projectId === projectId).map((t) => ({ daemonId: t.daemonId, at: t.updatedAt }))),
-    [activeDaemon, triggersQuery.data, projectId],
-  );
+  const { lastUsed, loading: historyLoading } = useRecentMachine(projectId, triggersQuery.data ?? [], choices);
   useEffect(() => {
-    if (machineChosen || daemonsLoading || installs.isLoading || !library.isSuccess) return;
+    if (machineChosen || daemonsLoading || installs.isLoading || historyLoading || !library.isSuccess) return;
     // A workflow that needs no machine runs without one unless the person
     // says otherwise; else the machine they last used here.
     setMachine(defaultMachine({ choices, needsNoMachine, lastUsed }));
-  }, [choices, machineChosen, daemonsLoading, installs.isLoading, library.isSuccess, needsNoMachine, lastUsed]);
+  }, [choices, machineChosen, daemonsLoading, installs.isLoading, historyLoading, library.isSuccess, needsNoMachine, lastUsed]);
 
   // What every input shows: presets first, explicit values over them.
   const flat = useMemo(
@@ -676,7 +673,7 @@ export function DeclaredAutomationForm({
             </ErrorSummary>
           )}
 
-          {plan.integrations.map((integration, index) => (
+          {plan.integrations.map((integration) => (
             <SetupSection key={integration} number={++section} title={integrationName(integration)}>
               <div id={fid(`connection-${integration}`)} tabIndex={-1} className="focus:outline-none">
                 <IntegrationConnection
@@ -687,16 +684,23 @@ export function DeclaredAutomationForm({
                   onConnect={() => setConnectTarget(integration)}
                 />
               </div>
-              {index === 0 && <ActingIdentityField
-                value={actingIdentity}
-                onChange={setChosenIdentity}
-                allowApp={!hasOtherIntegration}
-                defaultHint={chosenIdentity ? undefined : existing.length > 0
-                  ? "Each existing trigger keeps its stored identity unless you choose a shared identity here."
-                  : "New GitHub triggers default to Reliant bot; other triggers write as you. Bot writes never fall back to your account."}
-              />}
             </SetupSection>
           ))}
+
+          {/* Once, whatever starts it: a workflow started by a schedule, a webhook or
+              another workflow still writes to GitHub, and its author must be able to
+              choose (and later change) whose identity it writes as. */}
+          <SetupSection number={++section} title="GitHub identity" testId="section-identity">
+            <ActingIdentityField
+              value={actingIdentity}
+              onChange={setChosenIdentity}
+              defaultHint={chosenIdentity ? undefined : existing.length > 0
+                ? "Each existing trigger keeps its stored identity unless you choose a shared identity here."
+                : reliantBotAvailable()
+                  ? "New automations write to GitHub as Reliant bot unless you choose yourself. Bot writes never fall back to your account."
+                  : "New GitHub triggers default to Reliant bot; other triggers write as you. Bot writes never fall back to your account."}
+            />
+          </SetupSection>
 
           {inputs.watches.length > 0 && (
             <SetupSection number={++section} title="What it watches" testId="section-watches">

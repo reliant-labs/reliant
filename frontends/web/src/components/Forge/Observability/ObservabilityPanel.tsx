@@ -39,7 +39,7 @@
  * to get data onto it.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -82,6 +82,7 @@ import { ReleaseStrip } from "./ReleaseStrip";
 import { useNothingArrived } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
+import { GraphView } from "./Graph/GraphView";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
@@ -100,6 +101,7 @@ export interface ObservabilityPanelProps {
 export default function ObservabilityPanel({ place, search, navigate }: ObservabilityPanelProps) {
   const view = viewOf(search.view);
   const range = rangeOf(search.range);
+  const [graphRefresh, setGraphRefresh] = useState(0);
   const queryClient = useQueryClient();
   const org = useObservabilityOrg();
 
@@ -163,6 +165,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       istatus: undefined,
       platform: undefined,
       isort: undefined,
+      assignee: undefined,
       session: undefined,
       t: undefined,
       replay: undefined,
@@ -204,7 +207,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
                 className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="obs-range"
               >
-                {RANGE_PRESETS.map((preset) => (
+                {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
                   <option key={preset} value={preset}>
                     {RANGE_LABELS[preset]}
                   </option>
@@ -216,6 +219,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             variant="ghost"
             size="sm"
             onClick={() => {
+              if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
               void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
               void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
               void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
@@ -297,6 +301,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             rule={search.rule}
             navigate={navigate}
           />
+        ) : view === "graph" || view === "rpc" ? (
+          <GraphView key={`${scope.orgId}/${scope.projectId}/${scope.envIds.join(",")}/${range}/${graphRefresh}`} scope={scope} range={range} search={search} navigate={navigate} subject={subject} />
         ) : comparing ? (
           <ReleaseComparison
             scope={scope}
@@ -321,6 +327,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             statuses={issueStatusesOf(search.istatus)}
             platform={issuePlatformOf(search.platform)}
             sort={issueSortOf(search.isort)}
+            assignee={search.assignee}
             issueId={search.issue}
             navigate={navigate}
           />

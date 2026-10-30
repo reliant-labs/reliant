@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
-	_ "github.com/reliant-labs/reliant/internal/integrations/githubqueue" // Exercise the shipped native executor alongside REST actions.
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
@@ -449,6 +449,28 @@ func TestPullRequestListFilesPaginates(t *testing.T) {
 	}, out["items"])
 }
 
+func TestPullRequestListFilesNarrowsByPathAndDropsPatches(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/pulls/17/files", jsonReply(200, `[
+	  {"sha":"s1","filename":"internal/auth/a.go","status":"modified","additions":3,"deletions":1,"changes":4,"patch":"@@ -1 +1 @@"},
+	  {"sha":"s2","filename":"web/b.ts","status":"modified","additions":1,"deletions":0,"changes":1,"patch":"@@ -2 +2 @@"},
+	  {"sha":"s3","filename":"pkg/c.go","status":"renamed","previous_filename":"internal/auth/c.go","additions":0,"deletions":0,"changes":0}]`))
+
+	out := data(t, f.run("pr.list_files", map[string]any{"owner": "acme", "repo": "app", "pull_number": 17, "path_prefix": "internal/auth/"}))
+	var names []any
+	for _, item := range out["items"].([]any) {
+		names = append(names, item.(map[string]any)["filename"])
+	}
+	assert.Equal(t, []any{"internal/auth/a.go", "pkg/c.go"}, names, "a rename matches on its old path too")
+
+	out = data(t, f.run("pr.list_files", map[string]any{"owner": "acme", "repo": "app", "pull_number": 17, "include_patch": false}))
+	items := out["items"].([]any)
+	require.Len(t, items, 3, "no prefix lists every file")
+	for _, item := range items {
+		assert.Nil(t, item.(map[string]any)["patch"])
+	}
+}
+
 func TestPullRequestReviewCreate(t *testing.T) {
 	f := newFake(t)
 	f.on("POST", "/repos/acme/app/pulls/17/reviews", jsonReply(200,
@@ -665,8 +687,66 @@ func TestRepoGetContentReadsAFileAsText(t *testing.T) {
 		"sha": "3d21ec53a331a6f037a91c368710b99387d012c1", "size": float64(len(source)),
 		"html_url": "https://github.com/acme/app/blob/dev/src/main.go",
 		"content":  source, "binary": false, "too_large": false,
+		"start_line": float64(1), "start_column": float64(1), "end_line": float64(12), "total_lines": float64(12),
+		"truncated": false, "next": nil,
 		"target": nil, "submodule_git_url": nil,
 	}, out)
+}
+
+// A file larger than one result is served as whole lines plus the exact call
+// that continues, never as JSON cut mid-string by the action layer's
+// character limit (pr-review gave up on control-plane #1485 when a 30,000
+// character cut hid the changed hunk's surroundings).
+func TestRepoGetContentPagesALargeFileByLine(t *testing.T) {
+	var b strings.Builder
+	for i := 1; i <= 3000; i++ {
+		fmt.Fprintf(&b, "line %04d: if a < b && c > d { return \"x\" }\n", i)
+	}
+	source := b.String()
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/big.go", jsonReply(200, contentJSON(t, "big.go", "base64", []byte(source))))
+
+	res := f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev"})
+	out := data(t, res)
+	assert.Equal(t, float64(1), out["start_line"])
+	assert.Equal(t, float64(3000), out["total_lines"])
+	assert.Equal(t, true, out["truncated"], "the default window stops at the size ceiling")
+	end := int(out["end_line"].(float64))
+	require.Greater(t, end, 100)
+	require.Less(t, end, 3000)
+	content := out["content"].(string)
+	assert.True(t, strings.HasPrefix(content, "line 0001:"))
+	assert.True(t, strings.HasSuffix(content, fmt.Sprintf("line %04d: if a < b && c > d { return \"x\" }\n", end)), "the window ends on a whole line")
+	assert.Equal(t, fmt.Sprintf("Lines 1-%d of 3000 shown. To continue, call again with the same path and ref and start_line=%d.", end, end+1), out["next"])
+	assert.NotContains(t, res.Content, "…(truncated)", "the window fits under the action result's character cut")
+	assert.True(t, json.Valid([]byte(res.Content)), "the agent sees whole JSON")
+
+	// A window around a hunk, and the last window, which has no next.
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev", "start_line": 2501, "line_count": 10}))
+	assert.Equal(t, float64(2501), out["start_line"])
+	assert.Equal(t, float64(2510), out["end_line"])
+	assert.Equal(t, false, out["truncated"])
+	assert.True(t, strings.HasPrefix(out["content"].(string), "line 2501:"))
+	assert.Equal(t, 10, strings.Count(out["content"].(string), "\n"))
+
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "big.go", "ref": "dev", "start_line": 2995}))
+	assert.Equal(t, float64(3000), out["end_line"])
+	assert.Nil(t, out["next"])
+}
+
+// A line longer than one window continues at a byte column, so a minified
+// file is still readable in full.
+func TestRepoGetContentContinuesAnOversizedLine(t *testing.T) {
+	source := strings.Repeat("x", 30000)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/min.js", jsonReply(200, contentJSON(t, "min.js", "base64", []byte(source))))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "min.js"}))
+	first := out["content"].(string)
+	require.Less(t, len(first), len(source))
+	assert.Equal(t, fmt.Sprintf("Lines 1-1 of 1 shown (line 1 is longer than one window and continues). To continue, call again with the same path and ref and start_line=1 start_column=%d.", len(first)+1), out["next"])
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "min.js", "start_line": 1, "start_column": len(first) + 1}))
+	assert.Equal(t, source, first+out["content"].(string))
+	assert.Nil(t, out["next"])
 }
 
 // A binary file is reported as such, with no content, rather than failing.
@@ -718,6 +798,40 @@ func TestRepoGetContentListsADirectory(t *testing.T) {
 			map[string]any{"name": "latest", "path": "latest", "type": "symlink", "size": 9.0},
 		},
 	}, out)
+}
+
+// A path that does not exist is an answer that names the path and ref, not an
+// error: a reviewer reading a pull request asks for files the PR deletes and
+// for rules files that may be absent, and three such errors in a row ended the
+// run through the repeated-tool-error breaker. Only a missing repository root
+// says the repository itself is out of reach, so only it carries the
+// GitHub App hint.
+func TestRepoGetContentOfAMissingPathIsNotAnError(t *testing.T) {
+	notFound := jsonReply(404, `{"message":"Not Found","documentation_url":"https://docs.github.com/rest","status":"404"}`)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/internal/AGENTS.md", notFound)
+	res := f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "internal/AGENTS.md", "ref": "abc123"})
+	out := data(t, res)
+	assert.Equal(t, "missing", out["type"])
+	assert.Equal(t, "internal/AGENTS.md", out["path"])
+	assert.Equal(t, "abc123", out["ref"])
+	assert.Contains(t, out["note"], "No file or directory at internal/AGENTS.md at abc123")
+	assert.NotContains(t, out["note"], "installed", "the repository answered: the App hint would mislead")
+	assert.Contains(t, out["note"], "read the root (omit path) to tell", "a non-root 404 is ambiguous and says how to resolve it")
+
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/contents/", notFound)
+	out = data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app"}))
+	assert.Equal(t, "missing", out["type"])
+	assert.Contains(t, out["note"], "cannot see acme/app (is the Reliant GitHub App installed on it?)")
+
+	// Any other 404 (an empty repository) is still an error.
+	f = newFake(t)
+	f.on("GET", "/repos/acme/app/contents/", jsonReply(404, `{"message":"This repository is empty.","status":"404"}`))
+	res, err := f.try("repo.get_content", map[string]any{"owner": "acme", "repo": "app"})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, res.Content, "This repository is empty.")
 }
 
 // A symlink whose target is outside the repository is described, not read.
@@ -954,11 +1068,15 @@ var minimal = map[string]map[string]any{
 	"labels.create":           {"owner": "acme", "repo": "app", "name": "bug"},
 	"labels.list":             {"owner": "acme", "repo": "app"},
 	"pr.create":               {"owner": "acme", "repo": "app", "head": "fix", "base": "main", "title": "t"},
-	"pr.enqueue":              {"owner": "acme", "repo": "app", "repository_id": 101, "pull_number": 1, "expectedHeadOid": strings.Repeat("a", 40)},
 	"pr.update":               {"owner": "acme", "repo": "app", "pull_number": 1, "title": "t"},
+	"pr.merge":                {"owner": "acme", "repo": "app", "pull_number": 1, "action": "disable_auto"},
 	"pr.reviews.list":         {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comments.list": {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review_comment.reply": {"owner": "acme", "repo": "app", "pull_number": 1, "comment_id": 5, "body": "b"},
+
+	"check_run.create": {"owner": "acme", "repo": "app", "name": "Reliant review", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
+	"check_run.update": {"owner": "acme", "repo": "app", "check_run_id": 1, "status": "in_progress"},
+	"check_run.list":   {"owner": "acme", "repo": "app", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
 }
 
 // Every action in the manifest is covered by these tests: adding one without
@@ -1039,9 +1157,12 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 	testkit.Slow(t, "runs every action against every error case over an HTTP test server")
 	for id, params := range minimal {
 		for _, tc := range errorCases {
+			if id == "repo.get_content" && tc.status == 404 {
+				continue // a missing path is an answer: TestRepoGetContentOfAMissingPathIsNotAnError
+			}
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				f := newFake(t)
-				h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					for k, v := range tc.headers {
 						w.Header().Set(k, v)
 					}
@@ -1049,42 +1170,12 @@ func TestErrorMappingForEveryAction(t *testing.T) {
 					w.WriteHeader(tc.status)
 					_, _ = w.Write([]byte(tc.body))
 				})
-				if id == "pr.enqueue" {
-					f.on("POST", "/graphql", h)
-				} else {
-					f.srv.Config.Handler = h
-				}
 				res := f.run(id, params)
 				assert.True(t, res.IsError, "a %d is an error result", tc.status)
 				assert.Equal(t, tc.status, res.StatusCode)
 				assert.Equal(t, tc.retryable, res.Retryable, "retryable for %s: %s", tc.name, res.Content)
-				if id == "pr.enqueue" {
-					// The native executor deliberately returns fixed safe prose,
-					// not the REST runner's provider-detail mapping. Still drive
-					// every status through it and assert its complete contract.
-					outcome := "failed"
-					content := "GitHub could not enqueue this open, non-draft pull request on its default branch. Check repository access, native queue availability and required rules."
-					if tc.retryable {
-						outcome = "unavailable"
-						content = "Queue outcome is unavailable. Retry to read current queue membership before another enqueue attempt."
-					}
-					assert.Equal(t, outcome, res.Data["outcome"])
-					assert.Equal(t, false, res.Data["accepted"])
-					assert.Equal(t, content, res.Content)
-					if tc.status == 403 && tc.retryable || tc.status == 429 {
-						assert.GreaterOrEqual(t, res.Data["retry_after_seconds"].(float64), float64(1))
-						assert.LessOrEqual(t, res.Data["retry_after_seconds"].(float64), float64(3600))
-					} else {
-						assert.NotContains(t, res.Data, "retry_after_seconds")
-					}
-					req := f.only()
-					assert.Equal(t, "POST", req.Method)
-					assert.Equal(t, "/graphql", req.Path)
-					assert.Contains(t, req.Body["query"], "query ReliantQueueSubject")
-				} else {
-					for _, want := range tc.contains {
-						assert.Contains(t, res.Content, want)
-					}
+				for _, want := range tc.contains {
+					assert.Contains(t, res.Content, want)
 				}
 				assert.NotContains(t, res.Content, token)
 			})

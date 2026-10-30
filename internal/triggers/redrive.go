@@ -4,10 +4,15 @@ package triggers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/client"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const (
@@ -58,15 +63,28 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	var errs []error
 	for _, ev := range stale {
 		if ev.TriggerID == nil {
-			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted"); err != nil {
+			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted", nil); err != nil {
 				errs = append(errs, err)
 			}
 			continue
 		}
-		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) {
+		// An event that has not launched within redriveGiveUp expires, a delivery
+		// that failed to launch and an intent queued for workflow capacity alike:
+		// a queue that never drains must surface as failed events, not grow forever.
+		// A launched capacity start still awaiting its binding is not waiting: it
+		// keeps being redriven so its slot is bound or recovered.
+		if ev.CreatedAt.Before(now.Add(-redriveGiveUp)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
 			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
-				"the event was never launched; it is too old to start now"); err != nil {
+				"the event was never launched; it is too old to start now", nil); err != nil {
 				errs = append(errs, err)
+			}
+			continue
+		}
+		if ev.Kind == core.TriggerEventKindSchedule {
+			request := FireRequest{TriggerID: *ev.TriggerID, FireWorkflowID: ev.DedupeKey, ScheduledAt: ev.OccurredAt, Manual: ev.Payload[payloadManual] == true}
+			_, startErr := r.starter.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: "capacity-redrive:" + ev.ID + ":" + fmt.Sprint(now.Unix()/60), TaskQueue: r.taskQueue}, TriggerCapacityRedriveWorkflow, request)
+			if startErr != nil {
+				errs = append(errs, startErr)
 			}
 			continue
 		}
@@ -80,6 +98,21 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
+	// Capacity reconciliation cannot prevent unrelated delivery recovery.
+	if repo, ok := r.repo.(capacityRepository); ok {
+		if batch, ok := r.repo.(interface {
+			ListTriggerCapacityExecutionBatch(context.Context, int) ([]store.TriggerCapacityExecution, error)
+		}); ok {
+			if descriptions, ok := r.starter.(capacityDescriptions); ok {
+				occupied, err := batch.ListTriggerCapacityExecutionBatch(ctx, redriveBatch)
+				if err != nil {
+					errs = append(errs, err)
+				} else {
+					reconcileCapacityExecutions(ctx, repo, descriptions, occupied)
+				}
+			}
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -89,7 +122,9 @@ func (r *Redriver) Run(ctx context.Context) {
 	ticker := time.NewTicker(redriveInterval)
 	defer ticker.Stop()
 	for {
-		if err := r.RedriveOnce(ctx); err != nil && ctx.Err() == nil {
+		// One trace per pass, so its queries and workflow starts nest under
+		// it rather than each opening an unparented trace of its own.
+		if err := observe.RunRoot(ctx, "worker.triggers.redrive", r.RedriveOnce); err != nil && ctx.Err() == nil {
 			logging.WarnContext(ctx, "trigger event redrive pass failed", "error", err)
 		}
 		select {

@@ -248,6 +248,11 @@ message GetForgeTopologyRequest {
 
   // Narrow the report to these environments. Empty means all declared.
   repeated string envs = 3;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 4;
 }
 
 message GetForgeTopologyResponse {
@@ -266,6 +271,11 @@ message GetForgeTopologyResponse {
 message VerifyForgeEnvRequest {
   string project_id = 1;
   string env = 2;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 3;
 }
 
 message VerifyForgeEnvResponse {
@@ -282,6 +292,11 @@ message VerifyForgeEnvResponse {
 message ListForgeSecretsRequest {
   string project_id = 1 [(buf.validate.field).required = true];
   string env = 2 [(buf.validate.field).required = true];
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 3;
 }
 
 // ListForgeSecretsResponse is CONSTRAINED BY DESIGN: meta plus forge's
@@ -309,6 +324,11 @@ message ListForgeSecretsResponse {
 message GetForgeEnvStatusRequest {
   string project_id = 1;
   string env = 2;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 3;
 }
 
 message GetForgeEnvStatusResponse {
@@ -324,6 +344,11 @@ message GetForgeEnvStatusResponse {
 message GetForgeEnvShapeRequest {
   string project_id = 1;
   string env = 2;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 3;
 }
 
 message GetForgeEnvShapeResponse {
@@ -351,6 +376,11 @@ message PlanForgePromoteRequest {
 
   // The already-built release to preview binding it to (e.g. "v1.5.15").
   string release = 3;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 4;
 }
 
 message PlanForgePromoteResponse {
@@ -408,6 +438,11 @@ message PromoteForgeEnvRequest {
   // environment that IS bound, which is the exact accident the guard exists to
   // prevent. A request with neither field set is rejected.
   bool expect_unbound = 5;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 6;
 }
 
 // ForgePromoteRefusalReason is why a promote was not applied.
@@ -556,6 +591,11 @@ message PlanForgeDeployRequest {
   // The checkout to render — the project's main checkout when empty. Honoured
   // only if it is one of this project's checkouts (main or a git worktree).
   string checkout_path = 3;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 4;
 }
 
 message PlanForgeDeployResponse {
@@ -597,6 +637,11 @@ message StartForgeDeployPlanRequest {
   // The checkout to build and render from — the project's main checkout when
   // empty. Honoured only if it is one of this project's checkouts (main or a git worktree).
   string checkout_path = 3;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 4;
 }
 
 // ============================================
@@ -685,6 +730,11 @@ message StartForgeDeployRequest {
   // worktree); the daemon re-derives that list and checks against it. A value
   // this server cannot authorise is refused rather than used.
   string checkout_path = 9;
+
+  // The org forge acts in for this request (the web's active org). Unset: the
+  // caller's default org. forge's credential helper mints for exactly this
+  // org, and the control plane refuses one the caller does not belong to.
+  optional string org_id = 10;
 }
 
 // ForgeDeployRefusalReason is why a deploy was not STARTED. In every case

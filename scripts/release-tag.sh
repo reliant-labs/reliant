@@ -2,7 +2,7 @@
 
 # Phase 2 of a release: tag the commit that ACTUALLY LANDED ON MAIN.
 #
-# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--dry-run]
+# Usage: ./scripts/release-tag.sh [vX.Y.Z] [--commit <sha>] [--dry-run]
 #
 # Run this AFTER the release PR opened by ./scripts/release.sh has merged.
 # With no version argument it reads the version from origin/main itself, so
@@ -40,6 +40,8 @@
 # push has to carry a human credential. That is this script.
 
 set -euo pipefail
+# shellcheck source=release-lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/release-lock.sh"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -50,9 +52,16 @@ NC='\033[0m'
 DRY_RUN=false
 REQUESTED_TAG=""
 SKIP_RELEASE_GATE=false
+REQUESTED_COMMIT=""
 
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
     case "$arg" in
+        --commit)
+            REQUESTED_COMMIT="${1:?--commit needs a commit}"
+            shift
+            ;;
         --dry-run)
             DRY_RUN=true
             ;;
@@ -63,16 +72,17 @@ for arg in "$@"; do
             REQUESTED_TAG="$arg"
             ;;
         -h|--help)
-            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]"
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]"
             echo ""
             echo "  vX.Y.Z               Tag this specific version (default: read from origin/main)"
+            echo "  --commit <sha>       Tag this main commit instead of the version bump (it must contain the bump)"
             echo "  --dry-run            Print exactly what would happen, create and push nothing"
             echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
             exit 0
             ;;
         *)
             echo -e "${RED}Error: unrecognized argument '$arg'${NC}" >&2
-            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]" >&2
+            echo "Usage: $0 [vX.Y.Z] [--commit <sha>] [--dry-run] [--skip-release-gate]" >&2
             exit 1
             ;;
     esac
@@ -83,17 +93,10 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# One release of reliant at a time on this machine (release.sh takes the same
-# lock): a second tagger fails here, naming who holds it. A dry run only
-# reports a release in progress. Tagging is the release train's job
-# (control-plane's scripts/release-train.sh); a chat labels its PR release:asap.
-# shellcheck source=scripts/lib/release-lock.sh
-. "$(dirname "$0")/lib/release-lock.sh"
-if [[ "$DRY_RUN" == "true" ]]; then
-    release_lock_status reliant || echo -e "${YELLOW}  A real run would refuse now (above); the dry run continues.${NC}" >&2
-else
-    release_lock reliant "release-tag.sh ${REQUESTED_TAG:-<version on main>}" || exit $?
-fi
+# Tagging is the release train's job (control-plane's scripts/release-train.sh);
+# a chat labels its PR release:asap. There is no release lock: the tag push
+# decides a race between two taggers (the remote refuses a second push of the
+# same tag).
 
 # Everything below reasons about origin/main, never the local checkout. A
 # local `main` can be stale, ahead, or someone else's in-flight work; the tag
@@ -180,6 +183,22 @@ if [[ -z "$RELEASE_COMMIT" ]]; then
     exit 1
 fi
 
+# --commit: tag a later commit of main than the bump (a fix that landed after
+# it). It must contain the bump and still carry this version; the guard, the
+# release notes and the release gate below then judge it like any other.
+if [[ -n "$REQUESTED_COMMIT" ]]; then
+    VERSION_COMMIT="$RELEASE_COMMIT"
+    RELEASE_COMMIT=$(git rev-parse --verify "$REQUESTED_COMMIT^{commit}")
+    if ! git merge-base --is-ancestor "$VERSION_COMMIT" "$RELEASE_COMMIT"; then
+        echo -e "${RED}Error: --commit ${RELEASE_COMMIT:0:9} does not contain the version bump ${VERSION_COMMIT:0:9}${NC}" >&2
+        exit 1
+    fi
+    if [[ "$(git show "$RELEASE_COMMIT:electron/package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")" != "$NEW_VERSION" ]]; then
+        echo -e "${RED}Error: ${RELEASE_COMMIT:0:9} does not carry version ${NEW_VERSION}${NC}" >&2
+        exit 1
+    fi
+fi
+
 # ── THE GUARD ───────────────────────────────────────────────────────────────
 #
 # The one check that would have caught this five releases ago. It is cheap,
@@ -245,9 +264,31 @@ if [[ "$DRY_RUN" == "true" ]]; then
     exit 0
 fi
 
+# One release of this repository at a time, across machines and pipelines: a hand cut
+# and the release workflow cannot both tag (release-lock.sh; the workflow coalesces into
+# a live lock). Then re-check origin: a holder that just finished released the lock
+# after pushing the tag.
+# The release is registered before the lock is taken, so no exit between the two
+# leaves a held lock behind (release_lock_release is a no-op when none is held).
+trap release_lock_release EXIT
+release_lock_acquire "$RELEASE_TAG" || exit 1
+if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+    echo -e "${RED}Error: tag $RELEASE_TAG reached origin while waiting (another cut released it)${NC}" >&2
+    exit 1
+fi
+
 echo -e "${YELLOW}🏷️  Creating and pushing ${RELEASE_TAG}...${NC}"
+# Publish only while this release provably still holds the lock (release-lock.sh).
+release_lock_assert || exit 1
 git tag "$RELEASE_TAG" "$RELEASE_COMMIT"
-git push origin "$RELEASE_TAG"
+# A refused push deletes the local tag this run just made: every worktree of a
+# checkout shares refs/tags/, and a loser's leftover tag makes every later
+# `git fetch --tags` there fail with "would clobber existing tag" (forge#1524).
+if ! git push origin "$RELEASE_TAG"; then
+    git tag -d "$RELEASE_TAG" >/dev/null
+    echo -e "${RED}Error: the push of $RELEASE_TAG was refused, so nothing was released; deleted the local tag${NC}" >&2
+    exit 1
+fi
 
 echo ""
 echo -e "${GREEN}🎉 ${RELEASE_TAG} published on main at ${RELEASE_COMMIT:0:9}${NC}"

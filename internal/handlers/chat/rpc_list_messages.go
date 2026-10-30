@@ -30,7 +30,7 @@ func (s *Service) ListMessages(
 	}
 
 	// Verify user owns the chat
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -170,7 +170,7 @@ func (s *Service) ListMessages(
 	}
 
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, messageIDs, blocksByMessageID, attachmentMap, viewingThreadID, 0)
+		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
@@ -300,12 +300,12 @@ func (s *Service) listThreadMessages(
 //     summarized history. The chat's messages on every other thread are one
 //     COUNT (siblings don't inherit from elsewhere, so their own chat_id-scoped
 //     rows are their whole count).
-//   - HasMore: taken directly from the main thread's own hasMoreOlder. This
-//     is sufficient because seq is a chat-global order (the chat's seq
-//     counter, which a branch's fork raises past its inherited history) and every
-//     message a branch chat displays -- inherited or local -- carries a seq
-//     from that same allocator, so no sibling thread's oldest message can
-//     precede the resolved main thread's oldest message.
+//   - HasMore: the main thread's own hasMoreOlder. seq is a chat-global order
+//     (the chat's seq counter, which a branch's fork raises past its
+//     inherited history), and the oldest page (no older main message) takes
+//     every sibling below it too, so no sibling message is left without a
+//     page. A chat whose main thread has nothing in range pages its siblings
+//     alone, recentLimit at a time, and HasMore comes from that read.
 //
 // The two counts depend on nothing the page read produces, so they run
 // beside it.
@@ -349,18 +349,30 @@ func (s *Service) listMessagesBounded(
 	// already served.
 	var fromSeq int64
 	var toSeq *int64
-	if len(mainThreadMessages) > 0 {
-		fromSeq = mainThreadMessages[0].Seq
-	} else if beforeSeq > 0 {
-		fromSeq = beforeSeq
-	}
 	if beforeSeq > 0 {
 		toSeq = &beforeSeq
 	}
+	hasMore := mainHasMoreOlder
+	siblingLimit := 0
+	switch {
+	case len(mainThreadMessages) == 0:
+		// No main-thread window to bound the range by: page the siblings
+		// themselves, newest first, probing one past the page for hasMore.
+		siblingLimit = recentLimit + 1
+	case mainHasMoreOlder:
+		fromSeq = mainThreadMessages[0].Seq
+	default:
+		// The oldest page: a sibling older than the main thread's first
+		// message has no later page to land on, so it lands here (fromSeq 0).
+	}
 
-	siblingMessages, err := s.deps.Repo.ListTranscriptSiblingMessagesInRange(ctx, chatID, mainThreadID, fromSeq, toSeq)
+	siblingMessages, err := s.deps.Repo.ListTranscriptSiblingMessagesInRange(ctx, chatID, mainThreadID, fromSeq, toSeq, siblingLimit)
 	if err != nil {
 		return nil, 0, 0, false, fmt.Errorf("failed to load sibling thread messages: %w", err)
+	}
+	if siblingLimit > 0 && len(siblingMessages) > recentLimit {
+		siblingMessages = siblingMessages[len(siblingMessages)-recentLimit:]
+		hasMore = true
 	}
 
 	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(siblingMessages))
@@ -384,8 +396,12 @@ func (s *Service) listMessagesBounded(
 	// The window above is already the correctly-sized page (the same shape
 	// windowByMainThread would produce), but re-apply it for safety: a
 	// sibling thread with messages exactly AT the boundary could otherwise
-	// push the reported page past recentLimit main-thread messages.
-	messages = windowByMainThread(messages, mainThreadID, recentLimit)
+	// push the reported page past recentLimit main-thread messages. Not on
+	// the oldest page, whose siblings below the main thread's first message
+	// have no other page to land on.
+	if mainHasMoreOlder {
+		messages = windowByMainThread(messages, mainThreadID, recentLimit)
+	}
 
 	if err := counts.Wait(); err != nil {
 		return nil, 0, 0, false, err
@@ -396,7 +412,7 @@ func (s *Service) listMessagesBounded(
 		oldestSeq = messages[0].Seq
 	}
 
-	return messages, mainCount + siblingCount, oldestSeq, mainHasMoreOlder, nil
+	return messages, mainCount + siblingCount, oldestSeq, hasMore, nil
 }
 
 // messagePage carries the cursor facts a paginated message read has to report

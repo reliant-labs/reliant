@@ -55,6 +55,7 @@ var credentialEnvNames = map[string]bool{
 	"NPM_TOKEN":               true,
 	"FORGE_TOKEN":             true,
 	"FORGE_CREDENTIAL_HELPER": true,
+	"RELIANT_FORGE_ORG":       true,
 	"RELIANT_TOKEN":           true,
 }
 

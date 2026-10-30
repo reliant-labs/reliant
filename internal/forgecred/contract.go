@@ -76,9 +76,10 @@ type Exchanged struct {
 	Scopes    []string
 }
 
-// Exchanger calls TokenService.ExchangeToken on server with bearer.
+// Exchanger calls TokenService.ExchangeToken on server with bearer. orgID is
+// the org the token must act in; "" leaves it to the server (the session's own).
 type Exchanger interface {
-	Exchange(ctx context.Context, server, bearer, audience string, scopes []string) (Exchanged, error)
+	Exchange(ctx context.Context, server, bearer, audience string, scopes []string, orgID string) (Exchanged, error)
 }
 
 // Deps are the Service's collaborators.
@@ -87,6 +88,10 @@ type Deps struct {
 	Sessions func() ([]Session, error)
 	// Exchanger performs the exchange.
 	Exchanger Exchanger
+	// Org is the org the minted token must act in: the one the web (or
+	// `reliant forge`) is working in. Empty asks for none, and the server uses
+	// the session's own. A cached token is only ever reused for the same org.
+	Org string
 	// CachePath is the token cache file. Empty disables caching.
 	CachePath string
 	// Now is the clock. Defaults to time.Now.

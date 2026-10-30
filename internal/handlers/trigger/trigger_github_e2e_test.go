@@ -105,7 +105,9 @@ func (e2eGitHubAccess) IsPermanent(err error) bool { return ghaccess.IsPermanent
 // alice and bob are both members of one org installation (98765). alice can
 // see acme/app; bob only acme/other. A delivery about acme/app must reach
 // alice's trigger and never bob's, even though bob's trigger listens to the
-// same event type in the same installation.
+// same event type in the same installation. These activations explicitly act
+// as their owners: this fixture exercises repository access and event routing,
+// not App-authored writes, and has no control plane to mint bot tokens.
 func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("boots a Temporal dev server and a worker; skipped under -short")
@@ -178,9 +180,11 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 		resp, err := svc.CreateTrigger(o.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 			Name: name, ProjectId: o.project, DaemonId: o.daemon, Workflow: "builtin://agent",
 			Message: "Triage it.", Params: mockModelTriggerParams(t),
-			Source: &reliantv1.TriggerDefinition_Integration{Integration: src},
+			Source:         &reliantv1.TriggerDefinition_Integration{Integration: src},
+			ActingIdentity: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER,
 		}}))
 		require.NoError(t, err)
+		assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, resp.Msg.GetTrigger().GetActingIdentity())
 		return resp.Msg.GetTrigger()
 	}
 
@@ -270,9 +274,11 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	carol := setup(uuid.NewString())
 	_, err = svc.CreateTrigger(carol.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 		Name: "carol", ProjectId: carol.project, DaemonId: carol.daemon, Workflow: "builtin://agent", Message: "x",
-		Source: &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{Integration: "github", Events: []string{"push"}}},
+		Source:         &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{Integration: "github", Events: []string{"push"}}},
+		ActingIdentity: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER,
 	}}))
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), fmt.Sprint(err))
+	assert.ErrorIs(t, err, ghaccess.ErrNotConnected, "refuse missing GitHub access, not missing App infrastructure")
 }
 
 func waitForEventCount(t *testing.T, repo *db.Repo, userID, triggerID string, want int) {

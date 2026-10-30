@@ -351,6 +351,11 @@ message Worktree {
   // FAILED and the reason is the user's to fix; empty otherwise, including for
   // a failure on our side.
   string failure_reason = 15;
+  // The machine (daemon) whose disk holds this workspace's checkout. A
+  // branch workspace exists on exactly one machine, so a chat in it runs
+  // there and nowhere else. Unset for the main checkout, which every machine
+  // with the project has, and for rows from before ownership was recorded.
+  optional string daemon_id = 16;
 }
 
 // WorktreeSummary is the part of a worktree a chat list renders and groups by.
@@ -491,6 +496,13 @@ message CreateWorktreeRequest {
   // produces a second workspace. Repeat the same key to get the existing row
   // back instead.
   optional string idempotency_key = 10;
+  // daemon_id names the machine to create the workspace on (the new-chat
+  // composer's "Runs on"). Unset places it by the usual rule: the chat's
+  // machine, else the source workspace's, else the project's default. It must
+  // be one of the caller's machines the project is installed on, and it may
+  // not contradict chat_id's or source_worktree_id's machine: a checkout
+  // exists on one machine only.
+  optional string daemon_id = 11;
 }
 
 // CreateWorktreeResponse returns the created workspace-level worktree.
@@ -622,6 +634,9 @@ message ImportWorktreeRequest {
   // (DiscoveredWorktree.moves_on_import): the user has been told that
   // anything running inside it loses its working directory.
   bool confirm_move = 6;
+  // daemon_id names the machine the directory is on: the one
+  // DiscoverWorktrees was asked about. Unset places it as CreateWorktree does.
+  optional string daemon_id = 7;
 }
 
 // ImportWorktreeResponse returns the imported worktree
@@ -636,6 +651,10 @@ message DiscoverWorktreesRequest {
   // when true and the machine is asleep, the call fails with Unavailable and
   // nothing is woken. A user opening the discover dialog leaves it false.
   bool background = 2;
+  // daemon_id names the machine to look on. Unset asks the project's default
+  // machine. Each machine has its own checkouts, so the answer is about that
+  // machine only.
+  optional string daemon_id = 3;
 }
 
 // DiscoverWorktreesResponse returns the untracked worktrees of every repo of
@@ -655,6 +674,8 @@ message DiscoverWorktreesResponse {
 // whose directories no longer exist.
 message PruneWorktreesRequest {
   string project_id = 1;
+  // daemon_id names the machine to prune on, as DiscoverWorktrees'.
+  optional string daemon_id = 2;
 }
 
 // PruneWorktreesResponse lists the records that were removed.

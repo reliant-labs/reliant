@@ -2,6 +2,8 @@
 package cliauth
 
 import (
+	"time"
+
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 )
@@ -26,29 +28,58 @@ import (
 // 403'd and users ran `forge login` anyway — and it sat in a second file.
 // RemoveLegacyForgeDeposits cleans up what those releases wrote.
 
-// ForgeScopes is the explicit control-plane capability ceiling requested by
-// Reliant sign-ins and daemon registration, and exchangeable by the credential
-// helper. Defaults follow the user's org authority; restrictions are opt-in.
-// The control plane clips every mint to current org grants, and exchange also
-// intersects the parent's scopes. Session and resource-specialized capabilities
-// never reach forge. Keep this explicit: a new registry entry is not implicitly
-// safe to delegate.
+// ForgeScopes is the control-plane capability ceiling requested by an
+// explicit-list Reliant sign-in (`reliant auth login`), and exchangeable by the
+// credential helper. A DAEMON registration does not use it: a daemon's
+// credential holds every scope its user holds (owner decision), keyed on
+// daemon:connect and resolved by the control plane at each use, so agents on
+// the machine can deploy, read telemetry, and manage secrets and domains with
+// no list to go stale. The control plane clips every mint and every use to
+// current org grants, and exchange also intersects the parent's scopes, so
+// neither ever exceeds the person.
 //
-// token:read and token:write are deliberately absent. They administer member
-// permissions and tokens, which the control plane reserves to a signed-in
-// person (every token RPC refuses a machine caller), so on a long-lived daemon
-// or CLI credential they are dead authority and a latent escalation path.
+// DERIVED FROM FORGE'S CATALOG, not listed here, so a scope forge adds is
+// requested the release it ships in. A scope is a control-plane capability
+// when it is the user's org authority that forge lets ride the user's own
+// daemon credential (Grant.Validate with a daemon binding) and it does not act
+// as a session or a personal resource (RequiresActingUser: reliant:api,
+// daemon:connect, llm:invoke, mcp:connector, daemon:resume). That excludes the
+// port share (proxy:port) too: forge refuses it on a daemon binding.
+//
+// token:read and token:write are absent from this explicit list. They
+// administer member permissions and tokens, which the control plane reserves
+// to a signed-in person (every token RPC refuses a machine caller), so on a
+// CLI credential or an exchanged helper they are dead authority. A daemon's
+// wildcard does resolve to them — nothing is special-cased there — and they
+// are just as dead on it.
 func ForgeScopes() []string {
-	return []string{
-		string(fat.ScopeDeployRead), string(fat.ScopeDeployWrite),
-		string(fat.ScopeClusterManage),
-		string(fat.ScopeSecretRead), string(fat.ScopeSecretWrite),
-		string(fat.ScopeDomainRead), string(fat.ScopeDomainWrite),
-		string(fat.ScopeIdentityRead), string(fat.ScopeIdentityManage),
-		string(fat.ScopeObsRead), string(fat.ScopeObsTriage), string(fat.ScopeObsWrite),
-		string(fat.ScopeDBQuery),
-		string(fat.ScopeBillingRead),
+	out := make([]string, 0, len(fat.AllScopes))
+	for _, scope := range fat.AllScopes {
+		if isControlPlaneCapability(scope) {
+			out = append(out, string(scope))
+		}
 	}
+	return out
+}
+
+// tokenAdministration is the one carve-out from the derived set; see
+// ForgeScopes.
+var tokenAdministration = fat.SetOf(fat.ScopeTokenRead, fat.ScopeTokenWrite)
+
+// daemonProbe is a structurally valid daemon-bound grant; only its scope
+// varies. Its ids are placeholders: Validate checks shape, never existence.
+var daemonProbe = fat.Grant{
+	OrgID: "org", Name: "probe", ActingUserID: "user",
+	Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon"},
+}
+
+func isControlPlaneCapability(scope fat.Scope) bool {
+	if fat.RequiresActingUser(scope) || tokenAdministration.Has(scope) {
+		return false
+	}
+	probe := daemonProbe
+	probe.Scopes = fat.SetOf(scope)
+	return probe.Validate(time.Time{}) == nil
 }
 
 func (a *adapter) RemoveLegacyForgeDeposits() (int, error) {

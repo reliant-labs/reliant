@@ -158,6 +158,7 @@ describe("getEnvironmentStatus", () => {
         deployment_id: "",
         declared_run_state: "unspecified",
         suspend_reason: "unspecified",
+        domains: [],
       },
     ]);
     expect(status.currentPromotion).toMatchObject({

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 )
 
@@ -123,6 +125,18 @@ func TestClassifyError(t *testing.T) {
 				t.Errorf("classified error should contain original error message")
 			}
 		})
+	}
+}
+
+// The run step's own failure types survive classification whatever their
+// text says: the workflow branches on them.
+func TestClassifyError_KeepsRunStepTypes(t *testing.T) {
+	t.Parallel()
+	for _, errType := range []string{"RunStepMachineUnavailable", "RunStepNotDispatched", "RunStepOutcomeUnknown"} {
+		in := temporal.NewNonRetryableApplicationError("machine e164d47d not found; permission denied", errType, nil)
+		var app *temporal.ApplicationError
+		require.ErrorAs(t, classifyError(in), &app)
+		assert.Equal(t, errType, app.Type())
 	}
 }
 

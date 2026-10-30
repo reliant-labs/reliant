@@ -151,6 +151,7 @@ describe("machineDefault", () => {
     expect(defaultMachine({ choices: [choice("a"), choice("b", { eligible: false })], needsNoMachine: false, lastUsed: "b" })).toBe("a");
     // Two equal choices and no history: the person picks.
     expect(defaultMachine({ choices, needsNoMachine: false })).toBe("");
+    expect(defaultMachine({ choices: [choice("a", { statusLabel: "failed" })], needsNoMachine: false, lastUsed: "a" })).toBe("");
   });
 
   it("finds the newest use", () => {

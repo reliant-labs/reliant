@@ -1,0 +1,6 @@
+type: string
+minLength: 1
+maxLength: 255
+title: Check name
+description: The check's name, as a pull request's Checks tab shows it and a ruleset requires it.
+examples: ["Reliant review"]

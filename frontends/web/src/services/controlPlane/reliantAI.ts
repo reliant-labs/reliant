@@ -87,6 +87,8 @@ export interface CreateManagedKeyArgs {
 export async function createManagedLLMKey(
   args: CreateManagedKeyArgs,
 ): Promise<{ key?: LLMKey; plaintextKey: string }> {
+  // An empty org could be filled from a later selection after async auth.
+  if (!args.orgId) throw new Error("Choose an organization before creating a key.");
   const res = await getControlPlaneClient(LLMGatewayService).createLLMKey({
     orgId: args.orgId,
     name: args.name,
@@ -97,7 +99,8 @@ export async function createManagedLLMKey(
   return { key: res.key, plaintextKey: res.plaintextKey };
 }
 
-/** RevokeLLMKey — permanently disables a key. */
+/** RevokeLLMKey — permanently disables a key. The immutable key id pins its
+ * org: the server loads the key and checks permission against key.OrgID. */
 export async function revokeLLMKey(keyId: string): Promise<void> {
   await getControlPlaneClient(LLMGatewayService).revokeLLMKey({ keyId });
 }
@@ -105,7 +108,8 @@ export async function revokeLLMKey(keyId: string): Promise<void> {
 /**
  * RotateLLMKey — issues a fresh secret for an existing key. `gracePeriod`
  * (e.g. "24h") keeps the old secret valid during cut-over; empty = immediate.
- * Returns the new one-time plaintext secret.
+ * Returns the new one-time plaintext secret. Like revoke, this canonical RPC
+ * is resource-bound: key_id fixes the org before authentication or retries.
  */
 export async function rotateLLMKey(
   keyId: string,

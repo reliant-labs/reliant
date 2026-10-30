@@ -109,3 +109,29 @@ describe("a process-output stream the server ended", () => {
     expect(callbacks.onError).toHaveBeenCalledWith("Max reconnection attempts reached");
   });
 });
+
+// A package command runs on the machine holding its workspace; its output is
+// streamed from there, not from the default machine.
+describe("a process on a named machine", () => {
+  it("asks that machine for the output, on every reconnect too", async () => {
+    streams = [endsAfter(line), staysOpenAfter(line)];
+    const callbacks = {
+      onSnapshot: vi.fn(),
+      onLine: vi.fn(),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+      onStatusChange: vi.fn(),
+    };
+    const service = new ProcessOutputStreamingService("proc-1234-5678", callbacks, "daemon-gpu");
+
+    service.start();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(requests.length).toBeGreaterThanOrEqual(2);
+    for (const request of requests) {
+      expect((request as { daemonId?: string }).daemonId).toBe("daemon-gpu");
+    }
+    service.stop();
+  });
+});
+

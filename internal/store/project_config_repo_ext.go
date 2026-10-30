@@ -205,22 +205,6 @@ func GetProjectConfigVersion(ctx context.Context, db orm.Context, projectID stri
 	return fmt.Sprintf("%d/%s", updatedAt.Time.UnixMicro(), xmin), nil
 }
 
-// GetProjectWorkflowSnapshot reads only workflow contents and the last
-// project snapshot's source daemon for missing-workflow diagnostics.
-func GetProjectWorkflowSnapshot(ctx context.Context, db orm.Context, projectID string) (*string, string, error) {
-	var row ProjectConfig
-	err := db.Bun().NewSelect().Model(&row).
-		Column(ProjectConfigFieldProjectWorkflowsJSON, ProjectConfigFieldDaemonID).
-		Where("project_id = ?", projectID).Limit(1).Scan(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, "", missing("project config")
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	return row.ProjectWorkflowsJSON, row.DaemonID, nil
-}
-
 // GetProjectWorkflowsJSON reads the synced .reliant/workflows.
 func GetProjectWorkflowsJSON(ctx context.Context, db orm.Context, projectID string) (*string, error) {
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldProjectWorkflowsJSON)
@@ -239,6 +223,29 @@ func GetProjectScenariosJSON(ctx context.Context, db orm.Context, projectID stri
 // GetProjectMCPConfigsJSON reads the stored scoped MCP configs.
 func GetProjectMCPConfigsJSON(ctx context.Context, db orm.Context, projectID string) (*string, error) {
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldMCPConfigs)
+}
+
+// GetProjectCatalogJSON reads the project's synced workflows and presets in
+// one statement, so the pair comes from one committed sync: two reads could
+// straddle a push and pair one sync's workflows with the next one's presets.
+// Both are nil with no error when the project has no record.
+func GetProjectCatalogJSON(ctx context.Context, db orm.Context, projectID string) (workflows, presets *string, err error) {
+	var row struct {
+		Workflows *string `bun:"project_workflows_json"`
+		Presets   *string `bun:"project_presets_json"`
+	}
+	err = db.Bun().NewSelect().Model((*ProjectConfig)(nil)).
+		Column(ProjectConfigFieldProjectWorkflowsJSON, ProjectConfigFieldProjectPresetsJSON).
+		Where("project_id = ?", projectID).
+		Limit(1).
+		Scan(ctx, &row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load the workflow catalog of project %s: %w", projectID, err)
+	}
+	return row.Workflows, row.Presets, nil
 }
 
 // projectConfigColumn reads one nullable text column of the project's

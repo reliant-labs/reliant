@@ -5,9 +5,12 @@
  *
  * A static site is live the moment the platform allocates its default hostname
  * (`<word-pair>.sites.<platform domain>`); a custom domain is an addition, not
- * a prerequisite. So the default URL is the headline of every row, and the
- * custom domains sit under it with their own state — an "Add a domain" link
- * where there are none, rather than a blank that reads as "not live".
+ * a prerequisite. So the headline of every row is the address the site is
+ * opened at — its custom domain once that is live and healthy, else the
+ * default URL — and the generated address stays beside a custom headline,
+ * muted. The other custom domains sit under it with their own state — an
+ * "Add a domain" link where there are none, rather than a blank that reads as
+ * "not live".
  *
  * Shared by the environment page and the Overview (frontendsOf is the model);
  * this component only draws rows and never reads a query.
@@ -107,7 +110,23 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
       </div>
 
       {frontend.url ? (
-        <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
+          {frontend.platformUrl && frontend.platformUrl !== frontend.url && (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-muted" data-testid="frontend-platform-url">
+              also at
+              <a
+                href={frontend.platformUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open ${frontend.platformUrl}`}
+                className="no-color truncate font-mono text-ink-muted underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {frontend.platformHost}
+              </a>
+            </span>
+          )}
+        </div>
       ) : (
         <p className="text-xs text-ink-muted" data-testid="frontend-url-pending">
           No address yet. The platform allocates one on this site&apos;s first deploy, and it appears here.
@@ -116,7 +135,8 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
 
       {domains !== null && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs" data-testid="frontend-domains">
-          {domains.map((domain) => (
+          {/* The domain the headline opens is not repeated here. */}
+          {domains.filter((domain) => domain.hostname !== frontend.host).map((domain) => (
             <span key={domain.hostname} className="flex min-w-0 items-center gap-1.5" data-testid={`frontend-domain-${domain.hostname}`}>
               {domain.url ? (
                 <UrlLine url={domain.url} host={domain.hostname} testId="frontend-domain-url" />

@@ -131,13 +131,16 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
+	// The user's own machines: list them; start, stop or resize one.
+	ToolListMachines  = "list_machines"
+	ToolManageMachine = "manage_machine"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
@@ -173,10 +176,10 @@ var AllToolNames = []string{
 	"github__user_get", "github__issue_create", "github__issue_get", "github__issue_comment",
 	"github__issue_comment_update", "github__issue_comment_list", "github__issue_labels_add", "github__issue_labels_remove",
 	"github__issue_search", "github__labels_create", "github__labels_list", "github__issue_update", "github__pr_get", "github__pr_list_files", "github__pr_create",
-	"github__pr_enqueue", "github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
+	"github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
 	"github__pr_review_comment_reply",
 	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
-	"github__code_search", "github__workflow_dispatch",
+	"github__code_search", "github__workflow_dispatch", "github__check_run_list",
 	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
 	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",

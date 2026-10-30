@@ -29,6 +29,11 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 	if detail == "" {
 		detail = rundiagnostics.ErrorText(input.Error)
 	}
+	if detail == "" && input.OutcomeNode != "" {
+		// The declaring node runs no activity (compute, a sub-workflow), so
+		// there was no attempt to mark.
+		detail = fmt.Sprintf("Node %s declared the run's outcome: failure.", logging.RedactText(input.OutcomeNode))
+	}
 	if detail == "" {
 		detail = "Workflow declared failure without a recorded node error."
 	}
@@ -52,7 +57,9 @@ func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Cont
 			if node.Status == "failed" {
 				for _, row := range rows {
 					if row.ID == node.Id {
-						afterFailure = !last.CreatedAt.Before(row.CreatedAt)
+						// A failure-outcome save_message IS the author's
+						// message; its row is written just after it.
+						afterFailure = !last.CreatedAt.Before(row.CreatedAt) || row.ActivityName == "SaveMessage"
 					}
 				}
 				break

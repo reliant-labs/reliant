@@ -97,6 +97,10 @@ type ToolResult struct {
 	// error across the flattening into a result, so nothing downstream has to
 	// parse Content to learn why the run is stuck.
 	DaemonPending bool
+	// NotDispatched is true when the call's failure proves the request never
+	// reached a daemon (ErrNotDispatched), so nothing of it ran and sending it
+	// again is safe for any tool. False says nothing either way.
+	NotDispatched bool
 	// RanOnDaemon is true when the call completed a round trip to a daemon. A
 	// success with this set is proof the machine is reachable again.
 	RanOnDaemon bool

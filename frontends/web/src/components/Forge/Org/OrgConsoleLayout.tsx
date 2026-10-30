@@ -33,6 +33,7 @@ import { useAuthStore } from "@/store/authStore";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
 import { orgPageOf, type OrgPage } from "../Console/paths";
+import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { OrgShell } from "./OrgShell";
 
 // One preference for both consoles: collapsing the rail in an app keeps it collapsed up here.
@@ -84,6 +85,7 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
 
   return (
     <OrgShell
+      orgSwitcher={<OrgSwitcher />}
       page={page}
       apps={apps}
       alertsFiring={alertsFiring}

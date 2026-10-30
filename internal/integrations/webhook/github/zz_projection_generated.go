@@ -32,6 +32,7 @@ const (
 var mappings = map[string]mapping{
 	"check_run.completed":                 {attrs: checkRunCompletedAttrs, data: checkRunCompletedData},
 	"check_suite.completed":               {attrs: checkSuiteCompletedAttrs, data: checkSuiteCompletedData},
+	"check_suite.requested":               {attrs: checkSuiteRequestedAttrs, data: checkSuiteRequestedData},
 	"issue_comment.created":               {attrs: issueCommentCreatedAttrs, data: issueCommentCreatedData},
 	"issues.assigned":                     {attrs: issuesAssignedAttrs, data: issuesAssignedData},
 	"issues.closed":                       {data: issuesClosedData},
@@ -40,7 +41,9 @@ var mappings = map[string]mapping{
 	"issues.opened":                       {data: issuesOpenedData},
 	"issues.reopened":                     {data: issuesReopenedData},
 	"issues.unlabeled":                    {attrs: issuesUnlabeledAttrs, data: issuesUnlabeledData},
+	"pull_request.auto_merge_disabled":    {attrs: pullRequestAutoMergeDisabledAttrs, data: pullRequestAutoMergeDisabledData},
 	"pull_request.closed":                 {attrs: pullRequestClosedAttrs, data: pullRequestClosedData},
+	"pull_request.dequeued":               {attrs: pullRequestDequeuedAttrs, data: pullRequestDequeuedData},
 	"pull_request.labeled":                {attrs: pullRequestLabeledAttrs, data: pullRequestLabeledData},
 	"pull_request.opened":                 {attrs: pullRequestOpenedAttrs, data: pullRequestOpenedData},
 	"pull_request.ready_for_review":       {attrs: pullRequestReadyForReviewAttrs, data: pullRequestReadyForReviewData},
@@ -133,6 +136,36 @@ func checkSuiteCompletedDataCheckSuite(v any) map[string]any {
 		"app":           appObject(dig(v, "app")),
 		"created_at":    text(dig(v, "created_at")),
 		"updated_at":    text(dig(v, "updated_at")),
+		"pull_requests": integers(dig(v, "pull_requests"), "number"),
+	}
+	return out
+}
+
+func checkSuiteRequestedAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "check_suite", "head_branch"))
+	attrs["app"] = text(dig(raw, "check_suite", "app", "slug"))
+}
+
+func checkSuiteRequestedData(v any) map[string]any {
+	out := map[string]any{
+		"action":      text(dig(v, "action")),
+		"check_suite": checkSuiteRequestedDataCheckSuite(dig(v, "check_suite")),
+		"repository":  repositoryObject(dig(v, "repository")),
+		"sender":      userObject(dig(v, "sender")),
+	}
+	return out
+}
+
+func checkSuiteRequestedDataCheckSuite(v any) map[string]any {
+	out := map[string]any{
+		"id":            num(dig(v, "id")),
+		"status":        text(dig(v, "status")),
+		"head_sha":      text(dig(v, "head_sha")),
+		"head_branch":   text(dig(v, "head_branch")),
+		"before":        text(dig(v, "before")),
+		"after":         text(dig(v, "after")),
+		"app":           appObject(dig(v, "app")),
+		"created_at":    text(dig(v, "created_at")),
 		"pull_requests": integers(dig(v, "pull_requests"), "number"),
 	}
 	return out
@@ -364,6 +397,23 @@ func prObject(v any) map[string]any {
 	return out
 }
 
+func pullRequestAutoMergeDisabledAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
+	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
+}
+
+func pullRequestAutoMergeDisabledData(v any) map[string]any {
+	out := map[string]any{
+		"action":       text(dig(v, "action")),
+		"number":       num(dig(v, "number")),
+		"reason":       text(dig(v, "reason")),
+		"pull_request": prObject(dig(v, "pull_request")),
+		"repository":   repositoryObject(dig(v, "repository")),
+		"sender":       userObject(dig(v, "sender")),
+	}
+	return out
+}
+
 func pullRequestClosedAttrs(raw any, attrs map[string]string) {
 	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
 	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
@@ -374,6 +424,23 @@ func pullRequestClosedData(v any) map[string]any {
 	out := map[string]any{
 		"action":       text(dig(v, "action")),
 		"number":       num(dig(v, "number")),
+		"pull_request": prObject(dig(v, "pull_request")),
+		"repository":   repositoryObject(dig(v, "repository")),
+		"sender":       userObject(dig(v, "sender")),
+	}
+	return out
+}
+
+func pullRequestDequeuedAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "pull_request", "head", "ref"))
+	attrs["base_branch"] = text(dig(raw, "pull_request", "base", "ref"))
+}
+
+func pullRequestDequeuedData(v any) map[string]any {
+	out := map[string]any{
+		"action":       text(dig(v, "action")),
+		"number":       num(dig(v, "number")),
+		"reason":       text(dig(v, "reason")),
 		"pull_request": prObject(dig(v, "pull_request")),
 		"repository":   repositoryObject(dig(v, "repository")),
 		"sender":       userObject(dig(v, "sender")),
