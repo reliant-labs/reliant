@@ -22,6 +22,14 @@
 #       (default origin/main); exit 3 when there is none in the last 200.
 #   release-gate.sh show <rev>
 #       Print <rev>'s record.
+#   release-gate.sh run --part <part> [--shard I/N] <rev>
+#       Run one PART of the steps (below) and write a part record,
+#       <records>/<sha>.part-<part>[-<I>of<N>].json. Never a release record,
+#       never published: CI runs the parts as parallel jobs, then
+#   release-gate.sh assemble <sha> <part.json>...
+#       composes them into the record and publishes it. Fails closed, writing
+#       nothing, unless every part is there (every shard 1..N of a sharded
+#       part, exactly once) and every step ran on <sha>.
 #
 # Everything the merge gate (scripts/merge-gate.sh) leaves out runs here:
 # golangci-lint and buf lint (lint), link errors (build), slow tests, the race
@@ -40,10 +48,22 @@
 #   webbuild     task build:web:verify (lint, production renderer, artifact verification)
 #   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
-#   test         task test  (Go -race -count=1 without -short: every slow
-#                test, plus web and electron in full)
-#   integration  task test:integration
+#   test-go      task test -- <packages>  (Go -race -count=1 without -short:
+#                every slow test; ./..., or this shard's packages)
+#   test-web     task test:web  (every vitest file)
+#   test-electron task test:electron
+#   integration  task test:integration  (packages with integration-tagged
+#                tests: none today, so it runs nothing and passes)
 #   e2e          task test:e2e  (e2e/stories, ephemeral Temporal dev server)
+#
+# Parts (run --part; CI runs each as its own job, so the gate's wall time is
+# the slowest part, not the sum: ~70 min serial on one runner, 2026-10-30):
+#   static       npm generate docs build webbuild typecheck vet
+#   lint         npm lint
+#   go           npm test-go     (sharded: --shard I/N; packages balanced on
+#                                 scripts/release-gate-go-timings.json)
+#   web          npm test-web test-electron integration e2e
+# npm is in every part: each is a fresh runner that needs node_modules.
 #
 # Records: <git-common-dir>/release-gate/<sha>.{json,md} (outside every tree,
 # shared by every worktree of the clone), and a git note on the commit under
@@ -58,7 +78,14 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build webbuild typecheck vet test integration e2e)
+STEPS=(npm generate docs lint build webbuild typecheck vet test-go test-web test-electron integration e2e)
+PARTS=(static lint go web)
+declare -A PART_STEPS=(
+  [static]="npm generate docs build webbuild typecheck vet"
+  [lint]="npm lint"
+  [go]="npm test-go"
+  [web]="npm test-web test-electron integration e2e"
+)
 NOTES_REF=refs/notes/release-gate
 die() { printf 'release-gate: %s\n' "$*" >&2; exit 2; }
 
@@ -176,8 +203,23 @@ cmd_latest() {
 }
 
 cmd_run() {
-  local force=0 rev sha snap t0 rc fail=0 s e step json steps_json md slot_wait
-  [ "${1:-}" = --force ] && { force=1; shift; }
+  local force=0 rev sha snap t0 rc fail=0 s e step json steps_json md slot_wait part="" shard="" steps
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1; shift ;;
+      --part) part=${2:-}; shift 2 || die "--part needs a name" ;;
+      --shard) shard=${2:-}; shift 2 || die "--shard needs I/N" ;;
+      *) break ;;
+    esac
+  done
+  if [ -n "$part" ]; then
+    [ -n "${PART_STEPS[$part]:-}" ] || die "unknown part '$part' (${PARTS[*]})"
+    [ -n "${RG_ONLY:-}" ] && die "RG_ONLY and --part do not combine"
+  fi
+  if [ -n "$shard" ]; then
+    [[ "$shard" =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] && [ "${BASH_REMATCH[1]}" -le "${BASH_REMATCH[2]}" ] || die "--shard must be I/N with 1 <= I <= N (got '$shard')"
+    [ "$part" = go ] || die "only --part go is sharded"
+  fi
   rev=${1:-}
   if [ -z "$rev" ]; then git fetch -q origin main || die "cannot fetch origin main"; rev=origin/main; fi
   sha=$(resolve "$rev")
@@ -188,7 +230,7 @@ cmd_run() {
   # One heavy slot for the whole run; every step nests inside it.
   local slotforge=${FORGE_BIN:-forge}
   if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) "$sha"
+    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) ${part:+--part "$part"} ${shard:+--shard "$shard"} "$sha"
   fi
   t0=$(date +%s); slot_wait=$(( t0 - ${RG_SLOT_T0:-$t0} ))
   snap=${RELEASE_GATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-release-gate/$(echo "$common" | md5sum | cut -c1-8)}/snap
@@ -204,11 +246,12 @@ cmd_run() {
   echo "release-gate: $(git log --oneline -1 "$sha" | cut -c1-100)"
   echo "release-gate: private checkout $snap, logs $L (queued ${slot_wait}s for a heavy slot)"
   steps_json="[]"
-  for step in "${STEPS[@]}"; do
+  if [ -n "$part" ]; then read -r -a steps <<<"${PART_STEPS[$part]}"; else steps=("${STEPS[@]}"); fi
+  for step in "${steps[@]}"; do
     if [ -n "${RG_ONLY:-}" ] && ! echo ",$RG_ONLY," | grep -q ",$step,"; then continue; fi
     s=$(date +%s)
     echo "release-gate: [$(date -u +%H:%M:%SZ)] $step ..."
-    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 && run_step "$step") >"$L/$step.log" 2>&1
+    (cd "$snap" && export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" FORGE_NO_MERGE_DRIVER=1 RG_GO_SHARD="$shard" && run_step "$step") >"$L/$step.log" 2>&1
     rc=$?; e=$(date +%s)
     [ "$rc" = 0 ] || fail=1
     echo "release-gate: $step $([ "$rc" = 0 ] && echo PASS || echo "FAIL (rc $rc; $L/$step.log)") in $((e - s))s"
@@ -231,9 +274,100 @@ cmd_run() {
   } )
   echo; echo "$md"
   if [ -n "${RG_ONLY:-}" ]; then echo "release-gate: RG_ONLY run: not recorded"; return "$fail"; fi
+  if [ -n "$part" ]; then
+    local pf="$records/$sha.part-$part${shard:+-${shard%/*}of${shard#*/}}.json"
+    jq -c --arg part "$part" --arg shard "$shard" '. + {part: $part, shard: $shard}' <<<"$json" >"$pf"
+    echo "release-gate: part record $pf (not a release record: \`$0 assemble\` composes the parts)"
+    return "$fail"
+  fi
   echo "$json" >"$records/$sha.json"; echo "$md" >"$records/$sha.md"
   publish "$sha" "$json"
   return "$fail"
+}
+
+# cmd_assemble <sha> <part.json>...: the parts CI ran in parallel, as one
+# record. Fails closed (exit 2, nothing written) unless every part is present,
+# every shard of a sharded part exactly once, and every step ran on <sha>; a
+# step's result is FAIL if any part's run of it failed.
+cmd_assemble() {
+  local sha parts json md p want got
+  [ $# -ge 1 ] || die "usage: $0 assemble <sha> <part.json>..."
+  sha=$(resolve "$1"); shift
+  fetch_notes
+  if [ "$(result_of "$sha")" = PASS ]; then
+    echo "release-gate: $(git rev-parse --short "$sha") already has a green record"; return 0
+  fi
+  [ $# -ge 1 ] || die "no part records for $(git rev-parse --short "$sha")"
+  parts=$(jq -cs . "$@") || die "unreadable part record(s)"
+  [ "$(jq --arg s "$sha" 'all(.[]; .sha == $s)' <<<"$parts")" = true ] || die "a part record is not of $sha"
+  # Every part exactly once; a sharded part as one complete set 1/N..N/N.
+  for p in "${PARTS[@]}"; do
+    got=$(jq -r --arg p "$p" '[.[] | select(.part == $p) | .shard] | sort_by(split("/") | map(tonumber? // 0)) | join(",")' <<<"$parts")
+    want=$(jq -r --arg p "$p" '[.[] | select(.part == $p) | .shard] as $s
+      | if ($s | length) == 0 then "(none)"
+        elif $s == [""] then ""
+        else ($s[0] | split("/")[1] | tonumber) as $n | [range(1; $n + 1) | "\(.)/\($n)"] | join(",") end' <<<"$parts")
+    [ "$got" = "$want" ] || die "part $p: ran [${got:-unsharded}], want [${want:-exactly one unsharded run}]; nothing recorded"
+  done
+  json=$(jq -c --argjson steps "$(printf '%s\n' "${STEPS[@]}" | jq -R . | jq -s .)" \
+    --arg forge "$(git show "$sha:forge.yaml" 2>/dev/null | sed -n 's/^forge_version:[[:space:]]*//p' | head -1)" \
+    --arg by "$(git config user.email || whoami)" '
+    . as $parts
+    | ([$parts[].steps[]] | group_by(.name) | map({key: .[0].name, value: .}) | from_entries) as $ran
+    | ($steps - ($ran | keys)) as $missing
+    | if ($missing | length) > 0 then error("steps no part ran: \($missing | join(", "))") else . end
+    | ([$parts[].started] | min) as $started | ([$parts[].finished] | max) as $finished
+    | {sha: $parts[0].sha,
+       result: (if all($parts[].steps[]; .result == "PASS") then "PASS" else "FAIL" end),
+       started: $started, finished: $finished,
+       seconds: (($finished | fromdate) - ($started | fromdate)),
+       slot_wait_seconds: ([$parts[].slot_wait_seconds] | max),
+       forge: $forge, host: ([$parts[].host] | unique | join(",")), by: $by,
+       parts: [$parts[] | {part, shard, seconds, result}],
+       steps: [$steps[] as $n | $ran[$n] | {name: $n,
+         result: (if all(.[]; .result == "PASS") then "PASS" else "FAIL" end),
+         seconds: ([.[].seconds] | max)}]}' <<<"$parts") || die "cannot assemble the parts (above)"
+  md=$( {
+    echo "### release-gate: $(git rev-parse --short "$sha") $([ "$(jq -r .result <<<"$json")" = PASS ] && echo PASSED || echo FAILED) (assembled from $(jq '.parts | length' <<<"$json") parallel parts)"
+    echo
+    echo "| part | result | seconds |"
+    echo "|---|---|---|"
+    jq -r '.parts[] | "| \(.part)\(if .shard != "" then " " + .shard else "" end) | \(.result) | \(.seconds) |"' <<<"$json"
+    echo
+    echo "| step | result | seconds (slowest part) |"
+    echo "|---|---|---|"
+    jq -r '.steps[] | "| \(.name) | \(.result) | \(.seconds) |"' <<<"$json"
+    echo
+    echo "wall: $(jq -r .seconds <<<"$json")s from the first part's start to the last's finish; forge $(jq -r .forge <<<"$json")"
+  } )
+  echo "$md"
+  echo "$json" >"$records/$sha.json"; echo "$md" >"$records/$sha.md"
+  publish "$sha" "$json"
+  [ "$(jq -r .result <<<"$json")" = PASS ]
+}
+
+# go_shard_packages: with RG_GO_SHARD=I/N, this shard's packages (1-based I)
+# of those with test files, longest-processing-time first on the recorded
+# `go test -race` package seconds in scripts/release-gate-go-timings.json (a
+# package with no entry weighs the median); ties break on the path, so every
+# shard computes the same split. Without it, ./... .
+go_shard_packages() {
+  [ -n "${RG_GO_SHARD:-}" ] || { echo ./...; return; }
+  local i=${RG_GO_SHARD%/*} n=${RG_GO_SHARD#*/} timings=scripts/release-gate-go-timings.json
+  [ -f "$timings" ] || timings=/dev/null
+  go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... \
+    | jq -rRn --slurpfile t <(cat "$timings" 2>/dev/null || echo '{}') --argjson i "$((i - 1))" --argjson n "$n" '
+      ($t[0] // {}) as $w
+      | [inputs | select(length > 0)] as $pkgs
+      | ([$w[]] | sort) as $known
+      | (if ($known | length) > 0 then $known[($known | length) / 2 | floor] else 1 end) as $median
+      | [$pkgs[] | {p: ., s: ($w[.] // $median)}]
+      | sort_by(-.s, .p)
+      | reduce .[] as $x ({load: [range($n) | 0], of: {}};
+          (.load | to_entries | min_by(.value) | .key) as $k
+          | .load[$k] += $x.s
+          | .of[$x.p] = $k)
+      | .of | to_entries[] | select(.value == $i) | .key'
 }
 
 run_step() {
@@ -271,7 +405,15 @@ run_step() {
     webbuild) task build:web:verify ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
     vet) go vet ./... ;;
-    test) task test ;;
+    test-go)
+      local pkgs
+      pkgs=$(go_shard_packages | tr '\n' ' ')
+      [ -n "${pkgs// /}" ] || { echo "test-go: shard $RG_GO_SHARD is empty; lower the shard count"; return 1; }
+      echo "test-go${RG_GO_SHARD:+ shard $RG_GO_SHARD}: $(wc -w <<<"$pkgs") package pattern(s)"
+      # shellcheck disable=SC2086 # one word per package
+      task test -- $pkgs ;;
+    test-web) task test:web ;;
+    test-electron) task test:electron ;;
     integration) task test:integration ;;
     e2e) task test:e2e ;;
     *) echo "unknown step $1"; return 2 ;;
@@ -284,6 +426,7 @@ case "$sub" in
   check) cmd_check "$@" ;;
   latest) cmd_latest "$@" ;;
   show) record_of "$(resolve "${1:-HEAD}")" | jq . ;;
-  -h|--help|"") sed -n '2,49p' "$0" ;;
-  *) die "unknown command '$sub' (run, check, latest, show)" ;;
+  assemble) cmd_assemble "$@" ;;
+  -h|--help|"") sed -n '2,78p' "$0" ;;
+  *) die "unknown command '$sub' (run, check, latest, show, assemble)" ;;
 esac

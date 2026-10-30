@@ -3143,8 +3143,7 @@ type LoadedWorkflow struct {
 func loadWorkflowDefinition(ctx workflow.Context, input WorkflowInput) (*LoadedWorkflow, error) {
 	logger := workflow.GetLogger(ctx)
 
-	// Create activity context for loading workflow
-	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -3152,21 +3151,19 @@ func loadWorkflowDefinition(ctx workflow.Context, input WorkflowInput) (*LoadedW
 			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
 		},
-	})
+	}
 
 	// Load workflow from database/file
 	// Pass ChatID to allow the activity to resolve project-relative workflow paths
-	loadInput := map[string]string{
-		"chat_id":       input.ChatID,
-		"workflow_name": input.WorkflowName,
-	}
-	// A continue-as-new successor of a pinned run, or a restart from its
-	// checkpoint, loads its root from the pin too.
-	if pin := rootCatalogPin(input); pin != "" {
-		loadInput["catalog_pin"] = pin
+	loadInput := types.LoadWorkflowInput{
+		ChatID:       input.ChatID,
+		WorkflowName: input.WorkflowName,
+		// A continue-as-new successor of a pinned run, or a restart from
+		// its checkpoint, loads its root from the pin too.
+		CatalogPin: rootCatalogPin(input),
 	}
 	var result LoadedWorkflow
-	if err := workflow.ExecuteActivity(activityCtx, "ActivityLoadWorkflow", loadInput).Get(ctx, &result); err != nil {
+	if err := executeBookkeeping(ctx, activityOpts, "ActivityLoadWorkflow", loadInput).Get(ctx, &result); err != nil {
 		logger.Error("[Workflow Runtime] Failed to load workflow", "error", err)
 		return nil, err
 	}
@@ -5312,7 +5309,7 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID string, loopIteration int) {
 	logger := workflow.GetLogger(ctx)
 
-	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	activityOpts := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -5320,22 +5317,21 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 			MaximumInterval:    5 * time.Second,
 			MaximumAttempts:    2,
 		},
-	})
-
-	input := map[string]interface{}{
-		"chat_id":        chatID,
-		"workflow_id":    workflowID,
-		"node_id":        nodeID,
-		"loop_iteration": loopIteration,
 	}
-	// The run's catalog rides its position: a restart from this checkpoint
-	// loads the definitions the run started with (ResumeInput.CatalogPin).
-	if pin := catalogPinFrom(ctx); pin != "" {
-		input["catalog_pin"] = pin
+
+	input := types.WorkflowCheckpointInput{
+		ChatID:        chatID,
+		WorkflowID:    workflowID,
+		NodeID:        nodeID,
+		LoopIteration: int64(loopIteration),
+		// The run's catalog rides its position: a restart from this
+		// checkpoint loads the definitions the run started with
+		// (ResumeInput.CatalogPin).
+		CatalogPin: catalogPinFrom(ctx),
 	}
 
 	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(activityCtx, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
+	if err := executeBookkeeping(ctx, activityOpts, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
 		logger.Warn("[Workflow Runtime] Failed to persist position checkpoint",
 			"nodeID", nodeID,
 			"loopIteration", loopIteration,
@@ -5863,8 +5859,10 @@ const (
 	preflightWaitSlice = 60 * time.Second
 	// preflightHeartbeatTimeout deliberately differs from
 	// activityHeartbeatTimeout so resolveMaxAttempts does not treat the check
-	// as a retried graph step.
-	preflightHeartbeatTimeout = 20 * time.Second
+	// as a retried graph step. It must still leave room for several heartbeat
+	// windows: the SDK heartbeats every min(0.8x this, the worker's 15s
+	// throttle) = 15s, so 45s is three windows (20s left one).
+	preflightHeartbeatTimeout = 45 * time.Second
 	preflightSliceMargin      = 30 * time.Second
 
 	// preflightMachineWaitCap is the safety net behind the machine's own

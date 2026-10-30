@@ -34,7 +34,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
-| `concurrency` | WorkflowConcurrency | No | - |
+| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
 
 ---
@@ -64,6 +64,20 @@ Defines one conditional routing path from an edge.
 | `to` | string[] | No | - |
 | `condition` | string | No | - |
 | `label` | string | No | - |
+
+---
+
+## WorkflowConcurrency
+
+A trigger admission policy (`concurrency:`), not a worker task limit. Pooled per owner, project and workflow; manual trigger fires participate, chat starts do not. Example, one release at a time with only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: '{{ trigger.payload.attributes.repository }}'}`.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `max_running` | integer | No | *How many trigger-launched runs of the workflow run at once; later firings wait. Required, at least 1.* |
+| `waiting` | enum | No | *What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail "superseded" (never failed). Running runs are never touched.* |
+| `key` | string | No | *With `waiting: latest` only: a template over `trigger`, like a webhook dedupe_key, naming the group of waiting firings that replace each other, e.g. `'{{ trigger.payload.attributes.repository }}'`. Unset: one group for the whole workflow. max_running still bounds the whole workflow. A firing whose key does not render waits FIFO and is never superseded.* |
 
 ---
 

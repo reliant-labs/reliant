@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/pdfutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // localMemReader reads the workspace cgroup's memory accounting for
@@ -861,9 +862,18 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := localMemReader.SnapshotOOMKills()
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree). Last before Start:
+	// the heavy-slot and sandbox rewrites above change what cmd execs.
+	tree := proctree.Default().Prepare(cmd)
+
 	start := time.Now()
 	err = cmd.Start()
+	if err != nil {
+		tree.Started(0)
+	}
 	if err == nil {
+		tree.Started(cmd.Process.Pid)
 		// Steer the kernel OOM killer toward the workload (and descendants,
 		// which inherit the score) rather than the daemon. No-op outside
 		// Linux; best-effort everywhere.
@@ -897,6 +907,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			StdoutBuf:  &stdoutBuf,
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
+			Tree:       tree,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -906,6 +917,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			return &bgResp, nil
 		}
 		err = <-waitCh
+		tree.Release()
 	}
 	// Finished: nothing may stop it now, and Err() below stays the reason it
 	// was stopped, if it was.

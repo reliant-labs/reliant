@@ -405,8 +405,8 @@ func TestRolloutFailsCleanlyWhenTheOldReplicaAnswersFirst(t *testing.T) {
 	var once sync.Once
 	sub, err := lagging.Subscribe("daemon.command."+userID+"."+daemonID, func(msg *nats.Msg) {
 		once.Do(func() {
-			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon ` + daemonID + ` is not connected for user ` + userID + `","error_code":"` + toolexec.ErrorCodeDaemonRoundTrip + `"}`))
 			close(answered)
+			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon ` + daemonID + ` is not connected for user ` + userID + `","error_code":"` + toolexec.ErrorCodeDaemonRoundTrip + `"}`))
 		})
 	})
 	require.NoError(t, err)
@@ -418,9 +418,13 @@ func TestRolloutFailsCleanlyWhenTheOldReplicaAnswersFirst(t *testing.T) {
 	require.True(t, ok)
 
 	requireLostAndSaysWhy(t, answerEveryStatusUntil(t, streamB, req.RequestId, toolexec.ToolRequestUnknown, results))
+	// Every command on the daemon's subject is delivered to the stand-in too,
+	// but its callback runs on its own goroutine: on a loaded host (main's
+	// release gate saw ~1 run in 9) the new replica's answer settles the call
+	// before that callback has run. So wait for it rather than sampling it.
 	select {
 	case <-answered:
-	default:
+	case <-time.After(10 * time.Second):
 		t.Fatal("the lagging replica was never asked: this test did not exercise the race it pins")
 	}
 }

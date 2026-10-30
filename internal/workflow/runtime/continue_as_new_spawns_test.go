@@ -79,21 +79,23 @@ func newCANSpawnEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment) *canSp
 	ok := func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}
-	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 		return LoadedWorkflow{WorkflowJSON: wfJSON, CatalogPin: e.loadPin}, nil
 	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
-	for _, name := range []string{"WorkflowStatus", "WorkflowCheckpoint", "Cleanup", "EmitThreadEvent", "WorkflowError", "ValidateThreadOwnership", "LoadPresetParams", "SaveMessage"} {
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+		return map[string]interface{}{"success": true}, nil
+	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ types.LoadPresetParamsInput) (map[string]interface{}, error) {
+		return map[string]interface{}{}, nil
+	}, activity.RegisterOptions{Name: "LoadPresetParams"})
+	for _, name := range []string{"WorkflowStatus", "Cleanup", "EmitThreadEvent", "WorkflowError", "ValidateThreadOwnership", "SaveMessage"} {
 		name := name
 		switch name {
 		case "ValidateThreadOwnership":
 			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 				return map[string]interface{}{"valid": true}, nil
-			}, activity.RegisterOptions{Name: name})
-		case "LoadPresetParams":
-			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
-				return map[string]interface{}{}, nil
 			}, activity.RegisterOptions{Name: name})
 		case "SaveMessage":
 			env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {

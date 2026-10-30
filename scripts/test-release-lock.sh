@@ -19,12 +19,13 @@ mkdir -p "$fx/bin"
 cat > "$fx/bin/gh" << 'GH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_CALLS"
+# GH_FAIL=<glob>: a call matching it fails (timeout, no auth, a refused label).
+# shellcheck disable=SC2053 # a glob on purpose
+if [ -n "${GH_FAIL:-}" ] && [[ "$*" == $GH_FAIL ]]; then exit 1; fi
 case "$*" in
   'pr list '*'--label release:asap'*) ;;
-  'pr list '*'--limit 1 '*) [ "${GH_FAIL:-}" != list ] || exit 1; echo 7 ;;
-  'pr view '*) [ "${GH_FAIL:-}" != view ] || exit 1; echo "${GH_ASAP:-false}" ;;
-  'pr edit '*'--remove-label'*) [ "${GH_FAIL:-}" != remove ] || exit 1 ;;
-  'pr edit '*'--add-label'*) [ "${GH_FAIL:-}" != edit ] || exit 1 ;;
+  'pr list '*'--limit 1 '*) echo 7 ;;
+  'pr view '*) echo false ;;
   'pr edit '*) ;;
   *) echo "unexpected gh: $*" >&2; exit 90 ;;
 esac
@@ -110,19 +111,6 @@ holder a 'release_lock_acquire v1.0.4
 grep -qx 'pr edit 7 -R acme/repo --add-label release:asap' "$GH_CALLS" || { cat "$GH_CALLS" >&2; fail "a coalesced request was lost"; }
 grep -qF 'coalesced: run fixture (a release:asap PR merged since v1.0.0) while a release; labelled #7 release:asap' "$fx/recheck" || { cat "$fx/recheck" >&2; fail "the re-check was silent"; }
 [ -z "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || fail "the request was not consumed"
-# ...a request consumed and then not acted on (the PR lookup or the label fails) is put
-# back on origin for the next release, never lost.
-# (remove: release:asap is already on the PR, so only removing it first makes the add a
-# fresh event.)
-for f in list edit view remove; do
-  : > "$GH_CALLS"
-  holder a 'release_lock_acquire v1.0.4
-    (request "asap")
-    GH_ASAP=true GH_FAIL='"$f"' release_lock_release 2> '"$fx"'/recheck' || fail "release with a failing gh ($f) failed"
-  [ -n "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || { cat "$fx/recheck" >&2; fail "a failed gh $f lost the coalesced request"; }
-  grep -qF 'the request is back on origin for the next release' "$fx/recheck" || { cat "$fx/recheck" >&2; fail "a restored request was not reported ($f)"; }
-  git -C "$fx/a" push -q origin :refs/release-lock/coalesced
-done
 # ...and a release that LOST its lock leaves the request for the new holder.
 : > "$GH_CALLS"
 holder a 'RELEASE_LOCK_HEARTBEAT_SECS=3600; release_lock_acquire v1.0.4
@@ -132,6 +120,20 @@ holder a 'RELEASE_LOCK_HEARTBEAT_SECS=3600; release_lock_acquire v1.0.4
 grep -q 'pr edit' "$GH_CALLS" && fail "a release that lost its lock acted on the new holder's request"
 [ -n "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] || fail "a lost release consumed the request"
 git -C "$fx/a" push -q origin :refs/release-lock/coalesced :refs/release-lock/release 2> /dev/null || true
+# ...and a request the release could not act on (gh cannot list, read or label) stays on
+# origin for the next release; it is acknowledged only once the label is applied.
+for failing in 'pr list *' 'pr view *' 'pr edit *--add-label*'; do
+  : > "$GH_CALLS"
+  holder a 'release_lock_acquire v1.0.4
+    (request "asap")
+    GH_FAIL='"'$failing'"' release_lock_release 2> '"$fx"'/recheck' || fail "release with a failing gh ($failing) failed"
+  [ -n "$(git -C "$fx/a" ls-remote origin refs/release-lock/coalesced)" ] \
+    || { cat "$fx/recheck" >&2; fail "a request was dropped although gh failed ($failing)"; }
+  grep -qF 'the request stays on refs/release-lock/coalesced' "$fx/recheck" \
+    || { cat "$fx/recheck" >&2; fail "the failure ($failing) does not say the request was kept"; }
+  git -C "$fx/a" push -q origin :refs/release-lock/coalesced
+done
+git -C "$fx/a" push -q origin :refs/release-lock/release 2> /dev/null || true
 
 # 5. release_lock_assert proves ownership on origin at the moment of publication: ours ->
 #    0; replaced by another cutter (before our heartbeat has noticed) -> refused.
@@ -143,6 +145,23 @@ holder a 'RELEASE_LOCK_RECHECK=off RELEASE_LOCK_HEARTBEAT_SECS=3600; release_loc
 grep -qF 'is no longer ours' "$fx/assert" || fail "the assert refusal does not say why"
 case "$(holder a release_lock_status)" in "live "*"v2.0.1"*) ;; *) fail "the replaced holder's release dropped the new holder's lock" ;; esac
 git -C "$fx/a" push -q origin :refs/release-lock/release
+
+# 5b. A renewal whose push has reached origin but whose bookkeeping has not run yet (held
+#     there by the test seam) is still ours: the assertion accepts it, and the release
+#     drops it.
+holder a 'RELEASE_LOCK_RECHECK=off RELEASE_LOCK_HEARTBEAT_SECS=1 RELEASE_LOCK_TEST_PAUSE_FILE='"$fx"'/pause
+  : > "$RELEASE_LOCK_TEST_PAUSE_FILE"
+  release_lock_acquire v2.1.0
+  first="$(cat "$RELEASE_LOCK_STATE/sha")"
+  for _ in $(seq 1 60); do [ "$(git ls-remote origin refs/release-lock/release | cut -f1)" != "$first" ] && break; sleep 0.5; done
+  [ "$(git ls-remote origin refs/release-lock/release | cut -f1)" != "$first" ] || exit 56
+  [ "$(cat "$RELEASE_LOCK_STATE/sha")" = "$first" ] || exit 57
+  release_lock_assert 2> '"$fx"'/assert || exit 58
+  rm -f "$RELEASE_LOCK_TEST_PAUSE_FILE"
+  release_lock_release
+  [ -z "$(git ls-remote origin refs/release-lock/release)" ] || exit 59' \
+  || { cat "$fx/assert" >&2; fail "an assertion during a renewal rejected our own lock (exit $?)"; }
+rm -f "$fx/pause"
 
 # A release that holds the lock with a 1s heartbeat and then "works" for 15 min (it is
 # expected to be stopped long before), as a separate process; prints its pid. Its output

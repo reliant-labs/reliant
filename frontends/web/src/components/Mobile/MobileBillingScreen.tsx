@@ -121,7 +121,7 @@ function Band({
   );
 }
 
-export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
+export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) {
   const subQ = useComputeSubscription();
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
@@ -257,7 +257,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <MobileSettingsSectionHeader title="Billing" onBack={onBack} />
+      <MobileSettingsSectionHeader title="Billing" onBack={onBack} backLabel={backLabel} />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {loading ? (

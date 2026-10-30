@@ -5,26 +5,17 @@ import (
 	"context"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // ============================================================================
 // TYPES (strongly typed inputs/outputs)
 // ============================================================================
 
-// WorkflowCheckpointInput is the input for the WorkflowCheckpoint activity.
-// It records the position a workflow run has reached: the top-level node it
-// just entered and, for loop nodes, the loop iteration in flight. This is the
-// position truth used by SendMessage to resume an interrupted
-// (failed/terminated) run at position instead of restarting at graph entry.
-type WorkflowCheckpointInput struct {
-	ChatID        string `json:"chat_id" reliant:"-"`
-	WorkflowID    string `json:"workflow_id"`
-	NodeID        string `json:"node_id"`
-	LoopIteration int64  `json:"loop_iteration,omitempty"`
-	// CatalogPin is the catalog the run started with, recorded beside its
-	// position so a restart from here loads the same definitions.
-	CatalogPin string `json:"catalog_pin,omitempty"`
-}
+// WorkflowCheckpointInput is defined in activities/types: this activity runs
+// as a LOCAL activity (runtime.executeBookkeeping), whose input must already be
+// the registered parameter type, so the workflow names it too.
+type WorkflowCheckpointInput = types.WorkflowCheckpointInput
 
 // WorkflowCheckpointOutput is the output from the WorkflowCheckpoint activity.
 type WorkflowCheckpointOutput struct {

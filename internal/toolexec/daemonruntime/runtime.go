@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/proctree"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -490,6 +491,15 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		logging.Info(logPrefix + " " + heavyGate.String())
 	}
 	SetHeavyGate(heavyGate)
+
+	// Every command an agent runs gets a process limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command), and every
+	// command's RLIMIT_NPROC leaves the daemon a reserve, so one runaway
+	// command fails alone instead of exhausting the user's process limit for
+	// every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{})
+	proctree.SetDefault(limiter)
+	logging.Info(logPrefix + " " + limiter.String())
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
 	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})
