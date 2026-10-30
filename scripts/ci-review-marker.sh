@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Exact-head review gate for the merge queue (control-plane docs/pr-pipeline.md).
+# Exact-head review gate (control-plane docs/pr-pipeline.md). The `Reliant review`
+# workflow (.github/workflows/reliant-review.yml), the ruleset's required check,
+# runs this from main on every pull request event and merge group.
 # A pull request merges only if its CURRENT head carries pr-review's pass marker
 # for that exact sha (`<!-- review-passed sha=<head> -->` in a review whose
 # commit_id is the head), posted by the pipeline's reviewer. pr-disarm reacts to
