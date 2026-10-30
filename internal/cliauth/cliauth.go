@@ -26,6 +26,9 @@ const (
 	ScopeAPI = "reliant:api"
 	// ScopeDaemon registers and connects a daemon as the user.
 	ScopeDaemon = "daemon:connect"
+	// ScopeMachines lists, starts, stops and resizes the user's machines
+	// (`reliant machine`). Person-only: a daemon's credential never holds it.
+	ScopeMachines = "daemon:manage"
 )
 
 // ErrNotLoggedIn reports no stored credential for a server.
