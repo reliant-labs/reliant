@@ -788,6 +788,16 @@ tasks:
     cmds:
       - '{{.GEN_GO}} run ./tools/docgen/changelog/... {{.MINTLIFY_DOCS_DIR}}/data/releases {{.MINTLIFY_DOCS_DIR}}/changelog.mdx'
 
+  generate:docs:changelog:draft:
+    # What the release workflow runs before ./scripts/release.sh (control-plane
+    # scripts/release-chain/reliant-bump.sh). Deterministic; refuses to replace an
+    # existing file (FORCE=1 does).
+    desc: Write docs/data/releases/VERSION.yaml from the PR titles merged since SINCE_TAG, grouped by conventional-commit type
+    requires:
+      vars: [VERSION, SINCE_TAG]
+    cmds:
+      - '{{.GEN_GO}} run ./tools/releasenotes --version {{.VERSION}} --since {{.SINCE_TAG}} --to {{.TO | default "HEAD"}} --out {{.MINTLIFY_DOCS_DIR}}/data/releases/{{.VERSION}}.yaml{{if .FORCE}} --force{{end}}'
+
   generate:docs:mintlify-reference:
     desc: Convert the generated reference markdown into Mintlify .mdx pages
     cmds:
