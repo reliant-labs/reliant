@@ -201,10 +201,10 @@ beforeEach(() => {
 describe("ComputeStep — every size says what it gives you", () => {
   // THE REPORT. A size name with a price and no specification.
   it.each([
-    ["Small", "2 GB RAM", "0.5 CPU"],
-    ["Medium", "4 GB RAM", "1 CPU"],
-    ["Large", "8 GB RAM", "2 CPU"],
-    ["XL", "16 GB RAM", "4 CPU"],
+    ["Small", "4 GB RAM", "2 CPU"],
+    ["Medium", "8 GB RAM", "4 CPU"],
+    ["Large", "16 GB RAM", "8 CPU"],
+    ["XL", "32 GB RAM", "15 CPU"],
   ])("labels %s with its memory and CPU", (size, memory, cpu) => {
     renderStep();
 
@@ -226,8 +226,9 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     const small = screen.getByRole("button", { name: /^Small / });
-    expect(small).toHaveTextContent("2 GB RAM");
-    expect(small).not.toHaveTextContent("4 GB RAM");
+    expect(small).toHaveTextContent("4 GB RAM");
+    expect(small).toHaveTextContent("2 CPU");
+    expect(small).not.toHaveTextContent("0.5 CPU");
   });
 
   /**
@@ -242,13 +243,10 @@ describe("ComputeStep — every size says what it gives you", () => {
    * on the whole way up. One number here would overstate memory headroom by
    * double, on the axis a build actually dies on.
    */
-  it("states both burst multiples exactly once, below the sizes", () => {
+  it("does not advertise bursting above Guaranteed requests", () => {
     renderStep();
 
-    const note = screen.getByTestId("compute-step-burst-note");
-    expect(note).toHaveTextContent(/4× the CPU/);
-    expect(note).toHaveTextContent(/2× the memory/);
-    expect(note).toHaveTextContent(/reserve/i);
+    expect(screen.queryByTestId("compute-step-burst-note")).not.toBeInTheDocument();
 
     for (const size of ["Small", "Medium", "Large", "XL"]) {
       const tile = screen.getByRole("button", {
@@ -548,10 +546,8 @@ describe("machineSpecs mirrors control-plane's ladder", () => {
    */
   it("keeps each axis uniform, at its own multiple", () => {
     for (const [size, spec] of Object.entries(MACHINE_SPECS)) {
-      expect(spec.cpuBurst / spec.cpuReserved, `${size} cpu`).toBe(4);
-      expect(spec.memoryBurstGb / spec.memoryReservedGb, `${size} memory`).toBe(
-        2,
-      );
+      expect(spec.cpuBurst / spec.cpuReserved, `${size} cpu`).toBe(1);
+      expect(spec.memoryBurstGb / spec.memoryReservedGb, `${size} memory`).toBe(1);
     }
   });
 });

@@ -334,9 +334,9 @@ describe("the machine list", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    expect(machineRow("Small")).toHaveTextContent("2 GB RAM · 0.5 CPU");
-    expect(machineRow("Medium")).toHaveTextContent("4 GB RAM · 1 CPU");
-    expect(machineRow("Large")).toHaveTextContent("8 GB RAM · 2 CPU");
+    expect(machineRow("Small")).toHaveTextContent("4 GB RAM · 2 CPU");
+    expect(machineRow("Medium")).toHaveTextContent("8 GB RAM · 4 CPU");
+    expect(machineRow("Large")).toHaveTextContent("16 GB RAM · 8 CPU");
   });
 
   /**
@@ -368,9 +368,7 @@ describe("the machine list", () => {
     const user = userEvent.setup();
     await openPlans(user);
 
-    const note = screen.getByTestId("plans-burst-note");
-    expect(note).toHaveTextContent(/4× the CPU/);
-    expect(note).toHaveTextContent(/2× the memory/);
+    expect(screen.queryByTestId("plans-burst-note")).not.toBeInTheDocument();
     for (const size of ["Small", "Medium", "Large"]) {
       expect(machineRow(size)).not.toHaveTextContent(/burst/i);
     }
