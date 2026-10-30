@@ -127,6 +127,12 @@ export interface DashboardViewProps {
 
 const NO_MARKERS: readonly ChartMarker[] = [];
 
+/** Release comparison on a platform dashboard: no environment, so no release. */
+const PLATFORM_NO_RELEASE: CompareTarget = {
+  mode: "unavailable",
+  reason: "A platform dashboard belongs to no environment, so there is no release to compare with.",
+};
+
 export function DashboardView({ project, dashRef, env, environments, search, onSearch, onEnvChange, hrefs, navigateTo }: DashboardViewProps) {
   const org = useObservabilityOrg();
   const orgId = org.orgId;
@@ -174,16 +180,20 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const marks = !!spec && !platform && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
-  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
+  // A platform dashboard belongs to no environment: the environment the top
+  // bar names (hidden for it) must not lend it that environment's alert bands
+  // or its last release to compare with. Previous-period comparison stays.
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!spec && !!envId && !platform && dashRef.kind !== "builtin" });
+  // Both wait for the document: until it loads, a platform dashboard is not yet known to be one.
+  const history = useAlertHistory(dashRef.kind === "builtin" || !spec || platform ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
   const bands = useMemo(
-    () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
-    [history.data, scopeEnvIds, search.service, search.alerts]
+    () => platform || search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
+    [platform, history.data, scopeEnvIds, search.service, search.alerts]
   );
   const now = Date.now();
-  const target = compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
-  const releaseCompare = compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const releaseCompare = platform ? PLATFORM_NO_RELEASE : compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);
+  const target = platform && compare === "release" ? PLATFORM_NO_RELEASE : compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
 
   // ── Drill-down ──
   const [drill, setDrill] = useState<{ target: DrillTarget; panel: Panel; at: { x: number; y: number } } | null>(null);

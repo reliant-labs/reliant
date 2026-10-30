@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
@@ -138,6 +138,25 @@ describe("a platform dashboard", () => {
     await screen.findByTestId("dashboard-grid");
     await waitFor(() => expect(onCall).toHaveBeenCalled());
     expect(onCall.mock.calls[0][0]).toMatchObject({ platformScope: true, envIds: [] });
+  });
+
+  it("borrows no environment's alert bands or release to compare with, whatever environment is selected", async () => {
+    for (const env of ["prod", "staging"]) {
+      const api = platformApi("platform");
+      const history = vi.fn(api.listAlertHistory);
+      const releases = vi.fn(api.listReleases);
+      const queried = vi.fn();
+      renderWithApi(
+        { ...api, listAlertHistory: history, listReleases: releases, queryPanel: (req: Parameters<typeof api.queryPanel>[0]) => (queried(req), api.queryPanel(req)) },
+        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env={env} environments={FIXTURE_ENVS} search={{ compare: "release" }} onSearch={vi.fn()}
+          onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+      );
+      await screen.findByTestId("dashboard-grid");
+      await waitFor(() => expect(queried).toHaveBeenCalled());
+      expect(history).not.toHaveBeenCalled();
+      expect(releases).not.toHaveBeenCalled();
+      cleanup();
+    }
   });
 
   it("is unchanged for an ordinary dashboard: scoped to the environment, never platform-wide", async () => {
