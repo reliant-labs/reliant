@@ -148,3 +148,5 @@ triggers:
   - $ref: events/workflow_run.completed.yaml
   - $ref: events/check_run.completed.yaml
   - $ref: events/check_suite.completed.yaml
+  - $ref: events/pull_request.auto_merge_disabled.yaml
+  - $ref: events/pull_request.dequeued.yaml

@@ -634,3 +634,53 @@ func TestInterruptThread_DurableCancelIsScopedToTheThread(t *testing.T) {
 	assert.Equal(t, core.ToolCallStatusExecuting, child.Status,
 		"another thread's in-flight tool must be untouched")
 }
+
+// historyRefusingRepo is the real repository with the chat-wide history read
+// taken away, so a test learns if interrupt or pause still reads every tool
+// call a chat ever made to find the few in flight.
+type historyRefusingRepo struct {
+	*db.Repo
+}
+
+func (historyRefusingRepo) ListToolCallsByChat(context.Context, string) ([]*db.ToolCall, error) {
+	return nil, errors.New("interrupt and pause must read only the chat's live calls, not its whole tool-call history")
+}
+
+// TestInterruptThread_ReadsOnlyLiveCalls pins the read behind a prod
+// interrupt that took 7.3s (chat 2ee014da, 2026-10-30): 5.5s of it was loading
+// the chat's whole tool-call history to filter for the few calls in flight.
+// A backgrounded call is live but not cancelled: it has handed its work to a
+// background process the turn does not wait on.
+func TestInterruptThread_ReadsOnlyLiveCalls(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.Background()
+	fx := newInterruptFixture(t, repo, "test-user")
+	canceler := newRecordingThreadInterruptCanceler()
+	svc := NewService(historyRefusingRepo{repo}, WithTemporalSignaler(&recordingThreadInterruptSignaler{}), WithToolCanceler(canceler))
+
+	executing := "toolu_" + uuid.NewString()
+	pending := "toolu_" + uuid.NewString()
+	backgrounded := "toolu_" + uuid.NewString()
+	finished := "toolu_" + uuid.NewString()
+	insertInterruptToolCall(t, repo, executing, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusExecuting)
+	insertInterruptToolCall(t, repo, pending, fx.chatID, fx.rootThreadID, "spawn_status", core.ToolCallStatusPending)
+	insertInterruptToolCall(t, repo, backgrounded, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusBackgrounded)
+	insertInterruptToolCall(t, repo, finished, fx.chatID, fx.rootThreadID, "view", core.ToolCallStatusCompleted)
+
+	result, err := svc.InterruptThread(ctx, InterruptThreadOpts{
+		UserID: fx.userID, ChatID: fx.chatID, ThreadID: fx.rootThreadID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.CancelledToolCalls)
+	assert.ElementsMatch(t, []string{executing, pending}, canceler.cancelledIDs())
+
+	paused, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{UserID: fx.userID, ChatID: fx.chatID})
+	require.NoError(t, err)
+	assert.Zero(t, paused.CancelledToolCalls,
+		"the interrupt already recorded both calls cancelled; pause finds nothing left in flight")
+}

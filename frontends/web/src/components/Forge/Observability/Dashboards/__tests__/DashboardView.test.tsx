@@ -277,3 +277,112 @@ describe("a dashboard of many panels", () => {
     }
   });
 });
+
+describe("an org-scoped dashboard", () => {
+  const ORG_ENVS = [
+    { id: "env-cp-prod", name: "control-plane/prod", project: "control-plane" },
+    { id: "env-landing-prod", name: "landing/prod", project: "landing" },
+    { id: "env-landing-staging", name: "landing/staging", project: "landing" },
+  ];
+
+  function render(scope: "org" | undefined, initial: DashboardSearch = {}, roster: { loading?: boolean; error?: Error; retry?: () => void } = {}) {
+    const onCall = vi.fn();
+    const base = createFixtureApi({ onCall });
+    const api = {
+      ...base,
+      getDashboard: async (req: Parameters<typeof base.getDashboard>[0]) => {
+        const doc = await base.getDashboard(req);
+        return { ...doc, spec: { ...doc.spec, scope } };
+      },
+      queryPanel: (req: Parameters<typeof base.queryPanel>[0]) => (onCall("scope", req), base.queryPanel(req)),
+    };
+    function Stateful() {
+      const [search, setSearch] = useState<DashboardSearch>(initial);
+      return (
+        <DashboardView project={FIXTURE_PROJECT} dashRef={ref("release", "checkout")} env="prod" environments={FIXTURE_ENVS} orgEnvironments={roster.loading || roster.error ? [] : ORG_ENVS}
+          orgEnvironmentsLoading={roster.loading} orgEnvironmentsError={roster.error} onRetryOrgEnvironments={roster.retry}
+          search={search} onSearch={(next) => setSearch((prev) => ({ ...prev, ...next }))} onEnvChange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />
+      );
+    }
+    renderWithApi(api, <Stateful />);
+    return onCall;
+  }
+
+  const scopes = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([name]) => name === "scope").map(([, req]) => req);
+
+  it("does not widen a selected environment while the org roster is loading", async () => {
+    const onCall = render("org", { orgEnvs: ["landing/prod"] }, { loading: true });
+    await waitFor(() => expect(calls(onCall, "GetDashboard").length).toBeGreaterThan(0));
+    expect(screen.getByTestId("dashboard-loading")).toBeInTheDocument();
+    expect(scopes(onCall)).toHaveLength(0);
+  });
+
+  it("shows a retryable roster failure instead of querying every environment", async () => {
+    const retry = vi.fn();
+    const onCall = render("org", { orgEnvs: ["landing/prod"] }, { error: new Error("Roster unavailable"), retry });
+    await screen.findByRole("alert");
+    expect(scopes(onCall)).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the whole org: no project, no environment, whatever the console's environment is", async () => {
+    const onCall = render("org");
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(scopes(onCall).length).toBeGreaterThan(0));
+    for (const req of scopes(onCall)) {
+      expect(req.projectId).toBeUndefined();
+      expect(req.envIds).toEqual([]);
+      expect(req.platformScope).toBeUndefined();
+    }
+  });
+
+  it("offers every org environment as project/env and reads the ones picked", async () => {
+    const onCall = render("org");
+    await screen.findByTestId("dashboard-grid");
+    await userEvent.click(screen.getByTestId("dashboard-org-env-picker"));
+    const popover = screen.getByTestId("dashboard-org-env-picker-popover");
+    for (const env of ORG_ENVS) expect(within(popover).getByTestId(`dashboard-org-env-option-${env.name}`)).toBeInTheDocument();
+    expect(within(popover).getByText("landing/prod")).toBeInTheDocument();
+
+    onCall.mockClear();
+    await userEvent.click(within(popover).getByTestId("dashboard-org-env-option-landing/prod"));
+    await userEvent.click(within(popover).getByTestId("dashboard-org-env-option-control-plane/prod"));
+    await waitFor(() => expect(scopes(onCall).some((req) => req.envIds.length === 2)).toBe(true));
+    const picked = scopes(onCall).filter((req) => req.envIds.length === 2).at(-1);
+    expect(picked.envIds).toEqual(["env-cp-prod", "env-landing-prod"]);
+    expect(picked.projectId).toBeUndefined();
+    expect(screen.getByTestId("dashboard-org-env-picker")).toHaveTextContent("control-plane/prod, landing/prod");
+  });
+
+  it("reads a link's picked environments", async () => {
+    const onCall = render("org", { orgEnvs: ["landing/staging"] });
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(scopes(onCall).length).toBeGreaterThan(0));
+    for (const req of scopes(onCall)) expect(req.envIds).toEqual(["env-landing-staging"]);
+  });
+
+  it("links its explorers to the picked project/env on the org's pages, not the route project's", async () => {
+    render("org", { orgEnvs: ["landing/prod"] });
+    await screen.findByTestId("dashboard-grid");
+    await userEvent.click(await screen.findByTestId("dashboard-panel-menu-orders"));
+    const traces = await screen.findByRole("menuitem", { name: /Explore in Traces/ });
+    const href = new URL(traces.getAttribute("href")!, "http://x");
+    expect(href.pathname).toBe("/forge/observability/traces");
+    expect(href.searchParams.get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    const explore = screen.queryByTestId("dashboard-panel-explore-orders");
+    if (explore) {
+      const metrics = new URL(explore.getAttribute("href")!, "http://x");
+      expect(metrics.pathname).toBe("/forge/observability/metrics");
+      expect(metrics.searchParams.get("envs")).toBe(JSON.stringify(["landing/prod"]));
+    }
+  });
+
+  it("leaves an ordinary dashboard on its project: the route's project and environment, no org picker", async () => {
+    const onCall = render(undefined);
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(scopes(onCall).length).toBeGreaterThan(0));
+    for (const req of scopes(onCall)) expect(req).toMatchObject({ projectId: FIXTURE_PROJECT, envIds: ["env-prod"] });
+    expect(screen.queryByTestId("dashboard-org-env-picker")).not.toBeInTheDocument();
+  });
+});
